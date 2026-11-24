@@ -133,6 +133,7 @@ fn a_body_with_no_envelope_is_left_out_and_reported() {
         seg_la: Vec::new(),
         t_scurve: 0.0,
         seg_scurve: Vec::new(),
+        t_scurve_blend: None,
         after_skip: Vec::new(),
         skip_unmodelled: Vec::new(),
     };

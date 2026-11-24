@@ -268,7 +268,20 @@ impl Gui {
         // what covers the view's bottom: the timeline, and the Document Text panel above it
         let text = if w.text_open { crate::shell::cam::text_panel_h(free.height()) + 4.0 } else { 0.0 };
         let cover = vr.bottom() - free.bottom() + text;
-        if (w.view_w - vr.width()).abs() < 1.0 && (w.view_cover - cover).abs() < 1.0 {
+        // the turning Section window over the view's bottom right: framed around as a right inset
+        // or a bottom one, whichever leaves the more room (UX-LEAD: the part in what is left)
+        let side = match w.section_at {
+            Some(r) => {
+                let right = (vr.right() - r.left()).max(0.0);
+                let bottom = (vr.bottom() - r.top() - cover).max(0.0);
+                let by_right = (vr.width() - right) * (vr.height() - cover);
+                let by_bottom = vr.width() * (vr.height() - cover - bottom);
+                if by_right >= by_bottom { [right, 0.0] } else { [0.0, bottom] }
+            }
+            None => [0.0, 0.0],
+        };
+        let side_changed = (w.view_side[0] - side[0]).abs() >= 1.0 || (w.view_side[1] - side[1]).abs() >= 1.0;
+        if (w.view_w - vr.width()).abs() < 1.0 && (w.view_cover - cover).abs() < 1.0 && !side_changed {
             return;
         }
         let first = w.view_w == 0.0;
@@ -276,12 +289,14 @@ impl Gui {
         let Some(v) = &mut self.view else { return };
         w.view_w = vr.width();
         w.view_cover = cover;
+        w.view_side = side;
         // moved since this workspace last framed it (by the user, or another framing): keep
         // that view and pan it so the subject's centre is the new view's (docs/ux/STANDARD.md
         // §2); else frame it whole. The first width seen with a view is framed whole: the view
         // was framed when made, maybe before the column narrowed it (a browser page builds its
         // view after the run).
-        let moved = !first && w.framed.is_some_and(|c| c != v.nav.heading_to());
+        // (a window opened over it is framed around whole: the part fills what it leaves)
+        let moved = !first && !side_changed && w.framed.is_some_and(|c| c != v.nav.heading_to());
         // the subject: what the scene shows (the part, the stock with the simulation's view)
         let subject = match v.scene.shown_box() {
             Some((lo, hi)) => crate::frame::Bounds::new(lo, hi),
@@ -298,7 +313,7 @@ impl Gui {
             height: vr.height(),
             // the simulation's panel is in the properties column (outside `vr`) whenever there is
             // one, docked or not yet: only its timeline covers the view
-            covered: [0.0, 0.0, 0.0, cover],
+            covered: [0.0, 0.0, side[0], cover + side[1]],
         };
         // from the direction the view is seen from now, the subject at the standard's 70 %
         let (yaw, pitch) = (v.nav.camera.yaw.to_degrees(), v.nav.camera.pitch.to_degrees());

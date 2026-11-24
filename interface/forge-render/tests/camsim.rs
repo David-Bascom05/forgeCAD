@@ -65,6 +65,9 @@ fn the_flange_plays_as_posted() {
     // being 3 below it and the contour going to −0.5) is, below z 0, once the setup is done
     assert!(sim.markers.iter().all(|m| !m.severe()), "{:?}", sim.markers);
     for m in &sim.markers {
+        // all of it the stock left under the part by the plan: shown neutral, not an issue
+        assert!(m.planned, "{m:?}");
+        assert!(m.text.starts_with("Under the part, z "), "{}", m.text);
         let (_, _, z1) = m.region.expect("a leftover region");
         assert!(z1 <= 1e-9 && (m.t - tl.total).abs() < 1e-9, "{m:?}");
     }
@@ -622,7 +625,7 @@ fn tools_are_drawn_from_their_records() {
         let t2 = std::time::Instant::now();
         for k in 0..20 {
             out.clear();
-            tools::draw(big, [1.0, 2.0, 3.0], k as f64 * 0.3, false, &mut out);
+            tools::draw(big, [1.0, 2.0, 3.0], k as f64 * 0.3, tools::Hit::None, &mut out);
         }
         let draw_ms = t2.elapsed().as_secs_f64() * 1e3 / 20.0;
         eprintln!(
@@ -742,4 +745,80 @@ fn a_cutters_flutes_stand_out_from_its_shank() {
         "{:?}",
         lk.note
     );
+    // the label beside the tool is people's words; the record keys are the note's (its hover)
+    assert_eq!(lk.label, "\u{d8}10 flat end mill \u{b7} BT40 holder, ER32 nut");
 }
+
+/// The Checks tab's first line says in words what every move was checked for: all clear on the
+/// flange; on a broken copy (its clear height under the stock's top: rapids into it) the failure
+/// named in its issue kind's words. The checker's codes are only its hover.
+#[test]
+fn the_checks_line_is_in_words() {
+    use forge_render::gui_camsim_panel::checked_line;
+    let sim = flange();
+    let (line, failed) = checked_line(&sim.markers, sim.cam.leftover_done);
+    assert!(!failed);
+    assert_eq!(
+        line,
+        "Every move checked: no gouges, holder and fixture clear, rapids clear. Leftover stock measured exactly."
+    );
+    let dir = machined();
+    let sim = Sim::open(BROKEN, &dir);
+    let mut rules: Vec<&str> = sim.markers.iter().map(|m| m.rule.as_str()).collect();
+    rules.sort();
+    rules.dedup();
+    eprintln!("broken flange: {rules:?}");
+    let (line, failed) = checked_line(&sim.markers, sim.cam.leftover_done);
+    assert!(failed, "{line}");
+    // a rapid into the stock is a crash: its own kind, named so in the line
+    assert!(line.contains("rapids into the stock"), "{line}");
+    let m = sim
+        .markers
+        .iter()
+        .find(|m| m.rule == "rapid_into_stock")
+        .expect("a rapid into the stock");
+    // its row says when, where and how much, not what (the heading does)
+    assert!(
+        m.row.contains("move ") && m.row.ends_with("mm into the stock"),
+        "{}",
+        m.row
+    );
+    assert!(!m.row.contains("bolts") && !m.row.contains("hits"), "{}", m.row);
+    // the spot drill's pass and the drill's at the same hole are told apart by their tool
+    let rows: Vec<(&str, &str)> = sim
+        .markers
+        .iter()
+        .filter(|m| m.rule == "rapid_into_stock")
+        .map(|m| (m.tool.as_str(), m.row.as_str()))
+        .collect();
+    assert!(rows.iter().any(|r| r.0 == "\u{d8}10 spot drill"), "{rows:?}");
+    assert!(rows.iter().all(|r| r.1.starts_with("move ")), "{rows:?}");
+    let mut seen = rows.clone();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), rows.len(), "no two rows alike: {rows:?}");
+    // the checker says the cutter hit: the cutter alone is tinted, its holder stays itself
+    use forge_render::camsim::tools::Hit;
+    assert_eq!(m.part, "cutter");
+    let h = Hit::of(&m.part);
+    assert!(h.tints(true) && !h.tints(false));
+    assert_eq!(h.and(Hit::of("shank/holder")), Hit::Whole);
+    assert_eq!(Hit::None.and(h), h);
+    assert!(!line.contains("G3") && !line.contains("pairs"), "{line}");
+    // the run's warnings in people's words, the syntax on hover
+    use forge_render::gui_camsim_panel::note_words;
+    assert_eq!(
+        note_words(
+            "setup `op1` is not placed: G5 checked each axis's span against the travel, not the positions; fix: add `at: (x, y, z)` to the setup"
+        ),
+        "Setup op1 isn't placed on the machine. Place it to check machine travel, or allow uncertified output in NC Programs."
+    );
+    assert_eq!(
+        note_words("part `flange.fg` names only a material group (N): name the alloy"),
+        "The part's material is only a group: non-ferrous (aluminium, copper alloys). Pick the alloy for realistic feeds and tool life."
+    );
+}
+
+/// The flange's bolt holes drilled alone under a clear height below the stock's top: rapids into
+/// it, and the material drilling leaves.
+pub const BROKEN: &str = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01, clear: -0.5, retract: -1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";

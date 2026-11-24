@@ -103,15 +103,7 @@ fn main() {
         n: Default::default(),
         t: Default::default(),
     };
-    let ls = waterline::level(
-        &wc,
-        20.0,
-        waterline::Params {
-            grid: 1.0,
-            tol_xy: 0.01,
-        },
-    )
-    .unwrap();
+    let ls = waterline::level(&wc, 20.0, waterline::Params::new(1.0, 0.01)).unwrap();
     println!(
         "waterline z=20: {} loops, {} pts, {:.1} s",
         ls.len(),

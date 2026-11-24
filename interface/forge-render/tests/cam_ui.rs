@@ -195,17 +195,41 @@ fn the_op_dialog_edits_the_text_and_marks_it_stale() {
 #[test]
 fn post_process_shows_the_program_and_writes_it() {
     let Some((mut h, file)) = open_unplaced("post") else { return };
+    // the flange's setup is not placed (G5 unchecked): its program cannot be released, so Post
+    // Process is off, the status says why, and its fix opens the setup
+    h.step();
+    let line = forge_render::shell::cam::status_line(h.gui.shell.cam.as_ref().unwrap());
+    assert!(line.contains("not releasable: setup not placed") && !line.contains("ops certified"), "{line}");
+    assert!(!line.contains("G5"), "no rule codes on the screen: {line}");
+    let why = forge_render::shell::cam::release_block(h.gui.shell.cam.as_ref().unwrap()).expect("blocked");
+    assert!(why.contains("at:"), "the syntax on hover: {why}");
+    // one sentence for a person, and what to do (UX-LEAD); the code and syntax on hover only
+    let b = forge_render::shell::cam::release_words(h.gui.shell.cam.as_ref().unwrap()).expect("blocked");
+    assert_eq!(b.sentence, "Program prog can't be released: setup op1 isn't placed on the machine.");
+    assert_eq!(b.next, "Place it to check machine travel, or allow uncertified output in NC Programs.");
+    assert!(h.placed("cam:blocked").is_some(), "the sentence under Tools");
+    // a refused export says the sentence on the status bar
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::ExportNc(None));
+    h.step();
+    let line = forge_render::shell::cam::status_line(h.gui.shell.cam.as_ref().unwrap());
+    assert_eq!(line, b.sentence);
+    tap(&mut h, "tool:Post Process");
+    h.step();
+    assert!(h.placed("cam:post:text").is_none(), "Post Process is off while not releasable");
+    // the fix is seen whatever the words before it: never under the markup toggle
+    let (fx, mk) = (h.gui.shell.place("status:fix").unwrap(), h.gui.shell.place("status:markup").unwrap());
+    assert!(fx.right() <= mk.left(), "{fx:?} under {mk:?}");
+    tap(&mut h, "status:fix");
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().setup_dlg.is_some(), "the fix opens the setup");
+    h.gui.shell.cam.as_mut().unwrap().setup_dlg = None;
+    // allowed uncertified: Post Process opens, writes the program stamped
+    h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
+    h.step();
     tap(&mut h, "tool:Post Process");
     h.step();
     assert!(h.placed("cam:post:text").is_some());
     shot(&mut h, "cam-post");
-    // the flange's setup is not placed (G5 unchecked): refused until allowed
-    tap(&mut h, "cam:post:write");
-    h.step();
-    assert!(!file.with_file_name("prog.nc").exists());
-    let said = h.gui.shell.cam.as_ref().unwrap().said.clone().unwrap_or_default();
-    assert!(said.contains("Allow uncertified"), "{said}");
-    h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
     tap(&mut h, "cam:post:write");
     // the write lands a few frames on (sooner or later under a loaded machine)
     let t0 = std::time::Instant::now();
@@ -533,6 +557,40 @@ fn a_turning_document_docks_its_section_and_windows_take_turns() {
         h.step();
     }
     assert!(h.gui.shell.camsim.is_none(), "no milling simulation of a lathe document");
+    // the Section window covers the view's bottom right: the part framed in what it leaves
+    // (UX-LEAD), not small behind it
+    {
+        let w = h.gui.shell.cam.as_ref().unwrap();
+        let sec = w.section_at.expect("the Section window open");
+        assert!(w.view_side != [0.0, 0.0], "framed around the Section window");
+        let vr = h.gui.shell.view_rect;
+        let cam = w.framed.expect("framed");
+        // the subject as the re-frame takes it: the shown box, else the scene's bounds
+        let scene = &h.gui.view.as_ref().unwrap().scene;
+        let b = match scene.shown_box() {
+            Some((lo, hi)) => forge_render::frame::Bounds::new(lo, hi),
+            None => {
+                let (c, r) = scene.bounds();
+                forge_render::frame::Bounds::new([c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r])
+            }
+        };
+        let px: Vec<(f32, f32)> = b
+            .corners()
+            .iter()
+            .filter_map(|c| cam.pixel_of(*c, vr.width() as u32, vr.height() as u32))
+            .map(|(x, y)| (vr.left() + x, vr.top() + y))
+            .collect();
+        let part = egui::Rect::from_points(&px.iter().map(|p| egui::pos2(p.0, p.1)).collect::<Vec<_>>());
+        let free = if w.view_side[0] > 0.0 {
+            egui::Rect::from_min_max(vr.min, egui::pos2(vr.right() - w.view_side[0], vr.bottom() - w.view_cover))
+        } else {
+            egui::Rect::from_min_max(vr.min, egui::pos2(vr.right(), vr.bottom() - w.view_cover - w.view_side[1]))
+        };
+        assert!(!part.shrink(2.0).intersects(sec), "the part {part:?} behind the Section window {sec:?}");
+        let fill = (part.width() / free.width()).max(part.height() / free.height());
+        assert!(fill > 0.55, "the part fills {fill:.2} of what is left");
+    }
+    shot(&mut h, "cam-turn-section-framed");
     assert!(h.click("tool:NC Programs"));
     h.step();
     h.step();
@@ -838,5 +896,11 @@ fn an_adaptive_op_shows_what_clear_would_take() {
     assert_eq!(op, "top");
     let (lo, est) = got.expect("clear builds on the flange");
     assert!(lo > 0.0 && est >= lo);
+    // the row says whose time and of what (UX-LEAD): "≥ … · est. … · N% less time"
+    let own = w.run.as_ref().unwrap().cycle(["top"]).expect("adaptive's own time");
+    let words = forge_render::shell::cam::alt_clear_words((lo, est), own);
+    let pct = ((est / own.1 - 1.0) * 100.0).abs();
+    assert!(words.ends_with(&format!("{pct:.0}% {} time", if est < own.1 { "less" } else { "more" })), "{words}");
+    assert!(words.starts_with('\u{2265}'), "{words}");
     shot(&mut h, "cam-adaptive-vs-clear");
 }

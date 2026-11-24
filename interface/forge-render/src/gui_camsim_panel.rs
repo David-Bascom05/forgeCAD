@@ -98,6 +98,11 @@ pub struct CamSimUi {
     /// (what is left over, the run's warnings), for the Checks tab; set by the host.
     pub op_checks: Vec<(String, String, egui::Color32)>,
     pub check_notes: Vec<String>,
+    /// The place picked in the Checks tab (a marker's index): its kind's row opens to it, and it
+    /// is highlighted there; a click on a place picks it.
+    pub issue: Option<usize>,
+    /// Picked from outside the tab (a command, the view): its row is opened and scrolled to once.
+    pub issue_new: bool,
     /// The op the workspace selected (its path drawn in the selection's blue).
     pub selected_op: Option<usize>,
     /// Every problem of the document listed, not the first few.
@@ -146,6 +151,8 @@ impl CamSimUi {
             cycles: vec![],
             op_checks: vec![],
             check_notes: vec![],
+            issue: None,
+            issue_new: false,
             drawn_key: None,
             stock_mesh: vec![],
             stop_at_markers: true,
@@ -341,6 +348,17 @@ fn op_colour(i: usize) -> Color32 {
     Color32::from_rgb((c >> 16) as u8, (c >> 8) as u8, c as u8)
 }
 
+/// A marker's colour: a failure red, material left over amber, stock left by the plan neutral.
+fn marker_colour(m: &Marker) -> Color32 {
+    if m.severe() {
+        srgb(look::FAIL)
+    } else if m.planned {
+        srgb(look::NO_VALUE)
+    } else {
+        srgb(look::LEFTOVER)
+    }
+}
+
 fn srgb(c: [f32; 3]) -> Color32 {
     let e = |x: f32| {
         let x = x.clamp(0.0, 1.0);
@@ -506,11 +524,7 @@ impl Shell {
                 if !v.contains(p) {
                     continue;
                 }
-                let c = if m.severe() {
-                    srgb(look::FAIL)
-                } else {
-                    srgb(look::LEFTOVER)
-                };
+                let c = marker_colour(m);
                 painter.circle_stroke(p, 7.0, Stroke::new(2.0, c));
                 painter.circle_filled(p, 2.5, c);
                 let id = egui::Id::unique("camsim:mark").with(k);
@@ -524,34 +538,100 @@ impl Shell {
                         r.on_hover_text(&m.text)
                     });
                 if resp.inner.clicked() {
-                    jump = Some(m.t);
+                    jump = Some((k, m.t));
                 }
                 self.view_blocks.push(hit);
             }
-            if let Some(tm) = jump {
+            // a place clicked in the view: picked in the Checks tab too
+            if let Some((k, tm)) = jump {
+                st.issue = Some(k);
+                st.issue_new = true;
                 st.jump(tm);
             }
-            // what the tool's drawing leaves out, said beside its top (the holder's interface)
+            // the tool and its holder in words, a leader label beside the tool's top (where the
+            // holder meets it), out to the side with more room; the records it was drawn from
+            // (keys, sources, what is left out) are its hover
             if st.tool
                 && let Some((tool, p, _)) = st.tool_now()
-                && let Some((at, note)) = st.sim.looks.get(tool).and_then(|l| l.note.as_ref())
-                && let Some(a) = st
-                    .sim
-                    .cam
-                    .sim_tools()
-                    .get(tool)
-                    // on the tool where it shows: the top of its cutting length, its left side
-                    .and_then(|tu| to_px([p[0] - 0.5 * tu.tool.dc, p[1], p[2] + tu.tool.lcf.min(at[1])]))
-                && v.contains(a)
+                && let Some(lk) = st.sim.looks.get(tool)
+                && let Some((at, note)) = lk.note.as_ref()
+                && let Some(tu) = st.sim.cam.sim_tools().get(tool)
             {
-                // leftwards from it, so it never runs under the panel; kept inside the view
-                let at = pos2((a.x - 14.0).max(v.left() + 8.0), (a.y - 10.0).max(v.top() + 64.0));
-                painter.line_segment([a, at], Stroke::new(1.0, t.ink2));
-                let galley = painter.layout_no_wrap(note.clone(), FontId::proportional(11.0), t.ink);
-                let r = Align2::RIGHT_BOTTOM.anchor_size(at, galley.size());
-                let r = r.translate(vec2((v.left() + 8.0 - r.left()).max(0.0), 0.0));
-                painter.rect_filled(r.expand(3.0), 3.0, t.surface.gamma_multiply(0.9));
-                painter.galley(r.min, galley, t.ink);
+                let (z, r) = (p[2] + at[1], at[0].max(0.5 * tu.tool.dc));
+                // the leader runs out past the widest of the drawing (the nut, the flange)
+                let out = |side: f64| to_px([p[0] + side * lk.reach, p[1], z]);
+                let left = to_px([p[0] - r, p[1], z]);
+                let right = to_px([p[0] + r, p[1], z]);
+                if let (Some(l), Some(rt)) = (left, right) {
+                    let (l, rt) = if l.x <= rt.x { (l, rt) } else { (rt, l) };
+                    let (far_l, far_r) = match (out(-1.0), out(1.0)) {
+                        (Some(a), Some(b)) => (a.x.min(b.x).min(l.x), a.x.max(b.x).max(rt.x)),
+                        _ => (l.x, rt.x),
+                    };
+                    let panel_w = if self.cam.is_some() { -8.0 } else { covered_w(&st) };
+                    // clear of the view's own tool strip along its right edge (52 px) too
+                    let free = Rect::from_min_max(
+                        v.min,
+                        pos2(v.right() - panel_w - 60.0, v.bottom() - TIMELINE_H - 16.0),
+                    );
+                    let room_r = free.right() - far_r;
+                    let room_l = far_l - free.left();
+                    let room = room_r.max(room_l) - 26.0;
+                    // the whole label where it fits beside the tool, else the tool's words alone,
+                    // else none (never over the tool: the hover has it all the same)
+                    let font = FontId::proportional(12.0);
+                    let galley = [lk.label.clone(), crate::camsim::tools::tool_words(tu)]
+                        .into_iter()
+                        .map(|w| painter.layout_no_wrap(w, font.clone(), t.ink))
+                        .find(|g| g.size().x <= room);
+                    if let Some(galley) = galley {
+                        let (wd, ht) = (galley.size().x, galley.size().y);
+                        let to_right = room_r >= wd + 26.0 && (room_r >= room_l || room_l < wd + 26.0);
+                        let (a, end, rect) = if to_right {
+                            // level with the holder's foot: under the nut, not across it
+                            let end = pos2(far_r + 16.0, rt.y);
+                            (
+                                rt,
+                                end,
+                                Rect::from_min_size(pos2(end.x + 4.0, end.y - 0.5 * ht), galley.size()),
+                            )
+                        } else {
+                            let end = pos2(far_l - 16.0, l.y);
+                            (
+                                l,
+                                end,
+                                Rect::from_min_size(pos2(end.x - 4.0 - wd, end.y - 0.5 * ht), galley.size()),
+                            )
+                        };
+                        // kept inside the free view
+                        let dx = (free.left() + 6.0 - rect.left()).max(0.0)
+                            - (rect.right() - free.right() + 6.0).max(0.0);
+                        let dy = (free.top() + 6.0 - rect.top()).max(0.0)
+                            - (rect.bottom() - free.bottom() + 6.0).max(0.0);
+                        let rect = rect.translate(vec2(dx, dy));
+                        let end = end + vec2(dx, dy);
+                        if v.contains(a) {
+                            painter.line_segment([a, end], Stroke::new(1.0, t.ink2));
+                            painter.circle_filled(a, 2.0, t.ink2);
+                            painter.rect_filled(
+                                rect.expand2(vec2(5.0, 3.0)),
+                                4.0,
+                                t.surface.gamma_multiply(0.85),
+                            );
+                            painter.galley(rect.min, galley, t.ink);
+                            let hit = rect.expand2(vec2(5.0, 3.0));
+                            egui::Area::new(egui::Id::unique("camsim:toolnote"))
+                                .fixed_pos(hit.min)
+                                .order(egui::Order::Background)
+                                .fade_in(false)
+                                .show(ctx, |ui| {
+                                    let (_, r) = ui.allocate_exact_size(hit.size(), Sense::hover());
+                                    r.on_hover_text(note.as_str());
+                                });
+                            self.view_blocks.push(hit);
+                        }
+                    }
+                }
             }
         }
         if st.playing {
@@ -601,8 +681,25 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
         };
         // the playback clock runs at feed time (feeds and rapids at their programmed rates): not
         // the cycle time, which the Program tab gives (the bound and the estimate)
+        // with the run's cycle time beside it where every op was timed on the machine, so the two
+        // totals are read together (the cycle time is the longer: it adds what feed time leaves out)
+        let timed: Option<(f64, f64)> = (!st.cycles.is_empty()
+            && st.sim.tl.ops.iter().all(|o| st.cycles.iter().any(|c| c.0 == o.name)))
+        .then(|| {
+            st.cycles
+                .iter()
+                .fold((0.0, 0.0), |a, c| (a.0 + c.1.0, a.1 + c.1.1))
+        });
+        let cycle = match timed {
+            Some((lo, est)) => format!(
+                "The cycle time on the machine is \u{2265} {} \u{b7} est. {} (the Program tab, per op).",
+                mmss(lo),
+                mmss(est)
+            ),
+            None => "The cycle time on the machine is in the Program tab, per op.".to_string(),
+        };
         let tip = format!(
-            "{} of {} at feed time: feeds and rapids at their programmed rates, no acceleration or tool changes. Not the cycle time: the Program tab gives that (\u{2265} the least it can take \u{b7} est. an estimate).",
+            "{} of {} at feed time: feeds at their programmed rates, rapids at the machine's rapid rates. Feed time leaves out tool changes, dwells and acceleration, so it is shorter than the cycle time. {cycle}",
             clock(st.t),
             clock(total)
         );
@@ -725,11 +822,7 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
     let pointer = resp.hover_pos();
     for m in &st.sim.markers {
         let x = x_of(m.t);
-        let c = if m.severe() {
-            srgb(look::FAIL)
-        } else {
-            srgb(look::LEFTOVER)
-        };
+        let c = marker_colour(m);
         let tri = vec![
             pos2(x, band.top() - 1.0),
             pos2(x - 4.5, rect.top() + 2.0),
@@ -820,7 +913,7 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     let cam = &st.sim.cam;
     let refused = cam.ops.iter().filter(|o| o.status != "built").count();
     let plural = |n: usize| if n == 1 { "" } else { "s" };
-    let (c, s) = if !cam.ok {
+    let (c, s) = if !cam.ok && !cam.errors.is_empty() {
         let n = cam.errors.len();
         (
             t.error,
@@ -834,13 +927,15 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
             t.error,
             format!("Not certified: {refused} op{} refused", plural(refused)),
         )
+    } else if !cam.ok {
+        (t.error, "Not certified".to_string())
     } else {
         (t.success, String::new())
     };
     if s.is_empty() {
         // certified: the workspace's words (a rule left unchecked named, its meaning on hover)
-        let (words, hover) = crate::shell::cam::certified_words(cam.certification());
-        let r = ui.colored_label(if hover.is_some() { t.ink2 } else { c }, words);
+        let (words, hover, amber) = crate::shell::cam::certified_words(cam.certification());
+        let r = ui.colored_label(if amber { t.warn } else if hover.is_some() { t.ink2 } else { c }, words);
         if let Some(h) = hover {
             r.on_hover_text(h);
         }
@@ -1289,14 +1384,16 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     verdict(ui, st, t);
     let cam = &st.sim.cam;
     let pairs: usize = cam.ops.iter().map(|o| o.pairs).sum();
+    let (line, failed) = checked_line(&st.sim.markers, cam.leftover_done);
     ui.label(
-        egui::RichText::new(format!(
-            "{pairs} tool–face pairs certified by the checker (G1 gouge, G2 holder and fixture, G3 rapids); leftover (G4) {}",
-            if cam.leftover_done { "decided exactly" } else { "not decided" }
-        ))
-        .size(11.0)
-        .color(t.ink2),
-    );
+        egui::RichText::new(line)
+            .size(11.0)
+            .color(if failed { t.error } else { t.ink2 }),
+    )
+    .on_hover_text(format!(
+        "{pairs} tool–face pairs certified by the checker: G1 gouge, G2 holder and fixture, G3 rapids; leftover (G4) {}",
+        if cam.leftover_done { "decided exactly" } else { "not decided" }
+    ));
     // each op's verdict (the workspace's: certified, refused, not posted), then the notes
     if !st.op_checks.is_empty() {
         heading(ui, t, "Ops");
@@ -1312,42 +1409,274 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
         }
     }
     for n in &st.check_notes {
-        ui.label(egui::RichText::new(n).size(11.0).color(t.warn));
+        let words = note_words(n);
+        let r = ui.label(egui::RichText::new(&words).size(11.0).color(t.warn));
+        if words != *n {
+            r.on_hover_text(n.as_str());
+        }
     }
-    heading(ui, t, &format!("Issues ({})", st.sim.markers.len()));
+    // the markers by kind: an issue's kind (a failed check's rule), material left over, and the
+    // stock left by the plan apart; each kind one row, opened to its places
+    let kind = |m: &Marker| -> (u8, String) {
+        if m.severe() {
+            (0, m.rule.clone())
+        } else if m.planned {
+            (2, "planned".into())
+        } else {
+            (1, "leftover".into())
+        }
+    };
+    let mut groups: Vec<((u8, String), Vec<usize>)> = vec![];
+    for (k, m) in st.sim.markers.iter().enumerate() {
+        let key = kind(m);
+        match groups.iter_mut().find(|g| g.0 == key) {
+            Some(g) => g.1.push(k),
+            None => groups.push((key, vec![k])),
+        }
+    }
+    groups.sort_by(|a, b| a.0.cmp(&b.0));
+    let issues: usize = groups.iter().filter(|g| g.0.0 < 2).map(|g| g.1.len()).sum();
+    if issues == 0 {
+        // one line, in the header's colour, and nothing more to say
+        heading(ui, t, "No issues");
+    } else {
+        heading(ui, t, &format!("Issues ({issues})"));
+    }
     let mut jump = None;
+    let mut pick = None;
     egui::ScrollArea::vertical()
         .id_salt("camsim:checks")
         .show(ui, |ui| {
-            if st.sim.markers.is_empty() {
-                ui.colored_label(t.success, "None: every move certified, nothing left over.");
-            }
-            // a certified run: what is left is not a fault (UX-LEAD, until each region says why
-            // it is left): neutral, not amber
-            let certified = cam.ok && cam.ops.iter().all(|o| o.status == "built");
-            for m in &st.sim.markers {
-                let c = if m.severe() {
-                    srgb(look::FAIL)
-                } else if certified {
-                    t.ink2
-                } else {
-                    srgb(look::LEFTOVER)
+            for ((rank, rule), ks) in &groups {
+                let ms: Vec<&Marker> = ks.iter().map(|&k| &st.sim.markers[k]).collect();
+                let n = ms.len();
+                let thick = ms
+                    .iter()
+                    .filter_map(|m| m.region.map(|r| r.2 - r.1))
+                    .fold(0.0, f64::max);
+                let ops: Vec<String> = {
+                    let mut v: Vec<String> = ms
+                        .iter()
+                        .filter_map(|m| m.op.and_then(|o| st.sim.tl.ops.get(o)).map(|o| o.name.clone()))
+                        .collect();
+                    v.dedup();
+                    v
                 };
-                let r = ui.add(
-                    egui::Label::new(
-                        egui::RichText::new(format!("{}  {}", clock(m.t), m.text))
-                            .size(11.0)
-                            .color(c),
-                    )
-                    .sense(Sense::click()),
-                );
-                if r.on_hover_text("Go there").clicked() {
-                    jump = Some(m.t);
-                }
+                let setups: Vec<&str> = {
+                    let mut v: Vec<&str> = ms
+                        .iter()
+                        .filter_map(|m| st.sim.setups.get(m.setup).map(|s| s.name.as_str()))
+                        .collect();
+                    v.dedup();
+                    v
+                };
+                // the tool, where the kind's places name one: once in the heading if all share it
+                let one_tool = {
+                    let mut v: Vec<&str> = ms.iter().map(|m| m.tool.as_str()).collect();
+                    v.dedup();
+                    (v.len() == 1 && !v[0].is_empty()).then(|| v[0].to_string())
+                };
+                let plural = |w: &str| if n == 1 { w.to_string() } else { format!("{w}s") };
+                let title = match *rank {
+                    2 => format!(
+                        "Stock left as planned \u{b7} {n} {} under the part \u{b7} up to {thick:.1} mm thick",
+                        plural("region")
+                    ),
+                    1 => format!(
+                        "Material left on the part \u{b7} {n} {} \u{b7} up to {thick:.1} mm thick \u{b7} in {}",
+                        plural("region"),
+                        setups.join(", ")
+                    ),
+                    _ => format!(
+                        "{} \u{b7} {n} \u{b7} in {}{}",
+                        rule_title(rule),
+                        if ops.is_empty() { setups.join(", ") } else { ops.join(", ") },
+                        one_tool.as_ref().map_or(String::new(), |w| format!(" \u{b7} {w}"))
+                    ),
+                };
+                let c = marker_colour(ms[0]);
+                let has_pick = st.issue.is_some_and(|p| ks.contains(&p));
+                egui::CollapsingHeader::new(egui::RichText::new(title).size(12.0).color(c))
+                    .id_salt(("camsim:group", *rank, rule.as_str()))
+                    .default_open(*rank == 0 && n <= 4)
+                    .open(has_pick.then_some(true).filter(|_| st.issue_new))
+                    .show(ui, |ui| {
+                        // a long kind lists 8 places (around the picked one) until all are asked for
+                        let all_id = ui.scope_id().with("all");
+                        let all = ui.data(|d| d.get_temp::<bool>(all_id).unwrap_or(false));
+                        const SHOWN: usize = 8;
+                        let at = ks.iter().position(|&k| st.issue == Some(k)).unwrap_or(0);
+                        let from = if all || n <= SHOWN {
+                            0
+                        } else {
+                            at.saturating_sub(SHOWN / 2).min(n - SHOWN)
+                        };
+                        let to = if all { n } else { (from + SHOWN).min(n) };
+                        for (&k, m) in ks.iter().zip(&ms).skip(from).take(to - from) {
+                            let picked = st.issue == Some(k);
+                            let mut text = egui::RichText::new(if m.tool.is_empty() || one_tool.is_some() {
+                                format!("{} \u{b7} {}", clock(m.t), m.row)
+                            } else {
+                                format!("{} \u{b7} {} \u{b7} {}", clock(m.t), m.tool, m.row)
+                            })
+                                .size(11.0)
+                                .color(if *rank == 2 { t.ink2 } else { c });
+                            if picked {
+                                text = text.background_color(look_selected(t));
+                            }
+                            let r = ui.add(egui::Label::new(text).sense(Sense::click()));
+                            if picked && st.issue_new {
+                                r.scroll_to_me(Some(egui::Align::Center));
+                            }
+                            if r.on_hover_text(format!("{}\nGo there", m.text)).clicked() {
+                                pick = Some(k);
+                                jump = Some(m.t);
+                            }
+                        }
+                        if to - from < n {
+                            let more = ui.add(
+                                egui::Label::new(
+                                    egui::RichText::new(format!("Show all {n}"))
+                                        .size(11.0)
+                                        .color(t.accent),
+                                )
+                                .sense(Sense::click()),
+                            );
+                            if more.clicked() {
+                                ui.data_mut(|d| d.insert_temp(all_id, true));
+                            }
+                        }
+                    });
             }
         });
+    st.issue_new = false;
+    if let Some(k) = pick {
+        st.issue = Some(k);
+    }
     if let Some(tm) = jump {
         st.jump(tm);
+    }
+}
+
+/// A picked row's background: the selection's blue, faint under the row's own colour.
+fn look_selected(t: &crate::shell::theme::Theme) -> Color32 {
+    t.accent.gamma_multiply(0.25)
+}
+
+/// The Checks tab's first line, in words: what every move was checked for and what it found
+/// (each failure in its issue kind's words), and whether the leftover was measured; true if any
+/// check failed. The checker's pair count and rule codes are its hover.
+pub fn checked_line(markers: &[Marker], leftover_done: bool) -> (String, bool) {
+    // each failed kind counted, said by its title ("24 rapids into the stock")
+    let said = |rules: &[&str], clear: &str| -> (String, usize) {
+        let mut parts = vec![];
+        let mut all = 0;
+        for r in rules {
+            let k = markers.iter().filter(|m| m.rule == *r).count();
+            if k > 0 {
+                all += k;
+                let title = rule_title(r).to_lowercase();
+                let title = if k == 1 { singular(&title) } else { title };
+                parts.push(format!("{k} {title}"));
+            }
+        }
+        if parts.is_empty() {
+            (clear.to_string(), 0)
+        } else {
+            (parts.join(", "), all)
+        }
+    };
+    let (g, gn) = said(&["gouge"], "no gouges");
+    let (h, hn) = said(
+        &[
+            "holder_collision",
+            "shank_collision",
+            "fixture_collision",
+            "holder_into_stock",
+            "machine_collision",
+        ],
+        "holder and fixture clear",
+    );
+    let (r, rn) = said(
+        &[
+            "rapid_into_stock",
+            "rapid_into_part",
+            "rapid_into_workholding",
+            "rapid_clear",
+        ],
+        "rapids clear",
+    );
+    let leftover = if leftover_done {
+        "Leftover stock measured exactly."
+    } else {
+        "Leftover stock not measured."
+    };
+    (
+        format!("Every move checked: {g}, {h}, {r}. {leftover}"),
+        gn + hn + rn > 0,
+    )
+}
+
+/// A kind's title for one of it: "rapids into the stock" → "rapid into the stock".
+fn singular(title: &str) -> String {
+    let (head, rest) = title.split_once(' ').unwrap_or((title, ""));
+    let head = head.strip_suffix('s').unwrap_or(head);
+    if rest.is_empty() {
+        head.to_string()
+    } else {
+        format!("{head} {rest}")
+    }
+}
+
+/// A run's warning in people's words (UX-LEAD: what is wrong and what to do; the syntax and the
+/// rule's code are its hover): a setup not placed on the machine, a part whose material is only
+/// a group. Else the warning as it is.
+pub fn note_words(raw: &str) -> String {
+    if let Some(i) = raw.find("setup `")
+        && raw.contains("is not placed")
+    {
+        let name = raw[i + 7..].split('`').next().unwrap_or("");
+        return format!(
+            "Setup {name} isn't placed on the machine. Place it to check machine travel, or allow uncertified output in NC Programs."
+        );
+    }
+    if let Some(i) = raw.find("names only a material group (") {
+        // the group by its name in the tool library's cutting data, never the bare key
+        let g = raw[i + 29..].split(')').next().unwrap_or("");
+        static LIB: std::sync::OnceLock<forge_tooling::Library> = std::sync::OnceLock::new();
+        let lib = LIB.get_or_init(forge_tooling::Library::builtin);
+        let group = lib
+            .group(g)
+            .map(|gr| format!(": {}", gr.name))
+            .unwrap_or_default();
+        return format!(
+            "The part's material is only a group{group}. Pick the alloy for realistic feeds and tool life."
+        );
+    }
+    raw.to_string()
+}
+
+/// A check's rule as a group's title.
+fn rule_title(rule: &str) -> String {
+    match rule {
+        "holder_collision" => "Holder hits".into(),
+        "fixture_collision" => "Fixture hits".into(),
+        "probe_clear" => "Probe too close".into(),
+        "containment" => "Outside the stock".into(),
+        "shank_collision" => "Shank hits".into(),
+        "gouge" => "Gouges".into(),
+        "rapid_clear" => "Rapids too close".into(),
+        "rapid_into_stock" => "Rapids into the stock".into(),
+        "rapid_into_part" => "Rapids into the part".into(),
+        "rapid_into_workholding" => "Rapids into the workholding".into(),
+        "holder_into_stock" => "Holder into the stock".into(),
+        "machine_collision" => "Machine collisions".into(),
+        "refused" => "Refused ops".into(),
+        "overtravel" => "Beyond the machine's travel".into(),
+        r => {
+            let w = r.replace('_', " ");
+            w.get(0..1).map_or(w.clone(), |f| f.to_uppercase() + &w[1..])
+        }
     }
 }
 
