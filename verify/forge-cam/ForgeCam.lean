@@ -16,3 +16,4 @@ import ForgeCam.Heights
 import ForgeCam.Turn
 import ForgeCam.Halfspace
 import ForgeCam.Drop
+import ForgeCam.Quad

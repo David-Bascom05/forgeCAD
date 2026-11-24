@@ -118,3 +118,11 @@ import ForgeCam
 #print axioms ForgeCam.ring_bound
 #print axioms ForgeCam.line_rho_ge
 #print axioms ForgeCam.line_bound
+#print axioms ForgeCam.Turn.rect_in_convex
+#print axioms ForgeCam.Quad.quad_mul
+#print axioms ForgeCam.Quad.quad_div
+#print axioms ForgeCam.Quad.quad_sign_rat
+#print axioms ForgeCam.Quad.quad_sign_root
+#print axioms ForgeCam.Quad.quad_sign_same
+#print axioms ForgeCam.Quad.quad_sign_opp
+#print axioms ForgeCam.Quad.quad_sign_opp'
