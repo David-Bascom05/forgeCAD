@@ -1,6 +1,6 @@
 # Record: photos and videos of any environment — design note
 
-Status: proposal, 2026-11-24. Owner: RENDER-STUDIO. Asked by David: "for all environments we should
+Status: building, 2026-11-24 (photo, record, PNG frames, native MP4 via ffmpeg, the MP4 muxer done). Owner: RENDER-STUDIO. Asked by David: "for all environments we should
 be able to record the entire simulation, and output video or photos." A shared capability in the
 environments framework (ENVIRONMENTS' `shell/env/`): every environment gets it with no work of its
 own beyond exposing a timeline if it has one.
@@ -40,15 +40,18 @@ output size (raster) or traces it (Studio tracer, fixed seed per frame), reads i
 the Studio's queue does, so the browser never blocks) and hands it to the encoder. One frame per
 GUI tick, so the window stays live and Cancel works.
 
-## 3. Encoders and licences (nothing GPL ships)
-| Output | Native | Browser | Licence |
-|---|---|---|---|
-| PNG | `png` (in tree) | same (wasm) | MIT/Apache |
-| PNG sequence | zip, stored (our own writer: CRC-32 + headers, ~100 lines) | same, download | ours |
-| GIF | our own encoder: median-cut palette per run, `weezl` LZW (already in the lock) | same | MIT/Apache |
-| Video | AV1 via `rav1e` into WebM (our own Matroska muxer), behind a cargo feature `video` (on in releases, off in quick dev builds); without it, the PNG sequence with a note | WebCodecs `VideoEncoder` (VP9, else AV1, else H.264 where the browser has it) into the same WebM muxer; MediaRecorder only as a last resort (it is wall-clock) | rav1e BSD-2-Clause; WebCodecs is the browser's |
-H.264/MP4 natively is left out: the open encoders are GPL (x264) or patent-encumbered binaries
-(OpenH264); WebM/AV1 plays in every current browser and in VLC/ffmpeg.
+## 3. Encoders and licences (David's decision, 2026-11-24: MP4; ffmpeg the one dependency)
+| Output | Native | Browser |
+|---|---|---|
+| Still | PNG (`png`, in tree) | the same (the project's files, downloadable) |
+| PNG frames | a folder of `frame_NNNNN.png` | a zip, our own stored-zip writer (`record/zip.rs`) |
+| MP4 (H.264) | ffmpeg as a **subprocess** (`record/ffmpeg.rs`): raw RGBA on stdin, `libopenh264` first, else the platform's encoder, `libx264` only in a user's own ffmpeg, else `mpeg4`; found at `FORGE_FFMPEG`, beside the app (the installers put the bundled LGPL build there), then PATH; nothing of ffmpeg is linked | WebCodecs `VideoEncoder` (`avc1`) into our own MP4 muxer (`record/mp4.rs`, checked by ffmpeg decoding what it writes); no `avc1` → PNG zip |
+| no ffmpeg | PNG frames and the exact ffmpeg command to make the video | — |
+Each recording says which path made it (`Recorded … (N frames, ENCODER)`). GIF and WebM are out
+(no second encoder, no new compiled dependency). Bundling ffmpeg (an LGPL build with openh264,
+pinned, fetched by the installers, never committed) waits on a decision: the prebuilt LGPL builds
+are rolling (unpinnable); building it ourselves in CI from the ffmpeg.org tarball with a pinned
+configure line is the proposal (see the coordinator thread).
 
 ## 4. Determinism and tests
 - Frame k is at t = k / fps exactly; the tracer's seed is (seed, k); nothing reads a clock.
