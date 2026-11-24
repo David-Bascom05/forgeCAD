@@ -60,6 +60,7 @@ what their absence means.
 | preference | optional | −1, 0, 1 (createAxis semantics); 0 |
 | reset | optional | never op-start rewind both; never |
 | diameter | optional | lathe X only: the word is a diameter |
+| ref | optional | `plus` or `minus`: the end of the travel where the machine's zero (reference point) sits, as makers publish it |
 
 ## `[[machine.spindle]]`
 
@@ -67,7 +68,10 @@ what their absence means.
 `axis`, `nose` (a point on the spin axis: gauge line or spindle face), `rpm = [min, max]`, `max =
 [length, diameter]` (milling) or `[swing, part length]` (turning). Optional: `curve_rpm`/`curve_kw`
 (piecewise-linear power, rpm increasing; absent: no power check), `interface`, `c_joint` (the rotary
-joint that positions this spindle as a C axis).
+joint that positions this spindle as a C axis), `ratings_kw` / `ratings_duty` (duty ratings as
+published: `cont`, `30min`, `10min`, `1min`, `S3-25%`, ...) and `torque_nm = [max, continuous]`.
+With no curve, a continuous rating and continuous torque give the feeds engine the conservative
+curve: torque-limited to the base speed P / T, then the continuous power.
 
 ## `[[machine.turret]]`
 
@@ -102,7 +106,9 @@ every tool change reports `changer.position` not checked.
 
 ## `[[machine.mount]]`
 
-`name`, `kind` (`tool` | `part`), `link`, `at`, `dir`. A tool mount's `at` is the gauge point and
+`name`, `kind` (`tool` | `part`), `link`, `at`, `dir`. A part mount may give `max_kg` (the most the
+table, pallet or rotary carries) and `max_inertia` (kg·m², rotaries); a setup's `work_kg` is checked
+against `max_kg` (over it: refused; either one absent: reported not checked). A tool mount's `at` is the gauge point and
 `dir` points from it to the tool tip. A part mount's `at` is the fixture datum (table centre, chuck
 face centre), `dir` the part's +Z and `xdir` its +X (orthogonal). Every machine has at least one of
 each; a mill-turn has two part mounts (main, sub).
@@ -176,6 +182,11 @@ the zone the control enforces). tests/collide.rs sweeps every built-in: for each
 joint that moves one relative to the other through its whole range, with the others at every
 combination of their ends; no Hit and no Near.
 
+## Variants and options
+
+One record per variant (spindle, magazine, Y axis, high column): a maker's option sheet becomes as
+many records as builds you use, each named for its build (`haas-vf2-15k`).
+
 ## Structural checks (`MachineDef::validate`)
 
 A `table-table` machine may carry one turning spindle on its table's C (`c_joint` naming a table
@@ -234,6 +245,7 @@ dialect = "fanuc"          # a forge-post dialect, or NAME.toml beside the setup
 program = "op1.nc"         # beside the setup
 step = 0.5                 # removal grid, mm (optional: 1)
 start_tool = 1             # the tool in the spindle at the start (optional)
+work_kg = 40               # part, fixture and pallet top on the part mount (optional)
 # optional: channel = 1, tool_mount, part_mount, dogleg = false, feed_combined = true
 
 [[setup.wcs]]              # per axis letter: the joint value at word 0

@@ -67,6 +67,9 @@ pub struct SetupSpec {
     pub stock: Option<Stock>,
     /// Workholding (vises, clamps, plates, chucks), part frame.
     pub fixture: Vec<Fixture>,
+    /// The work's mass on the part mount (part, fixture, pallet top), kg, for the mount's
+    /// `max_kg`; None: not given (the load is then not checked, and the reply says so).
+    pub work_kg: Option<f64>,
     pub start_tool: Option<u32>,
 }
 
@@ -260,6 +263,11 @@ impl SetupSpec {
             geo,
             stock,
             fixture,
+            work_kg: match num(s, "work_kg") {
+                Some(v) if v >= 0.0 && v.is_finite() => Some(v),
+                Some(_) => return Err("[setup]: `work_kg` must be >= 0".into()),
+                None => None,
+            },
             start_tool: num(s, "start_tool")
                 .map(|v| whole(v, rec, "start_tool"))
                 .transpose()?,
@@ -318,6 +326,39 @@ impl SetupSpec {
     }
 
     /// The workpiece's collision bodies: the stock (a box; a bar as a cylinder on the part's z)
+    /// The work's mass against the part mount's `max_kg`: Ok(()) within it, Err((work, max)) over
+    /// it; or what could not be checked (no `work_kg`, no `max_kg`, or an estimated/unknown one).
+    pub fn check_load(
+        &self,
+        s: &crate::sim::Setup,
+    ) -> (Result<(), (f64, f64)>, Option<crate::sim::Unchecked>) {
+        let Some(mount) = s.def.mount(&s.part_mount) else {
+            return (Ok(()), None);
+        };
+        let path = format!("mount.{}.max_kg", mount.name);
+        let not = |path: String, why: &'static str| {
+            Some(crate::sim::Unchecked {
+                path,
+                why,
+                line: 0,
+                check: "table load",
+            })
+        };
+        match (self.work_kg, mount.max_kg) {
+            (Some(w), Some(max)) => {
+                let est = match s.def.cite_status(&path) {
+                    Some(crate::def::CiteStatus::Unknown) => not(path, "unknown"),
+                    Some(crate::def::CiteStatus::Estimate) => not(path, "estimated"),
+                    None if !s.def.real => not(path, "estimated"),
+                    _ => None,
+                };
+                (if w > max { Err((w, max)) } else { Ok(()) }, est)
+            }
+            (None, Some(_)) => (Ok(()), not("setup.work_kg".into(), "unknown")),
+            (_, None) => (Ok(()), not(path, "unknown")),
+        }
+    }
+
     /// and the fixture boxes.
     pub fn work_bodies(&self, s: &crate::sim::Setup) -> Vec<crate::collide::CBody> {
         let mut out = Vec::new();

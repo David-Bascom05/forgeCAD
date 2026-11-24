@@ -177,6 +177,9 @@ pub struct Joint {
     pub reset: Reset,
     /// A lathe's X: the word is a diameter, the joint moves its half.
     pub diameter: bool,
+    /// Where the machine's zero (reference point) sits in the travel: +1 at the plus end, -1 the
+    /// minus end (`ref = "plus" | "minus"`), as makers publish; None: not stated.
+    pub reference: Option<i8>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -208,6 +211,11 @@ pub struct Spindle {
     pub interface: String,
     /// A joint whose letter positions this spindle as a C axis (mill-turn), if any.
     pub c_joint: Option<String>,
+    /// Duty ratings as makers publish them: (kW, duty) with duty "cont", "30min", "10min",
+    /// "1min", "S3-25%", ... (`ratings_kw` / `ratings_duty`). Empty: none given.
+    pub ratings: Vec<(f64, String)>,
+    /// Torque, N·m: [max, continuous] (`torque_nm`); None: not given.
+    pub torque_nm: Option<[f64; 2]>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -278,6 +286,10 @@ pub struct Mount {
     pub dir: [f64; 3],
     /// Part mount: the part's +X (unit, orthogonal to dir). Tool mount: unused, [1, 0, 0].
     pub xdir: [f64; 3],
+    /// Part mount: the most the table, pallet or rotary carries, kg, and its inertia limit,
+    /// kg·m² (rotaries); None: not given (the load is then not checked, and replies say so).
+    pub max_kg: Option<f64>,
+    pub max_inertia: Option<f64>,
 }
 
 /// An analytic solid in a link's frame (home pose, base coordinates).
@@ -700,6 +712,18 @@ impl Joint {
             preference: preference as i8,
             reset,
             diameter,
+            reference: match text(t, "ref") {
+                None => None,
+                Some("plus") => Some(1),
+                Some("minus") => Some(-1),
+                Some(other) => {
+                    return Err(DefError::Bad {
+                        record: rec,
+                        field: "ref",
+                        why: format!("`{other}`: plus | minus"),
+                    });
+                }
+            },
             name,
         })
     }
@@ -831,6 +855,19 @@ impl MachineDef {
                 },
                 interface: text(s, "interface").unwrap_or("").to_string(),
                 c_joint: text(s, "c_joint").map(str::to_string),
+                ratings: {
+                    let kw = nums(s, "ratings_kw").unwrap_or_default();
+                    let duty = texts(s, "ratings_duty").unwrap_or_default();
+                    if kw.len() != duty.len() || kw.iter().any(|k| k.is_nan() || *k <= 0.0) {
+                        return Err(DefError::Bad {
+                            record: rec,
+                            field: "ratings_kw",
+                            why: "and ratings_duty need one positive kW per duty".into(),
+                        });
+                    }
+                    kw.into_iter().zip(duty).collect()
+                },
+                torque_nm: vec_n::<2>(s, &rec, "torque_nm")?,
                 name: sn,
             });
         }
@@ -1073,6 +1110,14 @@ impl MachineDef {
                 at: need_vec::<3>(s, &rec, "at", "give `at = [x, y, z]`")?,
                 dir,
                 xdir,
+                max_kg: match num(s, "max_kg") {
+                    Some(v) => Some(positive(&rec, "max_kg", v)?),
+                    None => None,
+                },
+                max_inertia: match num(s, "max_inertia") {
+                    Some(v) => Some(positive(&rec, "max_inertia", v)?),
+                    None => None,
+                },
                 name: mn,
             });
         }
@@ -1747,7 +1792,27 @@ impl MachineDef {
                 })
                 .collect(),
             rpm: s.rpm.unwrap_or([0.0, f64::INFINITY]),
-            power: s.power.clone(),
+            // no curve published but a continuous rating and torque: the conservative curve,
+            // torque-limited to the base speed P / T, then the continuous power
+            power: if s.power.is_empty() {
+                match (
+                    s.ratings.iter().find(|(_, d)| d == "cont").map(|(kw, _)| *kw),
+                    s.torque_nm.map(|t| t[1]),
+                    s.rpm.map(|r| r[1]),
+                ) {
+                    (Some(kw), Some(t), Some(top)) if t > 0.0 => {
+                        let base = kw * 1000.0 * 60.0 / (2.0 * std::f64::consts::PI * t);
+                        if base < top {
+                            vec![[0.0, 0.0], [base, kw], [top, kw]]
+                        } else {
+                            vec![[0.0, 0.0], [top, t * 2.0 * std::f64::consts::PI * top / 60_000.0]]
+                        }
+                    }
+                    _ => Vec::new(),
+                }
+            } else {
+                s.power.clone()
+            },
             max_feed: self
                 .joints
                 .iter()

@@ -250,7 +250,9 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
         ),
     };
     let col = collide::check(&setup, &tl, if modelled { &fixtures } else { &all_work });
+    let (load, load_unchecked) = spec.check_load(&setup);
     let ok = tl.violations.is_empty()
+        && load.is_ok()
         && col.contacts.is_empty()
         && rapid_cuts.is_empty()
         && holder_hits.is_empty();
@@ -274,6 +276,13 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
     // checks made against an unknown or estimated value: never a silent pass
     let mut unchecked = forge_machine::sim::unchecked(def, &tl);
     unchecked.extend(forge_machine::sim::unchecked_cycles(def, &prog));
+    unchecked.extend(load_unchecked);
+    if let Err((w, max)) = load {
+        text.push_str(&format!(
+            "violation: the work's {w} kg is over the {} mount's {max} kg\n",
+            setup.part_mount
+        ));
+    }
     for u in &unchecked {
         text.push_str(&format!(
             "not checked: {} {} ({}{})\n",
@@ -386,7 +395,7 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
         })
         .collect();
     let json = format!(
-        "{{\"format\":\"forgecad.machine/1\",\"ok\":{ok},\"machine\":{},\"program\":{},\"timeline\":{},\"collisions\":[{}],\"rapid_cuts\":[{}],\"holder_hits\":[{}],\"not_checked\":[{}],\"removal\":{rem_json},\"claims\":{}}}",
+        "{{\"format\":\"forgecad.machine/1\",\"ok\":{ok},\"machine\":{},\"program\":{},\"timeline\":{},\"collisions\":[{}],\"rapid_cuts\":[{}],\"holder_hits\":[{}],\"not_checked\":[{}],\"load\":{},\"removal\":{rem_json},\"claims\":{}}}",
         jstr(&def.name),
         jstr(&spec.program),
         forge_machine::sim::timeline_json(&tl),
@@ -394,6 +403,10 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
         rcs.join(","),
         hhs.join(","),
         ucs.join(","),
+        match load {
+            Ok(()) => "null".to_string(),
+            Err((w, max)) => format!("{{\"work_kg\":{},\"max_kg\":{}}}", jnum(w), jnum(max)),
+        },
         jstr(
             "Proven: every pair of bodies on different links (machine envelopes, the tool's cylinders, the fixture; the stock as first given only where removal is not modelled) keeps the machine's clearance on every reported-clear segment, from interval poses (forge-math's interval contracts). Hits carry a witness point found in floating point. Times: t_min is a lower bound under the feed and axis limits; t_stop an exact-stop estimate. Removal heights, rapids into material and tool pieces into material are floating-point simulation at the grid nodes with the stock as cut so far, not a proof. Not claimed: the control's own interpolation, look-ahead or tolerances; machine fidelity beyond the envelopes."
         )

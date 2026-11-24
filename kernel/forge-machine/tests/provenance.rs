@@ -629,3 +629,53 @@ h = 25
     assert!(SetupSpec::parse(&src.replace("name = \"strap clamp\"", "name = \"vise\"")).is_err());
     assert!(SetupSpec::parse(&(src.to_string() + "\n[[setup.fixture]]\nname = \"empty\"\n")).is_err());
 }
+
+#[test]
+fn ratings_torque_ref_and_the_table_load() {
+    use forge_machine::setup::SetupSpec;
+    let src = vmc3()
+        .replacen("interface = \"BT40\"", "interface = \"BT40\"\nratings_kw = [11, 15]\nratings_duty = [\"cont\", \"30min\"]\ntorque_nm = [95, 70]", 1)
+        .replacen("name = \"table\"\nkind = \"part\"", "name = \"table\"\nmax_kg = 300\nkind = \"part\"", 1)
+        .replacen("range = [-300, 300]", "range = [-300, 300]\nref = \"plus\"", 1);
+    let m = &MachineDef::parse_all(&src).unwrap_or_else(|e| panic!("{e}"))[0];
+    let sp = &m.spindles[0];
+    assert_eq!(
+        sp.ratings,
+        vec![(11.0, "cont".to_string()), (15.0, "30min".to_string())]
+    );
+    assert_eq!(sp.torque_nm, Some([95.0, 70.0]));
+    assert_eq!(m.joint("X").unwrap().reference, Some(1));
+    assert_eq!(m.mount("table").unwrap().max_kg, Some(300.0));
+    // the published curve stays; without one the continuous rating and torque make one
+    assert_eq!(m.to_tooling().unwrap().power, sp.power);
+    let mut m2 = m.clone();
+    m2.spindles[0].power.clear();
+    let p = m2.to_tooling().unwrap().power;
+    let base = 11_000.0 * 60.0 / (2.0 * std::f64::consts::PI * 70.0);
+    assert_eq!(p.len(), 3);
+    assert!(
+        (p[1][0] - base).abs() < 1e-9 && p[1][1] == 11.0 && p[2] == [12000.0, 11.0],
+        "{p:?}"
+    );
+    let setup = |kg: &str| {
+        SetupSpec::parse(&format!(
+            "[setup]\nmachine = \"m\"\ndialect = \"fanuc\"\nprogram = \"p.nc\"\n{kg}\n[[setup.wcs]]\nn = 54\nz = -500\n"
+        ))
+        .unwrap()
+    };
+    let dsrc = Control::dialect_src("fanuc").unwrap();
+    let over = setup("work_kg = 350");
+    let s = over.build(m, dsrc).unwrap();
+    let (r, u) = over.check_load(&s);
+    assert_eq!(r, Err((350.0, 300.0)));
+    // the record is not a real machine: its 300 kg is an estimate, and the reply says so
+    assert_eq!(u.map(|u| u.why), Some("estimated"));
+    let ok = setup("work_kg = 120");
+    assert_eq!(ok.check_load(&ok.build(m, dsrc).unwrap()).0, Ok(()));
+    let none = setup("");
+    let (r, u) = none.check_load(&none.build(m, dsrc).unwrap());
+    assert_eq!(
+        (r, u.map(|u| u.path)),
+        (Ok(()), Some("setup.work_kg".to_string()))
+    );
+}
