@@ -228,7 +228,9 @@ impl Field {
     /// The link by retract from `cur` to `target` (its level): up, across at the retract height,
     /// down. A rapid is certified against the stock as it stood before the op (G3, 0.1 mm clear),
     /// so up and down go at feed only through the height that stock stood at over the tool's
-    /// disk (and `CLEAR` above it), rapid beyond.
+    /// disk (and `CLEAR` above it), rapid beyond. Across, through `via` first (xy, at the retract
+    /// height): a return over the swath the last pass cut, not across what is still uncut
+    /// (fto-adaptive.md §9: the path as travelled must not wind round uncut material).
     fn retract_link(
         &self,
         mv: &mut Vec<PMove>,
@@ -236,6 +238,7 @@ impl Field {
         target: [f64; 3],
         retract: f64,
         feed: (f64, f64),
+        via: &[[f64; 2]],
     ) {
         const CLEAR: f64 = 0.5;
         let rr = self.r + CLEAR + self.map0.h;
@@ -253,6 +256,11 @@ impl Field {
                     to: [cur[0], cur[1], retract],
                 });
             }
+        }
+        for v in via {
+            mv.push(PMove::Rapid {
+                to: [v[0], v[1], retract],
+            });
         }
         mv.push(PMove::Rapid {
             to: [target[0], target[1], retract],
@@ -346,6 +354,8 @@ pub fn adaptive(
     let peel_cos = dmath::cos(PEEL.to_radians());
     // the direction the last pass went along the sweep (+1 with it, −1 against it)
     let mut last_sign = 1.0f64;
+    // the way back over the last pass, for a link by retract (one-way passes)
+    let mut back: Vec<[f64; 2]> = Vec::new();
     let mut mv: Vec<PMove> = Vec::new();
     let mut voids = Vec::new();
     // where the tool is: (x, y, z)
@@ -608,7 +618,7 @@ pub fn adaptive(
                     phase: Phase::Link,
                 });
             } else {
-                f.retract_link(&mut mv, cur, target, h.retract, feed);
+                f.retract_link(&mut mv, cur, target, h.retract, feed, &back);
             }
             moves_at_level.push((target, target));
             // the heading: the sweep direction, or two-way its reverse (the way material lies)
@@ -726,6 +736,13 @@ pub fn adaptive(
             pts.extend_from_slice(&pass[..keep]);
             fit_arcs(&pts, f.r, feed.0, &mut mv);
             at = Some(if keep > 0 { pass[keep - 1] } else { target });
+            // the way back over this pass: its points from the end to its start, simplified to
+            // within r/2 of it (inside the swath it cut)
+            back = simplify(
+                &pts.iter().rev().map(|q| [q[0], q[1]]).collect::<Vec<_>>(),
+                0.5 * f.r,
+            );
+            back.remove(0);
             // each start is used once (crumbs the cap keeps a pass from reaching are left to
             // the wall pass, not retried)
             cands.retain(|c| *c != p);
@@ -858,7 +875,7 @@ pub fn adaptive(
                             phase: Phase::Link,
                         });
                     } else {
-                        f.retract_link(&mut mv, cur, target, h.retract, feed);
+                        f.retract_link(&mut mv, cur, target, h.retract, feed, &[]);
                     }
                     let mut a = target;
                     for sg in &l.segs {
@@ -922,6 +939,36 @@ pub fn adaptive(
         },
         voids,
     })
+}
+
+/// A polyline simplified (Douglas–Peucker): every dropped point within `tol` of the kept chord.
+fn simplify(p: &[[f64; 2]], tol: f64) -> Vec<[f64; 2]> {
+    if p.len() <= 2 {
+        return p.to_vec();
+    }
+    let (a, b) = (p[0], p[p.len() - 1]);
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let ll = dx * dx + dy * dy;
+    let mut worst = (0.0, 0);
+    for (i, q) in p.iter().enumerate().take(p.len() - 1).skip(1) {
+        let t = if ll > 0.0 {
+            (((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / ll).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
+        let d = ((q[0] - a[0] - t * dx).powi(2) + (q[1] - a[1] - t * dy).powi(2)).sqrt();
+        if d > worst.0 {
+            worst = (d, i);
+        }
+    }
+    if worst.0 <= tol {
+        return vec![a, b];
+    }
+    let mut l = simplify(&p[..=worst.1], tol);
+    let r = simplify(&p[worst.1..], tol);
+    l.pop();
+    l.extend(r);
+    l
 }
 
 /// The pass through `pts` (one height) as moves: greedy arcs through runs of points, each
@@ -1148,63 +1195,25 @@ mod tests {
         }
     }
 
-    /// The winding number about q of the path's pieces at depth (z ≤ `zmax`): each run of moves
-    /// that stays at or below it, closed by its own end–start chord, summed. Retracts and rapids
-    /// above `zmax` end a piece (the tool lifted).
-    fn winding_at_depth(path: &OpPath, q: [f64; 2], zmax: f64) -> i64 {
-        let mut total = 0i64;
-        let mut piece: Vec<PMove> = Vec::new();
-        let mut start = path.start;
+    /// The path as travelled: points no further apart than 0.25 mm (arcs by chords), each with
+    /// whether the move reaching it cuts (a feed move that is not a link or a plunge).
+    fn travelled(path: &OpPath) -> Vec<([f64; 3], bool)> {
+        let mut pts = vec![(path.start, false)];
         let mut at = path.start;
-        let flush = |piece: &mut Vec<PMove>, start: [f64; 3], total: &mut i64| {
-            if !piece.is_empty() {
-                let p = OpPath {
-                    tool: path.tool,
-                    start,
-                    moves: std::mem::take(piece),
-                    rpm: 0.0,
-                    coolant: forge_post::Coolant::Flood,
-                };
-                *total += winding(&p, q);
-            }
-        };
         for mv in &path.moves {
-            let to = match *mv {
-                PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+            let (to, cut) = match *mv {
+                PMove::Rapid { to } => (to, false),
+                PMove::Line { to, phase, .. } => (to, phase == Phase::Cut),
+                PMove::Arc { to, .. } => (to, true),
                 PMove::Cycle { .. } => continue,
             };
-            if at[2] <= zmax && to[2] <= zmax {
-                if piece.is_empty() {
-                    start = at;
-                }
-                piece.push(*mv);
-            } else {
-                flush(&mut piece, start, &mut total);
-            }
-            at = to;
-        }
-        flush(&mut piece, start, &mut total);
-        total
-    }
-
-    /// The winding number of a path's xy projection (every move, links and rapids too, closed
-    /// by the chord from its end to its start) about q.
-    fn winding(path: &OpPath, q: [f64; 2]) -> i64 {
-        let mut pts: Vec<[f64; 2]> = vec![[path.start[0], path.start[1]]];
-        let mut at = path.start;
-        for mv in &path.moves {
             match *mv {
-                PMove::Rapid { to } | PMove::Line { to, .. } => {
-                    pts.push([to[0], to[1]]);
-                    at = to;
-                }
-                PMove::Arc { to, c, cw, .. } => {
-                    // the arc by points (its sweep under a half turn each way of the chord's side)
+                PMove::Arc { c, cw, .. } => {
                     let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
                     let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
                     let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
-                    let mut sw = a1 - a0;
                     let tau = std::f64::consts::TAU;
+                    let mut sw = a1 - a0;
                     if cw {
                         while sw >= 0.0 {
                             sw -= tau;
@@ -1214,36 +1223,153 @@ mod tests {
                             sw += tau;
                         }
                     }
-                    for k in 1..=16 {
-                        let (sn, cs) = dmath::sin_cos(a0 + sw * k as f64 / 16.0);
-                        pts.push([c[0] + r * cs, c[1] + r * sn]);
+                    let n = ((sw.abs() * r / 0.25).ceil() as usize).max(1);
+                    for k in 1..=n {
+                        let t = k as f64 / n as f64;
+                        let (sn, cs) = dmath::sin_cos(a0 + sw * t);
+                        pts.push(([c[0] + r * cs, c[1] + r * sn, at[2] + t * (to[2] - at[2])], true));
                     }
-                    at = to;
                 }
-                PMove::Cycle { .. } => {}
+                _ => {
+                    let l =
+                        ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+                    let n = ((l / 0.25).ceil() as usize).max(1);
+                    for k in 1..=n {
+                        let t = k as f64 / n as f64;
+                        pts.push((
+                            [
+                                at[0] + t * (to[0] - at[0]),
+                                at[1] + t * (to[1] - at[1]),
+                                at[2] + t * (to[2] - at[2]),
+                            ],
+                            cut,
+                        ));
+                    }
+                }
             }
+            at = to;
         }
-        pts.push(pts[0]);
-        let mut total = 0.0;
-        for w in pts.windows(2) {
-            let a = dmath::atan2(w[0][1] - q[1], w[0][0] - q[0]);
-            let b = dmath::atan2(w[1][1] - q[1], w[1][0] - q[0]);
-            let mut d = b - a;
-            while d > std::f64::consts::PI {
-                d -= std::f64::consts::TAU;
-            }
-            while d < -std::f64::consts::PI {
-                d += std::f64::consts::TAU;
-            }
-            total += d;
-        }
-        (total / std::f64::consts::TAU).round() as i64
+        pts
     }
 
-    /// fto-adaptive.md §9 condition (2): the whole path, passes and links and rapids, closed by
-    /// its end–start chord, winds 0 times round the island, and at most once round any point of
-    /// a grid (a pass and its way back enclose a strip of cleared air once; a spiral winds n
-    /// times round its core).
+    /// fto-adaptive.md §9 (TOOLPATH-RESEARCH, corrected 2026-11-24), the binding tests:
+    /// (1) each pass (a run of cutting moves at one depth) turns in all by at most 2·PEEL;
+    /// (2) the path AS TRAVELLED (passes, links and rapids in order, never closed by a chord)
+    ///     sweeps an angle about every island point, and about every point of material while it
+    ///     is still uncut, that stays strictly inside (−2π, 2π) at every prefix: a spiral or a
+    ///     moat accumulates whole turns, peels with their returns oscillate.
+    fn assert_no_winding(path: &OpPath, island: [f64; 4], stock: [f64; 4], z: f64, r: f64, what: &str) {
+        let pts = travelled(path);
+        // (1)
+        let mut run: Vec<[f64; 2]> = Vec::new();
+        let mut check = |run: &mut Vec<[f64; 2]>| {
+            let mut total = 0.0f64;
+            let mut last: Option<f64> = None;
+            for w in run.windows(2) {
+                let (dx, dy) = (w[1][0] - w[0][0], w[1][1] - w[0][1]);
+                if dx * dx + dy * dy < 1e-12 {
+                    continue;
+                }
+                let h = dmath::atan2(dy, dx);
+                if let Some(l) = last {
+                    let mut d = h - l;
+                    while d > std::f64::consts::PI {
+                        d -= std::f64::consts::TAU;
+                    }
+                    while d < -std::f64::consts::PI {
+                        d += std::f64::consts::TAU;
+                    }
+                    total += d;
+                }
+                last = Some(h);
+            }
+            assert!(
+                total.abs().to_degrees() <= 2.0 * PEEL + 1.0,
+                "{what}: a pass turns {:.1} deg in all",
+                total.to_degrees()
+            );
+            run.clear();
+        };
+        let mut prev: Option<[f64; 3]> = None;
+        for &(p, cut) in &pts {
+            let at_depth = (p[2] - z).abs() < 1e-9 && prev.is_some_and(|q| (q[2] - z).abs() < 1e-9);
+            if cut && at_depth {
+                if run.is_empty() {
+                    let q = prev.unwrap();
+                    run.push([q[0], q[1]]);
+                }
+                run.push([p[0], p[1]]);
+            } else if !run.is_empty() {
+                check(&mut run);
+            }
+            prev = Some(p);
+        }
+        if !run.is_empty() {
+            check(&mut run);
+        }
+        // (2): the points, each with the index from which it is cut (islands never)
+        let mut probes: Vec<([f64; 2], usize)> = Vec::new();
+        let mut y = island[1] + 0.5;
+        while y < island[3] {
+            let mut x = island[0] + 0.5;
+            while x < island[2] {
+                probes.push(([x, y], usize::MAX));
+                x += 1.0;
+            }
+            y += 1.0;
+        }
+        let mut y = stock[1] + 0.25;
+        while y < stock[3] {
+            let mut x = stock[0] + 0.25;
+            while x < stock[2] {
+                let inside_island = x > island[0] && x < island[2] && y > island[1] && y < island[3];
+                if !inside_island {
+                    // cut from the first point where the tool at the level comes within r of it
+                    let k = pts
+                        .iter()
+                        .position(|(p, _)| {
+                            p[2] <= z + 1e-9 && (p[0] - x).powi(2) + (p[1] - y).powi(2) <= r * r
+                        })
+                        .unwrap_or(usize::MAX);
+                    probes.push(([x + 0.013, y + 0.017], k));
+                }
+                x += 1.5;
+            }
+            y += 1.5;
+        }
+        for (q, until) in probes {
+            let mut sum = 0.0f64;
+            let mut worst = 0.0f64;
+            let n = pts.len().min(until);
+            for w in pts[..n].windows(2) {
+                let a = dmath::atan2(w[0].0[1] - q[1], w[0].0[0] - q[0]);
+                let b = dmath::atan2(w[1].0[1] - q[1], w[1].0[0] - q[0]);
+                let mut d = b - a;
+                while d > std::f64::consts::PI {
+                    d -= std::f64::consts::TAU;
+                }
+                while d < -std::f64::consts::PI {
+                    d += std::f64::consts::TAU;
+                }
+                sum += d;
+                worst = worst.max(sum.abs());
+            }
+            assert!(
+                worst < std::f64::consts::TAU - 1e-6,
+                "{what}: the path turns {:.0} deg about ({:.2}, {:.2}) while it is {}",
+                worst.to_degrees(),
+                q[0],
+                q[1],
+                if until == usize::MAX {
+                    "an island or never cut"
+                } else {
+                    "uncut"
+                }
+            );
+        }
+    }
+
+    /// fto-adaptive.md §9 (2) as corrected: see `assert_no_winding`.
     #[test]
     fn path_winds_round_nothing() {
         let t = tool("flat-6");
@@ -1255,13 +1381,15 @@ mod tests {
             ],
         };
         let ip = InProcess::new([0.0, 0.0, -5.0], [40.0, 30.0, 0.0]);
+        // the wall pass is a plain offset round the walls and islands at the end of each level
+        // (§9 (1)): it goes round by design, so these tests are of the sweep alone (wall off)
         for (sweep, wall, two_way) in [
             (0.0, false, false),
             (90.0, false, false),
-            (0.0, true, false),
+            (30.0, false, false),
             (0.0, false, true),
             (90.0, false, true),
-            (0.0, true, true),
+            (30.0, false, true),
         ] {
             let prm = Adaptive {
                 phi_max: 60.0,
@@ -1291,44 +1419,14 @@ mod tests {
                 &prm,
             )
             .unwrap();
-            if std::env::var_os("FORGE_ADAPTIVE_DUMP").is_some() {
-                let mut t = format!("start {:?}\n", out.path.start);
-                for m in &out.path.moves {
-                    t += &format!("{m:?}\n");
-                }
-                std::fs::write(
-                    std::env::temp_dir().join(format!("adaptive_{sweep}_{wall}_{two_way}.txt")),
-                    t,
-                )
-                .unwrap();
-            }
-            // the whole projection, rapids over the island included (reported: whether it is
-            // the reading fto-adaptive.md §9 (2) means is with TOOLPATH-RESEARCH)
-            eprintln!(
-                "sweep {sweep}, wall {wall}, two-way {two_way}: whole path winds {} round the island, at depth {}",
-                winding(&out.path, [20.0, 15.0]),
-                winding_at_depth(&out.path, [20.0, 15.0], -2.9)
+            assert_no_winding(
+                &out.path,
+                [15.0, 11.0, 25.0, 19.0],
+                [0.0, 0.0, 40.0, 30.0],
+                -3.0,
+                3.0,
+                &format!("sweep {sweep}, wall {wall}, two-way {two_way}"),
             );
-            assert_eq!(
-                winding_at_depth(&out.path, [20.0, 15.0], -2.9),
-                0,
-                "sweep {sweep}, wall {wall}, two-way {two_way}: round the island"
-            );
-            let mut y = -6.0;
-            while y <= 36.0 {
-                let mut x = -6.0;
-                while x <= 46.0 {
-                    // a pass and the link or rapid back enclose the strip of cleared air between
-                    // them once; a spiral of n loops winds n times round its core
-                    let w = winding_at_depth(&out.path, [x + 0.013, y + 0.017], -2.9);
-                    assert!(
-                        w.abs() <= 1,
-                        "sweep {sweep}, wall {wall}, two-way {two_way}: {w} times round ({x}, {y})"
-                    );
-                    x += 2.0;
-                }
-                y += 2.0;
-            }
         }
     }
 
