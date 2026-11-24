@@ -349,10 +349,7 @@ fn f(x: f64) -> String {
 }
 
 pub fn write(all: &[Instance]) -> String {
-    write_with(
-        "Physical tool instances (forgecad tool log). One [[instance]] per tool on the shelf.",
-        all,
-    )
+    write_with("Physical tool instances (forgecad tool log). One [[instance]] per tool on the shelf.", all)
 }
 
 /// `write` with its own header comment (each line prefixed `# `; empty: none).
@@ -746,9 +743,7 @@ impl Mounts {
     }
 
     pub fn write(&self) -> String {
-        let mut o = String::from(
-            "# Physical tools mounted per tool number (forgecad tool log / the CAM workspace).\n[mounts]\n",
-        );
+        let mut o = String::from("# Physical tools mounted per tool number (forgecad tool log / the CAM workspace).\n[mounts]\n");
         for (t, l) in &self.by_t {
             o += &format!("T{t} = {}\n", q(l));
         }

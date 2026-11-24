@@ -123,9 +123,7 @@ type Args = Vec<(Option<String>, String)>;
 
 /// The statements `NAME = func(..)` of `src`: name, function, keyword args as written.
 fn calls(src: &str) -> Vec<(String, String, Args)> {
-    let Ok(prog) = syntax::parse(src) else {
-        return vec![];
-    };
+    let Ok(prog) = syntax::parse(src) else { return vec![] };
     let mut out = vec![];
     for s in &prog {
         if let StmtKind::Assign { name, value } = &s.kind
@@ -172,18 +170,12 @@ pub fn settings(src: &str, name: &str) -> Settings {
 pub fn tool_list(src: &str) -> Vec<String> {
     let cs = calls(src);
     let arg = |args: &[(Option<String>, String)], k: &str| {
-        args.iter()
-            .find(|a| a.0.as_deref() == Some(k))
-            .map(|a| unquote(&a.1))
+        args.iter().find(|a| a.0.as_deref() == Some(k)).map(|a| unquote(&a.1))
     };
     cs.iter()
         .filter(|(_, f, _)| f == "tool" || f == "lathe_tool")
         .map(|(name, _, args)| {
-            let id = args
-                .iter()
-                .find(|a| a.0.is_none())
-                .map(|a| unquote(&a.1))
-                .unwrap_or_default();
+            let id = args.iter().find(|a| a.0.is_none()).map(|a| unquote(&a.1)).unwrap_or_default();
             let ops: Vec<&str> = cs
                 .iter()
                 .filter(|(_, _, a)| arg(a, "tool").as_deref() == Some(name.as_str()))
@@ -235,17 +227,11 @@ pub fn files(
     let chosen: Vec<&ProgIn> = match which {
         // a program by its name, or every part of a split one by its statement's
         Some(n) => {
-            let ps: Vec<&ProgIn> = progs
-                .iter()
-                .filter(|p| p.name == n || p.statement() == n)
-                .collect();
+            let ps: Vec<&ProgIn> = progs.iter().filter(|p| p.name == n || p.statement() == n).collect();
             if ps.is_empty() {
                 let mut known: Vec<String> = progs.iter().map(|p| p.statement().to_string()).collect();
                 known.dedup();
-                return Err(ExportError::NoProgram {
-                    name: n.into(),
-                    known,
-                });
+                return Err(ExportError::NoProgram { name: n.into(), known });
             }
             ps
         }
@@ -257,10 +243,7 @@ pub fn files(
         let Some(text) = &p.text else {
             return Err(ExportError::Refused {
                 program: p.name.clone(),
-                why: p
-                    .error
-                    .clone()
-                    .unwrap_or_else(|| "an op it posts is refused".into()),
+                why: p.error.clone().unwrap_or_else(|| "an op it posts is refused".into()),
             });
         };
         let full = p.certified == "full";
@@ -288,10 +271,7 @@ pub fn files(
             Some(su) => format!("{stem}-{su}"),
             None => stem,
         };
-        let file = format!(
-            "{stem}.{}",
-            s.ext.clone().unwrap_or_else(|| ext_of(&p.post).to_string())
-        );
+        let file = format!("{stem}.{}", s.ext.clone().unwrap_or_else(|| ext_of(&p.post).to_string()));
         let path = match &s.out {
             Some(d) if !d.is_empty() => format!("{}/{file}", d.trim_end_matches('/')),
             _ => file,
@@ -375,25 +355,11 @@ p2 = program(op1, post: \"grbl\", number: 6)
     fn refused_and_uncertified_programs_are_not_exported_unless_asked() {
         let e = files(SRC, &progs("full"), Some("p2"), true).unwrap_err();
         assert!(matches!(e, ExportError::Refused { .. }), "{e:?}");
-        let e = files(
-            SRC,
-            &progs("except G5 (unchecked: no `at:`)"),
-            Some("prog"),
-            false,
-        )
-        .unwrap_err();
+        let e = files(SRC, &progs("except G5 (unchecked: no `at:`)"), Some("prog"), false).unwrap_err();
         assert!(matches!(e, ExportError::NotCertified { .. }), "{e:?}");
         let f = files(SRC, &progs("except G5 (unchecked: no `at:`)"), Some("prog"), true).expect("allowed");
-        assert!(
-            f[0].text
-                .contains("(NOT CERTIFIED IN FULL: except G5 unchecked: no `at:`)"),
-            "{}",
-            f[0].text
-        );
-        assert!(matches!(
-            files(SRC, &progs("full"), Some("nope"), false),
-            Err(ExportError::NoProgram { .. })
-        ));
+        assert!(f[0].text.contains("(NOT CERTIFIED IN FULL: except G5 unchecked: no `at:`)"), "{}", f[0].text);
+        assert!(matches!(files(SRC, &progs("full"), Some("nope"), false), Err(ExportError::NoProgram { .. })));
         assert_eq!(ext_of("grbl"), "gcode");
     }
 
@@ -411,10 +377,7 @@ p2 = program(op1, post: \"grbl\", number: 6)
         let f = files(SRC, &progs, Some("prog"), false).expect("both parts");
         let paths: Vec<&str> = f.iter().map(|f| f.path.as_str()).collect();
         assert_eq!(paths, ["nc/side-1-op1.ngc", "nc/side-1-op2.ngc"]);
-        assert!(
-            f[1].text.contains("(TOOLS)"),
-            "the statement's settings apply to each part"
-        );
+        assert!(f[1].text.contains("(TOOLS)"), "the statement's settings apply to each part");
         assert_eq!(files(SRC, &progs, Some("prog/op2"), false).unwrap().len(), 1);
     }
 }

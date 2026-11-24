@@ -125,35 +125,18 @@ pub struct Finding {
 
 /// The rules for `check` that apply to `group`, the strictest first (none: not checked).
 pub fn rule_for<'a>(rules: &'a [Rule], check: Check, group: &str) -> Option<&'a Rule> {
-    let mut v: Vec<&Rule> = rules
-        .iter()
-        .filter(|r| r.check == check && r.applies(group))
-        .collect();
+    let mut v: Vec<&Rule> = rules.iter().filter(|r| r.check == check && r.applies(group)).collect();
     v.sort_by(|a, b| {
-        let (x, y) = if check.max() {
-            (a.limit, b.limit)
-        } else {
-            (b.limit, a.limit)
-        };
+        let (x, y) = if check.max() { (a.limit, b.limit) } else { (b.limit, a.limit) };
         x.partial_cmp(&y).unwrap_or(std::cmp::Ordering::Equal)
     });
     v.first().copied()
 }
 
 /// A finding when `value` is on the wrong side of the rule for `check`.
-pub fn judge(
-    rules: &[Rule],
-    check: Check,
-    group: &str,
-    value: f64,
-    at: (usize, usize, usize),
-) -> Option<Finding> {
+pub fn judge(rules: &[Rule], check: Check, group: &str, value: f64, at: (usize, usize, usize)) -> Option<Finding> {
     let r = rule_for(rules, check, group)?;
-    let over = if check.max() {
-        value > r.limit
-    } else {
-        value < r.limit
-    };
+    let over = if check.max() { value > r.limit } else { value < r.limit };
     over.then(|| Finding {
         op: at.0,
         path: at.1,

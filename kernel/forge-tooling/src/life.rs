@@ -427,12 +427,11 @@ pub fn integrate(row: Option<&Row>, cuts: &[Cut], limit: Limit, not_found: &str)
                     String::new()
                 },
                 r.vb.map(|v| format!("VB = {v} mm"))
-                    .unwrap_or_else(|| r.criterion.clone())
-                    + &if r.condition.is_empty() {
-                        String::new()
-                    } else {
-                        format!("; work condition: {}", r.condition)
-                    },
+                    .unwrap_or_else(|| r.criterion.clone()) + &if r.condition.is_empty() {
+                String::new()
+            } else {
+                format!("; work condition: {}", r.condition)
+            },
             ),
         },
     }
