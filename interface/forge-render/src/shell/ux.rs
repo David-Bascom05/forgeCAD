@@ -469,6 +469,96 @@ pub fn loading(ui: &mut Ui, t: &Theme, doing: &str) {
     });
 }
 
+// ----- thumbnails ------------------------------------------------------------------------------
+
+/// A record's thumbnail (§8), drawn from its real geometry by `crate::thumb` the first time `key`
+/// is seen and kept as a texture after that. `key` must change when the geometry does (hash the
+/// record). `mesh` is only called on a miss. None geometry draws the kind's ghost icon.
+pub fn thumbnail(
+    ui: &mut Ui,
+    t: &Theme,
+    key: u64,
+    side: f32,
+    mesh: impl FnOnce() -> Option<crate::thumb::Image>,
+) -> Response {
+    let id = egui::Id::unique(("ux-thumb", key));
+    let tex: Option<Option<egui::TextureHandle>> = ui.ctx().data(|d| d.get_temp(id));
+    let tex = match tex {
+        Some(t) => t,
+        None => {
+            let made = mesh().map(|img| {
+                let ci = egui::ColorImage::from_rgba_unmultiplied(
+                    [img.side as usize, img.side as usize],
+                    &img.rgba,
+                );
+                ui.ctx()
+                    .load_texture(format!("ux-thumb-{key:x}"), ci, egui::TextureOptions::LINEAR)
+            });
+            ui.ctx().data_mut(|d| d.insert_temp(id, made.clone()));
+            made
+        }
+    };
+    let (rect, resp) = ui.allocate_exact_size(vec2(side, side), Sense::hover());
+    ui.painter()
+        .rect_filled(rect, CornerRadius::same(theme::R1), t.raised);
+    match tex {
+        Some(tex) => {
+            let uv = egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0));
+            ui.painter().image(tex.id(), rect.shrink(2.0), uv, Color32::WHITE);
+        }
+        None => {
+            // no geometry published: a dashed square, the ghost's look
+            let r = rect.shrink(side * 0.22);
+            let ink = t.ink2.gamma_multiply(0.7);
+            for (a, b) in [
+                (r.left_top(), r.right_top()),
+                (r.right_top(), r.right_bottom()),
+                (r.right_bottom(), r.left_bottom()),
+                (r.left_bottom(), r.left_top()),
+            ] {
+                ui.painter()
+                    .add(egui::Shape::dashed_line(&[a, b], Stroke::new(1.0, ink), 3.0, 2.0));
+            }
+        }
+    }
+    resp
+}
+
+// ----- ghost labels ----------------------------------------------------------------------------
+
+/// Labels for ghosts (`crate::ghost`), drawn over the view: a short leader up and right from
+/// the anchor to a pill saying what is unknown. `view` is the view's rect on screen; anchors
+/// behind the eye are skipped.
+pub fn ghost_labels(
+    painter: &egui::Painter,
+    t: &Theme,
+    camera: &crate::camera::Camera,
+    view: egui::Rect,
+    labels: &[crate::ghost::Label],
+) {
+    let size = (view.width().max(1.0) as u32, view.height().max(1.0) as u32);
+    for l in labels {
+        let Some((x, y)) = camera.pixel_of(l.at, size.0, size.1) else {
+            continue;
+        };
+        let a = view.min + vec2(x, y);
+        let b = a + vec2(18.0, -18.0);
+        let ink = t.ink;
+        painter.line_segment([a, b], Stroke::new(1.0, ink.gamma_multiply(0.7)));
+        painter.circle_filled(a, 2.5, ink.gamma_multiply(0.8));
+        let g = painter.layout_no_wrap(l.text.clone(), theme::small(), ink);
+        let r = egui::Rect::from_min_size(b + vec2(0.0, -g.size().y * 0.5 - 3.0), g.size() + vec2(12.0, 6.0));
+        painter.rect(
+            r,
+            CornerRadius::same(theme::R1),
+            t.surface.gamma_multiply(0.92),
+            Stroke::new(1.0, t.line),
+            egui::StrokeKind::Inside,
+        );
+        painter.galley(r.min + vec2(6.0, 3.0), g, ink);
+    }
+}
+
 // ----- transport -------------------------------------------------------------------------------
 
 /// What the transport asks for.
