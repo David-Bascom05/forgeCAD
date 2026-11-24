@@ -390,3 +390,30 @@ fn g43_on_a_table_side_z_puts_the_tip_where_a_head_side_z_does() {
         "{last:?}"
     );
 }
+
+#[test]
+fn a_live_turret_lathe_is_a_turn_mill() {
+    let l = lathe()
+        .replace("kind = \"lathe\"", "kind = \"turn-mill\"")
+        .replacen(
+            "[[machine.spindle]]",
+            "[[machine.joint]]\nname = \"C\"\nparent = \"base\"\nside = \"table\"\ntype = \"rotary\"\naxis = [0, 0, 1]\npivot = [0, 0, 0]\nrange = [-360, 360]\nrapid = 36000\nmax_feed = 7200\ncyclic = true\n\n[[machine.spindle]]\nname = \"live\"\nlink = \"X\"\nkind = \"milling\"\naxis = [1, 0, 0]\nnose = [270, 0, 0]\nrpm = [100, 6000]\nmax = [80, 20]\n\n[[machine.spindle]]",
+            1,
+        )
+        .replace("index_axis = [0, 0, 1]\n", "index_axis = [0, 0, 1]\nlive = \"live\"\n")
+        .replace("kind = \"part\"\nlink = \"base\"", "kind = \"part\"\nlink = \"C\"");
+    let m = &MachineDef::parse_all(&l).unwrap_or_else(|e| panic!("{e}\n{l}"))[0];
+    assert_eq!(m.kind, forge_machine::Kind::TurnMill);
+    assert!(m.kind.turns());
+    let c = Control::for_machine(
+        m,
+        "[dialect]\nname = \"t\"\ndecimals = 3\nfeed_decimals = 3\ndwell = \"G04 P{ms}\"\n",
+        1,
+    )
+    .unwrap();
+    assert!(c.lathe && c.diameter == Some('X'));
+    // without the live drive it is not a turn-mill
+    let no_live = l.replace("live = \"live\"\n", "");
+    let e = MachineDef::parse_all(&no_live).unwrap_err().to_string();
+    assert!(e.contains("turn-mill"), "{e}");
+}

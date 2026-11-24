@@ -32,7 +32,7 @@ what their absence means.
 | field | | meaning |
 |---|---|---|
 | name | required | unique in its level |
-| kind | required | `vmc3` `vmc4` `table-table` `head-table` `head-head` `lathe` `mill-turn` |
+| kind | required | `vmc3` `vmc4` `table-table` `head-table` `head-head` `lathe` `mill-turn` `turn-mill` (a live-turret lathe: X Z, optional Y and C, a turret whose `live` names the milling spindle that drives it; no B head) |
 | control | required | the forge-post dialect its control speaks (machine and control kept apart) |
 | source | required | where the numbers come from; `taken`, `note` optional |
 | clearance | required | least gap (mm) the collision check holds between bodies |

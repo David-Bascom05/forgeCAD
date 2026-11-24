@@ -107,7 +107,7 @@ impl Control {
                 diameter = Some(c);
             }
         }
-        let lathe = matches!(def.kind, crate::def::Kind::Lathe | crate::def::Kind::MillTurn);
+        let lathe = def.kind.turns();
         Ok(Control {
             decimals,
             feed_decimals,

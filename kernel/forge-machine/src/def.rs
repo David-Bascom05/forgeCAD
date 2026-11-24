@@ -88,10 +88,13 @@ pub enum Kind {
     /// a lathe that also mills: a live or milling spindle, C on the main spindle, optional B head,
     /// optional sub-spindle.
     MillTurn,
+    /// a live-turret lathe: X and Z (Y optional), C on the spindle optional, a turret whose live
+    /// stations a milling spindle drives; no B head.
+    TurnMill,
 }
 
 impl Kind {
-    pub const ALL: [(&'static str, Kind); 7] = [
+    pub const ALL: [(&'static str, Kind); 8] = [
         ("vmc3", Kind::Vmc3),
         ("vmc4", Kind::Vmc4),
         ("table-table", Kind::TableTable),
@@ -99,7 +102,13 @@ impl Kind {
         ("head-head", Kind::HeadHead),
         ("lathe", Kind::Lathe),
         ("mill-turn", Kind::MillTurn),
+        ("turn-mill", Kind::TurnMill),
     ];
+    /// A lathe of some kind: X is a diameter, tools on a turret, plane G18 at the start.
+    pub fn turns(self) -> bool {
+        matches!(self, Kind::Lathe | Kind::MillTurn | Kind::TurnMill)
+    }
+
     pub fn name(self) -> &'static str {
         Kind::ALL.iter().find(|(_, k)| *k == self).unwrap().0
     }
@@ -727,7 +736,7 @@ impl MachineDef {
             &m,
             "kind",
             &Kind::ALL,
-            "vmc3 | vmc4 | table-table | head-table | head-head | lathe | mill-turn",
+            "vmc3 | vmc4 | table-table | head-table | head-head | lathe | mill-turn | turn-mill",
         )?;
         let control = need_text(
             t,
@@ -1536,6 +1545,13 @@ impl MachineDef {
                     && !self.turrets.is_empty()
             }
             Kind::MillTurn => lin >= 3 && turn >= 1 && mill >= 1 && rot_t >= 1,
+            Kind::TurnMill => {
+                (2..=3).contains(&lin)
+                    && rot_h == 0
+                    && turn >= 1
+                    && mill >= 1
+                    && self.turrets.iter().any(|t| t.live.is_some())
+            }
         };
         if !ok {
             return Err(self.shape(format!(
@@ -1544,14 +1560,14 @@ impl MachineDef {
                 self.turrets.len()
             )));
         }
-        if matches!(self.kind, Kind::Lathe | Kind::MillTurn) {
+        if self.kind.turns() {
             if !self.joints.iter().any(|j| j.diameter) {
                 return Err(self.shape("a lathe's X (diameter = true) is missing".into()));
             }
         } else if self.joints.iter().any(|j| j.diameter) {
             return Err(self.shape("diameter = true is for lathes".into()));
         }
-        if !matches!(self.kind, Kind::Lathe | Kind::MillTurn) && self.length_joint.is_none() {
+        if !self.kind.turns() && self.length_joint.is_none() {
             return Err(self.shape("a mill needs `length_joint` (the joint G43 moves)".into()));
         }
         for z in &self.zones {
