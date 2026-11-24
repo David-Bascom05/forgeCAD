@@ -296,7 +296,22 @@ answer is to record the distance (§4), or to refuse.
   Wall 25 lies flush, 5.5e-6 off, against the plate's y = 0 wall, from below the plate's bottom
   to above its middle. Wall 43 lies almost wholly inside wall 25, its own face flush too. The
   second union drops the plate's bottom and the flush face below it: eight edges used once.
-  Not yet traced.
+
+  Traced: wall 43's front crosses wall 25's front (below the plate) at 6e-7 rad. One edge of the
+  crossing is made, a vertical piece at x = 51.625 from the plate's bottom down to wall 43's own
+  bottom; the pieces that would close it (wall 43's bottom and side against wall 25's front, over
+  the 0.28 mm where wall 43 stands 2e-7 proud) lie within tolerance and are not. The piece dangles,
+  and the classifier drops the face it splits and the plate's bottom with it. Two tests deciding
+  at one threshold again (§10 of proof/slit-faces).
+
+  Refused now (proof/open-shell-refuse): after `apply`, an edge of a face `apply` took off (its
+  loops stay readable) or of a loop it took off a face, left alive and used by one face, is an
+  open shell, refused (`Lost::OpenShell`). A sheet's own free edges die with their one use and
+  are not asked, and a tool with a free edge is let through. forge-model's regen already refused
+  such a result after the feature (`NotClosed`); the boolean now does at the source, so its own
+  callers (drift_adv, forge-stress, assembly interference) never get one. The scan costs +0.0091%
+  in total, +0.194% on coplanar seq: a correctness exception (research/booleans/speed-ledger.md).
+  Test: `a_union_left_open_is_refused`.
 - **An n-ary wrong Ok, open** (§9): FaceWrongSide after three notches; a refusal is written and
   awaits a judgment on its cost.
 - The n-ary boolean's refusals of §9 are refusals, not fixes: the sequential boolean builds

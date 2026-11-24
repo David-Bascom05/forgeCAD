@@ -138,6 +138,9 @@ pub enum Lost {
     MergedRegion { face: FaceRef },
     /// A retry after losing the way made a body `check` faults.
     RetryInvalid,
+    /// An edge of the target that lost a use to the boolean is left used by one face only: the
+    /// result would be an open shell.
+    OpenShell { at: Point3 },
     /// An open curve inside both faces that crosses no edge of either.
     Uncut { a: FaceRef, b: FaceRef, at: Point3 },
 }
@@ -159,6 +162,11 @@ impl std::fmt::Display for Lost {
             Lost::DegenerateEdge { face } => write!(f, "degenerate edge on {face}"),
             Lost::MergedRegion { face } => write!(f, "merged region of no old one on {face}"),
             Lost::RetryInvalid => write!(f, "a retry after losing the way left an invalid body"),
+            Lost::OpenShell { at } => write!(
+                f,
+                "an edge at ({:.3}, {:.3}, {:.3}) would bound one face only",
+                at.x, at.y, at.z
+            ),
             Lost::Uncut { a, b, at } => write!(
                 f,
                 "a curve between {a} and {b} through ({:.6}, {:.6}, {:.6}) meets no edge of either",
@@ -686,6 +694,11 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     let touched = touched_old(&plan);
     apply(target, b, &plan);
+    // an edge of the target that lost a use (round a face the boolean took off, or a loop it took
+    // off a face) and is left used once: an open shell, the boolean's own (drift.md §8)
+    if let Some(at) = opened(target, &plan) {
+        open_shell(b, at)?;
+    }
     let pinch = pinched_new(target, loops, verts).or_else(|| pinched_old(target, &touched));
     target.joins.extend(&b.joins);
     target.joins.pieces.extend_from_slice(&plan.wholes);
@@ -742,6 +755,64 @@ pub(crate) fn undecided_touch(body: &Body, undecided: Option<Point3>) -> R<()> {
         }
         _ => Ok(()),
     }
+}
+
+/// Where an edge of a face `apply` took off (its loops stay readable), or of a loop it took off a
+/// face, is left alive and used by one face: the result's shell is open there. (An edge used
+/// once before, an open sheet's, dies with its one use and is not asked.)
+fn opened(t: &Body, plan: &Plan) -> Option<Point3> {
+    // (plain loops over each loop's run of coedges: this is asked on every boolean)
+    let free = |l: forge_topo::LoopId| -> Option<EdgeId> {
+        let (first, len) = t.loops[l.index()].span();
+        t.coedges[first as usize..(first + len) as usize]
+            .iter()
+            .map(|c| c.edge)
+            .find(|&e| {
+                let x = &t.edges[e.index()];
+                x.coedges.len() == 1 && x.alive
+            })
+    };
+    let mut found = None;
+    for &f in &plan.involved {
+        let face = &t.faces[f.index()];
+        if !face.alive {
+            found = face.loops.iter().find_map(|&l| free(l));
+            if found.is_some() {
+                break;
+            }
+        }
+    }
+    if found.is_none() {
+        for &(si, flip) in &plan.kept {
+            let s = &plan.specs[si];
+            if s.extend && !flip {
+                found = s.remove.iter().find_map(|&l| free(l));
+                if found.is_some() {
+                    break;
+                }
+            }
+        }
+    }
+    found.map(|e| {
+        let x = t.edge(e);
+        x.curve.eval(x.range.mid())
+    })
+}
+
+/// An open shell the boolean made, refused: a wrong Ok `check` finds (EdgeUses), the classifier
+/// having dropped a region it should have kept beside one it kept (research/booleans/drift.md §6,
+/// §8). Not where the tool itself has an edge used once (an open sheet): its free edges come
+/// through so.
+#[cold]
+#[inline(never)]
+fn open_shell(b: &Body, at: Point3) -> R<()> {
+    // (an open sheet's free edges come through as they were: the target's die with their one use
+    // and are not asked, the tool's are asked of the tool)
+    if b.edge_ids().any(|e| b.edge(e).coedges.len() == 1) {
+        return Ok(());
+    }
+    decided!(crate::decisions::site("open shell refused", 1));
+    Err(BoolError::lost(Lost::OpenShell { at }))
 }
 
 /// The target's vertices where something of this boolean meets them: a new curve's end, or a
