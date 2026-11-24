@@ -1685,6 +1685,15 @@ def PlaceInv (b : Body) (A Q : List Nat) (atv items : List Usize) : Prop :=
   (∀ w < b.nv, (atv[w]!).val = vpre b A w + cntQ b Q w) ∧
   (∀ w < b.nv, ∀ j < cntQ b Q w, (items[vpre b A w + j]!).val = (Q.filter fun c => b.start c == w)[j]!)
 
+theorem place_bound (b : Body) (A Q : List Nat) (c : Nat) (hQA : List.Sublist (Q ++ [c]) A)
+    (hnvA : vpre b A b.nv = A.length) (atv items : List Usize) (hP : PlaceInv b A Q atv items)
+    (s : Nat) (hs : s < b.nv) (hcs : b.start c = s) : (atv[s]!).val < items.length := by
+  obtain ⟨hal, hil, hat, hit⟩ := hP
+  have hlt : cntQ b Q s < cntQ b A s := by
+    have := cntQ_sub b hQA s; rw [cntQ_snoc, if_pos hcs] at this; omega
+  have hend : vpre b A (s + 1) ≤ A.length := by rw [← hnvA]; exact vpre_mono b A (by omega)
+  rw [hat s hs, hil]; rw [vpre_succ] at hend; omega
+
 theorem place_step (b : Body) (A Q : List Nat) (c : Nat) (hQA : List.Sublist (Q ++ [c]) A) (hnvA : vpre b A b.nv = A.length)
     (atv items : List Usize) (hP : PlaceInv b A Q atv items) (s : Nat) (hs : s < b.nv) (hcs : b.start c = s)
     (cu : Usize) (hcu : cu.val = c) (a1 : Usize) (ha1 : a1.val = (atv[s]!).val + 1) :
@@ -1725,6 +1734,63 @@ theorem place_step (b : Body) (A Q : List Nat) (c : Nat) (hQA : List.Sublist (Q 
         rcases Nat.lt_or_ge w s with hws | hws
         · have := vpre_mono b A (show w + 1 ≤ s by omega); rw [vpre_succ] at this; omega
         · have := vpre_mono b A (show s + 1 ≤ w by omega); rw [vpre_succ] at this; omega
+
+theorem place_edge_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF)
+    (hsmall : (allUses b).length < Usize.max) (Q : List Nat)
+    (e n : Usize) (he : e.val < b.edges.size) (hn : n.val = (b.ed e.val).uses.length)
+    (hQe : List.Sublist (Q ++ (b.ed e.val).uses) (allUses b)) (hnvA : vpre b (allUses b) b.nv = (allUses b).length)
+    (atv items : alloc.vec.Vec Usize) (hP : PlaceInv b (allUses b) Q atv.val items.val) :
+    topo_fans.fans_loop2_loop0 FI t atv items e n 0#usize ⦃ r =>
+      PlaceInv b (allUses b) (Q ++ (b.ed e.val).uses) r.1.val r.2.val ⦄ := by
+  set U := (b.ed e.val).uses with hU
+  set A := allUses b
+  unfold topo_fans.fans_loop2_loop0
+  apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Usize × alloc.vec.Vec Usize × Usize) => n.val - y.2.2.val)
+    (fun y => y.2.2.val ≤ n.val ∧ PlaceInv b A (Q ++ U.take y.2.2.val) y.1.val y.2.1.val)
+  · rintro ⟨a, it, i⟩ ⟨hle, hP0⟩
+    simp only at hle hP0 ⊢
+    unfold topo_fans.fans_loop2_loop0.body
+    split
+    · rename_i hlt
+      have hlt' : i.val < n.val := by scalar_tac
+      have hiU : i.val < U.length := by omega
+      step with R.base.edge_use e i he hiU as ⟨c, hc⟩
+      have hcv : c.val = U[i.val] := by rw [hc, getElem!_pos U i.val hiU]
+      have hcu : Use b c.val := ⟨e.val, he, by rw [hcv]; exact List.getElem_mem hiU⟩
+      obtain ⟨hcn, hen, -, -, -, -⟩ := use_facts H W hcu
+      step with start_spec FI t R c hcn hen as ⟨st, hst⟩
+      have hstn : st.val < b.nv := by rw [hst]; exact use_start_lt H W hcu
+      have htk : Q ++ U.take (i.val + 1) = (Q ++ U.take i.val) ++ [c.val] := by
+        rw [List.take_succ_eq_append_getElem hiU, hcv]; simp
+      have hsub : List.Sublist ((Q ++ U.take i.val) ++ [c.val]) A := by
+        rw [← htk]; exact ((List.take_sublist (i.val + 1) U).append_left Q).trans hQe
+      have hal := hP0.1
+      have hil := hP0.2.1
+      step as ⟨p, hp⟩
+      have hpv : p = a.val[st.val]! := by rw [hp, getElem!_pos]
+      have hpb := place_bound b A (Q ++ U.take i.val) c.val hsub hnvA a.val it.val hP0 st.val hstn hst.symm
+      rw [← hpv] at hpb
+      have hAl : A.length < Usize.max := hsmall
+      step as ⟨x0, back, hx0, hback⟩
+      step as ⟨y0, back1, hy0, hback1⟩
+      have hy0v : y0 = a.val[st.val]! := by rw [hy0, getElem!_pos]
+      have h1 : (1#usize).val = 1 := rfl
+      step with usize_add_wspec y0 1#usize (by rw [h1, hy0v, ← hpv]; omega) as ⟨y1, hy1⟩
+      have hy1v : y1.val = (a.val[st.val]!).val + 1 := by
+        rw [hy1, add_val y0 1#usize (lt_size_of_le_max _ (by rw [h1, hy0v, ← hpv]; omega)), hy0v, h1]
+      step with usize_add_wspec i 1#usize (succ_le_max i n hlt') as ⟨i1, hi1⟩
+      have hi1v : i1.val = i.val + 1 := by rw [hi1]; exact succ_val i n hlt'
+      rw [hi1v, hback, hback1]
+      have hsa : (a.set st y1).val = a.val.set st.val y1 := by simp
+      have hsi : (it.set p c).val = it.val.set p.val c := by simp
+      rw [hsa, hsi, htk, hpv]
+      refine ⟨by omega, (place_step b A (Q ++ U.take i.val) c.val hsub hnvA a.val it.val hP0 st.val hstn hst.symm c rfl y1 hy1v).1, by omega⟩
+    · rename_i hlt
+      have hi : i.val = n.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [hi, hn, List.take_length] at hP0; exact hP0
+  · have h0 : (0#usize).val = 0 := rfl
+    simp only [h0, List.take_zero, List.append_nil]; exact ⟨by simp, hP⟩
 
 end sort
 
