@@ -18,7 +18,7 @@ fn summary(jobs: &[JobQ]) -> String {
             let _ = writeln!(
                 o,
                 "{stem}/{} {} t_stop={:.1} t_min={:.1} cut={:.1} air={:.1} rapid={:.0} retracts={} plunges={} ramps={} c90={} \
-phi_max={:.0} phi_mean={:.0} climb={:.2} slot={:.2} hex_max={:.4} hex_mean={:.4} thin={:.2} thick={:.2} removed={:.0} fc={:.0}",
+phi_max={:.0} phi_mean={:.0} climb={:.2} slot={:.2} hex_max={:.4} hex_p99={:.4} hex_mean={:.4} thin={:.2} thick={:.2} removed={:.0} fc={:.0}",
                 q.name,
                 q.kind,
                 q.t_stop,
@@ -35,6 +35,7 @@ phi_max={:.0} phi_mean={:.0} climb={:.2} slot={:.2} hex_max={:.4} hex_mean={:.4}
                 q.climb,
                 q.slotting,
                 q.hex_max,
+                q.hex_p99,
                 q.hex_mean,
                 q.thin,
                 q.thick,

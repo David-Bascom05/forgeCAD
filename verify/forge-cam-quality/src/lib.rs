@@ -81,6 +81,9 @@ pub struct OpQ {
     pub hex_min: f64,
     pub hex_mean: f64,
     pub hex_max: f64,
+    /// The chip that 99% of the side-cutting time is at or under (mm): hex_max without the
+    /// slivers a few cells wide.
+    pub hex_p99: f64,
     /// Time shares with hex < 0.5 fz_target (rubbing) and > 1.25 fz_target (overload).
     pub thin: f64,
     pub thick: f64,
@@ -288,6 +291,7 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
         let mut side_t = 0.0; // time of side-engaged cutting
         let mut hex_t = 0.0;
         let mut hex_tt = 0.0;
+        let mut hexes: Vec<(f64, f64)> = Vec::new();
         for p in &op.paths {
             let tu = &tools[p.tool];
             let prof = profile(&tu.tool);
@@ -406,6 +410,7 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                             q.hex_max = q.hex_max.max(hex);
                             hex_t += hex * dt;
                             hex_tt += dt;
+                            hexes.push((hex, dt));
                             if hex < 0.5 * q.fz_target {
                                 q.thin += dt;
                             }
@@ -477,6 +482,15 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
         }
         if hex_tt > 0.0 {
             q.hex_mean = hex_t / hex_tt;
+            hexes.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let mut acc = 0.0;
+            for (h, dt) in &hexes {
+                acc += dt;
+                q.hex_p99 = *h;
+                if acc >= 0.99 * hex_tt {
+                    break;
+                }
+            }
         }
         if !q.hex_min.is_finite() {
             q.hex_min = 0.0;
@@ -606,7 +620,7 @@ pub fn table(jobs: &[JobQ]) -> String {
     let mut o = String::new();
     let _ = writeln!(
         o,
-        "{:<22} {:<10} {:<8} {:>6} {:>7} {:>7} {:>5} {:>5} {:>4} {:>4} {:>4} {:>5} {:>5} {:>5} {:>5} {:>6} {:>6} {:>6} {:>5} {:>5} {:>7} {:>6} {:>5}",
+        "{:<22} {:<10} {:<8} {:>6} {:>7} {:>7} {:>5} {:>5} {:>4} {:>4} {:>4} {:>5} {:>5} {:>5} {:>5} {:>6} {:>6} {:>6} {:>6} {:>5} {:>5} {:>7} {:>6} {:>5}",
         "job/op",
         "kind",
         "tool",
@@ -623,6 +637,7 @@ pub fn table(jobs: &[JobQ]) -> String {
         "climb",
         "slot",
         "hexMx",
+        "hex99",
         "hexAv",
         "fzTgt",
         "thin",
@@ -645,7 +660,7 @@ pub fn table(jobs: &[JobQ]) -> String {
             };
             let _ = writeln!(
                 o,
-                "{:<22} {:<10} {:<8} {:>6} {:>7} {:>7} {:>5} {:>5} {:>4} {:>4} {:>4} {:>5} {:>5} {:>5} {:>5} {:>6} {:>6} {:>6} {:>5} {:>5} {:>7} {:>6} {:>5}",
+                "{:<22} {:<10} {:<8} {:>6} {:>7} {:>7} {:>5} {:>5} {:>4} {:>4} {:>4} {:>5} {:>5} {:>5} {:>5} {:>6} {:>6} {:>6} {:>6} {:>5} {:>5} {:>7} {:>6} {:>5}",
                 format!("{stem}/{}", q.name),
                 q.kind,
                 q.tool.chars().take(8).collect::<String>(),
@@ -662,6 +677,7 @@ pub fn table(jobs: &[JobQ]) -> String {
                 side(pct(q.climb)),
                 side(pct(q.slotting)),
                 side(f(q.hex_max, 3)),
+                side(f(q.hex_p99, 3)),
                 side(f(q.hex_mean, 3)),
                 f(q.fz_target, 3),
                 side(pct(q.thin)),
@@ -752,7 +768,7 @@ pub fn json(jobs: &[JobQ]) -> String {
 \"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
-\"fz_target\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
+\"fz_target\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
 \"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{}}}",
                 js(&q.name),
                 js(&q.kind),
@@ -787,6 +803,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.hex_min),
                 jn(q.hex_mean),
                 jn(q.hex_max),
+                jn(q.hex_p99),
                 jn(q.thin),
                 jn(q.thick),
                 jn(q.removed),

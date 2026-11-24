@@ -2037,6 +2037,39 @@ impl Cam {
         .map_err(|e| format!("{e:?}"))
     }
 
+    /// The milling ops' feeds set from the engagement each piece meets (forge_cam::engage): the
+    /// chip held at the cutting data's feed per tooth, the in-process stock as the ops so far
+    /// left it the model. The paths' geometry is unchanged; they are posted and certified after.
+    fn feeds_from_engagement(&self, su: usize, kind: &str, out: &OpOut, paths: Vec<OpPath>) -> Vec<OpPath> {
+        use forge_cam::engage::{HeightMap, Profile, Sched, schedule};
+        if !matches!(kind, "facing" | "pocket" | "clear" | "contour" | "slot") {
+            return paths;
+        }
+        let (Some(fe), Some(ti)) = (out.feeds, out.tool) else {
+            return paths;
+        };
+        let t = &self.tools[ti];
+        let Some(prof) = Profile::of(&t.tool) else {
+            return paths;
+        };
+        let s = &self.setups[su];
+        let Some(g) = self.lib.group(&self.parts[s.part].group) else {
+            return paths;
+        };
+        let f_max = self.lib.machine(&s.machine).map(|m| m.max_feed).unwrap_or(fe.vf);
+        let cell = (t.tool.dc / 30.0).clamp(0.05, 0.25);
+        let sc = Sched {
+            fz: g.fz_at(t.tool.dc),
+            flutes: t.tool.nof.max(1) as f64,
+            rpm: fe.rpm,
+            f_max,
+            cap: feeds::THIN_CAP,
+            cell,
+        };
+        let mut map = HeightMap::of_stock(&s.ip, cell);
+        paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()
+    }
+
     fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
         let g = self.lib.group(&self.parts[self.setups[su].part].group)?;
         let m = self.lib.machine(&self.setups[su].machine).ok()?;
@@ -2115,9 +2148,16 @@ impl Cam {
                     Some(V::Num(x)) if *x > 0.0 && *x <= 30.0 => Some(*x),
                     Some(_) => return Err("ramp: an angle in degrees, over 0 and at most 30".into()),
                 };
+                // the radial engagement the feed is set for (chip thinning credits ae < D/2): what
+                // the op cuts at most along its passes, never less (a thinner ae would overload
+                // the tool where the path cuts more: slots and a clear's first pass cut full width)
                 let fd = match kind {
                     "facing" => self.feeds_for(su, t, 0.7 * d, step.min(t.tool.lcf)),
-                    "pocket" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
+                    "pocket" | "clear" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
+                    // the whole width
+                    "slot" => self.feeds_for(su, t, d, step),
+                    // what a contour meets is not known here: no thinning credit
+                    "contour" => self.feeds_for(su, t, 0.5 * d, step),
                     _ => self.feeds_for(su, t, 0.1 * d, step),
                 };
                 let (vf, vp) = match fd {
@@ -2382,6 +2422,7 @@ impl Cam {
                 return Ok(V::Op(self.ops.len() - 1));
             }
         };
+        let paths = self.feeds_from_engagement(su, kind, &out, paths);
         out.paths = paths;
         out.voids = voids.clone();
         for (v, floor) in voids {
