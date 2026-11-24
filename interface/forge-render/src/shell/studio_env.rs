@@ -18,8 +18,16 @@ pub const FLOOR: u16 = 5;
 pub const DEPTH: u16 = 6;
 pub const RESTART: u16 = 7;
 
-/// The lighting's built-in choices: the drawn studio, or a Radiance file the user names.
-pub const LIGHTS: [&str; 2] = ["Studio (drawn)", "HDRI file"];
+/// The lighting's choices: the drawn studio (0), the manifest's HDRIs (1..=n, `studio::hdri`),
+/// a Radiance file the user names (n + 1).
+pub fn lights() -> Vec<String> {
+    let mut v = vec!["Studio (drawn)".to_string()];
+    for h in crate::studio::hdri::list() {
+        v.push(if h.bundled { format!("{} (bundled)", h.name) } else { h.name });
+    }
+    v.push("HDRI file".into());
+    v
+}
 
 /// A render the user asked for, for the GUI to queue.
 #[derive(Clone, Debug, PartialEq)]
@@ -63,7 +71,8 @@ impl Default for StudioUi {
         StudioUi {
             looks: Vec::new(),
             names: Vec::new(),
-            light: 0,
+            // the bundled HDRI
+            light: 1,
             hdri: String::new(),
             turn_deg: 0.0,
             strength: 1.0,
@@ -216,14 +225,17 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
             }
 
             head(ui, s, "Lighting");
+            let lights = lights();
             egui::ComboBox::from_id_salt("studio-light")
-                .selected_text(LIGHTS[st.light.min(LIGHTS.len() - 1)])
+                .selected_text(&lights[st.light.min(lights.len() - 1)])
                 .show_ui(ui, |ui| {
-                    for (k, l) in LIGHTS.iter().enumerate() {
-                        ui.selectable_value(&mut st.light, k, *l);
+                    for (k, l) in lights.iter().enumerate() {
+                        ui.selectable_value(&mut st.light, k, l);
                     }
-                });
-            if st.light == 1 {
+                })
+                .response
+                .on_hover_text("Poly Haven HDRIs, CC0; all but the bundled one come from tools/fetch-hdri.sh");
+            if st.light == lights.len() - 1 {
                 ui.horizontal(|ui| {
                     ui.label("File");
                     ui.text_edit_singleline(&mut st.hdri).on_hover_text("a Radiance .hdr, equirectangular");

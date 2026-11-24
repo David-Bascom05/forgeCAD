@@ -72,15 +72,18 @@ impl Stage {
     }
 }
 
-/// The lighting: a Radiance file or the drawn studio.
+/// The lighting: the drawn studio (`studio`), a manifest HDRI by its key (default: the bundled
+/// one), or a Radiance file.
 pub fn lighting(hdri: Option<&str>) -> Result<Env, String> {
     match hdri {
+        Some("studio") => Ok(Env::new(512, 256, env::studio(512, 256, 1.0))),
+        None => super::hdri::load("studio_small_09"),
+        Some(key) if super::hdri::list().iter().any(|h| h.key == key) => super::hdri::load(key),
         Some(path) => {
             let bytes = forge_dirs::fs::read(path).map_err(|e| format!("{path}: {e}"))?;
             let (w, h, rgb) = env::read_hdr(&bytes).map_err(|e| format!("{path}: {e}"))?;
             Ok(Env::new(w, h, rgb))
         }
-        None => Ok(Env::new(512, 256, env::studio(512, 256, 1.0))),
     }
 }
 
@@ -209,7 +212,8 @@ pub use super::save_png;
 
 pub const USAGE: &str = "forge-studio PART.fg|ASSEMBLY.fg|BENCH -o OUT.png [options]
   --look NAME[;NAME..]   appearances (data/appearances.toml), one per part in turn
-  --hdri FILE.hdr        lighting from a Radiance map (default: the drawn studio)
+  --hdri KEY|FILE.hdr|studio  lighting: a manifest HDRI (default studio_small_09, bundled),
+                         a Radiance file, or the drawn studio
   --turn DEG --strength X --exposure EV
   --size WxH --spp N --seed N --bounces N
   --yaw DEG --pitch DEG --zoom X --focal MM --fstop N --parallel

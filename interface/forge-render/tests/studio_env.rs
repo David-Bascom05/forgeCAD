@@ -54,11 +54,10 @@ fn the_studio_traces_the_view_and_renders_a_file() {
     st.looks[0] = Some("Brass".into());
     st.version += 1;
     st.asks.push(Ask::Image);
-    for _ in 0..100 {
+    let start = std::time::Instant::now();
+    while !out.exists() && start.elapsed().as_secs() < 120 {
         h.step();
-        if out.exists() {
-            break;
-        }
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
     assert!(out.exists(), "no file; queue says {}", h.gui.shell.studio.queue);
     let bytes = std::fs::read(&out).unwrap();

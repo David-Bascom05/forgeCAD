@@ -217,7 +217,10 @@ fn the_queue_writes_a_turntable_frame_by_frame() {
         pivot: ((b.min + b.max) * 0.5).arr(),
     });
     let mut written = Vec::new();
-    for _ in 0..200 {
+    // a frame's ticks, as the window gives them, until the GPU has given every frame back
+    let start = std::time::Instant::now();
+    while !q.jobs.is_empty() && start.elapsed().as_secs() < 60 {
+        std::thread::sleep(std::time::Duration::from_millis(2));
         let scene = || Some((f.built.clone(), f.materials.clone(), Lut::new(64)));
         q.tick(&device, &queue, scene, &f.env, |path, size, rgba| {
             assert_eq!(rgba.len() as u32, size.0 * size.1 * 4);

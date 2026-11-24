@@ -10,6 +10,7 @@ pub mod bvh;
 pub mod cpu;
 pub mod env;
 pub mod golden;
+pub mod hdri;
 pub mod gpu;
 pub mod live;
 pub mod scene;

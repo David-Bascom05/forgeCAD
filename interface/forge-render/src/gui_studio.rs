@@ -39,8 +39,13 @@ fn poses_key(scene: &crate::scene::Scene) -> u64 {
     h.finish()
 }
 
+/// The light chosen (`studio_env::lights`): the drawn studio, a manifest HDRI, or a file.
 fn lighting(light: usize, hdri: &str) -> Result<Env, String> {
-    if light == 1 && !hdri.trim().is_empty() {
+    let list = crate::studio::hdri::list();
+    if (1..=list.len()).contains(&light) {
+        return crate::studio::hdri::load(&list[light - 1].key);
+    }
+    if light == list.len() + 1 && !hdri.trim().is_empty() {
         let bytes = forge_dirs::fs::read(hdri.trim()).map_err(|e| format!("{hdri}: {e}"))?;
         let (w, h, rgb) = env::read_hdr(&bytes).map_err(|e| format!("{hdri}: {e}"))?;
         return Ok(Env::new(w, h, rgb));
@@ -107,12 +112,10 @@ impl Gui {
                     host.env = e;
                 }
                 Err(why) => {
-                    status = Some(format!("Render Studio: {why}"));
-                    if host.env_key.is_none() {
-                        let e = lighting(0, "").expect("the drawn studio");
-                        host.live.set_env(&e);
-                        host.env = e;
-                    }
+                    status = Some(format!("Render Studio: {why}; the drawn studio meanwhile"));
+                    let e = lighting(0, "").expect("the drawn studio");
+                    host.live.set_env(&e);
+                    host.env = e;
                 }
             }
             host.env_key = Some(env_key);
