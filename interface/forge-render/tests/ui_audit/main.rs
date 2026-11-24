@@ -70,7 +70,7 @@ fn hover_tip(h: &mut Headless, r: Rect) -> String {
         &s,
         &[Rect::from_min_max(
             pos2(r.left() - 4.0, r.bottom() - 2.0),
-            pos2(r.right() + 400.0, r.bottom() + 20.0),
+            pos2(r.right(), r.bottom() + 20.0),
         )],
     )
     .iter()
