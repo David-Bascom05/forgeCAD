@@ -59,6 +59,10 @@ pub struct Adaptive {
     /// The sweep direction, degrees from +x: every pass heads within `PEEL` of it (one-direction
     /// "peel" passes, fto-adaptive.md §8 (b): a pass never winds round a centre).
     pub sweep: f64,
+    /// Two-way passes (fto-adaptive.md §9 (2)): a pass heads within `PEEL` of the sweep direction
+    /// or of its reverse, the starts still taken across the sweep from one side to the other
+    /// (a zigzag); off: every pass the same way.
+    pub two_way: bool,
 }
 
 /// The most a pass's heading may turn from the sweep direction (either way).
@@ -276,6 +280,8 @@ pub fn adaptive(
         [cs, sn]
     };
     let peel_cos = dmath::cos(PEEL.to_radians());
+    // the direction the last pass went along the sweep (+1 with it, −1 against it)
+    let mut last_sign = 1.0f64;
     let mut mv: Vec<PMove> = Vec::new();
     let mut voids = Vec::new();
     // where the tool is: (x, y, z)
@@ -319,31 +325,43 @@ pub fn adaptive(
             let here = at
                 .map(|p| [p[0], p[1]])
                 .unwrap_or([0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1])]);
-            let mut best: Option<([f64; 2], f64)> = None;
+            let mut best: Option<([f64; 2], f64, f64)> = None;
             if entered || open_try {
                 for &p in &cands {
                     if f.disk_has_material(p[0], p[1], z) {
                         continue;
                     }
-                    // material just beyond the disk
-                    let near = (0..16).any(|k| {
-                        let d = rot([1.0, 0.0], std::f64::consts::TAU * k as f64 / 16.0);
-                        // past the disk by a grid spacing: the next candidate out may already
-                        // overlap material
-                        let rr = f.r + g + 2.0 * f.map.h;
-                        // ahead along the sweep: a pass from here meets it going forward
-                        d[0] * sweep_dir[0] + d[1] * sweep_dir[1] > 0.0
-                            && f.material(p[0] + rr * d[0], p[1] + rr * d[1], z)
-                    });
-                    if !near {
+                    // material just beyond the disk, ahead along the sweep (sign +1) or, two-way,
+                    // against it (−1): a pass from here meets it going that way
+                    let ahead = |sign: f64| {
+                        (0..16).any(|k| {
+                            let d = rot([1.0, 0.0], std::f64::consts::TAU * k as f64 / 16.0);
+                            // past the disk by a grid spacing: the next candidate out may already
+                            // overlap material
+                            let rr = f.r + g + 2.0 * f.map.h;
+                            sign * (d[0] * sweep_dir[0] + d[1] * sweep_dir[1]) > 0.0
+                                && f.material(p[0] + rr * d[0], p[1] + rr * d[1], z)
+                        })
+                    };
+                    // two-way: the way back first (a zigzag), else the way the last pass went
+                    let sign = if !prm.two_way {
+                        if !ahead(1.0) {
+                            continue;
+                        }
+                        1.0
+                    } else if ahead(-last_sign) {
+                        -last_sign
+                    } else if ahead(last_sign) {
+                        last_sign
+                    } else {
                         continue;
-                    }
+                    };
                     // across the sweep from one side to the other (fto-adaptive.md §9 (2)): the
                     // lowest band of r/2 across the sweep first, the nearest within it
                     let across = (sweep_dir[0] * p[1] - sweep_dir[1] * p[0]) / (0.5 * f.r);
                     let d = across.floor() * 1e9 + (p[0] - here[0]).powi(2) + (p[1] - here[1]).powi(2);
-                    if best.is_none_or(|(_, bd)| d < bd) {
-                        best = Some((p, d));
+                    if best.is_none_or(|(_, bd, _)| d < bd) {
+                        best = Some((p, d, sign));
                     }
                 }
             } else {
@@ -492,7 +510,7 @@ pub fn adaptive(
                 entered = true;
                 continue;
             }
-            let Some((p, _)) = best else {
+            let Some((p, _, sign)) = best else {
                 if open_try && !entered {
                     // no open side here: a helix entry
                     open_try = false;
@@ -536,8 +554,9 @@ pub fn adaptive(
                 });
             }
             moves_at_level.push((target, target));
-            // the heading: the sweep direction (every pass the same way)
-            let dir = sweep_dir;
+            // the heading: the sweep direction, or two-way its reverse (the way material lies)
+            let dir = [sign * sweep_dir[0], sign * sweep_dir[1]];
+            last_sign = sign;
             let mut u = dir;
             let mut touched = false;
             let mut removed = 0.0;
@@ -1152,13 +1171,21 @@ mod tests {
             ],
         };
         let ip = InProcess::new([0.0, 0.0, -5.0], [40.0, 30.0, 0.0]);
-        for (sweep, wall) in [(0.0, false), (90.0, false), (0.0, true)] {
+        for (sweep, wall, two_way) in [
+            (0.0, false, false),
+            (90.0, false, false),
+            (0.0, true, false),
+            (0.0, false, true),
+            (90.0, false, true),
+            (0.0, true, true),
+        ] {
             let prm = Adaptive {
                 phi_max: 60.0,
                 step: 0.0,
                 leave: 0.0,
                 wall_pass: wall,
                 sweep,
+                two_way,
             };
             let out = adaptive(
                 &rg,
@@ -1183,7 +1210,7 @@ mod tests {
             assert_eq!(
                 winding(&out.path, [20.0, 15.0]),
                 0,
-                "sweep {sweep}, wall {wall}: round the island"
+                "sweep {sweep}, wall {wall}, two-way {two_way}: round the island"
             );
             let mut y = -6.0;
             while y <= 36.0 {
@@ -1194,7 +1221,7 @@ mod tests {
                     let w = winding(&out.path, [x + 0.013, y + 0.017]);
                     assert!(
                         w.abs() <= 1,
-                        "sweep {sweep}, wall {wall}: {w} times round ({x}, {y})"
+                        "sweep {sweep}, wall {wall}, two-way {two_way}: {w} times round ({x}, {y})"
                     );
                     x += 2.0;
                 }
@@ -1221,6 +1248,7 @@ mod tests {
                 leave: 0.0,
                 wall_pass: false,
                 sweep,
+                two_way: false,
             };
             let out = adaptive(
                 &rg,
@@ -1293,6 +1321,7 @@ mod tests {
             leave: 0.0,
             wall_pass: false,
             sweep: 0.0,
+            two_way: false,
         };
         let out = adaptive(
             &rg,

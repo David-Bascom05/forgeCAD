@@ -2304,6 +2304,15 @@ impl Cam {
                             leave: get_num(a, "leave", Some(0.0))?,
                             wall_pass: true,
                             sweep: get_num(a, "sweep", Some(0.0))?,
+                            two_way: match get_str(a, "passes", Some("one_way"))?.as_str() {
+                                "one_way" => false,
+                                "two_way" => true,
+                                w => {
+                                    return Err(format!(
+                                        "adaptive: passes: \"{w}\" is not \"one_way\" or \"two_way\""
+                                    ));
+                                }
+                            },
                         };
                         let mut paths = vec![];
                         for rg in &regions {
