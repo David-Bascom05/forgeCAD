@@ -1688,7 +1688,6 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
     flat
 }
 
-/// The timeline: every step a block, its stages marked; drag to scrub.
 /// A transport button: its icon, its name and key on hover.
 fn transport(ui: &mut egui::Ui, icon: &str, tip: &str) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(egui::vec2(28.0, 24.0), egui::Sense::click());
@@ -1747,7 +1746,51 @@ fn transport(ui: &mut egui::Ui, icon: &str, tip: &str) -> egui::Response {
     resp.on_hover_text(tip)
 }
 
-pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
+/// Follow bend, See through and its opacity: listed right to left at the bar's end, or left to
+/// right on a row of their own.
+fn view_settings(ui: &mut egui::Ui, st: &mut BendSimUi, rtl: bool) {
+    ui.spacing_mut().item_spacing.x = 8.0;
+    let ink = egui::Color32::from_gray(230);
+    let follow = |ui: &mut egui::Ui, st: &mut BendSimUi| {
+        if ui
+            .checkbox(&mut st.follow, egui::RichText::new("Follow bend").color(ink))
+            .on_hover_text("frame each new bend; off, the view stays where you put it")
+            .changed()
+            && st.follow
+        {
+            st.frame = Some(Framing::Work);
+        }
+    };
+    let see = |ui: &mut egui::Ui, st: &mut BendSimUi| {
+        ui.checkbox(&mut st.see_through, egui::RichText::new("See through").color(ink))
+            .on_hover_text(
+                "what stands between you and the bend being made is drawn faint; a collision stays solid red",
+            );
+    };
+    let opacity = |ui: &mut egui::Ui, st: &mut BendSimUi| {
+        if st.see_through {
+            ui.add(
+                egui::Slider::new(&mut st.opacity, 0.05..=0.8)
+                    .show_value(false)
+                    .text(egui::RichText::new("opacity").color(egui::Color32::from_gray(200))),
+            )
+            .on_hover_text("how much of what is seen through still shows");
+        }
+    };
+    if rtl {
+        opacity(ui, st);
+        see(ui, st);
+        follow(ui, st);
+    } else {
+        follow(ui, st);
+        see(ui, st);
+        opacity(ui, st);
+    }
+}
+
+/// The timeline: every step a block, its stages named in it; drag to scrub. `narrow`: the view's
+/// settings on a row of their own.
+pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi, narrow: bool) {
     let n = st.steps();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -1784,37 +1827,17 @@ pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
             ))
             .color(egui::Color32::from_gray(230)),
         );
-        // the view's own settings, at its foot: follow the bend, see through what hides it
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            if st.see_through {
-                ui.add(
-                    egui::Slider::new(&mut st.opacity, 0.05..=0.8)
-                        .show_value(false)
-                        .text(egui::RichText::new("opacity").color(egui::Color32::from_gray(200))),
-                )
-                .on_hover_text("how much of what is seen through still shows");
-            }
-            ui.checkbox(
-                &mut st.see_through,
-                egui::RichText::new("See through").color(egui::Color32::from_gray(230)),
-            )
-            .on_hover_text(
-                "what stands between you and the bend being made is drawn faint; a collision stays solid red",
-            );
-            if ui
-                .checkbox(
-                    &mut st.follow,
-                    egui::RichText::new("Follow bend").color(egui::Color32::from_gray(230)),
-                )
-                .on_hover_text("frame each new bend; off, the view stays where you put it")
-                .changed()
-                && st.follow
-            {
-                st.frame = Some(Framing::Work);
-            }
-        });
+        // the view's own settings, at its foot: follow the bend, see through what hides it (on a
+        // row of their own when the view is narrow)
+        if !narrow {
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                view_settings(ui, st, true);
+            });
+        }
     });
+    if narrow {
+        ui.horizontal(|ui| view_settings(ui, st, false));
+    }
     let w = ui.available_width().max(100.0);
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 34.0), egui::Sense::click_and_drag());
     let p = ui.painter_at(rect);

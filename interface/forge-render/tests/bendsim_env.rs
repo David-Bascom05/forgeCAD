@@ -233,6 +233,9 @@ fn a_small_window_holds_it_all() {
     }
     frame(&mut h, Framing::Work);
     shot(&mut h, "09-small-window-1024x700");
+    // the bar's settings on a row of their own: nothing drawn over the step's words
+    let bar = h.gui.shell.place("env:bendsim:timeline").expect("the bar");
+    assert!(bar.height() > 90.0, "a taller bar in a narrow view: {bar:?}");
     let view = h.gui.shell.place("env:bendsim:view").expect("the view");
     let dock = h.gui.shell.place("env:bendsim:properties").expect("the sheet");
     assert!(
