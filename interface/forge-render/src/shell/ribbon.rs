@@ -746,9 +746,10 @@ impl Shell {
         }
     }
 
-    /// Nothing open: no part, drawing or DWG.
+    /// Nothing open: no part, drawing, DWG or machining document (one opened alone, its part
+    /// not in a tab of its own, is a document all the same).
     pub(super) fn no_document(&self) -> bool {
-        self.fg.is_none() && self.drawing.is_none() && self.dwgdoc.is_none()
+        self.fg.is_none() && self.drawing.is_none() && self.dwgdoc.is_none() && self.cam.is_none()
     }
 
     /// A tool that does nothing without a document is drawn off then, its tooltip saying why;
