@@ -317,4 +317,9 @@ urdf-export, machines/builder, posts/dialects.
 - Adaptive: no micro-moves (David) — arcs/long lines from generation, min block length test, one F per arc; chip-load guard (hex_max ≤ fz) harness-wide.
 - macOS ffmpeg: unpinned pending David (Riedl builds are --enable-nonfree: not redistributable).
 - ZERO-SPEED RULE, judged LAYOUT exception (coordinator ruling): allowed only with per-function callgrind showing zero increase in any forge-* fn own cost, identical call counts, excess solely glibc maps parse / std generics codegen / memcmp alignment; 0 regen1 lines over; strict total <= main; bits identical; analysis in PR band section.
+- 11-24 rulings: layout exception re-confirmed on fixed-path gate (EXACT-CORE; residues real but glibc/std/memcmp only). Refactor own-cost rises are NOT excepted (forge-bb CAM migration +33 Ir/call refused: 1h to reach parity, else hold, brake-only). Leak fix ui/leakfix 1ba6d40a = correctness exception (+0.0001% total), replaces 319b39a3; 319b39a3 is fallback only if leakfix not ready.
+- forge-lang codegen is chaotic: small edits regroup CGUs and swing bench lines +-0.1%; profile per function before believing a line.
+- hidden_inputs.rs scanner stopped at first #[cfg(test)] (review gap) -> FALLBACK fixing to skip only the test item.
+- Train 5 lands as ONE squash commit (e3148c8b FTO commit in ancestry; David: no active-patent material in repo incl. history). 5b lands --no-ff (clean).
+- Bend sim within-res Clear: Near (my ruling) vs brake's documented contract (Policy.resolution=res) -> awaiting David. Measure-mode gap fixed ab994f62.
 - Line/circle merge (forge-num step 5): awaiting David; recommended (5b) one formula+exact classifier, judged bits per client, weld first.
