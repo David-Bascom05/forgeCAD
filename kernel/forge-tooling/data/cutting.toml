@@ -250,3 +250,98 @@ basis = "forgeCAD's own round placeholder (the generic set since the first CAM c
 path = "mc"
 status = "unknown"
 basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read"
+
+# Stock materials (forge-material names) with their ISO 513 group where the family's default
+# class is not it, and measured Kienzle data where read. The part's material picks the record;
+# its kc1.1/mc at the cut's speed replace the group's for power and torque.
+
+[[stock]]
+material = "Ti-6Al-4V annealed"
+group = "S"
+real = true
+vc_rows = [11, 13, 20, 40, 50, 52, 60, 70, 74, 80, 89, 100, 125, 150, 159, 162, 191, 212, 254, 318, 381, 400, 500]
+kc1_1_rows = [1299, 1264, 1265, 1253, 1061, 1156, 1146, 1156, 941, 1084, 891, 932, 962, 998, 869, 1027, 881, 859, 749, 712, 663, 803, 662]
+mc_rows = [0.21, 0.22, 0.22, 0.22, 0.28, 0.27, 0.27, 0.24, 0.32, 0.28, 0.34, 0.33, 0.31, 0.3, 0.31, 0.28, 0.32, 0.32, 0.37, 0.36, 0.38, 0.35, 0.41]
+[[stock.cite]]
+path = "group"
+status = "published"
+source = "ISO 513 (class S: heat-resistant super alloys and titanium)"
+taken = "2026-11-24"
+value = "titanium alloys are class S"
+[[stock.cite]]
+path = "vc_rows"
+status = "published"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ti6Al4V vc [m/min]: 11, 13, 20, 40, 50, 52, 60, 70, 74, 80, 89, 100, 125, 150, 159, 162, 191, 212, 254, 318, 381, 400, 500"
+note = "orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors' TeX source, the paper's Table 16 (Ti6Al4V) and 17 (Ck45); CC BY 4.0, attributed in this file's header"
+[[stock.cite]]
+path = "kc1_1_rows"
+status = "published"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ti6Al4V kc1.1 [N/mm2]: 1299, 1264, 1265, 1253, 1061, 1156, 1146, 1156, 941, 1084, 891, 932, 962, 998, 869, 1027, 881, 859, 749, 712, 663, 803, 662"
+note = "orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors' TeX source, the paper's Table 16 (Ti6Al4V) and 17 (Ck45); CC BY 4.0, attributed in this file's header"
+[[stock.cite]]
+path = "mc_rows"
+status = "published"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ti6Al4V mc: 0.21, 0.22, 0.22, 0.22, 0.28, 0.27, 0.27, 0.24, 0.32, 0.28, 0.34, 0.33, 0.31, 0.3, 0.31, 0.28, 0.32, 0.32, 0.37, 0.36, 0.38, 0.35, 0.41"
+note = "orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors' TeX source, the paper's Table 16 (Ti6Al4V) and 17 (Ck45); CC BY 4.0, attributed in this file's header"
+
+[[stock]]
+material = "C45 bright"
+group = "P"
+real = true
+vc_rows = [10, 30, 50, 70, 100, 150, 200, 250, 300, 350, 450]
+kc1_1_rows = [1935, 1803, 1417, 1729, 1672, 1707, 1716, 1794, 1851, 1575, 1368]
+mc_rows = [0.19, 0.17, 0.51, 0.35, 0.32, 0.28, 0.26, 0.22, 0.22, 0.27, 0.29]
+[[stock.cite]]
+path = "group"
+status = "published"
+source = "ISO 513 (class P: steel)"
+taken = "2026-11-24"
+value = "unalloyed steel is class P"
+[[stock.cite]]
+path = "vc_rows"
+status = "estimate"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ck45 vc [m/min]: 10, 30, 50, 70, 100, 150, 200, 250, 300, 350, 450"
+basis = "measured on Ck45 (C45E, EN 10083-2), held for C45 bright: the same nominal composition, C45E with tighter P and S limits; drawn (bright) stock not tested"
+note = "orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors' TeX source, the paper's Table 16 (Ti6Al4V) and 17 (Ck45); CC BY 4.0, attributed in this file's header"
+[[stock.cite]]
+path = "kc1_1_rows"
+status = "estimate"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ck45 kc1.1 [N/mm2]: 1935, 1803, 1417, 1729, 1672, 1707, 1716, 1794, 1851, 1575, 1368"
+basis = "measured on Ck45 (C45E, EN 10083-2), held for C45 bright: the same nominal composition, C45E with tighter P and S limits; drawn (bright) stock not tested"
+note = "orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors' TeX source, the paper's Table 16 (Ti6Al4V) and 17 (Ck45); CC BY 4.0, attributed in this file's header"
+[[stock.cite]]
+path = "mc_rows"
+status = "estimate"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ck45 mc: 0.19, 0.17, 0.51, 0.35, 0.32, 0.28, 0.26, 0.22, 0.22, 0.27, 0.29"
+basis = "measured on Ck45 (C45E, EN 10083-2), held for C45 bright: the same nominal composition, C45E with tighter P and S limits; drawn (bright) stock not tested"
+note = "orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors' TeX source, the paper's Table 16 (Ti6Al4V) and 17 (Ck45); CC BY 4.0, attributed in this file's header"
+
+[[stock]]
+material = "52100 hardened"
+group = "H"
+real = true
+[[stock.cite]]
+path = "group"
+status = "estimate"
+basis = "ISO 513 class H is hardened steel; the forge-material record's note gives 60-67 HRC for this through-hardened 52100"
+
+[[stock]]
+material = "A286 age hardened"
+group = "S"
+real = true
+[[stock.cite]]
+path = "group"
+status = "estimate"
+basis = "A286 is an iron-nickel-chromium heat-resistant superalloy (filed under family stainless in forge-material); ISO 513 class S covers heat-resistant super alloys"

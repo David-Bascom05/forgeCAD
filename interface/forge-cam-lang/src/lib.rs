@@ -109,7 +109,13 @@ struct PartIn {
     faces: Vec<Face>,
     holes: Vec<holes::HoleInfo>,
     bbox: ([f64; 3], [f64; 3]),
+    /// ISO 513 group: `group:`, else the stock material's record, else its family; "" when
+    /// none is known (never a silent default).
     group: String,
+    /// The stock material (forge-material name): `part(.., material:)`, else the part's own.
+    material: Option<String>,
+    /// Where the material and group came from, for the reply and the fixes.
+    material_note: String,
 }
 
 struct SetupIn {
@@ -291,6 +297,8 @@ impl Cam {
             holes: vec![],
             bbox: ([lo[0], -hi[1], h - hi[2]], [hi[0], -lo[1], h - lo[2]]),
             group: p.group.clone(),
+            material: p.material.clone(),
+            material_note: p.material_note.clone(),
         };
         self.parts.push(turned);
         Ok(self.parts.len() - 1)
@@ -644,7 +652,9 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                     }
                     let a = cam.named(args, &local)?;
                     // the kernel's clock: std's Instant panics in a browser
-                    let t0 = std::env::var("FORGE_CAM_TIME").is_ok().then(forge_math::clock::Instant::now);
+                    let t0 = std::env::var("FORGE_CAM_TIME")
+                        .is_ok()
+                        .then(forge_math::clock::Instant::now);
                     let v = cam.call(name, fname, &a, dir)?;
                     if let Some(t0) = t0 {
                         eprintln!("{name}: {:?}", t0.elapsed());
@@ -915,7 +925,8 @@ impl Cam {
             "part" => {
                 let file = get_str(a, "#0", None)?;
                 let path = dir.join(&file);
-                let src = forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let src =
+                    forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
                 let holes = holes::hole_view(&src, forge_lang::Options::default());
                 if !run.ok() {
@@ -924,6 +935,27 @@ impl Cam {
                         run.errors.first()
                     ));
                 }
+                // the stock material: the machining doc's `material:` (stock is often not the
+                // part's record), else the part's own; its group unless `group:` says otherwise
+                let asked = match a.get("material") {
+                    Some(V::Str(m)) => Some(m.clone()),
+                    Some(_) => return Err("part: `material` must be a string".into()),
+                    None => run.props.material.clone(),
+                };
+                let (material, mgroup, mut material_note) = self.stock_material(asked.as_deref(), dir);
+                let group = match a.get("group") {
+                    Some(V::Str(g)) => {
+                        if mgroup.as_deref().is_some_and(|m| m != g) {
+                            material_note.push_str(&format!(
+                                "; group {g} given over the material's {}",
+                                mgroup.clone().unwrap_or_default()
+                            ));
+                        }
+                        g.clone()
+                    }
+                    Some(_) => return Err("part: `group` must be a string (ISO 513: P M K N S H)".into()),
+                    None => mgroup.unwrap_or_default(),
+                };
                 let body = run.body.ok_or("the part has no body")?;
                 let faces = forge_cam::lower::lower(&body)
                     .map_err(|e| format!("the part is outside this phase's CAM domain: {e:?}"))?;
@@ -944,7 +976,9 @@ impl Cam {
                     faces,
                     holes,
                     bbox: (lo, hi),
-                    group: get_str(a, "group", Some("N"))?,
+                    group,
+                    material,
+                    material_note,
                 });
                 Ok(V::Part(self.parts.len() - 1))
             }
@@ -1310,6 +1344,10 @@ impl Cam {
             ));
         }
         let b = sj.block;
+        let (jaw_material, jaw_group, jaw_note) = {
+            let (m, g, n) = self.stock_material(Some(&bl.material), Path::new("."));
+            (m, g.unwrap_or_default(), format!("the jaw blank's: {n}"))
+        };
         self.parts.push(PartIn {
             src: String::new(),
             pdir: Default::default(),
@@ -1319,7 +1357,9 @@ impl Cam {
             faces: sj.part.clone(),
             holes: vec![],
             bbox: (b.min, b.max),
-            group: "N".into(),
+            group: jaw_group,
+            material: jaw_material,
+            material_note: jaw_note,
         });
         self.jaws.push(sj);
         Ok(V::Jaws(self.jaws.len() - 1, self.parts.len() - 1))
@@ -2267,6 +2307,48 @@ impl Cam {
         ))
     }
 
+    /// A stock material by name: (its forge-material name, its ISO 513 group, how they were
+    /// found). The group is the material's `[[stock]]` record's, else its family's ISO 513
+    /// class; None when the name is unknown or its family has no class.
+    fn stock_material(&self, name: Option<&str>, dir: &Path) -> (Option<String>, Option<String>, String) {
+        let Some(name) = name else {
+            return (None, None, "the part has no material: give it one (`material` in the part, or part(.., material:)) or part(.., group:)".into());
+        };
+        let libs = forge_material::Libraries::cached(Some(dir));
+        let Some((_, m)) = libs.find(name) else {
+            return (
+                None,
+                None,
+                format!(
+                    "no material `{name}` in the material libraries; near: {}",
+                    libs.near(name).join(", ")
+                ),
+            );
+        };
+        if let Some(st) = self.lib.stock(&m.name) {
+            return (
+                Some(m.name.clone()),
+                Some(st.group.clone()),
+                format!("{} (group {} from its cutting record)", m.name, st.group),
+            );
+        }
+        match feeds::iso_group_of_family(&m.family) {
+            Some(g) => (
+                Some(m.name.clone()),
+                Some(g.into()),
+                format!("{} (family {}: ISO 513 group {g})", m.name, m.family),
+            ),
+            None => (
+                Some(m.name.clone()),
+                None,
+                format!(
+                    "{} is family {}, which ISO 513 does not class: no cutting data (give vc/rpm and fz/feed)",
+                    m.name, m.family
+                ),
+            ),
+        }
+    }
+
     /// The op's feeds and speeds: the user's (op over tool) over the tool's preset for the
     /// part's group over the group's data, clamped by the machine (forge_tooling::resolve).
     fn resolve_for(&self, su: usize, ti: usize, ask: &Ask, nominal: (f64, f64)) -> Option<resolve::Resolved> {
@@ -2278,16 +2360,20 @@ impl Cam {
             let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
             (p, t.tool.cites.iter().find(|c| c.path == path))
         });
-        resolve::milling(
+        let part = &self.parts[self.setups[su].part];
+        let stock = part.material.as_deref().and_then(|m| self.lib.stock(m));
+        resolve::milling_on(
             &ask.over(self.tool_asks[ti]),
             &resolve::ToolData {
                 d: t.tool.dc,
                 flutes: t.tool.nof.max(1),
                 ball: t.tool.kind == Kind::Ball,
-                carbide: t.tool.material == "carbide",
+                substrate: feeds::Substrate::of(&t.tool.material),
+                coating: &t.tool.coating,
                 preset,
             },
             g,
+            stock,
             &resolve::Spindle {
                 rpm: m.rpm,
                 max_feed: m.max_feed,
@@ -2397,10 +2483,19 @@ impl Cam {
                 let (vf, vp) = match &rs {
                     Some(r) => (r.feed.v, r.plunge.v),
                     None => {
-                        self.warnings.push(format!(
-                            "{name}: no cutting data (no speed given, no preset on the tool and no data for the part's group): feeds 300/100 mm/min, unchecked"
+                        let p = &self.parts[s.part];
+                        out.status = "refused";
+                        out.refusal = Some(format!(
+                            "no cutting data: no speed or chip given, no preset on tool `{}` for group `{}`, and no group data ({}; substrate {})",
+                            self.tools[ti].tool.id,
+                            p.group,
+                            p.material_note,
+                            feeds::Substrate::of(&self.tools[ti].tool.material).name()
                         ));
-                        (300.0, 100.0)
+                        out.fix = Some(
+                            "give the part a material (or part(.., group:)), a tool with a preset for it, or `vc:`/`rpm:` and `chip:`/`fz:`/`feed:` on the op or tool".into(),
+                        );
+                        (0.0, 0.0)
                     }
                 };
                 if let Some(r) = &rs {
@@ -3460,7 +3555,9 @@ impl Cam {
             .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
         let faces_of = |ip: &forge_cam::stock::InProcess| {
             // a clock only when asked: std's panics in a browser page
-            let t0 = std::env::var("FORGE_CAM_DEBUG").is_ok().then(forge_math::clock::Instant::now);
+            let t0 = std::env::var("FORGE_CAM_DEBUG")
+                .is_ok()
+                .then(forge_math::clock::Instant::now);
             let r = ip.faces();
             if let Some(t0) = t0 {
                 eprintln!(

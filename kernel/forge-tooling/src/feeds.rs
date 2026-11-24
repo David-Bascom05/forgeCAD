@@ -122,6 +122,186 @@ impl Group {
     }
 }
 
+/// A cutting tool's substrate, read from the record's `material` text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Substrate {
+    Carbide,
+    /// High-speed steel, cobalt and powder-metal grades included.
+    Hss,
+    /// Cermet, ceramic, CBN, PCD: no generic speed column (the maker's data or the user's).
+    Other,
+    Unknown,
+}
+
+impl Substrate {
+    /// "carbide", "Solid Carbide", "Micrograin Carbide" → Carbide; "HSS", "HSS-Co", "PM-HSS",
+    /// "high speed steel" → Hss; cermet, ceramic, CBN, PCD, diamond → Other; else Unknown.
+    pub fn of(text: &str) -> Substrate {
+        let t = text.to_ascii_lowercase();
+        if t.contains("carbide") {
+            Substrate::Carbide
+        } else if t.contains("hss") || t.contains("high speed") || t.contains("high-speed") {
+            Substrate::Hss
+        } else if ["cermet", "ceramic", "cbn", "pcd", "diamond"]
+            .iter()
+            .any(|k| t.contains(k))
+        {
+            Substrate::Other
+        } else {
+            Substrate::Unknown
+        }
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            Substrate::Carbide => "carbide",
+            Substrate::Hss => "HSS",
+            Substrate::Other => "other",
+            Substrate::Unknown => "unknown",
+        }
+    }
+}
+
+/// The ISO 513 group of a forge-material family, by the standard's own classes (P steel,
+/// M stainless steel, K cast iron, N non-ferrous, S heat-resistant alloys and titanium,
+/// H hardened steel). None for families ISO 513 does not class (plastics, rubber, wood).
+/// A hardened steel's H, or a superalloy filed under another family, comes from a `[[stock]]`
+/// record, never from this.
+pub fn iso_group_of_family(family: &str) -> Option<&'static str> {
+    match family {
+        "steel" => Some("P"),
+        "stainless" => Some("M"),
+        "iron" => Some("K"),
+        "aluminium" | "copper" => Some("N"),
+        "titanium" => Some("S"),
+        _ => None,
+    }
+}
+
+/// kc1.1 and mc at a speed, their spread over the rows ([low, high] each), and how they were read.
+pub type Kienzle = (f64, f64, [f64; 2], [f64; 2], String);
+
+/// Cutting data for one stock material (a forge-material name): its ISO 513 group and, where
+/// measured, kc1.1 and mc against the cutting speed (rows, linear between, held at the ends).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Stock {
+    pub material: String,
+    pub group: String,
+    pub vc_rows: Vec<f64>,
+    pub kc1_1_rows: Vec<f64>,
+    pub mc_rows: Vec<f64>,
+    pub note: String,
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+impl Stock {
+    pub fn from_table(t: &Table) -> Result<Stock, LibError> {
+        let material = text(t, "material")
+            .ok_or_else(|| LibError::Missing {
+                record: "[[stock]]".into(),
+                field: "material",
+                fix: "give the forge-material name".into(),
+            })?
+            .to_string();
+        let rec = format!("stock `{material}`");
+        let group = text(t, "group")
+            .ok_or_else(|| LibError::Missing {
+                record: rec.clone(),
+                field: "group",
+                fix: "give the ISO 513 letter".into(),
+            })?
+            .to_string();
+        let rows = |k: &str| nums(t, k).unwrap_or_default();
+        let (vc_rows, kc1_1_rows, mc_rows) = (rows("vc_rows"), rows("kc1_1_rows"), rows("mc_rows"));
+        if kc1_1_rows.len() != vc_rows.len()
+            || mc_rows.len() != vc_rows.len()
+            || vc_rows.windows(2).any(|w| w[0] >= w[1])
+        {
+            return Err(LibError::Bad {
+                record: rec,
+                field: "vc_rows",
+                why: "vc_rows, kc1_1_rows and mc_rows are the same length, vc increasing".into(),
+            });
+        }
+        let mut required = vec!["group".to_string()];
+        if !vc_rows.is_empty() {
+            required.extend(["vc_rows", "kc1_1_rows", "mc_rows"].map(String::from));
+        }
+        let (real, cites) = cite::read(t, &rec, &required, &[])?;
+        Ok(Stock {
+            note: text(t, "note").unwrap_or("").to_string(),
+            material,
+            group,
+            vc_rows,
+            kc1_1_rows,
+            mc_rows,
+            real,
+            cites,
+        })
+    }
+
+    /// kc1.1 and mc at cutting speed vc (linear between rows; the end row outside them, said
+    /// in the note), and the rows' full spread. None when the record has no rows.
+    pub fn kienzle_at(&self, vc: f64) -> Option<Kienzle> {
+        let n = self.vc_rows.len();
+        if n == 0 {
+            return None;
+        }
+        let spread = |v: &[f64]| {
+            [
+                v.iter().copied().fold(f64::INFINITY, f64::min),
+                v.iter().copied().fold(0.0, f64::max),
+            ]
+        };
+        let (lo, hi) = (self.vc_rows[0], self.vc_rows[n - 1]);
+        let (kc, mc, how) = if vc <= lo || n == 1 {
+            (
+                self.kc1_1_rows[0],
+                self.mc_rows[0],
+                format!("the row at vc {lo} (asked {vc:.0}: under the data)"),
+            )
+        } else if vc >= hi {
+            (
+                self.kc1_1_rows[n - 1],
+                self.mc_rows[n - 1],
+                format!("the row at vc {hi} (asked {vc:.0}: over the data)"),
+            )
+        } else {
+            let j = self.vc_rows.iter().position(|&x| x >= vc).unwrap_or(n - 1);
+            let (a, b) = (self.vc_rows[j - 1], self.vc_rows[j]);
+            let u = (vc - a) / (b - a);
+            (
+                self.kc1_1_rows[j - 1] + u * (self.kc1_1_rows[j] - self.kc1_1_rows[j - 1]),
+                self.mc_rows[j - 1] + u * (self.mc_rows[j] - self.mc_rows[j - 1]),
+                format!("between the rows at vc {a} and {b}"),
+            )
+        };
+        Some((kc, mc, spread(&self.kc1_1_rows), spread(&self.mc_rows), how))
+    }
+
+    /// The group's record with this material's kc1.1/mc at vc (and their spread as the ranges).
+    pub fn apply(&self, g: &Group, vc: f64) -> Group {
+        match self.kienzle_at(vc) {
+            Some((kc, mc, kr, mr, how)) => {
+                let src = self
+                    .cites
+                    .iter()
+                    .find(|c| c.path == "kc1_1_rows")
+                    .map_or("", |c| c.source.as_str());
+                Group {
+                    kc1_1: kc,
+                    mc,
+                    kc1_1_range: Some(kr),
+                    mc_range: Some(mr),
+                    source: format!("{} kc1.1/mc {how}: {src}", self.material),
+                    ..g.clone()
+                }
+            }
+            None => g.clone(),
+        }
+    }
+}
+
 /// What the engine was asked for.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Cut {

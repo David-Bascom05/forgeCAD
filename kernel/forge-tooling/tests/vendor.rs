@@ -212,3 +212,32 @@ fn cutting_data_is_cited_per_value() {
     assert!(c.source.contains("2209.04197") && c.note.contains("CC BY 4.0"));
     assert_eq!(p.upper(), (1935.0, 0.51));
 }
+
+/// Stock records: Ti-6Al-4V carries Klippel et al.'s Table 16 rows; kc1.1/mc are read between
+/// rows at the cut's speed and held at the end rows outside them.
+#[test]
+fn stock_kienzle_rows() {
+    let lib = Library::builtin();
+    let ti = lib.stock("Ti-6Al-4V annealed").unwrap();
+    assert_eq!(ti.group, "S");
+    assert!(ti.real);
+    let (kc, mc, kr, mr, _) = ti.kienzle_at(45.0).unwrap();
+    // between vc 40 (1253, 0.22) and 50 (1061, 0.28), halfway
+    assert!(
+        (kc - 1157.0).abs() < 1e-9 && (mc - 0.25).abs() < 1e-12,
+        "{kc} {mc}"
+    );
+    assert_eq!((kr, mr), ([662.0, 1299.0], [0.21, 0.41]));
+    let (kc, _, _, _, how) = ti.kienzle_at(600.0).unwrap();
+    assert!(kc == 662.0 && how.contains("over the data"));
+    assert_eq!(lib.stock("C45 bright").unwrap().group, "P");
+    assert_eq!(lib.stock("52100 hardened").unwrap().group, "H");
+    assert_eq!(forge_tooling::feeds::iso_group_of_family("aluminium"), Some("N"));
+    assert_eq!(forge_tooling::feeds::iso_group_of_family("plastic"), None);
+    use forge_tooling::feeds::Substrate;
+    assert_eq!(Substrate::of("Solid Carbide"), Substrate::Carbide);
+    assert_eq!(Substrate::of("Micrograin Carbide"), Substrate::Carbide);
+    assert_eq!(Substrate::of("HSS-Co"), Substrate::Hss);
+    assert_eq!(Substrate::of("PCD"), Substrate::Other);
+    assert_eq!(Substrate::of(""), Substrate::Unknown);
+}

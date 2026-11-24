@@ -14,7 +14,7 @@
 //!
 //! The formulas are feeds.rs's (chip thinning, mean chip, Kienzle power, torque). Power and
 //! torque limits lower the feed only, never ap or ae (patent note: fto-adaptive.md, '607).
-use crate::feeds::{self, Cut, Group, THIN_CAP};
+use crate::feeds::{self, Cut, Group, Stock, Substrate, THIN_CAP};
 use crate::{Cite, Preset};
 use std::f64::consts::PI;
 
@@ -118,7 +118,11 @@ pub struct ToolData<'a> {
     pub d: f64,
     pub flutes: u32,
     pub ball: bool,
-    pub carbide: bool,
+    /// Its substrate (picks the group's carbide or HSS speed; others have no generic speed)
+    /// and coating as the record states it (no generic factor is applied for a coating: the
+    /// maker's preset carries it).
+    pub substrate: Substrate,
+    pub coating: &'a str,
     /// The tool's cutting data for the part's group, and its cite.
     pub preset: Option<(&'a Preset, Option<&'a Cite>)>,
 }
@@ -241,7 +245,21 @@ pub fn milling(
     spindle: &Spindle,
     nominal: (f64, f64),
 ) -> Option<Resolved> {
+    milling_on(ask, tool, group, None, spindle, nominal)
+}
+
+/// As `milling`, for a specific stock material: its record's kc1.1 and mc at the cut's actual
+/// speed (and their measured spread) take the group's place for power and torque.
+pub fn milling_on(
+    ask: &Ask,
+    tool: &ToolData,
+    group: Option<&Group>,
+    stock: Option<&Stock>,
+    spindle: &Spindle,
+    nominal: (f64, f64),
+) -> Option<Resolved> {
     let d = tool.d;
+    let carbide = tool.substrate == Substrate::Carbide;
     let z = tool.flutes.max(1) as f64;
     let mut checks = Vec::new();
     let cite_note = |c: Option<&Cite>, fallback: &str| match c {
@@ -296,12 +314,22 @@ pub fn milling(
             )
         } else {
             let g = group?;
-            let v = if tool.carbide { g.vc_carbide } else { g.vc_hss };
+            // the group's generic speeds are per substrate; a coating moves no generic number
+            let v = match tool.substrate {
+                Substrate::Carbide => g.vc_carbide,
+                Substrate::Hss => g.vc_hss,
+                Substrate::Other | Substrate::Unknown => return None,
+            };
+            let coat = if tool.coating.is_empty() {
+                String::new()
+            } else {
+                format!("; coating {} (no generic factor)", tool.coating)
+            };
             Val::new(
                 v,
                 "m/min",
                 Source::Material,
-                format!("group {}: {}", g.group, g.source),
+                format!("group {} {}: {}{coat}", g.group, tool.substrate.name(), g.source),
             )
         };
         (1000.0 * vc.v / (PI * d_eff.max(1e-6)), vc)
@@ -377,15 +405,15 @@ pub fn milling(
                     if p.name.is_empty() { "preset" } else { &p.name }
                 ),
             )
-        } else if let Some(g) = group {
+        } else {
+            // no chip from any layer: nothing to set the feed from
+            let g = group?;
             Val::new(
                 g.fz_at(d),
                 "mm",
                 Source::Material,
                 format!("group {}: {}", g.group, g.source),
             )
-        } else {
-            Val::new(0.0, "mm", Source::Default, "no chip data")
         };
         let fz = if k > 0.0 {
             (chip.v / k).min(THIN_CAP * chip.v)
@@ -407,6 +435,13 @@ pub fn milling(
     };
     let mut fz = fz;
     let mut vf = Val::new(fz.v * n * z, "mm/min", fz.source, fz.note.clone());
+    // from here the cutting force: the stock material's own data at the actual speed where its
+    // record has some, else the group's
+    let kz: Option<Group> = group.map(|g| match stock {
+        Some(st) => st.apply(g, vc_val.v),
+        None => g.clone(),
+    });
+    let group = kz.as_ref();
 
     // the user's power and torque limits lower the feed (only the feed). P ∝ fz^(1 − mc)
     // at fixed n, ap, ae (kc = kc1.1 hm^(−mc), hm ∝ fz), so the largest fz under a cap is exact.
@@ -415,7 +450,7 @@ pub fn milling(
             d,
             flutes: tool.flutes,
             ball: tool.ball,
-            carbide: tool.carbide,
+            carbide,
             ap: ap.v,
             ae: ae.v,
         };
@@ -498,7 +533,7 @@ pub fn milling(
                 d,
                 flutes: tool.flutes,
                 ball: tool.ball,
-                carbide: tool.carbide,
+                carbide,
                 ap: ap.v,
                 ae: ae.v,
             },
@@ -539,7 +574,7 @@ pub fn milling(
                     d,
                     flutes: tool.flutes,
                     ball: tool.ball,
-                    carbide: tool.carbide,
+                    carbide,
                     ap: ap.v,
                     ae: ae.v,
                 },
@@ -1041,7 +1076,8 @@ mod tests {
             d: 12.7,
             flutes: 3,
             ball: false,
-            carbide: true,
+            substrate: Substrate::Carbide,
+            coating: "",
             preset: p,
         }
     }

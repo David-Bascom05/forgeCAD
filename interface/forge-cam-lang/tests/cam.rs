@@ -1111,3 +1111,102 @@ fn the_posted_paths_check_again_on_demand() {
     assert!(one[0].clear);
     assert!(cam.check(Some("no-such-op")).is_empty());
 }
+
+/// The stock material drives the cutting data: `part(.., material:)` names it (the flange
+/// document has none), its group comes from its record or family, and a material with measured
+/// Kienzle rows (Ti-6Al-4V, Klippel et al. 2022) sets kc1.1/mc at the cut's speed. No material
+/// and no group: the ops are refused with a fix, never cut at a guessed group.
+#[test]
+fn stock_material_sets_the_cutting_data() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    // aluminium by name: group N from the family
+    let cam = forge_cam_lang::run(
+        &src.replace(
+            "part(\"flange.fg\", group: \"N\")",
+            "part(\"flange.fg\", material: \"6061-T6\")",
+        ),
+        &dir,
+    );
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let skim = cam
+        .ops
+        .iter()
+        .find(|o| o.name == "skim")
+        .unwrap()
+        .resolved
+        .clone()
+        .unwrap();
+    assert_eq!(skim.vc.source, Source::MachineClamped);
+    assert!(skim.chip.note.contains("group N"), "{}", skim.chip.note);
+    // titanium: group S, and the measured rows at the cut's speed (45 m/min, carbide, group S)
+    let cam = forge_cam_lang::run(
+        &src.replace(
+            "part(\"flange.fg\", group: \"N\")",
+            "part(\"flange.fg\", material: \"Ti-6Al-4V annealed\")",
+        ),
+        &dir,
+    );
+    let skim = cam
+        .ops
+        .iter()
+        .find(|o| o.name == "skim")
+        .unwrap()
+        .resolved
+        .clone()
+        .unwrap();
+    assert_eq!((skim.vc.v, skim.vc.source), (45.0, Source::Material));
+    let p = skim.checks.iter().find(|c| c.what == "power").unwrap();
+    assert!(
+        p.why
+            .contains("Ti-6Al-4V annealed kc1.1/mc between the rows at vc 40 and 50"),
+        "{}",
+        p.why
+    );
+    // between the rows at 40 (1253, 0.22) and 50 (1061, 0.28), halfway
+    let hm = skim.feeds.hm.max(1e-4);
+    let kc = 1157.0 * forge_math::dmath::powf(hm, -0.25);
+    let want = skim.ap.v * skim.ae.v * skim.feed.v * kc / 6.0e7;
+    assert!(
+        (skim.feeds.power - want).abs() < 1e-9 * want,
+        "{} {want}",
+        skim.feeds.power
+    );
+    // nothing known: refused, with the fix
+    let cam = forge_cam_lang::run(
+        &src.replace("part(\"flange.fg\", group: \"N\")", "part(\"flange.fg\")"),
+        &dir,
+    );
+    assert!(!cam.ok);
+    let skim = cam.ops.iter().find(|o| o.name == "skim").unwrap();
+    assert_eq!(skim.status, "refused");
+    assert!(
+        skim.refusal
+            .as_deref()
+            .unwrap()
+            .contains("the part has no material"),
+        "{:?}",
+        skim.refusal
+    );
+    assert!(skim.fix.as_deref().unwrap().contains("material"));
+    // but speeds and chips given on the tool are enough (power then not checked)
+    let cam = forge_cam_lang::run(
+        &src.replace("part(\"flange.fg\", group: \"N\")", "part(\"flange.fg\")")
+            .replace(
+                "holder: \"bt40-er32\")",
+                "holder: \"bt40-er32\", rpm: 8000, chip: 0.04)",
+            ),
+        &dir,
+    );
+    let skim = cam.ops.iter().find(|o| o.name == "skim").unwrap();
+    assert_eq!(skim.status, "built", "{:?}", skim.refusal);
+    let r = skim.resolved.as_ref().unwrap();
+    let p = r.checks.iter().find(|c| c.what == "power").unwrap();
+    assert_eq!(p.verdict, forge_tooling::resolve::Verdict::NotChecked);
+}

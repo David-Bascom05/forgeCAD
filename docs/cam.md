@@ -90,8 +90,18 @@ every `tool(..)` takes these args; an op's value wins over its tool's (kernel/fo
 | `max_power:`, `max_torque:` | kW, N·m | limits: the feed (only the feed) is lowered to meet them; P ∝ fz^(1−mc), so exactly |
 | `min_feed:`, `max_feed:` | mm/min | the feed range (engagement feed stays in it) |
 
-Each value is resolved in layers, each over the one before: `default` → `material` (the part's
-group in cutting.toml) → `library` (the tool's `[[tool.preset]]` for the group, with its cite) →
+The stock material is `part(.., material:)` (a forge-material name; stock is often not the
+part's own record), else the part document's material. Its ISO 513 group is `part(.., group:)`,
+else its `[[stock]]` record's in cutting.toml, else its family's class (steel P, stainless M,
+iron K, aluminium and copper N, titanium S); nothing defaults. A `[[stock]]` record with measured
+Kienzle rows (Ti-6Al-4V and C45: Klippel et al. 2022, CC BY 4.0) gives kc1.1/mc at the cut's speed
+for power and torque. The tool's substrate (`material`: carbide, HSS, ...) picks the group's
+speed column; cermet, ceramic, CBN and PCD have none, so the maker's preset or the user's speed
+is needed; a coating moves no generic number (the maker's preset carries it). With no speed or
+chip from any layer the op is refused, with the fix.
+
+Each value is resolved in layers, each over the one before: `default` → `material` (the
+stock's data, else its group in cutting.toml) → `library` (the tool's `[[tool.preset]]` for the group, with its cite) →
 `user`. Then only two things lower a value, and both are reported with the reason:
 `machine-clamped` (rpm range; max feed, held 1 mm/min under it) and `limited` (the user's own
 limits). A user's value is never changed silently. Formulas (feeds.rs, with sources): chip thinning

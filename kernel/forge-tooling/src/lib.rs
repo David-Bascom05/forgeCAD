@@ -161,7 +161,11 @@ pub struct Tool {
     pub dcon: f64,
     pub oal: f64,
     pub hand: String,
+    /// The substrate as the record writes it ("carbide", "Solid Carbide", "HSS-Co", ...):
+    /// feeds::Substrate::of reads it.
     pub material: String,
+    /// The coating as the record writes it ("AlTiN", "uncoated", ...; "" when not stated).
+    pub coating: String,
     pub vendor: String,
     pub product_id: String,
     pub source: String,
@@ -296,6 +300,7 @@ impl Tool {
             oal,
             hand: text(t, "hand").unwrap_or("right").to_string(),
             material: s("material"),
+            coating: s("coating"),
             vendor: s("vendor"),
             product_id: s("product_id"),
             source: s("source"),
@@ -598,6 +603,8 @@ pub struct Library {
     pub assemblies: Vec<Assembly>,
     pub machines: Vec<Machine>,
     pub cutting: Vec<feeds::Group>,
+    /// Cutting data for specific stock materials (forge-material names), over their group's.
+    pub stock: Vec<feeds::Stock>,
     pub vises: Vec<Vise>,
     pub jaw_blanks: Vec<JawBlank>,
     pub collets: Vec<Collet>,
@@ -929,6 +936,16 @@ impl Library {
         for r in tables(&t, "group") {
             self.cutting.push(feeds::Group::from_table(r)?);
         }
+        for r in tables(&t, "stock") {
+            let x = feeds::Stock::from_table(r)?;
+            if self.stock.iter().any(|o| o.material == x.material) {
+                return Err(LibError::Duplicate {
+                    kind: "stock",
+                    name: x.material,
+                });
+            }
+            self.stock.push(x);
+        }
         for r in tables(&t, "vise") {
             self.vises.push(Vise::from_table(r)?);
         }
@@ -1019,6 +1036,10 @@ impl Library {
     }
     pub fn group(&self, g: &str) -> Option<&feeds::Group> {
         self.cutting.iter().find(|x| x.group == g || x.name == g)
+    }
+    /// The cutting data for a stock material by its forge-material name.
+    pub fn stock(&self, material: &str) -> Option<&feeds::Stock> {
+        self.stock.iter().find(|x| x.material == material)
     }
 }
 
