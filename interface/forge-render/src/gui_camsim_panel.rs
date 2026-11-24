@@ -839,8 +839,8 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     };
     if s.is_empty() {
         // certified: the workspace's words (a rule left unchecked named, its meaning on hover)
-        let (words, hover) = crate::shell::cam::certified_words(cam.certification());
-        let r = ui.colored_label(if hover.is_some() { t.ink2 } else { c }, words);
+        let (words, hover, amber) = crate::shell::cam::certified_words(cam.certification());
+        let r = ui.colored_label(if amber { t.warn } else if hover.is_some() { t.ink2 } else { c }, words);
         if let Some(h) = hover {
             r.on_hover_text(h);
         }
