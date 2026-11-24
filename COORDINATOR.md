@@ -264,3 +264,9 @@ forge-topo #39) in CI. Train 3 candidates: #13, #20, #41 (cam/ui), cam/sim, #42,
 library stacks (machines/fadal→haas-2, industrial-b, vendor-c; union sweep-diff digest lines), post/haas-audit,
 CAM-CORE stack to cam/sym-ties, cam-turn follow-up, spine-euler, curved-sites-pif/absorb, TRANSLATE 1 + B1,
 urdf-export, machines/builder, posts/dialects.
+
+### §10b (2026-11-24) new workers, delegation
+- TRAIN-CONDUCTOR session_01WJtawwrcJMe9MW7GeYQtHw now owns ALL merge trains: assembly, conflicts, PRs and CI. That is David's direction: "make a session handle merge nonsense so you don't block on it". Workers send train-ready shas to it and cc the coordinator.
+- UI-BUGHUNT session_01WJtax11GnJCjfyG5XiZG3a: wasm/browser UI bugs. Lag first (measured), then dead clicks, then visual glitches (screenshots). Branch ui/bughunt-*.
+- Adaptive clearing: David rejects a blanket ban. TOOLPATH-RESEARCH is writing a claim-level FTO with design-arounds (research/cam/toolpath-quality/fto-adaptive.md). TOOLPATH-QUALITY may build engagement measurement and engagement-based feed now; it builds the path generator once a design-around is named.
+- tools/test-wasm.sh now runs the test binaries in parallel (train 3).
