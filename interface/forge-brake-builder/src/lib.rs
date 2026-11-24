@@ -138,8 +138,10 @@ pub fn fields(kind: &str) -> Vec<Field> {
             let unit = match f.unit {
                 "mm" => Unit::Length,
                 "deg" => Unit::Angle,
-                "mm/s" => Unit::Speed,
-                "kN" => Unit::Force,
+                // as forge-brake keeps them: a ram's speed in mm/s, a force in kN
+                "mm/s" => Unit::MmPerS,
+                "kN" => Unit::KiloNewton,
+                "kN/m" => Unit::KiloNewtonPerMetre,
                 _ => Unit::None,
             };
             let ty = match f.kind {

@@ -6,8 +6,8 @@
 //! edit, the checks (an unpublished press value is "not checked", not a failure), save, and the
 //! record's exact sections drawn along the bed.
 //!
-//! forge-brake's cites know published, estimate, unknown and conflict: a value the user enters
-//! is cited `estimate` with the basis [`USER_VALUE`] (shown as the user's); "?" makes a value
+//! forge-brake's cites know published, estimate, user, unknown and conflict: a value the user enters
+//! is cited `user` with the basis [`USER_VALUE`] (and the record is no longer `real`); "?" makes a value
 //! unknown (removed, cited unknown with the basis [`USER_UNKNOWN`]).
 use super::theme::{Theme, sans, semi};
 use egui::{RichText, Ui, vec2};
@@ -135,7 +135,13 @@ pub fn recite(t: &mut Table, path: &str, status: &str, basis: &str) {
 pub fn set_user(t: &mut Table, f: &Field, v: Item) {
     put(t, &f.path, Some(v));
     if f.cited {
-        recite(t, &f.path, "estimate", USER_VALUE);
+        recite(t, &f.path, "user", USER_VALUE);
+        // a record holding a user's value is not a maker's published record (forge-brake)
+        put(t, "real", Some(Item::Bool(false)));
+        if let Some(i) = t.0.iter().position(|(k, _)| k == "cite") {
+            let c = t.0.remove(i);
+            t.0.push(c);
+        }
     } else {
         // keep the cites last
         if let Some(i) = t.0.iter().position(|(k, _)| k == "cite") {
@@ -658,9 +664,8 @@ enum Change {
     Unknown(String),
 }
 
-fn num_cell(ui: &mut Ui, x: &mut f64, suffix: &str) -> bool {
-    ui.add(egui::DragValue::new(x).speed(0.1).max_decimals(4).suffix(suffix))
-        .changed()
+fn num_cell(ui: &mut Ui, x: &mut f64, unit: &str) -> bool {
+    super::lib_form::num_edit(ui, x, unit.trim())
 }
 
 /// One field's value cell; Some(new value) when edited.
@@ -769,10 +774,10 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
                             match row {
                                 // segments: { length, count }
                                 Item::Table(tb) => {
-                                    for (c, _) in cols.iter() {
+                                    for (c, u) in cols.iter() {
                                         if let Some(Item::Num(x)) = tb.get(c) {
                                             let mut x = *x;
-                                            if num_cell(ui, &mut x, "") {
+                                            if num_cell(ui, &mut x, u.suffix()) {
                                                 tb.set(c, Item::Num(x));
                                                 ch = true;
                                             }
@@ -783,7 +788,7 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
                                 Item::Arr(xs) => {
                                     for x in xs.iter_mut() {
                                         if let Item::Num(x) = x {
-                                            ch |= num_cell(ui, x, "");
+                                            ch |= num_cell(ui, x, "mm");
                                         }
                                     }
                                 }

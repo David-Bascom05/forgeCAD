@@ -52,6 +52,12 @@ pub enum Unit {
     Torque,
     /// m³/h
     Flow,
+    /// kN (a press's tonnage, a tool's load)
+    KiloNewton,
+    /// mm/s (a press's ram speeds)
+    MmPerS,
+    /// kN/m (a press-brake tool's load per metre of length)
+    KiloNewtonPerMetre,
 }
 
 impl Unit {
@@ -72,6 +78,9 @@ impl Unit {
             Unit::Pressure => "kPa",
             Unit::Torque => "N·m",
             Unit::Flow => "m³/h",
+            Unit::KiloNewton => "kN",
+            Unit::MmPerS => "mm/s",
+            Unit::KiloNewtonPerMetre => "kN/m",
         }
     }
 }

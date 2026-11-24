@@ -131,6 +131,29 @@ fn punches_dies_presses() {
         }
     }
 
+    // units as forge-brake keeps them: a press's force in kN, its speeds in mm/s, a tool's load
+    // in kN/m (never shown as N or m/min)
+    let unit = |k: &str, p: &str| {
+        forge_brake_builder::fields(k)
+            .into_iter()
+            .find(|f| f.path == p)
+            .unwrap()
+            .unit
+            .suffix()
+    };
+    assert_eq!(unit("press", "force"), "kN");
+    assert_eq!(unit("press", "speeds.work"), "mm/s");
+    assert_eq!(unit("die", "max_load"), "kN/m");
+    assert_eq!(unit("press", "bed_length"), "mm");
+    // an inch window shows the lengths in inches
+    h.gui.shell.units = "in";
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        m.set_lib("press");
+    }
+    shot(&mut h, "brake-0b-press-inch");
+    h.gui.shell.units = "mm";
+
     // a press: its unpublished values are "not checked", not failures
     {
         let m = h.gui.shell.machine.as_mut().unwrap();

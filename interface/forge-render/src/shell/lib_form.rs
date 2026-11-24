@@ -405,3 +405,44 @@ pub fn machine_thumb(def: &forge_machine::def::MachineDef) -> Vec<Vec<[f64; 2]>>
         })
         .collect()
 }
+
+thread_local! {
+    static DOC_UNITS: std::cell::Cell<&'static str> = const { std::cell::Cell::new("mm") };
+}
+
+/// The length unit the sheets show lengths in this frame (the window's mm/in).
+pub fn set_doc_units(u: &'static str) {
+    DOC_UNITS.with(|c| c.set(u));
+}
+
+/// A number kept in `unit` edited in place: a length shown in the window's unit (inches in an
+/// inch document), anything else in the unit the record keeps it in. True when changed.
+pub fn num_edit(ui: &mut Ui, x: &mut f64, unit: &str) -> bool {
+    let doc = DOC_UNITS.with(|c| c.get());
+    if unit == "mm"
+        && doc != "mm"
+        && let Some((_, top, bottom)) = forge_units::lookup(doc)
+    {
+        let per = top / bottom;
+        let mut v = *x / per;
+        let ch = ui
+            .add(
+                egui::DragValue::new(&mut v)
+                    .speed(0.01)
+                    .max_decimals(4)
+                    .suffix(format!(" {doc}")),
+            )
+            .changed();
+        if ch {
+            *x = v * per;
+        }
+        return ch;
+    }
+    let sfx = match unit {
+        "" => String::new(),
+        "deg" | "°" => "°".to_string(),
+        u => format!(" {u}"),
+    };
+    ui.add(egui::DragValue::new(x).speed(0.1).max_decimals(4).suffix(sfx))
+        .changed()
+}

@@ -393,15 +393,7 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                 Ty::Num | Ty::Int => match r.vals.get(&f.path) {
                                     Some(v) => {
                                         let mut x = *v;
-                                        if ui
-                                            .add(
-                                                egui::DragValue::new(&mut x)
-                                                    .speed(0.1)
-                                                    .max_decimals(3)
-                                                    .suffix(format!(" {}", f.unit.suffix())),
-                                            )
-                                            .changed()
-                                        {
+                                        if super::lib_form::num_edit(ui, &mut x, f.unit.suffix()) {
                                             set = Some((f.path.clone(), x));
                                         }
                                     }

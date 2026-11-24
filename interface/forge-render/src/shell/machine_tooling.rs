@@ -427,15 +427,7 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut ToolingUi) {
                                     }
                                 }
                                 Some(Val::Num(mut x)) => {
-                                    if ui
-                                        .add(
-                                            egui::DragValue::new(&mut x)
-                                                .speed(0.05)
-                                                .max_decimals(4)
-                                                .suffix(unit_of(k)),
-                                        )
-                                        .changed()
-                                    {
+                                    if lf::num_edit(ui, &mut x, unit_of(k).trim()) {
                                         edit = Some((k.clone(), Val::Num(x)));
                                     }
                                 }

@@ -873,6 +873,7 @@ impl Shell {
     /// The environment's properties panel: the chosen record's sheet (and its checks).
     pub fn machine_props(&mut self, ui: &mut Ui, r: egui::Rect) {
         let Some(mut st) = self.machine.take() else { return };
+        super::lib_form::set_doc_units(self.units);
         let t = self.theme;
         let mut places = Vec::new();
         ui.scope_builder(
@@ -2410,9 +2411,25 @@ fn overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
     ));
     let p = p.with_clip_rect(v);
     for (at, words) in &st.view_labels {
-        let g = p.layout_no_wrap(words.clone(), sans(11.0), t.ink);
-        let box_ = egui::Rect::from_min_size(*at + vec2(14.0, -22.0), g.size() + vec2(10.0, 6.0));
-        p.line_segment([*at, box_.left_bottom()], egui::Stroke::new(1.0, t.ink2));
+        // wrapped to the room the view leaves, on the side of the point with more of it
+        let room_r = v.right() - at.x - 24.0;
+        let room_l = at.x - v.left() - 24.0;
+        let right = room_r >= room_l;
+        let wrap = room_r.max(room_l).clamp(120.0, 360.0);
+        let g = p.layout(words.clone(), sans(11.0), t.ink, wrap);
+        let size = g.size() + vec2(10.0, 6.0);
+        let min = if right {
+            *at + vec2(14.0, -size.y - 6.0)
+        } else {
+            *at + vec2(-14.0 - size.x, -size.y - 6.0)
+        };
+        let box_ = egui::Rect::from_min_size(min, size);
+        let foot = if right {
+            box_.left_bottom()
+        } else {
+            box_.right_bottom()
+        };
+        p.line_segment([*at, foot], egui::Stroke::new(1.0, t.ink2));
         p.circle_filled(*at, 2.5, t.ink2);
         p.rect_filled(box_, 4.0, t.surface.gamma_multiply(0.92));
         p.rect_stroke(
