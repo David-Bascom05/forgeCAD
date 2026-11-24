@@ -28,10 +28,9 @@ pub fn texts_in<'a>(s: &'a Snap, region: &[Rect]) -> Vec<&'a Text> {
         .collect()
 }
 
-/// Those the click put there: text already drawn in the same place before is what the popup
-/// covers, not what it shows.
-pub fn new_texts_in<'a>(s: &'a Snap, before: &Snap, region: &[Rect]) -> Vec<&'a Text> {
-    // the popup's own background: the first opaque fill covering most of it
+/// The texts drawn on top in the region: clipped to it, or painted over the topmost background
+/// covering it (a panel beneath, covered, doesn't count).
+pub fn on_top_in<'a>(s: &'a Snap, region: &[Rect]) -> Vec<&'a Text> {
     let floor = region
         .iter()
         .filter_map(|r| {
@@ -46,11 +45,17 @@ pub fn new_texts_in<'a>(s: &'a Snap, before: &Snap, region: &[Rect]) -> Vec<&'a 
         .unwrap_or(0);
     texts_in(s, region)
         .into_iter()
-        // the popup's own: clipped to it (a panel beneath clips its text to the panel), or
-        // painted after its background
         .filter(|t| {
             region.iter().any(|r| r.expand(4.0).contains_rect(t.clip)) || (floor > 0 && t.idx > floor)
         })
+        .collect()
+}
+
+/// Those the click put there: text already drawn in the same place before is what the popup
+/// covers, not what it shows.
+pub fn new_texts_in<'a>(s: &'a Snap, before: &Snap, region: &[Rect]) -> Vec<&'a Text> {
+    on_top_in(s, region)
+        .into_iter()
         .filter(|t| {
             !before
                 .texts
