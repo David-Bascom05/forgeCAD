@@ -1,0 +1,147 @@
+{
+ "vendor": "DN Solutions",
+ "model": "DVF 5000",
+ "family": "DVF 5-axis",
+ "source": [
+  "https://www.dn-solutions.com/us/product/5-axis-machining/horizontal-machining/dvf-5000.do"
+ ],
+ "source_secondary": [
+  "https://images.machineryhouse.com.au/products/M8407/PDF/DVF%205000_1727305776.pdf",
+  "https://www.sourceatlantic.ca/userfiles/documents/dvf5000.pdf"
+ ],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Simultaneous 5-axis VMC, vertical spindle. Tilting rotary table (catalog: '2-axis tilting table') with trunnion support: tilt axis named B by DN Solutions, -30 to +110 deg, carrying the C rotary table (360 deg). Which unit carries X, Y, Z is not stated in the fetched text.",
+ "control": {
+  "standard": "FANUC F31iB5 Plus",
+  "options": [
+   "HEIDENHAIN TNC640",
+   "SIEMENS S840D",
+   "Sinumerik One"
+  ]
+ },
+ "travel_mm": {
+  "X": 625,
+  "Y": 450,
+  "Z": 400
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": [
+    -30,
+    110
+   ],
+   "rapid_rpm": 20,
+   "indexing_or_full": "full (simultaneous)"
+  },
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 20,
+   "indexing_or_full": "full (simultaneous)"
+  }
+ },
+ "spindle_nose_to_table_mm": [
+  150,
+  550
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  500,
+  450
+ ],
+ "table_load_kg": 400,
+ "rotary_table_dia_mm": 500,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12000,
+  "rpm_min": null,
+  "taper_or_interface": "ISO #40",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 18.5
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 118
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 40,
+  "Y": 40,
+  "Z": 40,
+  "A_or_B_rpm": 20,
+  "C_rpm": 20
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [
+   40,
+   60,
+   120
+  ],
+  "tool_to_tool_s": 1.3,
+  "chip_to_chip_s": 5.3,
+  "max_tool_dia_mm": 75,
+  "max_tool_dia_empty_adjacent_mm": 125,
+  "max_tool_len_mm": 300,
+  "max_tool_kg": 8
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": "Coolant tank 410 L (maker catalogue). Dealer spec sheet (Source Atlantic, Doosan-era) lists 20 bar TSC and air-through-spindle as standard in its package and a 350 L tank; not confirmed by maker document."
+ },
+ "overall_mm": {
+  "W": 2700,
+  "D": 2205,
+  "H": 2890
+ },
+ "weight_kg": 7500,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "table dia 630 x 450 mm",
+  "spindle 15000 / 18000 r/min (Fanuc 22 kW; HEIDENHAIN 30 kW; SIEMENS 30 kW; 155 N·m option on H/S)",
+  "magazine 40 (drum), 60 / 120 (chain)",
+  "AWC"
+ ],
+ "notes": "Main numbers from DN Solutions DVF 5000 catalogue ver. EN 240312 SU hosted on dealer Machinery House CDN (maker document, dealer host). Table size given as 'ø500 x 450' (diameter x height-ish second figure, recorded in table_mm as published). Max workpiece ø550 x h450 mm; 400 kg 'with trunnion support'. Spindle power S6/Cont. given as single values per control: Fanuc 18.5 kW, HEIDENHAIN 17 kW, SIEMENS 16.5 kW; torque Fanuc 118, H/H 108, Siemens 79 N·m. Spindle nose to table 150-550 mm and chip-to-chip 5.3 s come ONLY from dealer Source Atlantic spec sheet (Doosan-era, secondary). Catalogue dimension labels Height 2890 / Length 2205 / Width 2700. DN US page (DVF 5000 row) agrees on 625/450/400, 40 m/min, 20 r/min B/C, 12000 {18000}, 18.5 {22} kW, 118 N·m, ø500, 400 kg, 30 tools, 7500 kg. Current DN lineup also has 'DVF 5000 2nd Generation' (separate file). Not applicable to this machine kind (left null, not listed in unknown): swing_over_bed_mm, max_turning_dia_mm, max_turning_length_mm, chuck_size_in, bar_capacity_mm, spindle_nose_type, sub_spindle, live_tool, turret_stations, turret_index_s, tailstock, milling_head, pallet, spindle_center_to_column_mm, spindle_center_to_pallet_top_mm, rotary.A."
+}

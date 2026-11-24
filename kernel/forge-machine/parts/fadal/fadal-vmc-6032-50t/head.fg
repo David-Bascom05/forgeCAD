@@ -1,0 +1,22 @@
+# fadal-vmc-6032-50t head: nose and housing back to the column (sizes unpublished)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared ax = 762
+shared ay = 406.4
+shared nz = 890
+shared nr = 129
+shared nh = 159
+shared x0 = 523
+shared y0 = 167.4
+shared z0 = 1049
+shared lx = 478
+shared ly = 1106.125
+shared lz = 419
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+housing = extrude(plan, lz)
+sketch nk(on: offset(xy, nz)) {
+  c = circle((ax, ay), nr)
+}
+nose = extrude(nk.c, nh)

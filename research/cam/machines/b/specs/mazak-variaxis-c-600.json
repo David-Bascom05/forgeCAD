@@ -1,0 +1,126 @@
+{
+ "vendor": "Mazak",
+ "model": "VARIAXIS C-600",
+ "family": "VARIAXIS C",
+ "source": [
+  "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/",
+  "https://www.mazak.com/uk-en/products/variaxis-c/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "5-axis vertical, tilting table: page gives B-axis tilt -30 to +120 deg; C-axis range and which unit carries which linear axis are not on the page.",
+ "control": {
+  "standard": "MAZATROL SmoothAi (named in the machine-size row only)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 650,
+  "Y": 550,
+  "Z": 530
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": [
+    -30,
+    120
+   ],
+   "rapid_rpm": null,
+   "indexing_or_full": "full 5-axis (simultaneous not stated on page)"
+  },
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  50,
+  580
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 500,
+ "rotary_table_dia_mm": 600,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12000,
+  "rpm_min": null,
+  "taper_or_interface": "BT40 / CAT40",
+  "power_kw": {
+   "cont": 11,
+   "30min": null,
+   "peak/other": "11 kW (40% ED)"
+  },
+  "torque_nm": {
+   "cont": 57.3,
+   "max": 70
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 42,
+  "Y": 42,
+  "Z": 42,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": 130,
+  "max_tool_len_mm": 300,
+  "max_tool_kg": 8
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 2350,
+  "D": 2962,
+  "H": 3039
+ },
+ "weight_kg": 10000,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.tool_to_tool_s",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rotary.C",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle_center_to_column_mm",
+  "table_height_from_floor_mm"
+ ],
+ "options": [],
+ "notes": "Table size printed 'Φ600 × 500' (dia x unclear second value); max workpiece Φ730 x 450 mm. Nose-to-table distance stated with table horizontal. Rapids 42000 mm/min. C-axis range and rotary rapids not published on the page."
+}

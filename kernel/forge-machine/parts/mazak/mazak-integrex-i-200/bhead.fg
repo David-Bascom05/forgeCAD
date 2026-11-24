@@ -1,0 +1,14 @@
+# mazak-integrex-i-200 bhead: the B head housing (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = 250
+shared y0 = -100
+shared z0 = -100
+shared L = 200
+shared W = 200
+shared H = 200
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

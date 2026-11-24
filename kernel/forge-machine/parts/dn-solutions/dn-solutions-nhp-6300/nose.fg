@@ -1,0 +1,13 @@
+# dn-solutions-nhp-6300 nose: the spindle housing around the tool: radius an estimate, kept large.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared d = 1100
+shared u = 0
+shared v = 100
+shared r = 120
+shared h = 180
+
+sketch plan(on: offset(xy, d)) {
+  outline = circle((u, v), r)
+}
+body = extrude(plan.outline, h)

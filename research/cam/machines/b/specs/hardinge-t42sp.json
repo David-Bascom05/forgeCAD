@@ -1,0 +1,136 @@
+{
+ "vendor": "Hardinge (now Kellenberger SUPER PRECISION)",
+ "model": "T42 SP (now Kellenberger SP42)",
+ "family": "SUPER PRECISION SP-Series",
+ "source": [
+  "https://kellenberger.com/brands/super-precision/",
+  "https://kellenberger.com/wp-content/uploads/2026/11/Kellenberger_Hard-Turning_E.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe-c-live",
+ "architecture": "45 deg one-piece slant bed (polymer-concrete filled), single turret (BMT-45 live top plate or T-style static), Heidenhain linear scales on X/Y/Z, collet-ready spindle (collet seats directly in spindle), servo non-quill tailstock MT4. Variants Y, YT, YS, MSY, MYT add Y axis / sub-spindle.",
+ "control": {
+  "standard": "FANUC 31i-B",
+  "options": []
+ },
+ "travel_mm": {
+  "X": null,
+  "Y": null,
+  "Z": null
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": 6,
+ "bar_capacity_mm": 42,
+ "spindle_nose_type": "A2-5 / 16C",
+ "spindle": {
+  "rpm_max": 6000,
+  "rpm_min": null,
+  "taper_or_interface": "A2-5 / 16C collet-ready",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 11
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 16,
+ "turret_index_s": null,
+ "tailstock": "servo-driven, programmable force, MT4",
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "live_tool.rpm_max",
+  "max_cutting_feed_m_min",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "sub_spindle",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "travel_mm.X",
+  "travel_mm.Z",
+  "turret_index_s",
+  "weight_kg"
+ ],
+ "options": [
+  "Big bore: A2-6 / 20C, 51 mm collet, 60.4 mm through hole, 8 in chuck, 5,000 rpm",
+  "BMT-45 live: 16 stations with half-index = 32 positions; block type 12; T-style static 12-station",
+  "Live tool holders 8,000 rpm up to 32,000 rpm with 2:1/4:1 ratios",
+  "Y / YT / YS / MSY / MYT variants"
+ ],
+ "notes": "Hardinge's T42 SP is now sold as Kellenberger SP42 (Hardinge.com redirects to kellenberger.com). Orig: collet 1.625 in / 42 mm, through hole 1.890 in / 48 mm, chuck 6 in / 150 mm, motor 15 hp / 11 kW (duty not stated). Live tool rpm/kW, travels, swing, turning length, rapids, dims, weight not published in brochure (floor plan pages carry drawings only)."
+}

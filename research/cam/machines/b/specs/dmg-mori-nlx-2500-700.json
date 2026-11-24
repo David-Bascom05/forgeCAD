@@ -1,0 +1,160 @@
+{
+ "vendor": "DMG MORI",
+ "model": "NLX 2500 | 700 2nd Generation",
+ "family": "NLX",
+ "source": [
+  "https://en.dmgmori.com/products/machines/turning/universal-turning/nlx/nlx-2500-2nd",
+  "https://us.dmgmori.com/products/machines/turning/universal-turning/nlx/nlx-2500-2nd",
+  "https://en.dmgmori.com/media/public/epaper/TEM_1_2024/TEM_2024-1_ENOS/epaper/TEM_2024-1_ENOS.pdf",
+  "https://en.dmgmori.com/products/machines/turning/universal-turning/nlx/nlx-2500"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe-y",
+ "architecture": "Horizontal universal lathe, left-hand main spindle, BMT (built-in motor) turret with Y-axis (+/-60 mm), optional right-hand (sub) spindle for 6-sided machining. Bed/slide arrangement not published on page.",
+ "control": {
+  "standard": null,
+  "options": [
+   "CELOS X with MAPPS (FANUC)",
+   "CELOS X with SIEMENS"
+  ]
+ },
+ "travel_mm": {
+  "X": 260,
+  "Y": 120,
+  "Z": 795
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 366,
+ "max_turning_length_mm": 708,
+ "chuck_size_in": 10,
+ "bar_capacity_mm": 105,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 5000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 843
+  },
+  "curve_points": null
+ },
+ "sub_spindle": {
+  "standard": false,
+  "options": [
+   "6in 7,000 rpm 95 Nm bar 35",
+   "8in 5,000 rpm 207 Nm bar 72",
+   "10in 5,000 rpm 577 Nm bar 105"
+  ]
+ },
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": "900 l zero-sludgeCOOLANT pro tank, zeroFOG mist collector"
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "control.standard",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "live_tool.rpm_max",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle_nose_type",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "turret_index_s",
+  "weight_kg"
+ ],
+ "options": [
+  "12in chuck 3,000 rpm 1,273 Nm",
+  "BMT turret 10 / 12 / 20 stations or VDI 12",
+  "BMT high speed 12,000 rpm 86 Nm (option)",
+  "BMT high torque 6,000 rpm 100 Nm (option)",
+  "NLX 2500 | 1250: Z 1,345 mm, max length 1,258 mm"
+ ],
+ "notes": "turret_stations: 12 recorded as typical (TEM lists BMT 10, 12 or 20 stations and VDI 12; which is standard not stated). Live tool standard rpm not stated for 2nd gen (both BMT variants marked option). TEM gives max length 708.6 mm. 1st generation NLX 2500 page (still online): X 260, Y 100, Z 795 (|700) / 1,345 (|1250), max dia 460 mm, length 705/1,255 mm, bar 90 mm, rotary tool 10,000 rpm, slideways X/Y/Z. DMG MORI's full technical data and brochures (PDF) are behind a DMG MORI Account registration (download URL returns 'Download - Registrierung erforderlich' HTML); not used. Only data printed on the public product page (and public TECHNOLOGY EXCELLENCE magazine PDFs) recorded.",
+ "_not_applicable": [
+  "rotary",
+  "spindle_nose_to_table_mm",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "table_mm",
+  "table_load_kg",
+  "rotary_table_dia_mm",
+  "pallet",
+  "changer",
+  "milling_head"
+ ]
+}

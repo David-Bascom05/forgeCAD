@@ -1,0 +1,18 @@
+# FAIL extrude: Boolean Internal(InconsistentClassification) (8 parts, DeepCAD). A slot whose end arc (centre (0,63),
+# r ~10.5) is joined by a ring r 10.6 at (0,64): two cylinders a hair apart, nearly tangent. For fix-curved.
+sketch s(on: xy) {
+  a = pt(-20, 3)
+  b = pt(-10.5, 65)
+  c = pt(10.5, 65)
+  d = pt(20, 3)
+  l1 = line(a, b)
+  t = arc(center: (0, 63), from: b, to: c)
+  l2 = line(c, d)
+  u = arc(center: (0, 0), from: d, to: a)
+}
+e1 = extrude(s, 37)
+sketch r(on: xy) {
+  o = circle((0, 64), 10.6)
+  i = circle((0, 64), 5)
+}
+e2 = extrude(r, 37.4)

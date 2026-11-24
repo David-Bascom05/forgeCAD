@@ -1,0 +1,25 @@
+Benchmark Dataset of 10 Multi-Feature Models for Single-Setup 3-Axis Milling, version 1
+Marius Schmitz, Jan Mertes, Felix Schillinger, Marcel Wagner (RPTU Kaiserslautern-Landau), 2025.
+https://doi.org/10.5281/zenodo.17035762 (zenodo.org/records/17035762), published 2025-09-02.
+Licence: Creative Commons Attribution 4.0 International (CC BY 4.0), text in LICENSE.
+
+Files here: the ten parts' STEP models (N.step) and G-code programs (N.ngc), unchanged, as
+downloaded 2026-11-24 (each checked against the record's MD5; SHA-256 in SHA256SUMS). The
+record's rendered images of the machined parts are not copied.
+
+From the record's description (not ours): all parts are made from a raw block of 80 x 80 x 50 mm
+with one end mill of at most 6 mm diameter, single setup, on a three-axis machine; the programs
+were made with Autodesk CAM (their header: "HERSTELLER AUTODESK", "MODEL GENERIC 3-AXIS").
+
+What we read off the programs (verify/forge-cam-quality, --ngc, --part): G54 is the corner of
+the CAM stock, the part's top is at Z -1 (every program faces 1 mm off at Z -1; ZMIN in each tool
+comment is the part's deepest floor below Z -1), and the part sits inside the stock by 0.5 mm per
+side for parts 1-4 (stock 81 x 81: the arc centres of part 3's holes are at 15.5 and 65.5, the
+model's at -25 and 25) and by 1 mm for parts 5-6 (82 x 82: centres 23.5/58.5 and 13.5/68.5).
+Checked: with these frames each program's end state over the part's footprint is the part, to
+within the cells straddling its walls (forge-cam-quality README, "like for like"). Parts 7-10:
+taken as 81 x 81, not checked. These are our readings, not the authors' statements: their
+description gives the raw block (80 x 80 x 50), not the CAM stock or where G54 is.
+
+Used here as an outside reference: the same parts, another CAM system's toolpaths, measured with
+the same model as forge-cam's own (verify/forge-cam-quality/README.md, "Foreign programs").

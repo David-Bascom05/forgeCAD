@@ -1,0 +1,20 @@
+# plane_sphere/tangent_top_above/Add (scoreboard degen_plane_sphere/0).
+# A ball resting on a box's top, touching it at one point, the top's centre. The ball's axis is
+# horizontal (its sketch plane is vertical), so the contact is on the ball's equator.
+# Exact reference: non-manifold (sphere and plane touch at a point; the union keeps both
+# sides and not the gap). Kernel: builds 32 523.6 mm³ (box 32 000 + ball 523.6), one valid
+# body; it must refuse ZeroThickness. With the ball's axis vertical (the contact at its pole)
+# the kernel refuses correctly.
+shared L = 40
+shared H = 20
+shared r = 5
+
+sketch plan(on: xy) {
+  outline = rect(corner: (-L / 2, -L / 2), size: (L, L))
+}
+base = extrude(plan, H)
+centre = workplane(offset: base.side(plan.outline[0]), d: -L / 2)
+sketch c(on: centre) {
+  p = pt(L / 2, H + r)
+}
+knob = ball(c.p, r)

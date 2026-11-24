@@ -1,0 +1,6 @@
+# blocked_hosts for group dmg-euro (taken 2026-11-23)
+www.kern-microtechnik.com  429 Too Many Requests (one WebFetch try, not retried). Used Kern/AMETEK media CDN edge.sitecorecloud.io PDFs instead.
+www.dmgmori.co.jp          no response (curl 000, timeout through proxy) - not retried.
+us.dmgmori.com / en.dmgmori.com  /resource/blob/...pdf and /media/gated/epaper/...: HTTP 200 but returns a "Download - Registrierung erforderlich" (registration required) HTML page instead of the PDF; full DMG MORI technical data is behind a DMG MORI Account. Not bypassed. Public pages + public TECHNOLOGY EXCELLENCE magazine PDFs used.
+chiron-group.com/configurator/...  login form (e-mail/company) required for per-variant data; not used.
+grobgroup.com  no public datasheet PDF found; download centre is script-driven (no PDF links in HTML).

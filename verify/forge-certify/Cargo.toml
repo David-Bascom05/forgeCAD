@@ -1,0 +1,26 @@
+[package]
+name = "forge-certify"
+description = "Every flat boolean's certificate checked by the proven Lean checker (lake build here first)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# Every flat boolean of the fuzz corpus certified: accepted, rejected (with reasons), out of scope,
+# and the checker's time against the kernel's.
+[[bin]]
+name = "certify"
+path = "src/main.rs"
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-model = { path = "../../kernel/forge-model" }
+forge-bool = { path = "../../kernel/forge-bool", features = ["certify"] }
+forge-proof = { path = "../forge-proof" }
+forge-lang = { path = "../../interface/forge-lang" }
+forge-exact-fuzz = { path = "../forge-exact/fuzz" }
+
+[lints]
+workspace = true

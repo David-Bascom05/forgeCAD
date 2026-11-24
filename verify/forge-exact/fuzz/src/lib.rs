@@ -823,6 +823,7 @@ pub fn judge(reference: &mut Reference, case: &Case, ulp_seeds: &[u64]) -> Vec<J
     out
 }
 
+pub mod apexfam;
 pub mod curved;
 pub mod pairs;
 pub mod shrink;

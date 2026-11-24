@@ -1,0 +1,125 @@
+{
+ "vendor": "Kitamura",
+ "model": "Mycenter-3XV",
+ "family": "Mycenter XV vertical (successor of 3XiF; sold in US as Mycenter-3XVII)",
+ "source": [
+  "https://www.kitamura-machinery.com/products/mycenter3xv/",
+  "https://kitamura-machinery.co.jp/products/%e7%ab%8b%e5%bd%a2%e3%83%9e%e3%82%b7%e3%83%8b%e3%83%b3%e3%82%b0%e3%82%bb%e3%83%b3%e3%82%bf/p-5414/",
+  "https://kitamura-machinery.co.jp/products/%e7%ab%8b%e5%bd%a2%e3%83%9e%e3%82%b7%e3%83%8b%e3%83%b3%e3%82%b0%e3%82%bb%e3%83%b3%e3%82%bf/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "Vertical NST No.40 spindle; box (square) slideways per Kitamura JP site. Which unit carries X/Y/Z not stated on fetched pages.",
+ "control": {
+  "standard": "Kitamura Arumatik-Mi (JP: Arumatik-Mi Pro family)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 760,
+  "Y": 510,
+  "Z": 510
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  860,
+  500
+ ],
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 15000,
+  "rpm_min": 50,
+  "taper_or_interface": "NST No.40 (dual contact per US page)",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": "31 kW (42 hp) on JP listing; US page says 41 hp"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 141
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 52,
+  "Y": 52,
+  "Z": 48,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [],
+  "tool_to_tool_s": 2.2,
+  "chip_to_chip_s": 4.2,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": 7
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 2415,
+  "D": 2245,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_len_mm",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.H",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "table_load_kg",
+  "weight_kg"
+ ],
+ "options": [],
+ "notes": "Mycenter-3XiF is no longer listed by Kitamura (US or JP); 3XV (JP) / 3XVII (US) is the current equivalent and is recorded instead. Table load, nose-to-table, weight, height not on fetched pages. Spindle: JP listing 'newly developed 2-speed high-output spindle, 31 kW/42 hp, 141 N·m'; US page says 41 hp built-in. Positioning ±0.002 mm full stroke, repeatability ±0.001 mm (US page). Power requirement 40 kVA. Floor space 2,415 x 2,245 mm (JP, W x D). Sibling 4XV: X1020/Y510/Z510."
+}

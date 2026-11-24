@@ -1,0 +1,147 @@
+{
+ "vendor": "Makino",
+ "model": "D500",
+ "family": "D-series vertical 5-axis",
+ "source": [
+  "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500",
+  "https://www.makino.co.jp/ja-jp/machine-technology/machines/vertical-5-axis/d500"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Vertical 40-taper spindle; trunnion table: a cradle tilting A (-120 to +30 deg, 150 deg total) carries a 360-deg continuous C rotary table (dia 500). Trunnion runs parallel to X (so A turns about X), driven by DD motors at both ends, synchronised. Linear-axis carriers not stated on fetched pages.",
+ "control": {
+  "standard": "Makino Professional 6 (SGI.5)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 550,
+  "Y": 1000,
+  "Z": 500
+ },
+ "rotary": {
+  "A": {
+   "range_deg": [
+    -120,
+    30
+   ],
+   "rapid_rpm": 50,
+   "indexing_or_full": "full simultaneous (DD both ends)",
+   "orig": "18000 deg/min"
+  },
+  "B": null,
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 50,
+   "indexing_or_full": "full continuous (DD)",
+   "orig": "18000 deg/min"
+  }
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 350,
+ "rotary_table_dia_mm": 500,
+ "pallet": {
+  "count": null,
+  "size_mm": [
+   400,
+   400
+  ],
+  "change_s": null,
+  "load_kg": 300
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 14000,
+  "rpm_min": 50,
+  "taper_or_interface": "BT40 (JP); HSK-A63, HSK-F63 options",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 48,
+  "Y": 50,
+  "Z": 50,
+  "A_or_B_rpm": 50,
+  "C_rpm": 50
+ },
+ "max_cutting_feed_m_min": "X 32, Y/Z 40 (US page); JP page gives cutting feed up to X 48, Y/Z 50",
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 40,
+  "options": [
+   "60/80/113/155/197/323 (JP)",
+   "60 std, 80/113/155/197/239/281/323 (US)"
+  ],
+  "tool_to_tool_s": 4.2,
+  "chip_to_chip_s": 10.2,
+  "max_tool_dia_mm": 70,
+  "max_tool_dia_empty_adjacent_mm": 140,
+  "max_tool_len_mm": 300,
+  "max_tool_kg": 8
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "coolant.through_spindle",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "12k/20k/30k spindles",
+  "APC (pallet 400x400, 300 kg on pallet)",
+  "pallet magazine up to 21 pallets",
+  "MMC2 (pallets common with a51nx)",
+  "500 kg table load (JP special)"
+ ],
+ "notes": "Rotary rapid 18,000 deg/min converted to 50 rpm. Max workpiece dia 650 x 500 mm (conditional). Standard ATC 40 (JP) vs 60 (US) — US records 60 standard. Tool-to-tool 4.2 s / chip-to-chip 10.2 s (US page). APC is optional (stand-alone standard). US page rapid Y/Z written '50,000 m/min' (typo for mm/min)."
+}

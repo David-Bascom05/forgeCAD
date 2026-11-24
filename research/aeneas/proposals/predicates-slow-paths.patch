@@ -1,0 +1,166 @@
+diff --git a/kernel/forge-math/src/predicates.rs b/kernel/forge-math/src/predicates.rs
+index b061046..2524cf7 100644
+--- a/kernel/forge-math/src/predicates.rs
++++ b/kernel/forge-math/src/predicates.rs
+@@ -319,28 +319,22 @@ fn estimate(e: &[f64]) -> f64 {
+ /// `e + f` into `h`, both inputs nonoverlapping and in increasing magnitude;
+ /// zero components dropped. Returns the length used. No allocation.
+ fn sum_into(e: &[f64], f: &[f64], h: &mut [f64]) -> usize {
+-    let (mut ei, mut fi, mut n) = (0, 0, 0);
+-    let mut next = || {
+-        if fi >= f.len() || (ei < e.len() && e[ei].abs() < f[fi].abs()) {
+-            ei += 1;
+-            e[ei - 1]
+-        } else {
+-            fi += 1;
+-            f[fi - 1]
+-        }
+-    };
+-    let total = e.len() + f.len();
++    let (mut n, total) = (0, e.len() + f.len());
+     if total == 0 {
+         return 0;
+     }
+-    let mut q = next();
+-    for _ in 1..total {
+-        let (s, err) = two_sum(q, next());
++    let (mut q, mut ei, mut fi) = next_component(e, f, 0, 0);
++    let mut k = 1;
++    while k < total {
++        let (x, ei2, fi2) = next_component(e, f, ei, fi);
++        (ei, fi) = (ei2, fi2);
++        let (s, err) = two_sum(q, x);
+         if err != 0.0 {
+             h[n] = err;
+             n += 1;
+         }
+         q = s;
++        k += 1;
+     }
+     if q != 0.0 || n == 0 {
+         h[n] = q;
+@@ -349,19 +343,32 @@ fn sum_into(e: &[f64], f: &[f64], h: &mut [f64]) -> usize {
+     n
+ }
+ 
++/// The next component of the merge of `e` and `f` by magnitude, and the advanced cursors: a
++/// function with its state passed in and out, not a closure capturing it mutably (Aeneas).
++#[inline]
++fn next_component(e: &[f64], f: &[f64], ei: usize, fi: usize) -> (f64, usize, usize) {
++    if fi >= f.len() || (ei < e.len() && e[ei].abs() < f[fi].abs()) {
++        (e[ei], ei + 1, fi)
++    } else {
++        (f[fi], ei, fi + 1)
++    }
++}
++
+ /// `e * b` into `h` (needs 2 * e.len() slots). No allocation.
+ fn scale_into(e: &[f64], b: f64, h: &mut [f64]) -> usize {
+-    let Some((&first, rest)) = e.split_first() else {
++    if e.is_empty() {
+         return 0;
+-    };
++    }
+     let mut n = 0;
+-    let (mut q, lo) = two_product(first, b);
++    let (mut q, lo) = two_product(e[0], b);
+     if lo != 0.0 {
+         h[n] = lo;
+         n += 1;
+     }
+-    for &ei in rest {
+-        let (p1, p0) = two_product(ei, b);
++    let mut i = 1;
++    while i < e.len() {
++        let (p1, p0) = two_product(e[i], b);
++        i += 1;
+         let (s, err) = two_sum(q, p0);
+         if err != 0.0 {
+             h[n] = err;
+@@ -389,15 +396,18 @@ fn cross_exact(a: f64, d: f64, b: f64, c: f64, h: &mut [f64; 4]) -> usize {
+ }
+ 
+ fn exact_diffs<const N: usize>(pairs: [(f64, f64); N]) -> Option<[f64; N]> {
+-    let mut out = [0.0; N];
+-    for (o, (a, b)) in out.iter_mut().zip(pairs) {
+-        let (x, tail) = two_diff(a, b);
++    // stops at the first inexact difference, through the loop condition (no `return` in a loop)
++    let (mut out, mut exact, mut i) = ([0.0; N], true, 0);
++    while exact && i < N {
++        let (x, tail) = two_diff(pairs[i].0, pairs[i].1);
+         if tail != 0.0 {
+-            return None;
++            exact = false;
++        } else {
++            out[i] = x;
+         }
+-        *o = x;
++        i += 1;
+     }
+-    Some(out)
++    if exact { Some(out) } else { None }
+ }
+ 
+ /// Positive if a, b, c run counter-clockwise, negative if clockwise, zero if collinear.
+@@ -491,8 +501,10 @@ fn cross_two(
+     let (mut p, mut q) = ([0.0; 8], [0.0; 8]);
+     let np = mul_small(&x1.0[..x1.1], &y2.0[..y2.1], &mut p);
+     let nq = mul_small(&x2.0[..x2.1], &y1.0[..y1.1], &mut q);
+-    for v in &mut q[..nq] {
+-        *v = -*v;
++    let mut i = 0;
++    while i < nq {
++        q[i] = -q[i];
++        i += 1;
+     }
+     sum_into(&p[..np], &q[..nq], h)
+ }
+@@ -687,16 +699,13 @@ pub fn incircle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
+ 
+     // stage B: exact for the rounded differences; their rounding is within the bound
+     let det = incircle_exact_diffs([adx, ady, bdx, bdy, cdx, cdy]);
+-    let exact = [
+-        (a.x, d.x),
+-        (a.y, d.y),
+-        (b.x, d.x),
+-        (b.y, d.y),
+-        (c.x, d.x),
+-        (c.y, d.y),
+-    ]
+-    .iter()
+-    .all(|&(p, q)| two_diff(p, q).1 == 0.0);
++    // in order, stopping at the first inexact one, as `iter().all` did
++    let exact = two_diff(a.x, d.x).1 == 0.0
++        && two_diff(a.y, d.y).1 == 0.0
++        && two_diff(b.x, d.x).1 == 0.0
++        && two_diff(b.y, d.y).1 == 0.0
++        && two_diff(c.x, d.x).1 == 0.0
++        && two_diff(c.y, d.y).1 == 0.0;
+     if exact || det >= ICC_BOUND_B * permanent || -det >= ICC_BOUND_B * permanent {
+         return det;
+     }
+@@ -771,17 +780,20 @@ fn incircle_exact_general(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
+     let (cdx, cdy) = (diff2(c.x, d.x), diff2(c.y, d.y));
+     // lift (16) times cross (16): at most 512 components per term
+     let term = |x: &([f64; 2], usize), y: &([f64; 2], usize), cr: &[f64], out: &mut [f64; 512]| -> usize {
+-        let (mut xx, mut yy, mut lift) = ([0.0; 8], [0.0; 8], [0.0; 16]);
++        // `sq`, not `lift`: a local `lift` shadows the function Aeneas's translation calls
++        let (mut xx, mut yy, mut sq) = ([0.0; 8], [0.0; 8], [0.0; 16]);
+         let nx = mul_small(&x.0[..x.1], &x.0[..x.1], &mut xx);
+         let ny = mul_small(&y.0[..y.1], &y.0[..y.1], &mut yy);
+-        let nl = sum_into(&xx[..nx], &yy[..ny], &mut lift);
++        let nl = sum_into(&xx[..nx], &yy[..ny], &mut sq);
+         let mut acc = [0.0; 512];
+         let mut na = 0;
+         let mut part = [0.0; 32];
+-        for &c in cr {
+-            let np = scale_into(&lift[..nl], c, &mut part);
++        let mut k = 0;
++        while k < cr.len() {
++            let np = scale_into(&sq[..nl], cr[k], &mut part);
+             na = sum_into(&acc[..na], &part[..np], out);
+             acc[..na].copy_from_slice(&out[..na]);
++            k += 1;
+         }
+         na
+     };

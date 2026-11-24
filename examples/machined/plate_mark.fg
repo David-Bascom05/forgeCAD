@@ -1,0 +1,22 @@
+# A plate with an engraved mark: the groove is in the model (a slot `groove_w` wide, `groove_d`
+# deep), and the sketch `mark` holds its centre line, stopping half the groove's width short of its
+# ends, which the engraving traces (plate_mark_cam.fg).
+
+shared L = 40
+shared W = 30
+shared t = 5
+shared m = 5
+shared groove_w = 0.6
+shared groove_d = 0.3
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+sketch g(on: plate.end) {
+  s = rect(center: (L / 2, W / 2), size: (L - 2 * m, groove_w))
+}
+groove = cut(g.s, groove_d)
+sketch mark(on: plate.end) {
+  c = line((m + groove_w / 2, W / 2), (L - m - groove_w / 2, W / 2))
+}

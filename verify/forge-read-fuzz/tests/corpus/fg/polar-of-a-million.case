@@ -1,0 +1,7 @@
+# polar(n: 1e6), within a range's 2^20: a million segments, the crossing sweep's pairs grew to 2 GB
+# (its margin was 1e-3 against segments of 6e-5) and the sketch to 2 GB more. The margin is
+# rounding's now, and a count that sizes geometry is at most 100 000.
+from: examples/rack18u/hw/iso7379_8x12_m6.fg
+replace: shared n6 = count(6)
+with: shared n6 = count(1000000.)
+expect: refused

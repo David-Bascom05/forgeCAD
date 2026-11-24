@@ -1,0 +1,13 @@
+# tormach-24r table: 680 x 1650 published, 40 thick (estimate)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -339
+shared y0 = -824
+shared z0 = -39
+shared lx = 678
+shared ly = 1648
+shared lz = 38
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

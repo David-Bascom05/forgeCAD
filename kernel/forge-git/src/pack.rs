@@ -228,8 +228,10 @@ fn read_at(f: &File, buf: &mut [u8], off: u64) -> std::io::Result<()> {
     f.read_exact(buf)
 }
 
-fn varint(d: &[u8], i: &mut usize) -> Result<usize, Error> {
-    let mut v = 0usize;
+/// A delta's size, read as 64 bits whatever the machine's word: the same number, and the same
+/// verdict on it, natively and in wasm32 (where a `usize` shifted past 31 would overflow).
+fn varint(d: &[u8], i: &mut usize) -> Result<u64, Error> {
+    let mut v = 0u64;
     let mut shift = 0;
     loop {
         let c = *d.get(*i).ok_or(Error::Corrupt("delta size"))?;
@@ -237,7 +239,7 @@ fn varint(d: &[u8], i: &mut usize) -> Result<usize, Error> {
         if shift > 56 {
             return Err(Error::Corrupt("delta size"));
         }
-        v |= ((c & 0x7f) as usize) << shift;
+        v |= ((c & 0x7f) as u64) << shift;
         shift += 7;
         if c & 0x80 == 0 {
             return Ok(v);
@@ -248,11 +250,17 @@ fn varint(d: &[u8], i: &mut usize) -> Result<usize, Error> {
 /// `delta` applied to `base`: copies from the base and inserted bytes.
 pub fn apply_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>, Error> {
     let mut i = 0;
-    if varint(delta, &mut i)? != base.len() {
+    if varint(delta, &mut i)? != base.len() as u64 {
         return Err(Error::Corrupt("delta base size"));
     }
     let n = varint(delta, &mut i)?;
-    let mut out = Vec::with_capacity(n);
+    // the size is the file's word: room for no more than its ops can make (each op is at least a
+    // byte and copies at most 0xffffff), so a lying size costs nothing up front
+    let most = (delta.len() - i)
+        .saturating_mul(0x00ff_ffff)
+        .saturating_add(delta.len());
+    let room = usize::try_from(n).unwrap_or(usize::MAX);
+    let mut out = Vec::with_capacity(room.min(most).min(base.len().saturating_add(delta.len())));
     while i < delta.len() {
         let c = delta[i];
         i += 1;
@@ -287,11 +295,11 @@ pub fn apply_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>, Error> {
         } else {
             return Err(Error::Corrupt("delta opcode 0"));
         }
-        if out.len() > n {
+        if out.len() as u64 > n {
             return Err(Error::Corrupt("delta result size"));
         }
     }
-    if out.len() != n {
+    if out.len() as u64 != n {
         return Err(Error::Corrupt("delta result size"));
     }
     Ok(out)
@@ -300,6 +308,13 @@ pub fn apply_delta(base: &[u8], delta: &[u8]) -> Result<Vec<u8>, Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_delta_that_lies_about_its_size_costs_nothing_up_front() {
+        // a result of 2^50 bytes declared, nothing to make it: refused, no allocation of that size
+        let delta = [0, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01, b'x'];
+        assert!(apply_delta(b"", &delta).is_err());
+    }
 
     #[test]
     fn delta_copies_and_inserts() {

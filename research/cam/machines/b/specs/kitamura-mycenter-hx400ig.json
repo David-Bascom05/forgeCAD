@@ -1,0 +1,143 @@
+{
+ "vendor": "Kitamura",
+ "model": "Mycenter-HX400iG",
+ "family": "Mycenter HX iG horizontal (successor of HX400iF); listed as HX400iG/500",
+ "source": [
+  "https://www.kitamura-machinery.com/products/mycenterhx400ig-500/",
+  "https://kitamura-machinery.co.jp/products/%e6%a8%aa%e5%bd%a2%e3%83%9e%e3%82%b7%e3%83%8b%e3%83%b3%e3%82%b0%e3%82%bb%e3%83%b3%e3%82%bf/p-1701/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "hmc",
+ "architecture": "Horizontal NST No.40 spindle; solid box guideways; DD-motor full 4th-axis B rotary table under the pallet; standard 2-station APC. Which unit carries X/Y/Z not stated on fetched pages.",
+ "control": {
+  "standard": "Kitamura Arumatik-Mi",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 610,
+  "Y": 610,
+  "Z": 610
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 125,
+   "indexing_or_full": "full 4th axis, DD motor",
+   "orig": "45,000 deg/min"
+  },
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": 2,
+  "size_mm": [
+   400,
+   400
+  ],
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 15000,
+  "rpm_min": 40,
+  "taper_or_interface": "NST No.40 dual contact; HSK-A63 option",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": "AC 22 kW motor (JP page; rating basis not stated)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 60,
+  "Y": 60,
+  "Z": 60,
+  "A_or_B_rpm": 125,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 50,
+  "options": [
+   "62/100/150/200/300 (US)",
+   "62/100/122 (JP)"
+  ],
+  "tool_to_tool_s": 1.3,
+  "chip_to_chip_s": 2.5,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.load_kg",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "table_height_from_floor_mm",
+  "table_load_kg",
+  "weight_kg"
+ ],
+ "options": [
+  "20,000 rpm spindle",
+  "HSK-A63",
+  "6/8/14/21 APC (field-expandable)"
+ ],
+ "notes": "HX400iF is no longer listed; HX400iG/500 is current and recorded. Max work dia 630 x H790. Positioning ±0.001 mm full stroke, repeatability ±0.0005 mm (US page). 50 kVA. Ballscrew cooling, scale feedback on all axes. '/500' in the name is not explained on the page (pallet is 400x400 on both US and JP pages)."
+}

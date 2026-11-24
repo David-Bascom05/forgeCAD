@@ -3,3 +3,14 @@ import ForgeCertify.IP
 import ForgeCertify.Geom2
 import ForgeCertify.Chain
 import ForgeCertify.Tri3
+import ForgeCertify.PT
+import ForgeCertify.Const
+import ForgeCertify.Tele
+import ForgeCertify.Check
+import ForgeCertify.Input
+import ForgeCertify.Bridge
+import ForgeCertify.Sound
+import ForgeCertify.Walls
+import ForgeCertify.Theorem
+import ForgeCertify.Frames
+import ForgeCertify.Axioms

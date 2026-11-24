@@ -20,7 +20,7 @@ impl Default for Limits {
             max_bytes: 2 << 30,
             max_values: 64 << 20,
             max_instances: 16 << 20,
-            max_evals: 1 << 25,
+            max_evals: forge_geom::budget::FILE,
         }
     }
 }

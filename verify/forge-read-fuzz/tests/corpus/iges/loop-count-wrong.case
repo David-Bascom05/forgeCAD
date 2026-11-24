@@ -1,0 +1,6 @@
+# A loop's edge count cut from 4 to 1: one face's points came far from the origin against their
+# spread, the super triangle rounded to nothing and a point fell on its side (cdt.rs index
+# u32::MAX). The triangulation now refuses such points, and inserting on the hull is an error.
+from: kernel/forge-step/tests/data/block_with_hole.igs
+replace: 508,4,0,19,7,0,0,0,19,13,1,0,0,19,12,1,0,0,19,8,0,0;
+with: 508,1,0,19,7,0,0,0,19,13,1,0,0,19,12,1,0,0,19,8,0,0;

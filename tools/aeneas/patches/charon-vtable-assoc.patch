@@ -1,0 +1,21 @@
+diff --git a/charon/src/transform/normalize/expand_associated_types.rs b/charon/src/transform/normalize/expand_associated_types.rs
+index d373fcbd5..279c0f0d3 100644
+--- a/charon/src/transform/normalize/expand_associated_types.rs
++++ b/charon/src/transform/normalize/expand_associated_types.rs
+@@ -1381,7 +1381,15 @@ impl VisitAstMut for UpdateItemBody<'_> {
+ 
+     fn enter_global_source(&mut self, kind: &mut GlobalSource) {
+         match kind {
+-            GlobalSource::Normal | GlobalSource::VTableInstance { .. } => {}
++            GlobalSource::Normal | GlobalSource::VTableInstance { impl_ref: None, .. } => {}
++            // A vtable instance names the trait it implements: its associated types come from
++            // the originating impl, as for an impl's associated items. (In monomorphized mode
++            // there is no impl reference, and no associated types are lifted.)
++            GlobalSource::VTableInstance {
++                impl_ref: Some(impl_ref),
++                trait_ref,
++                ..
++            } => self.process_trait_decl_ref(trait_ref, TraitRefKind::TraitImpl(impl_ref.clone())),
+             // Inside trait default values, the implicit `Self` clause is the first clause.
+             GlobalSource::TraitDefault { trait_ref, .. } => self.process_trait_decl_ref(
+                 trait_ref,

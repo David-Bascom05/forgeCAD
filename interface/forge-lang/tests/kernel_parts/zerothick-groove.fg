@@ -1,0 +1,12 @@
+# cut: Boolean ZeroThickness (11 parts of the cut kind, DeepCAD), a kernel gap: the cut is a ring 0.5-1 mm wide, 0.07 deep
+# into a 0.17 plate, no faces coincide and the result is one manifold solid. With the ring's corners square it builds;
+# with these slightly skewed corners it is refused. For fix-curved.
+sketch s(on: xy) {
+  o = rect(corner: (-230, -150), size: (460, 300))
+}
+p = extrude(s, 0.17)
+sketch g(on: offset(xy, 0.2)) {
+  o = poly([(220, -133), (220, 133), (-220, 133), (-220, -132.7)])
+  i = poly([(219, 132), (219.5, -132.5), (-219.5, -132.5), (-219, 132)])
+}
+k = cut(g, 0.1)

@@ -1,0 +1,10 @@
+blocked_hosts (group dn-wia, taken 2026-11-23)
+machine.hyundai-wia.com  https: connection reset by peer (curl 35); http://machine.hyundai-wia.com/kr/ and /en/product/xf6300.asp: HTTP 503
+www.hwmachine.com / hwmachine.com  TLS certificate verification failure (not bypassed)
+www.techspex.com  HTTP 403 (builder page and model pages)
+pdf.directindustry.com  HTTP 403 (curl and WebFetch) - holds DN Solutions NHP 4000/5000, Lynx 2100, Puma 2100/2600 catalogues
+www.machineryhouse.com.au  HTTP 403 Cloudflare "Just a moment" challenge (print?code= pages); its CDN images.machineryhouse.com.au served PDFs fine
+www.doosanmachinetools.com  not reachable (per task; not retried)
+dn-solutions.com catalogue download: gated behind e-mail/personal-info registration form (not a block; not used)
+wiamachine.com catalogue download: gated behind applicant form /api/public/catalog/apply (not used)
+www.headland.com.au  reachable, but no longer lists Hyundai WIA products (one old KF6700II PDF only; not used)

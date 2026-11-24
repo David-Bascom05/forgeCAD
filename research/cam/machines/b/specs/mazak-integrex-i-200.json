@@ -1,0 +1,154 @@
+{
+ "vendor": "Mazak",
+ "model": "INTEGREX i-200 NEO",
+ "family": "INTEGREX i NEO",
+ "source": [
+  "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/",
+  "https://www.mazak.com/us-en/products/integrex-i-neo/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "mill-turn",
+ "architecture": "Horizontal turning spindle with a B-axis milling head (B -30..+210 deg, 0.0001 deg min increment); tailstock MT5 on the spec page. Which units carry X/Y/Z not published.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 533.4,
+  "Y": 203.2,
+  "Z": 635.0
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": [
+    -30,
+    210
+   ],
+   "rapid_rpm": null,
+   "indexing_or_full": "full, 0.0001 deg increment"
+  },
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 609.6,
+ "max_turning_length_mm": 584.2,
+ "chuck_size_in": 8,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 5000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": 15,
+   "30min": null,
+   "peak/other": "22 kW (40% ED)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": 12000,
+  "power_kw": 18.5
+ },
+ "milling_head": {
+  "rpm_max": 12000,
+  "power_kw_40ED": 18.5,
+  "power_kw_cont": 15,
+  "torque_nm_40ED": 57.3,
+  "torque_nm_cont": 46.1,
+  "interface": "HSK-T63 / HSK-A63"
+ },
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": {
+  "center": "MT No.5",
+  "max_thrust_N": 6997.0
+ },
+ "rapid_m_min": {
+  "X": 48.0,
+  "Y": 40.0,
+  "Z": 40.0,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 36,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 101.6,
+  "max_tool_dia_empty_adjacent_mm": 127.0,
+  "max_tool_len_mm": 304.8,
+  "max_tool_kg": 5.0
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 3505.2,
+  "D": 2743.2,
+  "H": 2438.4
+ },
+ "weight_kg": 10779.6,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "bar_capacity_mm",
+  "changer.chip_to_chip_s",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "rapid_m_min.C_rpm",
+  "rotary.C",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "sub_spindle",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "milling spindle 12000 min-1 24 kW (40% ED)",
+  "milling spindle 20000 min-1 24 kW (40% ED)",
+  "tool shank CAPTO C6, KM4X63",
+  "i-200S NEO: second spindle + lower turret",
+  "bed length type 590U on spec page"
+ ],
+ "notes": "The plain i-200 NEO spec page lists a tailstock and no second-spindle rows; the product listing tags it 'Second Spindle' (likely an option). For B head + sub spindle as standard see i-200S NEO (/us-en/detail/japan/integrex-h/i200snen/, not read). C-axis, bar capacity, control not on spec page; product page names SOLID MAZATROL only as a feature.",
+ "orig": {
+  "travel": "X 21\" Y 8\" Z 25\" (product page: X 535 mm, Y 210 mm)",
+  "dia": "Φ24\" upper turret",
+  "length": "23\"",
+  "rapid": "X 1890, Y 1575, Z 1575 IPM",
+  "tool": "Φ4\"/Φ5\"/12\"/11 lbs",
+  "thrust": "1573 lbs",
+  "size": "138\" x 108\" x 96\"",
+  "weight": "23765 lbs"
+ }
+}

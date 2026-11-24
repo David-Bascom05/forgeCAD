@@ -474,3 +474,92 @@ fn clearances_just_pass_and_just_fail() {
     let c = selfc(&t);
     assert!(!c.pass && c.part.is_some() && c.other.is_some(), "{c:?}");
 }
+
+#[test]
+fn programs_are_feasible_and_ranked() {
+    // a return lip on one side, a plain flange on the other, and a third along the end
+    let (mut s, base) = sheet(2.0, 2.0, 60.0, 200.0);
+    let (f1, _) = s.flange(base, 1, deg(90.0), 40.0).unwrap();
+    s.flange(f1, 1, deg(90.0), 15.0).unwrap();
+    s.flange(base, 3, deg(90.0), 40.0).unwrap();
+    let m = forge_brake::Model::new(&s).unwrap();
+    let tl = forge_brake::library::std_eu();
+    let ps = forge_brake::programs(&m, &tl, &forge_brake::Options::default(), 5);
+    assert!(!ps.is_empty());
+    for w in ps.windows(2) {
+        assert!(w[0].key() <= w[1].key());
+    }
+    for p in &ps {
+        assert!(p.plan.feasible && p.plan.steps.iter().all(|s| s.pass()));
+        let mut seq = p.plan.sequence.clone();
+        seq.sort_unstable();
+        assert_eq!(seq, (0..m.bends.len()).collect::<Vec<_>>());
+        // the program simulated as given, tools kept, passes again
+        let again = forge_brake::simulate(
+            &m,
+            &tl,
+            &p.plan.sequence,
+            &forge_brake::Options {
+                keep_tools: true,
+                ..Default::default()
+            },
+        );
+        assert!(again.feasible);
+    }
+    eprintln!(
+        "{:?}",
+        ps.iter()
+            .map(|p| (p.plan.sequence.clone(), p.key()))
+            .collect::<Vec<_>>()
+    );
+}
+
+/// A verdict kept across steps never answers another search (FALLBACK's review: the memo's key
+/// left out the search's limit, resolution and start cells; two approaches of the ram with
+/// different travel shared a key, and a kept Clear hid a hit 0.27 mm off the wall): every tool
+/// check, through every order's steps and setups with one memo shared as the planner shares it,
+/// is the same as with none.
+#[test]
+fn a_kept_verdict_answers_only_its_own_search() {
+    let (mut s, base) = sheet(2.0, 2.0, 60.0, 200.0);
+    let (f1, _) = s.flange(base, 1, deg(90.0), 40.0).unwrap();
+    s.flange(f1, 1, deg(90.0), 15.0).unwrap();
+    s.flange(base, 3, deg(90.0), 40.0).unwrap();
+    let m = Model::new(&s).unwrap();
+    let tl = library::std_eu();
+    let n = m.bends.len();
+    let memo: std::rc::Rc<std::cell::RefCell<forge_brake::sim::Memo>> = Default::default();
+    let seen = |c: &Check| (c.rule, c.pass, c.value.to_bits(), c.certified, c.undecided);
+    let mut compared = 0;
+    for j in 0..n {
+        for mask in 0..1u32 << n {
+            if mask >> j & 1 == 1 {
+                continue;
+            }
+            let done: Vec<bool> = (0..n).map(|k| mask >> k & 1 == 1).collect();
+            for punch in 0..tl.punches.len().min(3) {
+                for die in 0..tl.dies.len().min(2) {
+                    for rotate in [false, true] {
+                        let setup = Setup { punch, die, rotate };
+                        let ob = tl.overbend(None, m.bends[j].theta);
+                        for phase in [Phase::Approach, Phase::Bend, Phase::Return] {
+                            let mut kept = StepCtx::new(&m, &tl, &done, j, setup, ob);
+                            kept.memo = Some(memo.clone());
+                            let fresh = StepCtx::new(&m, &tl, &done, j, setup, ob);
+                            let (mut a, mut b) = (Vec::new(), Vec::new());
+                            kept.collisions(phase, None, &mut a, true);
+                            fresh.collisions(phase, None, &mut b, true);
+                            assert_eq!(
+                                a.iter().map(seen).collect::<Vec<_>>(),
+                                b.iter().map(seen).collect::<Vec<_>>(),
+                                "bend {j} after {done:?}, {setup:?}, {phase:?}"
+                            );
+                            compared += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(compared > 100, "{compared}");
+}

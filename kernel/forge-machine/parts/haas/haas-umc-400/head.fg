@@ -1,0 +1,22 @@
+# haas-umc-400 head (unpublished sizes, conservative)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared ax = 216
+shared ay = 139.5
+shared nz = 433
+shared nr = 94
+shared nh = 159
+shared x0 = 27
+shared y0 = -49.5
+shared z0 = 592
+shared lx = 378
+shared ly = 608
+shared lz = 419
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+housing = extrude(plan, lz)
+sketch nk(on: offset(xy, nz)) {
+  c = circle((ax, ay), nr)
+}
+nose = extrude(nk.c, nh)

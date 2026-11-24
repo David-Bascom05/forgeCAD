@@ -226,6 +226,17 @@ fn disconnected_shell_rejected() {
             .iter()
             .any(|p| matches!(p, Problem::ShellFaces { .. }))
     );
+    // a face id past the faces: reported, not a panic
+    let mut past = holed.clone();
+    let n = past.faces.len() as u32;
+    past.shells[0].faces.push(forge_topo::body::FaceId(n));
+    let got = catch_unwind(AssertUnwindSafe(|| check(&past)));
+    assert!(got.is_ok(), "check panicked on a shell face id past the faces");
+    assert!(
+        got.unwrap()
+            .iter()
+            .any(|p| matches!(p, Problem::ShellFaces { .. }))
+    );
 }
 
 /// Broken back-links: an edge's use swapped for a copy of it outside every listed loop (the old

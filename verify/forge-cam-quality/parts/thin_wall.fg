@@ -1,0 +1,18 @@
+# Benchmark: two deep pockets either side of a 2 mm wall, for engagement and links on thin walls.
+
+shared L = 80
+shared W = 50
+shared t = 20
+shared wall = 2
+shared depth = 12
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+sketch pk(on: plate.end) {
+  a = rect(corner: (5, 5), size: ((L - 10 - wall) / 2, W - 10))
+  b = rect(corner: (5 + (L - 10 - wall) / 2 + wall, 5), size: ((L - 10 - wall) / 2, W - 10))
+}
+pa = cut(pk.a, depth)
+pb = cut(pk.b, depth)

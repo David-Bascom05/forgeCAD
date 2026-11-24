@@ -391,3 +391,38 @@ pub fn build_cff(units_per_em: u16, glyphs: &[(char, TestGlyph)]) -> Vec<u8> {
         .collect();
     build_cff_raw(units_per_em, &raw, &[], &[])
 }
+
+/// `font` with its cmap table replaced by `cmap` (the directory rebuilt).
+pub fn with_cmap(font: &[u8], cmap: Vec<u8>) -> Vec<u8> {
+    let n = u16::from_be_bytes([font[4], font[5]]) as usize;
+    let tables: Vec<([u8; 4], Vec<u8>)> = (0..n)
+        .map(|k| {
+            let r = 12 + 16 * k;
+            let tag: [u8; 4] = font[r..r + 4].try_into().unwrap();
+            let at = u32::from_be_bytes(font[r + 8..r + 12].try_into().unwrap()) as usize;
+            let len = u32::from_be_bytes(font[r + 12..r + 16].try_into().unwrap()) as usize;
+            let t = if &tag == b"cmap" {
+                cmap.clone()
+            } else {
+                font[at..at + len].to_vec()
+            };
+            (tag, t)
+        })
+        .collect();
+    let mut out = font[..12].to_vec();
+    let mut at = 12 + 16 * n;
+    for (tag, t) in &tables {
+        out.extend(tag);
+        be32(&mut out, 0);
+        be32(&mut out, at as u32);
+        be32(&mut out, t.len() as u32);
+        at += t.len().div_ceil(4) * 4;
+    }
+    for (_, t) in &tables {
+        out.extend(t);
+        while !out.len().is_multiple_of(4) {
+            out.push(0);
+        }
+    }
+    out
+}

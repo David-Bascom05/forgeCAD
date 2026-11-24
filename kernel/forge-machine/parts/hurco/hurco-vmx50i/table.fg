@@ -1,0 +1,22 @@
+# hurco-vmx50i table: 1500 x 660 published, thickness estimated
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -749
+shared y0 = -329
+shared z0 = -89
+shared lx = 1498
+shared ly = 658
+shared lz = 88
+shared cx = 0
+shared cy = 0
+shared cw = 1500
+shared cl = 18
+shared cd = 12
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)
+sketch top(on: block.end) {
+  r = rect(center: (cx, cy), size: (cw, cl))
+}
+tslot = cut(top.r, cd)

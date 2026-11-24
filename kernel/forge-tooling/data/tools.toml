@@ -1,0 +1,269 @@
+# The built-in tool library: generic tools in our own round numbers. Not any maker's product.
+# Lengths are typical stub/jobber proportions; verify against the tool you actually have.
+
+[[tool]]
+id = "flat-3"
+type = "flat"
+dc = 3.0
+nof = 2
+lcf = 9.0
+dcon = 3.0
+oal = 38.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "flat-6"
+type = "flat"
+dc = 6.0
+nof = 3
+lcf = 18.0
+dcon = 6.0
+oal = 57.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "flat-10"
+type = "flat"
+dc = 10.0
+nof = 3
+lcf = 25.0
+dcon = 10.0
+oal = 72.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "flat-12"
+type = "flat"
+dc = 12.0
+nof = 4
+lcf = 30.0
+dcon = 12.0
+oal = 83.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "face-50"
+type = "flat"
+dc = 50.0
+nof = 5
+lcf = 6.0
+dcon = 22.0
+oal = 50.0
+material = "carbide"
+source = "forgecad generic face mill envelope"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "ball-6"
+type = "ball"
+dc = 6.0
+nof = 2
+lcf = 16.0
+dcon = 6.0
+oal = 57.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "bull-10-r1"
+type = "bull"
+dc = 10.0
+re = 1.0
+nof = 4
+lcf = 22.0
+dcon = 10.0
+oal = 72.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "spot-10-90"
+type = "spot"
+dc = 10.0
+angle = 90.0
+nof = 2
+lcf = 12.0
+dcon = 10.0
+oal = 70.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "chamfer-10-90"
+type = "chamfer"
+dc = 10.0
+tip_d = 1.0
+angle = 90.0
+nof = 4
+lcf = 8.0
+dcon = 10.0
+oal = 63.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "drill-5"
+type = "drill"
+dc = 5.0
+sig = 118.0
+lcf = 52.0
+dcon = 5.0
+oal = 86.0
+material = "hss"
+source = "forgecad generic jobber"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "drill-6.6"
+type = "drill"
+dc = 6.6
+sig = 118.0
+lcf = 63.0
+dcon = 6.6
+oal = 101.0
+material = "hss"
+source = "forgecad generic jobber (M6 clearance)"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "drill-6.8"
+type = "drill"
+dc = 6.8
+sig = 118.0
+lcf = 69.0
+dcon = 6.8
+oal = 109.0
+material = "hss"
+source = "forgecad generic jobber (M8 tap drill)"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "drill-8.5"
+type = "drill"
+dc = 8.5
+sig = 118.0
+lcf = 75.0
+dcon = 8.5
+oal = 117.0
+material = "hss"
+source = "forgecad generic jobber (M10 tap drill)"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "drill-9.8"
+type = "drill"
+dc = 9.8
+sig = 118.0
+lcf = 87.0
+dcon = 9.8
+oal = 133.0
+material = "hss"
+source = "forgecad generic jobber (10 H7 ream drill)"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "drill-19.5"
+type = "drill"
+dc = 19.5
+sig = 118.0
+lcf = 70.0
+dcon = 19.5
+oal = 140.0
+material = "hss"
+source = "forgecad generic (20 H7 bore drill)"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "tap-m6"
+type = "tap"
+dc = 6.0
+tp = 1.0
+lcf = 16.0
+dcon = 6.0
+oal = 80.0
+material = "hss"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "tap-m8"
+type = "tap"
+dc = 8.0
+tp = 1.25
+lcf = 18.0
+dcon = 8.0
+oal = 90.0
+material = "hss"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "reamer-10h7"
+type = "reamer"
+dc = 10.0
+nof = 6
+lcf = 38.0
+dcon = 10.0
+oal = 133.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "threadmill-m6-m12-1"
+type = "thread_mill"
+dc = 4.8
+tp = 1.0
+nof = 3
+lcf = 12.0
+dcon = 6.0
+oal = 57.0
+material = "carbide"
+source = "forgecad generic single-form envelope"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"
+
+[[tool]]
+id = "engrave-60"
+type = "engrave"
+dc = 6.0
+tip_d = 0.2
+angle = 60.0
+nof = 1
+lcf = 6.0
+dcon = 6.0
+oal = 50.0
+material = "carbide"
+source = "forgecad generic"
+taken = "2026-11-23"
+note = "generic; verify with the vendor"

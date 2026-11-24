@@ -1,0 +1,131 @@
+{
+ "vendor": "Nakamura-Tome",
+ "model": "WT-150II",
+ "family": "WT two-turret two-spindle",
+ "source": [],
+ "source_secondary": [
+  "https://www.methodsmachine.com/machines/wt-150ii/"
+ ],
+ "taken": "2026-11-23",
+ "kind": "lathe-y",
+ "architecture": "Opposed two-spindle (L/R), two-turret (upper/lower) turning center; upper turret with Y axis; both turrets milling; right spindle on B (W-type) slide 600 mm.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 167.5,
+  "Y": 70,
+  "Z": 515,
+  "B(R spindle)": 600
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 190,
+ "max_turning_length_mm": 515,
+ "chuck_size_in": 6,
+ "bar_capacity_mm": 51,
+ "spindle_nose_type": "A2-5",
+ "spindle": {
+  "rpm_max": 5000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 14.9
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": {
+  "rpm_max": 5000,
+  "power_kw_orig": "15 hp (11.2 kW)",
+  "nose": "A2-5",
+  "bar_mm": 51
+ },
+ "live_tool": {
+  "rpm_max": 6000,
+  "power_kw": 5.6
+ },
+ "milling_head": null,
+ "turret_stations": 24,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": 8900,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "turret_index_s"
+ ],
+ "options": [],
+ "notes": "WT-150II no longer on nakamura-tome.com (successor WT-150V: max turning dia 190, length 515, spindle distance 800/200, bar 51 (65 op), L 5,000 rpm 15/11 kW, R 5,000 rpm 11/7.5 kW, milling 6,000 (10,000 op) rpm, floor H 1858.5 W 3675 D 2258.2 -- from nakamura-tome.co.jp/products/machines/wt-150v/). Values here from US importer Methods (dealer, secondary). Orig: 7.5 in, 20.3 in, 6.6 in X1/X2, Y +/-1.4 in (35 mm, i.e. 70 total), spindles 20 / 15 HP, driven tool 7.5 / 5 HP (converted 5.6 / 3.7 kW), 19,621 lb. Turret 24 stations, 48 index positions, 12x2 rotating tool stations per Methods. Spindle distance max 800 / min 200 mm."
+}

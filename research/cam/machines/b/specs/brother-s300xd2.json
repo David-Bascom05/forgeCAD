@@ -1,0 +1,136 @@
+{
+ "vendor": "Brother",
+ "model": "S300Xd2",
+ "family": "SPEEDIO S-Xd2 compact machining center",
+ "source": [
+  "https://machinetool.global.brother/en-eu/all-products/sxd2/s300xd2"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "Vertical BT30 spindle, 3-axis. Which unit carries X/Y/Z is not stated on the fetched page (memory says table X on Y saddle with Z head on fixed column for SPEEDIO S/W, unverified).",
+ "control": {
+  "standard": "Brother CNC-D00 (15in touch LCD), 5 axes (X,Y,Z + 2 additional)",
+  "options": [
+   "CNC-D00v(DB) on -5AX models"
+  ]
+ },
+ "travel_mm": {
+  "X": 300,
+  "Y": 450,
+  "Z": 300
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  180,
+  480
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  600,
+  450
+ ],
+ "table_load_kg": 250,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12000,
+  "rpm_min": 1,
+  "taper_or_interface": "7/24 No.30 (MAS-BT30, pull stud MAS-P30T-2)",
+  "power_kw": {
+   "cont": 7.0,
+   "30min": null,
+   "peak/other": "10.1 (10-min rating); 18.9 max output"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 40
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 50,
+  "Y": 50,
+  "Z": 56,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 30,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 14,
+  "options": [
+   21
+  ],
+  "tool_to_tool_s": 0.6,
+  "chip_to_chip_s": 1.2,
+  "max_tool_dia_mm": 110,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": 250,
+  "max_tool_kg": 3.0
+ },
+ "coolant": {
+  "through_spindle": "optional",
+  "notes": "CTS optional (BT dual-contact spindle used with CTS)"
+ },
+ "overall_mm": {
+  "W": 1080,
+  "D": 2161,
+  "H": 2529
+ },
+ "weight_kg": 2350,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_type",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "10,000 rpm high-torque spindle (12.8/9.2 kW 10-min/cont, 92 N·m max, 26.2 kW max output)",
+  "20,000 rpm spindle (7.4/5.1 kW, 27 N·m, 15.4 kW max output)",
+  "27,000 rpm spindle (8.9/6.3 kW; CTS-compatible)",
+  "BIG-PLUS",
+  "CTS",
+  "-5AX version (CNC-D00v(DB), simultaneous 5-axis)",
+  "RD relocation-detection variant"
+ ],
+ "notes": "Columns of Brother's shared S-Xd2 table read by position (S300/S500/S700/S700-100T). Z 380 option not available on S300. Max tool length 250 with 14-tool magazine, 160 with 21-tool. Max tool weight 3.0 kg (4.0 kg by parameter; not with 27k spindle); total 25 kg (14) / 35 kg (21). Table load 250 kg (300 by parameter). Tool-to-tool 0.6 s (14/21 tools), chip-to-chip 1.2 s. W x D = required floor space (control door closed; 2,999 D with door open), excludes coolant tank/conveyor. Spindle 1 rpm min as published. Tapping max 6,000 rpm. Cutting feed 30 m/min in high accuracy mode B. Previous S300X2 file exists separately (brother-s300x2.json)."
+}

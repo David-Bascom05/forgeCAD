@@ -1,0 +1,137 @@
+{
+ "vendor": "DN Solutions",
+ "model": "DNM 4500",
+ "family": "DNM 4th generation (DNM 4500/5700/6700)",
+ "source": [
+  "https://www.dn-solutions.com/us/product/machining-center/vertical/dnm-4500-4th.do"
+ ],
+ "source_secondary": [
+  "https://images.machineryhouse.com.au/products/M8415/PDF/DNM%20Series%20_4th%20Gen._%20_7__1731027798.pdf"
+ ],
+ "taken": "2026-11-23",
+ "kind": "vmc3",
+ "architecture": "3-axis vertical machining center, vertical spindle, direct-coupled spindle standard; roller-type LM guides on all axes; column type with optional raised column (+150/200/300 mm). Which unit carries X, Y and Z is not stated in the fetched text.",
+ "control": {
+  "standard": "DN Solutions Fanuc i Plus",
+  "options": [
+   "SIEMENS S828D",
+   "HEIDENHAIN TNC620"
+  ]
+ },
+ "travel_mm": {
+  "X": 800,
+  "Y": 450,
+  "Z": 510
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": [
+  150,
+  660
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": [
+  1000,
+  450
+ ],
+ "table_load_kg": 600,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 8000,
+  "rpm_min": null,
+  "taper_or_interface": "ISO #40 (BT40 standard; CAT40/DIN40 optional; BIG PLUS options)",
+  "power_kw": {
+   "cont": 11,
+   "30min": null,
+   "peak/other": 18.5
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 117.8
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 42,
+  "Y": 42,
+  "Z": 36,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [
+   40,
+   60
+  ],
+  "tool_to_tool_s": 1.2,
+  "chip_to_chip_s": 4.1,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": 125,
+  "max_tool_len_mm": 300,
+  "max_tool_kg": 8
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": "Options table lists TSC choices (None, or: 2 MPa (1.5 kW), 2 MPa (4 kW), 3 MPa (2.9 kW), 7 MPa (7.5 kW)); standard-vs-option marks did not survive text extraction. TSA 0.54 MPa listed. Flood 0.19/0.45/0.69 MPa pumps. Coolant tank 380 L."
+ },
+ "overall_mm": {
+  "W": 2835,
+  "D": 2200,
+  "H": 2980
+ },
+ "weight_kg": 5000,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "spindle 8000 r/min high-torque 15/11 kW (S3/cont) 286 N·m (Fanuc only)",
+  "spindle 12000 r/min 18.5/11 kW 117.8 N·m",
+  "spindle 15000 r/min 18.5/11 kW 117.8 N·m",
+  "magazine 40 or 60 tools (60T listed under special options)",
+  "HSK63A tool type (special option)",
+  "raised column 150 / 200 / 300 mm",
+  "4th-axis NC rotary table S-200F4-DS / S-250F8-DS / S-320F8-DS",
+  "AWC and Multi-AWC (up to 40 pallets)",
+  "linear scales X/Y/Z",
+  "Renishaw TS27R / OTS / OMP60 probing"
+ ],
+ "notes": "Numbers from DN Solutions DNM 4th Gen catalogue (ver. EN 240705 SU) hosted on dealer Machinery House CDN (maker document, dealer host -> source_secondary) and the DN Solutions US product page (summary table). US page table length/width shows 800 x 450 mm (equal to travels) while the catalogue gives 1000 x 450 mm; catalogue value used. US page and catalogue agree on travels, rapids, 8000 r/min, 18.5 kW, 117.8 N·m, 600 kg, 5000 kg. Catalog dimension labels: Length / Width / Height; recorded here as D=Length, W=Width (which of these is front width is not drawn in the text). Electric supply 34.31 kVA; air 0.54 MPa. Chip-to-chip 4.1 s is with ATC shutter; without shutter 3.2 s. Max tool dia continuous 80 mm {76 mm option}. Max tool moment 5.88 N·m. Tool selection memory random. Spindle power is published as S3/Cont. pair; S3 value placed in peak/other. Not applicable to this machine kind (left null, not listed in unknown): swing_over_bed_mm, max_turning_dia_mm, max_turning_length_mm, chuck_size_in, bar_capacity_mm, spindle_nose_type, sub_spindle, live_tool, turret_stations, turret_index_s, tailstock, milling_head, rotary, pallet, spindle_center_to_column_mm, spindle_center_to_pallet_top_mm, rotary_table_dia_mm."
+}

@@ -66,6 +66,10 @@ pub(super) fn scope(s: &Shell) -> &'static str {
             FLAT_TAB => "flat",
             THERMO_TAB => "thermo",
             super::super::WELD_TAB => "weld",
+            super::super::env::ENV_TAB => "env",
+            super::super::env::BENDSIM_TAB => "bendsim",
+            super::super::env::RENDER_TAB => "render",
+            super::super::CAM_TAB => "cam",
             _ => "tools",
         }
     }
@@ -90,6 +94,11 @@ pub(in crate::shell) fn key_of(s: &Shell, id: &str) -> Option<String> {
 fn why(s: &Shell, scope: &str, name: &str) -> String {
     if let Some(w) = why_off(name) {
         return w.to_string();
+    }
+    if scope == "env"
+        && let Some(w) = s.env_why_off(name)
+    {
+        return w;
     }
     if s.no_document() && scope != "thermo" {
         return "open or create a part first (File > New, or Open)".into();
@@ -165,6 +174,12 @@ impl Shell {
         let t = self.theme;
         ui.set_max_width(300.0);
         let (line, key) = tip(scope, tool.name).unwrap_or(("", ""));
+        // a Manufacture tool that is off: why, first
+        if tool.action.is_none()
+            && let Some(why) = self.cam.as_ref().and_then(|w| super::super::cam::disabled_why(w, tool.name))
+        {
+            ui.label(RichText::new(why).font(sans(12.0)).color(t.warn));
+        }
         let key = key_of(self, key);
         ui.horizontal(|ui| {
             ui.label(RichText::new(tool.name).font(semi(13.0)).color(t.ink));
@@ -241,7 +256,17 @@ mod tests {
             FLAT_TAB,
             THERMO_TAB,
             super::super::super::WELD_TAB,
+            super::super::super::env::ENV_TAB,
+            super::super::super::env::BENDSIM_TAB,
+            super::super::super::env::RENDER_TAB,
         ] {
+            use super::super::super::env::{BENDSIM_TAB, EnvId, RENDER_TAB};
+            s.env = match tab {
+                THERMO_TAB => Some(EnvId::Thermoform),
+                BENDSIM_TAB => Some(EnvId::BendSim),
+                RENDER_TAB => Some(EnvId::RenderStudio),
+                _ => None,
+            };
             s.tab = tab;
             let scope = scope(&s);
             let names: Vec<&str> = if tab == 1 {
@@ -259,8 +284,13 @@ mod tests {
                     .collect()
             };
             assert!(!names.is_empty(), "tab {tab}");
+            // the Capture group is on every tab: its tips are written once, as "capture"
+            let capture: Vec<&str> = super::super::super::capture::group(&s)
+                .map(|g| g.big.iter().chain(&g.small).map(|t| t.name).collect())
+                .unwrap_or_default();
             for n in names {
-                if !table().iter().any(|r| r.0 == scope && r.1 == n) {
+                let s0 = if capture.contains(&n) { "capture" } else { scope };
+                if !table().iter().any(|r| r.0 == s0 && r.1 == n) {
                     missing.push(format!("{scope},{n}"));
                 }
             }

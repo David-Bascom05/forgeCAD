@@ -1,0 +1,140 @@
+{
+ "vendor": "Makino",
+ "model": "a51nx",
+ "family": "nx-series HMC (400 mm pallet)",
+ "source": [
+  "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx",
+  "https://www.makino.eu/en-us/machine-technology/machines/horizontal-4-axis/a51nx",
+  "https://www.makino.co.jp/ja-jp/machine-technology/machines/horizontal-4-axis/a51nx"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "hmc",
+ "architecture": "Horizontal 40-taper spindle; 4-axis HMC with direct-drive (DD motor) NC rotary B table (360 deg, full contouring per B cutting feed spec) under the pallet. Makino JP page: slant-bed structure with two X-axis guides at different heights, allowing a lighter column (implies X on the column; Y/Z carriers not explicitly stated). Memory says moving-column T-bed: X column, Y headstock on column, Z table/pallet toward spindle — unverified.",
+ "control": {
+  "standard": "Makino Professional 6 (Pro6)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 560,
+  "Y": 640,
+  "Z": 640
+ },
+ "rotary": {
+  "A": null,
+  "B": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 125,
+   "indexing_or_full": "full (DD NC rotary; B cutting feed 1-45,000 deg/min)",
+   "orig": "45000 deg/min"
+  },
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 400,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": [
+   400,
+   400
+  ],
+  "change_s": null,
+  "load_kg": 400
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 14000,
+  "rpm_min": 50,
+  "taper_or_interface": "CAT40 (US) / BT40 (JP, EU); HSK-A63 option",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 303
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 60,
+  "Y": 60,
+  "Z": 60,
+  "A_or_B_rpm": 125,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 50,
+ "accel_g_or_m_s2": "1 G (linear axes, per US and JP pages)",
+ "changer": {
+  "pockets": 60,
+  "options": [
+   "134/219/311 (US page)",
+   "133/218/313 (JP page)",
+   "40 (US page)"
+  ],
+  "tool_to_tool_s": 0.9,
+  "chip_to_chip_s": 2.2,
+  "max_tool_dia_mm": 70,
+  "max_tool_dia_empty_adjacent_mm": 170,
+  "max_tool_len_mm": 430,
+  "max_tool_kg": 12
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": "Cyclone coolant filtration; coolant-tank stirring nozzles (pages)"
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "coolant.through_spindle",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "table_height_from_floor_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "20,000 rpm spindle",
+  "HSK-A63",
+  "MMC2 linear pallet pool",
+  "pallet magazine",
+  "robot cell"
+ ],
+ "notes": "Max workpiece dia 630 x 900 mm. B rapid 45,000 deg/min converted to 125 rpm. Torque 303 N·m from JP page. Max tool length 430 mm (restricted) CAT; HSK 420 mm (US). Max tool dia 70 mm with neighbours full / 170 mm restricted (JP). Pallet count and pallet-change time are NOT on any fetched Makino page: the brief's '2-pallet APC' is not confirmed there (a search snippet citing techspex.com says 'Pallet Changer: Standard, Num. Pallets: 2' but techspex returned 403; memory says 2-pallet APC standard, unverified). Spindle kW not published on fetched pages (search snippet of used listings says 30 hp; unverified). US page tool counts 134/219/311 vs JP 133/218/313 — inconsistent on maker's own sites."
+}

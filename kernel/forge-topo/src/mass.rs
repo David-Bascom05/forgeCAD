@@ -127,7 +127,7 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     // faces (not worth the threads)
     let ids: Vec<FaceId> = body.face_ids().collect();
     let one = |k: usize| face_integrals(body, ids[k], c, size, rel);
-    let each: Box<dyn Iterator<Item = _>> = if forge_geom::budget::left() == u64::MAX && ids.len() >= 8 {
+    let each: Box<dyn Iterator<Item = _>> = if !forge_geom::budget::limited() && ids.len() >= 8 {
         Box::new(forge_math::par::map(ids.len(), one).into_iter())
     } else {
         Box::new((0..ids.len()).map(one))

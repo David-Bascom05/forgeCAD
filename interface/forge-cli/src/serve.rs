@@ -17,7 +17,25 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 15] = [
+const TOOLS: [Tool; 17] = [
+    (
+        "bend",
+        "Run a bending document (.fg starting with `bending`): the press-brake program simulated as it states (certified tool clearance through each bend, handling between steps); reply forgecad.bending/1. what=sheet: the setup sheet",
+        1,
+        &[
+            ("file", "path to a bending .fg"),
+            ("what", "sheet: the setup sheet"),
+        ],
+    ),
+    (
+        "cam",
+        "Run a machining document (.fg starting with `machining`): every op's path certified against the exact part (gouge, holder, rapids) or refused with the check and a fix; reply forgecad.cam/1. what=sheet: the setup sheet",
+        1,
+        &[
+            ("file", "path to a machining .fg"),
+            ("what", "sheet: the setup sheet instead of the program"),
+        ],
+    ),
     (
         "query",
         "selector -> @handles; or stat, file, check, params, features; holes, section z=V, gap A B, ..",
@@ -229,29 +247,39 @@ pub fn run(mcp: bool, root: &str, writable: bool) -> ExitCode {
         if line.trim().is_empty() {
             continue;
         }
-        let reply = match Json::parse(&line) {
-            // a request that panics answers with an error, and the session starts afresh
-            Ok(req) => {
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| answer(&mut forge, &req, mcp)))
-                    .unwrap_or_else(|_| {
-                        forge = fg::Session::new(Some(root.clone()), writable);
-                        let id = req.get("id").cloned().unwrap_or(Json::Null);
-                        Some(error(
-                            id,
-                            -32603,
-                            "internal error: the request failed; the session was reset",
-                        ))
-                    })
-            }
-            Err(e) => Some(error(Json::Null, -32700, &e)),
-        };
-        if let Some(r) = reply
+        if let Some(r) = respond(&mut forge, &line, mcp, (&root, writable))
             && writeln!(out, "{r}").and_then(|_| out.flush()).is_err()
         {
             break;
         }
     }
     ExitCode::SUCCESS
+}
+
+/// One request's answer (none for an MCP notification), and the sketches its runs kept freed.
+fn respond(
+    forge: &mut fg::Session,
+    line: &str,
+    mcp: bool,
+    (root, writable): (&std::path::Path, bool),
+) -> Option<Json> {
+    let reply = match Json::parse(line) {
+        // a request that panics answers with an error, and the session starts afresh
+        Ok(req) => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| answer(forge, &req, mcp)))
+            .unwrap_or_else(|_| {
+                *forge = fg::Session::new(Some(root.to_path_buf()), writable);
+                let id = req.get("id").cloned().unwrap_or(Json::Null);
+                Some(error(
+                    id,
+                    -32603,
+                    "internal error: the request failed; the session was reset",
+                ))
+            }),
+        Err(e) => Some(error(Json::Null, -32700, &e)),
+    };
+    // the sketches the request's runs made: freed between requests (a run lets none go)
+    release_sketches();
+    reply
 }
 
 fn error(id: Json, code: i32, msg: &str) -> Json {
@@ -381,6 +409,13 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
         };
     }
     let mut r = forge.run(name, &a, p);
+    if (name == "cam" || name == "bend")
+        && let Some(b) = r.png.take()
+    {
+        // the program or the sheet is text: it goes as text, never as an image
+        r.text.push('\n');
+        r.text.push_str(&String::from_utf8_lossy(&b));
+    }
     if name == "export"
         && r.ok
         && let Some(out) = p.get("out").and_then(Json::str)
@@ -569,4 +604,63 @@ fn tool(t: &Tool) -> Json {
             ]),
         ),
     ])
+}
+
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`): each lets go of its
+/// names, the cycle through them broken (a sketch with a named entity is an `Rc` cycle: its
+/// `named` holds `Value::Ent`s of itself). A run frees none itself, so the speed gate's builds do
+/// what they did; between builds, never during one, on the thread that ran them. Without it every
+/// run kept its sketches (5.5 KB a run of a small part natively, ~30 KB an edit in the browser).
+/// A process that never calls it (the speed gate's benchparts, a one-shot CLI command) keeps them
+/// till it exits, as every process did before. Its own cost: the freeing a run paid before, about
+/// 5,500 instructions a run of a small one-sketch part.
+fn release_sketches() {
+    for x in forge_keep::take_all() {
+        if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {
+            let named = std::mem::take(&mut sk.borrow_mut().named);
+            drop(named);
+        }
+    }
+}
+
+#[cfg(test)]
+mod bounded {
+    use super::*;
+
+    /// A long session keeps no more sketches than one request's runs made: each request's are
+    /// freed as it is answered (`release_sketches`), in `serve` and in `mcp` alike. Without it
+    /// every build of a part kept its sketches (a sketch with a named entity is an `Rc` cycle).
+    #[test]
+    fn a_session_frees_each_requests_sketches() {
+        let dir = forge_dirs::temp_dir().join(format!("forge-serve-bounded-{}", forge_dirs::process_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = dir.join("plate.fg");
+        std::fs::write(
+            &part,
+            "shared t = 6\nsketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (60, 30))\n}\nbase = extrude(plan, t)\n",
+        )
+        .unwrap();
+        let root = std::fs::canonicalize(&dir).unwrap();
+        let file = part.to_str().unwrap().to_string();
+        for mcp in [false, true] {
+            let mut forge = fg::Session::new(Some(root.clone()), true);
+            for k in 0..20 {
+                let req = if mcp {
+                    format!(
+                        r#"{{"jsonrpc":"2.0","id":{k},"method":"tools/call","params":{{"name":"build","arguments":{{"file":{file:?}}}}}}}"#
+                    )
+                } else {
+                    format!(r#"{{"jsonrpc":"2.0","id":{k},"method":"build","params":{{"file":{file:?}}}}}"#)
+                };
+                let r = respond(&mut forge, &req, mcp, (&root, true)).expect("an answer");
+                assert!(r.get("error").is_none(), "{r}");
+                assert_eq!(
+                    forge_keep::kept(),
+                    0,
+                    "mcp {mcp}, request {k}: sketches kept after it"
+                );
+            }
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
