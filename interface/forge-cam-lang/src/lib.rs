@@ -2111,10 +2111,13 @@ impl Cam {
             fz: g.fz_at(t.tool.dc),
             flutes: t.tool.nof.max(1) as f64,
             rpm: fe.rpm,
-            f_max,
+            // just under the machine's limit: G5 checks the posted F against it soundly
+            f_max: 0.999 * f_max,
+            f_min: 0.0,
             cap: feeds::THIN_CAP,
             cell,
-            window: 0.5 * t.tool.dc,
+            // samples of one diameter, fixed by length (fto-adaptive.md D)
+            sample: t.tool.dc,
         };
         let mut map = HeightMap::of_stock(&s.ip, cell);
         paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()

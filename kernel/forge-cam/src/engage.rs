@@ -250,79 +250,126 @@ impl HeightMap {
         removed * self.h * self.h
     }
 
-    /// The largest cos θ over the side edge's front half (θ from the direction of travel u)
-    /// where the stock stands above the tip c by more than `eps`: the chip there is fz · that.
-    /// None: the edge meets nothing. The edge is read at r + h/2, a little outside the tool: the
-    /// cells' error then errs toward more engagement (a lower feed).
-    pub fn chip_factor(&self, c: [f64; 3], u: [f64; 2], r: f64, eps: f64) -> Option<f64> {
+    /// What the side edge's front half meets at tip c moving along u (θ from the direction of
+    /// travel, + left): the stock standing above the tip by more than `eps`, the edge read at
+    /// r + h/2, a little outside the tool, so the cells' error errs toward more engagement.
+    /// None: the edge meets nothing.
+    pub fn engage(&self, c: [f64; 3], u: [f64; 2], r: f64, eps: f64) -> Option<Engage> {
         let rr = r + 0.5 * self.h;
         let n = 181;
         let step = std::f64::consts::PI / (n - 1) as f64;
-        let mut best: Option<f64> = None;
+        let mut e: Option<Engage> = None;
         for k in 0..n {
             let th = -std::f64::consts::FRAC_PI_2 + k as f64 * step;
             let (s, co) = dmath::sin_cos(th);
             let dx = u[0] * co - u[1] * s;
             let dy = u[0] * s + u[1] * co;
-            if self.top(c[0] + rr * dx, c[1] + rr * dy) > c[2] + eps {
-                best = Some(best.map_or(co, |b: f64| b.max(co)));
+            let t = self.top(c[0] + rr * dx, c[1] + rr * dy);
+            if t > c[2] + eps {
+                let g = e.get_or_insert(Engage {
+                    cos_max: co,
+                    th_lo: th,
+                    th_hi: th,
+                    phi: 0.0,
+                    ap: 0.0,
+                    ae: 0.0,
+                });
+                g.cos_max = g.cos_max.max(co);
+                g.th_lo = g.th_lo.min(th);
+                g.th_hi = g.th_hi.max(th);
+                g.phi += if k == 0 || k == n - 1 { 0.5 * step } else { step };
+                g.ap = g.ap.max(t - c[2]);
             }
         }
-        best
+        if let Some(g) = &mut e {
+            // the width of material across the travel the engaged span covers
+            g.ae = r * (dmath::sin(g.th_hi) - dmath::sin(g.th_lo)).max(0.0);
+        }
+        e
+    }
+
+    /// The largest cos θ over the engaged front edge: the chip there is fz · that (`engage`).
+    pub fn chip_factor(&self, c: [f64; 3], u: [f64; 2], r: f64, eps: f64) -> Option<f64> {
+        self.engage(c, u, r, eps).map(|e| e.cos_max)
     }
 }
 
+/// What the side edge meets at one place (HeightMap::engage).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Engage {
+    /// max cos θ over the engaged edge: the chip is fz · this.
+    pub cos_max: f64,
+    /// The engaged span's ends, radians from the travel (+ left), and the angle engaged in it
+    /// (radians; the span may have gaps).
+    pub th_lo: f64,
+    pub th_hi: f64,
+    pub phi: f64,
+    /// Axial depth (the highest stock above the tip on the engaged edge) and the radial width
+    /// across the travel, mm.
+    pub ap: f64,
+    pub ae: f64,
+}
+
+/// One fixed-length sample of a scheduled path (`schedule_samples`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Sample {
+    /// The move it belongs to and its end along the path.
+    pub mv: usize,
+    pub end: [f64; 3],
+    /// Arc length (mm) from the path's start to the sample's end.
+    pub s: f64,
+    /// The heaviest engagement met in the sample (None: air).
+    pub engage: Option<Engage>,
+}
+
 /// What the feeds are set from.
+///
+/// Per research/cam/toolpath-quality/fto-adaptive.md (design-around D): the feed is set per
+/// FIXED-LENGTH sample from chip thinning and the chip load; the path is never split where the
+/// engagement changes, there is no abrasion term, and samples are joined only when both sit at
+/// the same clamp (machine/user limit or the thinning cap), never by engagement band.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Sched {
-    /// The cutting data's feed per tooth for the tool (the chip to cut), mm.
+    /// The chip to cut (feed per tooth), mm.
     pub fz: f64,
     pub flutes: f64,
     pub rpm: f64,
-    /// The machine's largest feed, mm/min.
+    /// The largest and least feed, mm/min (the largest kept under the machine's limit by the
+    /// caller; see `schedule`).
     pub f_max: f64,
+    pub f_min: f64,
     /// The most chip thinning may raise the feed per tooth by (forge_tooling::feeds::THIN_CAP).
     pub cap: f64,
     /// Cell size of the model, mm.
     pub cell: f64,
-    /// A feed holds for at least about this length of a move (mm): shorter rises are dropped.
-    pub window: f64,
+    /// Sample length, mm: each move is divided into equal samples no longer than this.
+    pub sample: f64,
 }
 
-/// Steps the feed per tooth is quantised to: fz · STEP^k, k = 0, 1, .. (rounded down, so the
-/// chip is never above fz).
-const STEP: f64 = 1.15;
 /// Stock this far above the tip counts as material (mm).
 const EPS_Z: f64 = 1e-3;
 
-/// A move's pieces: their ends (the last the move's end).
-fn pieces(from: [f64; 3], m: &PMove, l: f64) -> Vec<[f64; 3]> {
-    let d3 = |a: [f64; 3], b: [f64; 3]| {
-        ((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2])).sqrt()
-    };
+/// A move divided into n equal pieces: their ends (the last the move's end).
+fn pieces_n(from: [f64; 3], m: &PMove, n: usize) -> Vec<[f64; 3]> {
     match *m {
-        PMove::Rapid { to } | PMove::Line { to, .. } => {
-            let n = (d3(from, to) / l).ceil().max(1.0) as usize;
-            (1..=n)
-                .map(|k| {
-                    if k == n {
-                        return to;
-                    }
-                    let s = k as f64 / n as f64;
-                    [
-                        from[0] + s * (to[0] - from[0]),
-                        from[1] + s * (to[1] - from[1]),
-                        from[2] + s * (to[2] - from[2]),
-                    ]
-                })
-                .collect()
-        }
+        PMove::Rapid { to } | PMove::Line { to, .. } => (1..=n)
+            .map(|k| {
+                if k == n {
+                    return to;
+                }
+                let s = k as f64 / n as f64;
+                [
+                    from[0] + s * (to[0] - from[0]),
+                    from[1] + s * (to[1] - from[1]),
+                    from[2] + s * (to[2] - from[2]),
+                ]
+            })
+            .collect(),
         PMove::Arc { to, c, cw, .. } => {
             let r = ((from[0] - c[0]) * (from[0] - c[0]) + (from[1] - c[1]) * (from[1] - c[1])).sqrt();
             let a0 = dmath::atan2(from[1] - c[1], from[0] - c[0]);
             let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
             let sw = sweep(a0, a1, !cw);
-            let n = ((sw.abs() * r).max(d3(from, to)) / l).ceil().max(1.0) as usize;
             (1..=n)
                 .map(|k| {
                     if k == n {
@@ -338,143 +385,161 @@ fn pieces(from: [f64; 3], m: &PMove, l: f64) -> Vec<[f64; 3]> {
     }
 }
 
-/// A move's piece ends and each piece's largest allowed feed per tooth (None: not scheduled).
-type Plan = (Vec<[f64; 3]>, Vec<Option<f64>>);
+/// A move's length (arcs along the helix).
+fn move_len(from: [f64; 3], m: &PMove) -> f64 {
+    let d3 = |a: [f64; 3], b: [f64; 3]| {
+        ((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2])).sqrt()
+    };
+    match *m {
+        PMove::Rapid { to } | PMove::Line { to, .. } => d3(from, to),
+        PMove::Arc { to, c, cw, .. } => {
+            let r = ((from[0] - c[0]) * (from[0] - c[0]) + (from[1] - c[1]) * (from[1] - c[1])).sqrt();
+            let a0 = dmath::atan2(from[1] - c[1], from[0] - c[0]);
+            let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
+            let xy = sweep(a0, a1, !cw).abs() * r;
+            (xy * xy + (to[2] - from[2]) * (to[2] - from[2])).sqrt()
+        }
+        PMove::Cycle { .. } => 0.0,
+    }
+}
 
-/// The path with each feed move's feed set from the engagement it meets in `map` (which it
-/// leaves as the path cut it). Straight plunges, moves up and rapids keep their feeds.
-pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> OpPath {
+/// Whether a move is fed by engagement: a feed move with xy motion, not climbing.
+fn scheduled(at: [f64; 3], m: &PMove) -> bool {
+    match *m {
+        PMove::Line { to, phase, .. } => {
+            phase != Phase::Rapid && (to[0] != at[0] || to[1] != at[1]) && to[2] <= at[2]
+        }
+        PMove::Arc { to, .. } => to[2] <= at[2],
+        _ => false,
+    }
+}
+
+/// The path's samples: each scheduled move divided into equal samples no longer than
+/// `s.sample` (boundaries fixed by length alone), each measured in pieces no longer than
+/// min(R/4, 0.5) mm against `map` before the piece is swept; `map` is left as the path cut it.
+pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> Vec<Sample> {
     let r = prof.r();
     let l = s.cell.max((0.25 * r).min(0.5));
-    // pass 1: per move, its piece ends and each piece's largest allowed feed (None: not
-    // scheduled)
+    let mut out = Vec::new();
     let mut at = path.start;
-    let mut plan: Vec<Plan> = Vec::with_capacity(path.moves.len());
-    for mv in &path.moves {
+    let mut arc = 0.0;
+    for (mi, mv) in path.moves.iter().enumerate() {
         let to = match *mv {
             PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-            PMove::Cycle { .. } => {
-                plan.push((vec![], vec![]));
-                continue;
-            }
+            PMove::Cycle { .. } => continue,
         };
-        let ends = pieces(at, mv, l);
-        let scheduled = match *mv {
-            PMove::Line { phase, .. } => {
-                phase != Phase::Rapid && (to[0] != at[0] || to[1] != at[1]) && to[2] <= at[2]
-            }
-            PMove::Arc { .. } => to[2] <= at[2],
-            _ => false,
+        let len = move_len(at, mv);
+        let sched = scheduled(at, mv);
+        let ns = if sched {
+            (len / s.sample.max(1e-9)).ceil().max(1.0) as usize
+        } else {
+            1
         };
-        let mut req = Vec::with_capacity(ends.len());
+        let per = ((len / ns as f64) / l).ceil().max(1.0) as usize;
+        let ends = pieces_n(at, mv, ns * per);
         let mut a = at;
-        for &b in &ends {
-            let dxy = ((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1])).sqrt();
-            if scheduled && dxy > 0.0 {
-                let u = [(b[0] - a[0]) / dxy, (b[1] - a[1]) / dxy];
-                let fz = match map.chip_factor(b, u, r, EPS_Z) {
-                    // hex = fz cos θ ≤ the data's fz
-                    Some(c) if c * s.cap > 1.0 => s.fz / c,
-                    _ => s.cap * s.fz,
-                };
-                req.push(Some(fz));
-            } else {
-                req.push(None);
-            }
-            map.sweep(a, b, prof);
-            a = b;
-        }
-        plan.push((ends, req));
-        at = to;
-    }
-    // pass 2: each piece no faster than the next one (the engagement it runs into), quantised
-    // down; then pieces of one move at the same feed merged
-    let flat: Vec<Option<f64>> = plan.iter().flat_map(|(_, r)| r.iter().copied()).collect();
-    let mut fz_of = vec![None; flat.len()];
-    for k in 0..flat.len() {
-        if let Some(f) = flat[k] {
-            let next = flat.get(k + 1).copied().flatten().unwrap_or(f);
-            let f = f.min(next);
-            let steps = (dmath::ln(f / s.fz) / dmath::ln(STEP) + 1e-9).floor().max(0.0);
-            fz_of[k] = Some(s.fz * dmath::powf(STEP, steps));
-        }
-    }
-    // within each move, each piece no faster than any piece within half a window of it: a
-    // short rise in feed is dropped (never a chip above fz), so the feed changes less often
-    let window = 0.5 * s.window;
-    let mut k = 0;
-    let mut from = path.start;
-    for (ends, _) in &plan {
-        let n = ends.len();
-        if n > 1 && window > 0.0 {
-            // the distance along the move to each piece's middle
-            let mut mid = Vec::with_capacity(n);
-            let mut acc = 0.0;
-            let mut a = from;
-            for &b in ends {
-                let d = ((b[0] - a[0]) * (b[0] - a[0])
-                    + (b[1] - a[1]) * (b[1] - a[1])
-                    + (b[2] - a[2]) * (b[2] - a[2]))
-                    .sqrt();
-                mid.push(acc + 0.5 * d);
-                acc += d;
-                a = b;
-            }
-            let orig: Vec<Option<f64>> = fz_of[k..k + n].to_vec();
-            for i in 0..n {
-                let Some(mut f) = orig[i] else { continue };
-                for j in 0..n {
-                    if (mid[j] - mid[i]).abs() <= window
-                        && let Some(g) = orig[j]
-                    {
-                        f = f.min(g);
+        for k in 0..ns {
+            let mut worst: Option<Engage> = None;
+            for &b in &ends[k * per..(k + 1) * per] {
+                let dxy = ((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1])).sqrt();
+                if sched && dxy > 0.0 {
+                    let u = [(b[0] - a[0]) / dxy, (b[1] - a[1]) / dxy];
+                    if let Some(e) = map.engage(b, u, r, EPS_Z) {
+                        worst = Some(match worst {
+                            Some(w) if w.cos_max > e.cos_max => Engage {
+                                ap: w.ap.max(e.ap),
+                                ae: w.ae.max(e.ae),
+                                ..w
+                            },
+                            Some(w) => Engage {
+                                ap: w.ap.max(e.ap),
+                                ae: w.ae.max(e.ae),
+                                ..e
+                            },
+                            None => e,
+                        });
                     }
                 }
-                fz_of[k + i] = Some(f);
+                map.sweep(a, b, prof);
+                a = b;
+            }
+            if sched {
+                out.push(Sample {
+                    mv: mi,
+                    end: ends[(k + 1) * per - 1],
+                    s: arc + len * (k + 1) as f64 / ns as f64,
+                    engage: worst,
+                });
             }
         }
-        if let Some(&e) = ends.last() {
-            from = e;
-        }
-        k += n;
+        arc += len;
+        at = to;
     }
-    let mut out = Vec::with_capacity(path.moves.len());
+    out
+}
+
+/// The path with each scheduled move's feed set per fixed-length sample from the engagement
+/// it meets in `map` (left as the path cut it): fz / max cos θ over the sample and the start of
+/// the next (the chip never above fz), at most cap · fz, the feed within [f_min, f_max]. A move
+/// is split at its sample boundaries; neighbouring samples are joined only when both sit at the
+/// same clamp. Straight plunges, moves up and rapids keep their feeds. The caller keeps f_max
+/// under the machine's limit (G5 checks the posted F soundly, so the limit itself may fail).
+pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> OpPath {
+    let samples = schedule_samples(path, map, prof, s);
+    // the chip rule per sample; a clamped value is tagged so joins happen only between clamps
+    let want = |e: &Option<Engage>| -> (f64, bool) {
+        match e {
+            Some(g) if g.cos_max * s.cap > 1.0 => (s.fz / g.cos_max, false),
+            _ => (s.cap * s.fz, true),
+        }
+    };
+    let n = samples.len();
+    let mut feed: Vec<(f64, bool)> = Vec::with_capacity(n);
+    for k in 0..n {
+        let (mut fz, mut clamp) = want(&samples[k].engage);
+        // no faster than the next sample of the same run of feed moves
+        if let Some(nx) = samples.get(k + 1) {
+            let (f2, c2) = want(&nx.engage);
+            if f2 < fz {
+                fz = f2;
+                clamp = c2;
+            }
+        }
+        let mut f = fz * s.flutes * s.rpm;
+        if f >= s.f_max {
+            f = s.f_max;
+            clamp = true;
+        } else if f <= s.f_min {
+            f = s.f_min;
+            clamp = true;
+        }
+        feed.push((f, clamp));
+    }
+    let mut out = Vec::with_capacity(path.moves.len() + n);
     let mut k = 0;
-    for (mv, (ends, _)) in path.moves.iter().zip(&plan) {
-        let n = ends.len();
-        if n == 0 || fz_of[k..k + n].iter().all(|f| f.is_none()) {
+    for (mi, mv) in path.moves.iter().enumerate() {
+        let start = k;
+        while k < n && samples[k].mv == mi {
+            k += 1;
+        }
+        if start == k {
             out.push(*mv);
-            k += n;
             continue;
         }
-        // just under the machine's limit: G5 checks the posted F against it soundly, so a feed
-        // at the limit itself may not pass
-        let feed = |fz: f64| (fz * s.flutes * s.rpm).min(0.999 * s.f_max);
-        let mut i = 0;
-        while i < n {
-            let fz = fz_of[k + i].unwrap_or(s.fz);
+        let mut i = start;
+        while i < k {
             let mut j = i;
-            while j + 1 < n && fz_of[k + j + 1].unwrap_or(s.fz) == fz {
+            while j + 1 < k && feed[j + 1].1 && feed[i].1 && feed[j + 1].0 == feed[i].0 {
                 j += 1;
             }
-            let end = ends[j];
+            let (end, f) = (samples[j].end, feed[i].0);
             out.push(match *mv {
-                PMove::Line { phase, .. } => PMove::Line {
-                    to: end,
-                    f: feed(fz),
-                    phase,
-                },
-                PMove::Arc { c, cw, .. } => PMove::Arc {
-                    to: end,
-                    c,
-                    cw,
-                    f: feed(fz),
-                },
+                PMove::Line { phase, .. } => PMove::Line { to: end, f, phase },
+                PMove::Arc { c, cw, .. } => PMove::Arc { to: end, c, cw, f },
                 other => other,
             });
             i = j + 1;
         }
-        k += n;
     }
     OpPath {
         tool: path.tool,
@@ -489,66 +554,101 @@ pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -
 mod tests {
     use super::*;
 
+    fn sched(sample: f64) -> Sched {
+        Sched {
+            fz: 0.05,
+            flutes: 3.0,
+            rpm: 10_000.0,
+            f_max: 10_000.0,
+            f_min: 100.0,
+            cap: 3.0,
+            cell: 0.05,
+            sample,
+        }
+    }
+
+    fn slot_then_side() -> OpPath {
+        let line = |to: [f64; 3]| PMove::Line {
+            to,
+            f: 1000.0,
+            phase: Phase::Cut,
+        };
+        OpPath {
+            tool: 0,
+            start: [-6.0, 10.0, 8.0],
+            moves: vec![
+                line([46.0, 10.0, 8.0]),
+                line([46.0, 9.0, 8.0]),
+                line([-6.0, 9.0, 8.0]),
+            ],
+            rpm: 10_000.0,
+            coolant: forge_post::Coolant::Flood,
+        }
+    }
+
+    fn feeds(p: &OpPath) -> Vec<(f64, [f64; 3])> {
+        p.moves
+            .iter()
+            .filter_map(|m| {
+                if let PMove::Line { f, to, .. } = m {
+                    Some((*f, *to))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     #[test]
     fn a_slot_then_a_side_cut() {
         // a 40 x 20 block 10 high, a 10 mm flat end mill: a slot along y = 10 then a pass 1 mm
         // into its wall at y = 9 (ae/D = 0.1)
         let ip = InProcess::new([0.0, 0.0, 0.0], [40.0, 20.0, 10.0]);
         let mut m = HeightMap::of_stock(&ip, 0.05);
-        let prof = Profile::Bull { r: 5.0, re: 0.0 };
-        let s = Sched {
-            fz: 0.05,
-            flutes: 3.0,
-            rpm: 10_000.0,
-            f_max: 10_000.0,
-            cap: 3.0,
-            cell: 0.05,
-            window: 0.0,
-        };
-        let path = OpPath {
-            tool: 0,
-            start: [-6.0, 10.0, 8.0],
-            moves: vec![
-                PMove::Line {
-                    to: [46.0, 10.0, 8.0],
-                    f: 1000.0,
-                    phase: Phase::Cut,
-                },
-                PMove::Line {
-                    to: [46.0, 9.0, 8.0],
-                    f: 1000.0,
-                    phase: Phase::Cut,
-                },
-                PMove::Line {
-                    to: [-6.0, 9.0, 8.0],
-                    f: 1000.0,
-                    phase: Phase::Cut,
-                },
-            ],
-            rpm: 10_000.0,
-            coolant: forge_post::Coolant::Flood,
-        };
-        let out = schedule(&path, &mut m, &prof, &s);
-        let feeds: Vec<f64> = out
-            .moves
-            .iter()
-            .filter_map(|m| {
-                if let PMove::Line { f, .. } = m {
-                    Some(*f)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        // in the slot: fz exactly (1500 mm/min); the side cut: sin φ = 0.6, so fz / 0.6 = 1.67 fz,
-        // quantised down to 1.15^3 = 1.52 fz (2281 mm/min); in air: 3 fz, 1.15^7 = 2.66 fz
+        let out = schedule(
+            &slot_then_side(),
+            &mut m,
+            &Profile::Bull { r: 5.0, re: 0.0 },
+            &sched(2.0),
+        );
+        let f = feeds(&out);
+        // in the slot: fz exactly (1500 mm/min); the side cut: sin φ = 0.6, fz / 0.6 ≈ 2500
+        // (the edge read a little outside the tool: a little less); in air: 3 fz = 4500
         let slot = 0.05 * 3.0 * 10_000.0;
         assert!(
-            feeds.iter().all(|f| *f >= slot - 1e-9 && *f <= 3.0 * slot + 1e-9),
-            "{feeds:?}"
+            f.iter()
+                .all(|(v, _)| *v >= slot - 1e-9 && *v <= 3.0 * slot + 1e-9),
+            "{f:?}"
         );
-        assert!(feeds.contains(&slot), "{feeds:?}");
-        let side = slot * dmath::powf(STEP, 3.0);
-        assert!(feeds.iter().any(|f| (f - side).abs() < 1e-6), "{feeds:?}");
+        assert!(f.iter().any(|(v, _)| *v == slot), "{f:?}");
+        assert!(
+            f.iter()
+                .any(|(v, _)| *v > 2.2 * slot / 1.5 && *v < 2.6 * slot / 1.5),
+            "{f:?}"
+        );
+    }
+
+    /// The design-around (fto-adaptive.md D): sample boundaries are fixed by length alone,
+    /// whatever the engagement. Every engaged sample of the 52 mm moves ends at a multiple of
+    /// 52 / 26 = 2 mm along it, and a run of engagement does not change where they fall.
+    #[test]
+    fn samples_are_fixed_length_whatever_the_engagement() {
+        let p = slot_then_side();
+        let prof = Profile::Bull { r: 5.0, re: 0.0 };
+        let ip = InProcess::new([0.0, 0.0, 0.0], [40.0, 20.0, 10.0]);
+        let mut m = HeightMap::of_stock(&ip, 0.05);
+        let air = InProcess::new([100.0, 100.0, 0.0], [101.0, 101.0, 1.0]);
+        let mut m_air = HeightMap::of_stock(&air, 0.05);
+        let a = schedule_samples(&p, &mut m, &prof, &sched(2.0));
+        let b = schedule_samples(&p, &mut m_air, &prof, &sched(2.0));
+        let ends = |v: &[Sample]| v.iter().map(|x| (x.mv, x.end)).collect::<Vec<_>>();
+        assert_eq!(ends(&a), ends(&b));
+        for x in a.iter().filter(|x| x.mv == 0) {
+            let along = x.end[0] + 6.0;
+            assert!((along / 2.0 - (along / 2.0).round()).abs() < 1e-9, "{x:?}");
+        }
+        // in air every sample sits at the cap: joined into one move each
+        let out = schedule(&p, &mut HeightMap::of_stock(&air, 0.05), &prof, &sched(2.0));
+        assert_eq!(out.moves.len(), p.moves.len());
     }
 }
