@@ -59,7 +59,14 @@ fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality, fine: 
         Curve::Circle(c) => width / arc_step(c.radius, q),
         Curve::Ellipse(e) => width / arc_step(e.major, q),
         Curve::Parabola(c) => conic_segments(width, 1.0 / (2.0 * c.focal), 2.0 * c.focal, q),
-        Curve::Hyperbola(c) => conic_segments(width, c.a, c.b / c.a, q),
+        // in u = asinh t (`Curve::sample_param`): P(u) = a cosh u x + b sinh u y, |P''(u)| = |P(u) - o|
+        // is largest at the wider end, and the tangent turns at most a / b a unit of u
+        Curve::Hyperbola(c) => {
+            let (u0, u1) = (forge_geom::curve::asinh(range.lo), forge_geom::curve::asinh(range.hi));
+            let t = range.lo.abs().max(range.hi.abs());
+            let bend = (c.a * c.a * (1.0 + t * t) + c.b * c.b * t * t).sqrt();
+            conic_segments(u1 - u0, bend, c.b / c.a, q)
+        }
         // the chain already follows the curvature; split each link by the chord its sag allows
         Curve::Intersection(c) => width * (c.sag / q.chord).sqrt().max(1.0),
         Curve::Procedural(c) => c.segments(range, q.chord) as f64,
@@ -1008,7 +1015,7 @@ fn tessellate_with(body: &Body, q: &Quality, mend: bool) -> Result<TriMesh, Tess
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
         edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);
         for (i, &p) in pts.iter().enumerate() {
-            let t = edge.range.lo + edge.range.width() * ((i + 1) as f64 / n as f64);
+            let t = edge.curve.sample_param(edge.range, n, i + 1);
             let id = mesh.add_vertex(p);
             samples.owner.push((e.0, t));
             s.push((t, id));
@@ -2880,7 +2887,12 @@ mod tests {
                     let n = edge_segments(c, range, &q, false);
                     let mut worst: f64 = 0.0;
                     for i in 0..n {
-                        let at = |k: usize| range.lo + range.width() * k as f64 / n as f64;
+                        // (the parameters the mesh samples: equal steps of asinh t on a hyperbola)
+                        let at = |k: usize| match k {
+                            0 => range.lo,
+                            k if k == n => range.hi,
+                            k => c.sample_param(range, n, k),
+                        };
                         let (a, b) = (c.eval(at(i)), c.eval(at(i + 1)));
                         let (u, w) = (c.deriv(at(i)).d1, c.deriv(at(i + 1)).d1);
                         let turn = dmath::atan2(u.cross(w).length(), u.dot(w));

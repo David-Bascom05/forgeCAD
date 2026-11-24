@@ -582,12 +582,30 @@ impl Curve {
         match self {
             Curve::Circle(c) => conic(&c.frame, c.radius, c.radius, trig, out),
             Curve::Ellipse(e) => conic(&e.frame, e.major, e.minor, trig, out),
+            Curve::Hyperbola(_) => {
+                for k in 1..n {
+                    out.push(self.eval(self.sample_param(range, n, k)));
+                }
+            }
             _ => {
                 for k in 1..n {
                     out.push(self.eval(range.lo + dt * k as f64));
                 }
             }
         }
+    }
+
+    /// The parameter of `sample_interior`'s k-th point (k in 1..n): equal steps of the parameter,
+    /// but for a hyperbola, equal steps of u = asinh t (its point a cosh u x + b sinh u y), whose
+    /// tangent turns at most a / b a unit of u everywhere while t's speeds up as cosh u: equal
+    /// steps of t over a wide range put almost all of them where it is nearly straight.
+    pub fn sample_param(&self, range: Interval, n: usize, k: usize) -> f64 {
+        let f = k as f64 / n as f64;
+        if let Curve::Hyperbola(_) = self {
+            let (u0, u1) = (asinh(range.lo), asinh(range.hi));
+            return sinh(u0 + (u1 - u0) * f).clamp(range.lo, range.hi);
+        }
+        range.lo + range.width() * f
     }
 
     /// The whole parameter range, clipped to `bound` where the curve is unbounded.
@@ -696,4 +714,28 @@ mod tests {
             }
         }
     }
+}
+
+/// asinh by dmath's ln: ln(|x| + sqrt(x² + 1)) with x's sign (the series near 0, where the
+/// sum cancels).
+pub fn asinh(x: f64) -> f64 {
+    let a = x.abs();
+    let r = if a < 1e-4 {
+        a * (1.0 - a * a / 6.0)
+    } else {
+        dmath::ln(a + (a * a + 1.0).sqrt())
+    };
+    if x < 0.0 { -r } else { r }
+}
+
+/// sinh by dmath's exp (the series near 0, where the difference cancels).
+pub fn sinh(x: f64) -> f64 {
+    let a = x.abs();
+    let r = if a < 1e-4 {
+        a * (1.0 + a * a / 6.0)
+    } else {
+        let e = dmath::exp(a);
+        0.5 * (e - 1.0 / e)
+    };
+    if x < 0.0 { -r } else { r }
 }
