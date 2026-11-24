@@ -72,6 +72,21 @@ pub const PEEL: f64 = 75.0;
 pub struct AdaptiveOut {
     pub path: OpPath,
     pub voids: Vec<(Region, f64)>,
+    /// The rings each level ends with (fto-adaptive.md §9 (a)-(c)): one record per ring or run
+    /// of one, its moves `path.moves[first..end]`.
+    pub rings: Vec<RingRun>,
+}
+
+/// A ring at the end of a level, or a run of one: `k` = 0 the wall pass (one offset of all the
+/// walls together, at r), k > 0 a cleanup ring at r + k·r (only its runs that meet material).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct RingRun {
+    pub z: f64,
+    pub k: usize,
+    pub first: usize,
+    pub end: usize,
+    /// The whole ring (no point of it clear to enter at, or the wall pass), not a run of it.
+    pub whole: bool,
 }
 
 /// A closed loop as a polygon, arcs as chords whose sagitta is at most `sag`.
@@ -354,6 +369,7 @@ pub fn adaptive(
     let peel_cos = dmath::cos(PEEL.to_radians());
     // the direction the last pass went along the sweep (+1 with it, −1 against it)
     let mut last_sign = 1.0f64;
+    let mut rings_log: Vec<RingRun> = Vec::new();
     // the way back over the last pass, for a link by retract (one-way passes)
     let mut back: Vec<[f64; 2]> = Vec::new();
     let mut mv: Vec<PMove> = Vec::new();
@@ -806,6 +822,69 @@ pub fn adaptive(
                 if k > 0 && !dense.iter().any(|q| f.disk_has_material(q.0, q.1, z)) {
                     continue;
                 }
+                // a cleanup ring: only its runs that meet material (§9 (c)), each from the clear
+                // point before it to the clear point after, linked by the rule; material all round
+                // it: the whole ring, below
+                if k > 0 {
+                    let n = dense.len();
+                    let active: Vec<bool> = dense.iter().map(|q| f.disk_has_material(q.0, q.1, z)).collect();
+                    if let Some(i0) = active.iter().position(|a| !a) {
+                        let mut i = 0;
+                        while i < n {
+                            if !active[(i0 + i) % n] {
+                                i += 1;
+                                continue;
+                            }
+                            let j = (i0 + i) % n;
+                            let mut pts: Vec<[f64; 3]> = vec![{
+                                let q = dense[(j + n - 1) % n];
+                                [q.0, q.1, z]
+                            }];
+                            let mut m = i;
+                            while m < n && active[(i0 + m) % n] {
+                                let q = dense[(i0 + m) % n];
+                                pts.push([q.0, q.1, z]);
+                                m += 1;
+                            }
+                            let q = dense[(i0 + m) % n];
+                            pts.push([q.0, q.1, z]);
+                            i = m + 1;
+                            let target = pts[0];
+                            let cur = at.unwrap_or(target);
+                            if cur[2] == z && f.link_clear([cur[0], cur[1]], [target[0], target[1]], z) {
+                                mv.push(PMove::Line {
+                                    to: target,
+                                    f: feed.0,
+                                    phase: Phase::Link,
+                                });
+                            } else {
+                                f.retract_link(&mut mv, cur, target, h.retract, feed, &[]);
+                            }
+                            // straight stretches as one move each (within 2 µm of the ring,
+                            // which runs at least 2r from every wall), then arcs fitted
+                            let pts: Vec<[f64; 3]> =
+                                simplify(&pts.iter().map(|q| [q[0], q[1]]).collect::<Vec<_>>(), 0.002)
+                                    .into_iter()
+                                    .map(|q| [q[0], q[1], z])
+                                    .collect();
+                            let first = mv.len();
+                            for w in pts.windows(2) {
+                                f.map.sweep(w[0], w[1], &f.prof.clone());
+                                moves_at_level.push((w[0], w[1]));
+                            }
+                            fit_arcs(&pts, f.r, feed.0, &mut mv);
+                            rings_log.push(RingRun {
+                                z,
+                                k,
+                                first,
+                                end: mv.len(),
+                                whole: false,
+                            });
+                            at = Some(*pts.last().unwrap());
+                        }
+                        continue;
+                    }
+                }
                 // a vertex to enter at whose disk is clear, the loop turned to start there
                 // a point to enter at whose disk is clear: a vertex, else a point along a segment
                 // (the segment split there), the loop turned to start there
@@ -877,6 +956,7 @@ pub fn adaptive(
                     } else {
                         f.retract_link(&mut mv, cur, target, h.retract, feed, &[]);
                     }
+                    let first = mv.len();
                     let mut a = target;
                     for sg in &l.segs {
                         let b = [sg.end().x, sg.end().y, z];
@@ -903,6 +983,13 @@ pub fn adaptive(
                         }
                         a = b;
                     }
+                    rings_log.push(RingRun {
+                        z,
+                        k,
+                        first,
+                        end: mv.len(),
+                        whole: true,
+                    });
                     at = Some(target);
                 }
             }
@@ -938,6 +1025,7 @@ pub fn adaptive(
             coolant: forge_post::Coolant::Flood,
         },
         voids,
+        rings: rings_log,
     })
 }
 
@@ -1427,6 +1515,128 @@ mod tests {
                 3.0,
                 &format!("sweep {sweep}, wall {wall}, two-way {two_way}"),
             );
+        }
+    }
+
+    /// fto-adaptive.md §9, the wall pass and the cleanup rings (TOOLPATH-RESEARCH, 2026-11-24):
+    /// (a) every ring of a level comes after the level's passes; (b) the wall pass is one offset
+    /// of all the walls together, at r: at each level exactly the loops of that offset, whole;
+    /// (c) a cleanup ring (k > 0) is cut only where it meets material: each run removes material,
+    /// and a whole cleanup ring removes material on every move of it.
+    #[test]
+    fn rings_after_the_sweep_one_wall_offset_cleanup_partial() {
+        let t = tool("flat-6");
+        let rg = Region {
+            loops: vec![
+                rect(-7.0, -7.0, 47.0, 37.0),
+                rect(15.0, 11.0, 25.0, 19.0).reversed(),
+            ],
+        };
+        let ip = InProcess::new([0.0, 0.0, -5.0], [40.0, 30.0, 0.0]);
+        let walls = offset(&rg, 3.0).unwrap().0.len();
+        for two_way in [false, true] {
+            let prm = Adaptive {
+                phi_max: 60.0,
+                step: 0.0,
+                leave: 0.0,
+                wall_pass: true,
+                sweep: 0.0,
+                two_way,
+            };
+            let out = adaptive(
+                &rg,
+                Cut {
+                    tool: &t,
+                    tidx: 0,
+                    h: Heights {
+                        clear: 20.0,
+                        retract: 3.0,
+                    },
+                    feed: (1000.0, 300.0),
+                },
+                Span {
+                    top: 0.0,
+                    bottom: -4.0,
+                    step: 2.0,
+                },
+                &ip,
+                &prm,
+            )
+            .unwrap();
+            let in_ring = |i: usize| out.rings.iter().any(|g| (g.first..g.end).contains(&i));
+            for z in [-2.0, -4.0] {
+                let here: Vec<&RingRun> = out.rings.iter().filter(|g| g.z == z).collect();
+                assert!(!here.is_empty(), "two-way {two_way}: no rings at {z}");
+                // (b)
+                let wall: Vec<&&RingRun> = here.iter().filter(|g| g.k == 0).collect();
+                assert_eq!(wall.len(), walls, "two-way {two_way}: the wall pass at {z}");
+                assert!(wall.iter().all(|g| g.whole));
+                // (a): no pass move at this level after its first ring
+                let first_ring = here.iter().map(|g| g.first).min().unwrap();
+                let mut at = out.path.start;
+                for (i, m) in out.path.moves.iter().enumerate() {
+                    let to = match *m {
+                        PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+                        PMove::Cycle { .. } => continue,
+                    };
+                    let cut = matches!(
+                        m,
+                        PMove::Line {
+                            phase: Phase::Cut,
+                            ..
+                        } | PMove::Arc { .. }
+                    );
+                    if cut && to[2] == z && at[2] == z && !in_ring(i) {
+                        assert!(
+                            i < first_ring,
+                            "two-way {two_way}: a pass move {i} after the rings at {z}"
+                        );
+                    }
+                    at = to;
+                }
+            }
+            // (c): replay on a fresh model
+            let prof = Profile::of(&t.tool).unwrap();
+            let mut m = HeightMap::of_stock(&ip, 0.05);
+            let mut at = out.path.start;
+            let mut removed = vec![0.0; out.path.moves.len()];
+            for (i, mv) in out.path.moves.iter().enumerate() {
+                let to = match *mv {
+                    PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+                    PMove::Cycle { .. } => continue,
+                };
+                // arcs by chords
+                if let PMove::Arc { c, cw, .. } = *mv {
+                    let p = travelled(&OpPath {
+                        tool: 0,
+                        start: at,
+                        moves: vec![PMove::Arc { to, c, cw, f: 1.0 }],
+                        rpm: 0.0,
+                        coolant: forge_post::Coolant::Flood,
+                    });
+                    for w in p.windows(2) {
+                        removed[i] += m.sweep(w[0].0, w[1].0, &prof);
+                    }
+                } else {
+                    removed[i] = m.sweep(at, to, &prof);
+                }
+                at = to;
+            }
+            for g in out.rings.iter().filter(|g| g.k > 0) {
+                let total: f64 = removed[g.first..g.end].iter().sum();
+                assert!(
+                    total > 1e-3,
+                    "two-way {two_way}: a cleanup run {g:?} removes nothing"
+                );
+                if g.whole {
+                    for i in g.first..g.end {
+                        assert!(
+                            removed[i] > 0.0,
+                            "two-way {two_way}: whole ring {g:?}: move {i} in air"
+                        );
+                    }
+                }
+            }
         }
     }
 
