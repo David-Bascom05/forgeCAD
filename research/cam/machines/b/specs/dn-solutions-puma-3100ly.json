@@ -1,0 +1,125 @@
+{
+ "vendor": "DN Solutions",
+ "model": "PUMA 3100LY",
+ "family": "PUMA 2100/2600/3100",
+ "source": [
+  "https://www.dn-solutions.com/us/product/turning-center/y-axis-horizontal/puma-3100-y.do"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe-y",
+ "architecture": null,
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 293,
+  "Y": 130,
+  "Z": 1350
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 420,
+ "max_turning_length_mm": 1285,
+ "chuck_size_in": 12,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 2800,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": "26 kW (max, rating not stated)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 1123
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": 5000,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 30,
+  "Y": null,
+  "Z": 30,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 2067,
+  "D": 4530,
+  "H": 2315
+ },
+ "weight_kg": 8000,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "bar_capacity_mm",
+  "control.standard",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "max_cutting_feed_m_min",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.Y",
+  "rotary.C",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_nose_type",
+  "sub_spindle",
+  "swing_over_bed_mm",
+  "tailstock",
+  "turret_index_s"
+ ],
+ "options": [
+  "PUMA 3100XLY: length 2125 mm, Z 2190 mm, 10800 kg",
+  "PUMA 3100ULY: length 3125 mm, Z 3190 mm, Z rapid 26 m/min, 12300 kg"
+ ],
+ "notes": "US Y-axis page summary table; the shortest PUMA 3100 Y variant listed is the 'L' bed. Y rapid, live tool power not on page."
+}
