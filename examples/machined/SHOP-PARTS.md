@@ -80,6 +80,19 @@ stock that `rough` did not remove.
 | face2, rel | certified | |
 | cbh | certified | Guhring 5.5 drill, its point stopped on the flat floor (e7b3cd87: it was a −0.52 gouge through the floor); then the Ø10 × 5 counterbore pocketed by the largest end mill under 10 (9b4e598a). The floor's ring is said |
 
+With 3D roughing (merge-train/4b, which has CAM-3AXIS's `zlevel`, merged with cam/parity
+f462f977), `rough = zlevel(op1, tool: t1, from: 33.5, to: 26, down: 3, stepover: 4)` gives
+19.3 s in total:
+- `rough` is certified (18,090 cells; with `grid: 0.5`, 1,068,604 cells and 34 s);
+- `bored` and `cbh` are certified (4b has the drills);
+- three ops are still refused:
+  - `prof` by −0.056: the shank or holder meets stock on a plunge at (−5.3, 6, 7.6), outside the stock's x;
+  - `tap` by −0.011: a rapid into stock;
+  - `thr` and `dwl` lack their tools (4b has neither the 1.5-pitch thread mill nor a 6 H7 reamer).
+
+The two small misses are the next work. Either the stock model keeps slivers that zlevel's sweep
+does not record as cleared, or the material is real.
+
 ### hub_turn.fg: certified in full on claude/cam-turn-hub @f8b0152f (14 ops, 1811 checks, 0.58 s)
 
 CAM-TURN closed every item below there:
