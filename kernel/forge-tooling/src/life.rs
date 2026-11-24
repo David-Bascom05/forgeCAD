@@ -85,6 +85,9 @@ pub struct Row {
     pub value: String,
     pub licence: String,
     pub note: String,
+    /// What the source says (or does not) about the work's condition when it differs from the
+    /// matched material's, shown with every estimate (e.g. "heat treatment not stated").
+    pub condition: String,
 }
 
 fn range(t: &Table, k: &str, rec: &str) -> Result<Option<[f64; 2]>, LibError> {
@@ -171,6 +174,7 @@ impl Row {
             value: s("value"),
             licence: s("licence"),
             note: s("note"),
+            condition: s("condition"),
             id,
         })
     }
@@ -258,7 +262,9 @@ pub fn find<'a>(rows: &'a [Row], op: &str, tool: &str, coating: &str, work: &[&s
 pub struct Cut {
     /// The op (index in the program) and the NC line, when known.
     pub op: usize,
-    /// The move in the op's path, and the NC line it posts to, when known.
+    /// The op's path and the move in it (posted paths: the checks' move index), and the NC
+    /// line it posts to, when known.
+    pub path: usize,
     pub mv: Option<usize>,
     pub line: Option<usize>,
     /// Minutes the sample takes; zero-engagement samples should not be passed (air).
@@ -288,6 +294,7 @@ impl Cut {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct At {
     pub op: usize,
+    pub path: usize,
     pub mv: Option<usize>,
     pub line: Option<usize>,
     /// Minutes in cut into this program when it is reached.
@@ -369,6 +376,7 @@ pub fn integrate(row: Option<&Row>, cuts: &[Cut], limit: Limit, not_found: &str)
             };
             limit_at = Some(At {
                 op: c.op,
+                path: c.path,
                 mv: c.mv,
                 line: c.line,
                 minutes: minutes - c.minutes * (1.0 - frac),
@@ -419,7 +427,11 @@ pub fn integrate(row: Option<&Row>, cuts: &[Cut], limit: Limit, not_found: &str)
                     String::new()
                 },
                 r.vb.map(|v| format!("VB = {v} mm"))
-                    .unwrap_or_else(|| r.criterion.clone()),
+                    .unwrap_or_else(|| r.criterion.clone()) + &if r.condition.is_empty() {
+                String::new()
+            } else {
+                format!("; work condition: {}", r.condition)
+            },
             ),
         },
     }
@@ -516,12 +528,14 @@ mod tests {
             value: String::new(),
             licence: String::new(),
             note: String::new(),
+            condition: String::new(),
         }
     }
 
     fn cut(op: usize, minutes: f64, vc: f64) -> Cut {
         Cut {
             op,
+            path: 0,
             mv: None,
             line: Some(10 * op),
             minutes,

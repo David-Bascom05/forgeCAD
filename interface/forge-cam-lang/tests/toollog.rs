@@ -1,6 +1,7 @@
 //! `forgecad tool log`: instances added, a job logged on them with its predicted life use, wear
 //! observations, and a refusal for a tool the job does not load.
 use forge_cam_lang::toollog::{Env, run};
+use forge_tooling::instances::MemStore;
 use std::path::Path;
 
 fn argv(s: &str) -> Vec<String> {
@@ -21,10 +22,10 @@ fn log_a_job_on_a_physical_tool() {
     .unwrap();
     let env = Env {
         project: tmp.clone(),
-        user_cam: None,
         today: "2026-11-24".into(),
     };
-    let r = |s: &str| run(&env, &argv(s));
+    let mut store = MemStore::default();
+    let mut r = |s: &str| run(&env, &mut store, &argv(s));
     let o = r("add EM6-a --tool lakeshore-LC206014X --serial 0042");
     assert_eq!(o.code, 0, "{}", o.err);
     assert_eq!(r("add EM6-a --tool lakeshore-LC206014X").code, 1);
@@ -58,7 +59,6 @@ fn log_a_job_on_a_physical_tool() {
     assert_eq!(o.code, 0, "{}", o.err);
     let c = r("calibrate");
     assert!(c.out.contains("calibrated from your 1 log"), "{}", c.out);
-    assert!(tmp.join("cam/tool-instances.toml").exists());
     assert_eq!(r("frobnicate").code, 2);
     assert_eq!(r("").code, 2);
     let _ = forge_dirs::fs::remove_dir_all(&tmp);

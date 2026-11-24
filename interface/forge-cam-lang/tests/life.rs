@@ -52,6 +52,12 @@ fn ti64_altin_carbide_is_estimated_and_warns_when_worn() {
     let at = w.change_at.unwrap();
     assert!(at.minutes > 0.0 && at.minutes < t1.life.minutes_in_cut);
     assert!(w.why.contains("change it in op 1"), "{}", w.why);
+    // by name, for the UI
+    let rep = forge_cam_lang::life::estimate(&cam, &rows, &lim);
+    let v = rep.tools.iter().find(|t| t.t == 1).unwrap();
+    assert_eq!(v.wear_limit_at.as_ref().unwrap().op, "skim");
+    assert!(v.warning.is_some() && v.source.contains("work condition"));
+    assert!(rep.ops.iter().any(|o| o.op == "skim2" && o.fraction.is_none()));
 }
 
 #[test]

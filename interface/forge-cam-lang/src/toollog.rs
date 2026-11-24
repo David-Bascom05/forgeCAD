@@ -8,13 +8,15 @@
 //! forgecad tool log predict JOB.fg [--use T1=LABEL ..]
 //! forgecad tool log run JOB.fg --use T1=LABEL [--use T2=LABEL ..] [--posted] [--program NAME]
 //! forgecad tool log calibrate
-//!   any: [--user] (the user's cam folder; default the project's cam/), [--date YYYY-MM-DD]
+//!   any: [--project] (a new instance at the project level; default the user's), [--date YYYY-MM-DD]
+//! Instances are kept by a `Store` (forge_tooling::instances): on disk, one file per instance in
+//! `cam/tool-instances/` (forge-tooling-builder's LevelStore).
 //! ```
 //! `run` adds each named tool's predicted use of the job (its cut, binned by condition) to the
 //! instance; `--posted` records it as posted rather than run. Life use is a prediction from
 //! cited data (forge_tooling::life), never a certification; a tool with no cited row shows
 //! minutes only.
-use forge_tooling::instances::{self, Event, Instance, Log, Run};
+use forge_tooling::instances::{self, Event, Instance, Store};
 use forge_tooling::life::{self, Limit, Row};
 use forge_tooling::{Library, toml};
 use std::collections::BTreeMap;
@@ -41,12 +43,11 @@ pub const USAGE: &str = "usage: forgecad tool log add LABEL --tool ID [--serial 
        forgecad tool log predict JOB.fg [--use T1=LABEL ..]
        forgecad tool log run JOB.fg --use T1=LABEL [--use T2=LABEL ..] [--posted] [--program NAME]
        forgecad tool log calibrate
-       (any: --user for the user's cam folder, --date YYYY-MM-DD)";
+       (any: --project to keep a new instance with the project, --date YYYY-MM-DD)";
 
-/// Where the instances file is: `<project>/cam/tool-instances.toml`, or the user's cam folder.
+/// The project folder (jobs are read from it) and today's date.
 pub struct Env {
     pub project: PathBuf,
-    pub user_cam: Option<PathBuf>,
     /// Today's date (YYYY-MM-DD), for entries given no --date.
     pub today: String,
 }
@@ -67,7 +68,7 @@ fn parse(argv: &[String]) -> Result<Args, String> {
         "--program",
         "--date",
     ];
-    const FLAGS: &[&str] = &["--json", "--user", "--posted"];
+    const FLAGS: &[&str] = &["--json", "--user", "--project", "--posted"];
     let mut a = Args {
         words: vec![],
         opts: BTreeMap::new(),
@@ -102,32 +103,6 @@ impl Args {
     }
 }
 
-fn file(env: &Env, a: &Args) -> Result<PathBuf, String> {
-    if a.flag("--user") {
-        env.user_cam
-            .as_ref()
-            .map(|d| d.join(instances::FILE))
-            .ok_or("no user folder (no config directory): leave out --user".into())
-    } else {
-        Ok(env.project.join("cam").join(instances::FILE))
-    }
-}
-
-fn load(p: &Path) -> Result<Vec<Instance>, String> {
-    match forge_dirs::fs::read_to_string(p) {
-        Ok(s) => instances::read(&s, &p.display().to_string()).map_err(|e| e.to_string()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(vec![]),
-        Err(e) => Err(format!("{}: {e}", p.display())),
-    }
-}
-
-fn save(p: &Path, all: &[Instance]) -> Result<(), String> {
-    if let Some(d) = p.parent() {
-        forge_dirs::fs::create_dir_all(d).map_err(|e| format!("{}: {e}", d.display()))?;
-    }
-    forge_dirs::fs::write(p, instances::write(all)).map_err(|e| format!("{}: {e}", p.display()))
-}
-
 /// The coating text of a library tool record.
 fn coating(lib: &Library, id: &str) -> String {
     lib.sources
@@ -140,12 +115,7 @@ fn coating(lib: &Library, id: &str) -> String {
 
 /// The work names to look a material up by: the name, its forge-material name and aliases.
 fn work_names(m: &str) -> Vec<String> {
-    let mut v = vec![m.to_string()];
-    if let Some(fm) = forge_material::find(m) {
-        v.push(fm.name.clone());
-        v.extend(fm.aliases.iter().cloned());
-    }
-    v
+    vec![crate::life::work_name(m)]
 }
 
 /// The row for an instance's current life: its tool's substrate and coating, the material of
@@ -274,7 +244,7 @@ fn job(env: &Env, a: &Args, all: &mut [Instance], write_runs: bool) -> Result<St
         limits.insert(*t, Limit { at: 1.0, start });
     }
     let rep = cam.tool_life(&rows, &[], &limits);
-    let work = cam.material().unwrap_or_default();
+    let work = cam.material().map(|m| crate::life::work_name(&m)).unwrap_or_default();
     let mut o = String::new();
     for r in &rep {
         o += &format!(
@@ -302,21 +272,20 @@ fn job(env: &Env, a: &Args, all: &mut [Instance], write_runs: bool) -> Result<St
         if write_runs && let Some(l) = u.get(&r.t) {
             let cuts = cam.tool_cuts(r.t);
             let i = all.iter_mut().find(|i| &i.label == l).expect("checked above");
-            i.runs.push(Run {
-                program: a.opt("--program").unwrap_or(fg).to_string(),
-                date: a.opt("--date").unwrap_or(&env.today).to_string(),
-                work: work.clone(),
-                minutes: r.life.minutes_in_cut,
-                how: if a.flag("--posted") { "posted" } else { "run" }.into(),
-                bins: instances::bins(&cuts),
-            });
+            i.record(
+                a.opt("--program").unwrap_or(fg),
+                a.opt("--date").unwrap_or(&env.today),
+                &work,
+                if a.flag("--posted") { "posted" } else { "run" },
+                &cuts,
+            );
             o += &format!("  logged on {l}\n");
         }
     }
     Ok(o)
 }
 
-pub fn run(env: &Env, argv: &[String]) -> Out {
+pub fn run(env: &Env, store: &mut dyn Store, argv: &[String]) -> Out {
     let a = match parse(argv) {
         Ok(a) => a,
         Err(e) => return fail(2, format!("{e}\n{USAGE}")),
@@ -324,14 +293,11 @@ pub fn run(env: &Env, argv: &[String]) -> Out {
     let Some(cmd) = a.words.first().cloned() else {
         return fail(2, USAGE);
     };
-    let p = match file(env, &a) {
-        Ok(p) => p,
-        Err(e) => return fail(2, e),
-    };
-    let mut all = match load(&p) {
+    let mut all = match store.load() {
         Ok(v) => v,
         Err(e) => return fail(1, e),
     };
+    let orig = all.clone();
     let lib = Library::builtin();
     let rows = life::builtin();
     let date = a.opt("--date").unwrap_or(&env.today).to_string();
@@ -368,17 +334,7 @@ pub fn run(env: &Env, argv: &[String]) -> Out {
                 .iter_mut()
                 .find(|i| i.label == l)
                 .ok_or(format!("no tool instance `{l}`"))?;
-            let event = Event::parse(ev).expect("listed");
-            i.log.push(Log {
-                date: date.clone(),
-                event,
-                vb,
-                note: a.opt("--note").unwrap_or("").into(),
-                after: i.runs.len(),
-            });
-            if matches!(event, Event::Broken) {
-                i.state = "retired".into();
-            }
+            i.event(Event::parse(ev).expect("listed"), &date, vb, a.opt("--note").unwrap_or(""));
             Ok((format!("{l}: {ev} logged\n"), true))
         })(),
         "predict" => job(env, &a, &mut all, false).map(|o| (o, false)),
@@ -414,8 +370,12 @@ pub fn run(env: &Env, argv: &[String]) -> Out {
     };
     match res {
         Ok((out, dirty)) => {
-            if dirty && let Err(e) = save(&p, &all) {
-                return fail(1, e);
+            if dirty {
+                for i in all.iter().filter(|i| !orig.contains(i)) {
+                    if let Err(e) = store.save(i) {
+                        return fail(1, e);
+                    }
+                }
             }
             Out {
                 code: 0,

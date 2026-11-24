@@ -29,6 +29,7 @@ impl Bin {
     fn cut(&self) -> Cut {
         Cut {
             op: 0,
+            path: 0,
             mv: None,
             line: None,
             minutes: self.minutes,
@@ -348,9 +349,15 @@ fn f(x: f64) -> String {
 }
 
 pub fn write(all: &[Instance]) -> String {
-    let mut o = String::from(
-        "# Physical tool instances (forgecad tool log). One [[instance]] per tool on the shelf.\n",
-    );
+    write_with("Physical tool instances (forgecad tool log). One [[instance]] per tool on the shelf.", all)
+}
+
+/// `write` with its own header comment (each line prefixed `# `; empty: none).
+pub fn write_with(header: &str, all: &[Instance]) -> String {
+    let mut o = String::new();
+    for l in header.lines() {
+        o += &format!("# {l}\n");
+    }
     for i in all {
         o += &format!("\n[[instance]]\nlabel = {}\ntool = {}\n", q(&i.label), q(&i.tool));
         if !i.serial.is_empty() {
@@ -398,6 +405,67 @@ pub fn write(all: &[Instance]) -> String {
         }
     }
     o
+}
+
+/// Where instances are kept. The file-backed store (one file per instance at the project or
+/// user `cam/tool-instances/` level) is forge-tooling-builder's `instances::LevelStore`; tests
+/// and the browser can use `MemStore`.
+pub trait Store {
+    fn load(&mut self) -> Result<Vec<Instance>, String>;
+    /// Writes one instance (new or changed).
+    fn save(&mut self, i: &Instance) -> Result<(), String>;
+}
+
+/// Instances in memory.
+#[derive(Clone, Debug, Default)]
+pub struct MemStore {
+    pub all: Vec<Instance>,
+}
+
+impl Store for MemStore {
+    fn load(&mut self) -> Result<Vec<Instance>, String> {
+        Ok(self.all.clone())
+    }
+    fn save(&mut self, i: &Instance) -> Result<(), String> {
+        match self.all.iter_mut().find(|x| x.label == i.label) {
+            Some(x) => *x = i.clone(),
+            None => self.all.push(i.clone()),
+        }
+        Ok(())
+    }
+}
+
+impl Instance {
+    /// Adds a program's use: its cut (binned) on material `work`.
+    pub fn record(&mut self, program: &str, date: &str, work: &str, how: &str, cuts: &[Cut]) {
+        let minutes = cuts.iter().filter(|c| c.minutes > 0.0).map(|c| c.minutes).sum();
+        self.runs.push(Run {
+            program: program.into(),
+            date: date.into(),
+            work: work.into(),
+            minutes,
+            how: how.into(),
+            bins: bins(cuts),
+        });
+    }
+
+    /// Logs an event after the runs so far (a regrind starts a new life; broken retires it).
+    pub fn event(&mut self, event: Event, date: &str, vb: Option<f64>, note: &str) {
+        self.log.push(Log {
+            date: date.into(),
+            event,
+            vb,
+            note: note.into(),
+            after: self.runs.len(),
+        });
+        if event == Event::Broken {
+            self.state = "retired".into();
+        }
+    }
+
+    pub fn retire(&mut self) {
+        self.state = "retired".into();
+    }
 }
 
 /// The shop's own Taylor fit for one row's tool class and material, from logged lives that
@@ -597,6 +665,7 @@ mod tests {
     fn bins_merge() {
         let c = |vc: f64, m: f64| Cut {
             op: 0,
+            path: 0,
             mv: None,
             line: None,
             minutes: m,

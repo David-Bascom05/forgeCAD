@@ -24,6 +24,13 @@ pub struct ToolLifeOut {
     pub warning: Option<Warning>,
 }
 
+/// The name a material is matched to tool-life rows by: forge-material's own name when the
+/// library has it (an alias such as "AISI 1045" resolves to the library's "1045 cold drawn",
+/// and a row for another condition of the grade must not match it by the alias), else as given.
+pub fn work_name(m: &str) -> String {
+    forge_material::find(m).map(|f| f.name.clone()).unwrap_or_else(|| m.to_string())
+}
+
 #[derive(Default)]
 struct Meas {
     cuts: Vec<Cut>,
@@ -98,9 +105,9 @@ impl Cam {
             // the posted paths when there are (what runs), else the made ones
             let paths = if o.posted.is_empty() { &o.paths } else { &o.posted };
             let rpm = o.feeds.map(|f| f.rpm).unwrap_or(0.0);
-            for p in paths {
+            for (pi, p) in paths.iter().enumerate() {
                 let m = measure(oi, p, &mut map, &prof, geom, tu.tool.dc, cell, rpm);
-                e.cuts.extend(m.cuts);
+                e.cuts.extend(m.cuts.into_iter().map(|c| Cut { path: pi, ..c }));
                 e.unsampled += m.unsampled_minutes;
                 e.cycles += m.cycles;
             }
@@ -129,14 +136,7 @@ impl Cam {
             let tu = &self.tools[ti];
             let coating = self.coating_of(&tu.tool.id);
             let mat = part.and_then(|p| self.parts[p].material.clone());
-            let mut names: Vec<String> = Vec::new();
-            if let Some(m) = &mat {
-                names.push(m.clone());
-                if let Some(fm) = forge_material::find(m) {
-                    names.push(fm.name.clone());
-                    names.extend(fm.aliases.iter().cloned());
-                }
-            }
+            let names: Vec<String> = mat.iter().map(|m| work_name(m)).collect();
             let refs: Vec<&str> = names.iter().map(|s| s.as_str()).collect();
             let row = life::find(rows, "milling", &tu.tool.material, &coating, &refs);
             let why = match &mat {
@@ -173,4 +173,85 @@ impl Cam {
         }
         out
     }
+}
+
+/// Where a tool reaches its wear limit, by name: the op, its path and the move in it (posted
+/// paths: the same move index the checks report).
+#[derive(Clone, Debug, PartialEq)]
+pub struct LimitAt {
+    pub op: String,
+    pub path: usize,
+    pub mv: Option<usize>,
+    /// Minutes into the tool's cut in this job.
+    pub minutes: f64,
+}
+
+/// One tool, by name (CAM-UI's Tool Life column).
+#[derive(Clone, Debug, PartialEq)]
+pub struct ToolLifeView {
+    pub tool: String,
+    pub t: u32,
+    pub minutes_in_cut: f64,
+    /// Fraction of the cited life used (1 = the row's wear criterion); None: not estimated.
+    pub life_used: Option<f64>,
+    pub wear_limit_at: Option<LimitAt>,
+    /// The cite (or why not estimated).
+    pub source: String,
+    /// Minutes outside the data's fitted range, and plunge/ramp minutes not sampled.
+    pub outside_minutes: f64,
+    pub unsampled_minutes: f64,
+    /// A non-blocking warning text.
+    pub warning: Option<String>,
+}
+
+/// One op's share (the per-op life bar).
+#[derive(Clone, Debug, PartialEq)]
+pub struct OpLifeView {
+    pub op: String,
+    pub tool: String,
+    pub t: u32,
+    pub minutes: f64,
+    pub fraction: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LifeReport {
+    pub tools: Vec<ToolLifeView>,
+    pub ops: Vec<OpLifeView>,
+}
+
+/// The job's tool-life report keyed by names. Pure: no file system, clock or threads (runs in
+/// the browser). `rows`: forge_tooling::life::builtin() (plus user rows); `limits`: per tool
+/// number, the life already used on the loaded instance and the change fraction.
+pub fn estimate(cam: &Cam, rows: &[Row], limits: &BTreeMap<u32, Limit>) -> LifeReport {
+    let mut rep = LifeReport::default();
+    for t in cam.tool_life(rows, &[], limits) {
+        let name = |oi: usize| cam.ops.get(oi).map(|o| o.name.clone()).unwrap_or_default();
+        for o in &t.life.ops {
+            rep.ops.push(OpLifeView {
+                op: name(o.op),
+                tool: t.tool.clone(),
+                t: t.t,
+                minutes: o.minutes,
+                fraction: o.used,
+            });
+        }
+        rep.tools.push(ToolLifeView {
+            tool: t.tool.clone(),
+            t: t.t,
+            minutes_in_cut: t.life.minutes_in_cut,
+            life_used: t.life.used,
+            wear_limit_at: t.life.limit_at.map(|a| LimitAt {
+                op: name(a.op),
+                path: a.path,
+                mv: a.mv,
+                minutes: a.minutes,
+            }),
+            source: t.life.note.clone(),
+            outside_minutes: t.life.outside,
+            unsampled_minutes: t.unsampled_minutes,
+            warning: t.warning.as_ref().map(|w| w.why.clone()),
+        });
+    }
+    rep
 }

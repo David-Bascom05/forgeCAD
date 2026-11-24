@@ -42,8 +42,15 @@ shares, minutes of plunges/ramps the sampler does not measure, canned cycles (no
 
 **Unknown stays unknown.** A tool × material with no row → "not estimated". Rows match by
 substrate (`Tool.material`), coating (the tool record's `coating` text, compared exactly: a
-vendor's name such as "C3" is not taken to mean AlTiN), and the part's material
-(`part(.., material: "...")`, forge-material name or alias). No group-level fallback.
+vendor's name such as "C3" is not taken to mean AlTiN), and the part's material by
+forge-material's canonical name (`part(.., material: "...")`; an alias resolves to the
+library's entry first, so "AISI 1045" is "1045 cold drawn" and does not match a row for
+168–190 HB 1045). No group-level fallback. A row's `condition` field states when the source
+does not give the work's condition (the Ti row: Albertelli et al. name Ti6Al4V without heat
+treatment); it is printed with every estimate.
+
+**UI API:** `forge_cam_lang::life::estimate(&Cam, rows, limits) -> LifeReport` keyed by op and
+tool names (pure: no fs/clock/threads).
 
 ## 2. Data: `kernel/forge-tooling/data/life.toml`
 
@@ -76,10 +83,14 @@ cast iron, Inconel 718; steel milling with f/ap exponents; maker tool-life corre
 (Sandvik/Walter/Kennametal/Seco/Iscar originals not readable openly). Mitsubishi's web page gives
 "+20% vc → life ½, +50% → ⅕" (implied n ≈ 0.25–0.26, turning, generic) — not a row: no C.
 
-## 3. Tracking: `tool-instances.toml`
+## 3. Tracking: tool instances
 
-At a library level, next to the tools: `<project>/cam/tool-instances.toml` or
-`<user config>/forgecad/cam/tool-instances.toml` (`--user`). Never in the .fg.
+A library kind of its own (forge-tooling-builder `instances::ToolInstances`, agreed with
+MACHINE-BUILDER): one file per physical tool, `cam/tool-instances/<label>.toml`, at the user
+level by default (`<config>/forgecad/cam/tool-instances/`: a crib outlives projects) or the
+project's (`--project`). Never in the .fg, never in `cam/tools/`. An instance names its
+library tool by id and is resolved through the tools catalog; values are not copied in.
+Storage goes through `instances::Store` (LevelStore on disk, MemStore in memory/browser).
 
     [[instance]] label, tool (library id), serial, note, state
     [[instance.run]] program, date, work, minutes, how = "run" | "posted"
