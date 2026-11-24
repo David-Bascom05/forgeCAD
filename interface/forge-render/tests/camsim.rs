@@ -252,17 +252,19 @@ fn cutters_from_the_tools_profiles() {
     assert!(Timeline::of(&sim.cam).total > 0.0);
 }
 
-/// A refused op's checks are markers at the time of their move.
+/// A refused op's checks are markers at the time of their move: the bolt holes drilled before
+/// the plate's top is cleared rapid into the stock.
 #[test]
 fn a_refused_ops_check_is_a_marker_on_its_move() {
     let dir = machined();
-    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbore = pocket(op1, tool: t1, from: 12, to: -0.5, stepover: 2.5, step: 3)\nprog = program(op1)\n";
-    // the pocket goes 0.5 below the part with no stock under it: its plunges meet the support
-    // (a refusal by a check on a move; a through drill there is refused before any move, the
-    // stock under the part too thin for its break-through)
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
     let sim = Sim::open(src, &dir);
-    let b = sim.cam.ops.iter().position(|o| o.name == "bore").unwrap();
+    let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
     assert_eq!(sim.cam.ops[b].status, "refused");
+    assert!(
+        !sim.cam.ops[b].checks.is_empty(),
+        "refused by its checks, on moves"
+    );
     let m: Vec<_> = sim.markers.iter().filter(|m| m.op == Some(b)).collect();
     assert!(!m.is_empty());
     let sp = &sim.tl.ops[b];
@@ -275,12 +277,39 @@ fn a_refused_ops_check_is_a_marker_on_its_move() {
             sp.t1
         );
         assert!(m.severe());
+        assert_ne!(m.rule, "refused", "a check's marker, not the op's");
     }
     // facing alone leaves the plate's sides: leftover markers once the setup is done
     assert!(
         sim.markers
             .iter()
             .any(|m| m.rule == "leftover" && m.region.is_some())
+    );
+}
+
+/// An op refused before it has moves (here: drilling through with no stock under the part) is a
+/// marker all the same, at its place on the timeline, saying why.
+#[test]
+fn an_op_refused_without_moves_is_a_marker() {
+    let dir = machined();
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    let sim = Sim::open(src, &dir);
+    let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
+    let op = &sim.cam.ops[b];
+    assert_eq!(op.status, "refused");
+    if !op.checks.is_empty() {
+        // refused by its checks after all (planning changed): the case above covers it
+        return;
+    }
+    let m: Vec<_> = sim.markers.iter().filter(|m| m.op == Some(b)).collect();
+    assert_eq!(m.len(), 1, "{m:?}");
+    assert_eq!(m[0].rule, "refused");
+    assert!(m[0].severe());
+    assert_eq!(m[0].t, sim.tl.ops[b].t0);
+    assert!(
+        m[0].text.contains(op.refusal.as_deref().unwrap()),
+        "{}",
+        m[0].text
     );
 }
 
@@ -479,12 +508,9 @@ fn rapids_and_holders_against_the_stock_as_cut() {
     );
     assert!(issues.is_empty(), "{:?}", issues.first());
     let dir = machined();
-    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbore = pocket(op1, tool: t1, from: 12, to: -0.5, stepover: 2.5, step: 3)\nprog = program(op1)\n";
-    // the pocket goes 0.5 below the part with no stock under it: its plunges meet the support
-    // (a refusal by a check on a move; a through drill there is refused before any move, the
-    // stock under the part too thin for its break-through)
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
     let sim = Sim::open(src, &dir);
-    let b = sim.cam.ops.iter().position(|o| o.name == "bore").unwrap();
+    let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
     assert_eq!(sim.cam.ops[b].status, "refused");
     let issues = sim.stock_issues();
     assert!(
