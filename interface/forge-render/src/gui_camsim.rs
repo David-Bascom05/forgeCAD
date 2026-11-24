@@ -79,6 +79,17 @@ impl Gui {
             }
         }
         let Some(w) = &self.shell.cam else { return };
+        // a lathe document: the simulation is milling's (forge-cam-lang): nothing to show, rather
+        // than milling's refusals of every turning built-in (the section view is turning's)
+        if w.turning() {
+            if self.shell.camsim.take().is_some() {
+                self.shell.camsim_job.focus = None;
+                if let Some(v) = &mut self.view {
+                    v.dirty = true;
+                }
+            }
+            return;
+        }
         // the workspace has a run of text the simulation is not of: simulate it
         if let Some(run) = &w.run {
             // keyed by the text and what its run came to: the same text run again with the
