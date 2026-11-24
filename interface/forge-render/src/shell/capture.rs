@@ -232,6 +232,7 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
             .default_pos(pos2(v.right() - 360.0, v.top() + 60.0))
             .constrain_to(v)
             .show(ctx, |ui| {
+                ui.spacing_mut().slider_width = 170.0;
                 size_row(ui, "capture-photo-size", "Photo size", &mut c.photo_size, window);
                 ui.separator();
                 size_row(ui, "capture-video-size", "Video size", &mut c.size, window);
@@ -324,6 +325,7 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
                                 .color(t.ink),
                         );
                         if !cfg!(target_arch = "wasm32") && s.capture.last_file.is_some() {
+                            ui.add_space(12.0);
                             let r = ui.link(RichText::new("Open folder").font(super::theme::sans(13.0)));
                             s.places.push(("capture:reveal".into(), r.rect));
                             reveal = r.clicked();
