@@ -74,7 +74,9 @@ fn function<'a>(src: &'a str, marker: &str) -> &'a str {
         let line = &rest[off + 1..];
         let lead = line.len() - line.trim_start().len();
         let t = line.trim_start();
-        if lead <= indent && (t.starts_with('}') && lead < indent || t.starts_with("fn ") || t.starts_with("pub fn ")) {
+        if lead <= indent
+            && (t.starts_with('}') && lead < indent || t.starts_with("fn ") || t.starts_with("pub fn "))
+        {
             return &rest[..off];
         }
         off += 1 + line.find('\n').unwrap_or(line.len());
@@ -146,10 +148,14 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
     vec![
         ("core", owned(builtins::BUILTINS), Model::Shadow),
         ("shapes", owned(shapes::NAMES), Model::Shadow),
-        ("constants", {
-            let f = "interface/forge-lang/src/builtins.rs";
-            [const_list(f, "CONSTANTS"), const_list(f, "MORE")].concat()
-        }, Model::Shadow),
+        (
+            "constants",
+            {
+                let f = "interface/forge-lang/src/builtins.rs";
+                [const_list(f, "CONSTANTS"), const_list(f, "MORE")].concat()
+            },
+            Model::Shadow,
+        ),
         ("sheet", owned(sheet::BUILTINS), Model::Shadow),
         ("sheet-constants", owned(sheet::CONSTANTS), Model::Shadow),
         ("thermo", owned(thermo::BUILTINS), Model::Shadow),
@@ -160,7 +166,11 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
         ("assembly-kinds", owned(asm::KINDS), Model::Own),
         ("harness", owned(harness::BUILTINS), Model::Own),
         ("drawing", owned(drawing::doc::FUNCTIONS), Model::Own),
-        ("cam", arms(CAM, "fn call(&mut self, name: &str, f: &str"), Model::Closed),
+        (
+            "cam",
+            arms(CAM, "fn call(&mut self, name: &str, f: &str"),
+            Model::Closed,
+        ),
         ("cam-expr", expr_builtins(CAM), Model::Closed),
         ("turn", arms(TURN, "fn call(&mut self"), Model::Closed),
         ("turn-expr", expr_builtins(TURN), Model::Closed),
@@ -207,7 +217,10 @@ fn rs_files(dir: &Path, out: &mut Vec<PathBuf>) {
 
 /// A path under `root()` (every path here is one joined onto it), relative to it.
 fn rel_of(p: &Path) -> String {
-    p.strip_prefix(root()).expect("under the root").display().to_string()
+    p.strip_prefix(root())
+        .expect("under the root")
+        .display()
+        .to_string()
 }
 
 /// Every `const X: &[&str]` or `const X: [&str; N]` in the language crates, as `path::X`.
@@ -223,10 +236,18 @@ fn const_lists() -> Vec<String> {
         for line in src.lines() {
             let t = line.trim_start();
             let t = t.strip_prefix("pub ").unwrap_or(t);
-            let Some(rest) = t.strip_prefix("const ") else { continue };
-            let Some((name, ty)) = rest.split_once(':') else { continue };
+            let Some(rest) = t.strip_prefix("const ") else {
+                continue;
+            };
+            let Some((name, ty)) = rest.split_once(':') else {
+                continue;
+            };
             let ty = ty.trim_start();
-            if ty.starts_with("&[&str]") || ty.starts_with("&[&'static str]") || ty.starts_with("[&str;") || ty.starts_with("[&'static str;") {
+            if ty.starts_with("&[&str]")
+                || ty.starts_with("&[&'static str]")
+                || ty.starts_with("[&str;")
+                || ty.starts_with("[&'static str;")
+            {
                 out.push(format!("{}::{}", rel_of(&f), name.trim()));
             }
         }
@@ -243,10 +264,11 @@ fn headers() -> BTreeSet<String> {
     for f in files {
         let src = std::fs::read_to_string(&f).unwrap_or_default();
         for line in src.lines() {
-            if line.contains(".first()") && line.contains("ExprKind::Name(n)") {
-                if let Some(i) = line.find("n == \"") {
-                    out.extend(quoted(&line[i..]).into_iter().take(1));
-                }
+            if line.contains(".first()")
+                && line.contains("ExprKind::Name(n)")
+                && let Some(i) = line.find("n == \"")
+            {
+                out.extend(quoted(&line[i..]).into_iter().take(1));
             }
             if line.contains(".is_some_and(|l| l == \"") {
                 let i = line.find("l == \"").unwrap();
@@ -271,8 +293,14 @@ fn json_ops(rel: &str, marker: &str) -> Vec<String> {
 
 fn edit_ops() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    out.extend(json_ops("interface/forge-lang/src/error.rs", "pub fn from_json(j: &Json) -> Option<Op>"));
-    out.extend(json_ops("interface/forge-lang/src/refactor.rs", "pub fn from_json(j: &Json) -> Option<Refactor>"));
+    out.extend(json_ops(
+        "interface/forge-lang/src/error.rs",
+        "pub fn from_json(j: &Json) -> Option<Op>",
+    ));
+    out.extend(json_ops(
+        "interface/forge-lang/src/refactor.rs",
+        "pub fn from_json(j: &Json) -> Option<Refactor>",
+    ));
     let cli = read("interface/forge-cli/src/fg.rs");
     for line in cli.lines() {
         if line.contains("=> Some(forge_lang::undo::Step::") {
@@ -302,7 +330,13 @@ fn coverage() -> Vec<Row> {
         if cells.len() < 5 {
             continue;
         }
-        let tick = |s: &str| s.split('`').skip(1).step_by(2).map(str::to_string).collect::<Vec<_>>();
+        let tick = |s: &str| {
+            s.split('`')
+                .skip(1)
+                .step_by(2)
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
         rows.push(Row {
             kind: cells[0].to_string(),
             item: cells[1].trim_matches('`').to_string(),
@@ -341,10 +375,15 @@ fn every_builtin_has_its_row() {
     let rows = coverage();
     let mut errs = vec![];
     for (fam, names, model) in families() {
-        assert!(!names.is_empty(), "family {fam}: no names read (did its source move?)");
+        assert!(
+            !names.is_empty(),
+            "family {fam}: no names read (did its source move?)"
+        );
         let rust: BTreeSet<String> = names.into_iter().collect();
         match row(&rows, "builtins", fam) {
-            None => errs.push(format!("family {fam} ({model:?}): no `builtins` row; its names: {rust:?}")),
+            None => errs.push(format!(
+                "family {fam} ({model:?}): no `builtins` row; its names: {rust:?}"
+            )),
             Some(r) => {
                 let doc: BTreeSet<String> = r.names.iter().cloned().collect();
                 diff(&format!("family {fam}"), &rust, &doc, &mut errs);
@@ -357,7 +396,11 @@ fn every_builtin_has_its_row() {
 #[test]
 fn every_name_list_is_a_family_or_excused() {
     let rows = coverage();
-    let excused: BTreeSet<String> = rows.iter().filter(|r| r.kind == "not-names").map(|r| r.item.clone()).collect();
+    let excused: BTreeSet<String> = rows
+        .iter()
+        .filter(|r| r.kind == "not-names")
+        .map(|r| r.item.clone())
+        .collect();
     let mut errs = vec![];
     for c in const_lists() {
         if !FAMILY_CONSTS.contains(&c.as_str()) && !excused.contains(&c) {
@@ -377,7 +420,12 @@ fn every_name_list_is_a_family_or_excused() {
 fn every_header_keyword_and_op_has_its_row() {
     let rows = coverage();
     let mut errs = vec![];
-    let doc = |k: &str| -> BTreeSet<String> { rows.iter().filter(|r| r.kind == k).map(|r| r.item.clone()).collect() };
+    let doc = |k: &str| -> BTreeSet<String> {
+        rows.iter()
+            .filter(|r| r.kind == k)
+            .map(|r| r.item.clone())
+            .collect()
+    };
     diff("headers", &headers(), &doc("header"), &mut errs);
     let kw: BTreeSet<String> = syntax::KEYWORDS.iter().map(|s| s.to_string()).collect();
     match row(&rows, "keywords", "syntax::KEYWORDS") {
@@ -396,7 +444,10 @@ fn every_cited_theorem_exists() {
     let mut errs = vec![];
     for r in coverage() {
         let cites: Vec<String> = r.lean.split('`').skip(1).step_by(2).map(str::to_string).collect();
-        let cites: Vec<&String> = cites.iter().filter(|c| c.contains('.') && !c.contains(' ')).collect();
+        let cites: Vec<&String> = cites
+            .iter()
+            .filter(|c| c.contains('.') && !c.contains(' '))
+            .collect();
         if cites.is_empty() && !r.lean.contains("GAP") && r.kind != "not-names" {
             errs.push(format!("{} {}: neither a theorem nor GAP", r.kind, r.item));
         }
@@ -404,11 +455,18 @@ fn every_cited_theorem_exists() {
             let (module, thm) = c.rsplit_once('.').unwrap();
             let file = lean.join(format!("{}.lean", module.replace('.', "/")));
             let src = std::fs::read_to_string(&file).unwrap_or_default();
-            let found = ["theorem ", "def ", "private theorem "]
-                .iter()
-                .any(|k| src.contains(&format!("{k}{thm} ")) || src.contains(&format!("{k}{thm}\n")) || src.contains(&format!("{k}{thm} :")));
+            let found = ["theorem ", "def ", "private theorem "].iter().any(|k| {
+                src.contains(&format!("{k}{thm} "))
+                    || src.contains(&format!("{k}{thm}\n"))
+                    || src.contains(&format!("{k}{thm} :"))
+            });
             if !found {
-                errs.push(format!("{} {}: cites `{c}`, not in {}", r.kind, r.item, file.display()));
+                errs.push(format!(
+                    "{} {}: cites `{c}`, not in {}",
+                    r.kind,
+                    r.item,
+                    file.display()
+                ));
             }
         }
     }
@@ -421,20 +479,34 @@ fn lean_family_lists_are_the_rusts() {
     let src = read("research/forge-lang/lean/ForgeLang/Families.lean");
     let weld = read("research/forge-lang/lean/ForgeLang/Builtins.lean");
     let lean = |src: &str, def: &str| -> BTreeSet<String> {
-        let at = src.find(&format!("def {def} : List Name :=")).unwrap_or_else(|| panic!("no def {def}"));
+        let at = src
+            .find(&format!("def {def} : List Name :="))
+            .unwrap_or_else(|| panic!("no def {def}"));
         let body = &src[at..];
         let end = body.find(']').unwrap();
         quoted(&body[..end]).into_iter().collect()
     };
     let fams = families();
-    let rust = |f: &str| -> BTreeSet<String> { fams.iter().find(|x| x.0 == f).unwrap().1.iter().cloned().collect() };
+    let rust = |f: &str| -> BTreeSet<String> {
+        fams.iter()
+            .find(|x| x.0 == f)
+            .unwrap()
+            .1
+            .iter()
+            .cloned()
+            .collect()
+    };
     assert_eq!(lean(&src, "camStmt"), rust("cam"), "Families.camStmt");
     assert_eq!(lean(&src, "camExpr"), rust("cam-expr"), "Families.camExpr");
     assert_eq!(lean(&src, "turnStmt"), rust("turn"), "Families.turnStmt");
     assert_eq!(lean(&src, "turnExpr"), rust("turn-expr"), "Families.turnExpr");
     assert_eq!(lean(&weld, "weld"), rust("weld"), "Builtins.weld");
     let hd: BTreeSet<String> = lean(&src, "headers");
-    assert!(hd.is_subset(&headers()), "Families.headers: {hd:?} vs {:?}", headers());
+    assert!(
+        hd.is_subset(&headers()),
+        "Families.headers: {hd:?} vs {:?}",
+        headers()
+    );
 }
 
 /// No family's name is a keyword: each lexes as an identifier (`Families.families_not_keywords`
@@ -443,7 +515,10 @@ fn lean_family_lists_are_the_rusts() {
 fn no_builtin_is_a_keyword() {
     for (fam, names, _) in families() {
         for n in names {
-            assert!(!syntax::KEYWORDS.contains(&n.as_str()), "family {fam}: `{n}` is a keyword");
+            assert!(
+                !syntax::KEYWORDS.contains(&n.as_str()),
+                "family {fam}: `{n}` is a keyword"
+            );
         }
     }
 }
@@ -537,7 +612,9 @@ fn shadow_families_bound_nowhere() {
                         ..Default::default()
                     };
                     let (r, _) = forge_lang::run(&src, opts, Default::default());
-                    if r.errors.iter().any(|e| matches!(e, forge_lang::error::Error::ShadowsBuiltin { name, .. } if *name == n)) {
+                    if r.errors.iter().any(
+                        |e| matches!(e, forge_lang::error::Error::ShadowsBuiltin { name, .. } if *name == n),
+                    ) {
                         refused += 1;
                         continue;
                     }
