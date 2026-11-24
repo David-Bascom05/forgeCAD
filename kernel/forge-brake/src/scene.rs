@@ -10,7 +10,7 @@ use crate::geo::{Region, Seg};
 use crate::model::Model;
 use crate::plan::Plan;
 use crate::sim::{Check, Kind, Phase, Piece, Rule, Severity, Step, StepCtx};
-use crate::tooling::Tooling;
+use crate::tooling::{Punch, Segment, Tooling};
 use forge_math::{Point2, dmath};
 use forge_sheet::Strip;
 
@@ -23,6 +23,15 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    /// Another mesh's triangles added to this one's.
+    pub fn append(&mut self, o: &Mesh) {
+        let k = self.pos.len() as u32;
+        self.pos.extend_from_slice(&o.pos);
+        self.nrm.extend_from_slice(&o.nrm);
+        self.tri
+            .extend(o.tri.iter().map(|t| [t[0] + k, t[1] + k, t[2] + k]));
+    }
+
     fn push_tri(&mut self, a: [f64; 3], b: [f64; 3], c: [f64; 3]) {
         let n = normal(a, b, c);
         let k = self.pos.len() as u32;
@@ -120,9 +129,16 @@ pub enum Look {
     Floor,
     /// A collision's witness point.
     Witness,
+    /// The bend being made: its zone on the sheet, marked so the eye finds it.
+    BendZone,
 }
 
 impl Look {
+    /// The sheet's own bodies, its bend being made among them.
+    pub fn is_sheet(self) -> bool {
+        matches!(self, Look::Sheet | Look::BendZone)
+    }
+
     /// The appearance id a renderer asks its library for.
     pub fn appearance(self) -> &'static str {
         match self {
@@ -132,6 +148,7 @@ impl Look {
             Look::Gauge => "steel-black-oxide",
             Look::Floor => "concrete-floor",
             Look::Witness => "highlight-red",
+            Look::BendZone => "highlight-bend",
         }
     }
 }
@@ -755,7 +772,7 @@ impl<'a> Scene<'a> {
         let grow = r_max * (1.0 - dmath::cos(0.06)) + 1e-6;
         self.bodies_of(k, t, false)
             .into_iter()
-            .filter(|b| !matches!(b.look, Look::Sheet | Look::Floor | Look::Witness))
+            .filter(|b| !b.look.is_sheet() && !matches!(b.look, Look::Floor | Look::Witness))
             .filter_map(|b| {
                 let (lo, hi) = b.mesh.bounds()?;
                 Some((
@@ -1013,7 +1030,11 @@ impl<'a> Scene<'a> {
             }
             out.push(Body {
                 name: format!("part:{i}"),
-                look: Look::Sheet,
+                look: if strip == Strip::Bend(ctx.bj.joint) {
+                    Look::BendZone
+                } else {
+                    Look::Sheet
+                },
                 mesh,
                 hit: hit_parts.contains(&strip),
                 strip: Some(strip),
@@ -1031,10 +1052,10 @@ impl<'a> Scene<'a> {
         let tip = pose.tip;
         for (name, sec) in [
             (format!("punch:{}/tip", ctx.punch.id), ctx.punch.tip_section()),
-            (format!("punch:{}/body", ctx.punch.id), ctx.punch.body_section()),
+            (format!("punch:{}/body", ctx.punch.id), drawn_body(ctx.punch)),
         ] {
             let h = half(plen);
-            if let Some(mesh) = extrude(&sec, 0.0, tip, oy - h, oy + h) {
+            if let Some(mesh) = stack(&sec, 0.0, tip, oy - h, oy + h, &ctx.punch.segments) {
                 out.push(Body {
                     hit: hit(&name),
                     name,
@@ -1046,7 +1067,7 @@ impl<'a> Scene<'a> {
         }
         let dname = format!("die:{}", ctx.die.id);
         let h = half(dlen);
-        if let Some(mesh) = extrude(&ctx.die.section(), 0.0, 0.0, oy - h, oy + h) {
+        if let Some(mesh) = stack(&ctx.die.section(), 0.0, 0.0, oy - h, oy + h, &ctx.die.segments) {
             out.push(Body {
                 hit: hit(&dname),
                 name: dname,
@@ -1061,14 +1082,15 @@ impl<'a> Scene<'a> {
             }
             let (p, d) = (&self.tl.punches[s.punch], &self.tl.dies[s.die]);
             let lift = ctx.punch.height - p.height;
-            for (part, sec) in [("tip", p.tip_section()), ("body", p.body_section())] {
+            for (part, sec) in [("tip", p.tip_section()), ("body", drawn_body(p))] {
                 let name = format!("station{}:punch:{}/{part}", i + 1, p.id);
-                if let Some(mesh) = extrude(
+                if let Some(mesh) = stack(
                     &sec,
                     0.0,
                     tip + lift,
                     s.y - 0.5 * s.punch_length,
                     s.y + 0.5 * s.punch_length,
+                    &p.segments,
                 ) {
                     out.push(Body {
                         hit: hit(&name),
@@ -1081,12 +1103,13 @@ impl<'a> Scene<'a> {
             }
             let name = format!("station{}:die:{}", i + 1, d.id);
             let drop = ctx.die.height - d.height;
-            if let Some(mesh) = extrude(
+            if let Some(mesh) = stack(
                 &d.section(),
                 0.0,
                 drop,
                 s.y - 0.5 * s.die_length,
                 s.y + 0.5 * s.die_length,
+                &d.segments,
             ) {
                 out.push(Body {
                     hit: hit(&name),
@@ -1228,6 +1251,56 @@ impl<'a> Scene<'a> {
 }
 
 /// A tool section (x, z) extruded along y from y0 to y1, shifted by (dx, dz).
+/// The section a punch's body is drawn with: at its published width where the checked one is
+/// an envelope wider than it (`drawn_width`); the checks never read this.
+pub fn drawn_body(p: &Punch) -> Region {
+    match p.drawn_width {
+        Some(w) if w < p.width => Punch {
+            width: w,
+            ..p.clone()
+        }
+        .body_section(),
+        _ => p.body_section(),
+    }
+}
+
+/// A gap drawn between a stack's segments (mm): where one piece ends and the next begins.
+pub const STACK_GAP: f64 = 0.8;
+
+/// The pieces a length from `y0` to `y1` is made of: the published segment lengths that make it
+/// up exactly (`cover`), laid end to end, longest first; one piece when none do.
+pub fn stack_spans(segments: &[Segment], y0: f64, y1: f64) -> Vec<(f64, f64)> {
+    let len = y1 - y0;
+    let Some((total, pieces)) = crate::tooling::cover(segments, len - 1e-6) else {
+        return vec![(y0, y1)];
+    };
+    if (total - len).abs() > 0.05 || pieces.iter().map(|p| p.1).sum::<u32>() < 2 {
+        return vec![(y0, y1)];
+    }
+    let mut out = Vec::new();
+    let mut y = y0;
+    for (l, n) in pieces {
+        for _ in 0..n {
+            out.push((y, (y + l).min(y1)));
+            y += l;
+        }
+    }
+    out
+}
+
+/// A section extruded as a stack of segments, a small gap between each.
+pub fn stack(sec: &Region, dx: f64, dz: f64, y0: f64, y1: f64, segments: &[Segment]) -> Option<Mesh> {
+    let spans = stack_spans(segments, y0, y1);
+    let g = if spans.len() > 1 { 0.5 * STACK_GAP } else { 0.0 };
+    let mut out = Mesh::default();
+    for (i, (a, b)) in spans.iter().enumerate() {
+        let a = if i == 0 { *a } else { a + g };
+        let b = if i + 1 == spans.len() { *b } else { b - g };
+        out.append(&extrude(sec, dx, dz, a, b)?);
+    }
+    Some(out)
+}
+
 pub fn extrude(sec: &Region, dx: f64, dz: f64, y0: f64, y1: f64) -> Option<Mesh> {
     let (pts, tris, edges) = triangulate(sec, 20.0, None)?;
     let mut m = Mesh::default();
@@ -1280,6 +1353,42 @@ mod tests {
     use forge_ops::{ProfileLoop, Segment};
     use forge_sheet::{BendRule, FeatureId, Gauge, Sheet};
     use std::collections::HashMap;
+
+    #[test]
+    fn stacks_are_drawn_piece_by_piece() {
+        use crate::tooling::Segment as Seg;
+        let segs = [
+            Seg {
+                length: 100.0,
+                count: 2,
+            },
+            Seg {
+                length: 50.0,
+                count: 1,
+            },
+        ];
+        let s = stack_spans(&segs, -125.0, 125.0);
+        assert_eq!(s.len(), 3);
+        assert_eq!((s[0].0, s[2].1), (-125.0, 125.0));
+        // a length no stack makes up is one piece
+        assert_eq!(stack_spans(&segs, 0.0, 77.0), vec![(0.0, 77.0)]);
+        // the punch's published width is what is drawn, the envelope what is checked
+        let cat = crate::catalog::Catalog::builtin();
+        let p = cat
+            .punches
+            .iter()
+            .find_map(|r| r.punch.clone().ok().filter(|p| p.drawn_width.is_some()));
+        let p = p.expect("a punch with a published body width");
+        let (a, _) = extrude(&drawn_body(&p), 0.0, 0.0, 0.0, 1.0)
+            .unwrap()
+            .bounds()
+            .unwrap();
+        let (b, _) = extrude(&p.body_section(), 0.0, 0.0, 0.0, 1.0)
+            .unwrap()
+            .bounds()
+            .unwrap();
+        assert!(a[0] > b[0], "drawn {a:?} within checked {b:?}");
+    }
 
     fn ell() -> Model {
         let pts = [(0.0, 0.0), (120.0, 0.0), (120.0, 60.0), (0.0, 60.0)];
@@ -1355,7 +1464,7 @@ mod tests {
         for k in 0..p.steps.len() {
             for t in [0.0, 0.1, 0.2, 0.3, 0.5, 0.7, 0.8, 0.9, 1.0] {
                 let bs = sc.bodies(k, t);
-                let parts: Vec<&Body> = bs.iter().filter(|b| b.look == Look::Sheet).collect();
+                let parts: Vec<&Body> = bs.iter().filter(|b| b.look.is_sheet()).collect();
                 assert!(!parts.is_empty(), "step {k} t {t}: no part");
                 for b in &bs {
                     assert!(!b.mesh.tri.is_empty(), "{} empty", b.name);
@@ -1382,7 +1491,7 @@ mod tests {
             let start1 = sc.bodies(1, 0.0);
             let bb = |bs: &[Body]| {
                 bs.iter()
-                    .filter(|b| b.look == Look::Sheet)
+                    .filter(|b| b.look.is_sheet())
                     .fold((f32::MAX, f32::MIN), |acc, b| {
                         let (lo, hi) = b.mesh.bounds().unwrap();
                         (acc.0.min(lo[2]), acc.1.max(hi[2]))

@@ -123,6 +123,12 @@ fn each_document_keeps_the_environment_it_was_left_in() {
     std::fs::write(&a, PLATE).unwrap();
     std::fs::write(&b, PLATE).unwrap();
     open(&mut h, a.to_str().unwrap());
+    // looking straight down first, so the framing on entry is seen to happen
+    {
+        let v = h.gui.view.as_mut().unwrap();
+        v.nav.camera.yaw = 0.0;
+        v.nav.camera.pitch = 89f32.to_radians();
+    }
     h.gui
         .shell
         .out
@@ -131,6 +137,21 @@ fn each_document_keeps_the_environment_it_was_left_in() {
     h.step();
     assert_eq!(h.gui.shell.env, Some(EnvId::RenderStudio));
     assert_eq!(h.gui.shell.tab, RENDER_TAB);
+    // entered from the 3/4 view (docs/ux/STANDARD.md §2): yaw -45°, pitch 35.26°
+    for _ in 0..60 {
+        h.step();
+    }
+    let cam = h.gui.view.as_ref().unwrap().nav.camera;
+    assert!(
+        (cam.yaw.to_degrees() + 45.0).abs() < 0.5,
+        "yaw {}",
+        cam.yaw.to_degrees()
+    );
+    assert!(
+        (cam.pitch.to_degrees() - 35.26).abs() < 0.5,
+        "pitch {}",
+        cam.pitch.to_degrees()
+    );
     assert!(h.gui.shell.place("tool:Finish Render Studio").is_some());
     shot(&mut h, "03-render-studio");
     open(&mut h, b.to_str().unwrap());
@@ -241,7 +262,15 @@ fn bend_simulation_in_the_view_keeps_its_place() {
     click(&mut h, "tool:Next Bend");
     assert_eq!(h.gui.shell.sheet.bend_sim.as_ref().unwrap().step, 1);
     shot(&mut h, "04-bend-simulation");
-    click(&mut h, "tool:Stand-in American");
+    // a stand-in set, from the machine list (stand-ins are not on the ribbon: STANDARD.md §1)
+    h.gui
+        .shell
+        .sheet
+        .bend_sim
+        .as_mut()
+        .unwrap()
+        .redo(Default::default(), "std-us");
+    h.step();
     let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
     assert_eq!(b.tooling, "std-us");
     assert_eq!(b.step, 1, "the step kept across a tooling change");

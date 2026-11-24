@@ -15,6 +15,14 @@ use forge_cam_geom::ival::Ival;
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
 use forge_math::dmath;
 
+/// The stock faces made in this thread, by stock (`InProcess::faces`), the most recently used
+/// last; at most `FACES_MAX`.
+type FacesMemo = Vec<(Vec<u64>, Result<Vec<Face>, String>)>;
+thread_local! {
+    static FACES: std::cell::RefCell<FacesMemo> = const { std::cell::RefCell::new(Vec::new()) };
+}
+const FACES_MAX: usize = 8;
+
 #[derive(Clone, Debug)]
 pub struct InProcess {
     pub min: [f64; 3],
@@ -108,6 +116,21 @@ fn arc_pieces(a: [f64; 2], b: [f64; 2], c: [f64; 2], ccw: bool, full: bool) -> V
     out
 }
 
+/// The disk of radius r about c (one full-circle arc).
+pub fn disk(c: forge_cam_geom::region::P2, r: f64) -> Region {
+    let a = p2(c.x + r, c.y);
+    Region {
+        loops: vec![Loop {
+            segs: vec![Seg::Arc {
+                a,
+                b: a,
+                c,
+                ccw: true,
+            }],
+        }],
+    }
+}
+
 impl InProcess {
     pub fn new(min: [f64; 3], max: [f64; 3]) -> InProcess {
         InProcess {
@@ -116,6 +139,20 @@ impl InProcess {
             voids: vec![],
             under: vec![],
         }
+    }
+
+    /// A stock that is a prism along z of section `outline` (a bar, a tube, a sawn plate)
+    /// within the box: the box with what lies outside the outline cleared from the bottom up,
+    /// so every later section, face and leftover band sees the stock's own shape.
+    pub fn shaped(min: [f64; 3], max: [f64; 3], outline: &Region) -> Result<InProcess, String> {
+        let mut ip = InProcess::new(min, max);
+        let g = 1.0;
+        let around = rect([min[0] - g, min[1] - g, 0.0], [max[0] + g, max[1] + g, 0.0]);
+        let out = boolean(&around, outline, Op::Diff).map_err(|e| format!("{e:?}"))?;
+        if !out.is_empty() {
+            ip.voids.push((region_of(&out), min[2]));
+        }
+        Ok(ip)
     }
 
     /// The stock turned over about x like the part (lower::turned): (x, y, z) ↦ (x, −y, h − z).
@@ -179,8 +216,74 @@ impl InProcess {
         zs
     }
 
-    /// The stock's boundary as the checker's faces (all prisms along z).
+    /// The stock's boundary as the checker's faces (all prisms along z). Made once per stock:
+    /// a later call with the same stock (every number the same, bit for bit) has the faces
+    /// made before, `faces_anew` being a function of those numbers alone. Ops of one setup
+    /// that leave the stock as it was (3D finishing after roughing) are certified against
+    /// the same stock, whose faces took seconds each time (mold_core: 3 × 1.7 s).
     pub fn faces(&self) -> Result<Vec<Face>, String> {
+        let key = self.key();
+        let known = FACES.with(|m| {
+            let mut m = m.borrow_mut();
+            let i = m.iter().position(|(k, _)| *k == key)?;
+            // most recently used last
+            let e = m.remove(i);
+            let r = e.1.clone();
+            m.push(e);
+            Some(r)
+        });
+        if let Some(r) = known {
+            return r;
+        }
+        let r = self.faces_anew();
+        FACES.with(|m| {
+            let mut m = m.borrow_mut();
+            if m.len() >= FACES_MAX {
+                let _evicted = m.remove(0);
+            }
+            m.push((key, r.clone()));
+        });
+        r
+    }
+
+    /// The stock's content as bits: box, then each void's and under's region and height, with
+    /// the counts that delimit them (two stocks with the same key are the same stock).
+    fn key(&self) -> Vec<u64> {
+        let mut k = Vec::new();
+        for v in self.min.iter().chain(&self.max) {
+            k.push(v.to_bits());
+        }
+        for list in [&self.voids, &self.under] {
+            k.push(list.len() as u64);
+            for (r, h) in list {
+                k.push(h.to_bits());
+                k.push(r.loops.len() as u64);
+                for l in &r.loops {
+                    k.push(l.segs.len() as u64);
+                    for sg in &l.segs {
+                        match *sg {
+                            Seg::Line { a, b } => {
+                                k.extend([0, a.x.to_bits(), a.y.to_bits(), b.x.to_bits(), b.y.to_bits()])
+                            }
+                            Seg::Arc { a, b, c, ccw } => k.extend([
+                                1 + ccw as u64,
+                                a.x.to_bits(),
+                                a.y.to_bits(),
+                                b.x.to_bits(),
+                                b.y.to_bits(),
+                                c.x.to_bits(),
+                                c.y.to_bits(),
+                            ]),
+                        }
+                    }
+                }
+            }
+        }
+        k
+    }
+
+    /// `faces`, made anew.
+    fn faces_anew(&self) -> Result<Vec<Face>, String> {
         let mu = 1e-9 * (1.0 + self.max[0].abs().max(self.max[1].abs()).max(self.max[2].abs()));
         let mut zs: Vec<f64> = vec![self.min[2], self.max[2]];
         for (_, f) in self.voids.iter().chain(&self.under) {
@@ -190,31 +293,77 @@ impl InProcess {
         }
         zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
         zs.dedup();
-        let mut faces = vec![];
-        let mut id = 2000u32;
-        let mut below: Option<Region> = None;
-        for k in 0..zs.len() - 1 {
-            let (z0, z1) = (zs[k], zs[k + 1]);
-            let m = self.material(z0)?;
+        // each level's material, then each level's exposed horizontal faces (the material
+        // below it against its own), are independent of every other level's: made on all cores
+        // (forge_math::par), in level order, then assembled in order as one pass would. The first
+        // error in that order is the one returned, as a single pass stops at it
+        let n = zs.len() - 1;
+        let mats: Vec<Result<Option<Region>, String>> = forge_math::par::map(n, |k| self.material(zs[k]));
+        let exposed_at = |k: usize| -> Result<Vec<Region>, String> {
+            let z0 = zs[k];
+            let (Ok(m), Ok(below)) = (&mats[k], if k == 0 { &Ok(None) } else { &mats[k - 1] }) else {
+                // an earlier error is reported in its place
+                return Ok(vec![]);
+            };
             // the horizontal faces at z0: material below that ends here, and material above that
             // starts here (the box's bottom, or over a void from below)
-            let exposed = match (&below, &m) {
+            Ok(match (below, m) {
                 (None, Some(m)) => vec![m.clone()],
                 (Some(b), Some(m)) => {
+                    // what changes at z0: voids whose floor is z0 start, regions cleared from
+                    // below up to z0 end (`material` takes a void from its floor, an under-region
+                    // below its ceiling; every floor and ceiling is a level)
+                    let new: Vec<&Region> = self
+                        .voids
+                        .iter()
+                        .filter(|(_, f)| *f == z0)
+                        .map(|(r, _)| r)
+                        .collect();
+                    let ended = self.under.iter().any(|(_, c)| *c == z0);
                     let mut v = vec![];
-                    for (x, y) in [(b, m), (m, b)] {
+                    let diff = |x: &Region, y: &Region, v: &mut Vec<Region>| -> Result<(), String> {
                         match boolean(x, y, Op::Diff) {
+                            Ok(d) if d.is_empty() => Ok(()),
+                            Ok(d) => {
+                                v.push(region_of(&d));
+                                Ok(())
+                            }
+                            Err(e) => Err(format!("{e:?}")),
+                        }
+                    };
+                    if !ended && new.len() == 1 {
+                        // only a void starts: above = below ∖ V, so below ∖ above = below ∩ V
+                        // and above ∖ below is empty (the same sets, without comparing the two
+                        // materials' shared edges, every one an exact tie)
+                        match boolean(b, new[0], Op::Inter) {
                             Ok(d) if d.is_empty() => {}
                             Ok(d) => v.push(region_of(&d)),
                             Err(e) => return Err(format!("{e:?}")),
                         }
+                    } else if !ended {
+                        // voids only: above ⊆ below
+                        diff(b, m, &mut v)?;
+                    } else if new.is_empty() {
+                        // under-regions only end: below ⊆ above
+                        diff(m, b, &mut v)?;
+                    } else {
+                        diff(b, m, &mut v)?;
+                        diff(m, b, &mut v)?;
                     }
                     v
                 }
                 (Some(b), None) => vec![b.clone()],
                 (None, None) => vec![],
-            };
-            for e in exposed {
+            })
+        };
+        let exposed: Vec<Result<Vec<Region>, String>> = forge_math::par::map(n, exposed_at);
+        let mut faces = vec![];
+        let mut id = 2000u32;
+        let mut below: Option<Region> = None;
+        for (k, (m, ex)) in mats.into_iter().zip(exposed).enumerate() {
+            let (z0, z1) = (zs[k], zs[k + 1]);
+            let m = m?;
+            for e in ex? {
                 faces.push(flat(&e, z0, mu, id));
                 id += 1;
             }

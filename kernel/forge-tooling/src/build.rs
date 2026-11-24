@@ -10,7 +10,7 @@
 //! The ISO 1832 / 5608 / 6261 code checks of inserts and turning holders live in forge-turn
 //! (`decode_insert`, `decode_holder`, `decode_bar`), which depends on this crate.
 use crate::toml::{Table, Val};
-use crate::turning::{Insert, TurnHolder};
+use crate::turning::{Blade, GrooveInsert, Insert, ToolBlock, TurnHolder};
 use crate::{Collet, ColletNut, Holder, LibError, Library, PullStud, Tool};
 
 /// One library record of any kind.
@@ -23,6 +23,9 @@ pub enum Record {
     PullStud(PullStud),
     Insert(Insert),
     TurnHolder(TurnHolder),
+    GrooveInsert(GrooveInsert),
+    Blade(Blade),
+    ToolBlock(ToolBlock),
 }
 
 impl Record {
@@ -35,6 +38,25 @@ impl Record {
             Record::PullStud(x) => &x.id,
             Record::Insert(x) => &x.id,
             Record::TurnHolder(x) => &x.id,
+            Record::GrooveInsert(x) => &x.id,
+            Record::Blade(x) => &x.id,
+            Record::ToolBlock(x) => &x.id,
+        }
+    }
+
+    /// The record's cites (so a caller need not match every kind).
+    pub fn cites(&self) -> &[crate::Cite] {
+        match self {
+            Record::Tool(x) => &x.cites,
+            Record::Holder(x) => &x.cites,
+            Record::Collet(x) => &x.cites,
+            Record::ColletNut(x) => &x.cites,
+            Record::PullStud(x) => &x.cites,
+            Record::Insert(x) => &x.cites,
+            Record::TurnHolder(x) => &x.cites,
+            Record::GrooveInsert(x) => &x.cites,
+            Record::Blade(x) => &x.cites,
+            Record::ToolBlock(x) => &x.cites,
         }
     }
 }
@@ -56,7 +78,7 @@ pub enum DeriveError {
 }
 
 /// The TOML keys `derive` knows, as `kind`.
-pub const KINDS: [&str; 7] = [
+pub const KINDS: [&str; 10] = [
     "tool",
     "holder",
     "collet",
@@ -64,6 +86,9 @@ pub const KINDS: [&str; 7] = [
     "pull_stud",
     "insert",
     "turn_holder",
+    "groove_insert",
+    "blade",
+    "tool_block",
 ];
 
 /// Fields a record may carry beyond those it cites (bookkeeping, not values).
@@ -87,6 +112,18 @@ pub fn derive(
     id: &str,
     overrides: &[(String, Val)],
 ) -> Result<Record, DeriveError> {
+    derive_table(lib, kind, from, id, overrides).map(|(_, r)| r)
+}
+
+/// As `derive`, with the derived record's table as well (what a library file holds: a caller
+/// writes it under `[[kind]]`).
+pub fn derive_table(
+    lib: &Library,
+    kind: &str,
+    from: &str,
+    id: &str,
+    overrides: &[(String, Val)],
+) -> Result<(Table, Record), DeriveError> {
     if !KINDS.contains(&kind) {
         return Err(DeriveError::Kind(kind.to_string()));
     }
@@ -179,14 +216,26 @@ pub fn derive(
         "collet_nut" => ColletNut::from_table(&t).map(Record::ColletNut),
         "pull_stud" => PullStud::from_table(&t).map(Record::PullStud),
         "insert" => Insert::from_table(&t).map(Record::Insert),
+        "groove_insert" => GrooveInsert::from_table(&t).map(Record::GrooveInsert),
+        "blade" => Blade::from_table(&t).map(Record::Blade),
+        "tool_block" => ToolBlock::from_table(&t).map(Record::ToolBlock),
         _ => TurnHolder::from_table(&t).map(Record::TurnHolder),
     };
-    rec.map_err(DeriveError::Bad)
+    rec.map(|r| (t, r)).map_err(DeriveError::Bad)
+}
+
+/// How a finding stands: an error is a record that cannot be right; a warning is one the check
+/// could not settle (it says what would settle it).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Severity {
+    Error,
+    Warning,
 }
 
 /// What a check found: the field, what it measured, the limit it broke, and the fix.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Finding {
+    pub severity: Severity,
     pub path: String,
     pub measured: f64,
     pub limit: f64,
@@ -201,6 +250,7 @@ pub fn check(lib: &Library, r: &Record) -> Vec<Finding> {
         Record::Tool(t) => {
             if t.re > t.dc / 2.0 + 1e-12 {
                 out.push(Finding {
+                    severity: Severity::Error,
                     path: "re".into(),
                     measured: t.re,
                     limit: t.dc / 2.0,
@@ -209,6 +259,7 @@ pub fn check(lib: &Library, r: &Record) -> Vec<Finding> {
             }
             if t.tip_d > 0.0 && t.tip_d >= t.dc {
                 out.push(Finding {
+                    severity: Severity::Error,
                     path: "tip_d".into(),
                     measured: t.tip_d,
                     limit: t.dc,
@@ -217,20 +268,54 @@ pub fn check(lib: &Library, r: &Record) -> Vec<Finding> {
             }
         }
         Record::Holder(h) => {
-            // the nose ring must cover the collet nut of its system (the nut is what stands out)
-            let nut = lib
-                .collet_nuts
-                .iter()
-                .filter(|n| n.system.eq_ignore_ascii_case(&h.clamp))
-                .map(|n| n.od)
-                .fold(f64::NAN, f64::max);
-            if nut.is_finite() && h.profile[0][1] + 1e-9 < nut {
-                out.push(Finding {
+            // the nose ring must cover the collet nut (the nut is what stands out): the holder's
+            // own nut when it names one; otherwise the largest nut of its system, as a warning
+            let own = h
+                .nut
+                .as_ref()
+                .map(|id| lib.collet_nuts.iter().find(|n| &n.id == id));
+            match own {
+                Some(None) => out.push(Finding {
+                    severity: Severity::Error,
+                    path: "nut".into(),
+                    measured: f64::NAN,
+                    limit: f64::NAN,
+                    fix: format!(
+                        "nut `{}` is not a [[collet_nut]] in the library",
+                        h.nut.as_deref().unwrap_or("")
+                    ),
+                }),
+                Some(Some(n)) if h.profile[0][1] + 1e-9 < n.od => out.push(Finding {
+                    severity: Severity::Error,
                     path: "profile".into(),
                     measured: h.profile[0][1],
-                    limit: nut,
-                    fix: format!("the nose ring is smaller than the largest {} nut in the library: widen it to the nut's OD", h.clamp),
-                });
+                    limit: n.od,
+                    fix: format!(
+                        "the nose ring is smaller than its nut `{}`: widen it to the nut's OD",
+                        n.id
+                    ),
+                }),
+                Some(Some(_)) => {}
+                None => {
+                    let nut = lib
+                        .collet_nuts
+                        .iter()
+                        .filter(|n| n.system.eq_ignore_ascii_case(&h.clamp))
+                        .map(|n| n.od)
+                        .fold(f64::NAN, f64::max);
+                    if nut.is_finite() && h.profile[0][1] + 1e-9 < nut {
+                        out.push(Finding {
+                            severity: Severity::Warning,
+                            path: "profile".into(),
+                            measured: h.profile[0][1],
+                            limit: nut,
+                            fix: format!(
+                                "not checked against this holder's nut: give `nut` (the largest {} nut in the library is wider than the nose ring)",
+                                h.clamp
+                            ),
+                        });
+                    }
+                }
             }
         }
         Record::Collet(c) => {
@@ -238,6 +323,7 @@ pub fn check(lib: &Library, r: &Record) -> Vec<Finding> {
                 && !(lo <= c.bore + 1e-9 && c.bore <= hi + 1e-9)
             {
                 out.push(Finding {
+                    severity: Severity::Error,
                     path: "clamp".into(),
                     measured: c.bore,
                     limit: if c.bore < lo { lo } else { hi },
@@ -255,6 +341,7 @@ pub fn check_fit(tool: &Tool, collet: &Collet) -> Vec<Finding> {
     let [lo, hi] = collet.clamp.unwrap_or([collet.bore, collet.bore]);
     if tool.dcon + 1e-9 < lo || tool.dcon > hi + 1e-9 {
         vec![Finding {
+            severity: Severity::Error,
             path: "dcon".into(),
             measured: tool.dcon,
             limit: if tool.dcon < lo { lo } else { hi },
@@ -272,6 +359,7 @@ pub fn check_fit(tool: &Tool, collet: &Collet) -> Vec<Finding> {
 pub fn check_stickout(tool: &Tool, stickout: f64) -> Vec<Finding> {
     if stickout + 1e-9 < tool.lcf {
         vec![Finding {
+            severity: Severity::Error,
             path: "stickout".into(),
             measured: stickout,
             limit: tool.lcf,

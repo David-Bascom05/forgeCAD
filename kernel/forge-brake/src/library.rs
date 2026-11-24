@@ -75,6 +75,7 @@ fn punch(
             us_segments()
         },
         max_load: Some(max_load),
+        drawn_width: None,
     }
 }
 

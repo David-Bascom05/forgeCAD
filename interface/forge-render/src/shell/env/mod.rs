@@ -12,6 +12,7 @@
 mod bendsim;
 mod builtin;
 mod render;
+mod robot;
 mod workspaces;
 
 use super::ribbon::{Group, Tool};
@@ -25,6 +26,8 @@ pub const BENDSIM_TAB: usize = 21;
 /// The Machine Builder's (Manufacture's is `CAM_TAB`, 11).
 pub const MACHINE_TAB: usize = 12;
 pub const RENDER_TAB: usize = 22;
+/// The Robot environment's (`robot.rs`), in the slot kept for it.
+pub const ROBOT_TAB: usize = 13;
 
 /// Every environment, known or still to land.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -153,6 +156,21 @@ pub enum Entered {
     Opened,
 }
 
+/// A simulation's time, for whoever plays or films it: its length in seconds, a word for an
+/// instant (the step shown, "bend 2 of 5"), and a seek that puts the environment's state there.
+pub trait Timeline: Sync {
+    fn duration(&self, s: &Shell) -> f64;
+    fn label_at(&self, _s: &Shell, _t: f64) -> Option<String> {
+        None
+    }
+    fn seek(&self, s: &mut Shell, t: f64);
+}
+
+/// The Capture group (Photo, Record, its settings) every environment's ribbon ends with, before
+/// Exit: set once by the module that owns capture (Render Studio's recorder); none until then.
+pub(in crate::shell) type CaptureGroup = fn(&Shell) -> Option<Group>;
+pub(in crate::shell) static CAPTURE: std::sync::OnceLock<CaptureGroup> = std::sync::OnceLock::new();
+
 /// What each environment does. Zero-sized: what it holds is the shell's.
 pub(in crate::shell) trait Environment: Sync {
     fn id(&self) -> EnvId;
@@ -199,6 +217,11 @@ pub(in crate::shell) trait Environment: Sync {
     fn draw(&self, _s: &mut Shell, _ui: &mut Ui, _view: Rect) -> bool {
         false
     }
+    /// Its timeline, if it plays something through time (a simulation): what the recorder
+    /// (Render Studio's capture, research/render/record.md) steps through to film it.
+    fn timeline(&self) -> Option<&dyn Timeline> {
+        None
+    }
     /// One of its own ribbon commands (`Action::Env`).
     fn command(&self, _s: &mut Shell, _c: u16) {}
     /// Kept up with the document each frame: false if it can no longer be in it (left then).
@@ -230,7 +253,7 @@ impl Shell {
             Ok(Entered::Mode) => {
                 self.env = Some(id);
                 self.tab = e.tabs()[0].0;
-                self.status = format!("{}: Finish {} goes back to the design", id.name(), id.name());
+                // the status bar keeps the document's line (or the environment's own: env_status)
                 Ok(Entered::Mode)
             }
             Ok(Entered::Opened) => Ok(Entered::Opened),
@@ -247,6 +270,11 @@ impl Shell {
         id.imp().exit(self);
         self.env = None;
         self.tab = self.tab_order()[0];
+    }
+
+    /// The active environment's timeline, if it has one.
+    pub fn env_timeline(&self) -> Option<&'static dyn Timeline> {
+        self.env.and_then(|id| id.imp().timeline())
     }
 
     pub fn env_command(&mut self, id: EnvId, c: u16) {
@@ -317,6 +345,11 @@ impl Shell {
         let Some(id) = self.env else { return false };
         let e = id.imp();
         if e.browser(self, ui, r) {
+            // whoever draws it, the left panel is noted by one name (tests, scripts, the agent)
+            let name = format!("env:{}:browser", id.key());
+            if !self.places.iter().any(|p| p.0 == name) {
+                self.places.push((name, r));
+            }
             return true;
         }
         if e.keeps_tree() {
@@ -426,6 +459,10 @@ pub(super) fn groups(s: &Shell) -> Option<Vec<Group>> {
         return None;
     }
     let mut gs = e.groups(s, s.tab);
+    // the framework's groups every environment shows: Capture (Render Studio's), then Exit
+    if let Some(g) = CAPTURE.get().and_then(|f| f(s)) {
+        gs.push(g);
+    }
     if e.finish_button() {
         gs.push(Group {
             name: "Exit",

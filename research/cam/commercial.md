@@ -184,7 +184,7 @@ posts / tools / feature recognition / automation & AI / licensing & price.
 ### 2.5 ESPRIT EDGE (Hexagon)
 - **Best at:** mill-turn, multi-channel, Swiss, machine-builder-validated posts/digital twins (DMG MORI
   distributes it) (https://en.dmgmori.com/products/digitization/work-preparation/cam-software/hexagon-esprit-edge) [S].
-- **Roughing:** ProfitMilling (2.5-5 axis, patented) and ProfitTurning; 2026.2 adds dynamic cutting
+- **Roughing:** ProfitMilling (2.5-5 axis) and ProfitTurning; 2026.2 adds dynamic cutting
   optimisation in Pocketing with steady engagement [S]
   (https://hexagon.com/company/newsroom/press-releases/2026/hexagon-introduces-new-esprit-edge-capabilities-to-reduce-cnc-programming-effort-and-support-high-complexity-machining).
 - **Mill-turn:** multi-spindle, multi-channel synchronisation; Swiss support added 2025 [S].

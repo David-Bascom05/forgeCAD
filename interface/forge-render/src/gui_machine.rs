@@ -147,6 +147,7 @@ fn machine_bounds(def: &forge_machine::def::MachineDef) -> Option<crate::frame::
         .flat_map(|p| match p {
             Prim::Box { min, max } => vec![*min, *max],
             Prim::Cyl { base, axis, r, h } => crate::shell::lib_form::cyl_pts(*base, *axis, *r, *h),
+            Prim::OBox { o, axes, size } => (0..8u8).map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from))).collect::<Vec<_>>(),
         });
     crate::frame::Bounds::of(pts.map(|p| p.map(|x| x as f32)))
 }
@@ -164,8 +165,18 @@ fn frame_preview(p: &crate::library_mesh::Preview, size: (u32, u32)) -> crate::c
     let ext = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
     let sec = ext[0].max(ext[2]);
     if p.long_axis == Some(1) && ext[1] > 4.0 * sec {
-        let near = Bounds::new(f(lo), f([hi[0], lo[1] + 4.0 * sec, hi[2]]));
-        return crate::frame::frame_from(near, view, 0.7, -62.0, 22.0);
+        // a long die or punch: all of it, seen from the side and a little above, so its length
+        // runs across the view and both ends are in it; its section is the inset beside it
+        return crate::frame::frame(
+            Bounds::new(f(lo), f(hi)),
+            view,
+            Framing {
+                dir: crate::frame::Dir::Custom(-18.0, 22.0),
+                fill: 0.75,
+            },
+            &[],
+        )
+        .camera;
     }
     let how = if p.operator {
         Framing {
@@ -477,6 +488,9 @@ impl Gui {
                                 .collect()
                         })
                         .unwrap_or_default(),
+                    Prim::OBox { o, axes, size } => (0..8u8)
+                        .map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from)))
+                        .collect(),
                 };
                 if let Some((lo, hi)) =
                     forge_machine_builder::models::bounds(pts.into_iter().map(|x| at.apply(x)))
@@ -635,7 +649,7 @@ impl Gui {
                 match (i, lo.parse::<f64>(), hi.parse::<f64>()) {
                     (Some(i), Ok(a), Ok(b)) if a < b => {
                         if let Some(d) = &mut m.def {
-                            d.joints[i].range = [a, b];
+                            d.joints[i].range = Some([a, b]);
                             let path = format!("joint.{joint}.range");
                             d.cites.retain(|c| c.path != path);
                         }

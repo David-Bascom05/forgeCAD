@@ -51,9 +51,57 @@ by the test, not failed.
   Shars, Tormach TTS), everything behind the nose up to the gauge line is taken at the flange
   diameter: errs large, never small. Flange diameters: CAT40 63.5 and BT40 62.99 from Maritool
   drawings; HSK63A 63 (estimate); BT30 and TTS stand-ins (unknown, believed large).
-- Cutting presets: at most one per ISO 513 group, the vendor's slotting row first; the vendors
-  name materials, not groups, so the group is an estimate by the material's name, cited so;
-  a range of fz keeps its smallest value.
+- Cutting presets (FEEDS-SPEEDS' spec): one per (ISO 513 group, class), named "<group> <class>",
+  class from the maker's column header (slot | rough | finish; Lakeshore's general milling,
+  drilling, chamfering and unlabeled rows are `general`; Harvey's "Max" chip-load ceiling is
+  not an operation and is left out). vc, fz, ap and ae are the printed inch values converted
+  exactly (SFM x 0.3048, IPT/IPR x 25.4, a depth as a multiple or percent of the diameter x dc);
+  a printed range keeps its low end, as an estimate. Drills carry fz in mm/rev; a tap with vc
+  only feeds its pitch per rev. The vendors name materials, not groups: the group is taken by
+  name (copper alloys N; titanium, nickel and cobalt alloys S; H only for a steel or cast iron
+  whose stated hardness starts at 45 HRC). "<group> <class>" is the group's representative, by
+  FEEDS-SPEEDS' preference list (N wrought 6061/7075, then wrought/"Aluminums", then any aluminium; P 1018/1010/low carbon, then medium
+  carbon, then 4140/alloy steel at most 30 HRC; M 304/316/austenitic/"soft"; K grey or "soft"/
+  "medium" cast iron; S Ti-6Al-4V/titanium, then nickel; H the lowest stated hardness from 45
+  HRC); with none of them in the source, the group's lowest-vc row, cited so. Every row is also
+  kept as "<group> <class> <maker's material>", for an exact material match. A diameter on the
+  boundary of two diameter columns (Lakeshore) keeps the column whose lower edge is the
+  diameter (the low end of its range, which the preset takes, is the value for that diameter). "Up to" depths are the
+  source's upper limit, noted.
+  Helical's finishing column is a programmed feed at the stated RDOC: the preset sets ae to it
+  and notes "programmed at ae".
+- Turning presets (`[[insert.preset]]`, raw/turn-vc/<maker>.json): vc per ISO group and grade
+  from the makers' grade tables (Sumitomo catalogue section A "Recommended Cutting Conditions",
+  with f and ap; Tungaloy GC 2023-2024 insert section p.4; Korloy grade selection tables;
+  Ingersoll 1144_Turning_Tech "Cutting data for ISO turning"). Named "<G> <chipbreaker> <grade>"
+  (the first material the maker prints for the group) and "<...> <material>" for each; `fz` is
+  the feed in mm/rev. A printed optimum/recommended/nominal value is the start value, else the
+  range's low end. Korloy and Ingersoll print vc per grade only: matched to an insert by the
+  grades its catalogue row marks (read from the rendered page), f and ap from the insert's own
+  row, cited as estimates. A vc with no feed is held back. Turning records are now `real`.
+- Shop-part tools (raw/real-tools/<maker>.json, found one by one in the makers' catalogues):
+  Tungaloy TungCut blade CGP32-3D with SGM3-020 / DGM3-020 (GC F section: the feed is only a
+  bar chart, so the inserts carry no preset; reach = half the printed CUTDIA, an estimate),
+  Sumitomo WDX 260D4S32 and Tungaloy TDX260F25-4 26 mm 4xD indexable drills (sig 180, a flat
+  bottom, estimate; Sumitomo's flute length is its neck length LUX, estimate), Guhring 5518
+  (carbide) and 1131 (HSCO) drills at 5.5, 6 and 18.5 mm, and the Tungaloy MTEC0807C171.5ISO
+  thread mill (pitch 1.5). Feeds tabulated per diameter column take the first (smaller) column.
+- Reamers and counterbores (raw/real-tools/reamers-<maker>.json): Guhring HR 500 solid carbide H7
+  reamers, Series 1686 (steel) and 7286 (aluminium), 3/4/5/6/8/10/12 mm (HR 500 catalogue 11/26
+  p.8/14, cutting data p.26/29, cross-checked on Guhring's webshop item pages); Guhring Series 324
+  DIN 373 counterbores (fine grade, fixed pilot) for M3-M12, Ø 6/8/10/11/15/18/20 (webshop item
+  pages; the pilot Ø and screw size come from Guhring's DIN 4000 XML, whose codes are not
+  labelled: in the note only). RUKO's DIN 373 counterbores (same sizes) print no cutting length,
+  so no record is made from them; their pilot Ø agree with Guhring's. Reamer feeds are tabulated
+  for Ø 3/4/6/8/10/12, not 5 mm: the 5 mm reamers carry no preset.
+- Spindle interfaces (raw/interfaces.json → data/interfaces.toml, `[[interface]]`, for CAM-SIM):
+  BT30/40/50 from Sumitomo's "Bottle Grip Taper" table (n2.pdf p.31) with Maritool drawings;
+  CAT40/50 from ISCAR's "CAT A.N.S.I. B5.50" table (CAT.pdf) with Maritool drawings; HSK-A63/A100
+  from Sumitomo (g.pdf p.18) and Maritool. The standards are paywalled and not used. Values whose
+  meaning is our reading of a figure are estimates; a second maker's agreeing value is noted on the
+  cite; disagreements are conflict cites. Not printed by any maker: the taper's small-end
+  diameter, the V-groove angle and root diameter, HSK clamping bore and drive slots (each
+  interface's note). Holders find their table by `Library::interface(holder.interface)`.
 - Inconsistencies found in the sources are kept in the raw facts (e.g. Rego-Fix ER20 nut thread
   M25x1.5 in the catalogue vs M24x1.5 on the pocket sheet; Tormach BT30 "Gage length is 60mm
   (1.97 inches)"; Lakeshore ".0003.0010" chip load); the generator never resolves them silently.

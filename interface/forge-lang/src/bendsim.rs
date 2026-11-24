@@ -937,6 +937,7 @@ fn punch_of(j: &Json) -> Result<fb::Punch, Answer> {
         profile: profile(j)?,
         segments: segments(j),
         max_load: num(j, "max_load"),
+        drawn_width: None,
         id,
     })
 }
@@ -1465,7 +1466,10 @@ fn answer(sh: &SheetOut, m: &fb::Model, tl: &fb::Tooling, plan: &fb::Plan, names
             } else {
                 Json::obj(vec![
                     ("known", true.into()),
-                    ("source", "the stand-in set's rows (forgecad's own round numbers)".into()),
+                    (
+                        "source",
+                        "the stand-in set's rows (forgecad's own round numbers)".into(),
+                    ),
                 ])
             },
         ),

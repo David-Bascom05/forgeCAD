@@ -112,6 +112,10 @@ pub fn parse(src: &str) -> Result<Table, TomlError> {
 }
 
 fn strip_comment(l: &str) -> &str {
+    // no `#` at all: nothing to strip (the walk below returns l whole then)
+    if !l.as_bytes().contains(&b'#') {
+        return l;
+    }
     let mut in_str = false;
     let mut esc = false;
     for (k, c) in l.char_indices() {
@@ -188,10 +192,12 @@ impl Parser<'_> {
                             });
                         }
                         _ => {
-                            // copy the UTF-8 sequence whole
+                            // copy the run up to the next quote or backslash whole: the source
+                            // is a str and both are ASCII, never inside a UTF-8 sequence, so
+                            // the run is whole characters (the same string as one at a time)
                             let start = self.at - 1;
                             let mut end = self.at;
-                            while end < self.b.len() && (self.b[end] & 0xC0) == 0x80 {
+                            while end < self.b.len() && self.b[end] != b'"' && self.b[end] != b'\\' {
                                 end += 1;
                             }
                             out.push_str(
@@ -323,5 +329,31 @@ mod tests {
         assert!(matches!(tools[1].get("profile"), Some(Val::Arr(v)) if v.len() == 2));
         assert!(parse("x = \n").is_err());
         assert!(parse("x = 1\nx = 2\n").is_err());
+    }
+}
+
+#[cfg(test)]
+mod string_tests {
+    use super::*;
+
+    /// Strings copied in runs read as they did character by character: multi-byte text, every
+    /// escape, a `#` inside a string (not a comment) and after it (a comment), an empty string.
+    #[test]
+    fn strings_read_whole() {
+        let src = "a = \"Ø 10 mm, 45° — DIN 6527 « K » 刃\"\nb = \"x\\\"y\\\\z\\n\\tw\" # note\nc = \"a # b\" # c\nd = \"\"\ne = [\"µ\", \"é\"]\n";
+        let t = parse(src).unwrap();
+        let s = |k: &str| match &t[k] {
+            Val::Str(s) => s.clone(),
+            v => panic!("{k}: {v:?}"),
+        };
+        assert_eq!(s("a"), "Ø 10 mm, 45° — DIN 6527 « K » 刃");
+        assert_eq!(s("b"), "x\"y\\z\n\tw");
+        assert_eq!(s("c"), "a # b");
+        assert_eq!(s("d"), "");
+        assert_eq!(
+            t["e"],
+            Val::Arr(vec![Val::Str("µ".into()), Val::Str("é".into())])
+        );
+        assert!(parse("f = \"open\n").is_err());
     }
 }

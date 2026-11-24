@@ -1,0 +1,265 @@
+# HEIDENHAIN TNC 640 ISO programming (.I files), milling: restated from HEIDENHAIN's openly
+# published "TNC 640 User's Manual ISO Programming" 10/2023 (ID 892909) and "Programming of Machining
+# Cycles" 10/2022 (ID 1303406); every code is cited below. Klartext (.H, conversational) is NOT G-code
+# and is not written here. HEIDENHAIN's G numbers mean other things than Fanuc's (G28 mirroring,
+# G80 working plane, G98 label, G99 tool definition): only the codes below are written.
+[dialect]
+name = "heidenhain"
+extension = "i"
+decimals = 3
+feed_decimals = 0
+units_mm = "G71"
+point = "never"
+sign = "always"
+g_digits = 2
+program_open = ["%P{num} {units} *"]
+program_close = ["M30", "N99999999 %P{num} {units} *"]
+comment = ";{text}"
+comment_eol = ";"
+comment_strip = ";*"
+block_end = "*"
+line_numbers = true
+line_numbers_required = true
+line_start = 10
+line_step = 10
+safe_start = ["G40 G90"]
+tool_change = ["T{t} G17"]
+tool_word = true
+spindle_cw = ["T G17 S{rpm}", "M3"]
+spindle_ccw = ["T G17 S{rpm}", "M4"]
+spindle_stop = "M5"
+wcs = ""
+wcs_first = 0
+wcs_count = 1
+arc = "centre_abs"
+coolant_flood = "M8"
+coolant_off = "M9"
+dwell = "G04 F{s}"
+cycle_drill = "expand"
+cycle_dwell = "expand"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "refuse"
+cycle_ream = "expand"
+read_g_ignore = [71]
+cite_required = true
+source = "HEIDENHAIN TNC 640 ISO Programming 10/2023 (892909); Machining Cycles 10/2022 (1303406) (cited per code)"
+taken = "2026-11-23"
+note = "drilling cycles are posted as moves (HEIDENHAIN's G200-G207 take Q parameters and an M99 call, not modelled); rigid tapping (G207) and a machine-home retract (M91 needs machine coordinates) are refused"
+
+[[dialect.cite]]
+key = "program_open"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "3.5 p. 93; example p. 63"
+note = "%NAME G71 * opens an ISO program in mm (the name: P and the program number)"
+
+[[dialect.cite]]
+key = "program_close"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "3.5 p. 93; example p. 63; M table 7.2 p. 229"
+note = "M30 ends the program; the last block is N99999999 %NAME G71 *"
+
+[[dialect.cite]]
+key = "comment"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "6.3 pp. 196-197; example p. 335 (N40 ;)"
+note = ";  starts a comment to the end of the block; a comment block carries no * "
+
+[[dialect.cite]]
+key = "comment_eol"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "6.3 pp. 196-197"
+note = ";  to the end of the block"
+
+[[dialect.cite]]
+key = "line_numbers"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "3.5 p. 93; address table p. 633"
+note = "every block has an N number"
+
+[[dialect.cite]]
+key = "line_numbers_required"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "3.5 p. 93; address table p. 633"
+note = "every block has an N number: they cannot be left out"
+
+[[dialect.cite]]
+key = "block_end"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "address table p. 634; examples pp. 53, 63"
+note = "* ends a block"
+
+[[dialect.cite]]
+key = "safe_start"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "example pp. 53, 63 (G00 G90 Z+250 G40); G overview pp. 627-632"
+note = "G40 radius comp off, G90 absolute (written without a move); no G94/G49/G80: feed is mm/min, length comp is automatic, G80 is the working-plane cycle"
+
+[[dialect.cite]]
+key = "tool_change"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "tool call p. 133; tool change p. 134; example p. 63"
+note = "T<n> G17 calls the tool (runs the tool-change macro); no M6"
+
+[[dialect.cite]]
+key = "tool_word"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "p. 127 (speed only with a bare T block); p. 133"
+note = "a T block with a number is the tool change"
+
+[[dialect.cite]]
+key = "spindle_cw"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "p. 127; M table 7.2 p. 229"
+note = "the speed in a T block without a tool number (same axis) changes only the speed; M3 starts it clockwise"
+
+[[dialect.cite]]
+key = "spindle_ccw"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "p. 127; M table 7.2 p. 229"
+note = "M4 counter-clockwise"
+
+[[dialect.cite]]
+key = "spindle_stop"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "M table 7.2 p. 229"
+note = "M5"
+
+[[dialect.cite]]
+key = "wcs"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-17/zyklen_bearbeitung/1303406-22.pdf"
+taken = "2026-11-23"
+where = "7.2 Cycle 7 p. 229; 7.8 Cycle 247 p. 243"
+note = "no G54-G59 slots: the datum is the active preset (the first work offset writes nothing; others are refused)"
+
+[[dialect.cite]]
+key = "arc"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "pp. 162-166 (circle centre I J, G02/G03; full circle: end = start, p. 164)"
+note = "the centre I J (absolute) as its own block, then G02/G03 to the end point"
+
+[[dialect.cite]]
+key = "point"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "examples pp. 95, 133, 166 (X+100, Z-40, DL+0.2)"
+note = "whole values written without a point"
+
+[[dialect.cite]]
+key = "decimals"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-17/zyklen_bearbeitung/1303406-22.pdf"
+taken = "2026-11-23"
+where = "Cycle 200 parameters p. 78"
+note = "inputs up to 4 decimals; 3 used"
+
+[[dialect.cite]]
+key = "sign"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "examples pp. 53, 63, 166"
+note = "coordinates carry their sign (X+10)"
+
+[[dialect.cite]]
+key = "g_digits"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "G overview pp. 627-632; examples"
+note = "G00 G01 G02 G03"
+
+[[dialect.cite]]
+key = "coolant_flood"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "7.2 p. 229"
+note = "M8"
+
+[[dialect.cite]]
+key = "coolant_off"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "7.2 p. 229"
+note = "M9"
+
+[[dialect.cite]]
+key = "dwell"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "address table p. 633 (F = dwell time with G04); Machining Cycles 13.2 Cycle 9 p. 420"
+note = "G04 F seconds (0..3600 s, 0.001 s steps); the block form is assembled from the address table"
+
+[[dialect.cite]]
+key = "cycle_drill"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-17/zyklen_bearbeitung/1303406-22.pdf"
+taken = "2026-11-23"
+where = "4.2 pp. 76-79; H1 G overview p. 632"
+note = "no Fanuc G81: HEIDENHAIN's G200 takes Q parameters and an M99 call; posted as moves"
+
+[[dialect.cite]]
+key = "cycle_dwell"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-17/zyklen_bearbeitung/1303406-22.pdf"
+taken = "2026-11-23"
+where = "4.2 p. 78"
+note = "posted as moves with a G04 at the bottom"
+
+[[dialect.cite]]
+key = "cycle_peck"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-17/zyklen_bearbeitung/1303406-22.pdf"
+taken = "2026-11-23"
+where = "4.2 p. 76; 4.7 p. 95"
+note = "posted as moves"
+
+[[dialect.cite]]
+key = "cycle_chipbreak"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-17/zyklen_bearbeitung/1303406-22.pdf"
+taken = "2026-11-23"
+where = "4.5 pp. 87, 90"
+note = "posted as moves"
+
+[[dialect.cite]]
+key = "cycle_ream"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-17/zyklen_bearbeitung/1303406-22.pdf"
+taken = "2026-11-23"
+where = "4.3 pp. 80-81"
+note = "posted as moves"
+
+[[dialect.cite]]
+key = "read_g_ignore"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "3.5 p. 93"
+note = "G71 (mm) in the program's first and last blocks"
+
+[[dialect.cite]]
+key = "cycle_tap"
+status = "refused"
+note = "G207 RIGID TAPPING takes Q239 pitch and S, not modelled; tapping is refused (Machining Cycles 5.3 pp. 130-132)"
+
+# Not in the open manual (refused): mist and through-spindle coolant; a machine-home retract (M91 positions in
+# machine coordinates, which depend on the machine).
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://content.heidenhain.de/doku/tnc_guide/pdf_files/TNC640/34059x-18/diniso/892909-2C.pdf"
+taken = "2026-11-23"
+where = "3.5 p. 93; example p. 63"
+note = "%NAME G71 * opens an ISO program in mm"
+
+[[dialect.cite]]
+key = "units_inch"
+status = "refused"
+where = "File management, new NC program (MM or INCH soft key); program examples (all %NAME G71 *); feed input (F in 1/10 inch/min in inch programs)"
+note = "the control writes the first and last blocks itself from the unit chosen on a soft key; the manual gives no inch header code, and inch feeds are in 1/10 inch/min: inch refused"

@@ -37,7 +37,7 @@ fn fixture() -> Fixture {
     let crank = forge_render::load::open("crank", false).unwrap().0;
     let rows = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
     let built = Built::new(
-        &[crank.clone()],
+        std::slice::from_ref(&crank),
         &[Instance {
             part: 0,
             rows,

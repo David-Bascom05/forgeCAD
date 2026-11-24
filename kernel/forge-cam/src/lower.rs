@@ -36,7 +36,7 @@ fn sub(a: V3, b: V3) -> V3 {
 }
 
 /// The bound on a lowered face's distance from the true one, for a part of size `scale`.
-fn mu(scale: f64) -> f64 {
+pub(crate) fn mu(scale: f64) -> f64 {
     tol::LINEAR + 64.0 * f64::EPSILON * (1.0 + scale)
 }
 
@@ -51,7 +51,7 @@ pub fn lower(body: &Body) -> Result<Vec<Face>, LowerError> {
 
 /// The edges of a face, as (curve, range, start point, end point): the ends are the B-rep's
 /// vertices, shared bit for bit by the edges that meet there, so a trim built from them closes.
-fn edges(body: &Body, fid: FaceId) -> Vec<(Curve, forge_math::Interval, V3, V3)> {
+pub(crate) fn edges(body: &Body, fid: FaceId) -> Vec<(Curve, forge_math::Interval, V3, V3)> {
     let mut v = Vec::new();
     for &l in body.face(fid).loops.iter() {
         for c in body.lp(l).coedges() {
@@ -67,7 +67,7 @@ fn edges(body: &Body, fid: FaceId) -> Vec<(Curve, forge_math::Interval, V3, V3)>
     v
 }
 
-fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result<(), LowerError> {
+pub(crate) fn lower_face(body: &Body, fid: FaceId, k: usize, out: &mut Vec<Face>) -> Result<(), LowerError> {
     let f = body.face(fid);
     let bb = body.face_box(fid);
     let scale = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi]

@@ -339,7 +339,9 @@ impl MachineUi {
             self.q = d.joints.iter().map(|j| j.home).collect();
         }
         for (q, j) in self.q.iter_mut().zip(&d.joints) {
-            *q = q.clamp(j.range[0].min(j.range[1]), j.range[1].max(j.range[0]));
+            if let Some(r) = j.range {
+                *q = q.clamp(r[0].min(r[1]), r[1].max(r[0]));
+            }
         }
         if geometry {
             self.geom += 1;
@@ -554,6 +556,7 @@ fn badge(t: &Theme, d: &MachineDef, path: &str, own: bool) -> (String, Color32) 
             CiteStatus::Published => ("published".into(), t.accent),
             CiteStatus::Estimate => ("estimate".into(), t.warn),
             CiteStatus::Conflict => ("conflict".into(), t.error),
+            CiteStatus::User => ("user".into(), t.success),
         },
     }
 }
@@ -638,6 +641,112 @@ fn num_row(ui: &mut Ui, c: &Ctx, name: &str, path: &str, v: &mut f64, speed: f64
         }
         chip(ui, c, path, touch);
     });
+}
+
+/// An optional number (F1): known, shown and edited with its provenance and "?" to make it
+/// UNKNOWN (no value, cited unknown); UNKNOWN, said so with "set" to give it.
+#[allow(clippy::too_many_arguments)]
+fn opt_num_row(
+    ui: &mut Ui,
+    c: &Ctx,
+    name: &str,
+    path: &str,
+    v: &mut Option<f64>,
+    dflt: f64,
+    speed: f64,
+    touch: &mut Touch,
+) {
+    ui.horizontal(|ui| {
+        label_w(ui, c.t, name);
+        match v {
+            Some(x) => {
+                if ui
+                    .add(egui::DragValue::new(x).speed(speed).max_decimals(4))
+                    .changed()
+                {
+                    touch.edited.push(path.to_string());
+                    touch.any = true;
+                }
+                let (w, col) = badge(c.t, c.cites, path, c.own);
+                ui.label(RichText::new(w).font(sans(10.0)).color(col))
+                    .on_hover_text(path);
+                if ui
+                    .small_button("?")
+                    .on_hover_text("I don't know this value: make it UNKNOWN")
+                    .clicked()
+                {
+                    *v = None;
+                    touch.unknown.push(path.to_string());
+                    touch.any = true;
+                }
+            }
+            None => {
+                ui.label(RichText::new("UNKNOWN").font(sans(11.0)).color(c.t.error))
+                    .on_hover_text(format!("{path}: no value; checks against it say \"not checked\""));
+                if ui
+                    .small_button("set")
+                    .on_hover_text("enter this value (yours)")
+                    .clicked()
+                {
+                    *v = Some(dflt);
+                    touch.edited.push(path.to_string());
+                    touch.any = true;
+                    touch.geometry = true;
+                }
+            }
+        }
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn opt_vec_row<const N: usize>(
+    ui: &mut Ui,
+    c: &Ctx,
+    name: &str,
+    path: &str,
+    v: &mut Option<[f64; N]>,
+    dflt: [f64; N],
+    speed: f64,
+    touch: &mut Touch,
+) {
+    match v {
+        Some(x) => {
+            let mut gone = false;
+            ui.horizontal(|ui| {
+                vec_row(ui, c, name, path, x, speed, touch);
+                if ui
+                    .small_button("unknown")
+                    .on_hover_text("I don't know this value: make it UNKNOWN")
+                    .clicked()
+                {
+                    gone = true;
+                }
+            });
+            if gone {
+                *v = None;
+                touch.unknown.push(path.to_string());
+                touch.any = true;
+                touch.geometry = true;
+            }
+        }
+        None => {
+            ui.horizontal(|ui| {
+                label_w(ui, c.t, name);
+                ui.label(RichText::new("UNKNOWN").font(sans(11.0)).color(c.t.error))
+                    .on_hover_text(format!("{path}: no value; checks against it say \"not checked\""));
+                if ui
+                    .small_button("set")
+                    .on_hover_text("enter this value (yours)")
+                    .clicked()
+                {
+                    *v = Some(dflt);
+                    touch.edited.push(path.to_string());
+                    touch.any = true;
+                    touch.geometry = true;
+                }
+            });
+        }
+    }
 }
 
 fn vec_row<const N: usize>(
@@ -1430,8 +1539,17 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
                     .iter()
                     .any(|x| x.to_lowercase().contains(&want))
             };
+            let shown = super::lib_form::level_filter(
+                ui,
+                t,
+                "machines",
+                super::lib_form::level_counts(st.cat.entries.iter().map(|e| e.level)),
+            );
             super::lib_form::empty_levels(ui, t, st.cat.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
+                if !super::lib_form::level_shown(shown, lv) {
+                    continue;
+                }
                 let here: Vec<_> = st
                     .cat
                     .entries
@@ -1793,7 +1911,7 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
     }
 }
 
-const KINDS: [(&str, Kind); 7] = Kind::ALL;
+const KINDS: [(&str, Kind); Kind::ALL.len()] = Kind::ALL;
 
 fn tab_machine(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, touch: &mut Touch) {
     let t = c.t;
@@ -1935,16 +2053,17 @@ fn tab_joints(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
                 ty: JointType::Linear,
                 axis: [1.0, 0.0, 0.0],
                 pivot: [0.0; 3],
-                range: [-100.0, 100.0],
+                range: Some([-100.0, 100.0]),
                 home: 0.0,
-                rapid: 1000.0,
-                max_feed: 1000.0,
+                rapid: Some(1000.0),
+                max_feed: Some(1000.0),
                 accel: None,
                 cyclic: false,
                 tcp: false,
                 preference: 0,
                 reset: Reset::Never,
                 diameter: false,
+                reference: None,
             });
             for f in ["range", "rapid", "max_feed"] {
                 touch.unknown.push(format!("joint.{name}.{f}"));
@@ -2024,23 +2143,42 @@ fn tab_joints(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
     if jj.ty == JointType::Rotary {
         vec_row(ui, c, "Pivot", &p("pivot"), &mut jj.pivot, 1.0, touch);
     }
-    vec_row(ui, c, "Range", &p("range"), &mut jj.range, 1.0, touch);
+    opt_vec_row(
+        ui,
+        c,
+        "Range",
+        &p("range"),
+        &mut jj.range,
+        [-100.0, 100.0],
+        1.0,
+        touch,
+    );
     num_row(ui, c, "Home", &p("home"), &mut jj.home, 1.0, touch);
     let u = if jj.ty == JointType::Linear {
         "mm/min"
     } else {
         "deg/min"
     };
-    num_row(
+    opt_num_row(
         ui,
         c,
         &format!("Rapid {u}"),
         &p("rapid"),
         &mut jj.rapid,
+        1000.0,
         10.0,
         touch,
     );
-    num_row(ui, c, "Max feed", &p("max_feed"), &mut jj.max_feed, 10.0, touch);
+    opt_num_row(
+        ui,
+        c,
+        "Max feed",
+        &p("max_feed"),
+        &mut jj.max_feed,
+        1000.0,
+        10.0,
+        touch,
+    );
     ui.horizontal(|ui| {
         label_w(ui, t, "Accel");
         let mut has = jj.accel.is_some();
@@ -2115,8 +2253,8 @@ fn tab_spindles(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touc
     );
     vec_row(ui, c, "Axis", &pa, &mut s.axis, 0.01, touch);
     vec_row(ui, c, "Nose", &pn, &mut s.nose, 1.0, touch);
-    vec_row(ui, c, "rpm", &pr, &mut s.rpm, 10.0, touch);
-    vec_row(ui, c, "Max", &pm, &mut s.max, 1.0, touch);
+    opt_vec_row(ui, c, "rpm", &pr, &mut s.rpm, [100.0, 10000.0], 10.0, touch);
+    opt_vec_row(ui, c, "Max", &pm, &mut s.max, [100.0, 20.0], 1.0, touch);
     ui.label(small(
         t,
         "Max: [tool length, diameter] (milling) or [swing, part length] (turning)",
@@ -2168,10 +2306,13 @@ fn tab_changer(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, touch: &mut Touch) {
     let t = c.t;
     let mut has = d.changer.is_some();
     if ui.checkbox(&mut has, "Tool changer").changed() {
+        // a new changer's numbers are UNKNOWN until the user gives them
         d.changer = has.then_some(Changer {
-            pockets: 1,
-            change_s: 1.0,
-            max_tool_kg: 1.0,
+            manual: false,
+            pockets: None,
+            change_s: None,
+            max_tool_kg: None,
+            position: Vec::new(),
         });
         if has {
             for f in ["pockets", "change_s", "max_tool_kg"] {
@@ -2183,31 +2324,34 @@ fn tab_changer(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, touch: &mut Touch) {
         touch.any = true;
     }
     if let Some(ch) = &mut d.changer {
-        let mut p = ch.pockets as f64;
-        num_row(ui, c, "Pockets", "changer.pockets", &mut p, 1.0, touch);
-        ch.pockets = p.max(1.0).round() as u32;
-        num_row(
+        ui.checkbox(&mut ch.manual, "manual (the operator changes tools at M6)");
+        let mut p = ch.pockets.map(|p| p as f64);
+        opt_num_row(ui, c, "Pockets", "changer.pockets", &mut p, 12.0, 1.0, touch);
+        ch.pockets = p.map(|p| p.max(1.0).round() as u32);
+        opt_num_row(
             ui,
             c,
             "Change s",
             "changer.change_s",
             &mut ch.change_s,
+            3.0,
             0.1,
             touch,
         );
-        num_row(
+        opt_num_row(
             ui,
             c,
             "Max tool kg",
             "changer.max_tool_kg",
             &mut ch.max_tool_kg,
+            5.0,
             0.1,
             touch,
         );
-        ui.label(small(
-            t,
-            "Tool-change (M06) position: not in the format yet (request F3)",
-        ));
+        if !ch.position.is_empty() {
+            let pos: Vec<String> = ch.position.iter().map(|(j, v)| format!("{j}={v}")).collect();
+            ui.label(small(t, format!("Tool-change position: {}", pos.join(" "))));
+        }
     } else {
         ui.label(small(t, "None: tools are changed by hand"));
     }
@@ -2219,10 +2363,10 @@ fn tab_changer(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, touch: &mut Touch) {
                 .color(t.ink),
         );
         let p = |f: &str| format!("turret.{}.{f}", tu.name);
-        let mut s = tu.stations as f64;
-        num_row(ui, c, "Stations", &p("stations"), &mut s, 1.0, touch);
-        tu.stations = s.max(1.0).round() as u32;
-        num_row(ui, c, "Index s", &p("index_s"), &mut tu.index_s, 0.05, touch);
+        let mut s = tu.stations.map(|s| s as f64);
+        opt_num_row(ui, c, "Stations", &p("stations"), &mut s, 8.0, 1.0, touch);
+        tu.stations = s.map(|s| s.max(1.0).round() as u32);
+        opt_num_row(ui, c, "Index s", &p("index_s"), &mut tu.index_s, 0.5, 0.05, touch);
         vec_row(ui, c, "Center", &p("center"), &mut tu.center, 1.0, touch);
     }
 }
@@ -2442,6 +2586,8 @@ fn tab_bodies(
                 }],
                 part: None,
                 ignore: Vec::new(),
+                clearance: None,
+                passes_stock: false,
             });
             touch.unknown.push(format!("body.{n}"));
             *pick = d.bodies.len() - 1;
@@ -2623,6 +2769,33 @@ fn tab_bodies(
                                 ch |= super::lib_form::num_edit_in(ui, v, "mm", "", Some(110.0));
                             });
                         }
+                    }
+                    Prim::OBox { o, axes, size } => {
+                        // an oriented box (a fixture's angled block): its corner and sides edited;
+                        // its axes shown, set in the record (they must stay orthonormal)
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("Oriented box {}", i + 1))
+                                    .font(semi(11.0))
+                                    .color(t.ink),
+                            );
+                            if super::ux::icon_button(ui, t, "delete", "Remove this box", false).clicked() {
+                                del = Some(i);
+                            }
+                        });
+                        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, &format!("Corner {a}"));
+                                ch |= super::lib_form::num_edit_in(ui, &mut o[k], "mm", "", Some(110.0));
+                            });
+                        }
+                        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, &format!("Side {a}"));
+                                ch |= super::lib_form::num_edit_in(ui, &mut size[k], "mm", "", Some(110.0));
+                            });
+                        }
+                        ui.label(small(t, format!("Axes {axes:?} (set in the record)")));
                     }
                 }
             }
@@ -2827,7 +3000,15 @@ fn jog(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egu
             if i >= st.q.len() {
                 break;
             }
-            let (lo, hi) = (j.range[0].min(j.range[1]), j.range[0].max(j.range[1]));
+            let Some(r) = j.range else {
+                ui.label(
+                    RichText::new(format!("{}: travel UNKNOWN", j.name))
+                        .font(sans(11.0))
+                        .color(t.error),
+                );
+                continue;
+            };
+            let (lo, hi) = (r[0].min(r[1]), r[0].max(r[1]));
             ui.label(RichText::new(&j.name).font(semi(12.0)).color(t.ink));
             let u = if j.ty == JointType::Linear { " mm" } else { "°" };
             // a copy: the slider rounds what it shows, and only a move by the user may change q
@@ -2882,7 +3063,14 @@ fn motion(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
         if i >= st.q.len() {
             break;
         }
-        let (lo, hi) = (j.range[0].min(j.range[1]), j.range[0].max(j.range[1]));
+        let Some(r) = j.range else {
+            ui.horizontal(|ui| {
+                label_w(ui, t, &j.name);
+                ui.label(RichText::new("travel UNKNOWN").font(sans(11.0)).color(t.error));
+            });
+            continue;
+        };
+        let (lo, hi) = (r[0].min(r[1]), r[0].max(r[1]));
         ui.horizontal(|ui| {
             label_w(ui, t, &j.name);
             ui.spacing_mut().slider_width = (w - 90.0).max(60.0);

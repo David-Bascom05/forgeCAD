@@ -157,6 +157,14 @@ pub struct MeasurePanel {
     /// The thinnest wall, not picks: its thickness and where.
     pub wall: bool,
     pub wall_at: Option<Result<(f64, Point3), String>>,
+    /// The wall waits for Measure thinnest wall: where a job would block the page (a page whose
+    /// jobs run on its one thread), or after Cancel.
+    pub wall_held: bool,
+    /// How far the wall's search is, 0 to 1, while it runs.
+    pub wall_done: f32,
+    /// Asked of the panel this frame: the wall's search started, or stopped.
+    pub wall_go: bool,
+    pub wall_stop: bool,
 }
 
 impl MeasurePanel {
@@ -488,6 +496,9 @@ impl Shell {
                         unit: self.units,
                         angle: self.settings.angle,
                         wall,
+                        // the whole part's wall is worked out as Wall opens, on a worker; a page
+                        // with none waits to be asked (it held the page for seconds and more)
+                        wall_held: wall && crate::plat::INLINE_JOBS,
                         ..MeasurePanel::default()
                     })
                 };

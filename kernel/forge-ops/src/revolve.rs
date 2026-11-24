@@ -170,8 +170,8 @@ struct SegInfo {
 #[inline(never)]
 fn hold_pole(body: &mut Body, v: VertexId, curve: &Curve, t: f64) {
     let gap = body.vertex(v).point.distance(curve.eval(t));
-    let vx = &mut body.vertices[v.0 as usize];
-    vx.tol = vx.tol.max(gap);
+    // (the body's bound with it: CacheOK G9)
+    body.grow_vertex_tol(v, gap);
 }
 
 impl Revolver<'_> {

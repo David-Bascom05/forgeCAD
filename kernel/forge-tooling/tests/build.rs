@@ -1,5 +1,5 @@
 //! `build::derive` and the checks (MACHINE-BUILDER's library builder).
-use forge_tooling::build::{DeriveError, Record, check, check_fit, check_stickout, derive};
+use forge_tooling::build::{DeriveError, Record, Severity, check, check_fit, check_stickout, derive};
 use forge_tooling::toml::Val;
 use forge_tooling::{CiteStatus, Library};
 
@@ -111,12 +111,41 @@ fn checks_name_the_field_the_measure_and_the_limit() {
     .unwrap() else {
         panic!()
     };
-    let f = check(&lib, &Record::Holder(h));
+    let f = check(&lib, &Record::Holder(h.clone()));
+    // no `nut`: compared with the system's largest nut, as a warning
     assert!(
-        f.iter()
-            .any(|f| f.path == "profile" && f.measured == 10.0 && f.limit >= 22.0),
+        f.iter().any(|f| f.severity == Severity::Warning
+            && f.path == "profile"
+            && f.measured == 10.0
+            && f.limit >= 22.0),
         "{f:?}"
     );
+    // with its own nut named: an error against that nut
+    let nut = lib
+        .collet_nuts
+        .iter()
+        .find(|n| n.system == "ER16")
+        .expect("an ER16 nut");
+    let mut own = h.clone();
+    own.nut = Some(nut.id.clone());
+    let f = check(&lib, &Record::Holder(own.clone()));
+    assert!(
+        f.iter()
+            .any(|f| f.severity == Severity::Error && f.limit == nut.od),
+        "{f:?}"
+    );
+    own.nut = Some("no-such-nut".into());
+    assert!(check(&lib, &Record::Holder(own)).iter().any(|f| f.path == "nut"));
+    // the library's real holders: at most warnings (none names its nut yet)
+    for h in &lib.holders {
+        assert!(
+            check(&lib, &Record::Holder(h.clone()))
+                .iter()
+                .all(|f| f.severity == Severity::Warning),
+            "{}",
+            h.id
+        );
+    }
     // every real record of the library passes its own checks
     for t in &lib.tools {
         assert!(check(&lib, &Record::Tool(t.clone())).is_empty(), "{}", t.id);

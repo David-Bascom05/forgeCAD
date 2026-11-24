@@ -314,7 +314,9 @@ impl Shell {
         }
         if export {
             let to = csv_path(&path);
-            self.status = match std::fs::write(&to, list.csv()) {
+            // through the app's filesystem: in a page, std's has no files (it failed: "operation not
+            // supported on this platform"); there the project's, kept where the project is
+            self.status = match forge_dirs::fs::write(&to, list.csv()) {
                 Ok(()) => format!("Cut list written to {}", to.display()),
                 Err(e) => format!("Couldn't write {}: {e}", to.display()),
             };

@@ -356,7 +356,7 @@ impl Eqn {
             Form::Poly4 => {
                 let bound = 1.0 + (0..4).fold(0.0f64, |m, k| m.max((c[k] / c[4]).abs()));
                 let mut xs = [0.0; 4];
-                let k = real_roots(c, -bound, bound, &mut xs);
+                let k = poly::real_roots_small(c, -bound, bound, &mut xs);
                 for &x in &xs[..k] {
                     out[n] = (x, self.f_s(c, x).1);
                     n += 1;
@@ -385,7 +385,7 @@ impl Eqn {
                 for (base, sg) in [(0.0, 1.0), (dmath::PI, -1.0)] {
                     let q = trig2_quartic(c[0], sg * c[1], sg * c[2], c[3], c[4]);
                     let mut xs = [0.0; 4];
-                    let k = real_roots(&q, -1.01, 1.01, &mut xs);
+                    let k = poly::real_roots_small(&q, -1.01, 1.01, &mut xs);
                     for &w in &xs[..k] {
                         let s = base + 2.0 * dmath::atan(w);
                         if out[..n].iter().any(|r| wrap_pi(r.0 - s).abs() <= 1e-9) || n == MAX_ROOTS {
@@ -601,7 +601,7 @@ impl Eqn {
                 let top = d.iter().rposition(|x| *x != 0.0).unwrap_or(0);
                 let bound = 1.0 + (0..top).fold(0.0f64, |m, k| m.max((d[k] / d[top]).abs()));
                 let mut xs = [0.0; 4];
-                let k = real_roots(&d[..=top], -bound, bound, &mut xs);
+                let k = poly::real_roots_small(&d[..=top], -bound, bound, &mut xs);
                 for i in 0..k {
                     out[i] = (xs[i], 0.0);
                 }
@@ -716,89 +716,6 @@ impl Eqn {
         ];
         (d, f)
     }
-}
-
-/// Real roots of the polynomial `c` (ascending, degree at most 4) in [lo, hi], ascending.
-/// A root where the value only touches zero (within rounding) is included.
-fn real_roots(c: &[f64], lo: f64, hi: f64, out: &mut [f64; 4]) -> usize {
-    let mut deg = c.len();
-    while deg > 0 && c[deg - 1] == 0.0 {
-        deg -= 1;
-    }
-    let c = &c[..deg];
-    let mut n = 0;
-    let push = |x: f64, out: &mut [f64; 4], n: &mut usize| {
-        if *n < 4 && (*n == 0 || x - out[*n - 1] > 1e-14 * (1.0 + x.abs())) {
-            out[*n] = x;
-            *n += 1;
-        }
-    };
-    match deg {
-        0 | 1 => return 0,
-        2 => {
-            let x = -c[0] / c[1];
-            if lo <= x && x <= hi {
-                out[0] = x;
-                return 1;
-            }
-            return 0;
-        }
-        _ => {}
-    }
-    let mut d = [0.0; 4];
-    for k in 1..deg {
-        d[k - 1] = c[k] * k as f64;
-    }
-    let mut crit = [0.0; 4];
-    let nc = real_roots(&d[..deg - 1], lo, hi, &mut crit);
-    let mut cuts = [0.0; 6];
-    cuts[0] = lo;
-    cuts[1..=nc].copy_from_slice(&crit[..nc]);
-    cuts[nc + 1] = hi;
-    for w in cuts[..nc + 2].windows(2) {
-        let (a, b) = (w[0], w[1]);
-        let (fa, ea) = poly::eval_with_bound(c, a);
-        let (fb, eb) = poly::eval_with_bound(c, b);
-        let (za, zb) = (fa.abs() <= ea, fb.abs() <= eb);
-        if za {
-            push(a, out, &mut n);
-        }
-        if !za && !zb && (fa < 0.0) != (fb < 0.0) {
-            push(bisect(c, &d[..deg - 1], a, b, fa), out, &mut n);
-        }
-        if zb {
-            push(b, out, &mut n);
-        }
-    }
-    n
-}
-
-fn bisect(c: &[f64], d: &[f64], mut a: f64, mut b: f64, fa: f64) -> f64 {
-    let neg = fa < 0.0;
-    let mut x = 0.5 * (a + b);
-    for _ in 0..200 {
-        let f = poly::eval(c, x);
-        if f == 0.0 {
-            return x;
-        }
-        if (f < 0.0) == neg {
-            a = x;
-        } else {
-            b = x;
-        }
-        let df = poly::eval(d, x);
-        let newton = x - f / df;
-        let next = if df != 0.0 && newton > a && newton < b {
-            newton
-        } else {
-            0.5 * (a + b)
-        };
-        if (next - x).abs() <= 2.0 * f64::EPSILON * x.abs() || b - a <= f64::EPSILON * a.abs().max(b.abs()) {
-            return next;
-        }
-        x = next;
-    }
-    x
 }
 
 /// A trigonometric polynomial sum a_j cos(j u) + b_j sin(j u).
@@ -1322,13 +1239,17 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
     }
     // (decision log: the sampled events against the certified ones, curved-sites gap #7)
     #[cfg(feature = "decisions")]
-    if form == Form::Poly4 && std::env::var_os("FORGE_DECISIONS_DUMP").is_some() {
+    if form == Form::Poly4 && (oracle::on() || std::env::var_os("FORGE_DECISIONS_DUMP").is_some()) {
         let t = std::time::Instant::now();
         let v = cert::certify(&eq, &events);
-        eprintln!("poly4-cert {:?} us {}", v, t.elapsed().as_micros());
-        if !matches!(v, cert::Verdict::Certified { .. } | cert::Verdict::NotCovered) {
-            eprintln!("poly4-cert-pair {a:?} | {b:?} | events {events:?}");
+        if std::env::var_os("FORGE_DECISIONS_DUMP").is_some() {
+            eprintln!("poly4-cert {:?} us {}", v, t.elapsed().as_micros());
         }
+        let ok = matches!(v, cert::Verdict::Certified { .. } | cert::Verdict::NotCovered);
+        if !ok {
+            eprintln!("poly4-cert {v:?}\npoly4-cert-pair {a:?} | {b:?} | events {events:?}");
+        }
+        oracle::record(ok, matches!(v, cert::Verdict::NotCovered));
     }
     // two events polished onto one point: the isolation was off somewhere
     if events.windows(2).any(|w| w[1].0 - w[0].0 <= 1e-9) {
@@ -1655,13 +1576,14 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
         let grown = region.grow(step);
         let inside: Vec<bool> = chain.iter().map(|&p| grown.contains(p)).collect();
         if inside.iter().all(|&x| x) {
-            curves.push(crate::intcurve::finish(
-                a,
-                b,
-                chain.into_iter().map(exact).collect(),
-                true,
-                step,
-            ));
+            let mut pts: Vec<Point3> = chain.into_iter().map(exact).collect();
+            // a walk that came back to its first point, refined onto it: a last point within a
+            // tolerance of the first would close the loop with a link of nothing (the curve's
+            // speed falls to nothing there, and a direction taken at that parameter is noise)
+            while pts.len() > 3 && pts[pts.len() - 1].distance(pts[0]) <= tol::LINEAR {
+                pts.pop();
+            }
+            curves.push(crate::intcurve::finish(a, b, pts, true, step));
             continue;
         }
         for i in 0..n {
@@ -1875,6 +1797,43 @@ pub fn coaxial(a: &Surface, b: &Surface) -> Option<SurfaceSurface> {
 #[cfg(any(test, feature = "decisions"))]
 #[path = "meet_cert.rs"]
 mod cert;
+
+/// The event search's test oracle (M.ct, M.cert): with `on`, every torus × cylinder event search is
+/// certified (meet_cert) and counted; CI's poly4_oracle test fails on any search not certified.
+/// The decisions feature only: the shipped build has none of it.
+#[cfg(feature = "decisions")]
+pub mod oracle {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
+    static ON: AtomicBool = AtomicBool::new(false);
+    static CERTIFIED: AtomicUsize = AtomicUsize::new(0);
+    static NOT_COVERED: AtomicUsize = AtomicUsize::new(0);
+    static FAILED: AtomicUsize = AtomicUsize::new(0);
+    /// Certify every torus × cylinder search from now on.
+    pub fn start() {
+        ON.store(true, Relaxed);
+    }
+    pub(super) fn on() -> bool {
+        ON.load(Relaxed)
+    }
+    pub(super) fn record(ok: bool, not_covered: bool) {
+        let c = if !ok {
+            &FAILED
+        } else if not_covered {
+            &NOT_COVERED
+        } else {
+            &CERTIFIED
+        };
+        c.fetch_add(1, Relaxed);
+    }
+    /// (certified, not covered (a cone host), missed or undecided) so far.
+    pub fn counts() -> (usize, usize, usize) {
+        (
+            CERTIFIED.load(Relaxed),
+            NOT_COVERED.load(Relaxed),
+            FAILED.load(Relaxed),
+        )
+    }
+}
 
 #[cfg(test)]
 #[path = "meet_tests.rs"]

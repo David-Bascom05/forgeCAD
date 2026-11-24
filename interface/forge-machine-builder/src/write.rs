@@ -6,7 +6,7 @@
 //! the built-in library). Comments and key order of a hand-written file are not kept: the
 //! builder owns the files it writes.
 use forge_machine::def::{
-    Changer, Cite, CiteStatus, JointType, MachineDef, MountKind, Prim, Reset, Side, SpindleKind,
+    Cite, CiteStatus, JointType, MachineDef, MountKind, Prim, Reset, Side, SpindleKind,
 };
 use std::fmt::Write;
 
@@ -69,6 +69,25 @@ impl Out {
     fn vec(&mut self, k: &str, v: &[f64]) {
         writeln!(self.s, "{k} = {}", vec(v)).unwrap();
     }
+    /// A number the format lets be UNKNOWN (absent, cited unknown): written only when known.
+    fn opt(&mut self, k: &str, v: Option<f64>) {
+        if let Some(v) = v {
+            self.num(k, v);
+        }
+    }
+    fn opt_vec(&mut self, k: &str, v: Option<&[f64]>) {
+        if let Some(v) = v {
+            self.vec(k, v);
+        }
+    }
+    fn position(&mut self, p: &[(String, f64)]) -> Result<(), String> {
+        if !p.is_empty() {
+            let js: Vec<String> = p.iter().map(|(j, _)| j.clone()).collect();
+            writeln!(self.s, "position_joints = {}", strings(&js)?).unwrap();
+            self.vec("position", &p.iter().map(|(_, v)| *v).collect::<Vec<_>>());
+        }
+        Ok(())
+    }
 }
 
 pub fn side_name(s: Side) -> &'static str {
@@ -109,6 +128,7 @@ pub fn status_name(s: CiteStatus) -> &'static str {
         CiteStatus::Estimate => "estimate",
         CiteStatus::Unknown => "unknown",
         CiteStatus::Conflict => "conflict",
+        CiteStatus::User => "user",
     }
 }
 
@@ -127,6 +147,8 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
         writeln!(o.s, "coolants = {}", strings(&m.coolants)?).unwrap();
     }
     o.num("clearance", m.clearance);
+    o.opt("peck_clear", m.peck_clear);
+    o.opt("chip_lift", m.chip_lift);
     if m.real {
         o.line("real = true");
     }
@@ -151,12 +173,12 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
         if j.ty == JointType::Rotary {
             o.vec("pivot", &j.pivot);
         }
-        o.vec("range", &j.range);
+        o.opt_vec("range", j.range.as_ref().map(|r| &r[..]));
         if j.home != 0.0 {
             o.num("home", j.home);
         }
-        o.num("rapid", j.rapid);
-        o.num("max_feed", j.max_feed);
+        o.opt("rapid", j.rapid);
+        o.opt("max_feed", j.max_feed);
         if let Some(a) = j.accel {
             o.num("accel", a);
         }
@@ -184,12 +206,12 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
         o.text("kind", spindle_kind_name(s.kind))?;
         o.vec("axis", &s.axis);
         o.vec("nose", &s.nose);
-        o.vec("rpm", &s.rpm);
+        o.opt_vec("rpm", s.rpm.as_ref().map(|r| &r[..]));
         if !s.power.is_empty() {
             o.vec("curve_rpm", &s.power.iter().map(|p| p[0]).collect::<Vec<_>>());
             o.vec("curve_kw", &s.power.iter().map(|p| p[1]).collect::<Vec<_>>());
         }
-        o.vec("max", &s.max);
+        o.opt_vec("max", s.max.as_ref().map(|r| &r[..]));
         if !s.interface.is_empty() {
             o.text("interface", &s.interface)?;
         }
@@ -197,30 +219,48 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
             o.text("c_joint", c)?;
         }
     }
-    for t in &m.turrets {
+    // the reader keeps indexing turrets before manual tool posts
+    for t in m.turrets.iter().filter(|t| !t.manual) {
         o.line("");
         o.line("[[machine.turret]]");
         o.text("name", &t.name)?;
         o.text("link", &t.link)?;
-        o.num("stations", t.stations as f64);
-        o.num("index_s", t.index_s);
+        o.opt("stations", t.stations.map(|x| x as f64));
+        o.opt("index_s", t.index_s);
         o.vec("center", &t.center);
         o.vec("index_axis", &t.index_axis);
         if let Some(l) = &t.live {
             o.text("live", l)?;
         }
     }
-    if let Some(Changer {
-        pockets,
-        change_s,
-        max_tool_kg,
-    }) = &m.changer
-    {
+    for t in m.turrets.iter().filter(|t| t.manual) {
+        o.line("");
+        o.line("[[machine.toolpost]]");
+        o.text("name", &t.name)?;
+        o.text("link", &t.link)?;
+        o.vec("center", &t.center);
+        o.opt("change_s", t.index_s);
+    }
+    if let Some(c) = &m.changer {
         o.line("");
         o.line("[[machine.changer]]");
-        o.num("pockets", *pockets as f64);
-        o.num("change_s", *change_s);
-        o.num("max_tool_kg", *max_tool_kg);
+        if c.manual {
+            o.text("kind", "manual")?;
+        }
+        o.opt("pockets", c.pockets.map(|x| x as f64));
+        o.opt("change_s", c.change_s);
+        o.opt("max_tool_kg", c.max_tool_kg);
+        o.position(&c.position)?;
+    }
+    if let Some(p) = &m.pallets {
+        o.line("");
+        o.line("[[machine.pallets]]");
+        o.num("count", p.count as f64);
+        o.opt("change_s", p.change_s);
+        o.opt("max_kg", p.max_kg);
+        o.opt_vec("size", p.size.as_ref().map(|r| &r[..]));
+        o.opt_vec("max_work", p.max_work.as_ref().map(|r| &r[..]));
+        o.position(&p.position)?;
     }
     for mt in &m.mounts {
         o.line("");
@@ -261,6 +301,17 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
                 o.num("r", *r);
                 o.num("h", *h);
             }
+        }
+    }
+    for z in &m.zones {
+        o.line("");
+        o.line("[[machine.zone]]");
+        o.text("name", &z.name)?;
+        writeln!(o.s, "joints = {}", strings(&z.joints)?).unwrap();
+        o.vec("min", &z.min);
+        o.vec("max", &z.max);
+        if !z.note.is_empty() {
+            o.text("note", &z.note)?;
         }
     }
     for c in &m.cites {
