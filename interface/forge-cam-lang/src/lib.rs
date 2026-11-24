@@ -61,6 +61,9 @@ static SURFACED: memo::Memo<Surfaced> = memo::Memo::new();
 /// The certifications made by earlier runs of documents in this process (memo.rs).
 static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
 
+/// Parts' sections at a height (`PartIn::section`).
+static SECTIONS: memo::Memo<Result<Region, forge_cam::section::SectionError>> = memo::Memo::new();
+
 /// Programs' round trips (G6): the text and the motion read back, or why not.
 type RoundTrip = Result<(String, Vec<forge_post::Motion>), String>;
 static ROUND_TRIPS: memo::Memo<RoundTrip> = memo::Memo::new();
@@ -1316,7 +1319,7 @@ pub struct Cam {
     setups: Vec<SetupIn>,
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
-    lib: Library,
+    lib: std::sync::Arc<Library>,
     jaws: Vec<forge_cam::fixture::SoftJaws>,
 }
 
@@ -1324,6 +1327,13 @@ impl PartIn {
     /// `faces`' full text, made at the first call.
     fn faces_key(&self) -> &str {
         self.faces_text.get_or_init(|| format!("part {:?}", self.faces))
+    }
+
+    /// The section of the part at height z (forge_cam::section), from an earlier call with the
+    /// same faces, z and mu (memo.rs): a function of these alone.
+    fn section(&self, z: f64, mu: f64) -> Result<Region, forge_cam::section::SectionError> {
+        let key = format!("section/1 {:?}", (self.faces_key(), z, mu));
+        SECTIONS.get_or(key, || forge_cam::section::section(&self.faces, z, mu))
     }
 
     /// Its lowest plus its highest z: turning over about x maps z to h − z.
@@ -1449,7 +1459,7 @@ impl Cam {
         let mut secs = vec![];
         for w in zs.windows(2) {
             let zm = 0.5 * (w[0] + w[1]);
-            let sec = forge_cam::section::section(&p.faces, zm, 1e-5).map_err(|e| {
+            let sec = p.section(zm, 1e-5).map_err(|e| {
                 format!("stock: the part's section at z = {zm}: {e:?} (a shaped stock needs a 2.5D part)")
             })?;
             secs.push((zm, sec));
@@ -2192,7 +2202,16 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
-    run_with_library(src, dir, Library::builtin())
+    // the built-in library, shared: read once (Library::builtin), and copied only if the
+    // document's project files add to it (run_with_library)
+    static BUILTIN: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
+    run_shared(
+        src,
+        dir,
+        BUILTIN
+            .get_or_init(|| std::sync::Arc::new(Library::builtin()))
+            .clone(),
+    )
 }
 
 /// Runs a machining document on a given tooling library: the one the user's levels make
@@ -2200,6 +2219,11 @@ pub fn run(src: &str, dir: &Path) -> Cam {
 /// over the built-in), so tools, holders and inserts made in the builder reach CAM. The
 /// document's `cam/*.toml` beside it are added on top, as with `run`.
 pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
+    run_shared(src, dir, std::sync::Arc::new(lib))
+}
+
+/// `run_with_library` on a shared library (copied where the project's files add to it).
+fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
     let mut cam = Cam {
         leftover: vec![],
         leftover_done: false,
@@ -2241,7 +2265,7 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
             files.sort();
             for f in files {
                 if let Ok(s) = forge_dirs::fs::read_to_string(&f)
-                    && let Err(e) = cam.lib.add(&f.display().to_string(), &s)
+                    && let Err(e) = std::sync::Arc::make_mut(&mut cam.lib).add(&f.display().to_string(), &s)
                 {
                     cam.errors.push(e.to_string());
                     cam.ok = false;
@@ -2479,7 +2503,7 @@ impl Cam {
                 let mut found = None;
                 let mut failed = false;
                 for (zp, g) in tries {
-                    match forge_cam::section::section(&part.faces, zp, 1e-5) {
+                    match part.section(zp, 1e-5) {
                         Ok(sec) => {
                             if std::env::var("FORGE_CAM_DEBUG").is_ok() {
                                 eprintln!("G4 band {w:?}: section at {zp}, grown {g}");
@@ -3093,7 +3117,7 @@ impl Cam {
         if relief {
             for w in zs.windows(2) {
                 let zm = 0.5 * (w[0] + w[1]);
-                if let Ok(sec) = forge_cam::section::section(&part.faces, zm, 1e-5) {
+                if let Ok(sec) = part.section(zm, 1e-5) {
                     relief_at.extend(forge_cam::fixture::corners(&sec));
                 }
             }
@@ -5165,7 +5189,8 @@ impl Cam {
                         let top = get_num(a, "from", Some(s.stock.max[2]))?;
                         let bottom = get_num(a, "to", None)?;
                         let zmid = 0.5 * (top + bottom);
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                        let sec = part
+                            .section(zmid, 1e-5)
                             .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                         let regions = match get_str(a, "region", Some("outside"))?.as_str() {
                             "outside" => {
@@ -5251,7 +5276,8 @@ impl Cam {
                         let bottom = get_num(a, "to", None)? + ax;
                         let zmid = 0.5 * (top + bottom);
                         let r = 0.5 * d;
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                        let sec = part
+                            .section(zmid, 1e-5)
                             .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                         let islands = outer_or_inner(&sec, true)?;
                         // the tool may pass wholly outside the stock: a strip between the part
@@ -5330,7 +5356,8 @@ impl Cam {
                             tabs: contour_tabs(a, d, top - bottom)?,
                         };
                         let zmid = 0.5 * (top + bottom);
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                        let sec = part
+                            .section(zmid, 1e-5)
                             .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                         let rg = outer_or_inner(&sec, side == "outside")?;
                         if side == "outside" {
@@ -5403,7 +5430,8 @@ impl Cam {
                             let top = get_num(a, "from", None)?;
                             let bottom = get_num(a, "to", None)? + ax;
                             let zmid = 0.5 * (top + bottom);
-                            let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                            let sec = part
+                                .section(zmid, 1e-5)
                                 .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                             let pockets = pockets_of(&sec)?;
                             let leave = get_num(a, "leave", Some(0.0))?;
@@ -5415,7 +5443,7 @@ impl Cam {
                             // a hole that ends above `to:` (a drilled hole's floor or point) is
                             // left to its own op: the section just above the bottom shows
                             // material where it was (when that section can be made)
-                            let below = forge_cam::section::section(&part.faces, bottom + 1e-3, 1e-5).ok();
+                            let below = part.section(bottom + 1e-3, 1e-5).ok();
                             let mut shallow: Vec<[f64; 4]> = vec![];
                             for rg in pockets {
                                 // (where no section can be made there, a drill point crossing
