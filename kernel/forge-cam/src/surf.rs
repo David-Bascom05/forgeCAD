@@ -262,7 +262,7 @@ impl<'a> Surfacer<'a> {
             return false;
         }
         let d = sweep.abs() / n as f64;
-        let sag = 1.01 * r * d * d / 8.0 + 1e-12;
+        let sag = 1.01 * r * d * d / 8.0 + 1e-12 * (1.0 + r + c[0].abs().max(c[1].abs()));
         let at = |k: usize| -> [f64; 3] {
             if k == 0 {
                 return a;
@@ -282,7 +282,10 @@ impl<'a> Surfacer<'a> {
         };
         let w = r + grown.r;
         let idx = self.grid.near(c[0] - w, c[1] - w, c[0] + w, c[1] + w);
-        let lim = limit + sag;
+        // outward-rounded, as `contact::clear_arc`
+        let lim = forge_cam_geom::ival::Ival::pt(limit)
+            .add(forge_cam_geom::ival::Ival::pt(sag))
+            .hi;
         for k in 0..n {
             let mv = Move::Line {
                 a: at(k),
