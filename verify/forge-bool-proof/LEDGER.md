@@ -171,7 +171,7 @@ fuzz family reaches it.
 | A8.R3 | face_fast: `Refines` from the input bodies to the face ledger | FALLBACK | open | — |
 | A8.out | the write-out of A8's result to a `Body` (D8 for A8) | FALLBACK | open | — |
 | A8.ref | A8's refusals are `RefusalTrue` (`coreI_zeroThickness_iff`, the collapse) | FALLBACK | proven (core) | verify/forge-exact `coreI_zeroThickness_iff` |
-| A8.unneeded | today's path never refuses or is undecided where A8 would answer | FALLBACK | open | — |
+| A8.unneeded | today's path never refuses or is undecided where A8 would answer | FALLBACK | stated (`A8Unneeded`), and its use proven: under it the composition `withFallback` answers exactly where today's path does (`withFallback_ok_iff`), so A8 stays unwired. The premise itself: open (UNKNOWN beyond the corpus); measured on main 4846170a, suite + fuzz 1–300 (316 parts), sequential and n-ary: one refusal, fuzz55 `ZeroThickness` (a subtracted ball, curved), where A8 (flat only) skips; A8 run from the original operands at every sequential refusal answered none | verify/forge-bool-fallback `Unneeded.A8Unneeded`, `Unneeded.withFallback_ok_iff` (a restatement of Compose.lean's `withFallback` over any types) |
 
 ## Curved screens (route B), for the curved D-steps
 
