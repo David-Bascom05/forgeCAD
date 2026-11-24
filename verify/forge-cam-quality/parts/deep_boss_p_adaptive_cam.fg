@@ -1,5 +1,5 @@
 machining
-# Benchmark (adaptive vs clear, fto-adaptive.md): boss.fg's open level all round the boss, 14.8 mm
+# Benchmark (adaptive vs clear): boss.fg's open level all round the boss, 14.8 mm
 # deep with a 6 mm end mill (2.5 D, flute 18 mm), material group P: adaptive.
 shared tol = 0.01
 

@@ -2,12 +2,12 @@
 //! piece of the path set so that the chip the edge cuts (after radial thinning) is the cutting
 //! data's feed per tooth, never more.
 //!
-//! This is the offline feed optimisation of GE's US 5,828,574 (1997, expired 2017-05-19): the
-//! swept tool is taken from a model of the stock, the engagement of each move measured, and the
-//! largest feed within the limit chosen (research/cam/patents.md §2.8). The path's geometry is
-//! unchanged: a move is only split where its feed changes (lines into collinear pieces, arcs and
-//! helices into pieces of the same circle), and what is posted is certified as before. Feeds are
-//! no part of G1–G4; G5 checks every posted feed against the machine.
+//! This is offline feed optimisation: the swept tool is taken from a model of the stock, the
+//! engagement of each move measured, and the largest feed within the limit chosen, so the tool
+//! runs at full chip load in light cuts and is never overloaded in heavy ones. The path's
+//! geometry is unchanged: a move is only split where its feed changes (lines into collinear
+//! pieces, arcs and helices into pieces of the same circle), and what is posted is certified as
+//! before. Feeds are no part of G1–G4; G5 checks every posted feed against the machine.
 //!
 //! The model: a z-up dexel per cell (its centre) over the setup's stock box, lowered by every
 //! void the in-process stock proves cleared and by the tool's body along the path. It holds at
@@ -324,9 +324,9 @@ pub struct Sample {
 
 /// What the feeds are set from.
 ///
-/// Per research/cam/toolpath-quality/fto-adaptive.md (design-around D): the feed is set per
-/// FIXED-LENGTH sample from chip thinning and the chip load; the path is never split where the
-/// engagement changes, there is no abrasion term, and every sample is its own move: samples are
+/// The feed is set per FIXED-LENGTH sample from chip thinning and the chip load: block lengths
+/// stay predictable for the controller's lookahead, and the path is never split where the
+/// engagement changes. There is no abrasion term, and every sample is its own move: samples are
 /// never joined, whatever their feeds (equal F words are simply not repeated when posted).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Sched {
@@ -619,7 +619,7 @@ mod tests {
         );
     }
 
-    /// The design-around (fto-adaptive.md D): sample boundaries are fixed by length alone,
+    /// Sample boundaries are fixed by length alone,
     /// whatever the engagement. Every engaged sample of the 52 mm moves ends at a multiple of
     /// 52 / 26 = 2 mm along it, and a run of engagement does not change where they fall.
     #[test]

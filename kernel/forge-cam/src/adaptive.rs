@@ -1,41 +1,33 @@
 //! Adaptive clearing: a 2.5D roughing path whose radial engagement is held under ONE capped
 //! target by simulating the cleared area step by step.
 //!
-//! **Patent design-around: read before changing anything here.** This module is built strictly
-//! to research/cam/toolpath-quality/fto-adaptive.md §3 (candidates A + C + D + E, B only plain),
-//! per the coordinator's rules of 2026-11-24 (engineering reading, not legal advice):
-//! 1. A cleared-area simulation steers each step to ONE capped engagement target (`Adaptive::
-//!    phi_max`): the largest turn into material whose engagement does not exceed the cap. There is
-//!    NO minimum engagement, NO band, and no designed variation. The output is OPEN passes joined by
-//!    links, never spiral loops built to a cyclic engagement pattern (SolidCAM US 8,489,224 /
-//!    9,823,645 / 10,895,861 / 10,324,445). A generated step is never revised afterwards
-//!    (Celeritive US 10,108,176; Delcam/Autodesk US 9,489,339).
-//! 2. Links by a FIXED rule: stay down on a straight move that lies in the cleared area, else
-//!    retract. No transition toolpaths or areas, no trimming of cuts against them (Celeritive
-//!    US 8,295,972 / 8,880,212), no choice between link kinds or between trochoid and spiral by
-//!    estimated time (SolidCAM US 12,248,293, US 2025/0284264).
-//! 3. Feed: not set here; forge_cam::engage sets it per fixed-length sample (MERL US 9,892,215).
-//! 4. Islands are met by the same simulation as they come: NO moat pass around an island
-//!    (SolidCAM '224 cl.45).
-//! 5. Only plain offsets (the final wall pass) and no Voronoi diagram (Celeritive US 10,579,040;
-//!    Autodesk US 10,108,172).
-//! 6. No corner-radius rule from predicted engagement (DP Technology US 9,778,649); paths are
-//!    the simulation's steps. Never the two-tangent-arc pass into a three-sided region (Truemill
-//!    US 7,577,490).
+//! How it works, and why:
+//! 1. A cleared-area simulation steers each step to one capped engagement target (`Adaptive::
+//!    phi_max`): the largest turn into material whose engagement does not exceed the cap. Holding
+//!    engagement at the cap keeps the tool load steady, so the full flute length can be used at a
+//!    feed set for that load, and no step ever slots. Steps are final once made: the path is the
+//!    simulation's output, so what is certified is what was simulated.
+//! 2. Passes are joined by a fixed link rule: stay down on a straight move that lies in the cleared
+//!    area, else go back along the last pass and then straight (below), else retract. Staying down
+//!    saves the retract/plunge pair that dominates cycle time on small pockets.
+//! 3. Feed is not set here; forge_cam::engage sets it per fixed-length sample from the measured
+//!    engagement.
+//! 4. Islands are met by the same simulation as they come; the engagement cap holds round them.
+//! 5. One plain offset wall pass leaves an even stock on the walls for the finishing op.
 //!
-//! Since fto-adaptive.md §8 (TOOLPATH-RESEARCH, 2026-11-24): the step rule alone, in a closed
-//! region, makes an outward spiral, which SolidCAM's '645/'861/'445 machine claims may read on
-//! however it was computed. So every pass is a one-direction "peel" (§8 (b)): its heading stays
-//! within `PEEL` of one sweep direction, it never winds round a centre or an island, and it ends
-//! at the boundary or the cap; the next starts by the fixed link rule.
+//! Every pass is a one-direction "peel": its heading stays within `PEEL` of one sweep direction
+//! and it ends at the boundary or the cap; the next starts by the link rule. Peels keep the cut
+//! climb (or conventional) throughout, and their ends fall where links are short. `two_way` makes
+//! alternate peels run back, a zigzag that halves the link travel where the machine's
+//! acceleration makes that pay.
 //!
-//! The tests `single_capped_target` and `passes_peel_one_way` assert rule 1 and the peel; keep
+//! The tests `single_capped_target` and `passes_peel_one_way` assert the cap and the peel; keep
 //! them passing.
 //!
-//! Links at depth (fto-adaptive.md §10): straight where the cleared area holds it, else back along
-//! the last pass as it was cut, then straight. The retrace lemma: the pass's own posted moves
-//! reversed, at its depth, with the same tool, sweep a subset of the swath that pass cut, so they
-//! meet no material; only the last straight leg is tested. `links_never_cut` replays it.
+//! Links at depth: straight where the cleared area holds it, else back along the last pass as it
+//! was cut, then straight. The retrace lemma: the pass's own posted moves reversed, at its depth,
+//! with the same tool, sweep a subset of the swath that pass cut, so they meet no material; only
+//! the last straight leg is tested. `links_never_cut` replays it.
 //!
 //! Certification: the path is posted and certified like every other (G1–G3 on the posted
 //! path). What the op claims cleared (its voids, for the in-process stock and G4) is not taken
@@ -62,21 +54,21 @@ pub struct Adaptive {
     /// A plain offset pass along the walls at the end of each level.
     pub wall_pass: bool,
     /// The sweep direction, degrees from +x: every pass heads within `PEEL` of it (one-direction
-    /// "peel" passes, fto-adaptive.md §8 (b): a pass never winds round a centre).
+    /// "peel" passes: a pass never winds round a centre, so the cut stays climb or conventional).
     pub sweep: f64,
-    /// Two-way passes (fto-adaptive.md §9 (2)): a pass heads within `PEEL` of the sweep direction
+    /// Two-way passes: a pass heads within `PEEL` of the sweep direction
     /// or of its reverse, the starts still taken across the sweep from one side to the other
     /// (a zigzag); off: every pass the same way.
     pub two_way: bool,
 }
 
 /// A link at depth back along what was cut is taken only within k times the straight distance
-/// plus d tool radii (fto-adaptive.md §10 (3): a fixed geometric cap, no time compared): one-way
+/// plus d tool radii (a fixed geometric cap, cheap to test and the same for every link): one-way
 /// passes (k, d) = CAP_ONE_WAY, two-way CAP_TWO_WAY (whose passes end near the next start, so a
 /// longer retrace still saves the climb). Provenance: picked once, by trying (3, 4), (6, 10),
 /// (10, 20), (20, 40), (40, 80), (100, 200) on verify/forge-cam-quality's deep_boss_{n,p}_*,
 /// boss_adaptive and rptu3_* parts (2026-11-24); a pure length test, never computed from rates
-/// or times, never varied per link (fto-adaptive.md §10 note).
+/// or times, the same for every link.
 pub const CAP_ONE_WAY: (f64, f64) = (10.0, 20.0);
 /// How many starts, in order, are tried for reach at depth before a retract (P1).
 pub const REACH_N: usize = 30;
@@ -89,10 +81,10 @@ pub const PEEL: f64 = 75.0;
 pub struct AdaptiveOut {
     pub path: OpPath,
     pub voids: Vec<(Region, f64)>,
-    /// The rings each level ends with (fto-adaptive.md §9 (a)-(c)): one record per ring or run
+    /// The rings each level ends with: one record per ring or run
     /// of one, its moves `path.moves[first..end]`.
     pub rings: Vec<RingRun>,
-    /// The links at depth that retrace a pass (fto-adaptive.md §10 (A)): `path.moves[first..end]`
+    /// The links at depth that retrace a pass: `path.moves[first..end]`
     /// each; their arcs are links, not cuts (a posted arc carries no phase).
     pub retraces: Vec<(usize, usize)>,
     /// What the user should know about the path made (e.g. a link kind left out, and why).
@@ -267,7 +259,7 @@ impl Field {
     /// so up and down go at feed only through the height that stock stood at over the tool's
     /// disk (and `CLEAR` above it), rapid beyond. Across, through `via` first (xy, at the retract
     /// height): a return over the swath the last pass cut, not across what is still uncut
-    /// (fto-adaptive.md §9: the path as travelled must not wind round uncut material).
+    /// (so the tool never travels round uncut material at the retract height).
     fn retract_link(
         &self,
         mv: &mut Vec<PMove>,
@@ -401,7 +393,7 @@ pub fn adaptive(
     let mut retraces_log: Vec<(usize, usize)> = Vec::new();
     // a retrace runs tangent to the walls the pass left: where those may be final part walls
     // (no stock left on them and no wall pass after), it could mark a finished surface, so no
-    // retraces there (fto-adaptive.md §10, TOOLPATH-RESEARCH 2026-11-24)
+    // retraces there
     let retrace_ok = prm.leave > 0.0 || prm.wall_pass;
     let mut notes: Vec<String> = Vec::new();
     if !retrace_ok {
@@ -496,7 +488,7 @@ pub fn adaptive(
                     } else {
                         continue;
                     };
-                    // across the sweep from one side to the other (fto-adaptive.md §9 (2)): the
+                    // across the sweep from one side to the other: the
                     // lowest band of r/2 across the sweep first, the nearest within it
                     let across = (sweep_dir[0] * p[1] - sweep_dir[1] * p[0]) / (0.5 * f.r);
                     let d = across.floor() * 1e9 + (p[0] - here[0]).powi(2) + (p[1] - here[1]).powi(2);
@@ -505,7 +497,7 @@ pub fn adaptive(
                     }
                     order.push((p, d, sign));
                 }
-                // P1 (fto-adaptive.md §11): among the starts reachable at depth (straight in the
+                // P1: among the starts reachable at depth (straight in the
                 // cleared area, or by a retrace then straight), the first in that order (the
                 // lowest band across the sweep, then the nearest); none of the first REACH_N in
                 // reach: the first, by a retract
@@ -951,7 +943,7 @@ pub fn adaptive(
                 if k > 0 && !dense.iter().any(|q| f.disk_has_material(q.0, q.1, z)) {
                     continue;
                 }
-                // a cleanup ring: only its runs that meet material (§9 (c)), each from the clear
+                // a cleanup ring: only its runs that meet material, each from the clear
                 // point before it to the clear point after, linked by the rule; material all round
                 // it: the whole ring, below
                 if k > 0 {
@@ -1160,7 +1152,7 @@ pub fn adaptive(
     })
 }
 
-/// A link at depth back along the last pass as it was cut (fto-adaptive.md §10 (A)), then
+/// A link at depth back along the last pass as it was cut, then
 /// straight to b. The retrace is the pass's own posted moves reversed (a line back along itself,
 /// an arc back about the same centre), at the pass's depth, with the same tool: the tool sweeps
 /// exactly a subset of the swath that pass cut, so it meets no material and removes none (the
@@ -1548,7 +1540,7 @@ mod tests {
         pts
     }
 
-    /// fto-adaptive.md §9 (TOOLPATH-RESEARCH, corrected 2026-11-24), the binding tests:
+    /// The shape of the path, the binding tests:
     /// (1) each pass (a run of cutting moves at one depth) turns in all by at most 2·PEEL;
     /// (2) the path AS TRAVELLED (passes, links and rapids in order, never closed by a chord)
     ///     sweeps an angle about every island point, and about every point of material while it
@@ -1675,7 +1667,7 @@ mod tests {
         }
     }
 
-    /// fto-adaptive.md §9 (2) as corrected: see `assert_no_winding`.
+    /// The path as travelled winds round nothing: see `assert_no_winding`.
     #[test]
     fn path_winds_round_nothing() {
         let t = tool("flat-6");
@@ -1687,8 +1679,8 @@ mod tests {
             ],
         };
         let ip = InProcess::new([0.0, 0.0, -5.0], [40.0, 30.0, 0.0]);
-        // the wall pass is a plain offset round the walls and islands at the end of each level
-        // (§9 (1)): it goes round by design, so these tests are of the sweep alone (wall off)
+        // the wall pass is a plain offset round the walls and islands at the end of each level:
+        // it goes round by design, so these tests are of the sweep alone (wall off)
         for (sweep, wall, two_way) in [
             (0.0, false, false),
             (90.0, false, false),
@@ -1740,7 +1732,7 @@ mod tests {
         }
     }
 
-    /// fto-adaptive.md §9, the wall pass and the cleanup rings (TOOLPATH-RESEARCH, 2026-11-24):
+    /// The wall pass and the cleanup rings:
     /// (a) every ring of a level comes after the level's passes; (b) the wall pass is one offset
     /// of all the walls together, at r: at each level exactly the loops of that offset, whole;
     /// (c) a cleanup ring (k > 0) is cut only where it meets material: each run removes material,
@@ -1864,7 +1856,7 @@ mod tests {
         }
     }
 
-    /// fto-adaptive.md §10 (1): links never cut. Replay the path on a fresh model: every link
+    /// Links never cut. Replay the path on a fresh model: every link
     /// move at depth (straight, or back along a pass as it was cut) removes nothing but the
     /// model's own rounding (a sliver of cells along a swath's edge, under 0.01 mm³ per mm).
     #[test]
@@ -1951,7 +1943,7 @@ mod tests {
         }
     }
 
-    /// The peel (fto-adaptive.md §8 (b)): every cutting step at depth, wall pass off, heads
+    /// The peel: every cutting step at depth, wall pass off, heads
     /// within PEEL of the sweep direction, so no pass winds round a centre.
     #[test]
     fn passes_peel_one_way() {
@@ -2030,7 +2022,7 @@ mod tests {
         }
     }
 
-    /// Rule 1 of the design-around: one capped target. Every step of every pass keeps the
+    /// One capped target. Every step of every pass keeps the
     /// engagement the simulation measured within the cap (and nothing in the API sets a minimum).
     #[test]
     fn single_capped_target() {
@@ -2059,6 +2051,8 @@ mod tests {
                     retract: 3.0,
                 },
                 feed: (1000.0, 300.0),
+                ramp_feed: None,
+                lead_feed: None,
             },
             Span {
                 top: 0.0,

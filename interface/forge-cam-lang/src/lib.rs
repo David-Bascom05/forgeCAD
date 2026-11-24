@@ -3367,7 +3367,7 @@ impl Cam {
             f_min: 0.0,
             cap: feeds::THIN_CAP,
             cell,
-            // samples of one diameter, fixed by length (fto-adaptive.md D)
+            // samples of one diameter, fixed by length
             sample: t.tool.dc,
         };
         let mut map = HeightMap::of_stock(&s.ip, cell);
@@ -3567,12 +3567,11 @@ impl Cam {
                                 }
                                 vec![Region { loops }]
                             }
-                            // closed pockets: one-direction peels cannot leave an entry hole
-                            // under the cap, and anything that winds round (a spiral) is what
-                            // fto-adaptive.md §8 rules out; offset pockets with feeds from
-                            // engagement are the design-around there (§8 (a))
+                            // closed pockets: one-direction peels cannot open an entry hole
+                            // under the cap, so a closed pocket is cut by pocket(), offset
+                            // passes with feeds set from the measured engagement
                             "pockets" => {
-                                return Err("adaptive: region \"pockets\" is not offered (fto-adaptive.md §8): use pocket(SETUP, from:, to:, ..), whose feeds follow the engagement".into());
+                                return Err("adaptive: region \"pockets\" is not offered: use pocket(SETUP, from:, to:, ..), whose feeds follow the engagement".into());
                             }
                             o => return Err(format!("adaptive: region \"{o}\": \"outside\" or \"pockets\"")),
                         };
