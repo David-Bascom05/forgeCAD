@@ -601,7 +601,16 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
         };
         let len = move_len(at, mv);
         let sched = scheduled(at, mv);
-        let ns = if sched {
+        // a hop (crate::hop) is read whole as one sample: one block, its feed the chip rule's for
+        // the worst piece if any meets material, else its own
+        let hop = matches!(
+            mv,
+            PMove::Line {
+                phase: Phase::Hop,
+                ..
+            }
+        );
+        let ns = if sched && !hop {
             (len / s.sample.max(1e-9)).ceil().max(1.0) as usize
         } else {
             1

@@ -89,6 +89,9 @@ pub enum Phase {
     Cut,
     Plunge,
     Link,
+    /// A hop (forge_cam::hop): a link up over the material and down, in place of a retract;
+    /// checked and fed as a link, posted with a comment so a reader can tell it from a cut.
+    Hop,
     Rapid,
     /// A probe move's approach: from its start to its contact window (nothing may touch).
     Probe,
@@ -103,6 +106,7 @@ impl Phase {
             Phase::Cut => "cut",
             Phase::Plunge => "plunge",
             Phase::Link => "link",
+            Phase::Hop => "hop",
             Phase::Rapid => "rapid",
             Phase::Probe => "probe",
             Phase::Touch => "touch",
@@ -1842,7 +1846,7 @@ fn trim_air(
         };
         let level = to[2] == at[2];
         let (air, len) = match *m {
-            PMove::Line { phase, .. } if level && matches!(phase, Phase::Cut | Phase::Link) => {
+            PMove::Line { phase, .. } if level && matches!(phase, Phase::Cut | Phase::Link | Phase::Hop) => {
                 let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
                 let again = done.contains(&(key(at), key(to))) || done.contains(&(key(to), key(at)));
                 if phase == Phase::Cut {
@@ -2212,10 +2216,16 @@ pub fn facing(st: &Stock, c: Cut, sp: Span) -> OpPath {
             let y = y0 + (y1 - y0) * i as f64 / n as f64;
             let (xa, xb) = if i % 2 == 0 { (x0, x1) } else { (x1, x0) };
             if i > 0 {
-                mv.push(PMove::Line {
+                // the turn between passes: a half circle through the air beyond the stock (the
+                // tool's edge further out than at the pass's end, at least 1 mm clear), not two
+                // right-angle corners, each a stop
+                let yp = y0 + (y1 - y0) * (i - 1) as f64 / n as f64;
+                mv.push(PMove::Arc {
                     to: [xa, y, zl],
+                    c: [xa, 0.5 * (yp + y)],
+                    // out past x1 (counter-clockwise from below) or past x0 (clockwise)
+                    cw: xa == x0,
                     f: feed.0,
-                    phase: Phase::Cut,
                 });
             }
             mv.push(PMove::Line {
