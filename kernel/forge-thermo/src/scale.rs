@@ -192,18 +192,11 @@ fn curve(e: &Curve, r: Interval, c: Point3, k: f64) -> Option<(Curve, Interval)>
             r,
         ),
         Curve::Ellipse(o) => (
-            Curve::Ellipse(Ellipse {
-                frame: frame(&o.frame, c, k),
-                major: o.major * k,
-                minor: o.minor * k,
-            }),
+            Curve::Ellipse(Ellipse::new(frame(&o.frame, c, k), o.major * k, o.minor * k)),
             r,
         ),
         Curve::Parabola(p) => (
-            Curve::Parabola(Parabola {
-                frame: frame(&p.frame, c, k),
-                focal: p.focal * k,
-            }),
+            Curve::Parabola(Parabola::new(frame(&p.frame, c, k), p.focal * k)),
             by_k,
         ),
         Curve::Hyperbola(h) => (
@@ -252,10 +245,14 @@ pub fn scaled(body: &Body, c: Point3, k: f64) -> Result<Body, Unscalable> {
             e.bbox.clear();
         }
     }
+    let mut widest = 0.0f64;
     for v in &mut out.vertices {
         v.point = c + (v.point - c) * k;
-        v.tol *= k.max(1.0);
+        // (raised here as the body's bound is, below: CacheOK G9)
+        v.tol *= k.max(1.0); // vertex_tol: bounded below
+        widest = widest.max(v.tol);
     }
+    out.note_vertex_tol(widest);
     out.hulls.clear();
     Ok(out)
 }

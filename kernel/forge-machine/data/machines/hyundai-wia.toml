@@ -1098,6 +1098,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # Hyundai WIA HS5000 II: HS4000/5000 II Series.
 # X 730 Y 730 Z 880; 15000 rpm BBT40; 40 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "hyundai-wia-hs5000-ii"
 kind = "vmc4"
@@ -1397,6 +1403,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # Hyundai WIA SE2200: SE2200 Series (SE series), FANUC (latest, model not named).
 # X 210 Z 340; 4500 rpm.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "hyundai-wia-se2200"
 kind = "lathe"

@@ -446,6 +446,16 @@ fn style_of(clamp: &str) -> Style {
     if clamp == "american" { Style::Us } else { Style::Eu }
 }
 
+/// Whether a record's width is cited as twice a published body dimension (an envelope).
+fn prov_width_twice(prov: &Prov) -> bool {
+    prov.of("width").iter().any(|c| {
+        c.status == Status::Estimate
+            && c.basis
+                .as_deref()
+                .is_some_and(|b| b.starts_with("twice the largest"))
+    })
+}
+
 fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
     let id = match t.get("id") {
         Some(Item::Str(s)) => s.clone(),
@@ -517,6 +527,9 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
             profile: outline,
             segments,
             max_load,
+            // a width that is the envelope of a published dimension (twice it, about the tip
+            // line): the dimension itself is what is drawn
+            drawn_width: prov_width_twice(&prov).then_some(w / 2.0),
         };
         // the working part: the flanks up to where they reach the body's width (or 12 mm, the
         // stand-ins' height, whichever is lower), unless the record states it

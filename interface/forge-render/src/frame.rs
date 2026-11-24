@@ -107,8 +107,15 @@ impl ViewRect {
 
     /// The uncovered rect's centre and half size, in clip units (-1..1, y up).
     fn clip(&self) -> ([f32; 2], [f32; 2]) {
-        let [l, t, r, b] = self.covered;
         let (w, h) = (self.width.max(1.0), self.height.max(1.0));
+        // insets that leave less than a tenth of the view: frame in the whole view instead
+        let [mut l, mut t, mut r, mut b] = self.covered.map(|v| v.max(0.0));
+        if l + r > w * 0.9 {
+            (l, r) = (0.0, 0.0);
+        }
+        if t + b > h * 0.9 {
+            (t, b) = (0.0, 0.0);
+        }
         let (x0, x1) = (l.min(w - 1.0), (w - r).max(l + 1.0));
         let (y0, y1) = (t.min(h - 1.0), (h - b).max(t + 1.0));
         let cx = (x0 + x1) / w - 1.0;
@@ -294,6 +301,17 @@ mod tests {
         let f = frame(sheet, ViewRect::full(1400.0, 860.0), Framing::default(), &[wall]);
         assert!(!f.eye_blocked);
         assert!(!wall.contains(f.camera.eye(), 0.0));
+    }
+
+    #[test]
+    fn insets_wider_than_the_view_fall_back_to_the_whole_view() {
+        let v = ViewRect {
+            width: 400.0,
+            height: 300.0,
+            covered: [300.0, 0.0, 300.0, 0.0],
+        };
+        let ([cx, cy], [wx, wy]) = v.clip();
+        assert_eq!((cx, cy, wx, wy), (0.0, 0.0, 1.0, 1.0));
     }
 
     #[test]

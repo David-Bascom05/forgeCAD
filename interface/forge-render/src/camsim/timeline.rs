@@ -2,7 +2,8 @@
 //! duration, so a time finds the tool's place and a check's move finds its time. Built from the
 //! real run (`forge_cam_lang::run`): the paths as posted where a program posted them (what the
 //! certified checks ran on), else as planned. Times: feeds as programmed, rapids at the run's
-//! rate (`RAPID`, the figure forge-cam-lang's own `time_s` uses), canned cycles as their motion.
+//! rate (the setup's machine's published rapid rates per axis; `RAPID`, the figure forge-cam-lang's
+//! own `time_s` uses, where it has none), canned cycles as their motion.
 
 use forge_cam::ops::{OpPath, PMove, Phase};
 use forge_cam_lang::Cam;
@@ -36,6 +37,8 @@ impl Kind {
             Phase::Plunge => Kind::Plunge,
             Phase::Link => Kind::Link,
             Phase::Rapid => Kind::Rapid,
+            // a probe's search shows as a link until CAM-SIM gives it its own look
+            Phase::Probe | Phase::Touch => Kind::Link,
         }
     }
 }
@@ -45,6 +48,10 @@ impl Kind {
 pub struct ArcOf {
     pub c: [f64; 2],
     pub r: f64,
+    /// The end's radius less the start's: a posted arc's ends, rounded to the control's
+    /// resolution, sit at radii a little apart; the radius goes from one to the other along
+    /// the sweep (as a control blends them), so the piece ends where the move says.
+    pub dr: f64,
     /// Start angle and signed sweep, radians.
     pub a0: f64,
     pub sweep: f64,
@@ -84,7 +91,8 @@ impl Seg {
             ],
             Some(ar) => {
                 let t = ar.a0 + ar.sweep * u;
-                [ar.c[0] + ar.r * dmath::cos(t), ar.c[1] + ar.r * dmath::sin(t), z]
+                let r = ar.r + ar.dr * u;
+                [ar.c[0] + r * dmath::cos(t), ar.c[1] + r * dmath::sin(t), z]
             }
         }
     }
@@ -135,7 +143,21 @@ fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
 }
 
 /// Pushes the pieces of one path, from time `t`; returns the time after it.
-pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64) -> f64 {
+pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, t: f64) -> f64 {
+    push_path_at(op, path, p, segs, t, None)
+}
+
+/// The same, rapids at a machine's rates (mm/min along X, Y, Z: the axes move together, so a
+/// rapid takes its longest axis's time, as the machine's own lower bound counts it); None: every
+/// rapid at `RAPID`.
+pub fn push_path_at(
+    op: u32,
+    path: u32,
+    p: &OpPath,
+    segs: &mut Vec<Seg>,
+    mut t: f64,
+    rapids: Option<[f64; 3]>,
+) -> f64 {
     let tool = p.tool as u32;
     let mut at = p.start;
     let put = |segs: &mut Vec<Seg>,
@@ -150,8 +172,16 @@ pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64
             None => dist(a, b),
             Some(ar) => ((ar.r * ar.sweep).powi(2) + (b[2] - a[2]).powi(2)).sqrt(),
         };
-        let rate = if kind == Kind::Rapid || f <= 0.0 { RAPID } else { f };
-        let dt = len / rate * 60.0;
+        let fast = kind == Kind::Rapid || f <= 0.0 || f >= RAPID;
+        let (rate, dt) = match (fast, rapids) {
+            // the longest axis's time at its rate; the piece's own rate is what that comes to
+            (true, Some(r)) => {
+                let dt = (0..3).map(|k| (b[k] - a[k]).abs() / r[k]).fold(0.0, f64::max) * 60.0;
+                (if dt > 0.0 { len / dt * 60.0 } else { r[0] }, dt)
+            }
+            (true, None) => (RAPID, len / RAPID * 60.0),
+            (false, _) => (f, len / f * 60.0),
+        };
         segs.push(Seg {
             op,
             path,
@@ -178,6 +208,15 @@ pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64
                 put(segs, i, Kind::of(phase), at, to, None, f, &mut t);
                 at = to;
             }
+            // a probe move: its search to the nominal contact, and its back-off when it has one
+            PMove::Probe { to, f, back, .. } => {
+                put(segs, i, Kind::Link, at, to, None, f, &mut t);
+                if back {
+                    put(segs, i, Kind::Link, to, at, None, f, &mut t);
+                } else {
+                    at = to;
+                }
+            }
             PMove::Arc { to, c, cw, f } => {
                 let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
                 let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
@@ -196,6 +235,7 @@ pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64
                 let arc = ArcOf {
                     c,
                     r,
+                    dr: ((to[0] - c[0]).powi(2) + (to[1] - c[1]).powi(2)).sqrt() - r,
                     a0,
                     sweep: a1 - a0,
                 };
@@ -263,8 +303,9 @@ impl Timeline {
             let first = tl.segs.len();
             let t0 = t;
             let paths = cam.sim_paths(oi);
+            let rapids = cam.sim_rapids(op.setup);
             for (pi, p) in paths.iter().enumerate() {
-                t = push_path(oi as u32, pi as u32, p, &mut tl.segs, t);
+                t = push_path_at(oi as u32, pi as u32, p, &mut tl.segs, t, rapids);
             }
             tl.ops.push(OpSpan {
                 name: op.name.clone(),

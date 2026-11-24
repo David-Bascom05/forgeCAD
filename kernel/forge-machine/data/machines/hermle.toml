@@ -714,6 +714,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # ---------------------------------------------------------------------------------------------
 # Hermle C 42 U: C GEN2 (High-Performance Line), HEIDENHAIN TNC7.
 # X 800 Y 800 Z 550; 16000 rpm HSK-A63; 42 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "hermle-c-42-u"
 kind = "table-table"
@@ -1068,6 +1074,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # ---------------------------------------------------------------------------------------------
 # Hermle C 250: C GEN2 Performance Line, HEIDENHAIN TNC7.
 # X 600 Y 550 Z 450; 15000 rpm SK 40; 30 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "hermle-c-250"
 kind = "table-table"
@@ -2126,3 +2138,9 @@ basis = "the spindle housing around the tool: radius an estimate, kept large; on
 path = "body.head"
 status = "estimate"
 basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+

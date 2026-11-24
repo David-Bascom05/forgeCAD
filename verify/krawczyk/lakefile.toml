@@ -1,0 +1,17 @@
+name = "krawczyk"
+version = "0.1.0"
+defaultTargets = ["Krawczyk"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+# Mathlib at the tag matching the toolchain: the pin verify/ieee754 uses, so the two can be joined
+# (the interval side's rounding lemma there, the step lemma here).
+[[require]]
+name = "mathlib"
+git = "https://github.com/leanprover-community/mathlib4.git"
+rev = "v4.36.0"
+
+[[lean_lib]]
+name = "Krawczyk"

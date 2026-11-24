@@ -1,0 +1,1598 @@
+{
+ "maker": "Tungaloy",
+ "taken": "2026-11-24",
+ "source": "General Catalogue 2023-2024 section B Insert (Chipbreaker Guide pages B004-B028, STANDARD CUTTING CONDITIONS); ISO-EcoTurn brochure TR426 (unmatched rows)",
+ "rows": [
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9205",
+   "iso_group": "P",
+   "material_stated": "Low carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     180.0,
+     400.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9205",
+   "iso_group": "P",
+   "material_stated": "Medium carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     180.0,
+     400.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9205",
+   "iso_group": "P",
+   "material_stated": "High carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     150.0,
+     350.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160404-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9215",
+   "iso_group": "P",
+   "material_stated": "Low carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     150.0,
+     400.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160404-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9215",
+   "iso_group": "P",
+   "material_stated": "Medium carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     150.0,
+     400.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160404-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9215",
+   "iso_group": "P",
+   "material_stated": "High carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160404-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9225",
+   "iso_group": "P",
+   "material_stated": "Low carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160404-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9225",
+   "iso_group": "P",
+   "material_stated": "Medium carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160404-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9225",
+   "iso_group": "P",
+   "material_stated": "High carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     100.0,
+     250.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160404-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9235",
+   "iso_group": "P",
+   "material_stated": "Low carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     50.0,
+     200.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160404-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9235",
+   "iso_group": "P",
+   "material_stated": "Medium carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     50.0,
+     200.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+  },
+  {
+   "insert_ids": [
+    "CNMG120404-TM",
+    "CNMG120408-TM",
+    "DNMG150404-TM",
+    "DNMG150408-TM",
+    "DNMG150604-TM",
+    "TNMG160404-TM",
+    "TNMG160408-TM",
+    "VNMG160404-TM",
+    "WNMG080404-TM",
+    "WNMG080408-TM"
+   ],
+   "chipbreaker": "TM",
+   "grade": "T9235",
+   "iso_group": "P",
+   "material_stated": "High carbon steels, Alloy steels",
+   "vc": {
+    "v": [
+     50.0,
+     150.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1,
+     5
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1 - 5"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4",
+   "note": "General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T9215",
+   "iso_group": "P",
+   "material_stated": "Low carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     150.0,
+     400.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steel, alloy steel: 150 - 400"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T9215",
+   "iso_group": "P",
+   "material_stated": "Medium carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     150.0,
+     400.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steel, alloy steel: 150 - 400"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T9215",
+   "iso_group": "P",
+   "material_stated": "High carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steel, alloy steel: 120 - 300"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T9225",
+   "iso_group": "P",
+   "material_stated": "Low carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steel, alloy steel: 120 - 300"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T9225",
+   "iso_group": "P",
+   "material_stated": "Medium carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steel, alloy steel: 120 - 300"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T9225",
+   "iso_group": "P",
+   "material_stated": "High carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     100.0,
+     250.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steel, alloy steel: 100 - 250"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "T9215",
+   "iso_group": "P",
+   "material_stated": "Low carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     150.0,
+     400.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steel, alloy steel: 150 - 400"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "T9215",
+   "iso_group": "P",
+   "material_stated": "Medium carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     150.0,
+     400.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steel, alloy steel: 150 - 400"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "T9215",
+   "iso_group": "P",
+   "material_stated": "High carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steel, alloy steel: 120 - 300"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "T9225",
+   "iso_group": "P",
+   "material_stated": "Low carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steel, alloy steel: 120 - 300"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "T9225",
+   "iso_group": "P",
+   "material_stated": "Medium carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     120.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steel, alloy steel: 120 - 300"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "T9225",
+   "iso_group": "P",
+   "material_stated": "High carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     100.0,
+     250.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steel, alloy steel: 100 - 250"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=58",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T6215",
+   "iso_group": "M",
+   "material_stated": "Low carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     140.0,
+     240.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steel, alloy steel: 140 - 240"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T6215",
+   "iso_group": "M",
+   "material_stated": "Medium carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     160.0,
+     280.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steel, alloy steel: 160 - 280"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T6215",
+   "iso_group": "M",
+   "material_stated": "High carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     80.0,
+     150.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steel, alloy steel: 80 - 150"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "AH6225",
+   "iso_group": "M",
+   "material_stated": "Low carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     90.0,
+     200.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steel, alloy steel: 90 - 200"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "AH6225",
+   "iso_group": "M",
+   "material_stated": "Medium carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     110.0,
+     240.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steel, alloy steel: 110 - 240"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "AH6225",
+   "iso_group": "M",
+   "material_stated": "High carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     60.0,
+     110.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steel, alloy steel: 60 - 110"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "T6215",
+   "iso_group": "M",
+   "material_stated": "Low carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     140.0,
+     240.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steel, alloy steel: 140 - 240"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "T6215",
+   "iso_group": "M",
+   "material_stated": "Medium carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     160.0,
+     280.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steel, alloy steel: 160 - 280"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "T6215",
+   "iso_group": "M",
+   "material_stated": "High carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     80.0,
+     150.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steel, alloy steel: 80 - 150"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "AH6225",
+   "iso_group": "M",
+   "material_stated": "Low carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     90.0,
+     200.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Low carbon steel, alloy steel: 90 - 200"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "AH6225",
+   "iso_group": "M",
+   "material_stated": "Medium carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     110.0,
+     240.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Medium carbon steel, alloy steel: 110 - 240"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "AH6225",
+   "iso_group": "M",
+   "material_stated": "High carbon steel, alloy steel",
+   "vc": {
+    "v": [
+     60.0,
+     110.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) High carbon steel, alloy steel: 60 - 110"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller. The M block's column headers are printed as steel names (\"Low carbon steel, alloy steel\" etc.), apparently carried over from the P block; recorded verbatim."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T515",
+   "iso_group": "K",
+   "material_stated": "Grey cast iron",
+   "vc": {
+    "v": [
+     150.0,
+     700.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Grey cast iron: 150 - 700"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "T515",
+   "iso_group": "K",
+   "material_stated": "Ductile cast iron",
+   "vc": {
+    "v": [
+     150.0,
+     300.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Ductile cast iron: 150 - 300"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "AH8015",
+   "iso_group": "S",
+   "material_stated": "Titanium alloy",
+   "vc": {
+    "v": [
+     20.0,
+     150.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Titanium alloy: 20 - 150"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "TM",
+   "grade": "AH8015",
+   "iso_group": "S",
+   "material_stated": "Ni-base alloy",
+   "vc": {
+    "v": [
+     20.0,
+     100.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Ni-base alloy: 20 - 100"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.2 - 0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 1-3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "AH8015",
+   "iso_group": "S",
+   "material_stated": "Titanium alloy",
+   "vc": {
+    "v": [
+     20.0,
+     150.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Titanium alloy: 20 - 150"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  },
+  {
+   "insert_ids": [],
+   "chipbreaker": "PM",
+   "grade": "AH8015",
+   "iso_group": "S",
+   "material_stated": "Ni-base alloy",
+   "vc": {
+    "v": [
+     20.0,
+     100.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed: Vc (m/min) Ni-base alloy: 20 - 100"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "unit": "mm/rev",
+    "stated": "Feed f (mm/rev) 0.15 - 0.5"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     3.0
+    ],
+    "unit": "mm",
+    "stated": "Depth of cut ap (mm) 0.5 - 3"
+   },
+   "url": "https://tungaloy.com/wpdata/wp-content/uploads/426.pdf#page=59",
+   "note": "ISO-EcoTurn brochure (TR426, 2026 PDF) STANDARD CUTTING CONDITIONS, operation \"Medium cutting\". NOT matched to any raw record: this table is for ISO-EcoTurn small-size inserts (e.g. WNMG06, CNMG09, DNMG11 types), not the CNMG12/DNMG15/TNMG16/VNMG16/WNMG08 records; the brochure says the chipbreaker geometry is identical to regular inserts, but applying it is an inference left to the caller."
+  }
+ ],
+ "missing": [
+  {
+   "insert_id": "CNMG120404-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'T515', 'AH8015', 'AH6225', 'AH6235', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "CNMG120408-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'T515', 'AH8015', 'AH6225', 'AH6235', 'AH725', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "DNMG150404-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'T515', 'AH8015', 'AH6225', 'AH6235', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "DNMG150408-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'T515', 'AH8015', 'AH6225', 'AH6235', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "DNMG150604-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'AH8015', 'AH6225', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "DNMG150608-PM",
+   "why": "Negative-type PM: the GC B004 chart shows PM (T9215/T9225) but its STANDARD CUTTING CONDITIONS table has no PM row; PM rows on B016/B018 are in the positive-type tables (not applied to negative inserts). ISO-EcoTurn brochure (426.pdf p58-59) has PM rows for ISO-EcoTurn sizes only; included as unmatched rows. No vc for any group/grade."
+  },
+  {
+   "insert_id": "TNMG160404-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'AH8015', 'AH6225', 'AH725', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "TNMG160408-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'AH8015', 'AH6225', 'AH725', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "VNMG160404-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'AH8015', 'AH6225', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "VNMG160408-PM",
+   "why": "Negative-type PM: the GC B004 chart shows PM (T9215/T9225) but its STANDARD CUTTING CONDITIONS table has no PM row; PM rows on B016/B018 are in the positive-type tables (not applied to negative inserts). ISO-EcoTurn brochure (426.pdf p58-59) has PM rows for ISO-EcoTurn sizes only; included as unmatched rows. No vc for any group/grade."
+  },
+  {
+   "insert_id": "WNMG080404-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'T515', 'AH8015', 'AH6225', 'AH6235', 'AH725', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "WNMG080408-TM",
+   "why": "P vc printed (B004) only for TM x T9205/T9215/T9225/T9235; no TM row in the GC negative-type M (B006), K (B008), N (B010), S (B012), H (B014) standard-cutting-condition tables, so no vc for M/K/N/S/H and none for offered grades ['T6215', 'T515', 'AH8015', 'AH6225', 'AH6235', 'AH725', 'AH120']. ISO-EcoTurn brochure (426.pdf p58-59) prints TM rows for T6215/AH6225 (M), T515 (K), AH8015 (S) but for ISO-EcoTurn insert sizes only; included as unmatched rows."
+  },
+  {
+   "insert_id": "CCMT09T304-TM",
+   "why": "Positive-type TM: GC positive-type standard-cutting-condition tables (B016 P, B018 M, B020 K, B022 N, B024 S, B026 H) have no TM row; no vc for any group or offered grade ['T9215', 'T9225', 'T6215', 'AH8015', 'AH6225', 'NS9530']."
+  },
+  {
+   "insert_id": "CCMT09T308-TM",
+   "why": "Positive-type TM: GC positive-type standard-cutting-condition tables (B016 P, B018 M, B020 K, B022 N, B024 S, B026 H) have no TM row; no vc for any group or offered grade ['T9215', 'T9225', 'T6215', 'AH8015', 'AH6225', 'NS9530']."
+  },
+  {
+   "insert_id": "DCMT11T304-TM",
+   "why": "Positive-type TM: GC positive-type standard-cutting-condition tables (B016 P, B018 M, B020 K, B022 N, B024 S, B026 H) have no TM row; no vc for any group or offered grade ['T9215', 'T9225', 'T6215', 'AH8015', 'AH6225', 'NS9530']."
+  },
+  {
+   "insert_id": "DCMT11T308-TM",
+   "why": "Positive-type TM: GC positive-type standard-cutting-condition tables (B016 P, B018 M, B020 K, B022 N, B024 S, B026 H) have no TM row; no vc for any group or offered grade ['T9215', 'T9225', 'T6215', 'AH8015', 'AH6225', 'NS9530']."
+  },
+  {
+   "insert_id": "VBMT160404-TM",
+   "why": "Positive-type TM: GC positive-type standard-cutting-condition tables (B016 P, B018 M, B020 K, B022 N, B024 S, B026 H) have no TM row; no vc for any group or offered grade ['T9215', 'T9225', 'T6215', 'AH8015', 'AH6225', 'NS9530']."
+  }
+ ],
+ "blocked": [],
+ "also_checked": [
+  "GC_2023-2024_G_A_Grade.pdf (no grade vc tables)",
+  "GC_2023-2024_G_L_UsersGuide.pdf (technical formulas only)",
+  "426-u_ISO-EcoTurn.pdf (inch twin of 426.pdf, SFM)"
+ ]
+}

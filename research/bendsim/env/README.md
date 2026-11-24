@@ -6,16 +6,42 @@
   The library TOML (kernel/forge-brake/data/) is generated from them by tools/bendsim/
   md2toml.py and press2toml.py.
 - `shots/native-*.png`: interface/forge-render/tests/bendsim_env.rs on the view's renderer
-  (Vulkan, lavapipe), `BENDSIM_SHOTS=DIR`:
+  (Vulkan, lavapipe), `BENDSIM_SHOTS=DIR`, at the environment's own framings (View: Part and
+  Tools, the default: the operator's front-right, the part's whole motion through the step
+  and the working punch and die, the press's parts between eye and subject cut away; Press
+  Overview: all of it), laid out to docs/ux/STANDARD.md (ux/standard 85cdc22d): the program in
+  the browser, the selected bend's sheet docked at the right, icon transport:
   - 00: a 100 x 200 channel on a Trumpf TruBend 5130 with Trumpf's own punches and dies, the
-    default view and the whole press (C-frame housings from the published throat, ram, bed);
-  - 01-04: approach, first bend, the operator's handling between steps, second bend;
+    default view (the part, the punch and the die nearly end on, the bend line marked amber)
+    and the Press Overview (C-frame housings from the published throat, ram, bed);
+  - 01-04: approach, first bend, the operator's handling between steps, second bend (the eye
+    follows the part to the second station);
   - 05: a 40 mm U with 70 mm flanges on a Bystronic Xpert Pro 100/3100, the straight P6 punch
     only: the second flange closes on the punch body at phi 45 deg (certified witness), the
-    punch and the flange drawn red.
+    punch and the flange drawn red, the check named in words with "locate";
+  - 06: the program written as the part's bending document: each step pictured end on (drag a
+    picture onto another row to move the bend), its station, the step's results with the checks
+    folded to failures and those not checked;
+  - 07: Machine & Tools: the press by its maker's name, the tool library as cards (drawn
+    cross-section, name, angle, radius, height, rated load; the id on hover), only what fits;
+  - 08: the stations on the bed, drawn to scale between the housings, each stack in its
+    published segments; dragged to place;
+  - 09: the same at 1024 x 700: nothing cut off;
+  - 10: the view cube's LEFT: down the bend line (the cube is named in the press's frame: LEFT
+    and RIGHT along the bed, FRONT the operator's side, BACK the backgauge's; its home the
+    framed working zone);
+  - 11: see-through: from the operator's side and above, the first flange (already bent) stands
+    between the eye and the second bend and is drawn as a ghost (per body, kept up with the eye;
+    never the walls either side of the bend being made, the tools, or a collision's red), at
+    35 % with its outline drawn;
+  - 12: the cube from above, the operator's side below: TOP reads upright (at the default
+    view's 28 deg the cube's own fade makes TOP faint and foreshortened, not turned).
+  The default view (Home, Follow bend, cube faces) is scaled to the part (David): its bounds
+  through the step, with the punch's last 12 mm and the die's V and shoulders, +15 %; only
+  Press Overview shows the machine.
 - `shots/web-*.png`: interface/forge-render/web/tests/bendsim.cjs in Chromium (software WebGPU),
-  the wasm32 build: the same channel on the library's first press with its maker's tools
-  (TruBend 5085), at the start, the first bend and the second.
+  the wasm32 build (bendsim/env c106089d): the same channel on the library's first press with
+  its maker's tools, at the start, the first bend and the second; the same layout as native.
 - `band-27900c27.txt`: tools/speed/band.py, main f04c533e vs bendsim/env 27900c27, exact
   callgrind on one machine: every strict line <= +0.0000%, strict total -0.0085%; bits.txt
   unchanged.
@@ -28,10 +54,14 @@
 - Amada's tooling and Rolleri's PDF catalogue were not openly readable (Cloudflare block; a
   contact form): Amada tools are listed UNKNOWN and refused; Rolleri comes from its open online
   listing only. LVD and Accurpress publish no tool dimensions.
-- Punch bodies are envelopes (twice the largest published horizontal dimension, symmetric
-  about the tip line) unless an outline is given: they err large. Goosenecks whose throat is not
-  dimensioned are refused.
-- Operator handling between steps is shown, not checked. The flat-pattern link opens the Flat
-  Pattern with bend lines on and names the bend; it does not yet pick that one line out.
-- Livery colours are not in the data: the press is a neutral grey; appearances are the
-  viewport's tint/metal until RENDER-STUDIO's appearance API lands.
+- Punch bodies are checked as envelopes (twice the largest published horizontal dimension,
+  symmetric about the tip line) unless an outline is given: they err large. They are drawn at
+  the published dimension (`drawn_width`); the envelope is not drawn (the view's renderer has
+  no transparency for a ghost). Goosenecks whose throat is not dimensioned are refused.
+- The flat-pattern link opens the Flat Pattern with bend lines on and names the bend; it does
+  not yet pick that one line out.
+- Livery colours are not in the data: the press is RENDER-STUDIO's neutral machine paint; the
+  bend zone's amber is RENDER-STUDIO's signal colour `highlight-bend`, not a material. A sheet
+  whose material the part does not name is drawn a neutral matte slate (no material claimed).
+- The tool library's "fits" filter uses the rules' own sides (tip angle and radius against
+  the sharpest bend, die angle) and the clamping system; open height only where it is checked.

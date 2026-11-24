@@ -50,6 +50,10 @@ pub enum Qty {
     Accel,
     /// rev/min
     Rpm,
+    /// rad/s (a joint's velocity limit), the same in both systems
+    AngVel,
+    /// N (a linear joint's effort)
+    ForceN,
     /// kW
     Power,
     /// kN/m (a die's load per length)
@@ -97,6 +101,9 @@ pub fn convert(v: f64, q: Qty, sys: System) -> (f64, &'static str) {
         (Qty::Accel, Metric) => (v, "mm/s²"),
         (Qty::Accel, Inch) => (v / 25.4, "in/s²"),
         (Qty::Rpm, _) => (v, "rpm"),
+        (Qty::AngVel, _) => (v, "rad/s"),
+        (Qty::ForceN, Metric) => (v, "N"),
+        (Qty::ForceN, Inch) => (v / 4.448_221_615_260_5, "lbf"),
         (Qty::Power, Metric) => (v, "kW"),
         (Qty::Power, Inch) => (v / 0.745_699_872, "hp"),
         (Qty::LoadPerLength, Metric) => (v, "kN/m"),
@@ -133,7 +140,7 @@ pub fn label(key: &str) -> String {
         "apmx" => "Max depth of cut",
         "oal" | "lf" => "Overall length",
         "lu" => "Usable length",
-        "nof" | "z" => "Flutes",
+        "nof" => "Flutes",
         "re" => "Corner radius",
         "sig" => "Point angle",
         "kapr" => "Lead angle",
@@ -211,6 +218,8 @@ pub enum Source {
     Unknown,
     /// The user's own value: when, and what it replaced.
     User(String),
+    /// Linked to another document's value (a robot's joint limit from its assembly): which one.
+    Linked(String),
     /// Given without a source.
     Uncited,
 }
@@ -223,26 +232,40 @@ impl Source {
             Source::Conflict(_) => "conflict",
             Source::Unknown => "unknown",
             Source::User(_) => "yours",
+            Source::Linked(_) => "linked",
             Source::Uncited => "uncited",
         }
     }
 
     pub fn colour(&self, t: &Theme) -> Color32 {
         match self {
-            Source::Published(_) => t.on_ink,
+            Source::Published(_) | Source::Linked(_) => t.on_ink,
             Source::Estimate(_) => t.warn,
             Source::Conflict(_) => t.error,
             Source::Unknown | Source::Uncited => t.ink2,
-            Source::User(_) => Color32::from_rgb(0xB3, 0x8C, 0xF0),
+            Source::User(_) => user_colour(t),
         }
     }
 
     pub fn detail(&self) -> &str {
         match self {
-            Source::Published(s) | Source::Estimate(s) | Source::Conflict(s) | Source::User(s) => s,
+            Source::Published(s)
+            | Source::Estimate(s)
+            | Source::Conflict(s)
+            | Source::User(s)
+            | Source::Linked(s) => s,
             Source::Unknown => "Not published in any source we read.",
             Source::Uncited => "Given without a source.",
         }
+    }
+}
+
+/// "Yours": violet, lighter on the dark theme, deeper on the light one so it reads on white.
+pub fn user_colour(t: &Theme) -> Color32 {
+    if t.dark {
+        Color32::from_rgb(0xB3, 0x8C, 0xF0)
+    } else {
+        Color32::from_rgb(0x6A, 0x3F, 0xC0)
     }
 }
 
@@ -352,7 +375,9 @@ impl<'a> Sheet<'a> {
                     let (shown, unit) = convert(x, q, self.sys);
                     let resp = ui.add_sized(
                         vec2(self.value_w - 44.0, theme::CONTROL_H),
-                        egui::TextEdit::singleline(buf).align(egui::Align2::RIGHT_CENTER),
+                        egui::TextEdit::singleline(buf)
+                            .id_salt(("ux-sheet", key))
+                            .align(egui::Align2::RIGHT_CENTER),
                     );
                     if !resp.has_focus() && !resp.lost_focus() {
                         *buf = match q {
@@ -439,8 +464,15 @@ impl<'a> Sheet<'a> {
 // ----- empty and loading states ----------------------------------------------------------------
 
 /// An empty list or view (§7): what it is, and the next step as buttons. Returns the index of the
-/// button pressed.
-pub fn empty_state(ui: &mut Ui, t: &Theme, what: &str, hint: &str, actions: &[&str]) -> Option<usize> {
+/// button pressed. Each button's rect goes into `places` as `empty:<label>`, for tests to click.
+pub fn empty_state(
+    ui: &mut Ui,
+    t: &Theme,
+    what: &str,
+    hint: &str,
+    actions: &[&str],
+    places: &mut Vec<(String, egui::Rect)>,
+) -> Option<usize> {
     let mut hit = None;
     ui.vertical_centered(|ui| {
         ui.add_space(theme::S3);
@@ -451,7 +483,9 @@ pub fn empty_state(ui: &mut Ui, t: &Theme, what: &str, hint: &str, actions: &[&s
         ui.add_space(theme::S2);
         ui.horizontal_wrapped(|ui| {
             for (k, a) in actions.iter().enumerate() {
-                if ui.button(*a).clicked() {
+                let b = ui.button(*a);
+                places.push((format!("empty:{a}"), b.rect));
+                if b.clicked() {
                     hit = Some(k);
                 }
             }
@@ -472,7 +506,8 @@ pub fn loading(ui: &mut Ui, t: &Theme, doing: &str) {
 // ----- thumbnails ------------------------------------------------------------------------------
 
 /// A record's thumbnail (§8), drawn from its real geometry by `crate::thumb` the first time `key`
-/// is seen and kept as a texture after that. `key` must change when the geometry does (hash the
+/// is seen and kept as a texture after that (for the session: no eviction, fine for libraries of
+/// a few thousand records at 96 px; add an LRU if that changes). `key` must change when the geometry does (hash the
 /// record). `mesh` is only called on a miss. None geometry draws the kind's ghost icon.
 pub fn thumbnail(
     ui: &mut Ui,
@@ -597,7 +632,7 @@ pub fn icon_button(ui: &mut Ui, t: &Theme, icon: &str, tip: &str, on: bool) -> R
 }
 
 /// The one transport row for anything that plays (CAM sim, bend sim): first, back, play/pause,
-/// forward, last, then `status` ("Bend 1 of 2 · bending · 51.4°"). Space, ←/→ and Home/End do
+/// forward, last, then `status` ("Bend 1 of 2 · bending · 51.4°"). Space, the arrow keys and Home/End do
 /// the same when the view has focus; the caller routes those keys to `transport_key`.
 pub fn transport(ui: &mut Ui, t: &Theme, playing: bool, status: &str) -> Option<Transport> {
     let mut out = None;
@@ -606,7 +641,7 @@ pub fn transport(ui: &mut Ui, t: &Theme, playing: bool, status: &str) -> Option<
         if icon_button(ui, t, "first", "First (Home)", false).clicked() {
             out = Some(Transport::First);
         }
-        if icon_button(ui, t, "stepback", "Previous step (←)", false).clicked() {
+        if icon_button(ui, t, "stepback", "Previous step (Left arrow)", false).clicked() {
             out = Some(Transport::Back);
         }
         let (icon, tip) = if playing {
@@ -617,7 +652,7 @@ pub fn transport(ui: &mut Ui, t: &Theme, playing: bool, status: &str) -> Option<
         if icon_button(ui, t, icon, tip, playing).clicked() {
             out = Some(Transport::PlayPause);
         }
-        if icon_button(ui, t, "stepfwd", "Next step (→)", false).clicked() {
+        if icon_button(ui, t, "stepfwd", "Next step (Right arrow)", false).clicked() {
             out = Some(Transport::Forward);
         }
         if icon_button(ui, t, "last", "Last (End)", false).clicked() {
@@ -664,6 +699,8 @@ mod tests {
         assert_eq!(show(30.0, Qty::Angle, System::Metric), "30°");
         assert_eq!(show(3.0, Qty::Count, System::Inch), "3");
         assert_eq!(show(25.0, Qty::Speed, System::Metric), "25 m/min");
+        assert_eq!(show(1.0, Qty::AngVel, System::Metric), "1 rad/s");
+        assert_eq!(Source::Linked("arm2.fg".into()).word(), "linked");
         let back = unconvert(
             convert(150.0, Qty::Length, System::Inch).0,
             Qty::Length,

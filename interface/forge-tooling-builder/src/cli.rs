@@ -266,16 +266,8 @@ fn derived_table(
 }
 
 fn record_cites(r: &build::Record) -> Vec<forge_tooling::Cite> {
-    use build::Record as R;
-    match r {
-        R::Tool(x) => x.cites.clone(),
-        R::Holder(x) => x.cites.clone(),
-        R::Collet(x) => x.cites.clone(),
-        R::ColletNut(x) => x.cites.clone(),
-        R::PullStud(x) => x.cites.clone(),
-        R::Insert(x) => x.cites.clone(),
-        R::TurnHolder(x) => x.cites.clone(),
-    }
+    // every kind, including those added after this crate (groove inserts, blades, tool blocks)
+    r.cites().to_vec()
 }
 
 fn check<K: Kind<Record = Rec>>(env: &Env, argv: &[String]) -> Out {

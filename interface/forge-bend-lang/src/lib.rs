@@ -10,7 +10,8 @@
 //! b1     = bend("right", at: s1)
 //! b2     = bend("left", at: s1, rotate: true)
 //! sheet  = setup_sheet()
-//! prog   = program(format: "delem")             # typed ProgramFormatUnavailable
+//! prog   = program(format: "cincinnati")        # EM-503 XML; an undocumented format is
+//!                                                # typed ProgramFormatUnavailable
 //! ```
 //!
 //! Steps run in statement order: reordering is moving `bend` lines (forge-lang's MoveFeature);
@@ -317,7 +318,15 @@ pub fn read(src: &str) -> Result<Doc, Vec<(String, String)>> {
                 }
                 r.call(name, fname, pos, named).map_err(fail)
             })(),
-            StmtKind::Expr(_) => Ok(()),
+            // the header word; any other bare expression would be silently nothing: refused
+            StmtKind::Expr(Expr {
+                kind: ExprKind::Name(n),
+                ..
+            }) if n == "bending" => Ok(()),
+            StmtKind::Expr(_) => Err((
+                "document".into(),
+                "Unnamed: a statement with no name does nothing here; name it (b3 = bend(\"left\"))".into(),
+            )),
             _ => Err((
                 "document".into(),
                 "a statement this document does not take".into(),

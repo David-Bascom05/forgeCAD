@@ -25,7 +25,7 @@ fn disc() -> Body {
     };
     let mut pts: Vec<Point2> = (0..240).map(|i| at(TAU * i as f64 / 240.0)).collect();
     pts.push(pts[0]);
-    let spline = PlaneSpline::through(pts, None, None).expect("a spline");
+    let spline = PlaneSpline::through_periodic(pts).expect("a spline");
     let profile = Profile {
         plane: Frame::WORLD,
         loops: vec![ProfileLoop::new(vec![(Segment::Spline(Arc::new(spline)), 0)])],

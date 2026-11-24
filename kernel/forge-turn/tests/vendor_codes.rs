@@ -15,11 +15,7 @@ fn maker_inserts_and_holders_agree_with_their_codes() {
     let lib = Library::builtin();
     assert!(lib.inserts.len() >= 40 && lib.turn_holders.len() >= 40);
     let mut bad = Vec::new();
-    // codes forge-turn does not decode yet (its own phase limits, not data errors): listed
-    let mut unsupported = Vec::new();
-    let limit = |e: &forge_turn::insert::ToolError| {
-        format!("{e:?}").contains("not in this library yet") || format!("{e:?}").contains("only right-hand")
-    };
+    // every code decodes: a code forge-turn cannot decode fails here, as a mismatch does
     for i in &lib.inserts {
         let conflict = |p: &str| {
             i.cites
@@ -28,10 +24,6 @@ fn maker_inserts_and_holders_agree_with_their_codes() {
         };
         let d = match decode_insert(&i.code) {
             Ok(d) => d,
-            Err(e) if limit(&e) => {
-                unsupported.push(i.code.clone());
-                continue;
-            }
             Err(e) => {
                 bad.push(format!("{}: {} does not decode: {e:?}", i.id, i.code));
                 continue;
@@ -86,7 +78,6 @@ fn maker_inserts_and_holders_agree_with_their_codes() {
                         ));
                     }
                 }
-                Err(e) if limit(&e) => unsupported.push(h.code.clone()),
                 Err(e) => bad.push(format!("{}: {} does not decode: {e:?}", h.id, h.code)),
             },
             forge_tooling::turning::HolderKind::Bar => match decode_bar(&h.code) {
@@ -104,20 +95,11 @@ fn maker_inserts_and_holders_agree_with_their_codes() {
                         }
                     }
                 }
-                Err(e) if limit(&e) => unsupported.push(h.code.clone()),
                 Err(e) => bad.push(format!("{}: {} does not decode: {e:?}", h.id, h.code)),
             },
         }
     }
-    // at least the right-hand holders and bars and the C/D/V/T inserts were checked
-    let checked = lib.inserts.len() + lib.turn_holders.len() - unsupported.len();
-    assert!(
-        checked >= 60,
-        "only {checked} checked; unsupported: {unsupported:?}"
-    );
-    eprintln!(
-        "not decodable by forge-turn yet ({}): {unsupported:?}",
-        unsupported.len()
-    );
+    // every record was checked: inserts of every shape (W too), holders and bars of both hands
+    assert!(lib.inserts.len() + lib.turn_holders.len() >= 75);
     assert!(bad.is_empty(), "{} mismatches:\n{}", bad.len(), bad.join("\n"));
 }
