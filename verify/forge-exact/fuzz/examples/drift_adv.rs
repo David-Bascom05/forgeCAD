@@ -10,7 +10,8 @@
 //! - `QS_OUT=F` / `QS_IN=F`: save the best parameters / start from saved ones (ITERS 0: replay);
 //! - `SKIP=i,j,..`, `UPTO=n`: leave out ops by their index, stop after op n (to shrink a case);
 //! - `DETAIL=1`: each op's worst vertex, its edges, their tolerances and faces;
-//! - `RESNAP=merge|cond|all`: the re-snap probe after each boolean (`resnap`, drift.md §7).
+//! - `RESNAP=merge|cond|all`: the re-snap probe after each boolean (`resnap`, drift.md §7);
+//! - `NARY=1`: each op through the n-ary boolean (`nary`, two tools) instead.
 use forge_bool::{Op, boolean};
 use forge_exact_fuzz::pairs::{kernel_pair, pair_input};
 use forge_exact_fuzz::{Class, Reference, classify};
@@ -388,6 +389,7 @@ fn run(fam: &str, qs: &[Vec<f64>], keep: bool) -> (Run, Vec<(Body, Body, Op)>) {
         .and_then(|v| v.parse().ok())
         .unwrap_or(usize::MAX);
     let mode = std::env::var("RESNAP").unwrap_or_default();
+    let nary = std::env::var_os("NARY").is_some();
     for (i, q) in qs.iter().enumerate() {
         if skip.contains(&i) || i > upto {
             continue;
@@ -395,7 +397,11 @@ fn run(fam: &str, qs: &[Vec<f64>], keep: bool) -> (Run, Vec<(Body, Body, Op)>) {
         let Some((t, op)) = tool(fam, i, q) else { continue };
         let tb = std::time::Instant::now();
         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            boolean(&body, &t, op, 100 + i as u64)
+            if nary {
+                forge_bool::nary(&[&body, &t], &[op], 1)
+            } else {
+                boolean(&body, &t, op, 100 + i as u64)
+            }
         }));
         BOOL_SECS.with(|c| c.set(c.get() + tb.elapsed().as_secs_f64()));
         match r {

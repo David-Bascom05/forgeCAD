@@ -435,11 +435,11 @@ pub(crate) struct Imprint {
     pub(crate) into: FaceId,
     /// The body `into` belongs to (a `Side`; u32 keeps the record at 40 bytes with `exact`).
     pub(crate) into_side: u32,
-    /// The edge's own face lies on `into`'s surface (`same_plane`, but for rounding inside
-    /// `ROUNDING`; `same_cylinder`, bit for bit): the edge and its ends are as near `into` as they
-    /// are to their own face, nothing for `imprint_tols` to grow. Decided once per pair of faces
-    /// on one surface; false for an edge found lying on another body's face (`trim_in`: its own
-    /// faces are on other surfaces) and in the n-ary boolean (which takes no `imprint_tols`).
+    /// The edge's own face lies on `into`'s surface (`same_plane`, `same_cylinder`: but for
+    /// rounding inside `ROUNDING`): the edge and its ends are as near `into` as they are to their
+    /// own face, nothing for `imprint_tols` to grow. Decided once per pair of faces on one
+    /// surface that imprinted something (`mark_exact`); false for an edge found lying on another
+    /// body's face (`trim_in`), which `imprint_tols` asks of the edge's own faces.
     pub(crate) exact: bool,
 }
 // (the size it had before `exact`: a larger record moves every list of them on the heap)
@@ -1399,8 +1399,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
     let mut along = Vec::new();
     for &(fa, fb) in &coplanar {
         let pair = [&index[0], &index[1]];
-        // (on one surface but for rounding: `imprint_tols` has nothing to grow)
-        let exact = same_surface(&a.face(fa).surface, &b.face(fb).surface);
+        let made = imprints.len();
         imprint(
             bodies,
             pair,
@@ -1411,7 +1410,6 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
             &mut cuts,
             &mut imprints,
             &mut along,
-            exact,
         )?;
         imprint(
             bodies,
@@ -1423,8 +1421,10 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
             &mut cuts,
             &mut imprints,
             &mut along,
-            exact,
         )?;
+        if imprints.len() > made {
+            mark_exact(&mut imprints[made..], &a.face(fa).surface, &b.face(fb).surface);
+        }
     }
     share_cuts(&bodies, &mut along, &mut cuts);
 
@@ -2105,16 +2105,16 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
     let grown_edges = if imprints.is_empty() {
         Vec::new()
     } else {
-        imprint_tols(
-            &bodies,
-            &imprints,
-            edge_pieces,
-            now,
-            &mut pieces,
-            &alias,
-            &mut grown,
-            &uses,
-        )?
+        let first = grown.len();
+        let pieces_of = |sd: Side, e: EdgeId| {
+            let (at, first, n) = edge_pieces[sd][e.index()];
+            (at == now).then_some((first as usize, n as usize))
+        };
+        let grown_edges = imprint_tols(&bodies, &imprints, pieces_of, &mut pieces, &alias, &mut grown);
+        if grown.len() > first {
+            refuse_tolerances_meeting(&grown[first..], &pieces, |p| uses[p] > 0)?;
+        }
+        grown_edges
     };
     (scratch.cuts, scratch.segs) = (cuts, segs);
     Ok(Plan {
@@ -2326,28 +2326,33 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
 /// surface: no curve of its own ends there to vouch for it (more than `Vertex::tol` promises, which
 /// is cheap here and keeps the vertex as near every face it bounds as its record says). Cold: only
 /// booleans with faces on one surface, or an edge lying on the other body's face, imprint.
+/// `pieces_of` gives an edge's pieces (first, count) where it has been split into them; `bodies`
+/// are the operands by side (the n-ary boolean's tools).
 #[cold]
 #[inline(never)]
-#[allow(clippy::too_many_arguments)]
-fn imprint_tols(
-    bodies: &[&Body; 2],
+pub(crate) fn imprint_tols(
+    bodies: &[&Body],
     imprints: &[Imprint],
-    edge_pieces: &[Vec<(u32, u32, u32)>; 2],
-    now: u32,
+    pieces_of: impl Fn(Side, EdgeId) -> Option<(usize, usize)>,
     pieces: &mut [Piece],
     alias: &[(VKey, VKey)],
     grown: &mut Vec<(VKey, f64)>,
-    uses: &[u8],
-) -> R<Vec<(EdgeId, f64)>> {
+) -> Vec<(EdgeId, f64)> {
     let mut grown_edges = Vec::new();
-    let first_grown = grown.len();
     for im in imprints {
         let surface = &bodies[im.into_side as usize].face(im.into).surface;
-        // (most imprints are of faces on one surface)
-        if im.exact {
+        // (most imprints are of faces on one surface; an edge found lying on the other body's face
+        // may be one of its own faces' on that very surface too)
+        let body = bodies[im.side];
+        let edge = body.edge(im.edge);
+        if im.exact
+            || edge
+                .coedges
+                .iter()
+                .any(|&c| same_surface(&body.face(body.coedge_face(c)).surface, surface))
+        {
             continue;
         }
-        let edge = bodies[im.side].edge(im.edge);
         for (t, v) in [(edge.range.lo, edge.start), (edge.range.hi, edge.end)] {
             if t != im.range.lo && t != im.range.hi {
                 continue;
@@ -2362,12 +2367,14 @@ fn imprint_tols(
                 }
             }
         }
-        let (at, first, n) = edge_pieces[im.side][im.edge.index()];
+        let Some((first, n)) = pieces_of(im.side, im.edge) else {
+            continue;
+        };
         // (the whole stretch first: within the edge's own tolerance, so is each piece of it)
-        if at != now || stray(&edge.curve, im.range, surface) + ROUNDING <= edge.tol.max(tol::LINEAR) {
+        if stray(&edge.curve, im.range, surface) + ROUNDING <= edge.tol.max(tol::LINEAR) {
             continue;
         }
-        for pc in &mut pieces[first as usize..(first + n) as usize] {
+        for pc in &mut pieces[first..first + n] {
             let (lo, hi) = (pc.range.lo.max(im.range.lo), pc.range.hi.min(im.range.hi));
             if lo >= hi {
                 continue;
@@ -2383,11 +2390,22 @@ fn imprint_tols(
             }
         }
     }
-    // a vertex grown past the middle of a kept edge ending on it: the edge is shorter than the
-    // balls at its ends, which `check` refuses (VertexTolerance); refused here, not handed out
-    for &(k, t) in &grown[first_grown..] {
+    grown_edges
+}
+
+/// Vertices `imprint_tols` grew (`grown`) past the middle of a kept piece (`kept`) ending on
+/// them: the edge is shorter than the balls at its ends, which `check` refuses
+/// (VertexTolerance); refused here, not handed out.
+#[cold]
+#[inline(never)]
+pub(crate) fn refuse_tolerances_meeting(
+    grown: &[(VKey, f64)],
+    pieces: &[Piece],
+    kept: impl Fn(usize) -> bool,
+) -> R<()> {
+    for &(k, t) in grown {
         for (p, pc) in pieces.iter().enumerate() {
-            if uses[p] == 0 || (pc.start != k && pc.end != k) || t <= 1.1 * pc.tol.max(tol::LINEAR) {
+            if (pc.start != k && pc.end != k) || t <= 1.1 * pc.tol.max(tol::LINEAR) || !kept(p) {
                 continue;
             }
             let at = |x: f64| pc.curve.eval(pc.range.lo + pc.range.width() * x);
@@ -2399,7 +2417,7 @@ fn imprint_tols(
             }
         }
     }
-    Ok(grown_edges)
+    Ok(())
 }
 
 /// A margin over a distance for its rounding: a few units in the last place of coordinates up
@@ -2430,8 +2448,20 @@ fn same_plane_rounded(a: &forge_geom::Plane, b: &forge_geom::Plane) -> bool {
         && b.signed_distance(oa).abs() <= ULPS * (1.0 + scale)
 }
 
+/// The imprints a pair of faces on surfaces `a` and `b` just made: `exact` where the surfaces are
+/// one (`same_surface`). Asked only of pairs that made some (most pairs on one surface imprint
+/// nothing new).
+#[cold]
+#[inline(never)]
+pub(crate) fn mark_exact(made: &mut [Imprint], a: &Surface, b: &Surface) {
+    let exact = same_surface(a, b);
+    for im in made {
+        im.exact = exact;
+    }
+}
+
 /// Surfaces `a` and `b` one surface: planes `same_plane`, cylinders `same_cylinder`.
-fn same_surface(a: &Surface, b: &Surface) -> bool {
+pub(crate) fn same_surface(a: &Surface, b: &Surface) -> bool {
     match (a, b) {
         (Surface::Plane(a), Surface::Plane(b)) => same_plane(a, b),
         (Surface::Cylinder(a), Surface::Cylinder(b)) => same_cylinder(a, b),
@@ -2439,13 +2469,31 @@ fn same_surface(a: &Surface, b: &Surface) -> bool {
     }
 }
 
-/// Cylinders `a` and `b` one cylinder exactly: radii equal, axes equal or opposite, and `b`'s
-/// origin on `a`'s axis.
+/// Cylinders `a` and `b` one cylinder but for rounding: radii equal, axes equal or opposite, and
+/// `b`'s origin on `a`'s axis, each within 8 units in the last place (as `same_plane`; a part
+/// rotated into place has its axes off by an ε or so).
 fn same_cylinder(a: &forge_geom::Cylinder, b: &forge_geom::Cylinder) -> bool {
     let (da, db) = (a.frame.z().get(), b.frame.z().get());
-    a.radius == b.radius
+    // (most are one cylinder bit for bit)
+    if a.radius == b.radius
         && (da == db || da == -db)
         && (b.frame.origin - a.frame.origin).cross(da) == Vec3::ZERO
+    {
+        return true;
+    }
+    same_cylinder_rounded(a, b)
+}
+
+#[cold]
+#[inline(never)]
+fn same_cylinder_rounded(a: &forge_geom::Cylinder, b: &forge_geom::Cylinder) -> bool {
+    const ULPS: f64 = 8.0 * f64::EPSILON;
+    let (da, db) = (a.frame.z().get(), b.frame.z().get());
+    let (oa, ob) = (a.frame.origin, b.frame.origin);
+    let scale = oa.x.abs() + oa.y.abs() + oa.z.abs() + ob.x.abs() + ob.y.abs() + ob.z.abs();
+    (a.radius - b.radius).abs() <= ULPS * a.radius.abs().max(b.radius.abs())
+        && ((da - db).length() <= ULPS || (da + db).length() <= ULPS)
+        && (ob - oa).cross(da).length() <= ULPS * (1.0 + scale)
 }
 
 /// How far a curve's stretch `range` strays from a surface. From a plane: a line's exactly (at an
@@ -4953,7 +5001,6 @@ pub(crate) fn imprint(
     cuts: &mut Vec<Cut>,
     imprints: &mut Vec<Imprint>,
     along: &mut Vec<Along>,
-    exact: bool,
 ) -> R<()> {
     let dst = 1 - src;
     let (sb, db) = (bodies[src], bodies[dst]);
@@ -5115,7 +5162,8 @@ pub(crate) fn imprint(
                         range: Interval::new(w[0], w[1]),
                         into: dst_face,
                         into_side: sides[dst] as u32,
-                        exact,
+                        // (`mark_exact`, once the pair's imprints are made)
+                        exact: false,
                     }),
                     // along the destination's boundary: the shared part of coincident edges
                     Where::On | Where::Outside => {}

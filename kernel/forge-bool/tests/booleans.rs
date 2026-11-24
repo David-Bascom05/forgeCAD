@@ -1156,3 +1156,71 @@ fn a_wall_unioned_flush_on_a_notched_face_stays_closed() {
         }
     }
 }
+
+/// `an_imprinted_edges_end_vertex_holds_its_new_face` through the n-ary boolean, each op its own
+/// two-tool call: its imprinted ends must grow as the sequential boolean's do (`imprint_tols`).
+/// Three ops of a hill-climbed fifty (`drift_adv top`, `NARY=1`), by their original indices.
+#[test]
+fn an_nary_imprinted_edges_end_vertex_holds_its_new_face() {
+    let mut body = slab(Frame::WORLD, 100.0, 100.0, 10.0, 1);
+    let ops: [(usize, [f64; 6]); 3] = [
+        (
+            9,
+            [
+                -0.26507043851392975,
+                0.8406934451433343,
+                0.24718198994817364,
+                0.31614661880392536,
+                0.60960096690831,
+                1.0,
+            ],
+        ),
+        (
+            27,
+            [
+                -0.6739908258109015,
+                0.8580906948089231,
+                0.36771629220373514,
+                0.35843675683996346,
+                0.10504478019733154,
+                0.3343261878770015,
+            ],
+        ),
+        (
+            34,
+            [
+                -0.46367594489168495,
+                0.736688722718039,
+                0.881245991414807,
+                0.4951744296767451,
+                0.7269937185748625,
+                -0.7096159813835494,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = top_slab(i, q);
+        let Ok(r) = forge_bool::nary(&[&body, &tool], &[op], 1) else {
+            continue;
+        };
+        for e in r.edge_ids() {
+            let edge = r.edge(e);
+            for &c in &edge.coedges {
+                let f = r.coedge_face(c);
+                let forge_geom::Surface::Plane(pl) = &r.face(f).surface else {
+                    continue;
+                };
+                for v in [edge.start, edge.end] {
+                    let x = r.vertex(v);
+                    let d = pl.signed_distance(x.point).abs();
+                    assert!(
+                        d <= x.tol,
+                        "op {i} ({op:?}): vertex {v:?} {d:e} from face {f:?}, tol {:e}",
+                        x.tol
+                    );
+                }
+            }
+        }
+        body = r;
+    }
+}

@@ -271,8 +271,45 @@ answer is to record the distance (§4), or to refuse.
 
 - A diagonal sliver (§6).
 - The strict vertex bound (§5): ruled composed for now; David may reopen it.
-- The n-ary boolean (`nary.rs`) imprints by the same `imprint` but builds its own result. Its
-  pieces don't yet take `imprint_tols`' growth: the gate's nary1 lines are diagnostic, and no
-  search here ran it.
+- The n-ary boolean's own wrong Oks (§9): an EdgeDegenerate and an EdgeOffFace, each shrunk to
+  two ops.
 - A Lean statement of the composed bound per merge (δ_out = δ_in + edge tol, per entity), from
   gap #2's δ-Faithful.
+
+## 9. The n-ary boolean
+
+`nary.rs` imprints with the same `imprint`, but it builds its result fresh from pieces. It now
+takes `imprint_tols` as well:
+- after its pieces are made, it grows imprinted pieces and their ends' vertices into its
+  `grown`, which it then re-sorts;
+- after building, it refuses `TolerancesMeet` on the edges it built;
+- a coplanar pair that made imprints marks them exact where its surfaces are one
+  (`mark_exact`, in both booleans), and those skip the work.
+
+Test: `an_nary_imprinted_edges_end_vertex_holds_its_new_face`. These are the 3 ops of §4's vertex
+test, through `nary`. Without the change a vertex is 1.49e-5 off with tol 1e-5.
+
+`drift_adv`'s `NARY=1` runs each op through `nary` (two tools). Fresh searches, top and edge,
+both objectives, 300 rounds, before and after the change:
+
+| family | objective | without: wrong Ok / worst past tol | with |
+|---|---|---|---|
+| top | plane | 19 / 4.9e-6 | 19 / 2.1e-7 |
+| top | under | 19 / 4.9e-6 | 0 / 1e-15 |
+| edge | plane | 1 / 5.4e-6 | 1 / 5.4e-6 |
+| edge | under | 1 / 5.4e-6 | 0 / 2.5e-6 |
+
+The searches climb to different sequences; the wrong Oks that remain are the n-ary boolean's own.
+The same top sequence through the sequential boolean has none.
+- **EdgeDegenerate** (top family), shrunk to ops 2 and 18:
+  q2 = [0.8234008506443795, 1.0, 0.9816978534888866, -0.7512060189793819, 0.2798211277911311,
+  0.8838505963032673];
+  q18 = [0.7656299434906249, 0.30714060737671345, 0.5776076114719819, 0.3038072858117933,
+  0.5922808713271944, 0.1803587185311606].
+- **EdgeOffFace 1.75e-5** (edge family), shrunk to ops 21 and 45:
+  q21 = [-0.937536536084658, -0.1294825111441824, -0.41736311767210044, 0.4618893574349905,
+  -0.4952621930311446, 0.21589878069515733];
+  q45 = [-1.0, -0.06752310596340017, -0.3006744354686879, 0.8751654910424523,
+  -0.7156475910458602, 0.20559144756225].
+
+Both are open.
