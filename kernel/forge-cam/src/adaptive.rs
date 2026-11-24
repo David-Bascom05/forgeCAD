@@ -589,6 +589,8 @@ pub fn adaptive(
         // the rounds of sweeps a level has had (each all four directions)
         let mut rounds = 0usize;
         let order_near = std::env::var_os("FORGE_ORDER_NEAR").is_some();
+        let left_d: f64 = std::env::var("FORGE_LEFT_D").ok().and_then(|v| v.parse().ok()).unwrap_or(4.0);
+        let band_k: f64 = std::env::var("FORGE_BAND_K").ok().and_then(|v| v.parse().ok()).unwrap_or(1e9);
         let strips_on = std::env::var_os("FORGE_ADAPTIVE_STRIPS").is_some();
         let max_rounds: usize = std::env::var("FORGE_ADAPTIVE_ROUNDS").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
         sweep_dir = {
@@ -623,7 +625,7 @@ pub fn adaptive(
         let mut entries = 0usize;
         macro_rules! next_sweep {
             () => {{
-                let left_far = left_area(&f, 4.0 * f.r) > 10.0 * f.r * f.r;
+                let left_far = left_area(&f, left_d * f.r) > 10.0 * f.r * f.r;
                 // with crumbs taken back, any material more than a radius from the walls (beyond
                 // the cleanup rings' reach) sends the level round again with every pass kept
                 let left_near = dir_k >= 3 && rounds < max_rounds && left_area(&f, f.r) > f.r * f.r;
@@ -788,7 +790,7 @@ pub fn adaptive(
                     // lowest band of r/2 across the sweep first, the nearest within it
                     let across = (sweep_dir[0] * p[1] - sweep_dir[1] * p[0]) / (0.5 * f.r);
                     let d = if in_region(p) { 0.0 } else { 1e15 }
-                        + if order_near { 0.0 } else { across.floor() * 1e9 }
+                        + if order_near { 0.0 } else { across.floor() * band_k }
                         + (p[0] - here[0]).powi(2)
                         + (p[1] - here[1]).powi(2);
                     if best.is_none_or(|(_, bd, _)| d < bd) {
