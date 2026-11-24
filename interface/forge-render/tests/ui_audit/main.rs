@@ -1155,6 +1155,10 @@ fn disabled_tip(h: &mut Headless, group: &str, tool: &str) -> (String, bool) {
                 .collect()
         });
         if !tips.is_empty() {
+            // past the tooltip's fade-in
+            for _ in 0..10 {
+                step(h);
+            }
             let s = Snap::take(h);
             TIP_SHOT.with(|t| *t.borrow_mut() = s.png());
             let rects: Vec<Rect> = tips.iter().map(|x| x.1).collect();
