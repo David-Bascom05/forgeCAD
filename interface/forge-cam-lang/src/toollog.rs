@@ -269,6 +269,27 @@ fn job(env: &Env, a: &Args, all: &mut [Instance], write_runs: bool) -> Result<St
         if let Some(w) = &r.warning {
             o += &format!("  warning: {}\n", w.why);
         }
+        // entry load: per check, the count and the worst
+        let mut by: BTreeMap<&str, (usize, &forge_tooling::entry::Finding)> = BTreeMap::new();
+        for f in &r.entry {
+            let e = by.entry(f.check.name()).or_insert((0, f));
+            e.0 += 1;
+            let worse = if f.check.max() { f.value > e.1.value } else { f.value < e.1.value };
+            if worse {
+                e.1 = f;
+            }
+        }
+        for (k, (n, f)) in by {
+            o += &format!(
+                "  entry load (makers' guidance, not tool life): {n} × {k}, worst in op {} move {}: {}\n",
+                f.op + 1,
+                f.mv + 1,
+                f.why
+            );
+        }
+        for n in &r.entry_not_checked {
+            o += &format!("  entry not checked: {n}\n");
+        }
         if write_runs && let Some(l) = u.get(&r.t) {
             let cuts = cam.tool_cuts(r.t);
             let i = all.iter_mut().find(|i| &i.label == l).expect("checked above");

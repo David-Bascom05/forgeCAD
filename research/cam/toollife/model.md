@@ -115,3 +115,35 @@ logs: C = .. (range ..); cited: n = .., C = .. (source)". The cited row is never
 ## 5. Validation
 
 See validation.md.
+
+## 6. Entry load (separate from tool life)
+
+The validation showed that breakage at entry was what actually failed, not flank wear. So there
+is a second, separate check (`forge_tooling::entry`, data `kernel/forge-tooling/data/entry.toml`).
+It is reported as "entry load (makers' guidance, not tool life)" and never folded into D.
+`forge_cam::life::measure` finds the entries while replaying the stock.
+
+The cited rules:
+- **Feed at first contact.** A sample meeting stock after air may run at ≤ 50% of the op's
+  largest cutting feed. Source: Helical Machining Guidebook p. 5, "reduced by at least 50%"; Sandvik
+  Coromant, "Reduce feed to 50% until the cutter is fully engaged".
+- **Straight plunge into stock.** Feed ≤ 50% of the op's largest cutting feed. Source: Garr General
+  Solid Carbide Milling Guide p. 262, "drop feed by approximately 50%".
+- **Ramp or helix angle.** At most 3° in ferrous work (ISO P, M, K, H) and 10° in non-ferrous work
+  (N): the upper ends of the source's "1–3°" and "3–10°" starting ranges. Source: Helical p. 4. Ti
+  and superalloys (S) fit neither class, so this check is reported "not checked".
+- **Helix diameter.** At least 1.1 × D. Source: Helical p. 4, "programmed helix diameter
+  >110–120% of tool diameter". We read the helix diameter as the diameter the helix cuts (2r + D).
+
+**UNKNOWN (not used, no guess made):**
+- A breakage threshold on chip thickness for small end mills.
+- The Harvey Tool and Kyocera SGS chip loads. They are starting values, not limits.
+
+**Not used for coefficients (second research round):**
+- AISI 4140: Hubbard et al., IJERI 2015, n = 0.125 / 0.150. These are secondary constants derived
+  from McClure and Groover, with no VB stated.
+- Hardox 500: Majerik and Barenyi 2016. The paper's own arithmetic disagrees with its data, and the
+  material is not in forge-material.
+- Kantojärvi et al. 2023 (C45E milling, extended Taylor, open access) could not be fetched. It is
+  worth retrieving.
+- Aluminium, stainless and cast iron with carbide: still UNKNOWN.

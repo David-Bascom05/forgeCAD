@@ -4,7 +4,8 @@
 //! A warning when a program would use more life than the loaded tool has left; never an error.
 use crate::Cam;
 use forge_cam::engage::{HeightMap, Profile};
-use forge_cam::life::{ToolGeom, measure};
+use forge_cam::life::{Entry, ToolGeom, measure};
+use forge_tooling::entry::{self, Check, Finding};
 use forge_tooling::Kind;
 use forge_tooling::life::{self, Cut, Limit, Row, ToolLife, Warning};
 use std::collections::BTreeMap;
@@ -21,6 +22,10 @@ pub struct ToolLifeOut {
     pub cycles: usize,
     /// Ops of this tool the sampler cannot measure (a tool shape it has no profile for).
     pub unmeasured_ops: Vec<String>,
+    /// Entry load against cited makers' guidance (forge_tooling::entry): NOT a life estimate.
+    pub entry: Vec<Finding>,
+    /// Entry checks with no cited rule for the part's material group (not checked).
+    pub entry_not_checked: Vec<String>,
     pub warning: Option<Warning>,
 }
 
@@ -38,6 +43,8 @@ struct Meas {
     cycles: usize,
     unmeasured: Vec<String>,
     part: Option<usize>,
+    entry: Vec<Finding>,
+    not_checked: Vec<String>,
 }
 
 impl Cam {
@@ -105,8 +112,33 @@ impl Cam {
             // the posted paths when there are (what runs), else the made ones
             let paths = if o.posted.is_empty() { &o.paths } else { &o.posted };
             let rpm = o.feeds.map(|f| f.rpm).unwrap_or(0.0);
+            let group = self.parts[self.setups[o.setup].part].group.clone();
+            let rules = entry::builtin();
             for (pi, p) in paths.iter().enumerate() {
                 let m = measure(oi, p, &mut map, &prof, geom, tu.tool.dc, cell, rpm);
+                let fmax = m.max_cut_feed;
+                for en in &m.entries {
+                    let mut j = |c: Check, v: f64, mv: usize| {
+                        if entry::rule_for(&rules, c, &group).is_none() {
+                            let n = format!("{} (group {group}: no cited rule)", c.name());
+                            if !e.not_checked.contains(&n) {
+                                e.not_checked.push(n);
+                            }
+                        } else if let Some(f) = entry::judge(&rules, c, &group, v, (oi, pi, mv)) {
+                            e.entry.push(f);
+                        }
+                    };
+                    match *en {
+                        Entry::Contact { mv, feed } if fmax > 0.0 => j(Check::EntryFeed, feed / fmax, mv),
+                        Entry::Plunge { mv, feed } if fmax > 0.0 => j(Check::PlungeFeed, feed / fmax, mv),
+                        Entry::Ramp { mv, deg } => j(Check::RampAngle, deg, mv),
+                        Entry::Helix { mv, deg, dia_ratio } => {
+                            j(Check::RampAngle, deg, mv);
+                            j(Check::HelixDiameter, dia_ratio, mv);
+                        }
+                        _ => {}
+                    }
+                }
                 e.cuts.extend(m.cuts.into_iter().map(|c| Cut { path: pi, ..c }));
                 e.unsampled += m.unsampled_minutes;
                 e.cycles += m.cycles;
@@ -132,6 +164,8 @@ impl Cam {
                 cycles,
                 unmeasured,
                 part,
+                entry,
+                not_checked,
             } = m;
             let tu = &self.tools[ti];
             let coating = self.coating_of(&tu.tool.id);
@@ -168,6 +202,8 @@ impl Cam {
                 unsampled_minutes: unsampled,
                 cycles,
                 unmeasured_ops: unmeasured,
+                entry,
+                entry_not_checked: not_checked,
                 warning,
             });
         }
@@ -214,10 +250,29 @@ pub struct OpLifeView {
     pub fraction: Option<f64>,
 }
 
+/// An entry-load finding by name (cited makers' guidance; NOT a tool-life estimate).
+#[derive(Clone, Debug, PartialEq)]
+pub struct EntryView {
+    pub op: String,
+    pub tool: String,
+    pub t: u32,
+    pub path: usize,
+    pub mv: usize,
+    /// entry_feed | plunge_feed | ramp_angle | helix_diameter.
+    pub check: &'static str,
+    pub value: f64,
+    pub limit: f64,
+    pub why: String,
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct LifeReport {
     pub tools: Vec<ToolLifeView>,
     pub ops: Vec<OpLifeView>,
+    /// Entry load, reported apart from life.
+    pub entry: Vec<EntryView>,
+    /// Entry checks not made (no cited rule for the material group).
+    pub entry_not_checked: Vec<String>,
 }
 
 /// The job's tool-life report keyed by names. Pure: no file system, clock or threads (runs in
@@ -227,6 +282,24 @@ pub fn estimate(cam: &Cam, rows: &[Row], limits: &BTreeMap<u32, Limit>) -> LifeR
     let mut rep = LifeReport::default();
     for t in cam.tool_life(rows, &[], limits) {
         let name = |oi: usize| cam.ops.get(oi).map(|o| o.name.clone()).unwrap_or_default();
+        for f in &t.entry {
+            rep.entry.push(EntryView {
+                op: name(f.op),
+                tool: t.tool.clone(),
+                t: t.t,
+                path: f.path,
+                mv: f.mv,
+                check: f.check.name(),
+                value: f.value,
+                limit: f.limit,
+                why: f.why.clone(),
+            });
+        }
+        for n in &t.entry_not_checked {
+            if !rep.entry_not_checked.contains(n) {
+                rep.entry_not_checked.push(n.clone());
+            }
+        }
         for o in &t.life.ops {
             rep.ops.push(OpLifeView {
                 op: name(o.op),

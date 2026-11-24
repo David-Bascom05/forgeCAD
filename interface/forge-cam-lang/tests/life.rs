@@ -76,3 +76,24 @@ fn no_material_is_not_estimated() {
             .all(|o| o.life.used.is_none() && o.life.note.contains("names no material"))
     );
 }
+
+#[test]
+fn entry_load_is_reported_apart_from_life() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("group: \"N\")", "group: \"P\", material: \"4140 annealed\")");
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(cam.ok, "{:?}", cam.errors);
+    let rep = forge_cam_lang::life::estimate(&cam, &life::builtin(), &BTreeMap::new());
+    let t1 = rep.tools.iter().find(|t| t.t == 1).unwrap();
+    // no cited Taylor row for carbide in 4140: not estimated, but entry load is still checked
+    assert_eq!(t1.life_used, None);
+    assert!(
+        rep.entry
+            .iter()
+            .any(|e| e.check == "entry_feed" && e.value > e.limit && e.why.contains("Helical")),
+        "{:?}",
+        rep.entry
+    );
+}
