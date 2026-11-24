@@ -189,7 +189,12 @@ impl Cam {
                 name: tu.tool.id.clone(),
                 tip: [m.dir[0] * top, m.dir[1] * top, m.dir[2] * top],
                 body,
-                cut: sim::Cut::Mill { r, corner },
+                // a touch probe removes nothing: its ball's contact on a skip move is the trigger
+                cut: if tu.probe {
+                    sim::Cut::Probe { r }
+                } else {
+                    sim::Cut::Mill { r, corner }
+                },
             });
             h.push((tu.t, top));
         }
