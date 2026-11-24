@@ -1,0 +1,10 @@
+# generic-lathe headstock: behind the chuck (spindle axis z, chuck face z = 0).
+# frame: the machine's base frame at the home pose.
+shared S = 400
+shared z0 = -400
+shared H = 320
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(center: (0, 0), size: (S, S))
+}
+body = extrude(plan, H)
