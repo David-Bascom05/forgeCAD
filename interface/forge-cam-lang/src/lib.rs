@@ -3596,6 +3596,36 @@ impl Cam {
             paths.push(p);
         }
         let ti = add(self, drill, base_t + 1)?;
+        // a blind hole with a flat floor (no drill point modelled: a counterbored hole's, say):
+        // the drill's point stops on the floor, its shoulder the point's length above it; the
+        // floor's outer ring is left (said, and G4 lists it)
+        let (dc, ang) = (self.tools[ti].tool.dc, self.tools[ti].tool.angle);
+        let tip_len = if self.tools[ti].tool.kind == Kind::Drill && ang > 0.0 && ang < 180.0 {
+            0.5 * dc / (0.5 * ang).to_radians().tan()
+        } else {
+            0.0
+        };
+        let flat = !through && hole.point.is_none() && tip_len > 0.0;
+        let depth = if flat {
+            if depth - tip_len <= 0.0 {
+                return Err(format!(
+                    "`{hn}` has a flat floor {depth} deep, shallower than the {dc} mm drill's point ({tip_len:.2}): an end mill cuts it (pocket(SETUP, PART.{hn}, ..))"
+                ));
+            }
+            self.warnings.push(format!(
+                "{}: `{hn}` has a flat floor: the drill stops with its point on it, {tip_len:.2} short at the wall; the floor's ring is left to an end mill (G4 lists it)",
+                out.name
+            ));
+            depth - tip_len
+        } else {
+            depth
+        };
+        if let Some((cd, cdep)) = hole.counterbore {
+            self.warnings.push(format!(
+                "{}: `{hn}`'s counterbore (Dia {cd} x {cdep}) is not in the drill plan: no op cuts it yet (G4 lists it)",
+                out.name
+            ));
+        }
         let t = &self.tools[ti];
         let peck = depth > 3.0 * t.tool.dc;
         let f = self
