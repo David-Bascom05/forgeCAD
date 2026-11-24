@@ -69,6 +69,12 @@ fn pinned_subset() {
         machine: None,
     };
     let jobs: Vec<JobQ> = files.iter().map(|f| measure(f, &cfg)).collect();
+    // every milling op has its per-move values, one per feed move, the chip load within them
+    for q in jobs.iter().flat_map(|j| &j.ops).filter(|q| q.side) {
+        assert!(!q.moves_q.is_empty(), "{}", q.name);
+        let worst = q.moves_q.iter().map(|m| m.hex).fold(0.0, f64::max);
+        assert_eq!(worst, q.hex_max, "{}", q.name);
+    }
     let got = summary(&jobs);
     let pin = root.join("tests/pinned.txt");
     if std::env::var_os("FORGE_BLESS").is_some() {

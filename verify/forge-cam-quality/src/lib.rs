@@ -36,9 +36,25 @@ pub struct Config {
 /// Engagement-angle bins (degrees), upper ends: air is φ = 0.
 pub const PHI_BINS: [f64; 6] = [30.0, 60.0, 90.0, 120.0, 150.0, 180.0 + 1e-9];
 
+/// One move of an op's path, for colouring it: the heaviest engagement its cutting pieces met.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MoveQ {
+    /// Which of the op's paths (`OpOut::paths`) and which move of it (`OpPath::moves`).
+    pub path: usize,
+    pub mv: usize,
+    /// Engagement angle, degrees (0: air or not a side-cutting tool).
+    pub phi: f64,
+    /// Max chip thickness after thinning, mm.
+    pub hex: f64,
+    /// hex / the cutting data's fz (1 = the target chip).
+    pub load: f64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct OpQ {
     pub name: String,
+    /// The setup it belongs to (as `OpOut::setup`).
+    pub setup: usize,
     pub kind: String,
     pub status: String,
     pub tool: String,
@@ -97,6 +113,8 @@ pub struct OpQ {
     pub p_avail: f64,
     /// Rapid pieces that met material (a certified path has none).
     pub rapid_cuts: usize,
+    /// Per move with feed (rapids and cycles left out), in path order.
+    pub moves_q: Vec<MoveQ>,
     /// Hole cycles: the feed per spindle revolution (mm/rev), the least over the op's tools
     /// (spot, drill, tap).
     pub f_rev: f64,
@@ -105,6 +123,8 @@ pub struct OpQ {
 #[derive(Clone, Debug, Default)]
 pub struct ProgQ {
     pub name: String,
+    /// The setups it runs (as `ProgramOut::setups`).
+    pub setups: Vec<usize>,
     pub machine: String,
     pub t_min: f64,
     pub t_stop: f64,
@@ -276,6 +296,7 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             .unwrap_or_default();
         let mut q = OpQ {
             name: op.name.clone(),
+            setup: op.setup,
             kind: op.kind.to_string(),
             status: op.status.to_string(),
             moves: op.moves,
@@ -295,7 +316,7 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
         let mut hex_t = 0.0;
         let mut hex_tt = 0.0;
         let mut hexes: Vec<(f64, f64)> = Vec::new();
-        for p in &op.paths {
+        for (pi, p) in op.paths.iter().enumerate() {
             let tu = &tools[p.tool];
             let prof = profile(&tu.tool);
             let r = prof.r();
@@ -313,7 +334,7 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             // the last feed direction (xy), for corners
             let mut last_dir: Option<[f64; 2]> = None;
             let mut was_descending = false;
-            for mv in &p.moves {
+            for (mi, mv) in p.moves.iter().enumerate() {
                 let (f, phase) = match *mv {
                     PMove::Rapid { .. } => (0.0, Phase::Rapid),
                     PMove::Line { f, phase, .. } => (f, phase),
@@ -376,6 +397,11 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                     }
                 }
                 let mut moved_in = false;
+                let mut mq = MoveQ {
+                    path: pi,
+                    mv: mi,
+                    ..MoveQ::default()
+                };
                 let mut a = at;
                 for b in pieces(at, mv, l) {
                     let len = dist(a, b);
@@ -410,6 +436,8 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                                 q.conventional += dt;
                             }
                             let hex = fz * e.cos_max;
+                            mq.phi = mq.phi.max(e.phi);
+                            mq.hex = mq.hex.max(hex);
                             if std::env::var_os("FORGE_QUALITY_PIECES").is_some() {
                                 eprintln!(
                                     "piece {} f={f:.1} dt={dt:.4} phi={:.1} r={:.1} l={:.1} hex={hex:.4} ap={:.3} at={:?}",
@@ -452,6 +480,10 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                     }
                     a = b;
                 }
+                if q.fz_target > 0.0 {
+                    mq.load = mq.hex / q.fz_target;
+                }
+                q.moves_q.push(mq);
                 let descending = dz < -1e-9 && dxy >= 1e-9;
                 if moved_in && dz < -1e-9 {
                     if dxy < 1e-9 {
@@ -523,6 +555,7 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
     for p in &cam.programs {
         let mut pq = ProgQ {
             name: p.name.clone(),
+            setups: p.setups.clone(),
             ..ProgQ::default()
         };
         let Some(text) = p.text.as_deref() else {
@@ -779,13 +812,14 @@ pub fn json(jobs: &[JobQ]) -> String {
             }
             let _ = write!(
                 o,
-                "{{\"name\":{},\"kind\":{},\"status\":{},\"tool\":{},\"d\":{},\"flutes\":{},\"rpm\":{},\"moves\":{},\
+                "{{\"name\":{},\"setup\":{},\"kind\":{},\"status\":{},\"tool\":{},\"d\":{},\"flutes\":{},\"rpm\":{},\"moves\":{},\
 \"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
 \"fz_target\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
 \"fc_max\":{},\"p_max\":{},\"p_avail\":{},\"rapid_cuts\":{},\"f_rev\":{}}}",
                 js(&q.name),
+                q.setup,
                 js(&q.kind),
                 js(&q.status),
                 js(&q.tool),
@@ -837,8 +871,13 @@ pub fn json(jobs: &[JobQ]) -> String {
             }
             let _ = write!(
                 o,
-                "{{\"name\":{},\"machine\":{},\"t_min\":{},\"t_stop\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
+                "{{\"name\":{},\"setups\":[{}],\"machine\":{},\"t_min\":{},\"t_stop\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
                 js(&p.name),
+                p.setups
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<_>>()
+                    .join(","),
                 js(&p.machine),
                 jn(p.t_min),
                 jn(p.t_stop),

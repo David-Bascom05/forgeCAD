@@ -729,17 +729,32 @@ pub fn pocket_in(
     // (only where the passes cover the opening: stepover ≤ r, Pocket.passes_cover)
     if let Some(sx) = within.filter(|_| stepover <= r) {
         use forge_cam_geom::boolean::{Op, boolean, region_of};
-        // passes[k] is at r + k s, outermost first here; Rₖ ⊕ r for each
-        let grown: Vec<Option<Region>> = passes
-            .iter()
-            .map(|ls| offset(&region_of(ls), -r).ok().map(|(g, _)| region_of(&g)))
-            .collect();
+        // passes[k] is at r + k s, outermost first here. Only passes whose loops can run
+        // outside the stock are tried: a clear's region reaches 2r past it, so pass k's
+        // centres can be outside S only while k s < 2r (deeper passes cut material).
         for k in (0..passes.len().saturating_sub(1)).rev() {
-            let Some(gin) = &grown[k + 1] else { continue };
+            if k as f64 * stepover >= 2.0 * r {
+                continue;
+            }
+            // R_{k+1} ⊕ r
+            let Some(gin) = offset(&region_of(&passes[k + 1]), -r)
+                .ok()
+                .map(|(g, _)| region_of(&g))
+            else {
+                continue;
+            };
+            let gin = &gin;
             passes[k].retain(|l| {
                 // only an outer loop (its region alone a bounded one); its swept band is
                 // (L ⊕ r) ∖ (L ⊖ r), L the region it bounds
                 if !loop_ccw_approx(&l.segs) {
+                    return true;
+                }
+                // only a loop round the whole stock box (an air ring) is tried: keeping a loop is
+                // always sound, and the exact test can be slow where boundaries nearly meet
+                let (lo, hi) = loop_box(&l.segs);
+                let (blo, bhi) = region_box(sx);
+                if !(lo[0] <= blo[0] && lo[1] <= blo[1] && hi[0] >= bhi[0] && hi[1] >= bhi[1]) {
                     return true;
                 }
                 let lr = region_of(std::slice::from_ref(l));
@@ -932,6 +947,39 @@ pub fn pocket_in(
         rpm: 0.0,
         coolant: forge_post::Coolant::Flood,
     })
+}
+
+/// A loop's box from its segments' ends (arcs may bulge past it): for choosing loops only.
+fn loop_box(segs: &[Seg]) -> ([f64; 2], [f64; 2]) {
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    let mut add = |x: f64, y: f64| {
+        lo = [lo[0].min(x), lo[1].min(y)];
+        hi = [hi[0].max(x), hi[1].max(y)];
+    };
+    for sg in segs {
+        match *sg {
+            Seg::Line { a, b } => {
+                add(a.x, a.y);
+                add(b.x, b.y);
+            }
+            Seg::Arc { a, b, .. } => {
+                // the ends only: the box is used to choose loops to test, never as a bound
+                add(a.x, a.y);
+                add(b.x, b.y);
+            }
+        }
+    }
+    (lo, hi)
+}
+
+fn region_box(r: &Region) -> ([f64; 2], [f64; 2]) {
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for l in &r.loops {
+        let (a, b) = loop_box(&l.segs);
+        lo = [lo[0].min(a[0]), lo[1].min(a[1])];
+        hi = [hi[0].max(b[0]), hi[1].max(b[1])];
+    }
+    (lo, hi)
 }
 
 /// Whether a closed loop runs counter-clockwise (its signed area, arcs as chords): for choosing
