@@ -590,9 +590,10 @@ impl CamWs {
             }
             Cmd::StockAt(op) => self.focus.stock_at = op,
             Cmd::PostProcess => {
-                self.post_dlg = match self.post_dlg {
-                    Some(_) => None,
-                    None => Some(PostDlg::default()),
+                let open = self.post_dlg.is_none();
+                self.close_windows();
+                if open {
+                    self.post_dlg = Some(PostDlg::default());
                 }
             }
             Cmd::SetupSheet => match &self.run {
@@ -602,10 +603,27 @@ impl CamWs {
                 }
                 None => self.said = Some("generate first".into()),
             },
-            Cmd::ToolLibrary => self.tools_open = !self.tools_open,
-            Cmd::Programs => self.programs_open = !self.programs_open,
-            Cmd::Quality => self.quality_open = !self.quality_open,
-            Cmd::Checks => self.checks_open = !self.checks_open,
+            // the floating windows: one at a time (each opens where the last was, over the view)
+            Cmd::ToolLibrary => {
+                let open = !self.tools_open;
+                self.close_windows();
+                self.tools_open = open;
+            }
+            Cmd::Programs => {
+                let open = !self.programs_open;
+                self.close_windows();
+                self.programs_open = open;
+            }
+            Cmd::Quality => {
+                let open = !self.quality_open;
+                self.close_windows();
+                self.quality_open = open;
+            }
+            Cmd::Checks => {
+                let open = !self.checks_open;
+                self.close_windows();
+                self.checks_open = open;
+            }
             Cmd::Undo => {
                 if let Some(t) = self.undo.pop() {
                     self.redo.push(std::mem::replace(&mut self.text, t));
@@ -621,13 +639,18 @@ impl CamWs {
             Cmd::Save => self.want_write.push((self.path.clone(), self.text.clone())),
             Cmd::Text(t) => self.set_text(t),
             Cmd::ToggleText => {
-                self.text_open = !self.text_open;
+                let open = !self.text_open;
+                self.close_windows();
+                self.text_open = open;
                 self.text_edit = self.text.clone();
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
             Cmd::SectionView => self.turnview.open = !self.turnview.open,
             Cmd::PostNc(n) => self.post_programs(n.as_deref()),
-            Cmd::PostAt(k) => self.post_dlg = Some(PostDlg { program: k }),
+            Cmd::PostAt(k) => {
+                self.close_windows();
+                self.post_dlg = Some(PostDlg { program: k });
+            }
             Cmd::ExportNc(n) => self.export_programs(n.as_deref()),
             Cmd::ExportSheet => self.export_sheet(),
             Cmd::RepostStale => self.repost_stale(),
@@ -1023,6 +1046,16 @@ impl CamWs {
                 Ok(())
             }
         }
+    }
+
+    /// Every floating window closed (the dialogs of an op or a setup stay: they are edits).
+    pub fn close_windows(&mut self) {
+        self.post_dlg = None;
+        self.tools_open = false;
+        self.programs_open = false;
+        self.quality_open = false;
+        self.checks_open = false;
+        self.text_open = false;
     }
 
     /// The setup dialog's keyword arguments, in the order they are written ("" left out).

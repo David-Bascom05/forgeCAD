@@ -1955,14 +1955,15 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
 
 fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
     let mut close = false;
-    let width = 560.0;
+    // within the view (a side panel takes its right): its left, as the other windows open
+    let width = 560.0_f32.min(v.width() - 48.0).max(380.0);
     let mut add: Option<String> = None;
     let r = egui::Window::new("cam-tools")
         .id(egui::Id::unique("cam-tools-window"))
         .title_bar(false)
         .collapsible(false)
         .resizable(false)
-        .default_pos(pos2(v.center().x - width / 2.0, v.top() + 60.0))
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .constrain_to(crate::shell::dialog_area(ctx))
@@ -1986,10 +1987,11 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
             egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(&mut child, |ui| {
                 for tool in &w.lib.tools {
+                    // what a machinist reads: the id, the kind in words, Ø, flutes, flute length
                     let line = format!(
-                        "{}  ·  {}  ·  D {}  ·  {} fl  ·  flute {}",
+                        "{}  ·  {}  ·  Ø{} mm  ·  {} flutes  ·  {} mm flute",
                         tool.id,
-                        tool.kind.name(),
+                        kind_words(tool.kind),
                         num(tool.dc),
                         tool.nof,
                         num(tool.lcf)
@@ -1997,12 +1999,13 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
                     if !f.is_empty() && !line.to_lowercase().contains(&f) {
                         continue;
                     }
-                    let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 24.0), Sense::click());
+                    let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 26.0), Sense::click());
                     if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, t.hover);
                     }
                     let inu = used.contains(&tool.id);
-                    ui.painter().text(pos2(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, &line, sans(12.0), t.ink);
+                    tool_glyph(ui.painter(), Rect::from_center_size(pos2(r.left() + 22.0, r.center().y), vec2(12.0, 22.0)), tool.kind, t.ink2);
+                    ui.painter().text(pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, &line, sans(12.0), t.ink);
                     ui.painter().text(
                         pos2(r.right() - 10.0, r.center().y),
                         Align2::RIGHT_CENTER,
@@ -2042,7 +2045,7 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
             }
             heading(ui, t, "Holders", width);
             for h in &w.lib.holders {
-                fact(ui, t, &h.id, &format!("{} · gauge {} mm · {} rpm", h.interface, num(h.gauge_length), num(h.max_rpm)), width, t.ink);
+                fact(ui, t, &h.id, &format!("{} · gauge {} mm · max {} rpm", h.interface, num(h.gauge_length), grouped(h.max_rpm)), width, t.ink);
             }
             note(ui, "Built in: generic tools and conservative holders, our own numbers; verify with the vendor. A project adds its own in cam/*.toml beside the document.", width, t.ink2);
             ui.add_space(8.0);
@@ -2181,13 +2184,16 @@ fn section_window(
     places: &mut Places,
 ) -> Option<Rect> {
     let mut close = false;
-    let width = 560.0;
+    // half the view at most: the floating windows keep the other half
+    let width = 560.0_f32.min(v.width() * 0.5).max(360.0);
     let r = egui::Window::new("cam-section")
         .id(egui::Id::unique("cam-section-window"))
         .title_bar(false)
         .collapsible(false)
         .resizable(false)
-        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        // docked at the view's bottom right: the floating windows open at its top left
+        .pivot(Align2::RIGHT_BOTTOM)
+        .fixed_pos(pos2(v.right() - 16.0, v.bottom() - 16.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .constrain_to(crate::shell::dialog_area(ctx))
@@ -2916,4 +2922,75 @@ pub fn status_line(w: &CamWs) -> String {
         w.path.rsplit('/').next().unwrap_or(""),
         if w.dirty() { " · unsaved" } else { "" }
     )
+}
+
+/// A tool kind in words.
+fn kind_words(k: forge_tooling::Kind) -> &'static str {
+    use forge_tooling::Kind::*;
+    match k {
+        Flat => "Flat end mill",
+        Ball => "Ball end mill",
+        Bull => "Bull nose end mill",
+        Chamfer => "Chamfer mill",
+        Spot => "Spot drill",
+        Drill => "Drill",
+        Tap => "Tap",
+        ThreadMill => "Thread mill",
+        Reamer => "Reamer",
+        Bore => "Boring bar",
+        Counterbore => "Counterbore",
+        Countersink => "Countersink",
+        Slot => "Slot cutter",
+        Engrave => "Engraver",
+    }
+}
+
+/// A whole number with thin groups of three (15 000).
+fn grouped(v: f64) -> String {
+    let n = v.round() as i64;
+    let s = n.abs().to_string();
+    let mut out = String::new();
+    for (k, c) in s.chars().enumerate() {
+        if k > 0 && (s.len() - k).is_multiple_of(3) {
+            out.push('\u{2009}');
+        }
+        out.push(c);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+/// A tool's side silhouette in `r` (shank up, its tip down): flat, ball, point or V.
+fn tool_glyph(p: &egui::Painter, r: Rect, k: forge_tooling::Kind, ink: Color32) {
+    use forge_tooling::Kind::*;
+    let st = Stroke::new(1.2, ink);
+    let (l, rt, top, bot) = (r.left(), r.right(), r.top(), r.bottom());
+    let tip = bot - r.width() * 0.5;
+    // the shank and the flutes' sides
+    p.line_segment([pos2(l, top), pos2(l, tip)], st);
+    p.line_segment([pos2(rt, top), pos2(rt, tip)], st);
+    p.line_segment([pos2(l, top), pos2(rt, top)], st);
+    match k {
+        Ball => {
+            let c = pos2(r.center().x, tip);
+            let n = 8;
+            let pts: Vec<egui::Pos2> = (0..=n)
+                .map(|i| {
+                    let a = std::f32::consts::PI * i as f32 / n as f32;
+                    pos2(c.x - a.cos() * r.width() * 0.5, c.y + a.sin() * r.width() * 0.5)
+                })
+                .collect();
+            p.add(egui::Shape::line(pts, st));
+        }
+        Drill | Spot | Chamfer | Countersink | Engrave => {
+            p.line_segment([pos2(l, tip), pos2(r.center().x, bot)], st);
+            p.line_segment([pos2(rt, tip), pos2(r.center().x, bot)], st);
+        }
+        _ => {
+            p.line_segment([pos2(l, tip), pos2(l, bot)], st);
+            p.line_segment([pos2(rt, tip), pos2(rt, bot)], st);
+            p.line_segment([pos2(l, bot), pos2(rt, bot)], st);
+        }
+    }
+    // flutes
+    p.line_segment([pos2(l, (top + tip) * 0.5), pos2(rt, (top + tip) * 0.5 + 3.0)], Stroke::new(0.8, ink));
 }
