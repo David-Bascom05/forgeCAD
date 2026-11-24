@@ -1769,13 +1769,27 @@ impl Cam {
         // the sketch's handedness in the part's xy: x × y along +z keeps arcs' sense
         let flip = x[0] * y[1] - x[1] * y[0] < 0.0;
         let mut bands: Vec<Region> = vec![];
+        // `offset:` moves the tool off each curve, to its left (> 0) or right (< 0) as the
+        // curve runs: a line along its normal, an arc or circle to the concentric radius (a
+        // trace with compensation; each curve on its own, corners between curves not joined)
+        let off = get_num(a, "offset", Some(0.0))?;
+        if !off.is_finite() {
+            return Err(format!("{what}: offset: a length"));
+        }
         for id in s.entity_ids() {
             if s.is_construction(id) {
                 continue;
             }
             match s.entity(id) {
                 Some(forge_sketch::Entity::Line { a: pa, b: pb }) => {
-                    let (p0, p1) = (w(s.point(pa)), w(s.point(pb)));
+                    let (mut p0, mut p1) = (w(s.point(pa)), w(s.point(pb)));
+                    if off != 0.0 {
+                        let (dx, dy) = (p1[0] - p0[0], p1[1] - p0[1]);
+                        let l = (dx * dx + dy * dy).sqrt();
+                        let n = [-dy / l * off, dx / l * off];
+                        p0 = [p0[0] + n[0], p0[1] + n[1]];
+                        p1 = [p1[0] + n[0], p1[1] + n[1]];
+                    }
                     curves.push((p0, vec![(p1, None)]));
                     if tip > 0.0 {
                         bands.push(stadium(p0, p1, tip));
@@ -1787,8 +1801,21 @@ impl Cam {
                     end,
                     ccw,
                 }) => {
-                    let (c, p0, p1) = (w(s.point(center)), w(s.point(start)), w(s.point(end)));
+                    let (c, mut p0, mut p1) = (w(s.point(center)), w(s.point(start)), w(s.point(end)));
                     let ccw = ccw != flip;
+                    if off != 0.0 {
+                        // left of a ccw arc is toward its centre
+                        let r0 = ((p0[0] - c[0]).powi(2) + (p0[1] - c[1]).powi(2)).sqrt();
+                        let r1 = r0 + if ccw { -off } else { off };
+                        if r1 <= 0.0 {
+                            return Err(format!(
+                                "{what}: offset {off} takes an arc of radius {r0} to none"
+                            ));
+                        }
+                        let k = r1 / r0;
+                        p0 = [c[0] + (p0[0] - c[0]) * k, c[1] + (p0[1] - c[1]) * k];
+                        p1 = [c[0] + (p1[0] - c[0]) * k, c[1] + (p1[1] - c[1]) * k];
+                    }
                     // in pieces of at most a quarter turn, as posted
                     let r = ((p0[0] - c[0]).powi(2) + (p0[1] - c[1]).powi(2)).sqrt();
                     let a0 = forge_math::dmath::atan2(p0[1] - c[1], p0[0] - c[0]);
@@ -1818,7 +1845,11 @@ impl Cam {
                 }
                 Some(forge_sketch::Entity::Circle { center, r }) => {
                     let c = w(s.point(center));
-                    let r = s.params()[r];
+                    // run counter-clockwise: its left is toward the centre
+                    let r = s.params()[r] - off;
+                    if r <= 0.0 {
+                        return Err(format!("{what}: offset {off} takes a circle to none"));
+                    }
                     let p0 = [c[0] + r, c[1]];
                     let mv = (1..=4)
                         .map(|k| {
@@ -1850,7 +1881,11 @@ impl Cam {
         if depth.is_nan() || depth <= 0.0 {
             return Err(format!("{what}: depth > 0"));
         }
-        let bottom = o[2] - depth;
+        // `axial_offset:` raises (> 0) or lowers the tip from the depth
+        let bottom = o[2] - depth + get_num(a, "axial_offset", Some(0.0))?;
+        if bottom >= top {
+            return Err(format!("{what}: the bottom {bottom} is not under the top {top}"));
+        }
         let mut mv = vec![];
         let mut above = top;
         for z in ops::levels(top, bottom, step) {
@@ -2819,6 +2854,11 @@ impl Cam {
             posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
+        for k in ["offset", "axial_offset"] {
+            if a.contains_key(k) && !matches!(kind, "engrave" | "slot") {
+                return Err(format!("{kind} does not take `{k}:` (engrave and slot do)"));
+            }
+        }
         for k in ["pitch", "finish_leave"] {
             if a.contains_key(k) && kind != "bore" {
                 return Err(format!("{kind} does not take `{k}:` (bore does)"));
