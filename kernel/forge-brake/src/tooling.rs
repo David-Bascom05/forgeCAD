@@ -162,6 +162,9 @@ pub struct Press {
     /// Values a real press's record does not know (`open_height`, `stroke`, ..): the rules that
     /// need them are reported as not checked, never passed.
     pub unchecked: Vec<String>,
+    /// Bodies whose envelope is an estimate that errs large (`ram`, `bed`, `frame`,
+    /// `backgauge`): a collision with one is reported as against an estimate.
+    pub estimated: Vec<String>,
 }
 
 /// Overbend at a target angle (the bend's turn) for a material (`*`: any).

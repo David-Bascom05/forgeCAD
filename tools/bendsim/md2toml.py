@@ -94,6 +94,8 @@ def cite(kind, path, entry, status=None, basis=None, value=None):
 
 def clamp(s, maker):
     s = s.lower()
+    if "american" in s:
+        return "american"
     if "trumpf" in s:
         return "trumpf"
     if "bystronic" in s:
@@ -104,7 +106,7 @@ def clamp(s, maker):
         return "wila-ns"
     if "american" in s:
         return "american"
-    if "promecam" in s or "european" in s:
+    if "promecam" in s or "european" in s or "rolleri" in s or "fixed height" in s:
         return "promecam"
     return maker.lower()
 
@@ -119,6 +121,12 @@ def kind_of(s):
     return None
 
 def segs(f):
+    if "lengths" in f and isinstance(f["lengths"][0], str):
+        txt = f["lengths"][0]
+        inch = " in" in txt and "mm" not in txt
+        ls = sorted({float(x) * (25.4 if inch else 1.0) for x in re.findall(r"(?<![0-9.])([0-9]+(?:\.[0-9]+)?)", txt) if float(x) >= 10}, reverse=True)
+        if ls:
+            return [round(l, 1) for l in ls], "lengths"
     for k in ("segments_mat_no", "segments_part_no"):
         if k in f and isinstance(f[k][0], str):
             ls = []
@@ -159,7 +167,7 @@ def emit(r):
                 put(dst, v, f[src])
             else:
                 cites.append(cite(kind, dst, f.get(src), status="unknown", basis="not in the published catalogue pages read"))
-        dims = [(num(f, k), k) for k in ("body_width_at_clamp_mm", "body_width_mm", "dim_body_overall_mm", "neck_thickness_mm", "shoulder_width_mm", "top_width_mm", "blade_thickness_mm", "shoulder_thickness_mm")]
+        dims = [(num(f, k), k) for k in ("body_width_at_clamp_mm", "body_width_mm", "dim_body_overall_mm", "neck_thickness_mm", "shoulder_width_mm", "top_width_mm", "blade_thickness_mm", "shoulder_thickness_mm", "rear_extent_from_tip_axis_mm", "width_at_shoulder_mm", "width_behind_tip_mm")]
         dims = [d for d in dims if d[0] is not None]
         if dims:
             w, k = max(dims)
@@ -173,7 +181,7 @@ def emit(r):
         elif kind_of(f.get("kind", ("",))[0]) == "gooseneck":
             cites.append(cite(kind, "relief.depth", f.get("throat_depth_mm"), status="unknown", basis="throat not dimensioned: the gooseneck is refused (UNKNOWN geometry)"))
     else:
-        for src, dst in (("v_opening_mm", "v"), ("v_angle_deg", "angle"), ("shoulder_radius_mm", "shoulder_radius"), ("die_height_mm", "height")):
+        for src, dst in (("v_opening_mm", "v"), ("v_angle_deg", "angle"), ("shoulder_radius_mm", "shoulder_radius"), ("die_height_mm" if "die_height_mm" in f else "height_mm", "height")):
             v = num(f, src)
             if v is not None:
                 put(dst, v, f[src])
@@ -183,10 +191,12 @@ def emit(r):
         if vd is not None:
             put("floor", vd, f["v_depth_mm"])
         w = num(f, "die_width_mm")
-        fw = num(f, "foot_width_mm")
-        if w is not None or fw is not None:
-            if fw is not None and (w is None or fw > w):
-                put("width", fw, f["foot_width_mm"], status="estimate", basis="the foot's width, wider than the body: the envelope errs large")
+        others = [(num(f, k), k) for k in ("body_width_mm", "top_width_mm", "foot_width_mm", "base_width_mm", "pillar_width_mm", "stem_width_mm")]
+        others = [o for o in others if o[0] is not None]
+        big = max(others) if others else None
+        if w is not None or big is not None:
+            if big is not None and (w is None or big[0] > w):
+                put("width", big[0], f[big[1]], status="estimate", basis=f"the widest published dimension ({big[1]}): the envelope errs large")
             else:
                 put("width", w, f["die_width_mm"])
         else:

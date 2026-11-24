@@ -31,6 +31,11 @@ pub const BUILTIN: &[(&str, &str)] = &[
     ("builtin/wila.toml", include_str!("../data/tooling/wila.toml")),
     ("builtin/wilson.toml", include_str!("../data/tooling/wilson.toml")),
     (
+        "builtin/rolleri.toml",
+        include_str!("../data/tooling/rolleri.toml"),
+    ),
+    ("builtin/mate.toml", include_str!("../data/tooling/mate.toml")),
+    (
         "builtin/presses.toml",
         include_str!("../data/presses/presses.toml"),
     ),
@@ -688,6 +693,13 @@ fn press_rec(file: &str, t: &Table) -> Result<PressRec, CatalogError> {
         if force.is_none() {
             unchecked.push("force".to_string());
         }
+        // a maker's open height is the daylight between table and beam (or its clamps): the
+        // clamps' and holders' heights are not published with it, so neither the room left for
+        // the tools nor how far the ram must come down is known (open height and stroke report
+        // not checked)
+        if !matches!(t.get("clamps_included"), Some(Item::Bool(true))) {
+            unchecked.push("open_height".to_string());
+        }
         // beams: unstated, a block 200 mm each side of the tool line (errs large)
         let big = Beam {
             front: 200.0,
@@ -709,6 +721,19 @@ fn press_rec(file: &str, t: &Table) -> Result<PressRec, CatalogError> {
                 (bx.unwrap_or((0.0, 0.0)), br.unwrap_or((0.0, 0.0)))
             }
         };
+        let mut estimated = Vec::new();
+        if ram.is_none() {
+            estimated.push("ram".to_string());
+        }
+        if bed.is_none() {
+            estimated.push("bed".to_string());
+        }
+        if fdp.is_none() || fh.is_none() || fw.is_none() {
+            estimated.push("backgauge".to_string());
+        }
+        if throat.is_some() && (ft.is_none() || fd.is_none()) {
+            estimated.push("frame".to_string());
+        }
         let p = Press {
             id: id.clone(),
             open_height: open_height.unwrap(),
@@ -733,6 +758,7 @@ fn press_rec(file: &str, t: &Table) -> Result<PressRec, CatalogError> {
                 depth: fd.unwrap_or(1500.0),
             }),
             unchecked,
+            estimated,
         };
         Ok(p)
     } else {
@@ -881,26 +907,47 @@ impl Catalog {
         Ok(t)
     }
 
-    /// Every tool of the press's clamping system whose geometry is known: what the planner may
-    /// choose from when no tools are named.
+    /// The tools a press gets when none are named: those of its clamping system whose geometry
+    /// is known; of those, the press maker's own when the maker publishes any (machine
+    /// vendors' tooling first). With neither the maker's tools nor the press's clamping system
+    /// known: none.
+    pub fn default_tools(&self, pr: &PressRec, punches: bool) -> Vec<&str> {
+        let fits = |c: &str| pr.clamp == "unknown" || c == pr.clamp;
+        let all: Vec<(&str, &str)> = if punches {
+            self.punches
+                .iter()
+                .filter(|r| fits(&r.clamp) && r.punch.is_ok())
+                .map(|r| (r.id.as_str(), r.prov.maker.as_str()))
+                .collect()
+        } else {
+            self.dies
+                .iter()
+                .filter(|r| fits(&r.clamp) && r.die.is_ok())
+                .map(|r| (r.id.as_str(), r.prov.maker.as_str()))
+                .collect()
+        };
+        let own: Vec<&str> = all
+            .iter()
+            .filter(|x| x.1.eq_ignore_ascii_case(&pr.prov.maker))
+            .map(|x| x.0)
+            .collect();
+        if own.is_empty() && pr.clamp != "unknown" {
+            all.into_iter().map(|x| x.0).collect()
+        } else {
+            // a maker with no tools held and no clamping system published: none by default
+            // (a punch from one system on another's die is no setup); the user names them
+            own
+        }
+    }
+
+    /// The press's default tools ([`Catalog::default_tools`]) as a tooling set.
     pub fn tooling_for(&self, press: &str) -> Result<Tooling, ToolingError> {
         let pr = self.press(press).ok_or_else(|| ToolingError::Unknown {
             id: press.into(),
             fields: vec!["record".into()],
         })?;
-        let fits = |c: &str| pr.clamp == "unknown" || c == pr.clamp;
-        let ps: Vec<&str> = self
-            .punches
-            .iter()
-            .filter(|r| fits(&r.clamp) && r.punch.is_ok())
-            .map(|r| r.id.as_str())
-            .collect();
-        let ds: Vec<&str> = self
-            .dies
-            .iter()
-            .filter(|r| fits(&r.clamp) && r.die.is_ok())
-            .map(|r| r.id.as_str())
-            .collect();
+        let ps = self.default_tools(pr, true);
+        let ds = self.default_tools(pr, false);
         if ps.is_empty() {
             return Err(ToolingError::NoPunches);
         }
@@ -992,5 +1039,33 @@ taken = "2026-11-24"
             Catalog::from_sources(&[("t.toml", &bad)]),
             Err(CatalogError::Cite { .. })
         ));
+    }
+}
+
+#[cfg(test)]
+mod press_tests {
+    use super::*;
+
+    #[test]
+    fn presses_read_and_known_ones_build() {
+        let c = Catalog::builtin();
+        let usable: Vec<&str> = c
+            .presses
+            .iter()
+            .filter(|p| p.press.is_ok())
+            .map(|p| p.id.as_str())
+            .collect();
+        eprintln!("{} presses, usable {usable:?}", c.presses.len());
+        assert!(c.presses.len() >= 20);
+        let p = c.press("trumpf-trubend-5130").unwrap();
+        let pr = p.press.as_ref().unwrap();
+        assert_eq!(
+            (pr.open_height, pr.stroke, pr.housing_gap),
+            (385.0, 215.0, 2690.0)
+        );
+        assert_eq!(pr.frame.map(|f| f.throat), Some(420.0));
+        assert!(pr.unchecked.contains(&"open_height".to_string()));
+        let t = c.tooling_for("trumpf-trubend-5130").unwrap();
+        assert!(!t.punches.is_empty() && !t.dies.is_empty());
     }
 }

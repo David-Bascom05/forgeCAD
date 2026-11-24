@@ -447,3 +447,120 @@ fn an_inch_vendors_full_length_tooling_fits_its_bed() {
         "{st}"
     );
 }
+
+fn press(p: &str, punches: Option<&[&str]>) -> Ask {
+    Ask {
+        press: Some(p.into()),
+        punches: punches.map(|x| x.iter().map(|s| s.to_string()).collect()),
+        ..Ask::default()
+    }
+}
+
+#[test]
+fn a_real_press_bends_with_its_makers_own_tools() {
+    let a = ask_src(&channel(), None, None, &press("trumpf-trubend-5130", None));
+    assert!(a.ok, "{}", a.text);
+    let j = &a.json;
+    let src = j.get("tooling_source").unwrap();
+    assert_eq!(src.get("kind").and_then(Json::str), Some("library"));
+    assert_eq!(src.get("real"), Some(&Json::Bool(true)));
+    assert_eq!(j.get("feasible"), Some(&Json::Bool(true)), "{}", a.text);
+    for st in arr(j, "steps") {
+        assert!(
+            st.get("punch")
+                .and_then(Json::str)
+                .unwrap()
+                .starts_with("trumpf/")
+        );
+        assert!(st.get("die").and_then(Json::str).unwrap().starts_with("trumpf/"));
+        // the clamps' heights are not published: open height and stroke are not checked,
+        // never passed
+        for c in arr(&st, "checks") {
+            let rule = c.get("rule").and_then(Json::str).unwrap();
+            if rule == "open_height" || rule == "stroke" {
+                assert_eq!(
+                    c.get("verdict").and_then(Json::str),
+                    Some("not_checked"),
+                    "{rule}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn a_flange_closes_on_a_real_straight_punch() {
+    let u = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\nshared h = 70\n\
+             sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 300))\n}\n\
+             base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+             right = flange(base.edge(plan.outline[1]), height: h)\n\
+             left = flange(base.edge(plan.outline[3]), height: h)\n";
+    let a = ask_src(
+        u,
+        None,
+        None,
+        &press(
+            "bystronic-xpert-pro-100-3100",
+            Some(&["bystronic/P6_RF-A_H175_R1.0"]),
+        ),
+    );
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(false)));
+    let blocking = arr(&a.json, "blocking");
+    assert!(!blocking.is_empty());
+    for b in blocking {
+        let c = &arr(&b, "checks")[0];
+        assert_eq!(c.get("rule").and_then(Json::str), Some("closes_on_punch"));
+        assert_eq!(c.get("certified"), Some(&Json::Bool(true)));
+        assert_eq!(
+            c.get("tool").and_then(Json::str),
+            Some("punch:bystronic/P6_RF-A_H175_R1.0/body")
+        );
+        assert!(c.get("phi").and_then(Json::num).is_some() && c.get("at").is_some());
+    }
+}
+
+#[test]
+fn unknown_geometry_and_unknown_clamping_refuse() {
+    // Amada's clamping system and its dies' heights are not in the sources read
+    let a = ask_src(&channel(), None, None, &press("amada-hg-1303", None));
+    assert!(!a.ok);
+    assert_eq!(
+        a.json
+            .get("error")
+            .and_then(|e| e.get("kind"))
+            .and_then(Json::str),
+        Some("NoDefaultTooling"),
+        "{}",
+        a.text
+    );
+    let mut ask = press("amada-hg-1303", Some(&["trumpf/OW203-K"]));
+    let die = forge_brake::catalog::Catalog::builtin()
+        .dies
+        .iter()
+        .find(|d| d.prov.maker == "Amada" && d.die.is_err())
+        .map(|d| d.id.clone())
+        .unwrap();
+    ask.dies = Some(vec![die]);
+    let a = ask_src(&channel(), None, None, &ask);
+    assert!(!a.ok);
+    assert_eq!(
+        a.json
+            .get("error")
+            .and_then(|e| e.get("kind"))
+            .and_then(Json::str),
+        Some("UnknownGeometry"),
+        "{}",
+        a.text
+    );
+    let a = ask_src(&channel(), None, None, &press("no-such-press", None));
+    assert_eq!(
+        a.json
+            .get("error")
+            .and_then(|e| e.get("kind"))
+            .and_then(Json::str),
+        Some("NoSuchPress"),
+        "{}",
+        a.text
+    );
+}

@@ -172,6 +172,9 @@ pub struct Check {
     /// Not checked: the press or tool value it needs is unknown (named). Never a pass; a
     /// warning, so it does not block a plan.
     pub unchecked: Option<String>,
+    /// A distance failing against a body whose envelope is an estimate erring large (a real
+    /// press's beams, with no published geometry): a refusal, not a proven collision.
+    pub estimate: bool,
 }
 
 impl Check {
@@ -205,6 +208,7 @@ impl Check {
             phi: None,
             phase: None,
             unchecked: None,
+            estimate: false,
         }
     }
 }
@@ -1039,6 +1043,16 @@ impl<'a> StepCtx<'a> {
                         Severity::Error
                     };
                     c.tool = Some(el.name.clone());
+                    if self
+                        .tl
+                        .press
+                        .estimated
+                        .iter()
+                        .any(|e| el.name.starts_with(e.as_str()))
+                    {
+                        c.estimate = true;
+                        c.certified = false;
+                    }
                     c.phase = Some(phase);
                     if let Some(q) = q {
                         c.part = Some(self.part_ref(pc, q));
@@ -1329,8 +1343,23 @@ impl<'a> StepCtx<'a> {
             false,
         ));
         let travel = self.z_tdc - self.ztip(self.phimax);
-        out.push(Check::rule(Rule::Stroke, travel, self.tl.press.stroke, true));
-        let mut oh = Check::rule(Rule::OpenHeight, self.z_tdc, self.t + self.tl.clearance, false);
+        // the clamps' heights unknown: how far the ram must come down is not known either
+        out.push(if self.tl.press.unchecked.iter().any(|u| u == "open_height") {
+            Check::not_checked(
+                Rule::Stroke,
+                "the tool clamps' heights under the press's open height",
+            )
+        } else {
+            Check::rule(Rule::Stroke, travel, self.tl.press.stroke, true)
+        });
+        let mut oh = if self.tl.press.unchecked.iter().any(|u| u == "open_height") {
+            Check::not_checked(
+                Rule::OpenHeight,
+                "the tool clamps' heights under the press's open height",
+            )
+        } else {
+            Check::rule(Rule::OpenHeight, self.z_tdc, self.t + self.tl.clearance, false)
+        };
         oh.phase = Some(Phase::Approach);
         out.push(oh);
         let (pl, dl) = self.tool_lengths();

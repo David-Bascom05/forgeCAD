@@ -1,9 +1,12 @@
-//! The bend simulator's panel (kernel/forge-brake, `query F bendsim`): the bend order and each
-//! step's tooling and checks, the press section drawn with the part through the step's motion,
-//! play, step and scrub, and the failing checks' tools and places in red. Self-contained: its
-//! own colours until the shell's design tokens cover it.
+//! The Bend Simulation environment's state and panels (kernel/forge-brake, `query F bendsim`):
+//! the press and tooling from the library (real makers' records, every value cited) or a
+//! stand-in set, the bend order (the planner's, or edited), and the simulation through every
+//! step's stages — the view draws it in 3D (gui_bendsim.rs); these panels choose, order, scrub
+//! and report.
 
 use forge_brake as fb;
+use forge_brake::catalog::{Catalog, Status};
+use forge_brake::scene::{STAGES, Stage, stage_at};
 use forge_lang::bendsim::{Ask, Sim, simulate};
 
 /// Colours of its own.
@@ -15,50 +18,122 @@ pub mod look {
     pub const FAIL: Color32 = Color32::from_rgb(0xE0, 0x40, 0x40);
     pub const PASS: Color32 = Color32::from_rgb(0x3A, 0xA8, 0x5A);
     pub const WARN: Color32 = Color32::from_rgb(0xE8, 0xA0, 0x30);
+    pub const MUTED: Color32 = Color32::from_rgb(0x90, 0x94, 0x9A);
 }
 
-/// What the panel holds: the simulation, the step shown, where in its motion, and play.
+/// Seconds a step takes when played.
+pub const STEP_SECONDS: f64 = 4.0;
+
+/// What is simulated: a library press (its tools all, or those named) or a stand-in set, and
+/// the order (None: the planner's).
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct Choice {
+    pub press: Option<String>,
+    pub punches: Option<Vec<String>>,
+    pub dies: Option<Vec<String>>,
+    /// Bend names in order.
+    pub sequence: Option<Vec<String>>,
+}
+
+/// What the environment holds: the simulation, the step shown, where in its motion, and play.
 pub struct BendSimUi {
     pub sim: Result<Sim, String>,
     pub step: usize,
     pub t: f64,
     pub playing: bool,
-    /// Tooling asked for (a set id or a file beside the part).
+    /// A stand-in set's id, used when no press is chosen.
     pub tooling: String,
-    /// The part's text and file it simulated: stale once either differs.
+    pub choice: Choice,
+    /// The sheet's material (its look), and the press's table height above the floor.
+    pub material: Option<String>,
+    pub table_height: Option<f64>,
+    /// The part's text and file it was simulated from.
     pub source: String,
     pub path: String,
+    /// The library as last read (built in, the part's folder's, the user's).
+    pub catalog: Option<Result<Catalog, String>>,
+}
+
+fn dir_of(path: &str) -> Option<std::path::PathBuf> {
+    std::path::Path::new(path)
+        .parent()
+        .map(std::path::Path::to_path_buf)
 }
 
 impl BendSimUi {
-    /// Simulates the part's text, its files beside `path`.
+    /// Simulates the part's text on a stand-in set (its files beside `path`).
     pub fn open(source: &str, path: &str, tooling: &str) -> BendSimUi {
-        let dir = std::path::Path::new(path)
-            .parent()
-            .map(std::path::Path::to_path_buf);
+        BendSimUi::open_with(source, path, tooling, Choice::default())
+    }
+
+    /// Simulates the part's text as `choice` says.
+    pub fn open_with(source: &str, path: &str, tooling: &str, choice: Choice) -> BendSimUi {
+        let dir = dir_of(path);
         let ask = Ask {
-            tooling: Some(tooling.to_string()),
+            tooling: choice.press.is_none().then(|| tooling.to_string()),
+            press: choice.press.clone(),
+            punches: choice.punches.clone(),
+            dies: choice.dies.clone(),
+            sequence: choice.sequence.as_ref().map(|s| s.join(",")),
             ..Ask::default()
         };
-        let sim = simulate(source, dir, None, &ask).map_err(|a| a.text);
-        BendSimUi {
+        let sim = simulate(source, dir.clone(), None, &ask).map_err(|a| a.text);
+        let material = sim.as_ref().ok().and_then(|s| {
+            s.answer
+                .json
+                .get("material")
+                .and_then(|m| m.str().map(str::to_string))
+        });
+        let mut b = BendSimUi {
             sim,
             step: 0,
             t: 0.0,
             playing: false,
             tooling: tooling.into(),
+            choice,
+            material,
+            table_height: None,
             source: source.into(),
             path: path.into(),
+            catalog: None,
+        };
+        if let Some(p) = b.choice.press.clone() {
+            b.table_height = b.catalog().and_then(|c| c.press(&p)).and_then(|r| r.table_height);
         }
+        b
     }
 
-    /// Where `was` stood, kept where it still is a step of this one.
+    /// The library, read once.
+    pub fn catalog(&mut self) -> Option<&Catalog> {
+        if self.catalog.is_none() {
+            let dir = dir_of(&self.path);
+            self.catalog = Some(forge_lang::bendsim::catalog(dir.as_deref()).map_err(|a| a.text));
+        }
+        self.catalog.as_ref().and_then(|c| c.as_ref().ok())
+    }
+
+    /// Simulated again with a changed choice; the step kept where it still is one.
+    pub fn redo(&mut self, choice: Choice, tooling: &str) {
+        let cat = self.catalog.take();
+        let mut fresh = BendSimUi::open_with(&self.source.clone(), &self.path.clone(), tooling, choice);
+        if fresh.catalog.is_none() {
+            fresh.catalog = cat;
+        }
+        fresh.resume(self);
+        *self = fresh;
+    }
+
+    /// The step and instant of an earlier simulation, where it still has that step.
     pub fn resume(&mut self, was: &BendSimUi) {
-        let n = self.sim.as_ref().map_or(0, |s| s.plan.steps.len());
+        let n = self.steps();
         if was.step < n {
             self.step = was.step;
             self.t = was.t;
         }
+    }
+
+    pub fn steps(&self) -> usize {
+        self.sim.as_ref().map_or(0, |s| s.plan.steps.len())
     }
 
     /// To step `k`, at its start.
@@ -69,11 +144,27 @@ impl BendSimUi {
 
     /// Play or pause; from the start again once played through.
     pub fn play(&mut self) {
-        let n = self.sim.as_ref().map_or(0, |s| s.plan.steps.len());
+        let n = self.steps();
         self.playing = !self.playing;
         if self.playing && self.t >= 1.0 && self.step + 1 >= n {
             self.go(0);
         }
+    }
+
+    /// The whole run's position: steps done plus the instant in the step.
+    pub fn position(&self) -> f64 {
+        self.step as f64 + self.t
+    }
+
+    pub fn set_position(&mut self, x: f64) {
+        let n = self.steps();
+        if n == 0 {
+            return;
+        }
+        let x = x.clamp(0.0, n as f64);
+        let k = (x.floor() as usize).min(n - 1);
+        self.step = k;
+        self.t = (x - k as f64).clamp(0.0, 1.0);
     }
 
     /// The bends done before the step shown.
@@ -86,20 +177,22 @@ impl BendSimUi {
         d
     }
 
-    /// The picture now.
-    pub fn frame(&self) -> Option<fb::view::Frame> {
+    /// The instant shown: its stage, the bend's turn, the punch tip.
+    pub fn pose(&self) -> Option<fb::scene::Pose> {
         let s = self.sim.as_ref().ok()?;
-        let st = s.plan.steps.get(self.step)?;
-        Some(fb::view::frame(&s.model, &s.tooling, &self.done(), st, self.t))
+        if self.step >= s.plan.steps.len() {
+            return None;
+        }
+        Some(fb::scene::Scene::new(&s.model, &s.tooling, &s.plan).pose(self.step, self.t))
     }
 
-    /// Moves play on by `dt` seconds (a step takes three); past a step's end, on to the next.
+    /// Moves play on by `dt` seconds; past a step's end, on to the next.
     pub fn tick(&mut self, dt: f64) {
         if !self.playing {
             return;
         }
-        let n = self.sim.as_ref().map_or(0, |s| s.plan.steps.len());
-        self.t += dt / 3.0;
+        let n = self.steps();
+        self.t += dt / STEP_SECONDS;
         if self.t > 1.0 {
             if self.step + 1 < n {
                 self.step += 1;
@@ -117,89 +210,300 @@ impl BendSimUi {
         let Some(st) = s.plan.steps.get(self.step) else {
             return vec![];
         };
-        st.checks
-            .iter()
-            .filter(|c| !c.pass)
-            .map(|c| (c.tool.clone(), c.at))
-            .collect()
+        st.failures().iter().map(|c| (c.tool.clone(), c.at)).collect()
+    }
+
+    /// The machine's words: a library press's maker and model, or the stand-in set's.
+    pub fn machine_words(&mut self) -> String {
+        match self.choice.press.clone() {
+            Some(p) => match self.catalog().and_then(|c| c.press(&p)) {
+                Some(r) => format!("{} {}", r.prov.maker, r.model),
+                None => p,
+            },
+            None => format!("{} (stand-in: forgecad's own numbers)", self.tooling),
+        }
     }
 }
 
-/// The section's points fitted to `rect`, z up; the same scale both ways.
-pub fn fit(outlines: &[fb::view::Outline], rect: egui::Rect) -> impl Fn([f64; 2]) -> egui::Pos2 {
-    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
-    // fit to the part and the tools near it, not the beams' far ends
-    for o in outlines
-        .iter()
-        .filter(|o| o.what == "part" || o.what == "punch" || o.what == "die")
-    {
-        for p in &o.points {
-            for k in 0..2 {
-                lo[k] = lo[k].min(p[k]);
-                hi[k] = hi[k].max(p[k]);
+fn status_mark(s: Option<Status>) -> (&'static str, egui::Color32) {
+    match s {
+        Some(Status::Published) => ("●", look::PASS),
+        Some(Status::Estimate) => ("◐", look::WARN),
+        Some(Status::Conflict) => ("⚠", look::WARN),
+        Some(Status::Unknown) | None => ("○", look::MUTED),
+    }
+}
+
+/// One value with its provenance mark and the cite on hover.
+fn cited(ui: &mut egui::Ui, label: &str, value: String, prov: &fb::catalog::Prov, path: &str) {
+    let (m, c) = status_mark(prov.status(path));
+    let r = ui.horizontal(|ui| {
+        ui.colored_label(c, m);
+        ui.label(format!("{label}: {value}"));
+    });
+    let cites = prov.of(path);
+    if !cites.is_empty() {
+        r.response.on_hover_ui(|ui| {
+            for c in cites {
+                ui.label(format!(
+                    "{} — {}",
+                    c.status.word(),
+                    c.value.as_deref().unwrap_or("")
+                ));
+                if let Some(s) = &c.source {
+                    ui.small(format!("{s} (read {})", c.taken.as_deref().unwrap_or("?")));
+                }
+                if let Some(b) = &c.basis {
+                    ui.small(format!("basis: {b}"));
+                }
             }
-        }
+        });
     }
-    if !lo[0].is_finite() {
-        lo = [-1.0; 2];
-        hi = [1.0; 2];
-    }
-    let pad = 0.06 * (hi[0] - lo[0]).max(hi[1] - lo[1]);
-    let (w, h) = (hi[0] - lo[0] + 2.0 * pad, hi[1] - lo[1] + 2.0 * pad);
-    let s = (rect.width() as f64 / w).min(rect.height() as f64 / h);
-    let cx = 0.5 * (lo[0] + hi[0]);
-    let cz = 0.5 * (lo[1] + hi[1]);
-    let c = rect.center();
-    move |p: [f64; 2]| egui::pos2(c.x + ((p[0] - cx) * s) as f32, c.y - ((p[1] - cz) * s) as f32)
 }
 
-/// Draws the section into `rect`: tools, part, failing tools and places in red.
-pub fn paint(ui: &egui::Ui, rect: egui::Rect, ui_state: &BendSimUi) {
-    let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 4.0, egui::Color32::from_gray(24));
-    let Some(f) = ui_state.frame() else { return };
-    let to = fit(&f.outlines, rect);
-    let fails = ui_state.failures();
-    let failing = |name: &str| fails.iter().any(|(t, _)| t.as_deref() == Some(name));
-    for o in &f.outlines {
-        let colour = match o.what {
-            "part" => look::PART,
-            "finger" => look::GAUGE,
-            _ if failing(&o.name) => look::FAIL,
-            _ => look::TOOL,
-        };
-        let pts: Vec<egui::Pos2> = o.points.iter().map(|p| to(*p)).collect();
-        if o.what == "part" {
-            // the pieces' outlines on both skins, as lines
-            painter.add(egui::Shape::line(pts, egui::Stroke::new(1.2, colour)));
+/// The Setup panel: the machine from the library (or a stand-in), its specs with their
+/// provenance, and the tools it takes.
+pub fn setup_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
+    let mut redo: Option<(Choice, String)> = None;
+    let words = st.machine_words();
+    let tooling = st.tooling.clone();
+    let choice = st.choice.clone();
+    let Some(cat) = st.catalog().cloned() else {
+        if let Some(Err(e)) = &st.catalog {
+            ui.colored_label(look::FAIL, format!("library: {e}"));
+        }
+        return;
+    };
+    ui.strong("Machine");
+    egui::ComboBox::from_id_salt("bendsim-press")
+        .selected_text(words)
+        .width(ui.available_width() - 8.0)
+        .show_ui(ui, |ui| {
+            for id in fb::library::IDS {
+                if ui
+                    .selectable_label(
+                        choice.press.is_none() && tooling == id,
+                        format!("{id} (stand-in)"),
+                    )
+                    .clicked()
+                {
+                    redo = Some((
+                        Choice {
+                            press: None,
+                            ..Default::default()
+                        },
+                        id.to_string(),
+                    ));
+                }
+            }
+            ui.separator();
+            for r in &cat.presses {
+                let txt = format!(
+                    "{} {}{}{}",
+                    r.prov.maker,
+                    r.model,
+                    r.press
+                        .as_ref()
+                        .ok()
+                        .and_then(|p| p.max_force)
+                        .map_or(String::new(), |f| format!(" · {:.0} kN", f)),
+                    match &r.press {
+                        Ok(p) => format!(" · {:.0} mm", p.bed_length),
+                        Err(f) => format!(" · UNKNOWN {}", f.join(", ")),
+                    }
+                );
+                let ok = r.press.is_ok();
+                let resp = ui.add_enabled(
+                    ok,
+                    egui::SelectableLabel::new(choice.press.as_deref() == Some(&r.id), txt),
+                );
+                if resp.clicked() {
+                    redo = Some((
+                        Choice {
+                            press: Some(r.id.clone()),
+                            ..Default::default()
+                        },
+                        tooling.clone(),
+                    ));
+                }
+            }
+        });
+    if let Some(p) = choice.press.as_deref().and_then(|p| cat.press(p)) {
+        egui::CollapsingHeader::new("Specs (● published ◐ estimate ○ unknown)")
+            .id_salt("bendsim-specs")
+            .show(ui, |ui| {
+                let pv = &p.prov;
+                if let Ok(pr) = &p.press {
+                    cited(
+                        ui,
+                        "force",
+                        pr.max_force.map_or("UNKNOWN".into(), |f| format!("{f:.0} kN")),
+                        pv,
+                        "force",
+                    );
+                    cited(
+                        ui,
+                        "bending length",
+                        format!("{:.0} mm", pr.bed_length),
+                        pv,
+                        "bed_length",
+                    );
+                    cited(
+                        ui,
+                        "between housings",
+                        format!("{:.0} mm", pr.housing_gap),
+                        pv,
+                        "housing_gap",
+                    );
+                    cited(
+                        ui,
+                        "open height",
+                        format!("{:.0} mm", pr.open_height),
+                        pv,
+                        "open_height",
+                    );
+                    cited(ui, "stroke", format!("{:.0} mm", pr.stroke), pv, "stroke");
+                    cited(
+                        ui,
+                        "throat",
+                        pr.frame
+                            .map_or("UNKNOWN".into(), |f| format!("{:.0} mm", f.throat)),
+                        pv,
+                        "throat",
+                    );
+                    if !pr.unchecked.is_empty() {
+                        ui.colored_label(look::WARN, format!("not checked: {}", pr.unchecked.join(", ")));
+                    }
+                }
+                for c in pv.of("record") {
+                    ui.small(c.value.clone().unwrap_or_default());
+                }
+            });
+        // the tools of its clamping system
+        let fits = |c: &str| p.clamp == "unknown" || c == p.clamp;
+        egui::CollapsingHeader::new("Tooling")
+            .id_salt("bendsim-tools")
+            .default_open(false)
+            .show(ui, |ui| {
+                let mut ch = choice.clone();
+                let mut changed = false;
+                for (kind, list) in [("Punches", true), ("Dies", false)] {
+                    ui.strong(kind);
+                    let rows: Vec<(String, String, Option<String>)> = if list {
+                        cat.punches
+                            .iter()
+                            .filter(|r| fits(&r.clamp))
+                            .map(|r| {
+                                (
+                                    r.id.clone(),
+                                    r.prov.name.clone(),
+                                    r.punch.as_ref().err().map(|f| f.join(", ")),
+                                )
+                            })
+                            .collect()
+                    } else {
+                        cat.dies
+                            .iter()
+                            .filter(|r| fits(&r.clamp))
+                            .map(|r| {
+                                (
+                                    r.id.clone(),
+                                    r.prov.name.clone(),
+                                    r.die.as_ref().err().map(|f| f.join(", ")),
+                                )
+                            })
+                            .collect()
+                    };
+                    let sel = if list { &mut ch.punches } else { &mut ch.dies };
+                    for (id, name, unknown) in rows {
+                        let defaults: Vec<&str> = cat.default_tools(p, list);
+                        let mut on = unknown.is_none()
+                            && match sel.as_ref() {
+                                Some(s) => s.contains(&id),
+                                None => defaults.contains(&id.as_str()),
+                            };
+                        let label = match &unknown {
+                            Some(f) => format!("{id} {name} — UNKNOWN: {f}"),
+                            None => format!("{id} {name}"),
+                        };
+                        if ui
+                            .add_enabled(unknown.is_none(), egui::Checkbox::new(&mut on, label))
+                            .changed()
+                        {
+                            let all: Vec<String> = defaults.iter().map(|x| x.to_string()).collect();
+                            let mut s = sel.clone().unwrap_or(all);
+                            if on {
+                                s.push(id.clone());
+                            } else {
+                                s.retain(|x| x != &id);
+                            }
+                            *sel = Some(s);
+                            changed = true;
+                        }
+                    }
+                }
+                if changed {
+                    redo = Some((ch, tooling.clone()));
+                }
+            });
+    }
+    if let Some((c, t)) = redo {
+        st.redo(c, &t);
+    }
+}
+
+/// The Sequence panel: the order simulated (the planner's or edited), moved with the arrows.
+pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
+    let Ok(sim) = &st.sim else { return };
+    let names: Vec<String> = sim.plan.steps.iter().map(|s| sim.names[s.bend].clone()).collect();
+    let passes: Vec<bool> = sim.plan.steps.iter().map(fb::Step::pass).collect();
+    let mut order = names.clone();
+    let mut moved = None;
+    ui.horizontal(|ui| {
+        ui.strong("Sequence");
+        ui.label(if st.choice.sequence.is_some() {
+            "(edited)"
         } else {
-            painter.add(egui::Shape::closed_line(pts, egui::Stroke::new(1.5, colour)));
-        }
+            "(planned)"
+        });
+    });
+    for (i, n) in names.iter().enumerate() {
+        ui.horizontal(|ui| {
+            if ui.small_button("▲").clicked() && i > 0 {
+                moved = Some((i, i - 1));
+            }
+            if ui.small_button("▼").clicked() && i + 1 < names.len() {
+                moved = Some((i, i + 1));
+            }
+            let c = if passes[i] { look::PASS } else { look::FAIL };
+            if ui
+                .selectable_label(
+                    st.step == i,
+                    egui::RichText::new(format!("{}. {n}", i + 1)).color(c),
+                )
+                .clicked()
+            {
+                st.go(i);
+            }
+        });
     }
-    for (_, at) in &fails {
-        if let Some(a) = at {
-            let p = to([a[0], a[2]]);
-            painter.circle_stroke(p, 6.0, egui::Stroke::new(2.0, look::FAIL));
-        }
+    let planned = st.choice.sequence.is_some() && ui.button("Plan the order").clicked();
+    if let Some((a, b)) = moved {
+        order.swap(a, b);
+        let mut c = st.choice.clone();
+        c.sequence = Some(order);
+        let t = st.tooling.clone();
+        st.redo(c, &t);
+    } else if planned {
+        let mut c = st.choice.clone();
+        c.sequence = None;
+        let t = st.tooling.clone();
+        st.redo(c, &t);
     }
-    let label = format!(
-        "{}  turn {:.1}°  tip {:.1} mm",
-        f.phase.word(),
-        f.phi.to_degrees(),
-        f.tip
-    );
-    painter.text(
-        rect.left_top() + egui::vec2(8.0, 6.0),
-        egui::Align2::LEFT_TOP,
-        label,
-        egui::FontId::monospace(11.0),
-        egui::Color32::from_gray(200),
-    );
 }
 
-/// The panel's body: the order, the steps, play and scrub, the section (unless the view shows
-/// it, as the Bend Simulation environment's does), the step's checks.
-pub fn body(ui: &mut egui::Ui, st: &mut BendSimUi, section: bool) {
+/// The step's results: tooling, gauge, force, springback and every check.
+pub fn results_ui(ui: &mut egui::Ui, st: &BendSimUi) {
     let sim = match &st.sim {
         Ok(s) => s,
         Err(e) => {
@@ -208,100 +512,78 @@ pub fn body(ui: &mut egui::Ui, st: &mut BendSimUi, section: bool) {
         }
     };
     let plan = &sim.plan;
-    let head = if plan.feasible {
-        "Feasible"
-    } else {
-        "No feasible sequence"
-    };
     ui.colored_label(
         if plan.feasible { look::PASS } else { look::FAIL },
-        format!("{head} on {}", sim.tooling.id),
+        if plan.feasible {
+            "Feasible"
+        } else {
+            "No feasible sequence"
+        },
     );
-    let n = plan.steps.len();
-    ui.horizontal(|ui| {
-        if ui.button("First").clicked() {
-            st.step = 0;
-            st.t = 0.0;
-        }
-        if ui.button("Back").clicked() && st.step > 0 {
-            st.step -= 1;
-            st.t = 0.0;
-        }
-        if ui.button(if st.playing { "Pause" } else { "Play" }).clicked() {
-            st.playing = !st.playing;
-            if st.playing && st.t >= 1.0 && st.step + 1 >= n {
-                st.step = 0;
-                st.t = 0.0;
-            }
-        }
-        if ui.button("Next").clicked() && st.step + 1 < n {
-            st.step += 1;
-            st.t = 0.0;
-        }
-        ui.add(egui::Slider::new(&mut st.t, 0.0..=1.0).show_value(false));
-    });
     let names = &sim.names;
-    egui::ScrollArea::horizontal()
-        .id_salt("bendsim-steps")
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for (i, s) in plan.steps.iter().enumerate() {
-                    let c = if s.pass() { look::PASS } else { look::FAIL };
-                    let txt = egui::RichText::new(format!("{}. {}", i + 1, names[s.bend])).color(c);
-                    if ui.selectable_label(i == st.step, txt).clicked() {
-                        st.step = i;
-                        st.t = 0.0;
-                    }
-                }
-            });
-        });
-    if section {
-        let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 300.0), egui::Sense::hover());
-        paint(ui, rect, st);
-    }
     if let Some(s) = plan.steps.get(st.step) {
         ui.label(format!(
-            "{}: {:.1}° (+{:.1}°)  {} on {}{}{}",
+            "{}: {:.1}° turn, overbend {:.1}° (springs back to {:.1}°)",
             names[s.bend],
             s.angle.to_degrees(),
             s.overbend.to_degrees(),
+            s.angle.to_degrees()
+        ));
+        ui.label(format!(
+            "punch {} · die {}{}{}",
             s.punch,
             s.die,
-            if s.flip { ", flipped" } else { "" },
-            if s.setup.rotate { ", end for end" } else { "" }
+            if s.flip { " · flipped" } else { "" },
+            if s.setup.rotate { " · end for end" } else { "" }
         ));
+        if let (Some(pl), Some(dl)) = (s.punch_length, s.die_length) {
+            ui.label(format!("stacks: punch {pl:.0} mm, die {dl:.0} mm"));
+        }
         if let Some(g) = &s.gauge {
             ui.label(format!(
-                "backgauge x {:.2} r {:.2}, {} finger(s)",
+                "backgauge X {:.1} R {:.1} · {} finger(s)",
                 g.x,
                 g.r,
                 g.fingers.len()
             ));
         }
+        ui.label(format!(
+            "ram travel {:.1} mm{}",
+            s.travel,
+            s.force.map_or(String::new(), |f| format!(" · force {f:.1} kN"))
+        ));
         egui::Grid::new("bendsim-checks").striped(true).show(ui, |ui| {
             for c in &s.checks {
-                let col = if c.pass {
-                    look::PASS
+                let (col, verdict) = if c.pass {
+                    (look::PASS, "pass")
+                } else if c.unchecked.is_some() {
+                    (look::MUTED, "not checked")
                 } else if c.severity == fb::Severity::Warning {
-                    look::WARN
+                    (look::WARN, "warning")
+                } else if c.undecided {
+                    (look::FAIL, "undecided")
                 } else {
-                    look::FAIL
+                    (look::FAIL, "fail")
                 };
                 ui.colored_label(col, c.rule.word());
+                ui.colored_label(col, verdict);
                 let ang = matches!(c.rule, fb::Rule::DieAngle | fb::Rule::PunchAngle);
                 let v = |x: f64| {
                     if ang {
                         format!("{:.2}°", x.to_degrees())
                     } else {
-                        format!("{x:.3}")
+                        format!("{x:.2}")
                     }
                 };
-                ui.label(format!(
-                    "{} {} {}",
-                    v(c.value),
-                    if c.at_most { "≤" } else { "≥" },
-                    v(c.limit)
-                ));
+                match &c.unchecked {
+                    Some(u) => ui.label(format!("unknown: {u}")),
+                    None => ui.label(format!(
+                        "{} {} {}",
+                        v(c.value),
+                        if c.at_most { "≤" } else { "≥" },
+                        v(c.limit)
+                    )),
+                };
                 ui.label(c.tool.clone().unwrap_or_default());
                 ui.end_row();
             }
@@ -323,6 +605,153 @@ pub fn body(ui: &mut egui::Ui, st: &mut BendSimUi, section: bool) {
     }
 }
 
+/// The timeline: every step a block, its stages marked; drag to scrub.
+pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
+    let n = st.steps();
+    ui.horizontal(|ui| {
+        if ui.button("⏮").clicked() {
+            st.go(0);
+        }
+        if ui.button("◀").clicked() {
+            st.go(st.step.saturating_sub(1));
+        }
+        if ui.button(if st.playing { "⏸" } else { "▶" }).clicked() {
+            st.play();
+        }
+        if ui.button("▶|").clicked() && n > 0 {
+            st.go((st.step + 1).min(n - 1));
+        }
+        let (stage, _) = stage_at(st.t);
+        let pose = st.pose();
+        ui.label(format!(
+            "step {}/{} · {}{}",
+            st.step + 1,
+            n,
+            stage.word(),
+            pose.map_or(String::new(), |p| format!(" · φ {:.1}°", p.phi.to_degrees()))
+        ));
+    });
+    let w = ui.available_width().max(100.0);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 34.0), egui::Sense::click_and_drag());
+    let p = ui.painter_at(rect);
+    p.rect_filled(rect, 3.0, egui::Color32::from_gray(30));
+    if n == 0 {
+        return;
+    }
+    let bw = rect.width() / n as f32;
+    let fails: Vec<bool> = st
+        .sim
+        .as_ref()
+        .map(|s| s.plan.steps.iter().map(|x| !x.pass()).collect())
+        .unwrap_or_default();
+    for k in 0..n {
+        let x0 = rect.left() + bw * k as f32;
+        for (s, a, b) in STAGES {
+            let shade = match s {
+                Stage::Handle => 52,
+                Stage::Gauge => 62,
+                Stage::Approach => 72,
+                Stage::Bend => 96,
+                Stage::Springback => 84,
+                Stage::Return => 66,
+            };
+            let r = egui::Rect::from_min_max(
+                egui::pos2(x0 + bw * a as f32, rect.top() + 4.0),
+                egui::pos2(x0 + bw * b as f32, rect.bottom() - 4.0),
+            );
+            p.rect_filled(r, 0.0, egui::Color32::from_gray(shade));
+        }
+        let c = if fails.get(k).copied().unwrap_or(false) {
+            look::FAIL
+        } else {
+            look::PASS
+        };
+        p.rect_filled(
+            egui::Rect::from_min_max(
+                egui::pos2(x0, rect.bottom() - 4.0),
+                egui::pos2(x0 + bw, rect.bottom()),
+            ),
+            0.0,
+            c,
+        );
+        p.line_segment(
+            [egui::pos2(x0, rect.top()), egui::pos2(x0, rect.bottom())],
+            egui::Stroke::new(1.0, egui::Color32::from_gray(15)),
+        );
+    }
+    let x = rect.left() + (st.position() / n as f64) as f32 * rect.width();
+    p.line_segment(
+        [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+        egui::Stroke::new(2.0, egui::Color32::WHITE),
+    );
+    if (resp.dragged() || resp.clicked())
+        && let Some(pt) = resp.interact_pointer_pos()
+    {
+        let f = ((pt.x - rect.left()) / rect.width()).clamp(0.0, 1.0) as f64;
+        st.set_position(f * n as f64);
+        st.playing = false;
+    }
+}
+
+/// Words over the view: the machine, the step and stage, and what fails.
+pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
+    let p = ui.painter_at(rect);
+    let words = st.machine_words();
+    let Ok(sim) = &st.sim else {
+        if let Err(e) = &st.sim {
+            p.text(
+                rect.left_top() + egui::vec2(12.0, 12.0),
+                egui::Align2::LEFT_TOP,
+                e,
+                egui::FontId::proportional(14.0),
+                look::FAIL,
+            );
+        }
+        return;
+    };
+    let mut lines = vec![(words, egui::Color32::from_gray(225))];
+    if let Some(s) = sim.plan.steps.get(st.step) {
+        let (stage, _) = stage_at(st.t);
+        lines.push((
+            format!(
+                "{}. {} · {} · {} on {}",
+                st.step + 1,
+                sim.names[s.bend],
+                stage.word(),
+                s.punch,
+                s.die
+            ),
+            egui::Color32::from_gray(200),
+        ));
+        if stage == Stage::Handle {
+            lines.push(("operator handling: shown, not checked".into(), look::MUTED));
+        }
+        for c in s.failures() {
+            lines.push((
+                format!(
+                    "✖ {}{}{}",
+                    c.rule.word(),
+                    c.tool.as_deref().map_or(String::new(), |t| format!(" · {t}")),
+                    c.phi
+                        .map_or(String::new(), |f| format!(" at φ {:.1}°", f.to_degrees()))
+                ),
+                look::FAIL,
+            ));
+        }
+    }
+    let mut y = rect.top() + 10.0;
+    for (l, c) in lines {
+        p.text(
+            egui::pos2(rect.left() + 12.0, y),
+            egui::Align2::LEFT_TOP,
+            l,
+            egui::FontId::proportional(13.0),
+            c,
+        );
+        y += 18.0;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,14 +765,28 @@ mod tests {
     fn plays_through_its_steps() {
         let mut ui = BendSimUi::open(L, "l.fg", "std-eu");
         assert!(ui.sim.is_ok());
-        let a = ui.frame().unwrap();
         ui.playing = true;
-        ui.tick(1.5);
-        let b = ui.frame().unwrap();
-        assert!(b.tip < a.tip);
-        ui.tick(10.0);
+        ui.tick(0.3 * STEP_SECONDS);
+        let a = ui.pose().unwrap();
+        ui.tick(0.3 * STEP_SECONDS);
+        let b = ui.pose().unwrap();
+        assert!(b.tip < a.tip, "{a:?} {b:?}");
+        ui.tick(10.0 * STEP_SECONDS);
         assert!(!ui.playing && ui.t == 1.0);
         let bad = BendSimUi::open(L, "l.fg", "nope");
         assert!(bad.sim.is_err());
+    }
+
+    #[test]
+    fn a_library_press_simulates() {
+        let c = Choice {
+            press: Some("trumpf-trubend-5130".into()),
+            ..Default::default()
+        };
+        let ui = BendSimUi::open_with(L, "l.fg", "std-eu", c);
+        let sim = ui.sim.as_ref().expect("simulated");
+        assert_eq!(sim.tooling.press.id, "trumpf-trubend-5130");
+        assert!(sim.plan.feasible, "{:?}", sim.plan.blocking);
+        assert!(ui.table_height.is_some());
     }
 }

@@ -1231,7 +1231,7 @@ status = "estimate"
 source = "https://www.bystronic.com/sites/default/files/2026-06/2502436_Bending_Werkzeugkatalog_ENG_compressed.pdf p.74"
 taken = "2026-11-24"
 value = "foot width 25 on V4 drawings"
-basis = "the foot's width, wider than the body: the envelope errs large"
+basis = "the widest published dimension (foot_width_mm): the envelope errs large"
 
 [[die.cite]]
 path = "segments"
@@ -1303,7 +1303,7 @@ status = "estimate"
 source = "https://www.bystronic.com/sites/default/files/2026-06/2502436_Bending_Werkzeugkatalog_ENG_compressed.pdf p.76"
 taken = "2026-11-24"
 value = "foot width 25 on V4 drawings"
-basis = "the foot's width, wider than the body: the envelope errs large"
+basis = "the widest published dimension (foot_width_mm): the envelope errs large"
 
 [[die.cite]]
 path = "segments"
@@ -1375,7 +1375,7 @@ status = "estimate"
 source = "https://www.bystronic.com/sites/default/files/2026-06/2502436_Bending_Werkzeugkatalog_ENG_compressed.pdf p.82"
 taken = "2026-11-24"
 value = "foot width 25 on V4 drawings"
-basis = "the foot's width, wider than the body: the envelope errs large"
+basis = "the widest published dimension (foot_width_mm): the envelope errs large"
 
 [[die.cite]]
 path = "segments"
@@ -1447,7 +1447,7 @@ status = "estimate"
 source = "https://www.bystronic.com/sites/default/files/2026-06/2502436_Bending_Werkzeugkatalog_ENG_compressed.pdf p.84"
 taken = "2026-11-24"
 value = "foot width 25 on V4 drawings"
-basis = "the foot's width, wider than the body: the envelope errs large"
+basis = "the widest published dimension (foot_width_mm): the envelope errs large"
 
 [[die.cite]]
 path = "segments"
@@ -1519,7 +1519,7 @@ status = "estimate"
 source = "https://www.bystronic.com/sites/default/files/2026-06/2502436_Bending_Werkzeugkatalog_ENG_compressed.pdf p.90"
 taken = "2026-11-24"
 value = "foot width 25 on V4 drawings"
-basis = "the foot's width, wider than the body: the envelope errs large"
+basis = "the widest published dimension (foot_width_mm): the envelope errs large"
 
 [[die.cite]]
 path = "segments"
@@ -1591,7 +1591,7 @@ status = "estimate"
 source = "https://www.bystronic.com/sites/default/files/2026-06/2502436_Bending_Werkzeugkatalog_ENG_compressed.pdf p.92"
 taken = "2026-11-24"
 value = "foot width 25 on V4 drawings"
-basis = "the foot's width, wider than the body: the envelope errs large"
+basis = "the widest published dimension (foot_width_mm): the envelope errs large"
 
 [[die.cite]]
 path = "segments"
@@ -1663,7 +1663,7 @@ status = "estimate"
 source = "https://www.bystronic.com/sites/default/files/2026-06/2502436_Bending_Werkzeugkatalog_ENG_compressed.pdf p.98"
 taken = "2026-11-24"
 value = "foot width 25 on V4 drawings"
-basis = "the foot's width, wider than the body: the envelope errs large"
+basis = "the widest published dimension (foot_width_mm): the envelope errs large"
 
 [[die.cite]]
 path = "segments"
@@ -1735,7 +1735,7 @@ status = "estimate"
 source = "https://www.bystronic.com/sites/default/files/2026-06/2502436_Bending_Werkzeugkatalog_ENG_compressed.pdf p.100"
 taken = "2026-11-24"
 value = "foot width 25 on V4 drawings"
-basis = "the foot's width, wider than the body: the envelope errs large"
+basis = "the widest published dimension (foot_width_mm): the envelope errs large"
 
 [[die.cite]]
 path = "segments"

@@ -633,6 +633,12 @@ fn unknown_err(e: fb::ToolingError) -> Answer {
                 ),
             ],
         ),
+        fb::ToolingError::NoPunches | fb::ToolingError::NoDies => err(
+            "NoDefaultTooling",
+            "the library holds none of this press maker's tools and its clamping system is not published: name the punches and dies"
+                .to_string(),
+            vec![],
+        ),
         other => err("BadTooling", format!("{other:?}"), vec![]),
     }
 }
@@ -652,16 +658,14 @@ fn library_tooling(ask: &Ask, press: &str, dir: Option<&Path>) -> Result<(fb::To
         (None, None) => cat.tooling_for(press),
         (ps, ds) => {
             let all_p: Vec<String> = cat
-                .punches
-                .iter()
-                .filter(|r| r.clamp == rec.clamp && r.punch.is_ok())
-                .map(|r| r.id.clone())
+                .default_tools(rec, true)
+                .into_iter()
+                .map(String::from)
                 .collect();
             let all_d: Vec<String> = cat
-                .dies
-                .iter()
-                .filter(|r| r.clamp == rec.clamp && r.die.is_ok())
-                .map(|r| r.id.clone())
+                .default_tools(rec, false)
+                .into_iter()
+                .map(String::from)
                 .collect();
             let ps: Vec<&str> = ps.as_ref().unwrap_or(&all_p).iter().map(String::as_str).collect();
             let ds: Vec<&str> = ds.as_ref().unwrap_or(&all_d).iter().map(String::as_str).collect();
@@ -1041,6 +1045,12 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
     ];
     if let Some(u) = &c.unchecked {
         f.push(("unknown", u.as_str().into()));
+    }
+    if c.estimate {
+        f.push((
+            "against",
+            "estimated envelope (no published geometry; errs large)".into(),
+        ));
     }
     if let Some(lo) = c.lo {
         f.push(("limit_lo", v(lo)));
