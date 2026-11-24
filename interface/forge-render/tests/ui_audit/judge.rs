@@ -102,9 +102,11 @@ pub fn popup(s: &Snap, before: &Snap, region: &[Rect], screen: Rect) -> Vec<Find
     // texts drawn over each other
     for (i, a) in texts.iter().enumerate() {
         for b in &texts[i + 1..] {
-            let x = a.rect.intersect(b.rect);
-            if x.is_positive() && a.s != b.s {
-                let small = a.rect.area().min(b.rect.area()).max(1.0);
+            // what is seen of each: text a scroll area or a closed list clips away isn't drawn
+            let (ra, rb) = (a.rect.intersect(a.clip), b.rect.intersect(b.clip));
+            let x = ra.intersect(rb);
+            if ra.is_positive() && rb.is_positive() && x.is_positive() && a.s != b.s {
+                let small = ra.area().min(rb.area()).max(1.0);
                 if x.area() / small > 0.25 {
                     out.push(f(
                         "overlap",

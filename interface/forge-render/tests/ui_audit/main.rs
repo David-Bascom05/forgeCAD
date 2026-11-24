@@ -245,7 +245,12 @@ struct Crawl {
 
 fn copy_fixture(f: &Fixture, tag: &str) -> Option<PathBuf> {
     let file = f.file?;
-    let dir = std::env::temp_dir().join(format!("fg-ui-audit-{}-{}-{tag}", std::process::id(), f.name));
+    // each in a folder of its own inside one of the run's: a dialog that lists the files around
+    // a part (Place) sees the example's neighbours, not other runs' folders
+    let dir = std::env::temp_dir()
+        .join(format!("fg-ui-audit-{}", std::process::id()))
+        .join(f.name)
+        .join(tag);
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     if file == "PLATE" {
