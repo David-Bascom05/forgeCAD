@@ -140,7 +140,7 @@ pub fn prims_tris(prims: &[Prim]) -> Tris {
 /// A `.fg` part's triangles (its text, the folder its files are found in): built with forge-lang
 /// and tessellated at 0.1 mm, each triangle flat-shaded.
 pub fn part_tris(src: &str, dir: Option<&Path>) -> Result<Tris, String> {
-    static BUILT: OnceLock<Mutex<HashMap<(String, Option<PathBuf>), Result<Tris, String>>>> = OnceLock::new();
+    static BUILT: OnceLock<Built> = OnceLock::new();
     let key = (src.to_string(), dir.map(Path::to_path_buf));
     let c = BUILT.get_or_init(|| Mutex::new(HashMap::new()));
     if let Some(r) = c.lock().expect("no panics while held").get(&key) {
@@ -199,6 +199,8 @@ fn build_part(src: &str, dir: Option<&Path>) -> Result<Tris, String> {
 }
 
 type Key = (String, String, Option<String>, Option<PathBuf>, String);
+/// Parts built, by (text, folder).
+type Built = Mutex<HashMap<(String, Option<PathBuf>), Result<Tris, String>>>;
 
 fn cache() -> &'static Mutex<HashMap<Key, Arc<Tris>>> {
     static C: OnceLock<Mutex<HashMap<Key, Arc<Tris>>>> = OnceLock::new();
