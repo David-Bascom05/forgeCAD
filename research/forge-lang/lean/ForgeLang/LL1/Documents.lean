@@ -87,6 +87,17 @@ tool0 = frame(on: forearm, at: pose(at: (144, 0, 5)))
 transmission(src.shoulder, actuator: \"m1\", reduction: 50)
 " = true := by decide +kernel
 
+/-- A bending document (forge-bend-lang's own example, its comments left out). -/
+theorem bending_doc_accepted : accepts "bending
+part   = part(\"channel.fg\", sheet: \"base\")
+press  = press(\"trumpf-trubend-5130\")
+s1     = station(punch: \"trumpf/OW200-S\", die: \"trumpf/EV_W16-84deg\", y: 0, length: 500)
+b1     = bend(\"right\", at: s1)
+b2     = bend(\"left\", at: s1, rotate: true)
+sheet  = setup_sheet()
+prog   = program(format: \"cincinnati\")
+" = true := by decide +kernel
+
 /-- An assembly's optional header line, then a statement. -/
 theorem assembly_header_accepted : accepts "assembly
 a = part(\"a.fg\")

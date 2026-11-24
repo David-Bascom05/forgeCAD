@@ -1,0 +1,12 @@
+# name	kind	source	pin	files	licence	note
+# kind url: source is the URL; pin is sha256:HEX (refused on mismatch) or md5:HEX (checked, and its
+# sha256 printed to pin here). kind git: source is the repository; pin is the commit; files are the
+# paths checked out (sparse). From research/cam/benchmarks/datasets-gcode.md §7 (branch
+# research/toolpath-quality). rptu-10 is stored in the repo (verify/cam-parts/rptu-10), not here.
+spinner-u5-nc	git	https://github.com/ElMoe/Production-Data-Set-for-Five-Axis-CNC-Milling-with-Multiple-Changeovers	b800366089c196c22c6eb66c69a1e9cfa781a061	NC_code LICENSE README.md	CC-BY-4.0	Siemens 840D (NX) programs of the Spinner U5-620 runs
+spinner-u5-csv	url	https://zenodo.org/records/15735480/files/data_v1_0_1.csv	sha256:d7227badb6ae1a27339622b337207cc342f75acc5baa18538352228fd52be580	data_v1_0_1.csv	CC-BY-4.0	1 s log: line number, line text, cycle time (78.7 MB)
+nist-mtconnectR	url	https://cran.r-project.org/src/contrib/Archive/mtconnectR/mtconnectR_1.2.1.tar.gz	sha256:06d84654ced6876c4bb9ce59cf3e5d0332af1dec91f60af3e358d6320a348442	mtconnectR_1.2.1.tar.gz	AGPL-3.0	inst/extdata: raw_gcode.NC and its MTConnect log (cache only)
+malyer-ti	url	https://zenodo.org/records/23755091/files/Malyer_Caydas_TiPocketMilling_data.zip	sha256:d4ea5133c4d64f615f1f45a24ae1ba3dadfeea3b68e1ef58cf653ce203543218	Malyer_Caydas_TiPocketMilling_data.zip	CC-BY-4.0 (data), MIT (code)	Ti-6Al-4V pocket entries: NC, Ra, tool life (37.9 MB; record md5 8736d0c37bdd2b99cde7a02fad2c3200)
+linuxcnc-ngc	git	https://github.com/LinuxCNC/linuxcnc	65f7467903029174dae789b7f89d5251ccdf8650	nc_files tests/trajectory-planner	GPL-2.0-or-later	RS274NGC programs (cache only)
+camotics-ex	git	https://github.com/CauldronDevelopmentLLC/CAMotics	e84665f2fa9d1151f03282ac7e01320bc65e015b	examples	GPL-2.0-or-later	NC from several CAMs (cache only)
+freecad-camtests	git	https://github.com/FreeCAD/FreeCAD	8fef74c9a1ebb360917e6408daa702c886926f66	src/Mod/CAM/CAMTests	LGPL-2.1-or-later	post tests: read, write our own (cache only)

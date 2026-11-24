@@ -59,8 +59,10 @@ round = fillet(edges(of: boss, crease: "convex"), r)
     const v1 = st.built.volume;
     assert.ok(v1 > n0.volume, `thicker is more: ${v1} > ${n0.volume}`);
     console.log(`ok - t = 9 rebuilt: volume ${v1}`);
-    // drawn: frames after the rebuild's word (the whole mesh follows its first faces), then one
-    await t.frames(p, st);
+    // drawn: a frame after the rebuild's word (the whole mesh follows its first faces). One, not
+    // two: frames are paced to the GPU (webapp.rs `IN_FLIGHT`), and what's asked for while two are
+    // out is drawn once, in one frame, when one is done; the pixels below show it's the new part
+    await t.frames(p, st, 1);
     const f1 = await t.pixels(p);
     const changed = f1.changed;
     assert.ok(changed > 1000, `the thicker part drawn differently: ${changed} bytes changed`);

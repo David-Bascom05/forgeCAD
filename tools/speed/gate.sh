@@ -100,7 +100,8 @@ cargo build -q --release -p forge-model --example regen1 --example bits
 cargo build -q --release -p forge-lang --example benchparts
 bin="$target/release/examples"
 if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
-  # (the binaries at a path of one length whatever the checkout, and the fixed getrandom)
+  # (the binaries at a path of one length whatever the checkout, and the fixed getrandom and
+  # clock, fixedrandom.c: a clock read under load moved tour seq by up to 24)
   # (the directory's path reaches each counted process in argv[0], LD_PRELOAD and
   # FORGE_BENCH_PARTS: its LENGTH moves the counts (tour seq: 9,441,701 from a 22-character
   # directory, 9,436,604 from 14, 9,437,129 from 41), its letters do not. Always this one form)

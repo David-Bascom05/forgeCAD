@@ -5,7 +5,7 @@
 
 use super::schema::{self, Kind, Tab};
 use super::{Ask, CamWs, Cmd, Locate, OpDlg, SetupDlg};
-use crate::shell::placed::Placed;
+use crate::shell::placed::{Host, Placed};
 use crate::shell::theme::{Theme, medium, mono, sans};
 use crate::shell::thermo_ui::{button, foot, frame, head, heading, note, row, tabs};
 use crate::shell::{Action, Shell, icons};
@@ -198,9 +198,54 @@ pub fn num(x: f64) -> String {
     if s == "-0" { "0".into() } else { s.into() }
 }
 
+/// What a cycle time's two numbers are (shown on hover wherever they are).
+pub const CYCLE_TIP: &str = "\u{2265}: the least time the posted program can take on this machine, from its feeds, rapid rates and tool changes (a guaranteed lower bound).\nest.: an estimate with stated assumptions, not a prediction: a jerk-limited motion planner with 1000 mm/s\u{b2} acceleration (the machine record's where it gives one), 20,000 mm/s\u{b3} jerk and corners blended within 0.02 mm. A real machine can differ by tens of per cent.";
+
+/// A cycle time: the lower bound and the estimate, together.
+pub fn cycle_words((lo, est): (f64, f64)) -> String {
+    format!("\u{2265} {} \u{b7} est. {}", time(lo), time(est))
+}
+
+/// As `cycle_words`, short (m:ss), for the browser's rows.
+fn cycle_short((lo, est): (f64, f64)) -> String {
+    format!("\u{2265} {} \u{b7} est. {}", short_time(lo), short_time(est))
+}
+
+/// A choice's words for a person (the Forge word on hover): `passes: "one_way"` reads "One
+/// direction".
+fn choice_words(arg: &str, word: &str) -> String {
+    match (arg, word) {
+        ("passes", "one_way") => "One direction".into(),
+        ("passes", "two_way") => "Both directions".into(),
+        _ => {
+            let w = word.replace('_', " ");
+            let mut c = w.chars();
+            c.next().map_or(String::new(), |f| f.to_uppercase().collect::<String>() + c.as_str())
+        }
+    }
+}
+
+/// A default's value, where its words give one: a leading number ("0 (walls)", "60"), or a
+/// share of the tool's diameter ("half the tool's diameter", "0.4 × the tool's diameter").
+fn default_value(words: &str, tool_d: Option<f64>) -> Option<f64> {
+    let lead: String = words.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+    if !lead.is_empty() && !words.contains("tool's diameter") {
+        return lead.parse().ok();
+    }
+    let d = tool_d?;
+    if words.starts_with("half the tool's diameter") {
+        return Some(0.5 * d);
+    }
+    let (k, rest) = words.split_once(" \u{d7} ")?;
+    rest.starts_with("the tool's diameter").then_some(())?;
+    Some(k.trim().parse::<f64>().ok()? * d)
+}
+
 /// A time as m:ss.
 fn short_time(s: f64) -> String {
-    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0).floor() as u32)
+    // whole seconds, rounded as `time` rounds them
+    let s = s.round();
+    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0) as u32)
 }
 
 /// A work offset's word: G54 for the first.
@@ -330,7 +375,9 @@ impl Shell {
                         Some(_) if lathe => format!("{su}  ·  lathe"),
                         Some(s) => {
                             let tsum: f64 = w.run.as_ref().map_or(0.0, |r| r.ops.iter().filter(|o| o.setup == su).map(|o| o.time_s).sum());
-                            if tsum > 0.0 {
+                            if let Some(c) = w.run.as_ref().and_then(|r| r.setup_cycle(&su)) {
+                                format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), cycle_short(c))
+                            } else if tsum > 0.0 {
                                 format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), short_time(tsum))
                             } else {
                                 format!("{su}  ·  {}", wcs_word(s.offset))
@@ -488,7 +535,9 @@ impl Shell {
                 .id_salt("cam-details")
                 .auto_shrink([false, false])
                 .show(&mut child, |ui| {
-                    details(ui, &t, &w, &id, r.width(), &mut cmds, &mut places)
+                    details(ui, &t, &w, &id, r.width(), &mut cmds, &mut places);
+                    // the last row clear of the panel's edge when scrolled to the end
+                    ui.add_space(16.0);
                 });
         }
         for c in cmds {
@@ -501,19 +550,27 @@ impl Shell {
     /// The workspace's windows.
     pub(in crate::shell) fn cam_ui(&mut self, ctx: &egui::Context) {
         let Some(mut w) = self.cam.take() else { return };
+        w.screen_w = ctx.content_rect().width();
+        // docked this frame only if the environment's properties column said so this frame
+        let dock = w.dock.take();
+        w.dock = dock;
         let t = self.theme;
         // the view less what the simulation's panel and timeline cover: the windows keep inside
         let v = self.camsim_free(self.view_rect);
         let mut places: Places = vec![];
         let mut blocks: Vec<Rect> = vec![];
-        if let Some(mut d) = w.op_dlg.take() {
+        if !w.sheet_hidden
+            && let Some(mut d) = w.op_dlg.take()
+        {
             let (keep, r) = op_dialog(ctx, &t, v, &mut w, &mut d, &mut places);
             blocks.extend(r);
             if keep {
                 w.op_dlg = Some(d);
             }
         }
-        if let Some(mut d) = w.setup_dlg.take() {
+        if !w.sheet_hidden
+            && let Some(mut d) = w.setup_dlg.take()
+        {
             let (keep, r) = setup_dialog(ctx, &t, v, &mut w, &mut d, &mut places);
             blocks.extend(r);
             if keep {
@@ -541,6 +598,9 @@ impl Shell {
         if w.turning() && w.turnview.open {
             blocks.extend(section_window(ctx, &t, v, &mut w, &mut places));
         }
+        // docked only in a frame whose properties column set it (it draws before this)
+        w.dock = None;
+        w.sheet_hidden = false;
         self.view_blocks.extend(blocks);
         self.places.extend(places);
         self.cam = Some(w);
@@ -715,23 +775,26 @@ fn details(
             if let Some(r) = run {
                 let ops: Vec<&super::run::OpRes> = r.ops.iter().filter(|o| o.setup == id).collect();
                 let total: f64 = ops.iter().map(|o| o.time_s).sum();
-                heading(ui, t, &format!("Cycle time {}", time(total)), width);
-                for o in &ops {
-                    fact(
+                if let Some(c) = r.setup_cycle(id) {
+                    heading(ui, t, "Cycle time", width);
+                    fact_tip(ui, t, "On the machine", &cycle_words(c), CYCLE_TIP, width, t.ink);
+                    for o in &ops {
+                        if let Some(oc) = r.cycle([o.name.as_str()]) {
+                            fact_tip(ui, t, &format!("  {} · {}", o.name, o.kind), &cycle_words(oc), CYCLE_TIP, width, t.ink2);
+                        }
+                    }
+                } else {
+                    heading(ui, t, &format!("Feed time {}", time(total)), width);
+                    for o in &ops {
+                        fact(ui, t, &format!("  {} · {}", o.name, o.kind), &time(o.time_s), width, t.ink2);
+                    }
+                    note(
                         ui,
-                        t,
-                        &format!("  {} · {}", o.name, o.kind),
-                        &time(o.time_s),
+                        "Feeds and rapids at their programmed rates, tool changes not counted: not a cycle time (that comes from the machine's timeline once the program is timed).",
                         width,
                         t.ink2,
                     );
                 }
-                note(
-                    ui,
-                    "Feeds and rapids at their programmed rates, tool changes not counted; the machine-timeline time comes with the quality measure.",
-                    width,
-                    t.ink2,
-                );
             }
             fact(
                 ui,
@@ -915,7 +978,10 @@ fn details(
                     width,
                     t.ink,
                 );
-                fact(ui, t, "Time", &time(o.time_s), width, t.ink);
+                match run.and_then(|r| r.cycle([o.name.as_str()])) {
+                    Some(c) => fact_tip(ui, t, "Cycle time", &cycle_words(c), CYCLE_TIP, width, t.ink),
+                    None => fact(ui, t, "Feed time", &time(o.time_s), width, t.ink),
+                }
             }
             if let Some(l) = o.least {
                 let tol = run.and_then(|r| r.setup(&o.setup)).map_or(0.0, |s| s.tol);
@@ -988,8 +1054,8 @@ fn pct(x: f64) -> String {
 fn quality_facts(ui: &mut Ui, t: &Theme, q: &forge_cam_quality::OpQ, width: f32) {
     heading(ui, t, "Toolpath quality", width);
     let cut_air = q.t_cut + q.t_air;
-    if q.t_stop > 0.0 {
-        fact(ui, t, "Cycle (machine timeline)", &time(q.t_stop), width, t.ink);
+    if q.t_min > 0.0 {
+        fact_tip(ui, t, "Cycle time", &cycle_words((q.t_min, q.t_scurve.max(q.t_min))), CYCLE_TIP, width, t.ink);
     }
     if cut_air > 0.0 {
         let air = q.t_air / cut_air;
@@ -1161,6 +1227,22 @@ fn arg_field(
     key: &str,
     places: &mut Places,
 ) {
+    arg_field_tip(ui, t, label, v, hint, "", unit, key, places);
+}
+
+/// As `arg_field`, with `tip` on hover (a default's rule).
+#[allow(clippy::too_many_arguments)]
+fn arg_field_tip(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    v: &mut String,
+    hint: &str,
+    tip: &str,
+    unit: &str,
+    key: &str,
+    places: &mut Places,
+) {
     row(ui, t, label, DLG_W, 30.0, |ui| {
         let r = ui.add(
             egui::TextEdit::singleline(v)
@@ -1169,6 +1251,9 @@ fn arg_field(
                 .desired_width(ui.available_width() - 40.0)
                 .margin(vec2(7.0, 5.0)),
         );
+        if !tip.is_empty() {
+            r.clone().on_hover_text(tip);
+        }
         places.push((key.to_string(), r.rect));
         ui.add_space(4.0);
         ui.label(egui::RichText::new(unit).font(sans(12.0)).color(t.ink2));
@@ -1206,6 +1291,11 @@ fn arg_choice(
                     }
                 }
             });
+        // the Forge word it writes, on hover (an op's keyword choices)
+        if let Some(arg) = key.strip_prefix("cam:op:arg:") {
+            let words = if v.is_empty() { "not written (the default)".to_string() } else { format!("{arg}: {v}") };
+            r.response.clone().on_hover_text(format!("Forge text: {words}"));
+        }
         places.push((key.to_string(), r.response.rect));
     });
 }
@@ -1260,7 +1350,8 @@ fn op_dialog(
         .map(|s| (format!("{}.{s}", part.name), s.clone()))
         .collect();
     let new = d.id.is_none();
-    let r = egui::Window::new("cam-op")
+    let docked = w.dock.is_some();
+    let r = dialog_host(w.dock, "cam-op-dialog", t, egui::Window::new("cam-op")
         .id(egui::Id::unique("cam-op-dialog"))
         .title_bar(false)
         .collapsible(false)
@@ -1269,7 +1360,7 @@ fn op_dialog(
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v)))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1292,21 +1383,37 @@ fn op_dialog(
                 d.name = name;
                 fact(ui, t, "Setup", &d.setup, DLG_W, t.ink);
             }
+            // the chosen tool's diameter: the defaults that follow from it, as numbers
+            let tool_d = w
+                .lib
+                .tools
+                .iter()
+                .find(|x| w.stmt(d.get("tool")).and_then(|s| s.pos(0)).map(super::doc::unquote).as_deref() == Some(x.id.as_str()))
+                .map(|x| x.dc);
             for f in spec.fields.iter().filter(|f| f.tab == tab) {
                 let key = format!("cam:op:arg:{}", f.arg);
                 let mut val = d.get(f.arg).to_string();
-                let hint = if f.required { "required".to_string() } else { format!("default: {}", f.default) };
+                // a default: its value where it is a number (or the tool's diameter gives one),
+                // "default" beside it, the rule on hover
+                let (hint, tip) = if f.required {
+                    ("required".to_string(), String::new())
+                } else {
+                    match default_value(f.default, tool_d) {
+                        Some(v) => (format!("{}  \u{b7} default", num(v)), format!("Default: {}", f.default)),
+                        None => (format!("default: {}", f.default), String::new()),
+                    }
+                };
                 match f.kind {
-                    Kind::Len => arg_field(ui, t, f.label, &mut val, &hint, "mm", &key, places),
-                    Kind::Deg => arg_field(ui, t, f.label, &mut val, &hint, "deg", &key, places),
+                    Kind::Len => arg_field_tip(ui, t, f.label, &mut val, &hint, &tip, "mm", &key, places),
+                    Kind::Deg => arg_field_tip(ui, t, f.label, &mut val, &hint, &tip, "\u{b0}", &key, places),
                     Kind::Z => arg_field(ui, t, f.label, &mut val, &hint, "mm z", &key, places),
                     Kind::Count => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
                     Kind::Choice(words) => {
                         let mut items: Vec<(String, String)> = vec![];
                         if !f.required {
-                            items.push((String::new(), format!("default ({})", f.default)));
+                            items.push((String::new(), format!("{} (default)", choice_words(f.arg, f.default))));
                         }
-                        items.extend(words.iter().map(|w| (format!("\"{w}\""), (*w).to_string())));
+                        items.extend(words.iter().map(|w| (format!("\"{w}\""), choice_words(f.arg, w))));
                         arg_choice(ui, t, f.label, &mut val, &items, &key, places);
                     }
                     Kind::Tool => {
@@ -1396,9 +1503,15 @@ fn op_dialog(
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
-            (ok, cancel, apply) = foot(ui, t, "cam:op", true, places);
+            if !docked {
+                (ok, cancel, apply) = foot(ui, t, "cam:op", true, places);
+            }
         });
     let rect = r.map(|r| r.response.rect);
+    // docked: the commit buttons pinned under the sheet's body, always in sight
+    if let Some(dock) = w.dock {
+        (ok, cancel, apply) = docked_foot(ctx, t, dock, "cam:op", true, places);
+    }
     // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
     ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok || apply {
@@ -1494,7 +1607,8 @@ fn setup_dialog(
             .map(|s| (s.name.clone(), format!("{} (turned over)", s.name))),
     );
     let new = d.id.is_none();
-    let r = egui::Window::new("cam-setup")
+    let docked = w.dock.is_some();
+    let r = dialog_host(w.dock, "cam-setup-dialog", t, egui::Window::new("cam-setup")
         .id(egui::Id::unique("cam-setup-dialog"))
         .title_bar(false)
         .collapsible(false)
@@ -1503,7 +1617,7 @@ fn setup_dialog(
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v)))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1632,9 +1746,15 @@ fn setup_dialog(
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
-            (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+            if !docked {
+                (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+            }
         });
     let rect = r.map(|r| r.response.rect);
+    // docked: the commit buttons pinned under the sheet's body, always in sight
+    if let Some(dock) = w.dock {
+        (ok, cancel, _) = docked_foot(ctx, t, dock, "cam:setup", false, places);
+    }
     // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
     ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok && let Err(e) = w.setup_ok(d) {
@@ -1692,7 +1812,8 @@ fn lathe_dialog(
         "a new chuck (face −70, grip 30, jaw 15)".into(),
     ));
     let new = d.id.is_none();
-    let r = egui::Window::new("cam-lathe")
+    let docked = w.dock.is_some();
+    let r = dialog_host(w.dock, "cam-lathe-dialog", t, egui::Window::new("cam-lathe")
         .id(egui::Id::unique("cam-lathe-dialog"))
         .title_bar(false)
         .collapsible(false)
@@ -1701,7 +1822,7 @@ fn lathe_dialog(
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v)))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1762,9 +1883,15 @@ fn lathe_dialog(
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
-            (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+            if !docked {
+                (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+            }
         });
     let rect = r.map(|r| r.response.rect);
+    // docked: the commit buttons pinned under the sheet's body, always in sight
+    if let Some(dock) = w.dock {
+        (ok, cancel, _) = docked_foot(ctx, t, dock, "cam:setup", false, places);
+    }
     // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
     ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok && let Err(e) = w.setup_ok(d) {
@@ -1796,7 +1923,7 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_post", "Post Process", width, places, "cam:post");
             if progs.is_empty() {
@@ -1972,7 +2099,7 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_tools", "Tool Library", width, places, "cam:tools");
             let mut f = w.tools_filter.clone();
@@ -2222,7 +2349,7 @@ fn section_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(
                 ui,
@@ -2281,7 +2408,7 @@ fn programs_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_sheet", "NC Programs", width, places, "cam:programs");
             if progs.is_empty() {
@@ -2670,7 +2797,7 @@ fn quality_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Toolpath Quality", width, places, "cam:quality");
             // the toolpath's colouring in the view (the simulation view draws it)
@@ -2780,14 +2907,13 @@ fn quality_window(
                     let words = match &p.error {
                         Some(e) => format!("not timed: {e}"),
                         None => format!(
-                            "{} with stops ({} at least) · {} tool changes{}",
-                            time(p.t_stop),
-                            time(p.t_min),
+                            "{} · {} tool changes{}",
+                            cycle_words((p.t_min, p.t_scurve.max(p.t_min))),
                             p.tool_changes,
                             if p.accel_missing { " · the machine gives no accelerations" } else { "" }
                         ),
                     };
-                    fact(ui, t, &format!("{} on {}", p.name, p.machine), &words, width, if p.error.is_some() { t.warn } else { t.ink });
+                    fact_tip(ui, t, &format!("{} on {}", p.name, p.machine), &words, CYCLE_TIP, width, if p.error.is_some() { t.warn } else { t.ink });
                 }
             }
             note(
@@ -2831,7 +2957,7 @@ fn checks_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Checks", width, places, "cam:checks");
             let Some(run) = &w.run else {
@@ -2893,7 +3019,7 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(
                 ui,
@@ -2949,8 +3075,11 @@ pub fn status_line(w: &CamWs) -> String {
         .run
         .as_ref()
         .map_or(0.0, |r| r.ops.iter().map(|o| o.time_s).sum());
-    let machining = if time > 0.0 {
-        format!(" · {} machining", self::time(time))
+    let cycle = w.run.as_ref().and_then(|r| r.cycle(r.ops.iter().map(|o| o.name.as_str())));
+    let machining = if let Some(c) = cycle {
+        format!(" · {} machining", cycle_words(c))
+    } else if time > 0.0 {
+        format!(" · {} feed time", self::time(time))
     } else {
         String::new()
     };
@@ -3105,4 +3234,68 @@ fn forge_text(ui: &mut Ui, t: &Theme, text: &str, w: f32) {
     let field = egui::Rect::from_min_max(pos2(r.left() + 12.0, r.top()), pos2(r.right() - 12.0, r.bottom()));
     ui.painter().rect_filled(field, 4.0, t.field);
     ui.painter().galley(pos2(field.left() + 6.0, field.top() + 5.0), g, t.ink);
+}
+
+/// The part of the view a floating window keeps inside: below the view's chip row (Axes, Grid,
+/// Planes, Anchors), 4 px in from the other edges.
+fn below_chips(v: Rect) -> Rect {
+    Rect::from_min_max(pos2(v.left() + 4.0, v.top() + 40.0), pos2(v.right() - 4.0, v.bottom() - 4.0))
+}
+
+/// An op or setup dialog's host: docked in the Manufacture environment's properties column when
+/// it has one (`CamWs::dock`, set by the environment each frame), else floating over the view.
+fn dialog_host<'a>(dock: Option<Rect>, id: &str, t: &Theme, win: egui::Window<'a>) -> Host<'a> {
+    match dock {
+        Some(r) => Host::Dock(
+            egui::Id::unique(("cam-dock", id)),
+            Rect::from_min_max(r.min, pos2(r.right(), r.bottom() - FOOT_H)),
+            frame(t),
+        ),
+        None => Host::Float(Box::new(win)),
+    }
+}
+
+/// A docked sheet's footer height: its OK, Cancel and Apply.
+const FOOT_H: f32 = 48.0;
+
+/// A docked sheet's commit buttons, pinned at the bottom of its rect (outside the body's scroll).
+fn docked_foot(
+    ctx: &egui::Context,
+    t: &Theme,
+    dock: Rect,
+    key: &str,
+    apply: bool,
+    places: &mut Places,
+) -> (bool, bool, bool) {
+    let r = Rect::from_min_max(pos2(dock.left(), dock.bottom() - FOOT_H), dock.max);
+    egui::Area::new(egui::Id::unique(("cam-dock-foot", key)))
+        .fixed_pos(r.min)
+        .order(egui::Order::Middle)
+        .fade_in(false)
+        .show(ctx, |ui| {
+            ui.set_width(r.width());
+            ui.painter().rect_filled(r, 0.0, t.surface);
+            ui.painter().hline(r.x_range(), r.top(), Stroke::new(1.0, t.line));
+            ui.add_space(2.0);
+            foot(ui, t, key, apply, places)
+        })
+        .inner
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{choice_words, default_value};
+
+    #[test]
+    fn defaults_read_as_their_values() {
+        assert_eq!(default_value("half the tool's diameter", Some(10.0)), Some(5.0));
+        assert_eq!(default_value("0.4 × the tool's diameter", Some(10.0)), Some(4.0));
+        assert_eq!(default_value("half the tool's diameter", None), None);
+        assert_eq!(default_value("0 (walls)", None), Some(0.0));
+        assert_eq!(default_value("0 (from +x)", None), Some(0.0));
+        assert_eq!(default_value("60", None), Some(60.0));
+        assert_eq!(default_value("the stock's top", Some(10.0)), None);
+        assert_eq!(choice_words("passes", "two_way"), "Both directions");
+        assert_eq!(choice_words("side", "outside"), "Outside");
+    }
 }
