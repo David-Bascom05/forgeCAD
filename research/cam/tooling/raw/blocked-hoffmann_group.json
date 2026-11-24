@@ -1,0 +1,10 @@
+{
+ "source": "Hoffmann Group",
+ "blocked": [
+  {
+   "url": "https://www.hoffmann-group.com/US/en/hus/p/250104-CCX",
+   "why": "HTTP 429 with a bot \"blocking-page\" - skipped"
+  }
+ ],
+ "records": []
+}

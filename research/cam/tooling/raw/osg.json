@@ -1,0 +1,4975 @@
+{
+ "vendor": "OSG",
+ "blocked": [
+  "https://osgtool.com/<EDP> product pages: Specifications and Speed & Feeds tabs are script-loaded (no data in HTML); used the linked List PDFs instead.",
+  "OSG speed/feed pages for ADO-3D, EX-GOLD, A-POT, A-SFT not found as open PDFs; only the AD-LDS technical page (List 5190) was found.",
+  "No inch (1/4-20, 5/16-18, 3/8-16) OSG tap list PDF located; none recorded."
+ ],
+ "records": [
+  {
+   "kind": "drill",
+   "id": "8690300",
+   "name": "A BRAND ADO-3D, 3.000 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 3.000 / Inch 0.11811"
+    },
+    "lcf": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 18.00"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 66.00"
+    },
+    "dcon": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 3.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8690400",
+   "name": "A BRAND ADO-3D, 4.000 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 4.000 / Inch 0.15748"
+    },
+    "lcf": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 24.00"
+    },
+    "oal": {
+     "v": 74.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 74.00"
+    },
+    "dcon": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 4.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8690500",
+   "name": "A BRAND ADO-3D, 5.000 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 5.000 / Inch 0.19685"
+    },
+    "lcf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 25.00"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 80.00"
+    },
+    "dcon": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 5.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8700500",
+   "name": "A BRAND ADO-3D, 5.000 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 5.000 / Inch 0.19685"
+    },
+    "lcf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 25.00"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 80.00"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 6.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8690600",
+   "name": "A BRAND ADO-3D, 6.000 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.000 / Inch 0.23622"
+    },
+    "lcf": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 30.00"
+    },
+    "oal": {
+     "v": 82.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 82.00"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 6.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "650025011",
+   "name": "A BRAND ADO-3D, 6.350 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.350 / Inch 0.25000 (1/4/E)"
+    },
+    "lcf": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 32.00"
+    },
+    "oal": {
+     "v": 88.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 88.00"
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.250"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    },
+    "size_designation": {
+     "v": "1/4/E",
+     "unit": "text",
+     "stated": "Fractional / Wire / Letter columns"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "650025611",
+   "name": "A BRAND ADO-3D, 6.528 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.528,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.528 / Inch 0.25700 (F)"
+    },
+    "lcf": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 33.00"
+    },
+    "oal": {
+     "v": 88.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 88.00"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 8.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    },
+    "size_designation": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Fractional / Wire / Letter columns"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8690680",
+   "name": "A BRAND ADO-3D, 6.800 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.8,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.800 / Inch 0.26772"
+    },
+    "lcf": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 34.00"
+    },
+    "oal": {
+     "v": 88.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 88.00"
+    },
+    "dcon": {
+     "v": 7.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 7.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8700680",
+   "name": "A BRAND ADO-3D, 6.800 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.8,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.800 / Inch 0.26772"
+    },
+    "lcf": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 34.00"
+    },
+    "oal": {
+     "v": 88.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 88.00"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 8.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "650031211",
+   "name": "A BRAND ADO-3D, 7.938 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.938,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 7.938 / Inch 0.31250 (5/16)"
+    },
+    "lcf": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 40.00"
+    },
+    "oal": {
+     "v": 94.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 94.00"
+    },
+    "dcon": {
+     "v": 7.9502,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.313"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    },
+    "size_designation": {
+     "v": "5/16",
+     "unit": "text",
+     "stated": "Fractional / Wire / Letter columns"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8690800",
+   "name": "A BRAND ADO-3D, 8.000 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 8.000 / Inch 0.31496"
+    },
+    "lcf": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 40.00"
+    },
+    "oal": {
+     "v": 94.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 94.00"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 8.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8690850",
+   "name": "A BRAND ADO-3D, 8.500 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.5,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 8.500 / Inch 0.33465"
+    },
+    "lcf": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 43.00"
+    },
+    "oal": {
+     "v": 101.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 101.00"
+    },
+    "dcon": {
+     "v": 9.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 9.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8700850",
+   "name": "A BRAND ADO-3D, 8.500 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.5,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 8.500 / Inch 0.33465"
+    },
+    "lcf": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 43.00"
+    },
+    "oal": {
+     "v": 101.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 101.00"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 10.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "650037511",
+   "name": "A BRAND ADO-3D, 9.525 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 9.525 / Inch 0.37500 (3/8)"
+    },
+    "lcf": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 48.00"
+    },
+    "oal": {
+     "v": 106.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 106.00"
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.375"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    },
+    "size_designation": {
+     "v": "3/8",
+     "unit": "text",
+     "stated": "Fractional / Wire / Letter columns"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8691000",
+   "name": "A BRAND ADO-3D, 10.000 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 10.000 / Inch 0.39370"
+    },
+    "lcf": {
+     "v": 50.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 50.00"
+    },
+    "oal": {
+     "v": 106.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 106.00"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 10.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8691020",
+   "name": "A BRAND ADO-3D, 10.200 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.2,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 10.200 / Inch 0.40157"
+    },
+    "lcf": {
+     "v": 51.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 51.00"
+    },
+    "oal": {
+     "v": 113.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 113.00"
+    },
+    "dcon": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 11.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8701020",
+   "name": "A BRAND ADO-3D, 10.200 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.2,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 10.200 / Inch 0.40157"
+    },
+    "lcf": {
+     "v": 51.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 51.00"
+    },
+    "oal": {
+     "v": 113.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 113.00"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 12.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "8691200",
+   "name": "A BRAND ADO-3D, 12.000 mm",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310246/Literature/09%20-%20Catalog%20Pages/8002024CA/List_6500_-_A_BRAND_ADO-3D.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 12.000 / Inch 0.47244"
+    },
+    "lcf": {
+     "v": 60.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 60.00"
+    },
+    "oal": {
+     "v": 120.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 120.00"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 12.00"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140˚ (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "STUB",
+     "unit": "text",
+     "stated": "STUB icon"
+    },
+    "coolant": {
+     "v": "coolant-through",
+     "unit": "text",
+     "stated": "Advanced Performance Coolant-Through Carbide Drills"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Product page https://osgtool.com/8690490 links this List 6500 PDF; per-EDP specification tab is script-loaded."
+  },
+  {
+   "kind": "drill",
+   "id": "15201005",
+   "name": "EX-GOLD EX-GDR jobber drill, #7",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1500_-_EX-GOLD_EX-GDR.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.105,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 5.105 / Inch 0.20100 (#7)"
+    },
+    "size_designation": {
+     "v": "#7",
+     "unit": "text",
+     "stated": "Fractional / Wire Gage / Letter columns"
+    },
+    "lcf": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 61.00"
+    },
+    "oal": {
+     "v": 107.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 107.00"
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.250"
+    },
+    "sig": {
+     "v": 130,
+     "unit": "deg",
+     "stated": "130° (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "HSS-Co",
+     "unit": "text",
+     "stated": "HSS-Co icon; \"Cobalt High Speed Steel\""
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "TiN icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "JOBBER",
+     "unit": "text",
+     "stated": "JOBBER icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/15358005 (List 1500 PDF)."
+  },
+  {
+   "kind": "drill",
+   "id": "15250005",
+   "name": "EX-GOLD EX-GDR jobber drill, 1/4/E",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1500_-_EX-GOLD_EX-GDR.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.350 / Inch 0.25000 (1/4/E)"
+    },
+    "size_designation": {
+     "v": "1/4/E",
+     "unit": "text",
+     "stated": "Fractional / Wire Gage / Letter columns"
+    },
+    "lcf": {
+     "v": 69.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 69.00"
+    },
+    "oal": {
+     "v": 115.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 115.00"
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.250"
+    },
+    "sig": {
+     "v": 130,
+     "unit": "deg",
+     "stated": "130° (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "HSS-Co",
+     "unit": "text",
+     "stated": "HSS-Co icon; \"Cobalt High Speed Steel\""
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "TiN icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "JOBBER",
+     "unit": "text",
+     "stated": "JOBBER icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/15358005 (List 1500 PDF)."
+  },
+  {
+   "kind": "drill",
+   "id": "15257005",
+   "name": "EX-GOLD EX-GDR jobber drill, F",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1500_-_EX-GOLD_EX-GDR.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.528,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.528 / Inch 0.25700 (F)"
+    },
+    "size_designation": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Fractional / Wire Gage / Letter columns"
+    },
+    "lcf": {
+     "v": 73.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 73.00"
+    },
+    "oal": {
+     "v": 119.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 119.00"
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.375"
+    },
+    "sig": {
+     "v": 130,
+     "unit": "deg",
+     "stated": "130° (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "HSS-Co",
+     "unit": "text",
+     "stated": "HSS-Co icon; \"Cobalt High Speed Steel\""
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "TiN icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "JOBBER",
+     "unit": "text",
+     "stated": "JOBBER icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/15358005 (List 1500 PDF)."
+  },
+  {
+   "kind": "drill",
+   "id": "15312505",
+   "name": "EX-GOLD EX-GDR jobber drill, 5/16",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1500_-_EX-GOLD_EX-GDR.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.938,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 7.938 / Inch 0.31250 (5/16)"
+    },
+    "size_designation": {
+     "v": "5/16",
+     "unit": "text",
+     "stated": "Fractional / Wire Gage / Letter columns"
+    },
+    "lcf": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 80.00"
+    },
+    "oal": {
+     "v": 127.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 127.00"
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.375"
+    },
+    "sig": {
+     "v": 130,
+     "unit": "deg",
+     "stated": "130° (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "HSS-Co",
+     "unit": "text",
+     "stated": "HSS-Co icon; \"Cobalt High Speed Steel\""
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "TiN icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "JOBBER",
+     "unit": "text",
+     "stated": "JOBBER icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/15358005 (List 1500 PDF)."
+  },
+  {
+   "kind": "drill",
+   "id": "15375005",
+   "name": "EX-GOLD EX-GDR jobber drill, 3/8",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1500_-_EX-GOLD_EX-GDR.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 9.525 / Inch 0.37500 (3/8)"
+    },
+    "size_designation": {
+     "v": "3/8",
+     "unit": "text",
+     "stated": "Fractional / Wire Gage / Letter columns"
+    },
+    "lcf": {
+     "v": 92.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 92.00"
+    },
+    "oal": {
+     "v": 138.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 138.00"
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.375"
+    },
+    "sig": {
+     "v": 130,
+     "unit": "deg",
+     "stated": "130° (drawing)"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "30˚ icon"
+    },
+    "material": {
+     "v": "HSS-Co",
+     "unit": "text",
+     "stated": "HSS-Co icon; \"Cobalt High Speed Steel\""
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "TiN icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "Cutting Diameter Tolerance (h8)"
+    },
+    "length_class": {
+     "v": "JOBBER",
+     "unit": "text",
+     "stated": "JOBBER icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/15358005 (List 1500 PDF)."
+  },
+  {
+   "kind": "spot",
+   "id": "8688933",
+   "name": "A BRAND AD-LDS spot drill, 3.000 mm x 90°",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/Literature/09%20-%20Catalog%20Pages/8002024CA/List_5190_-_A_BRAND_AD-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 3.000 / Inch 0.11811"
+    },
+    "min_hole": {
+     "v": 1.2,
+     "unit": "mm",
+     "stated": "Min. Drill Hole Size mm 1.20"
+    },
+    "lcf": {
+     "v": 9.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 9.00"
+    },
+    "oal": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 48.00"
+    },
+    "dcon": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 3.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "helix": {
+     "v": 12,
+     "unit": "deg",
+     "stated": "Helix 12"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "SHANK h7 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Carbon Steels, Mild Steels 1010, 1050, 12L14",
+     "vc": {
+      "v": [
+       60.96,
+       79.25
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-260 SFM"
+     },
+     "n": {
+      "v": 7500.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 7,500"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0254,
+       0.0762
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.001-0.003"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Alloy Steels 4140, 4130",
+     "vc": {
+      "v": [
+       30.48,
+       50.29
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 100-165 SFM"
+     },
+     "n": {
+      "v": 4200.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 4,200"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0254,
+       0.0762
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.001-0.003"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Iron",
+     "vc": {
+      "v": [
+       60.96,
+       99.06
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-325 SFM"
+     },
+     "n": {
+      "v": 8400.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 8,400"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.0762
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.003"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Aluminum Alloy",
+     "vc": {
+      "v": [
+       79.25,
+       160.02
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 260-525 SFM"
+     },
+     "n": {
+      "v": 12600.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 12,600"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1016,
+       0.2286
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.004-0.009"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 26-30 HRC",
+     "vc": {
+      "v": [
+       19.81,
+       27.43
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 65-90 SFM"
+     },
+     "n": {
+      "v": 2500.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,500"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0254,
+       0.0762
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.001-0.003"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 30-34 HRC",
+     "vc": {
+      "v": [
+       15.24,
+       22.86
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 50-75 SFM"
+     },
+     "n": {
+      "v": 2000.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,000"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0254,
+       0.0762
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.001-0.003"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    }
+   ],
+   "unknown": [],
+   "notes": "List 5190 PDF fetched at the unversioned Cloudinary path of OSG's catalog-page folder; the product page https://osgtool.com/519012517 links the tech page."
+  },
+  {
+   "kind": "spot",
+   "id": "8688934",
+   "name": "A BRAND AD-LDS spot drill, 4.000 mm x 90°",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/Literature/09%20-%20Catalog%20Pages/8002024CA/List_5190_-_A_BRAND_AD-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 4.000 / Inch 0.15748"
+    },
+    "min_hole": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "Min. Drill Hole Size mm 1.50"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 12.00"
+    },
+    "oal": {
+     "v": 54.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 54.00"
+    },
+    "dcon": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 4.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "helix": {
+     "v": 12,
+     "unit": "deg",
+     "stated": "Helix 12"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "SHANK h7 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Carbon Steels, Mild Steels 1010, 1050, 12L14",
+     "vc": {
+      "v": [
+       60.96,
+       79.25
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-260 SFM"
+     },
+     "n": {
+      "v": 5700.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 5,700"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.1016
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.004"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Alloy Steels 4140, 4130",
+     "vc": {
+      "v": [
+       30.48,
+       50.29
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 100-165 SFM"
+     },
+     "n": {
+      "v": 3150.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 3,150"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.1016
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.004"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Iron",
+     "vc": {
+      "v": [
+       60.96,
+       99.06
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-325 SFM"
+     },
+     "n": {
+      "v": 6300.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 6,300"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0762,
+       0.127
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.003-0.005"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Aluminum Alloy",
+     "vc": {
+      "v": [
+       79.25,
+       160.02
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 260-525 SFM"
+     },
+     "n": {
+      "v": 9500.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 9,500"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.254
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.010"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 26-30 HRC",
+     "vc": {
+      "v": [
+       19.81,
+       27.43
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 65-90 SFM"
+     },
+     "n": {
+      "v": 1900.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,900"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.1016
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.004"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 30-34 HRC",
+     "vc": {
+      "v": [
+       15.24,
+       22.86
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 50-75 SFM"
+     },
+     "n": {
+      "v": 1500.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,500"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.1016
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.004"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    }
+   ],
+   "unknown": [],
+   "notes": "List 5190 PDF fetched at the unversioned Cloudinary path of OSG's catalog-page folder; the product page https://osgtool.com/519012517 links the tech page."
+  },
+  {
+   "kind": "spot",
+   "id": "8688935",
+   "name": "A BRAND AD-LDS spot drill, 6.000 mm x 90°",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/Literature/09%20-%20Catalog%20Pages/8002024CA/List_5190_-_A_BRAND_AD-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.000 / Inch 0.23622"
+    },
+    "min_hole": {
+     "v": 1.9,
+     "unit": "mm",
+     "stated": "Min. Drill Hole Size mm 1.90"
+    },
+    "lcf": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 15.00"
+    },
+    "oal": {
+     "v": 72.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 72.00"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 6.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "helix": {
+     "v": 12,
+     "unit": "deg",
+     "stated": "Helix 12"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "SHANK h7 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Carbon Steels, Mild Steels 1010, 1050, 12L14",
+     "vc": {
+      "v": [
+       60.96,
+       79.25
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-260 SFM"
+     },
+     "n": {
+      "v": 3800.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 3,800"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.127
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.005"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Alloy Steels 4140, 4130",
+     "vc": {
+      "v": [
+       30.48,
+       50.29
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 100-165 SFM"
+     },
+     "n": {
+      "v": 2100.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,100"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.127
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.005"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Iron",
+     "vc": {
+      "v": [
+       60.96,
+       99.06
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-325 SFM"
+     },
+     "n": {
+      "v": 4200.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 4,200"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Aluminum Alloy",
+     "vc": {
+      "v": [
+       79.25,
+       160.02
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 260-525 SFM"
+     },
+     "n": {
+      "v": 6300.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 6,300"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.2794
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.011"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 26-30 HRC",
+     "vc": {
+      "v": [
+       19.81,
+       27.43
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 65-90 SFM"
+     },
+     "n": {
+      "v": 1250.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,250"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.127
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.005"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 30-34 HRC",
+     "vc": {
+      "v": [
+       15.24,
+       22.86
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 50-75 SFM"
+     },
+     "n": {
+      "v": 1000.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,000"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.127
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.005"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    }
+   ],
+   "unknown": [],
+   "notes": "List 5190 PDF fetched at the unversioned Cloudinary path of OSG's catalog-page folder; the product page https://osgtool.com/519012517 links the tech page."
+  },
+  {
+   "kind": "spot",
+   "id": "519012517",
+   "name": "A BRAND AD-LDS spot drill, 6.350 mm x 90°",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/Literature/09%20-%20Catalog%20Pages/8002024CA/List_5190_-_A_BRAND_AD-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.350 / Inch 0.25000 (1/4)"
+    },
+    "min_hole": {
+     "v": 1.9,
+     "unit": "mm",
+     "stated": "Min. Drill Hole Size mm 1.90"
+    },
+    "lcf": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 17.00"
+    },
+    "oal": {
+     "v": 75.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 75.00"
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.250"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "helix": {
+     "v": 12,
+     "unit": "deg",
+     "stated": "Helix 12"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "SHANK h7 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Carbon Steels, Mild Steels 1010, 1050, 12L14",
+     "vc": {
+      "v": [
+       60.96,
+       79.25
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-260 SFM"
+     },
+     "n": {
+      "v": 3500.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 3,500"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.127
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.005"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Alloy Steels 4140, 4130",
+     "vc": {
+      "v": [
+       30.48,
+       50.29
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 100-165 SFM"
+     },
+     "n": {
+      "v": 2030.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,030"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.127
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.005"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Iron",
+     "vc": {
+      "v": [
+       60.96,
+       99.06
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-325 SFM"
+     },
+     "n": {
+      "v": 4000.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 4,000"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Aluminum Alloy",
+     "vc": {
+      "v": [
+       79.25,
+       160.02
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 260-525 SFM"
+     },
+     "n": {
+      "v": 6000.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 6,000"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.2794
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.011"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 26-30 HRC",
+     "vc": {
+      "v": [
+       19.81,
+       27.43
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 65-90 SFM"
+     },
+     "n": {
+      "v": 1180.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,180"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.127
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.005"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 30-34 HRC",
+     "vc": {
+      "v": [
+       15.24,
+       22.86
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 50-75 SFM"
+     },
+     "n": {
+      "v": 950.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 950"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0508,
+       0.127
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.002-0.005"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    }
+   ],
+   "unknown": [],
+   "notes": "List 5190 PDF fetched at the unversioned Cloudinary path of OSG's catalog-page folder; the product page https://osgtool.com/519012517 links the tech page."
+  },
+  {
+   "kind": "spot",
+   "id": "8688936",
+   "name": "A BRAND AD-LDS spot drill, 8.000 mm x 90°",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/Literature/09%20-%20Catalog%20Pages/8002024CA/List_5190_-_A_BRAND_AD-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 8.000 / Inch 0.31496"
+    },
+    "min_hole": {
+     "v": 2.1,
+     "unit": "mm",
+     "stated": "Min. Drill Hole Size mm 2.10"
+    },
+    "lcf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 20.00"
+    },
+    "oal": {
+     "v": 81.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 81.00"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 8.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "helix": {
+     "v": 12,
+     "unit": "deg",
+     "stated": "Helix 12"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "SHANK h7 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Carbon Steels, Mild Steels 1010, 1050, 12L14",
+     "vc": {
+      "v": [
+       60.96,
+       79.25
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-260 SFM"
+     },
+     "n": {
+      "v": 2800.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,800"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0762,
+       0.1524
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.003-0.006"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Alloy Steels 4140, 4130",
+     "vc": {
+      "v": [
+       30.48,
+       50.29
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 100-165 SFM"
+     },
+     "n": {
+      "v": 1575.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,575"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0762,
+       0.1524
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.003-0.006"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Iron",
+     "vc": {
+      "v": [
+       60.96,
+       99.06
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-325 SFM"
+     },
+     "n": {
+      "v": 3200.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 3,200"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.2032
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.008"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Aluminum Alloy",
+     "vc": {
+      "v": [
+       79.25,
+       160.02
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 260-525 SFM"
+     },
+     "n": {
+      "v": 4730.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 4,730"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1778,
+       0.3048
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.007-0.012"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 26-30 HRC",
+     "vc": {
+      "v": [
+       19.81,
+       27.43
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 65-90 SFM"
+     },
+     "n": {
+      "v": 940.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 940"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0762,
+       0.1524
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.003-0.006"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 30-34 HRC",
+     "vc": {
+      "v": [
+       15.24,
+       22.86
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 50-75 SFM"
+     },
+     "n": {
+      "v": 750.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 750"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.0762,
+       0.1524
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.003-0.006"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    }
+   ],
+   "unknown": [],
+   "notes": "List 5190 PDF fetched at the unversioned Cloudinary path of OSG's catalog-page folder; the product page https://osgtool.com/519012517 links the tech page."
+  },
+  {
+   "kind": "spot",
+   "id": "519013817",
+   "name": "A BRAND AD-LDS spot drill, 9.525 mm x 90°",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/Literature/09%20-%20Catalog%20Pages/8002024CA/List_5190_-_A_BRAND_AD-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 9.525 / Inch 0.37500 (3/8)"
+    },
+    "min_hole": {
+     "v": 2.3,
+     "unit": "mm",
+     "stated": "Min. Drill Hole Size mm 2.30"
+    },
+    "lcf": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 24.00"
+    },
+    "oal": {
+     "v": 93.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 93.00"
+    },
+    "dcon": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Shank Diameter d (in) 0.375"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "helix": {
+     "v": 12,
+     "unit": "deg",
+     "stated": "Helix 12"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "SHANK h7 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Carbon Steels, Mild Steels 1010, 1050, 12L14",
+     "vc": {
+      "v": [
+       60.96,
+       79.25
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-260 SFM"
+     },
+     "n": {
+      "v": 2340.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,340"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1016,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.004-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Alloy Steels 4140, 4130",
+     "vc": {
+      "v": [
+       30.48,
+       50.29
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 100-165 SFM"
+     },
+     "n": {
+      "v": 1350.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,350"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1016,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.004-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Iron",
+     "vc": {
+      "v": [
+       60.96,
+       99.06
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-325 SFM"
+     },
+     "n": {
+      "v": 2670.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,670"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1778,
+       0.254
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.007-0.010"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Aluminum Alloy",
+     "vc": {
+      "v": [
+       79.25,
+       160.02
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 260-525 SFM"
+     },
+     "n": {
+      "v": 4000.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 4,000"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.2286,
+       0.3556
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.009-0.014"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 26-30 HRC",
+     "vc": {
+      "v": [
+       19.81,
+       27.43
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 65-90 SFM"
+     },
+     "n": {
+      "v": 785.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 785"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1016,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.004-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 30-34 HRC",
+     "vc": {
+      "v": [
+       15.24,
+       22.86
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 50-75 SFM"
+     },
+     "n": {
+      "v": 630.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 630"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1016,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.004-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    }
+   ],
+   "unknown": [],
+   "notes": "List 5190 PDF fetched at the unversioned Cloudinary path of OSG's catalog-page folder; the product page https://osgtool.com/519012517 links the tech page."
+  },
+  {
+   "kind": "spot",
+   "id": "8688937",
+   "name": "A BRAND AD-LDS spot drill, 10.000 mm x 90°",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/Literature/09%20-%20Catalog%20Pages/8002024CA/List_5190_-_A_BRAND_AD-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 10.000 / Inch 0.39370"
+    },
+    "min_hole": {
+     "v": 2.5,
+     "unit": "mm",
+     "stated": "Min. Drill Hole Size mm 2.50"
+    },
+    "lcf": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 24.00"
+    },
+    "oal": {
+     "v": 93.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 93.00"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 10.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "helix": {
+     "v": 12,
+     "unit": "deg",
+     "stated": "Helix 12"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "SHANK h7 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Carbon Steels, Mild Steels 1010, 1050, 12L14",
+     "vc": {
+      "v": [
+       60.96,
+       79.25
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-260 SFM"
+     },
+     "n": {
+      "v": 2300.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,300"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1016,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.004-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Alloy Steels 4140, 4130",
+     "vc": {
+      "v": [
+       30.48,
+       50.29
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 100-165 SFM"
+     },
+     "n": {
+      "v": 1250.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,250"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1016,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.004-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Iron",
+     "vc": {
+      "v": [
+       60.96,
+       99.06
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-325 SFM"
+     },
+     "n": {
+      "v": 2500.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,500"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1778,
+       0.254
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.007-0.010"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Aluminum Alloy",
+     "vc": {
+      "v": [
+       79.25,
+       160.02
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 260-525 SFM"
+     },
+     "n": {
+      "v": 3800.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 3,800"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.2286,
+       0.3556
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.009-0.014"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 26-30 HRC",
+     "vc": {
+      "v": [
+       19.81,
+       27.43
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 65-90 SFM"
+     },
+     "n": {
+      "v": 750.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 750"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1016,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.004-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 30-34 HRC",
+     "vc": {
+      "v": [
+       15.24,
+       22.86
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 50-75 SFM"
+     },
+     "n": {
+      "v": 600.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 600"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.1016,
+       0.1778
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.004-0.007"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    }
+   ],
+   "unknown": [],
+   "notes": "List 5190 PDF fetched at the unversioned Cloudinary path of OSG's catalog-page folder; the product page https://osgtool.com/519012517 links the tech page."
+  },
+  {
+   "kind": "spot",
+   "id": "8688938",
+   "name": "A BRAND AD-LDS spot drill, 12.000 mm x 90°",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/Literature/09%20-%20Catalog%20Pages/8002024CA/List_5190_-_A_BRAND_AD-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 12.000 / Inch 0.47244"
+    },
+    "min_hole": {
+     "v": 2.5,
+     "unit": "mm",
+     "stated": "Min. Drill Hole Size mm 2.50"
+    },
+    "lcf": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 28.00"
+    },
+    "oal": {
+     "v": 108.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 108.00"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 12.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "helix": {
+     "v": 12,
+     "unit": "deg",
+     "stated": "Helix 12"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE icon"
+    },
+    "coating": {
+     "v": "EgiAs",
+     "unit": "text",
+     "stated": "EgiAs icon"
+    },
+    "shank_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "SHANK h7 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Carbon Steels, Mild Steels 1010, 1050, 12L14",
+     "vc": {
+      "v": [
+       60.96,
+       79.25
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-260 SFM"
+     },
+     "n": {
+      "v": 1900.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,900"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.2032
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.008"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Alloy Steels 4140, 4130",
+     "vc": {
+      "v": [
+       30.48,
+       50.29
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 100-165 SFM"
+     },
+     "n": {
+      "v": 1050.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 1,050"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.2032
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.008"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Iron",
+     "vc": {
+      "v": [
+       60.96,
+       99.06
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 200-325 SFM"
+     },
+     "n": {
+      "v": 2100.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 2,100"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.2032,
+       0.3048
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.008-0.012"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast Aluminum Alloy",
+     "vc": {
+      "v": [
+       79.25,
+       160.02
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 260-525 SFM"
+     },
+     "n": {
+      "v": 3150.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 3,150"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.254,
+       0.4064
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.010-0.016"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 26-30 HRC",
+     "vc": {
+      "v": [
+       19.81,
+       27.43
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 65-90 SFM"
+     },
+     "n": {
+      "v": 625.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 625"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.2032
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.008"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Special Alloy Steels, Hardened Steels 30-34 HRC",
+     "vc": {
+      "v": [
+       15.24,
+       22.86
+      ],
+      "unit": "m/min",
+      "stated": "Drilling Speed 50-75 SFM"
+     },
+     "n": {
+      "v": 500.0,
+      "unit": "rpm",
+      "stated": "Speed RPM 500"
+     },
+     "fn_or_fz": {
+      "v": [
+       0.127,
+       0.2032
+      ],
+      "unit": "mm/rev",
+      "stated": "Feed IPR 0.005-0.008"
+     },
+     "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf",
+     "note": "For water soluble oil; source: reduce speed 20% with non-water soluble oil."
+    }
+   ],
+   "unknown": [],
+   "notes": "List 5190 PDF fetched at the unversioned Cloudinary path of OSG's catalog-page folder; the product page https://osgtool.com/519012517 links the tech page."
+  },
+  {
+   "kind": "spot",
+   "id": "62903",
+   "name": "EX-GOLD TIN-NC-LDS spot drill, 3.000 mm x 90°, BRIGHT",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1200_-_EX-GOLD_TIN-NC-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 3.000 / Inch 0.11811"
+    },
+    "lcf": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 11.00"
+    },
+    "oal": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 48.000"
+    },
+    "dcon": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 3.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "coating": {
+     "v": "BRIGHT",
+     "unit": "text",
+     "stated": "Surface Treatment BRIGHT"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "HSS icon"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 20,
+     "unit": "deg",
+     "stated": "20˚ icon"
+    },
+    "min_hole": {
+     "v": 1.1,
+     "unit": "mm",
+     "stated": "Min Drill Hole Size 1.10"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/62920."
+  },
+  {
+   "kind": "spot",
+   "id": "62904",
+   "name": "EX-GOLD TIN-NC-LDS spot drill, 4.000 mm x 90°, BRIGHT",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1200_-_EX-GOLD_TIN-NC-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 4.000 / Inch 0.15748"
+    },
+    "lcf": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 15.00"
+    },
+    "oal": {
+     "v": 54.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 54.000"
+    },
+    "dcon": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 4.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "coating": {
+     "v": "BRIGHT",
+     "unit": "text",
+     "stated": "Surface Treatment BRIGHT"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "HSS icon"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 20,
+     "unit": "deg",
+     "stated": "20˚ icon"
+    },
+    "min_hole": {
+     "v": 1.3,
+     "unit": "mm",
+     "stated": "Min Drill Hole Size 1.30"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/62920."
+  },
+  {
+   "kind": "spot",
+   "id": "62906",
+   "name": "EX-GOLD TIN-NC-LDS spot drill, 6.000 mm x 90°, BRIGHT",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1200_-_EX-GOLD_TIN-NC-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.000 / Inch 0.23622"
+    },
+    "lcf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 20.00"
+    },
+    "oal": {
+     "v": 72.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 72.000"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 6.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "coating": {
+     "v": "BRIGHT",
+     "unit": "text",
+     "stated": "Surface Treatment BRIGHT"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "HSS icon"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 20,
+     "unit": "deg",
+     "stated": "20˚ icon"
+    },
+    "min_hole": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "Min Drill Hole Size 1.50"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/62920."
+  },
+  {
+   "kind": "spot",
+   "id": "63606",
+   "name": "EX-GOLD TIN-NC-LDS spot drill, 6.000 mm x 90°, TiN",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1200_-_EX-GOLD_TIN-NC-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 6.000 / Inch 0.23622"
+    },
+    "lcf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 20.00"
+    },
+    "oal": {
+     "v": 72.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 72.000"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 6.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface Treatment TiN"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "HSS icon"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 20,
+     "unit": "deg",
+     "stated": "20˚ icon"
+    },
+    "min_hole": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "Min Drill Hole Size 1.50"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/62920."
+  },
+  {
+   "kind": "spot",
+   "id": "62908",
+   "name": "EX-GOLD TIN-NC-LDS spot drill, 8.000 mm x 90°, BRIGHT",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1200_-_EX-GOLD_TIN-NC-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 8.000 / Inch 0.31496"
+    },
+    "lcf": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 26.00"
+    },
+    "oal": {
+     "v": 81.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 81.000"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 8.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "coating": {
+     "v": "BRIGHT",
+     "unit": "text",
+     "stated": "Surface Treatment BRIGHT"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "HSS icon"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 20,
+     "unit": "deg",
+     "stated": "20˚ icon"
+    },
+    "min_hole": {
+     "v": 1.6,
+     "unit": "mm",
+     "stated": "Min Drill Hole Size 1.60"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/62920."
+  },
+  {
+   "kind": "spot",
+   "id": "63608",
+   "name": "EX-GOLD TIN-NC-LDS spot drill, 8.000 mm x 90°, TiN",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1200_-_EX-GOLD_TIN-NC-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 8.000 / Inch 0.31496"
+    },
+    "lcf": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 26.00"
+    },
+    "oal": {
+     "v": 81.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 81.000"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 8.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface Treatment TiN"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "HSS icon"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 20,
+     "unit": "deg",
+     "stated": "20˚ icon"
+    },
+    "min_hole": {
+     "v": 1.6,
+     "unit": "mm",
+     "stated": "Min Drill Hole Size 1.60"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/62920."
+  },
+  {
+   "kind": "spot",
+   "id": "62910",
+   "name": "EX-GOLD TIN-NC-LDS spot drill, 10.000 mm x 90°, BRIGHT",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1200_-_EX-GOLD_TIN-NC-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 10.000 / Inch 0.39370"
+    },
+    "lcf": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 30.00"
+    },
+    "oal": {
+     "v": 93.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 93.000"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 10.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "coating": {
+     "v": "BRIGHT",
+     "unit": "text",
+     "stated": "Surface Treatment BRIGHT"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "HSS icon"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 20,
+     "unit": "deg",
+     "stated": "20˚ icon"
+    },
+    "min_hole": {
+     "v": 2.1,
+     "unit": "mm",
+     "stated": "Min Drill Hole Size 2.10"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/62920."
+  },
+  {
+   "kind": "spot",
+   "id": "63610",
+   "name": "EX-GOLD TIN-NC-LDS spot drill, 10.000 mm x 90°, TiN",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1200_-_EX-GOLD_TIN-NC-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 10.000 / Inch 0.39370"
+    },
+    "lcf": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 30.00"
+    },
+    "oal": {
+     "v": 93.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 93.000"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 10.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface Treatment TiN"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "HSS icon"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 20,
+     "unit": "deg",
+     "stated": "20˚ icon"
+    },
+    "min_hole": {
+     "v": 2.1,
+     "unit": "mm",
+     "stated": "Min Drill Hole Size 2.10"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/62920."
+  },
+  {
+   "kind": "spot",
+   "id": "62912",
+   "name": "EX-GOLD TIN-NC-LDS spot drill, 12.000 mm x 90°, BRIGHT",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310169/Literature/09%20-%20Catalog%20Pages/8002024CA/List_1200_-_EX-GOLD_TIN-NC-LDS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Diameter (D) mm 12.000 / Inch 0.47244"
+    },
+    "lcf": {
+     "v": 36.0,
+     "unit": "mm",
+     "stated": "Flute Length FL (mm) 36.00"
+    },
+    "oal": {
+     "v": 108.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 108.000"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Shank Diameter d (mm) 12.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "Point Angle α 90"
+    },
+    "coating": {
+     "v": "BRIGHT",
+     "unit": "text",
+     "stated": "Surface Treatment BRIGHT"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "HSS icon"
+    },
+    "nof": {
+     "v": 2,
+     "unit": "count",
+     "stated": "2 FLUTE icon"
+    },
+    "helix": {
+     "v": 20,
+     "unit": "deg",
+     "stated": "20˚ icon"
+    },
+    "min_hole": {
+     "v": 2.1,
+     "unit": "mm",
+     "stated": "Min Drill Hole Size 2.10"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Linked from https://osgtool.com/62920."
+  },
+  {
+   "kind": "tap",
+   "id": "1651000808",
+   "name": "A BRAND A-POT, DIN Overall Length, M6 x 1",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310347/Literature/09%20-%20Catalog%20Pages/8002024CA/List_16510_-_A_BRAND_A-POT.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6 x 1",
+     "unit": "text",
+     "stated": "Thread Size M6 x 1"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "Thread Size M6 x 1"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Thread Limit D5"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 80.00"
+    },
+    "thread_length": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Thread Length Lc (mm) 12.00"
+    },
+    "neck_length": {
+     "v": 29.7,
+     "unit": "mm",
+     "stated": "Neck Length L1 (mm) 29.70"
+    },
+    "dcon": {
+     "v": 6.48,
+     "unit": "mm",
+     "stated": "Shank Dia. d (mm) 6.48"
+    },
+    "square": {
+     "v": 4.85,
+     "unit": "mm",
+     "stated": "Square Width k (mm) 4.85"
+    },
+    "square_length": {
+     "v": 7.94,
+     "unit": "mm",
+     "stated": "Square Length lk (mm) 7.94"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "material": {
+     "v": "VC10",
+     "unit": "text",
+     "stated": "VC10 icon"
+    },
+    "coating": {
+     "v": "V",
+     "unit": "text",
+     "stated": "V icon"
+    },
+    "tap_style": {
+     "v": "spiral point",
+     "unit": "text",
+     "stated": "SPIRAL POINT icon; A BRAND A-POT, DIN Overall Length"
+    },
+    "chamfer": {
+     "v": "4P",
+     "unit": "text",
+     "stated": "C/4P icon"
+    },
+    "helix": {
+     "v": 0,
+     "unit": "deg",
+     "stated": "0˚ icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "tap",
+   "id": "1651001008",
+   "name": "A BRAND A-POT, DIN Overall Length, M8 x 1.25",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310347/Literature/09%20-%20Catalog%20Pages/8002024CA/List_16510_-_A_BRAND_A-POT.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M8 x 1.25",
+     "unit": "text",
+     "stated": "Thread Size M8 x 1.25"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "Thread Size M8 x 1.25"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Thread Limit D5"
+    },
+    "oal": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 90.00"
+    },
+    "thread_length": {
+     "v": 15.4,
+     "unit": "mm",
+     "stated": "Thread Length Lc (mm) 15.40"
+    },
+    "neck_length": {
+     "v": 34.8,
+     "unit": "mm",
+     "stated": "Neck Length L1 (mm) 34.80"
+    },
+    "dcon": {
+     "v": 8.08,
+     "unit": "mm",
+     "stated": "Shank Dia. d (mm) 8.08"
+    },
+    "square": {
+     "v": 6.05,
+     "unit": "mm",
+     "stated": "Square Width k (mm) 6.05"
+    },
+    "square_length": {
+     "v": 9.53,
+     "unit": "mm",
+     "stated": "Square Length lk (mm) 9.53"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "material": {
+     "v": "VC10",
+     "unit": "text",
+     "stated": "VC10 icon"
+    },
+    "coating": {
+     "v": "V",
+     "unit": "text",
+     "stated": "V icon"
+    },
+    "tap_style": {
+     "v": "spiral point",
+     "unit": "text",
+     "stated": "SPIRAL POINT icon; A BRAND A-POT, DIN Overall Length"
+    },
+    "chamfer": {
+     "v": "4P",
+     "unit": "text",
+     "stated": "C/4P icon"
+    },
+    "helix": {
+     "v": 0,
+     "unit": "deg",
+     "stated": "0˚ icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "tap",
+   "id": "1651001308",
+   "name": "A BRAND A-POT, DIN Overall Length, M10 x 1.5",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310347/Literature/09%20-%20Catalog%20Pages/8002024CA/List_16510_-_A_BRAND_A-POT.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10 x 1.5",
+     "unit": "text",
+     "stated": "Thread Size M10 x 1.5"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "Thread Size M10 x 1.5"
+    },
+    "limit": {
+     "v": "D6",
+     "unit": "text",
+     "stated": "Thread Limit D6"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 100.00"
+    },
+    "thread_length": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "Thread Length Lc (mm) 18.00"
+    },
+    "neck_length": {
+     "v": 38.9,
+     "unit": "mm",
+     "stated": "Neck Length L1 (mm) 38.90"
+    },
+    "dcon": {
+     "v": 9.68,
+     "unit": "mm",
+     "stated": "Shank Dia. d (mm) 9.68"
+    },
+    "square": {
+     "v": 7.26,
+     "unit": "mm",
+     "stated": "Square Width k (mm) 7.26"
+    },
+    "square_length": {
+     "v": 11.11,
+     "unit": "mm",
+     "stated": "Square Length lk (mm) 11.11"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "material": {
+     "v": "VC10",
+     "unit": "text",
+     "stated": "VC10 icon"
+    },
+    "coating": {
+     "v": "V",
+     "unit": "text",
+     "stated": "V icon"
+    },
+    "tap_style": {
+     "v": "spiral point",
+     "unit": "text",
+     "stated": "SPIRAL POINT icon; A BRAND A-POT, DIN Overall Length"
+    },
+    "chamfer": {
+     "v": "4P",
+     "unit": "text",
+     "stated": "C/4P icon"
+    },
+    "helix": {
+     "v": 0,
+     "unit": "deg",
+     "stated": "0˚ icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "SHANK h6 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": []
+  },
+  {
+   "kind": "tap",
+   "id": "1650011008",
+   "name": "A BRAND A-SFT, DIN Overall Length, M6 x 1, Bottom (1.5P)",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310346/Literature/09%20-%20Catalog%20Pages/8002024CA/List_16500_-_A_BRAND_A-SFT.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6 x 1",
+     "unit": "text",
+     "stated": "Thread Size M6 x 1"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "Thread Size M6 x 1"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Thread Limit D5"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 80.00"
+    },
+    "thread_length": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Thread Length Lc (mm) 8.00"
+    },
+    "neck_length": {
+     "v": 29.9,
+     "unit": "mm",
+     "stated": "Neck Length L1 (mm) 29.90"
+    },
+    "dcon": {
+     "v": 6.48,
+     "unit": "mm",
+     "stated": "Shank Dia. d (mm) 6.48"
+    },
+    "square": {
+     "v": 4.85,
+     "unit": "mm",
+     "stated": "Square Width k (mm) 4.85"
+    },
+    "square_length": {
+     "v": 7.94,
+     "unit": "mm",
+     "stated": "Square Length lk (mm) 7.94"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "material": {
+     "v": "VC10",
+     "unit": "text",
+     "stated": "VC10 icon"
+    },
+    "coating": {
+     "v": "V",
+     "unit": "text",
+     "stated": "V icon"
+    },
+    "tap_style": {
+     "v": "spiral flute",
+     "unit": "text",
+     "stated": "SPIRAL FLUTE icon; A BRAND A-SFT, DIN Overall Length"
+    },
+    "chamfer": {
+     "v": "Bottom (1.5P)",
+     "unit": "text",
+     "stated": "Chamfer Type Bottom (1.5P)"
+    },
+    "helix": {
+     "v": 45,
+     "unit": "deg",
+     "stated": "45˚ icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "shank_tol"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "1650000808",
+   "name": "A BRAND A-SFT, DIN Overall Length, M6 x 1, Modified Bottom (2.5P)",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310346/Literature/09%20-%20Catalog%20Pages/8002024CA/List_16500_-_A_BRAND_A-SFT.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6 x 1",
+     "unit": "text",
+     "stated": "Thread Size M6 x 1"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "Thread Size M6 x 1"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Thread Limit D5"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 80.00"
+    },
+    "thread_length": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Thread Length Lc (mm) 8.00"
+    },
+    "neck_length": {
+     "v": 29.9,
+     "unit": "mm",
+     "stated": "Neck Length L1 (mm) 29.90"
+    },
+    "dcon": {
+     "v": 6.48,
+     "unit": "mm",
+     "stated": "Shank Dia. d (mm) 6.48"
+    },
+    "square": {
+     "v": 4.85,
+     "unit": "mm",
+     "stated": "Square Width k (mm) 4.85"
+    },
+    "square_length": {
+     "v": 7.94,
+     "unit": "mm",
+     "stated": "Square Length lk (mm) 7.94"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "material": {
+     "v": "VC10",
+     "unit": "text",
+     "stated": "VC10 icon"
+    },
+    "coating": {
+     "v": "V",
+     "unit": "text",
+     "stated": "V icon"
+    },
+    "tap_style": {
+     "v": "spiral flute",
+     "unit": "text",
+     "stated": "SPIRAL FLUTE icon; A BRAND A-SFT, DIN Overall Length"
+    },
+    "chamfer": {
+     "v": "Modified Bottom (2.5P)",
+     "unit": "text",
+     "stated": "Chamfer Type Modified Bottom (2.5P)"
+    },
+    "helix": {
+     "v": 45,
+     "unit": "deg",
+     "stated": "45˚ icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "shank_tol"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "1650011508",
+   "name": "A BRAND A-SFT, DIN Overall Length, M8 x 1.25, Bottom (1.5P)",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310346/Literature/09%20-%20Catalog%20Pages/8002024CA/List_16500_-_A_BRAND_A-SFT.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M8 x 1.25",
+     "unit": "text",
+     "stated": "Thread Size M8 x 1.25"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "Thread Size M8 x 1.25"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Thread Limit D5"
+    },
+    "oal": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 90.00"
+    },
+    "thread_length": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Thread Length Lc (mm) 10.00"
+    },
+    "neck_length": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "Neck Length L1 (mm) 35.00"
+    },
+    "dcon": {
+     "v": 8.08,
+     "unit": "mm",
+     "stated": "Shank Dia. d (mm) 8.08"
+    },
+    "square": {
+     "v": 6.05,
+     "unit": "mm",
+     "stated": "Square Width k (mm) 6.05"
+    },
+    "square_length": {
+     "v": 9.53,
+     "unit": "mm",
+     "stated": "Square Length lk (mm) 9.53"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "material": {
+     "v": "VC10",
+     "unit": "text",
+     "stated": "VC10 icon"
+    },
+    "coating": {
+     "v": "V",
+     "unit": "text",
+     "stated": "V icon"
+    },
+    "tap_style": {
+     "v": "spiral flute",
+     "unit": "text",
+     "stated": "SPIRAL FLUTE icon; A BRAND A-SFT, DIN Overall Length"
+    },
+    "chamfer": {
+     "v": "Bottom (1.5P)",
+     "unit": "text",
+     "stated": "Chamfer Type Bottom (1.5P)"
+    },
+    "helix": {
+     "v": 45,
+     "unit": "deg",
+     "stated": "45˚ icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "shank_tol"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "1650001008",
+   "name": "A BRAND A-SFT, DIN Overall Length, M8 x 1.25, Modified Bottom (2.5P)",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310346/Literature/09%20-%20Catalog%20Pages/8002024CA/List_16500_-_A_BRAND_A-SFT.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M8 x 1.25",
+     "unit": "text",
+     "stated": "Thread Size M8 x 1.25"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "Thread Size M8 x 1.25"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Thread Limit D5"
+    },
+    "oal": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 90.00"
+    },
+    "thread_length": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Thread Length Lc (mm) 10.00"
+    },
+    "neck_length": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "Neck Length L1 (mm) 35.00"
+    },
+    "dcon": {
+     "v": 8.08,
+     "unit": "mm",
+     "stated": "Shank Dia. d (mm) 8.08"
+    },
+    "square": {
+     "v": 6.05,
+     "unit": "mm",
+     "stated": "Square Width k (mm) 6.05"
+    },
+    "square_length": {
+     "v": 9.53,
+     "unit": "mm",
+     "stated": "Square Length lk (mm) 9.53"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "material": {
+     "v": "VC10",
+     "unit": "text",
+     "stated": "VC10 icon"
+    },
+    "coating": {
+     "v": "V",
+     "unit": "text",
+     "stated": "V icon"
+    },
+    "tap_style": {
+     "v": "spiral flute",
+     "unit": "text",
+     "stated": "SPIRAL FLUTE icon; A BRAND A-SFT, DIN Overall Length"
+    },
+    "chamfer": {
+     "v": "Modified Bottom (2.5P)",
+     "unit": "text",
+     "stated": "Chamfer Type Modified Bottom (2.5P)"
+    },
+    "helix": {
+     "v": 45,
+     "unit": "deg",
+     "stated": "45˚ icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "shank_tol"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "1650012208",
+   "name": "A BRAND A-SFT, DIN Overall Length, M10 x 1.5, Bottom (1.5P)",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310346/Literature/09%20-%20Catalog%20Pages/8002024CA/List_16500_-_A_BRAND_A-SFT.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10 x 1.5",
+     "unit": "text",
+     "stated": "Thread Size M10 x 1.5"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "Thread Size M10 x 1.5"
+    },
+    "limit": {
+     "v": "D6",
+     "unit": "text",
+     "stated": "Thread Limit D6"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 100.00"
+    },
+    "thread_length": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Thread Length Lc (mm) 12.00"
+    },
+    "neck_length": {
+     "v": 39.0,
+     "unit": "mm",
+     "stated": "Neck Length L1 (mm) 39.00"
+    },
+    "dcon": {
+     "v": 9.68,
+     "unit": "mm",
+     "stated": "Shank Dia. d (mm) 9.68"
+    },
+    "square": {
+     "v": 7.26,
+     "unit": "mm",
+     "stated": "Square Width k (mm) 7.26"
+    },
+    "square_length": {
+     "v": 11.11,
+     "unit": "mm",
+     "stated": "Square Length lk (mm) 11.11"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "material": {
+     "v": "VC10",
+     "unit": "text",
+     "stated": "VC10 icon"
+    },
+    "coating": {
+     "v": "V",
+     "unit": "text",
+     "stated": "V icon"
+    },
+    "tap_style": {
+     "v": "spiral flute",
+     "unit": "text",
+     "stated": "SPIRAL FLUTE icon; A BRAND A-SFT, DIN Overall Length"
+    },
+    "chamfer": {
+     "v": "Bottom (1.5P)",
+     "unit": "text",
+     "stated": "Chamfer Type Bottom (1.5P)"
+    },
+    "helix": {
+     "v": 45,
+     "unit": "deg",
+     "stated": "45˚ icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "shank_tol"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "1650001308",
+   "name": "A BRAND A-SFT, DIN Overall Length, M10 x 1.5, Modified Bottom (2.5P)",
+   "url": "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310346/Literature/09%20-%20Catalog%20Pages/8002024CA/List_16500_-_A_BRAND_A-SFT.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10 x 1.5",
+     "unit": "text",
+     "stated": "Thread Size M10 x 1.5"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "Thread Size M10 x 1.5"
+    },
+    "limit": {
+     "v": "D6",
+     "unit": "text",
+     "stated": "Thread Limit D6"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "Overall Length L (mm) 100.00"
+    },
+    "thread_length": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Thread Length Lc (mm) 12.00"
+    },
+    "neck_length": {
+     "v": 39.0,
+     "unit": "mm",
+     "stated": "Neck Length L1 (mm) 39.00"
+    },
+    "dcon": {
+     "v": 9.68,
+     "unit": "mm",
+     "stated": "Shank Dia. d (mm) 9.68"
+    },
+    "square": {
+     "v": 7.26,
+     "unit": "mm",
+     "stated": "Square Width k (mm) 7.26"
+    },
+    "square_length": {
+     "v": 11.11,
+     "unit": "mm",
+     "stated": "Square Length lk (mm) 11.11"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "material": {
+     "v": "VC10",
+     "unit": "text",
+     "stated": "VC10 icon"
+    },
+    "coating": {
+     "v": "V",
+     "unit": "text",
+     "stated": "V icon"
+    },
+    "tap_style": {
+     "v": "spiral flute",
+     "unit": "text",
+     "stated": "SPIRAL FLUTE icon; A BRAND A-SFT, DIN Overall Length"
+    },
+    "chamfer": {
+     "v": "Modified Bottom (2.5P)",
+     "unit": "text",
+     "stated": "Chamfer Type Modified Bottom (2.5P)"
+    },
+    "helix": {
+     "v": 45,
+     "unit": "deg",
+     "stated": "45˚ icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "shank_tol"
+   ]
+  }
+ ]
+}
