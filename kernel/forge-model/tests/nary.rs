@@ -200,3 +200,22 @@ fn a_hole_a_hair_over_a_boundary_finds_its_host() {
     let (a, b) = (mass(&seq), mass(&nary));
     assert!((a.volume - b.volume).abs() <= a.err[0] + b.err[0] + 1e-12 * a.volume);
 }
+
+/// fuzz_keep seed 210 through feature 29: a rod cut into the side of a large kept rod, 1.6e-3 from
+/// that face's own edge. On the cylinder the rod's section is a hole beside a strip 1.6e-3 wide
+/// (2.1e-5 of a turn on a cylinder 75 across), and the point that finds its host was put a
+/// thousandth of the hole's width off its side: past the strip, outside every outline
+/// (Internal(HoleOutside)).
+#[test]
+fn a_hole_beside_a_hair_strip_on_a_cylinder_finds_its_host() {
+    let mut part = suite::fuzz_keep(210, 80);
+    part.features.truncate(30);
+    let seq = part.regenerate().expect("sequential regen");
+    assert!(
+        forge_topo::check(&seq).is_empty(),
+        "{:?}",
+        forge_topo::check(&seq)
+    );
+    let nary = part.regenerate_nary(1).expect("n-ary regen");
+    assert!(forge_topo::check(&nary).is_empty());
+}
