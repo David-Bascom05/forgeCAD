@@ -1,11 +1,11 @@
 # haas-dm-2 table: 864 x 381 published, thickness estimated; one T-slot
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -431
+shared x0 = -430.8
 shared y0 = -189.5
-shared z0 = -89
-shared lx = 862
+shared z0 = -110.6
+shared lx = 861.6
 shared ly = 379
-shared lz = 88
+shared lz = 109.6
 shared cx = 0
 shared cy = 0
 shared cw = 864

@@ -85,7 +85,7 @@ AUTO = {
     "haas-vf-2yt": "vf-2yt_2ssyt_solid_models_11_2021.zip",
     "haas-vf-5-40": "vf-5_40_ss_tr_solid_models_3_2022.zip",
 }
-VMC_RULES = ["anchor=-", "waycover=-", "table=table", "saddle=saddle", "spindle=head", "z axis=head", "head=head",
+VMC_RULES = ["anchor=-", "waycover=-", "low-profile=-", "table=table", "saddle=saddle", "spindle=head", "z axis=head", "head=head",
              "casting=base", "base=base", "column=base", "pads=base", "leveling=base", "enclosure=enclosure",
              "door=enclosure", "window=enclosure", "control panel=enclosure", "pendant=enclosure", "chute=enclosure",
              "*=-"]
@@ -190,19 +190,34 @@ def auto(name, zips, bin_, cell):
             np_ = ([min(p[k] for p in bottom) for k in range(3)], [max(p[k] for p in bottom) for k in range(3)])
         else:
             np_ = nose_piece(os.path.join(lib, ms["head"]["file"]))
+        found = np_ is not None
+        if not found and abs(low - top - nose[2]) < 40:
+            # no nose to find (the VF-4's head ends in a plate at the nose): its bottom at about the
+            # published height says Z home; the spindle's x, y are the record's, not measured
+            np_ = ([nose[0], low, 0.0], [nose[0], low, 0.0])
         if np_ is None:
-            sys.exit(f"{name}: no spindle nose found in the head")
+            raise RuntimeError(f"{name}: no spindle nose found in the head (its lowest 15 mm: {[round(e) for e in ext]} "
+                               f"mm in plan, from {round(low - top)} mm over the table)")
         hx, hz, face_y = (np_[0][0] + np_[1][0]) / 2, (np_[0][2] + np_[1][2]) / 2, np_[0][1]
         sx, sy, sh = *ours((hx, face_y, hz))[:2], face_y - top
+        if not found:
+            sx, sy = nose[0], nose[1]
         dz = nose[2] - sh
-        # at home: the nose within 15 mm of the published height (the keys stand 9 mm under the
-        # nose face), and the spindle within the travels' reach of the record's estimate
-        at_home = abs(dz) < 15 and abs(sx - nose[0]) < 150 and abs(sy - nose[1]) < 150
+        # at Z home: the nose within 15 mm of the published height (the keys stand 9 mm under the
+        # nose face); at X, Y home: the spindle within 150 mm of the record's (centred) estimate
+        z_home = abs(dz) < 15
+        xy_home = abs(sx - nose[0]) < 150 and abs(sy - nose[1]) < 150
+        at_home = z_home and xy_home and found
+        dz = 0.0 if z_home else dz
+        dx, dy = (0.0, 0.0) if xy_home else (nose[0] - sx, nose[1] - sy)
+        # the table stays at the origin: a model away from X, Y home has the machine's frame (base,
+        # enclosure) and the head moved by what the table would move to get home, the saddle (which
+        # moves with the table in Y, not X) in x only; one away from Z home has its head moved in z
+        shift = {"base": (dx, dy, 0.0), "enclosure": (dx, dy, 0.0), "head": (dx, dy, dz), "saddle": (dx, 0.0, 0.0)}
         place = {"*": off}
-        if not at_home:
-            # the head to the record's home: its published height, and its x, y (the model's unknown)
-            d = [nose[0] - sx, nose[1] - sy, dz]
-            place["head"] = [off[k] + d[k] for k in range(3)]
+        for b, s in shift.items():
+            if any(s):
+                place[b] = [off[k] + s[k] for k in range(3)]
         text, _ = models(lib)
         blocks = text.split("[[model]]")
         for i, b in enumerate(blocks[1:], 1):
@@ -212,16 +227,15 @@ def auto(name, zips, bin_, cell):
         open(os.path.join(lib, "models.toml"), "w").write("[[model]]".join(blocks))
         boxes = {}
         for b, ps in pts.items():
-            q = [ours(p) for p in ps]
-            if b == "head" and not at_home:
-                q = [(x + place["head"][0] - off[0], y + place["head"][1] - off[1], z + dz) for x, y, z in q]
+            s = shift.get(b, (0.0, 0.0, 0.0))
+            q = [(x + s[0], y + s[1], z + s[2]) for x, y, z in (ours(p) for p in ps)]
             boxes[b] = [[round(min(v[k] for v in q), 1) for k in range(3)], [round(max(v[k] for v in q), 1) for k in range(3)]]
         dst = os.path.join(OUT, name)
         shutil.rmtree(dst, ignore_errors=True)
         run([bin_, "machine", "model", "ship", name, dst, "--cell", cell, "--source", source], env)
         size = sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
         meas = json.load(open(MEASURES)) if os.path.exists(MEASURES) else {}
-        meas[name] = dict(file=os.path.basename(step), at_home=at_home, nose_over_table=round(sh, 1),
+        meas[name] = dict(file=os.path.basename(step), at_home=at_home, moved=[round(dx, 1), round(dy, 1), round(dz, 1)], nose_over_table=round(sh, 1),
                           published_nose=nose[2], spindle_xy=[round(sx, 1), round(sy, 1)], front_z=front_z,
                           bodies=boxes, mb=round(size / 1e6, 2))
         os.makedirs(os.path.dirname(MEASURES), exist_ok=True)
@@ -229,7 +243,7 @@ def auto(name, zips, bin_, cell):
             json.dump(dict(sorted(meas.items())), f, indent=1)
             f.write("\n")
         print(f"{name}: {size / 1e6:.2f} MB; nose {sh:.1f} over the table (published {nose[2]}), "
-              f"{'at home' if at_home else 'head moved to home'}; spindle ({sx:.1f}, {sy:.1f}) vs record ({nose[0]}, {nose[1]})")
+              f"{'at home' if at_home else f'moved to home by {[round(dx), round(dy), round(dz)]}'}; spindle ({sx:.1f}, {sy:.1f}) vs record ({nose[0]}, {nose[1]})")
 
 
 def run(cmd, env):
@@ -313,7 +327,10 @@ def main(argv):
     zips, names = names[0], names[1:] or list(MACHINES) + list(AUTO)
     for name in names:
         if name in AUTO:
-            auto(name, zips, bin_, cell)
+            try:
+                auto(name, zips, bin_, cell)
+            except (RuntimeError, SystemExit) as e:
+                print(f"{name}: NOT CONVERTED: {e}")
             continue
         m = MACHINES[name]
         with tempfile.TemporaryDirectory() as tmp:

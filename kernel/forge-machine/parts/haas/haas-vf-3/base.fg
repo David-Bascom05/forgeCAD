@@ -1,11 +1,11 @@
-# haas-vf-3 base (stand-in until measured)
+# haas-vf-3 base (display only: Haas's model drawn in its place)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -9
-shared y0 = -9
-shared z0 = -9
-shared lx = 18
-shared ly = 18
-shared lz = 18
+shared x0 = -112.8
+shared y0 = -359.4
+shared z0 = -939.4
+shared lx = 1240.1
+shared ly = 1773.6
+shared lz = 2267.8
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))

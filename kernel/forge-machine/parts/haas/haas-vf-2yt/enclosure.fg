@@ -1,11 +1,11 @@
-# haas-vf-2yt enclosure (stand-in until measured)
+# haas-vf-2yt enclosure (display only: Haas's model drawn in its place)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -9
-shared y0 = -9
-shared z0 = -9
-shared lx = 18
-shared ly = 18
-shared lz = 18
+shared x0 = -1572.3
+shared y0 = -809
+shared z0 = -723.6
+shared lx = 3121
+shared ly = 2403.7
+shared lz = 2866.1
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))

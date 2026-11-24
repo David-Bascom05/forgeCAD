@@ -1,11 +1,11 @@
-# haas-mini-mill enclosure (stand-in until measured)
+# haas-mini-mill enclosure (display only: Haas's model drawn in its place)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -9
-shared y0 = -9
-shared z0 = -9
-shared lx = 18
-shared ly = 18
-shared lz = 18
+shared x0 = -580.7
+shared y0 = -659.6
+shared z0 = -823.4
+shared lx = 1995.9
+shared ly = 1820.9
+shared lz = 2525.2
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))

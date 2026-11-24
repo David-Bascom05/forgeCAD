@@ -1,11 +1,11 @@
 # haas-mini-mill table: 914 x 305 published, thickness estimated; one T-slot
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -456
-shared y0 = -151.5
-shared z0 = -89
-shared lx = 912
-shared ly = 303
-shared lz = 88
+shared x0 = -543.9
+shared y0 = -158
+shared z0 = -154.7
+shared lx = 1087.8
+shared ly = 316
+shared lz = 153.7
 shared cx = 0
 shared cy = 0
 shared cw = 914

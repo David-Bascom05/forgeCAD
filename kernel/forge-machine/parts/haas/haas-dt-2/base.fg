@@ -1,11 +1,11 @@
-# haas-dt-2 base (stand-in until measured)
+# haas-dt-2 base (display only: Haas's model drawn in its place)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -9
-shared y0 = -9
-shared z0 = -9
-shared lx = 18
-shared ly = 18
-shared lz = 18
+shared x0 = -10.8
+shared y0 = -319.6
+shared z0 = -817.4
+shared lx = 734.6
+shared ly = 1465.4
+shared lz = 1856.7
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))

@@ -1,12 +1,12 @@
 # haas-vf-3 head: spindle nose cylinder and housing (unpublished sizes, conservative)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared ax = 508
-shared ay = 254
+shared ax = 507.2
+shared ay = 259.2
 shared nz = 743
 shared nr = 94
 shared nh = 159
-shared x0 = 319
-shared y0 = 65
+shared x0 = 318.2
+shared y0 = 70.2
 shared z0 = 902
 shared lx = 378
 shared ly = 608

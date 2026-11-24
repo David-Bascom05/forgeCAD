@@ -1,11 +1,11 @@
 # haas-vf-4 table: 1321 x 495 published, thickness estimated; one T-slot
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -659.5
-shared y0 = -246.5
-shared z0 = -89
-shared lx = 1319
-shared ly = 493
-shared lz = 88
+shared x0 = -659.4
+shared y0 = -246.7
+shared z0 = -182.4
+shared lx = 1318.8
+shared ly = 493.4
+shared lz = 181.4
 shared cx = 0
 shared cy = 0
 shared cw = 1321

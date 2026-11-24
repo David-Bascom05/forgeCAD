@@ -1,11 +1,11 @@
-# haas-dm-2 saddle (stand-in until measured)
+# haas-dm-2 saddle (display only: Haas's model drawn in its place)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -9
-shared y0 = -9
-shared z0 = -9
-shared lx = 18
-shared ly = 18
-shared lz = 18
+shared x0 = -228.9
+shared y0 = -150.6
+shared z0 = -279.5
+shared lx = 1183.4
+shared ly = 301.2
+shared lz = 188.7
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))
