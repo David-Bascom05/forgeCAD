@@ -457,18 +457,24 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
     true
 }
 
+/// The live picture's state, the same in the view's badge and the status bar: preparing; starting
+/// again while the raster view stands in; else its samples (one: "1 sample").
+pub fn live_words(st: &StudioUi) -> String {
+    match st.samples {
+        0 => "Preparing".into(),
+        s if s < READABLE => "Starting again…".into(),
+        s => format!(
+            "{s} sample{}{}",
+            if s == 1 { "" } else { "s" },
+            if st.denoise { " · denoised" } else { "" }
+        ),
+    }
+}
+
 /// The status bar's line: the live picture's samples, then what a render would make.
 pub(super) fn status(s: &Shell) -> String {
     let st = &s.studio;
-    let live = if st.samples == 0 {
-        "preparing".to_string()
-    } else {
-        format!(
-            "{} samples{}",
-            st.samples,
-            if st.denoise { " · denoised" } else { "" }
-        )
-    };
+    let live = live_words(st);
     let queue = if st.queue.is_empty() {
         String::new()
     } else {
@@ -604,18 +610,7 @@ fn render_cards(s: &mut Shell, ui: &mut Ui, view: Rect) {
 /// The sample count over the view's lower left corner.
 pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
     let st = &s.studio;
-    let text = if st.samples == 0 {
-        "Render Studio: preparing".to_string()
-    } else if st.samples < READABLE {
-        // the raster view stands in meanwhile: no promise the noise can't keep
-        "Starting again…".to_string()
-    } else {
-        format!(
-            "{} samples{}",
-            st.samples,
-            if st.denoise { " · denoised" } else { "" }
-        )
-    };
+    let text = live_words(st);
     let p = ui.painter();
     let g = p.layout_no_wrap(text, super::theme::sans(12.0), egui::Color32::WHITE);
     let at = view.left_bottom() + egui::vec2(10.0, -10.0 - g.size().y);
@@ -640,4 +635,24 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
         p.galley(at, g, egui::Color32::WHITE);
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_badge_and_the_bar_say_the_same() {
+        let mut st = StudioUi::default();
+        assert_eq!(live_words(&st), "Preparing");
+        st.samples = 1;
+        assert_eq!(live_words(&st), "Starting again…");
+        st.samples = READABLE;
+        st.denoise = true;
+        assert_eq!(live_words(&st), format!("{READABLE} samples · denoised"));
+        st.samples = 1;
+        st.denoise = false;
+        st.samples = READABLE + 1;
+        assert!(!live_words(&st).contains("denoised"));
+    }
 }

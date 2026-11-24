@@ -93,10 +93,11 @@ pub(super) fn lit(
     }
     for (i, p) in scene.placements.iter().enumerate() {
         let k = p.part as usize;
+        // faint enough that the look under it still shows (the look is what's being changed)
         let a = if st.selected.contains(&k) {
-            150
+            75
         } else if st.hover_row.contains(&k) {
-            70
+            35
         } else {
             continue;
         };
