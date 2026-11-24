@@ -25,7 +25,7 @@ pub mod toollib;
 pub mod schema;
 pub mod turnview;
 mod ui;
-pub use ui::{CYCLE_TIP, certified_words, check_lines, cycle_words};
+pub use ui::{CYCLE_TIP, certified_words, check_lines, cycle_words, text_panel_h};
 pub use ui::{groups, status_line};
 
 use doc::{Edit, Role, Stmt};
@@ -227,6 +227,10 @@ pub struct PartInfo {
     pub sketches: Vec<String>,
 }
 
+/// An adaptive op's comparison with clear: (op, the run's text it was measured on, clear's bound
+/// and estimate, or None when clear does not build there).
+pub type AltClear = (String, String, Option<(f64, f64)>);
+
 pub struct CamWs {
     pub path: String,
     pub dir: PathBuf,
@@ -246,6 +250,13 @@ pub struct CamWs {
     pub job: Arc<Mutex<Option<run::Run>>>,
     /// A run's quality measured after the run was shown (the text it is for, and it).
     pub quality_job: Arc<Mutex<Option<(String, forge_cam_quality::JobQ)>>>,
+    /// An adaptive op's comparison: the same setup, tool and heights as `clear` at its defaults
+    /// (forge-cam-quality's alternative_clear), measured off the UI thread: (op, the run's text
+    /// it is for, its bound and estimate, or None when it does not build). `alt_job` is the
+    /// worker's slot; `alt_asked` the (op, text) asked last.
+    pub alt: Option<AltClear>,
+    pub alt_job: Arc<Mutex<Option<AltClear>>>,
+    pub alt_asked: Option<(String, String)>,
     pub auto: bool,
     pub selected: Option<String>,
     pub focus: Focus,
@@ -309,6 +320,8 @@ pub struct CamWs {
     /// The view's width last frame (re-framed when the column comes or goes), and the camera
     /// this workspace last framed (the user's own moves are left alone).
     pub view_w: f32,
+    /// The view's bottom the panels cover (the timeline, Document Text) when last framed.
+    pub view_cover: f32,
     pub framed: Option<crate::camera::Camera>,
     pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
@@ -333,6 +346,9 @@ impl CamWs {
             running: None,
             job: Arc::new(Mutex::new(None)),
             quality_job: Arc::new(Mutex::new(None)),
+            alt: None,
+            alt_job: Arc::new(Mutex::new(None)),
+            alt_asked: None,
             auto: true,
             selected: None,
             focus: Focus::default(),
@@ -375,6 +391,7 @@ impl CamWs {
             sheet_hidden: false,
             sim_tab: false,
             view_w: 0.0,
+            view_cover: 0.0,
             framed: None,
             prog_field: None,
         };

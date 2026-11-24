@@ -1006,9 +1006,26 @@ fn details(
                     width,
                     t.ink,
                 );
-                match run.and_then(|r| r.cycle([o.name.as_str()])) {
+                let own = run.and_then(|r| r.cycle([o.name.as_str()]));
+                match own {
                     Some(c) => fact_tip(ui, t, "Cycle time", &cycle_words(c), CYCLE_TIP, width, t.ink),
                     None => fact(ui, t, "Feed time", &time(o.time_s), width, t.ink),
+                }
+                // adaptive: what clear (at its own defaults) would take on the same setup, tool
+                // and heights, so the faster can be chosen (TOOLPATH-QUALITY)
+                if o.kind == "adaptive" {
+                    let tip = "Clear on the same setup, tool, heights and stock to leave, at clear's own defaults, measured on the machine's timeline as this op is. A tuned clear (fewer, deeper levels) may be faster still.";
+                    let ready = w.alt.as_ref().filter(|a| a.0 == o.name && run.is_some_and(|r| r.text == a.1));
+                    match (ready, own) {
+                        (Some((_, _, Some(c))), Some(me)) => {
+                            let pct = (c.1 / me.1 - 1.0) * 100.0;
+                            let words = format!("{} ({}{:.0}%)", cycle_short(*c), if pct >= 0.0 { "+" } else { "\u{2212}" }, pct.abs());
+                            fact_tip(ui, t, "Clear (its defaults)", &words, tip, width, if c.1 < me.1 { t.warn } else { t.ink2 });
+                        }
+                        (Some((_, _, Some(c))), None) => fact_tip(ui, t, "Clear (its defaults)", &cycle_short(*c), tip, width, t.ink2),
+                        (Some((_, _, None)), _) => fact_tip(ui, t, "Clear (its defaults)", "does not build here", tip, width, t.ink2),
+                        (None, _) => fact_tip(ui, t, "Clear (its defaults)", "measuring\u{2026}", tip, width, t.ink2),
+                    }
                 }
             }
             if let Some(l) = o.least {
@@ -3642,7 +3659,7 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
     let mut close = false;
     let mut apply = false;
     // a panel across the bottom of the view, above the simulation's timeline (UX-LEAD)
-    let ph = (v.height() * 0.38).clamp(220.0, 380.0);
+    let ph = text_panel_h(v.height());
     let panel = Rect::from_min_max(pos2(v.left() + 8.0, v.bottom() - ph), pos2(v.right() - 8.0, v.bottom() - 4.0));
     let width = panel.width() - 16.0;
     let win = egui::Window::new("cam-text")
@@ -3682,7 +3699,9 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
                             .desired_width(width - 28.0)
                             .desired_rows(8),
                     );
-                    places.push(("cam:text:edit".into(), r.rect));
+                    // what is seen of it (a long text runs past the scroll's viewport, where a
+                    // click is clipped): a click by name lands on the field
+                    places.push(("cam:text:edit".into(), r.rect.intersect(ui.clip_rect())));
                 });
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
@@ -3890,6 +3909,12 @@ fn dialog_host<'a>(dock: Option<Rect>, id: &str, t: &Theme, win: egui::Window<'a
         ),
         None => Host::Float(Box::new(win)),
     }
+}
+
+/// The Document Text panel's height in a view (above the timeline) `free_h` tall: the view is
+/// re-framed into what it leaves (`Gui::cam_reframe`).
+pub fn text_panel_h(free_h: f32) -> f32 {
+    (free_h * 0.38).clamp(220.0, 380.0)
 }
 
 /// A column tab's rect as `dialog_host` takes it (it keeps a sheet's footer height free at the

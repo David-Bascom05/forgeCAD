@@ -413,7 +413,7 @@ impl DrawingEnv {
             Some(b) => {
                 forge_lang::drawing::block::read(&self.src, &name_of(&self.path), b).unwrap_or_default()
             }
-            None => self.doc(),
+            None => doc::read(&self.src),
         }
     }
 

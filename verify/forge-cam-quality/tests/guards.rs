@@ -48,6 +48,10 @@ fn measure_all() -> Vec<JobQ> {
         lookahead: None,
     };
     let fs = files();
+    // WASI has no threads: the same measures, one after another
+    if cfg!(target_family = "wasm") {
+        return fs.iter().map(|f| measure(f, &cfg)).collect();
+    }
     std::thread::scope(|s| {
         let hs: Vec<_> = fs.iter().map(|f| s.spawn(|| measure(f, &cfg))).collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect()
@@ -133,4 +137,67 @@ fn chip_load_and_equal_work() {
         "adaptive posts short moves:\n{}",
         micro.join("\n")
     );
+}
+
+/// A ratchet on micro-moves: in every adaptive op, at most a quarter of the cutting moves (cut
+/// lines and arcs) are shorter than 1 mm. (They were 5,348 blocks with a 2.2 mm mean on
+/// deep_boss once; now 7-24 % of cutting moves are under 1 mm, at pass ends and transitions;
+/// the most on the shallow RPTU levels.)
+#[test]
+fn adaptive_cutting_moves_not_micro() {
+    use forge_cam::ops::{PMove, Phase};
+    let mut bad = Vec::new();
+    for f in files() {
+        let src = std::fs::read_to_string(&f).unwrap();
+        if !src.contains("adaptive(") {
+            continue;
+        }
+        let cam = forge_cam_lang::run(&src, f.parent().unwrap());
+        for op in cam.ops.iter().filter(|o| o.kind == "adaptive") {
+            let (mut n, mut short) = (0usize, 0usize);
+            for p in &op.paths {
+                let mut at = p.start;
+                for m in &p.moves {
+                    let (to, len) = match *m {
+                        PMove::Line { to, phase, .. } => {
+                            let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                            (
+                                to,
+                                if phase == Phase::Cut && (to[2] - at[2]).abs() < 1e-9 {
+                                    Some(l)
+                                } else {
+                                    None
+                                },
+                            )
+                        }
+                        PMove::Arc { to, c, .. } => {
+                            // the chord bounds the arc's length from below
+                            let _ = c;
+                            (
+                                to,
+                                Some(((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt()),
+                            )
+                        }
+                        PMove::Rapid { to } => (to, None),
+                        _ => continue,
+                    };
+                    if let Some(l) = len {
+                        n += 1;
+                        if l < 1.0 {
+                            short += 1;
+                        }
+                    }
+                    at = to;
+                }
+            }
+            if n > 0 && short * 4 > n {
+                bad.push(format!(
+                    "{}/{}: {short} of {n} cutting moves under 1 mm",
+                    f.display(),
+                    op.name
+                ));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "adaptive posts micro-moves:\n{}", bad.join("\n"));
 }

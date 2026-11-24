@@ -77,6 +77,12 @@ pub enum ProfileError {
     SelfIntersecting {
         loop_index: usize,
     },
+    /// Whether a loop with a free curve meets itself near `at` (world coordinates) is not decided
+    /// within the certified search's budget (crate::simple): refused there rather than guessed.
+    SelfIntersectionUndecided {
+        loop_index: usize,
+        at: Point3,
+    },
 }
 
 /// A piece of a loop as a line or an arc, for exact nearest points.
@@ -501,6 +507,10 @@ impl ProfileLoop {
     /// Whether the loop crosses or touches itself, as a profile refuses it: a knife edge, its
     /// sides running within tolerance of each other into the cusp, does not.
     pub fn crosses_itself(&self) -> bool {
+        // with a free curve in it, decided on its exact pieces (crate::simple)
+        if self.segments.iter().any(|(s, _)| matches!(s, Segment::Spline(_))) {
+            return crate::simple::simplicity(self) != crate::simple::Simplicity::Simple;
+        }
         // a lone circle is drawn as a convex polygon: it cannot cross itself
         let circle = matches!(self.segments[..], [(Segment::Circle { .. }, _)]);
         // (a knife edge's sides, samples of them, cross within tolerance)
@@ -833,6 +843,15 @@ impl Profile {
         }
         for (i, l) in self.loops.iter().enumerate() {
             if l.crosses_itself() {
+                // a free curve's search may have stopped short: refused there, undecided
+                if l.segments.iter().any(|(s, _)| matches!(s, Segment::Spline(_)))
+                    && let crate::simple::Simplicity::Undecided(at) = crate::simple::simplicity(l)
+                {
+                    return Err(ProfileError::SelfIntersectionUndecided {
+                        loop_index: i,
+                        at: self.plane.plane_point(at),
+                    });
+                }
                 return Err(ProfileError::SelfIntersecting { loop_index: i });
             }
         }

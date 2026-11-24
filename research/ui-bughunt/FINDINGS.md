@@ -321,9 +321,10 @@ list on main: this branch's new strings add none).
 
 - `?open=../../../etc/passwd` (any path with `..`): app.js's `cleanPath` threw at the top level,
   before `start_app`, so the page stayed dead (`window.forgecad` never set, a page error). The
-  app now starts with nothing open, and its status says "Not opened: not a project path: …"
-  (`app_say`). File > Save As with such a name threw the same way and said nothing. Now it says
-  "Not saved: …".
+  app now starts with nothing open (its empty state: New part, Open…), and its status says
+  "Couldn't open ../x: it isn't in this project." (`app_say`; UX-LEAD's wording). File > Save As
+  with such a name threw the same way and said nothing. Now it says "Couldn't save as ../x: it
+  isn't in this project."
 - `?open=machined/flange_dwg.fg`: the page opens the linked file before the project's other
   files (they follow its first frame), then asks for a rebuild once they have come. That rebuild
   covered the part document and machining documents, not a drawing, so the sheet stayed empty
@@ -336,6 +337,47 @@ list on main: this branch's new strings add none).
   page; fails before: the page error).
 - Not changed: `?env=bogus` is ignored without a word; a missing file says its path twice
   ("nope/missing.fg: nope/missing.fg: no such file").
+
+## 21. The page's status said "Agent connection: operation not supported…"; a STEP picked said nothing (ui/bughunt-3)
+
+- At start the app published its agent's terminal connection (`start_agent_bridge`, from
+  `load_settings`). A page has no terminal to connect (the agent runs in the desktop app), so it
+  failed, and "Agent connection: operation not supported on this platform" stood in the status
+  bar until something said otherwise. A linked DWG said nothing over it. Not started in a page now.
+- File > Open > From this computer with a STEP model (or a font): the file was added to the
+  project, the dialog closed, and nothing on screen changed. It has nothing to open itself (a
+  part reads it), so now the status says "Added to the project: NAME". A DWG opens, as before.
+- Test: `web/tests/import.cjs` (a STEP added and said; a DWG opened; a DWG linked to in a new
+  page, with no agent failure in the status; fails before on both).
+- Swept fine in the page: Markup (draw, text with typing, Esc, Done); DWG open (layers,
+  properties, its command line).
+
+
+## 23. Placing a dimension in a drawing file hung the app (ui/bughunt-3)
+
+- File > New Drawing, Annotate > Dimension, two edges of a view, then the place: the app froze
+  for good, on the desktop and in the page. `DrawingEnv::doc()` (shell/drawing.rs) read a drawing
+  block's doc but, for a drawing file (no block), called itself, without end (gdb: doc ← doc ←
+  … ← fresh ← add ← click). Every annotation that reads the doc (dimension, note, the item under
+  the pointer) went through it. It reads the file's own text now (`doc::read(&self.src)`).
+- Test: `tests/drawing_dimension.rs` (the clicks in a headless window on a thread with a
+  watchdog; the dimension `d1 = dim(top, …)` is in the file). Before: the watchdog fired at 240 s.
+
+## 24. A linked machining document generated refused first: "0/5 ops certified" (ui/bughunt-3)
+
+- `?open=machined/flange_cam.fg`: the page opened the linked file before the project's other
+  files had come (on purpose, for a fast first frame), so its first generation had no
+  `flange.fg`: every op an error, certification refused, "flange_cam.fg · 0/5 ops certified",
+  and Export NC refused, for the seconds until the files came and §20's rebuild ran. Found while
+  checking for the coordinator whether flange_cam's `at:` got lost (it didn't: my sweep project
+  was a copy from before 8cae054a placed every example).
+- The page now starts the app with nothing open, says "Loading project…", and opens the linked
+  file (and `?env=`) once every file is in. `Mirror.loadOne` (the early single-file read) is
+  gone.
+- Test: `web/tests/deeplink.cjs`, a machining case with the project's files held back 4 s
+  (Playwright route on /api/bundle): says "Loading project…", and no generation is seen that
+  is not certified in full. Before: "flange_cam.fg · 0/5 ops certified" on the way.
+  `lib.cjs`'s `page()` takes an optional `prepare(p)` run before the page loads.
 
 ## Open (reported, not fixed here)
 
