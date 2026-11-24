@@ -79,12 +79,15 @@ enum Res<T> {
 impl Ctx {
     /// Runs `f` as op `key`, watched; the time is kept.
     fn run<T>(&mut self, key: &str, f: impl FnOnce() -> T) -> (Res<T>, f64) {
-        if self.skip.contains(key)
-            || self
+        // `--only` picks among the ops on solids: the import and each solid's check, mass and mesh
+        // always run, as the ops' choice of solids follows from them
+        let always = key == "import" || [":check", ":mass", ":mesh"].iter().any(|k| key.ends_with(k));
+        let unwanted = !always
+            && self
                 .only
                 .as_ref()
-                .is_some_and(|o| !o.iter().any(|p| key.ends_with(p.as_str()) || key == p))
-        {
+                .is_some_and(|o| !o.iter().any(|p| key.ends_with(&format!(":{p}")) || key == p));
+        if self.skip.contains(key) || unwanted {
             return (Res::Skipped, 0.0);
         }
         // the op in flight, for the runner if this process dies in it (an abort, a stack overflow)
@@ -112,7 +115,35 @@ fn problems(b: &Body) -> (usize, String) {
             .entry(d.split([' ', '{', '(']).next().unwrap_or("").to_string())
             .or_default() += 1;
     }
-    let first = p.first().map(|x| esc(&format!("{x:?}"))).unwrap_or_default();
+    let first = p
+        .first()
+        .map(|x| {
+            let d = format!("{x:?}");
+            // what the problem's edge and face are: a line on planes, a spline on a cylinder..
+            let id = |tag: &str| {
+                d.find(tag)
+                    .and_then(|i| d[i + tag.len()..].split(')').next()?.parse::<u32>().ok())
+            };
+            let mut what = String::new();
+            if let Some(e) = id("EdgeId(").filter(|&e| (e as usize) < b.edges.len()) {
+                let x = b.edge(forge_topo::EdgeId(e));
+                let k = format!("{:?}", x.curve);
+                what += &format!(
+                    " [edge {} tol {:e} on",
+                    k.split(['(', ' ', '{']).next().unwrap_or(""),
+                    x.tol
+                );
+                for &c in &x.coedges {
+                    what += &format!(" {}", b.face(b.coedge_face(c)).surface.kind());
+                }
+                what += "]";
+            }
+            if let Some(f) = id("FaceId(").filter(|&f| (f as usize) < b.faces.len()) {
+                what += &format!(" [face {}]", b.face(forge_topo::FaceId(f)).surface.kind());
+            }
+            esc(&format!("{d}{what}"))
+        })
+        .unwrap_or_default();
     let k: Vec<String> = kinds.iter().map(|(k, n)| format!("{k}:{n}")).collect();
     (
         p.len(),

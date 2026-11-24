@@ -1197,9 +1197,11 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
             dev
         };
         if dev > LINEAR {
-            // with room over what was measured: `check` measures again, on other points and after
-            // any rigid move, and a tolerance of exactly the gap fails it by the last bit
-            let dev = dev * (1.0 + 1e-6) + 1e-9;
+            // with room over what was measured: `check` measures again, after any rigid move and,
+            // once a boolean has trimmed the edge, at other points, where a gap that peaks between
+            // these samples comes out larger (by 1.7e-5 of it on a spline edge of GM2-5AX): a
+            // tolerance of exactly the gap fails it
+            let dev = dev * (1.0 + 1e-3) + 1e-9;
             body.edges[e.index()].tol = dev;
             stats.tolerant_edges += 1;
             stats.max_edge_tol = stats.max_edge_tol.max(dev);

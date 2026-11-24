@@ -189,3 +189,81 @@ fn a_rim_between_two_seams_at_other_angles_is_split_not_moved() {
         assert!(b.unverified.is_none(), "{:?}", b.unverified);
     }
 }
+
+/// A ring, as written here: two faces on one torus, joined by two meridian circles.
+fn ring() -> String {
+    use forge_math::{Vec2, dmath};
+    use forge_ops::{Axis2, revolve};
+    let p = Profile {
+        plane: Frame::WORLD,
+        loops: vec![Profile::circle(Point2::new(10.0, 0.0), 2.0, 0)],
+    };
+    let axis = Axis2 {
+        origin: Point2::ORIGIN,
+        dir: Vec2::Y,
+    };
+    export(&revolve(&p, axis, dmath::TAU, 1).unwrap(), &Options::default())
+        .unwrap()
+        .text
+}
+
+/// The most an edge strays from its faces, on many more points than any reader takes.
+fn dense_gap(b: &Body, e: forge_topo::EdgeId) -> f64 {
+    use forge_geom::SurfaceGeom;
+    let pts = b.edge_points(e, 20_000);
+    b.edge(e)
+        .coedges
+        .iter()
+        .map(|&c| {
+            let s = &b.face(b.coedge_face(c)).surface;
+            pts.iter()
+                .map(|&p| s.eval(s.project(p)).distance(p))
+                .fold(0.0, f64::max)
+        })
+        .fold(0.0, f64::max)
+}
+
+/// A tolerant edge's tolerance covers its whole gap, not just the gap at the points the reader
+/// measured: `check` measures a trimmed edge at other points, and a gap that peaks between the
+/// reader's samples came out over the tolerance (union_over on GM2-5AX's Edge-Flange3: a spline
+/// edge 1.2577e-4 mm off, tolerance 1.2574e-4). Here a ring's meridian, its centre moved 0.1 um
+/// towards angles between the reader's samples, so the gap peaks there.
+#[test]
+fn a_tolerance_covers_the_gap_between_the_samples() {
+    let text = ring();
+    let at = text.find("CIRCLE('',").expect("a meridian");
+    let place = &text[at + 10..];
+    let id = &place[..place.find(',').unwrap()];
+    let pl = text.find(&format!("{id}=AXIS2_PLACEMENT_3D('',")).unwrap();
+    let pt = &text[pl + id.len() + 23..];
+    let pt = &pt[..pt.find(',').unwrap()];
+    let mut worst = 0.0_f64;
+    for k in 0..16 {
+        let phi = forge_math::dmath::TAU / 255.0 * f64::from(k) / 16.0;
+        let bad = edge_off_at(&text, pt, Vec3::new(1e-4 * phi.cos(), 1e-4 * phi.sin(), 0.0));
+        let imp = import(bad.as_bytes(), &Limits::default()).unwrap();
+        let b = &imp.solids[0].body;
+        for e in b.edge_ids() {
+            let x = b.edge(e);
+            if x.tol > forge_math::tol::LINEAR {
+                let gap = dense_gap(b, e);
+                worst = worst.max(gap / x.tol);
+                assert!(gap <= x.tol, "phi {phi}: gap {gap:e} over tolerance {:e}", x.tol);
+            }
+        }
+    }
+    assert!(worst > 0.5, "the meridian was read as tolerant: {worst}");
+}
+
+/// The file's text with point `pt` (its `#` id) moved by `d`.
+fn edge_off_at(text: &str, pt: &str, d: Vec3) -> String {
+    let p0 = text.find(&format!("{pt}=CARTESIAN_POINT(")).expect("the point");
+    let open = p0 + text[p0..].find("',(").unwrap() + 3;
+    let close = open + text[open..].find(')').unwrap();
+    let xyz: Vec<f64> = text[open..close]
+        .split(',')
+        .map(|v| v.trim().parse().unwrap())
+        .collect();
+    let moved = format!("{:e},{:e},{:e}", xyz[0] + d.x, xyz[1] + d.y, xyz[2] + d.z);
+    format!("{}{}{}", &text[..open], moved, &text[close..])
+}

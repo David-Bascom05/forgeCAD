@@ -22,6 +22,20 @@ def norm(s, n=90):
     return s[:n]
 
 
+def variant(d):
+    """A kernel error by its kind: `Internal(SplitCrossed {..})` -> `Internal(SplitCrossed)`."""
+    m = re.match(r"\s*(\w+)\((\w+)", d or "")
+    if m:
+        return f"{m.group(1)}({m.group(2)})"
+    m = re.match(r"\s*(\w+) \{", d or "")
+    if m:
+        return m.group(1)
+    m = re.match(r"\s*(check|mass|mesh): (\w+)", d or "")
+    if m:
+        return f"{m.group(1)}: {m.group(2)}"
+    return norm(d, 60)
+
+
 def family(op):
     if op.startswith("sec_"):
         return "section"
@@ -90,6 +104,7 @@ def main():
     curv = Counter()
     worst = []  # (score, text)
     totals = Counter()
+    opcount = defaultdict(Counter)  # (group, status, variant) -> op family -> count
 
     def cat(cls, detail, where):
         k = (cls, norm(detail))
@@ -153,8 +168,13 @@ def main():
             stt = e["st"]
             if stt == "ok" or stt == "empty":
                 continue
+            if stt == "harness":
+                continue
             r[stt] += 1
-            cat(f"{family(op)}: {stt}", e.get("d", ""), w)
+            fam = family(op)
+            group = "section" if fam == "section" else ("oracle" if fam.endswith("_sum") else "boolean")
+            cat(f"{group} {stt}", variant(e.get("d", "")), w)
+            opcount[(group, stt, variant(e.get("d", "")))][fam] += 1
             if stt in ("wrong", "panic"):
                 worst.append((3 if stt == "wrong" else 2, w, e.get("d", "")))
         for h in f["hangs"]:
@@ -211,11 +231,14 @@ def main():
 
     p("## Failure classes")
     p()
-    p("| class | detail | count | first seen |")
-    p("|---|---|---:|---|")
+    p("| class | detail | count | ops | first seen |")
+    p("|---|---|---:|---|---|")
     order = sorted(cats.items(), key=lambda kv: (-kv[1], kv[0]))
     for (cls, det), n in order:
-        p(f"| {cls} | {det.replace('|', '/')} | {n} | {examples[(cls, det)].replace('|', '/')} |")
+        g = cls.split(" ")
+        ops = opcount.get((g[0], " ".join(g[1:]), det))
+        ops = ", ".join(f"{k} {v}" for k, v in ops.most_common()) if ops else ""
+        p(f"| {cls} | {det.replace('|', '/')} | {n} | {ops} | {examples[(cls, det)].replace('|', '/')} |")
     p()
 
     p("## Worst 10")
