@@ -638,6 +638,39 @@ pub fn adaptive(
                     phase: Phase::Link,
                 });
             } else {
+                if cur[2] == z && std::env::var_os("FORGE_ADAPTIVE_DIAG").is_some() {
+                    // what blocks the straight link: the highest material over the tool's disk
+                    // along it, above the level; and whether any unused start was in reach
+                    let (a, b) = ([cur[0], cur[1]], p);
+                    let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+                    let n = (l / f.map.h).ceil().max(1.0) as usize;
+                    let rr = f.r + f.map.h;
+                    let mut block = f64::NEG_INFINITY;
+                    for k in 0..=n {
+                        let t = k as f64 / n as f64;
+                        let (x, y) = (a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]));
+                        let m = (rr / f.map.h).ceil() as i64;
+                        for j in -m..=m {
+                            for i in -m..=m {
+                                let (dx, dy) = (i as f64 * f.map.h, j as f64 * f.map.h);
+                                if dx * dx + dy * dy <= rr * rr && inside(&f.work, x + dx, y + dy) {
+                                    block = block.max(f.map.top(x + dx, y + dy) - z);
+                                }
+                            }
+                        }
+                    }
+                    let mut near: Vec<&[f64; 2]> = cands
+                        .iter()
+                        .filter(|c| **c != p && !f.disk_has_material(c[0], c[1], z))
+                        .collect();
+                    near.sort_by(|u, v| {
+                        let du = (u[0] - a[0]).powi(2) + (u[1] - a[1]).powi(2);
+                        let dv = (v[0] - a[0]).powi(2) + (v[1] - a[1]).powi(2);
+                        du.total_cmp(&dv)
+                    });
+                    let reach = near.iter().take(40).any(|c| f.link_clear(a, **c, z));
+                    eprintln!("diag retract len={l:.2} block={block:.3} other_reachable={reach}");
+                }
                 f.retract_link(&mut mv, cur, target, h.retract, feed, &back);
             }
             moves_at_level.push((target, target));
