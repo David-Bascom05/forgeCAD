@@ -421,8 +421,9 @@ fn line_in_range(l: &Line, range: Interval, s: &Surface) -> CurveSurface {
 /// A line within ANGULAR of parallel to a plane, over `range`: `line_plane_t` decided On or Apart
 /// at the line's origin, which a long range can carry more than LINEAR off (B1,
 /// research/kernel-audit/tilt-wrong-ok.md: an edge 1.6e7 long at 5e-12 rad to a wall). The signed
-/// distance is affine along the line: decided at the range's ends instead, a crossing where they
-/// take opposite signs beyond LINEAR, On where both are within it, else Apart.
+/// distance is affine along the line: decided at the range's ends instead, On where both are
+/// within LINEAR, a crossing where they change sign (as off parallel), else Apart. `m`, the
+/// origin's answer, stands only for an unbounded range.
 #[cold]
 #[inline(never)]
 fn near_parallel_in(l: &Line, range: Interval, p: &Plane, m: PlaneMeet) -> PlaneMeet {
@@ -443,8 +444,13 @@ fn near_parallel_in(l: &Line, range: Interval, p: &Plane, m: PlaneMeet) -> Plane
     if (d0 > tol::LINEAR && d1 > tol::LINEAR) || (d0 < -tol::LINEAR && d1 < -tol::LINEAR) {
         return PlaneMeet::Apart;
     }
-    // one end within LINEAR, the other beyond: the line leaves the plane there; as decided
-    m
+    // one end within LINEAR, the other beyond: a sign change (an end on the plane included) is
+    // the crossing, inside the range, as off parallel; else none in the range (an end within
+    // LINEAR on the far side's sign is no crossing, as off parallel, where t falls outside)
+    if (d0 <= 0.0 && d1 > 0.0) || (d0 >= 0.0 && d1 < 0.0) {
+        return PlaneMeet::At(range.lo + range.width() * (d0 / (d0 - d1)));
+    }
+    PlaneMeet::Apart
 }
 
 /// (frame, A, b, c) of Q(p) = p.A.p + b.p + c.
@@ -1351,6 +1357,22 @@ mod tests {
         assert!(
             matches!(curve_surface(&Curve::Line(off), range, &Surface::Plane(wall)), CurveSurface::Hits(h) if h.is_empty())
         );
+        // one end within LINEAR (0.5e-5), the other beyond on the other side (-5.5e-5), the
+        // origin 2e-5 off: the crossing near the first end is kept (once the origin's Apart)
+        let (a, b) = (Point3::new(-4e6, 2e-5, 0.0), Point3::new(1.2e7, -6e-5, 0.0));
+        let near_end = Line {
+            origin: a,
+            dir: (b - a).normalize().unwrap(),
+        };
+        let from = a.distance(Point3::new(-1e6, 0.5e-5, 0.0));
+        let r = Interval::new(from, a.distance(b) - 1e6);
+        match curve_surface(&Curve::Line(near_end), r, &Surface::Plane(wall)) {
+            CurveSurface::Hits(h) => {
+                assert_eq!(h.len(), 1, "{h:?}");
+                assert!(h[0].point.y.abs() < 1e-9, "{h:?}");
+            }
+            other => panic!("{other:?}"),
+        }
     }
 
     /// A spindle's quartic also holds its other sheet (apple for lemon): a line hits only the used one.
