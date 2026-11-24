@@ -808,8 +808,10 @@ fn a_ghost_is_drawn_at_its_opacity() {
 
 /// Near (David; UX-LEAD's words): a clearance proven only within the simulation's resolution of
 /// its limit is not a pass but a mild warning, "near", listed after the warnings and before the
-/// passes, never hidden behind the step's "Passes" badge. A narrow, tall channel on the
-/// standard tooling, on no press, has one.
+/// passes, never hidden behind the step's "Passes" badge. The panel's side of it: a step's tool
+/// clearance made a Near as forge-brake makes one (which of a part's pairs end near is the
+/// kernel's, tested there; a finer search proves most of them clear), on a narrow channel whose
+/// step also has a warning.
 #[test]
 fn a_near_clearance_is_listed_as_near() {
     let Some(mut h) = headless() else { return };
@@ -832,22 +834,23 @@ left = flange(base.edge(plan.outline[3]), height: 60)\n";
     h.step();
     h.step();
     let b = h.gui.shell.sheet.bend_sim.as_mut().expect("simulated");
-    let plan = &b.sim.as_ref().expect("a program").plan;
-    assert!(plan.feasible, "Near never makes a program infeasible");
-    let at = plan
-        .steps
+    let plan = &mut b.sim.as_mut().expect("a program").plan;
+    assert!(plan.feasible);
+    let at = plan.steps.len() - 1;
+    let s = &mut plan.steps[at];
+    let k = s
+        .checks
         .iter()
-        .position(|s| s.checks.iter().any(|c| c.near.is_some()))
-        .expect("a near clearance on some step");
-    let s = &plan.steps[at];
+        .position(|c| c.rule == forge_brake::Rule::ToolCollision && c.pass)
+        .expect("a passing tool clearance");
+    let was = s.checks[k].clone();
+    let mut c = forge_brake::Check::near(was.rule, was.limit - 0.004, was.limit, was.limit / 4.0);
+    c.tool = was.tool.clone();
+    c.phase = was.phase;
+    s.checks[k] = c;
     assert!(s.pass(), "a near is a warning: the step still passes");
-    let c = s.checks.iter().find(|c| c.near.is_some()).unwrap();
-    assert!(!c.pass && c.severity == forge_brake::Severity::Warning);
-    assert!(
-        c.bound
-            .is_some_and(|l| l < c.limit && l >= c.limit - c.near.unwrap()),
-        "{c:?}"
-    );
+    let c = &s.checks[k];
+    assert!(!c.pass && c.severity == forge_brake::Severity::Warning && c.near.is_some());
     b.step = at;
     b.all_checks = true;
     for _ in 0..4 {
