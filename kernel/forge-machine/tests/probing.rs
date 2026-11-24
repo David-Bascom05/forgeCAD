@@ -42,7 +42,10 @@ fn probe_setter_and_homing_read() {
     assert_eq!(d.setters[0].dir, [0.0, 0.0, 1.0]);
     assert_eq!(
         d.homing,
-        Some(vec![vec!["Z".to_string()], vec!["X".to_string(), "Y".to_string()]])
+        Some(vec![
+            vec!["Z".to_string()],
+            vec!["X".to_string(), "Y".to_string()]
+        ])
     );
     let paths = d.cite_paths();
     for p in ["probe.p", "setter.s.at", "setter.s.dir", "homing"] {
@@ -77,4 +80,91 @@ fn refusals() {
         .unwrap_err();
         assert!(e.contains("table side"), "{e}");
     }
+}
+
+// ---- skip (probe) moves in the interpreter and the simulation ----
+
+use forge_machine::gcode::{self, Control, Ev};
+use forge_machine::library::builtin;
+use forge_machine::sim::{self, Cut, Happening, Setup, SimTool};
+
+fn skip_control(codes: &[u16]) -> Control {
+    let mut c = Control::mill3(3, 1, false);
+    c.skip = codes.to_vec();
+    c
+}
+
+#[test]
+fn a_skip_move_is_refused_unless_the_dialect_cites_it() {
+    let e = gcode::run("G90 G0 X0. Y0. Z10.\nG38.2 Z-5. F100.\n", &skip_control(&[])).unwrap_err();
+    assert!(e.what.contains("not in the subset"), "{e:?}");
+    let e = gcode::run("G90 G0 X0. Y0. Z10.\nG31 Z-5. F100.\n", &skip_control(&[382])).unwrap_err();
+    assert!(e.what.contains("not in the subset"), "{e:?}");
+}
+
+#[test]
+fn a_skip_move_leaves_its_axes_unknown() {
+    let c = skip_control(&[382]);
+    let (bs, st) = gcode::run("G90 G0 X0. Y0. Z10.\nG38.2 Z-5. F100.\n", &c).unwrap();
+    let sk = bs.iter().find_map(|b| match &b.ev {
+        Ev::Skip { to, f, code } => Some((to.clone(), *f, *code)),
+        _ => None,
+    });
+    assert_eq!(sk, Some((vec![None, None, Some(-5000)], 1000, 382)));
+    assert_eq!(st.core.pos, vec![Some(0), Some(0), None]);
+    // incremental from the unknown Z: refused; absolute: fine
+    let e = gcode::run("G90 G0 X0. Y0. Z10.\nG38.2 Z-5. F100.\nG91 G0 Z1.\n", &c).unwrap_err();
+    assert!(e.what.contains("unknown position"), "{e:?}");
+    gcode::run("G90 G0 X0. Y0. Z10.\nG38.2 Z-5. F100.\nG90 G0 Z10.\n", &c).unwrap();
+    // a bare axis word after it: no motion mode is assumed
+    assert!(gcode::run("G90 G0 X0. Y0. Z10.\nG38.2 Z-5. F100.\nZ10.\n", &c).is_err());
+    // incremental skip from a known start
+    let (bs, _) = gcode::run("G90 G0 X0. Y0. Z10.\nG91 G38.2 Z-5. F100.\n", &c).unwrap();
+    assert!(
+        bs.iter()
+            .any(|b| matches!(&b.ev, Ev::Skip { to, .. } if to[2] == Some(5000)))
+    );
+    for (prog, want) in [
+        ("G90 G0 X0. Y0. Z10.\nG38.2 Z-5.\n", "no feed"),
+        ("G38.2 Z-5. F100.\n", "unknown position"),
+        ("G90 G0 X0. Y0. Z10.\nG1 G38.2 Z-5. F100.\n", "another motion"),
+        ("G90 G0 X0. Y0. Z10.\nG38.2 F100.\n", "no axis word"),
+    ] {
+        let e = gcode::run(prog, &c).unwrap_err();
+        assert!(e.what.contains(want), "{prog}: {e:?}");
+    }
+}
+
+#[test]
+fn the_simulation_sweeps_a_skip_to_its_end_and_counts_no_time_for_it() {
+    let m = builtin().remove(0);
+    let mut c = Control::for_dialect(&m, "fanuc", 1).unwrap();
+    c.skip = vec![310];
+    let mut s = Setup::new(&m, c).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -300.0])];
+    s.tools = vec![SimTool {
+        t: 1,
+        name: "probe".into(),
+        tip: [0.0, 0.0, -100.0],
+        body: vec![(3.0, 0.0, 50.0), (20.0, 50.0, 100.0)],
+        cut: Cut::Mill { r: 3.0, corner: 3.0 },
+    }];
+    s.h = vec![(1, 100.0)];
+    let prog = "G90 G17 G21\nT1 M06\nG54\nG43 H1\nG0 X10. Y20. Z5.\nG31 Z-10. F200.\nG0 Z5.\n";
+    let tl = sim::simulate(prog, &s).unwrap();
+    let k = tl
+        .marks
+        .iter()
+        .position(|m| m.what == Happening::Skip { code: 310 })
+        .unwrap();
+    let ln = tl.marks[k].line;
+    let seg = tl.segments.iter().find(|sg| sg.line == ln).unwrap();
+    assert_eq!(seg.t_min, 0.0);
+    assert!(seg.t_stop > 0.0);
+    // swept to its programmed end (15 mm down)
+    let z = tl.joints.iter().position(|j| j == "Z").unwrap();
+    assert!((seg.q0[z] - seg.q1[z] - 15.0).abs() < 1e-9);
+    let un = sim::unchecked(&m, &tl);
+    assert!(un.iter().any(|u| u.path == "skip.end" && u.line == ln));
+    assert!(sim::timeline_json(&tl).contains("\"skip\",\"g\":\"G31\""));
 }

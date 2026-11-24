@@ -8,6 +8,8 @@
 //!   G17 G18 G19, G21 (G20 inch is refused), G28 (home through an intermediate point), G40, G43 H
 //!   G49, G53 (non-modal machine move), G54–G59, G64, G80–G85 G73 with G98 G99, G90 G91, G93 G94
 //!   G95, G96 G97, G50 S (lathe: spindle clamp), G187 (Haas smoothing: no motion effect).
+//! - skip (probe) moves G38.2–G38.5 / G31 where the dialect's `probe_move` names them (`Ev::Skip`,
+//!   the shell's: outside the proven core).
 //! - M0 M1 M2 M30 M3 M4 M5 M6 M7 M8 M9 M88 M89.
 //!
 //! Numbers: a word's value is held as an integer count of 10^-k (coordinates: k = `decimals`;
@@ -35,6 +37,29 @@ fn ge(line: usize, what: impl Into<String>) -> GError {
         line,
         what: what.into(),
     }
+}
+
+/// The skip codes a dialect's `probe_move` templates name: each template's leading G word
+/// (`"G38.2 {axes} F{f}"` → 382, `"G31 {axes} F{f}"` → 310). Lines of a list each count.
+fn skip_codes(d: &forge_tooling::toml::Table) -> Vec<u16> {
+    use forge_tooling::toml;
+    let ts = toml::texts(d, "probe_move")
+        .or_else(|| toml::text(d, "probe_move").map(|t| vec![t.to_string()]))
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for t in ts {
+        for w in t.split_whitespace() {
+            if let Some(g) = w.strip_prefix('G')
+                && let Ok(v) = g.parse::<f64>()
+            {
+                let v = (v * 10.0).round();
+                if (0.0..=9999.0).contains(&v) && !out.contains(&(v as u16)) {
+                    out.push(v as u16);
+                }
+            }
+        }
+    }
+    out
 }
 
 /// What the interpreter needs to know about the control and the machine's words.
@@ -66,6 +91,9 @@ pub struct Control {
     pub channel: u8,
     /// The dialect's lexical extras, read in this shell before the words reach the core.
     pub lex: Lex,
+    /// The skip (probe) moves this dialect cites, in tenths (G38.2 = 382, G31 = 310): from its
+    /// `probe_move` template. Empty: a skip move is refused as outside the subset.
+    pub skip: Vec<u16>,
 }
 
 /// A dialect's text conventions beyond the Fanuc words the core interprets (forge-post's
@@ -122,6 +150,7 @@ impl Control {
             wait_m: None,
             channel: 1,
             lex: Lex::default(),
+            skip: Vec::new(),
         }
     }
 
@@ -208,6 +237,7 @@ impl Control {
                 [lo, hi] if lo <= hi && *lo >= 0.0 => Some((*lo as u32, *hi as u32)),
                 _ => None,
             }),
+            skip: skip_codes(d),
         })
     }
 
@@ -229,7 +259,7 @@ impl Control {
         Control::for_machine(def, src, channel)
     }
 
-    fn idx(&self, c: char) -> Option<usize> {
+    pub fn idx(&self, c: char) -> Option<usize> {
         self.letters.iter().position(|l| *l == c)
     }
 }
@@ -324,6 +354,15 @@ pub enum Ev {
     /// A multi-channel wait (Fanuc M100–M199 by the dialect's `wait_m`): this channel holds until
     /// every channel with the same wait reaches it.
     Wait(u32),
+    /// A skip (probe) move, G38.2–G38.5 or G31 (`code` in tenths): a feed toward `to` that stops
+    /// somewhere unknown along it when the probe triggers (G38.4/.5: when contact is lost). The
+    /// simulation sweeps the whole segment; afterwards the moved axes' positions are unknown to
+    /// the interpreter until an absolute word sets them.
+    Skip {
+        to: Vec<Option<Q>>,
+        f: Q,
+        code: u16,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -661,47 +700,48 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
     let has_g = |g: u16| gs.contains(&(g * 10));
     // the G codes we know, by group; anything else is refused
     for g in &gs {
-        let ok = matches!(
-            *g,
-            0 | 10
-                | 20
-                | 30
-                | 40
-                | 170
-                | 180
-                | 190
-                | 210
-                | 280
-                | 400
-                | 430
-                | 490
-                | 500
-                | 530
-                | 540
-                | 550
-                | 560
-                | 570
-                | 580
-                | 590
-                | 640
-                | 730
-                | 800
-                | 810
-                | 820
-                | 830
-                | 840
-                | 850
-                | 900
-                | 910
-                | 930
-                | 940
-                | 950
-                | 960
-                | 970
-                | 980
-                | 990
-                | 1870
-        );
+        let ok = c.skip.contains(g)
+            || matches!(
+                *g,
+                0 | 10
+                    | 20
+                    | 30
+                    | 40
+                    | 170
+                    | 180
+                    | 190
+                    | 210
+                    | 280
+                    | 400
+                    | 430
+                    | 490
+                    | 500
+                    | 530
+                    | 540
+                    | 550
+                    | 560
+                    | 570
+                    | 580
+                    | 590
+                    | 640
+                    | 730
+                    | 800
+                    | 810
+                    | 820
+                    | 830
+                    | 840
+                    | 850
+                    | 900
+                    | 910
+                    | 930
+                    | 940
+                    | 950
+                    | 960
+                    | 970
+                    | 980
+                    | 990
+                    | 1870
+            );
         if !ok {
             let what = match g {
                 200 => "G20 (inch) is not modelled: post in mm".to_string(),
@@ -925,6 +965,76 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         }
         for i in axes {
             st.core.pos[i] = None;
+        }
+        for e in stop.into_iter().chain(after_stop) {
+            push(out, e);
+        }
+        return Ok(());
+    }
+    // 5c. a skip (probe) move: the shell's, outside the proven core (docs/cam-machine.md). Its
+    // end is unknown, so the moved axes' program position becomes unknown, and the motion mode
+    // is cleared (G38.x is modal on LinuxCNC, G31 one-shot on Fanuc: a bare axis word after it
+    // is refused rather than read either way).
+    if let Some(code) = gs.iter().copied().find(|g| c.skip.contains(g)) {
+        if !motion_gs.is_empty() || gs.iter().filter(|g| c.skip.contains(g)).count() > 1 {
+            return Err(ge(ln, "a skip move with another motion code in the block"));
+        }
+        if has_g(28) || get('I').is_some() || get('J').is_some() || get('K').is_some() || get('R').is_some() {
+            return Err(ge(ln, "a skip move with arc or home words"));
+        }
+        if st.feed_mode != FeedMode::PerMin {
+            return Err(ge(ln, "a skip move needs G94 (feed per minute)"));
+        }
+        if !any_axis {
+            return Err(ge(ln, "a skip move with no axis word"));
+        }
+        let abs = absolute.unwrap_or(st.core.absolute);
+        let mut to: Vec<Option<Q>> = vec![None; axis.len()];
+        for i in 0..axis.len() {
+            if let Some(v) = axis[i] {
+                to[i] = Some(if abs {
+                    v
+                } else {
+                    let p = st.core.pos[i]
+                        .ok_or_else(|| ge(ln, refusal(mcore::Refuse::IncrementalFromUnknown)))?;
+                    p.checked_add(v)
+                        .ok_or_else(|| ge(ln, "a coordinate past the word range"))?
+                });
+            }
+        }
+        // the start must be known on every axis the move names (the segment starts there)
+        if (0..axis.len()).any(|i| axis[i].is_some() && st.core.pos[i].is_none()) {
+            return Err(ge(ln, "a skip move from an unknown position"));
+        }
+        let f = f_word
+            .or(st.core.feed)
+            .ok_or_else(|| ge(ln, "a skip move with no feed"))?;
+        if f == 0 {
+            return Err(ge(ln, "a skip move at feed 0"));
+        }
+        st.core.feed = Some(f);
+        if let Some(a) = absolute {
+            st.core.absolute = a;
+        }
+        for p in [17u16, 18, 19] {
+            if has_g(p) {
+                st.core.plane = p as u32;
+            }
+        }
+        st.core.mode = None;
+        st.core.cyc = None;
+        push(
+            out,
+            Ev::Skip {
+                to: to.clone(),
+                f,
+                code,
+            },
+        );
+        for (i, t) in to.iter().enumerate() {
+            if t.is_some() {
+                st.core.pos[i] = None;
+            }
         }
         for e in stop.into_iter().chain(after_stop) {
             push(out, e);

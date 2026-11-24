@@ -1430,8 +1430,13 @@ impl MachineDef {
             let rec = format!("{m} setter `{sn}`");
             setters.push(Setter {
                 device: need_text(p, &rec, "device", "give `device`, a forge-probe device id")?.to_string(),
-                body: need_text(p, &rec, "body", "give `body`, the [[machine.body]] that is its envelope")?
-                    .to_string(),
+                body: need_text(
+                    p,
+                    &rec,
+                    "body",
+                    "give `body`, the [[machine.body]] that is its envelope",
+                )?
+                .to_string(),
                 at: need_vec::<3>(p, &rec, "at", "give `at`, the trigger point, home pose")?,
                 dir: unit(p, &rec, "dir", "give `dir`, the device's up direction")?,
                 name: sn,
@@ -1602,7 +1607,10 @@ impl MachineDef {
                 return Err(DefError::Bad {
                     record: rec,
                     field: "body",
-                    why: format!("rides `{}`, a head joint: a tool setter sits on the table side", b.link),
+                    why: format!(
+                        "rides `{}`, a head joint: a tool setter sits on the table side",
+                        b.link
+                    ),
                 });
             }
         }

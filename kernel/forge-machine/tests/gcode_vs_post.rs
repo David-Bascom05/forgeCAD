@@ -199,6 +199,7 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
                 });
             }
             Ev::Arc { .. } => panic!("an arc forge-post does not write"),
+            Ev::Skip { .. } => panic!("a skip move: forge-post's probe records are not in this comparison"),
             Ev::Dwell { ms } => out.push(Motion::Dwell(*ms)),
             Ev::Tool { t, .. } => out.push(Motion::Tool(*t)),
             Ev::Spindle { s, cw, .. } => out.push(Motion::Spindle(*s, *cw)),

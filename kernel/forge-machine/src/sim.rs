@@ -425,6 +425,13 @@ pub enum Happening {
     Wait {
         n: u32,
     },
+    /// A skip (probe) move starts (G38.2–.5 / G31, `code` in tenths): the segment after this mark
+    /// is swept to its programmed end, but the machine stops where the probe triggers, which the
+    /// simulation does not know: its time counts 0 in `t_min`, and the moves after it start from
+    /// the segment's end (reported by `unchecked` as `skip.end`).
+    Skip {
+        code: u16,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -600,6 +607,29 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     push_seg(&mut tl, &mut t, &mut t_est, seg);
                 }
                 q = qh;
+            }
+            Ev::Skip { to, f, code } => {
+                let q1 = to_q(to, &q, &wcs, &toff);
+                mark(&mut tl, t, Happening::Skip { code: *code });
+                let mut seg = feed_seg(
+                    s,
+                    ln,
+                    SegKind::Feed,
+                    &q,
+                    &q1,
+                    Path::Line,
+                    q_to_f(*f, fk),
+                    FeedMode::PerMin,
+                    spindle,
+                    css_now,
+                    t,
+                    tool,
+                    &mut tl,
+                )?;
+                // it may trigger at once: 0 is the lower bound; the estimate runs to the end
+                seg.t_min = 0.0;
+                push_seg(&mut tl, &mut t, &mut t_est, seg);
+                q = q1;
             }
             Ev::Feed { to, f, mode } => {
                 let q1 = to_q(to, &q, &wcs, &toff);
@@ -1475,6 +1505,10 @@ pub fn timeline_json(tl: &Timeline) -> String {
             Happening::End => "\"end\"".into(),
             Happening::PalletChange { seconds } => format!("\"pallet\",\"seconds\":{}", num(*seconds)),
             Happening::Wait { n } => format!("\"wait\",\"n\":{n}"),
+            Happening::Skip { code } => match code % 10 {
+                0 => format!("\"skip\",\"g\":\"G{}\"", code / 10),
+                d => format!("\"skip\",\"g\":\"G{}.{d}\"", code / 10),
+            },
         };
         o.push_str(&format!(
             "{{\"line\":{},\"at\":{},\"what\":{what}}}",
@@ -1663,6 +1697,8 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
                     );
                 }
             }
+            // where a skip move stops is not known here: the moves after it start from its end
+            Happening::Skip { .. } => note("skip.end".into(), false, m.line, "moves after a skip move"),
             _ => {}
         }
     }
