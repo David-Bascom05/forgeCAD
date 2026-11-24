@@ -6,6 +6,7 @@
 
 use super::ribbon::{Group, Tool};
 use super::{Action, Shell};
+use crate::shell::placed::Placed;
 use egui::{RichText, pos2, vec2};
 
 /// A capture command.
@@ -73,6 +74,9 @@ pub struct CaptureUi {
     pub format: Format,
     /// The view cube in the picture too (off: the picture is the model alone).
     pub overlays: bool,
+    /// The view's camera exactly; off: the subject framed to fill the picture (70 %) from the
+    /// view's direction, whatever the picture's shape (photos and turntables).
+    pub exact_view: bool,
     /// The folder photos and recordings go to; empty: the document's folder.
     pub folder: String,
     /// The exact file (a photo's PNG, a video's MP4, or the frames' folder) the next capture
@@ -98,6 +102,7 @@ impl Default for CaptureUi {
             orbit_seconds: 12.0,
             format: Format::Mp4,
             overlays: false,
+            exact_view: false,
             folder: String::new(),
             out: None,
             settings_open: false,
@@ -186,6 +191,42 @@ fn row(ui: &mut egui::Ui, label: String, control: impl FnOnce(&mut egui::Ui)) {
     });
 }
 
+/// Radio buttons in a row with room between them, so each reads as its own.
+fn radios<T: PartialEq + Copy>(ui: &mut egui::Ui, value: &mut T, options: &[(T, &str)]) {
+    for (k, (v, text)) in options.iter().enumerate() {
+        if k > 0 {
+            ui.add_space(10.0);
+        }
+        ui.radio_value(value, *v, *text);
+    }
+}
+
+/// The folder captures go to: its last part (`…/name`), the whole path on hover, Choose… for the
+/// system's picker, and Reset back to the document's folder.
+fn folder_row(ui: &mut egui::Ui, folder: &mut String) {
+    let f = folder.trim();
+    let shown = if f.is_empty() {
+        "the document's folder".to_string()
+    } else {
+        let name = std::path::Path::new(f)
+            .file_name()
+            .map_or_else(|| f.to_string(), |n| n.to_string_lossy().into_owned());
+        format!("…/{name}")
+    };
+    let r = ui.add(egui::Label::new(shown).truncate());
+    if !f.is_empty() {
+        r.on_hover_text(f);
+    }
+    if ui.button("Choose…").clicked()
+        && let Some(p) = crate::plat::pick_folder("Folder for photos and recordings")
+    {
+        *folder = p;
+    }
+    if !folder.trim().is_empty() && ui.small_button("Reset").clicked() {
+        folder.clear();
+    }
+}
+
 fn size_row(ui: &mut egui::Ui, id: &str, label: &str, size: &mut Size, window: (u32, u32)) {
     row(ui, label.into(), |ui| {
         let (w, h) = size.pixels(window);
@@ -228,40 +269,58 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
     if s.capture.settings_open {
         let mut open = true;
         let mut c = std::mem::take(&mut s.capture);
+        let mut places = std::mem::take(&mut s.places);
         let v = s.view_rect;
         let r = egui::Window::new("Capture Settings")
-            .open(&mut open)
+            .id(egui::Id::unique("capture-settings"))
+            .title_bar(false)
             .collapsible(false)
             .resizable(false)
-            .default_pos(pos2(v.right() - 360.0, v.top() + 60.0))
+            .frame(super::fgasm::dialog_frame(&t))
+            .default_pos(pos2(v.right() - 380.0, v.top() + 60.0))
             .constrain_to(v)
-            .show(ctx, |ui| {
+            .show_placed(ctx, &mut places, |ui, places| {
+                if super::fgasm::dialog_head(
+                    ui,
+                    &t,
+                    "options",
+                    "Capture Settings",
+                    "capture:settings",
+                    places,
+                ) {
+                    open = false;
+                }
+                ui.add_space(4.0);
                 ui.spacing_mut().slider_width = 170.0;
+                ui.spacing_mut().item_spacing.y = 8.0;
                 size_row(ui, "capture-photo-size", "Photo size", &mut c.photo_size, window);
                 ui.separator();
                 size_row(ui, "capture-video-size", "Video size", &mut c.size, window);
                 row(ui, "Frame rate".into(), |ui| {
-                    for f in [24, 30, 60] {
-                        ui.radio_value(&mut c.fps, f, format!("{f} fps"));
-                    }
+                    radios(ui, &mut c.fps, &[(24, "24 fps"), (30, "30 fps"), (60, "60 fps")]);
                 });
-                row(ui, format!("Turntable {:.0} s", c.orbit_seconds), |ui| {
+                row(ui, "Turntable".into(), |ui| {
                     ui.add(egui::Slider::new(&mut c.orbit_seconds, 2.0..=60.0).show_value(false));
+                    ui.label(format!("{:.0} s", c.orbit_seconds));
                 });
                 row(ui, "Record as".into(), |ui| {
-                    ui.radio_value(&mut c.format, Format::Mp4, "MP4 video");
-                    ui.radio_value(&mut c.format, Format::Frames, "PNG frames");
+                    radios(
+                        ui,
+                        &mut c.format,
+                        &[(Format::Mp4, "MP4 video"), (Format::Frames, "PNG frames")],
+                    );
+                });
+                ui.separator();
+                row(ui, "Framing".into(), |ui| {
+                    ui.checkbox(&mut c.exact_view, "Use the view exactly");
                 });
                 row(ui, "View overlays".into(), |ui| {
                     ui.checkbox(&mut c.overlays, "Include the view cube");
                 });
-                row(ui, "Folder".into(), |ui| {
-                    ui.add(
-                        egui::TextEdit::singleline(&mut c.folder)
-                            .hint_text("the document's folder")
-                            .desired_width(180.0),
-                    );
-                });
+                // the browser's downloads have no folder to choose
+                if !cfg!(target_arch = "wasm32") {
+                    row(ui, "Folder".into(), |ui| folder_row(ui, &mut c.folder));
+                }
             });
         // Enter and Esc close it, as a dialog's keys do
         let keys = ctx.input(|i| i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Escape));
@@ -270,8 +329,9 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
         }
         if let Some(r) = r {
             s.view_blocks.push(r.response.rect);
-            s.places.push(("capture:settings".into(), r.response.rect));
+            places.push(("capture:settings".into(), r.response.rect));
         }
+        s.places = places;
         c.settings_open = open;
         s.capture = c;
     }
@@ -294,7 +354,18 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
                                     .font(super::theme::sans(13.0))
                                     .color(t.ink),
                             );
-                            ui.add(egui::ProgressBar::new(k as f32 / n.max(1) as f32).desired_width(120.0));
+                            // a plain bar: a track and its fill, no knob
+                            ui.add_space(10.0);
+                            let (bar, _) = ui.allocate_exact_size(vec2(120.0, 6.0), egui::Sense::hover());
+                            let p = ui.painter();
+                            p.rect_filled(bar, 3.0, t.line);
+                            let done = (k as f32 / n.max(1) as f32).clamp(0.0, 1.0);
+                            if done > 0.0 {
+                                let mut fill = bar;
+                                fill.set_width(bar.width() * done);
+                                p.rect_filled(fill, 3.0, t.accent);
+                            }
+                            ui.add_space(10.0);
                             let r = ui.button(RichText::new("Stop").font(super::theme::sans(13.0)));
                             s.places.push(("capture:stop".into(), r.rect));
                             stop |= r.clicked();

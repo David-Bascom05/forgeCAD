@@ -103,7 +103,12 @@ pub fn commands() -> Vec<KeyCommand> {
             id: r[0].clone(),
             name: r[1].clone(),
             group: r[2].clone(),
-            default: Chord::parse(&r[3]),
+            // the browser's own where it has one (a key the browser keeps for itself natively free)
+            default: Chord::parse(
+                r.get(5)
+                    .filter(|w| cfg!(target_arch = "wasm32") && !w.is_empty())
+                    .unwrap_or(&r[3]),
+            ),
             fixed: r.get(4).is_some_and(|f| f == "fixed" || f == "context"),
             context: r.get(4).is_some_and(|f| f == "context"),
         })

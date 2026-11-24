@@ -71,6 +71,18 @@ async function download(p, words) {
     await p.evaluate(() => window.forgecad.fc.app_open("/project/examples/machined/flange.fg"));
     await t.until(p, (s) => s.built?.checked && s.done >= s.seq, "the build");
 
+    // FORGE_WEB_SHOTS=DIR: the settings window, as the browser draws it
+    if (process.env.FORGE_WEB_SHOTS) {
+      // Capture is on the View tab in the design view
+      await p.evaluate(() => window.forgecad.fc.app_click("tab:View", 0, false));
+      await t.pixels(p);
+      await t.until(p, (s) => s.places.some((q) => q.name === "tool:Capture Settings"), "Capture on the View tab");
+      await p.evaluate(() => window.forgecad.fc.app_click("tool:Capture Settings", 0, false));
+      await t.pixels(p);
+      console.log(`  ${t.shot("web-capture-settings.png", await t.pixels(p))}`);
+      await p.evaluate(() => window.forgecad.fc.app_click("tool:Capture Settings", 0, false));
+      await t.pixels(p);
+    }
     const photo = await download(p, "photo 320x200");
     assert.match(photo.name, /^flange-view-\d{8}-\d{6}\.png$/);
     assert.equal(photo.bytes.readUInt32BE(16), 320);
@@ -110,6 +122,14 @@ async function download(p, words) {
       window.forgecad.fc.app_env("bendsim");
     }, CHANNEL);
     await t.until(p, (s) => s.env === "bendsim" && s.done >= s.seq, "in Bend Simulation");
+    if (process.env.FORGE_WEB_SHOTS) {
+      // the pill, part way through a recording
+      await p.evaluate(() => window.forgecad.fc.app_capture("record 640x360 fps=10"));
+      await t.until(p, (s) => s.capture?.frame?.[0] >= 10, "a recording under way");
+      console.log(`  ${t.shot("web-recording.png", await t.pixels(p))}`);
+      await p.evaluate(() => window.forgecad.fc.app_click("capture:stop", 0, false));
+      await t.until(p, (s) => !s.capture.busy, "stopped");
+    }
     const bend = await download(p, "record 640x360 fps=10");
     assert.match(bend.name, /^channel-bendsim-\d{8}-\d{6}\.mp4$/, bend.said);
     assert.match(bend.said, /\(80 frames, WebCodecs H\.264\)$/);

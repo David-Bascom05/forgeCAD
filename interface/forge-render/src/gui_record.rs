@@ -5,6 +5,7 @@
 //! window to show that state, draws it, and hands it to ffmpeg (natively) or keeps PNG frames.
 
 use super::Gui;
+use crate::camera::Camera;
 use crate::render::{Offscreen, Overlay};
 use crate::shell::capture::{Capture, Format};
 use crate::studio::gpu::{Pending, read_texture};
@@ -54,9 +55,41 @@ pub struct RecordJob {
     fps: u32,
     size: (u32, u32),
     /// None: the environment's timeline; Some: the camera it started from, turned once round.
-    orbit: Option<crate::camera::Camera>,
+    orbit: Option<Camera>,
+    /// The view's camera as it was, given back at the end.
+    was: Option<Camera>,
     stage: Stage,
     sink: Option<Sink>,
+}
+
+/// The box round the parts' finest vertices, as placed in a lone part's view (no placements).
+fn vertex_box(parts: &[crate::mesh::PartMesh]) -> Option<crate::explode::Aabb> {
+    let mut out: Option<crate::explode::Aabb> = None;
+    for lod in parts.iter().filter_map(|p| p.lods.first()) {
+        for v in lod.vertices.as_chunks::<{ crate::mesh::VERTEX }>().0 {
+            let f = |k: usize| f32::from_le_bytes([v[k * 4], v[k * 4 + 1], v[k * 4 + 2], v[k * 4 + 3]]);
+            let p = [f(0), f(1), f(2)];
+            out = Some(out.map_or((p, p), |(a, b)| {
+                (
+                    [0, 1, 2].map(|k| a[k].min(p[k])),
+                    [0, 1, 2].map(|k| b[k].max(p[k])),
+                )
+            }));
+        }
+    }
+    out
+}
+
+/// `cam`, seen in a window `window` pixels, for a picture `size` pixels: the same vertical
+/// field when the picture is as wide or wider, else one wide enough to keep the window's
+/// horizontal extent.
+fn refit(mut cam: Camera, window: (u32, u32), size: (u32, u32)) -> Camera {
+    let aspect = |s: (u32, u32)| s.0.max(1) as f32 / s.1.max(1) as f32;
+    let (aw, ao) = (aspect(window), aspect(size));
+    if ao < aw {
+        cam.fovy = 2.0 * ((cam.fovy * 0.5).tan() * aw / ao).atan();
+    }
+    cam
 }
 
 /// Opaque: the view's texture holds the scheme's alpha.
@@ -81,7 +114,7 @@ fn png_bytes(size: (u32, u32), rgba: &[u8]) -> Result<Vec<u8>, String> {
 impl Gui {
     /// The view drawn offscreen at `size`, coming back: the model alone, or with the view cube
     /// when the capture settings ask for overlays.
-    fn draw_view_at(&mut self, size: (u32, u32)) -> Result<Pending, String> {
+    fn draw_view_at(&mut self, size: (u32, u32), camera: Option<Camera>) -> Result<Pending, String> {
         let overlays = self.shell.capture.overlays;
         if size.0 == 0 || size.1 == 0 || size.0 > 8192 || size.1 > 8192 {
             return Err(format!(
@@ -99,16 +132,50 @@ impl Gui {
             cube: overlays.then(|| (v.nav.cube_place(), None)),
             ..Overlay::default()
         };
-        v.renderer
-            .frame(&target.view, &mut v.scene, &v.nav.camera, overlay);
+        let camera = camera.unwrap_or(v.nav.camera);
+        v.renderer.frame(&target.view, &mut v.scene, &camera, overlay);
         v.renderer.resize(was);
         v.dirty = true;
         Ok(read_texture(&self.device, &self.queue, &target.texture))
     }
 
+    /// The camera a picture `size` pixels is taken with. In the design view: the view's direction
+    /// and projection, the subject (the parts' boxes, a lone part's vertices) filling 70 % of the
+    /// picture's shorter side as the view's framing standard has it (frame.rs), whatever the
+    /// picture's shape. In an environment, which frames its own scene (a press, a machine, a
+    /// stage): the window's composition, refitted to the picture's shape, the field widened when
+    /// the picture is narrower than the window so nothing framed is cut. With "Use the view
+    /// exactly": the view's camera as it is.
+    fn capture_camera(&self, size: (u32, u32)) -> Option<Camera> {
+        let v = self.view.as_ref()?;
+        let was = v.nav.camera;
+        if self.shell.capture.exact_view {
+            return Some(was);
+        }
+        let subject = self
+            .shell
+            .env
+            .is_none()
+            .then(|| v.scene.shown_box().or_else(|| vertex_box(&v.renderer.cpu_parts)))
+            .flatten()
+            .filter(|(lo, hi)| (0..3).all(|k| hi[k] >= lo[k]) && (0..3).any(|k| hi[k] > lo[k]));
+        let Some((lo, hi)) = subject else {
+            return Some(refit(was, v.size, size));
+        };
+        let how = crate::frame::Framing {
+            dir: crate::frame::Dir::Custom(was.yaw.to_degrees(), was.pitch.to_degrees()),
+            ..Default::default()
+        };
+        let view = crate::frame::ViewRect::full(size.0 as f32, size.1 as f32);
+        let mut cam = crate::frame::frame(crate::frame::Bounds::new(lo, hi), view, how, &[]).camera;
+        cam.parallel = was.parallel;
+        cam.roll = was.roll;
+        Some(cam)
+    }
+
     /// Draws the view at `size` and starts reading it back; `photo_poll` writes it to `path`.
     pub fn photo_start(&mut self, size: (u32, u32), path: &str) -> Result<(), String> {
-        let pending = self.draw_view_at(size)?;
+        let pending = self.draw_view_at(size, self.capture_camera(size))?;
         self.photo = Some(PhotoJob {
             pending,
             path: path.to_string(),
@@ -245,11 +312,7 @@ impl Gui {
                 None,
                 self.shell.env.map_or("timeline", |e| e.key()),
             ),
-            None => (
-                c.orbit_seconds as f64,
-                self.view.as_ref().map(|v| v.nav.camera),
-                "turntable",
-            ),
+            None => (c.orbit_seconds as f64, self.capture_camera(size), "turntable"),
         };
         let _ = what;
         let n = ((duration * fps as f64).round() as u32).max(1);
@@ -304,6 +367,7 @@ impl Gui {
             fps,
             size,
             orbit,
+            was: self.view.as_ref().map(|v| v.nav.camera),
             stage: Stage::Seek,
             sink: Some(sink),
         });
@@ -316,7 +380,7 @@ impl Gui {
             return;
         };
         self.shell.capture.recording = None;
-        if let (Some(cam), Some(v)) = (job.orbit, &mut self.view) {
+        if let (Some(_), Some(cam), Some(v)) = (job.orbit, job.was, &mut self.view) {
             v.nav.camera = cam;
             v.dirty = true;
         }
@@ -490,7 +554,7 @@ impl Gui {
             }
             #[cfg(target_arch = "wasm32")]
             Stage::Finished(_) => {}
-            Stage::Draw => match self.draw_view_at(job.size) {
+            Stage::Draw => match self.draw_view_at(job.size, None) {
                 Ok(p) => job.stage = Stage::Reading(p),
                 Err(e) => {
                     self.recording = Some(job);
@@ -615,6 +679,19 @@ fn utc_stamp(secs: u64) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_narrower_picture_widens_the_field_to_keep_the_windows_width() {
+        let mut cam = crate::camera::Camera::fit([0.0; 3], 1.0);
+        cam.fovy = 60f32.to_radians();
+        // as wide or wider: the field kept
+        assert_eq!(super::refit(cam, (1600, 900), (1920, 1080)).fovy, cam.fovy);
+        assert_eq!(super::refit(cam, (1000, 1000), (1920, 1080)).fovy, cam.fovy);
+        // square from 16:9: the half-width tangent kept, tan(f'/2) = tan(30°) · 16/9
+        let f = super::refit(cam, (1600, 900), (1000, 1000)).fovy;
+        let want = 2.0 * (30f32.to_radians().tan() * 16.0 / 9.0).atan();
+        assert!((f - want).abs() < 1e-6, "{f} {want}");
+    }
+
     #[test]
     fn a_unix_time_reads_as_its_utc_date() {
         assert_eq!(super::utc_stamp(0), "19700101-000000");
