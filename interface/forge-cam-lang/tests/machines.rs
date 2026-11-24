@@ -150,3 +150,33 @@ fn every_records_planner_axes_are_right_handed() {
     assert!(checked > 100);
     assert!(bad.is_empty(), "{} records:\n{}", bad.len(), bad.join("\n"));
 }
+
+/// A machine forge-machine has no record of, defined twice (a user's and a project's, here two
+/// of the project's files): the same machine twice is one; two that differ are refused, not the
+/// first planned on and the other ignored.
+#[test]
+fn two_differing_copies_of_an_unrecorded_machine_are_refused() {
+    let dir = std::env::temp_dir().join(format!("fg-machines-mine-{}", std::process::id()));
+    std::fs::create_dir_all(dir.join("cam")).unwrap();
+    std::fs::copy(machined().join("flange.fg"), dir.join("flange.fg")).unwrap();
+    let src = std::fs::read_to_string(machined().join("flange_cam.fg"))
+        .unwrap()
+        .replace("machine(\"generic-vmc3\")", "machine(\"my-vmc\")");
+    let copy = |z: i32| {
+        format!(
+            "[[machine]]\nname = \"my-vmc\"\nkind = \"vmc3\"\ncontrol = \"fanuc\"\nrpm = [100, 12000]\ncurve_rpm = [0, 1500, 12000]\ncurve_kw = [0, 11, 11]\nmax_feed = 10000\ncoolants = [\"flood\"]\nsource = \"mine\"\n\n[[machine.joint]]\nname = \"X\"\naxis = [1, 0, 0]\nrange = [-300, 300]\nrapid = 30000\n\n[[machine.joint]]\nname = \"Y\"\naxis = [0, 1, 0]\nrange = [-200, 200]\nrapid = 30000\n\n[[machine.joint]]\nname = \"Z\"\naxis = [0, 0, 1]\nrange = [{z}, 0]\nrapid = 24000\n"
+        )
+    };
+    std::fs::write(dir.join("cam").join("a.toml"), copy(-450)).unwrap();
+    std::fs::write(dir.join("cam").join("b.toml"), copy(-450)).unwrap();
+    let cam = run(&src, &dir);
+    assert!(cam.ok, "the same machine twice: {:?}", cam.errors);
+    std::fs::write(dir.join("cam").join("b.toml"), copy(-300)).unwrap();
+    let cam = run(&src, &dir);
+    assert!(!cam.ok);
+    let e = cam.errors.join("\n");
+    assert!(
+        e.contains("`my-vmc` is defined 2 times") && e.contains("differ"),
+        "{e}"
+    );
+}

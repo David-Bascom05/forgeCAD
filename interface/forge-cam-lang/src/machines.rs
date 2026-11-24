@@ -212,10 +212,30 @@ pub fn merge(lib: &mut Library) {
 }
 
 /// Why a machine name can't be used: its record and a library record of the name disagree, or
-/// two library records of it fill what the record lacks differently. None if it can.
+/// two library records of it fill what the record lacks differently, or (a name with no record)
+/// two library records of it differ. None if it can.
 pub fn conflict(lib: &Library, name: &str) -> Option<String> {
-    let d = records().iter().find(|d| d.name == name)?;
     let all: Vec<&Machine> = lib.machines.iter().filter(|m| m.name == name).collect();
+    // a name forge-machine has no record of: its copies (the user's, a project's) must all be
+    // the same machine, or the first would be planned on and the others ignored without a word
+    let Some(d) = records().iter().find(|d| d.name == name) else {
+        let same = all.windows(2).all(|w| {
+            let (a, b) = (w[0], w[1]);
+            Machine {
+                source: String::new(),
+                ..a.clone()
+            } == Machine {
+                source: String::new(),
+                ..b.clone()
+            }
+        });
+        return (!same).then(|| {
+            format!(
+                "machine `{name}` is defined {} times in the tool libraries (the user's, the project's) and they differ; keep one",
+                all.len()
+            )
+        });
+    };
     let mut made = vec![];
     for m in &all {
         match combine(d, Some(m)) {
