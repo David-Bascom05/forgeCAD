@@ -191,3 +191,7 @@ open ForgeLang ForgeLang.Counter
 #print axioms LL1.Documents.robot_doc_accepted
 #print axioms Families.run_append
 #print axioms Families.edit_prefix
+#print axioms ren_nested
+#print axioms ren_top
+#print axioms rename_body
+#print axioms renFirst_keep
