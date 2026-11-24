@@ -5,14 +5,13 @@
 use super::super::ribbon::{Group, Tool};
 use super::super::sheet::SheetCmd;
 use super::super::{Action, FLAT_TAB, Shell, THERMO_TAB};
-use super::{BENDSIM_TAB, Entered, EnvId, Environment, RENDER_TAB};
-use egui::{Rect, Ui};
+use super::{Entered, EnvId, Environment, RENDER_TAB};
 
 pub(super) fn of(id: EnvId) -> &'static dyn Environment {
     match id {
         EnvId::Thermoform => &Thermoform,
         EnvId::FlatPattern => &FlatPattern,
-        EnvId::BendSim => &BendSim,
+        EnvId::BendSim => &super::bendsim::BendSim,
         EnvId::RenderStudio => &RenderStudio,
         EnvId::Drawing => &Drawing,
         EnvId::Manufacture => &Pending(EnvId::Manufacture, MANUFACTURE),
@@ -75,7 +74,7 @@ fn part(s: &Shell) -> Result<&super::super::fg::FgPanel, String> {
 }
 
 /// A sheet metal part with a sheet to flatten or bend.
-fn sheet_part(s: &Shell) -> Result<&super::super::fg::FgPanel, String> {
+pub(super) fn sheet_part(s: &Shell) -> Result<&super::super::fg::FgPanel, String> {
     let f = part(s)?;
     if f.sheets.is_empty() {
         return Err("make the part sheet metal first (3D Model > Convert to Sheet Metal, then Face)".into());
@@ -113,7 +112,7 @@ impl Environment for Thermoform {
     }
 }
 
-struct FlatPattern;
+pub(super) struct FlatPattern;
 
 impl Environment for FlatPattern {
     fn id(&self) -> EnvId {
@@ -155,187 +154,6 @@ impl Environment for FlatPattern {
 
     fn still(&self, s: &Shell) -> bool {
         s.sheet.flat_env && s.fg.is_some()
-    }
-}
-
-/// The press brake simulation (kernel/forge-brake): the section drawn in the view, the bend
-/// order and each step's checks in the browser, play and the tooling on the ribbon.
-struct BendSim;
-
-/// Its commands: a tooling set by its index in `forge_brake::library::IDS`, then these.
-const FIRST: u16 = 100;
-const BACK: u16 = 101;
-const PLAY: u16 = 102;
-const NEXT: u16 = 103;
-const AGAIN: u16 = 104;
-
-impl Environment for BendSim {
-    fn id(&self) -> EnvId {
-        EnvId::BendSim
-    }
-
-    fn available(&self, s: &Shell) -> Result<(), String> {
-        sheet_part(s).map(|_| ())
-    }
-
-    /// Simulated afresh if the part's text changed since; its step kept where it still is one.
-    fn enter(&self, s: &mut Shell) -> Result<Entered, String> {
-        if s.sheet.flat_env {
-            FlatPattern.exit(s);
-        }
-        let fg = s.fg.as_ref().ok_or("no part")?;
-        let fresh = s
-            .sheet
-            .bend_sim
-            .as_ref()
-            .is_some_and(|b| b.source == fg.source && b.path == fg.path);
-        if !fresh {
-            let was = s.sheet.bend_sim.take();
-            let tooling = was.as_ref().map_or("std-eu", |b| b.tooling.as_str());
-            let mut b = super::super::bendsim::BendSimUi::open(&fg.source, &fg.path, tooling);
-            if let Some(w) = was {
-                b.resume(&w);
-            }
-            s.sheet.bend_sim = Some(Box::new(b));
-        }
-        Ok(Entered::Mode)
-    }
-
-    fn exit(&self, s: &mut Shell) {
-        if let Some(b) = &mut s.sheet.bend_sim {
-            b.playing = false;
-        }
-    }
-
-    fn tabs(&self) -> &'static [(usize, &'static str)] {
-        &[(BENDSIM_TAB, "Bend Simulation")]
-    }
-
-    fn groups(&self, s: &Shell, _tab: usize) -> Vec<Group> {
-        let b = s.sheet.bend_sim.as_deref();
-        let ran = b.is_some_and(|b| b.sim.is_ok());
-        let cmd = |c: u16| ran.then_some(Action::Env(EnvId::BendSim, c));
-        let playing = b.is_some_and(|b| b.playing);
-        let tooling = forge_brake::library::IDS
-            .iter()
-            .enumerate()
-            .map(|(k, id)| {
-                tool(
-                    tooling_word(id),
-                    "bendtable",
-                    Some(Action::Env(EnvId::BendSim, k as u16)),
-                    b.is_some_and(|b| b.tooling == *id),
-                )
-            })
-            .collect();
-        vec![
-            group("Tooling", vec![], tooling),
-            group(
-                "Play",
-                vec![tool(
-                    if playing { "Pause" } else { "Play" },
-                    "forward",
-                    cmd(PLAY),
-                    playing,
-                )],
-                vec![
-                    tool("First Bend", "home", cmd(FIRST), false),
-                    tool("Previous Bend", "backward", cmd(BACK), false),
-                    tool("Next Bend", "forward", cmd(NEXT), false),
-                ],
-            ),
-            group(
-                "Simulate",
-                vec![tool(
-                    "Simulate Again",
-                    "redo",
-                    Some(Action::Env(EnvId::BendSim, AGAIN)),
-                    false,
-                )],
-                vec![],
-            ),
-        ]
-    }
-
-    fn browser(&self, s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
-        let Some(mut b) = s.sheet.bend_sim.take() else {
-            return false;
-        };
-        let t = s.theme;
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(egui::vec2(10.0, 8.0))));
-        child.set_clip_rect(r);
-        egui::ScrollArea::both()
-            .id_salt("env-bendsim-browser")
-            .show(&mut child, |ui| {
-                ui.label(
-                    egui::RichText::new("Bend order")
-                        .font(super::super::theme::semi(13.0))
-                        .color(t.ink),
-                );
-                super::super::bendsim::body(ui, &mut b, false);
-            });
-        s.places.push(("env:bendsim:browser".into(), r));
-        s.sheet.bend_sim = Some(b);
-        true
-    }
-
-    fn panels(&self, s: &mut Shell, ctx: &egui::Context) {
-        if let Some(b) = &mut s.sheet.bend_sim {
-            b.tick(f64::from(ctx.input(|i| i.stable_dt)).min(0.1));
-            if b.playing {
-                ctx.request_repaint();
-            }
-        }
-    }
-
-    /// The press section fills the view: the sim is the picture here.
-    fn draw(&self, s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
-        let Some(b) = s.sheet.bend_sim.as_deref() else {
-            return false;
-        };
-        super::super::bendsim::paint(ui, view, b);
-        s.places.push(("env:bendsim:view".into(), view));
-        true
-    }
-
-    fn command(&self, s: &mut Shell, c: u16) {
-        let Some(b) = s.sheet.bend_sim.as_deref_mut() else {
-            return;
-        };
-        let n = b.sim.as_ref().map_or(0, |x| x.plan.steps.len());
-        match c {
-            FIRST => b.go(0),
-            BACK => b.go(b.step.saturating_sub(1)),
-            NEXT => b.go((b.step + 1).min(n.saturating_sub(1))),
-            PLAY => b.play(),
-            AGAIN => {
-                if let Some(fg) = s.fg.as_ref() {
-                    let mut fresh = super::super::bendsim::BendSimUi::open(&fg.source, &fg.path, &b.tooling);
-                    fresh.resume(b);
-                    *b = fresh;
-                }
-            }
-            k => {
-                if let (Some(id), Some(fg)) = (forge_brake::library::IDS.get(usize::from(k)), s.fg.as_ref()) {
-                    let mut fresh = super::super::bendsim::BendSimUi::open(&fg.source, &fg.path, id);
-                    fresh.resume(b);
-                    *b = fresh;
-                }
-            }
-        }
-    }
-
-    fn still(&self, s: &Shell) -> bool {
-        sheet_part(s).is_ok()
-    }
-}
-
-/// A built-in tooling set's word on the ribbon.
-fn tooling_word(id: &str) -> &'static str {
-    match id {
-        "std-eu" => "European Tooling",
-        "std-us" => "American Tooling",
-        _ => "Tooling",
     }
 }
 

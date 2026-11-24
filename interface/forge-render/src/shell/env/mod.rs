@@ -9,6 +9,7 @@
 //! did (`fg.thermo`, `sheet`, ...), so the shell borrows whole and nothing aliases. Nothing else in
 //! the shell names an environment: `tab_order`, the ribbon and the browser ask this module.
 
+mod bendsim;
 mod builtin;
 
 use super::ribbon::{Group, Tool};
