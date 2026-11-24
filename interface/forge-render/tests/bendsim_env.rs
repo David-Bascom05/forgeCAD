@@ -72,7 +72,8 @@ fn frame(h: &mut Headless, how: Framing) {
 }
 
 fn shot(h: &mut Headless, name: &str) {
-    for _ in 0..6 {
+    // see-through settled: FADE_AFTER frames, then FADE_FRAMES
+    for _ in 0..16 {
         h.step();
     }
     let Ok(dir) = std::env::var("BENDSIM_SHOTS") else {
@@ -408,7 +409,18 @@ fn see_through_fades_and_never_flickers() {
             v.nav.jump_to(c);
         }
         h.step();
-        // by the body's name: a placement's index moves as window pieces come and go
+        // nothing cut (David), and the bend being made and the walls either side of it never
+        // seen through
+        assert!(h.gui.bend.whole(), "a body cut at {i}");
+        let bending = h.gui.bend.bending_names();
+        assert!(!bending.is_empty());
+        for n in h.gui.bend.ghosted_names() {
+            assert!(
+                !bending.contains(&n),
+                "{n} is the bend being made, seen through at {i}"
+            );
+        }
+        // by the body's name
         let names = h.gui.bend.drawn_names();
         let now: std::collections::HashMap<String, f32> = h
             .gui
@@ -417,9 +429,8 @@ fn see_through_fades_and_never_flickers() {
             .iter()
             .map(|g| (names[g.placement as usize].clone(), g.rgba[3] as f32 / 255.0))
             .collect();
-        // a piece kept from one frame to the next fades a step at most; a piece that comes into
-        // the window comes in near solid (it fades in); one that leaves the window has nothing
-        // left in it to jump
+        // a body seen through from one frame to the next fades a step at most; one that starts
+        // to be seen through comes in near solid (it fades in)
         for (k, b) in &now {
             let a = was.get(k).copied().unwrap_or(1.0);
             worst = worst.max(a - b);
@@ -500,6 +511,14 @@ fn bend_two_followed_shows_the_part() {
             h.step();
         }
         shot(&mut h, &format!("15-bend-2-strip-{i}"));
+        assert!(h.gui.bend.whole(), "a body cut at t = {t}");
+        let bending = h.gui.bend.bending_names();
+        for n in h.gui.bend.ghosted_names() {
+            assert!(
+                !bending.contains(&n),
+                "{n}, the bend being made, seen through at t = {t}"
+            );
+        }
         let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
         let sim = b.sim.as_ref().unwrap();
         let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
@@ -523,11 +542,10 @@ fn bend_two_followed_shows_the_part() {
     );
 }
 
-/// Any part in the way, locally (David): from the Press Overview the press's frame stands
-/// between the eye and bend 2; it is seen through only inside the x-ray window round the bend
-/// (drawn as a ghost piece there and solid round it), not faded whole.
+/// Any part in the way (David): from the Press Overview the press's frame stands between the
+/// eye and the bend; it is seen through whole, nothing cut, the bend being made solid.
 #[test]
-fn a_press_part_in_the_way_is_seen_through_in_the_window_only() {
+fn a_press_part_in_the_way_is_seen_through_whole() {
     let Some(mut h) = headless() else { return };
     enter(&mut h, CHANNEL, "xray", "trumpf-trubend-5130", None);
     {
@@ -539,21 +557,115 @@ fn a_press_part_in_the_way_is_seen_through_in_the_window_only() {
     for _ in 0..20 {
         h.step();
     }
-    let names = h.gui.bend.drawn_names();
-    let pieces: Vec<&String> = names.iter().filter(|n| n.ends_with("#xray")).collect();
-    let press: Vec<&&String> = pieces
+    let ghosted = h.gui.bend.ghosted_names();
+    let press: Vec<&String> = ghosted
         .iter()
         .filter(|n| !n.starts_with("part:") && !n.contains("punch:") && !n.contains("die:"))
         .collect();
-    assert!(!press.is_empty(), "a press part seen through: {pieces:?}");
-    for p in &press {
-        let whole = p.trim_end_matches("#xray");
-        assert!(
-            names.iter().any(|n| n == whole),
-            "{whole} solid round its window piece"
-        );
+    assert!(!press.is_empty(), "a press part seen through: {ghosted:?}");
+    assert!(h.gui.bend.whole(), "nothing cut");
+    let bending = h.gui.bend.bending_names();
+    assert!(ghosted.iter().all(|n| !bending.contains(n)), "{ghosted:?}");
+    // the die can't hide the bend line from above it (UX-LEAD): it stays solid
+    assert!(ghosted.iter().all(|n| !n.contains("die:")), "{ghosted:?}");
+}
+
+/// A seen-through body is drawn, and seen (David: "it's still invisible"): where it stands,
+/// the view with it seen through differs clearly both from the view with it gone (opacity 0)
+/// and from the view with it solid (see-through off).
+#[test]
+fn a_ghost_is_seen_between_gone_and_solid() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "ghost", "trumpf-trubend-5130", None);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.step = 1;
+        b.t = 0.7;
     }
-    assert!(!h.gui.bend.ghosts.is_empty());
+    frame(&mut h, Framing::Work);
+    for _ in 0..4 {
+        h.step();
+    }
+    let v = h.gui.view.as_mut().unwrap();
+    let mut c = v.nav.camera;
+    c.yaw = 240f32.to_radians();
+    c.pitch = 25f32.to_radians();
+    v.nav.jump_to(c);
+    let opacity = h.gui.shell.sheet.bend_sim.as_ref().unwrap().opacity;
+    let at = |h: &mut Headless, o: f32, see: bool| {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.opacity = o;
+        b.see_through = see;
+        for _ in 0..30 {
+            h.step();
+        }
+        assert_eq!(h.gui.bend.ghosts.is_empty(), !see, "seen through: {see}");
+        h.ppm()
+    };
+    let gone = at(&mut h, 0.0, true);
+    let ghost = at(&mut h, opacity, true);
+    // where the seen-through bodies stand on the screen: their own triangles, projected (not
+    // what differs, which takes in the shadow a solid body casts)
+    let (cam, size) = h.gui.shell.camera.expect("the view's camera");
+    let r = h.gui.shell.place("env:bendsim:view").expect("the view");
+    let m = cam.view(size.0, size.1).matrix;
+    let (w, ht) = (1400usize, 860usize);
+    let mut cover = vec![false; w * ht];
+    for x in h.gui.bend.ghosted() {
+        let to = |p: [f32; 3]| {
+            let c = |k: usize| m[k] * p[0] + m[4 + k] * p[1] + m[8 + k] * p[2] + m[12 + k];
+            (
+                r.left() + (c(0) / c(3) + 1.0) * 0.5 * r.width(),
+                r.top() + (1.0 - c(1) / c(3)) * 0.5 * r.height(),
+            )
+        };
+        for t in &x.mesh.tri {
+            let [a, b, c] = t.map(|i| to(x.mesh.pos[i as usize]));
+            let area = (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
+            if area.abs() < 1e-3 {
+                continue;
+            }
+            let (x0, x1) = (
+                a.0.min(b.0).min(c.0).max(r.left()),
+                a.0.max(b.0).max(c.0).min(r.right()),
+            );
+            let (y0, y1) = (
+                a.1.min(b.1).min(c.1).max(r.top()),
+                a.1.max(b.1).max(c.1).min(r.bottom()),
+            );
+            for py in y0 as usize..(y1.ceil() as usize).min(ht) {
+                for px in x0 as usize..(x1.ceil() as usize).min(w) {
+                    let q = (px as f32 + 0.5, py as f32 + 0.5);
+                    let e = |u: (f32, f32), v: (f32, f32)| {
+                        ((v.0 - u.0) * (q.1 - u.1) - (v.1 - u.1) * (q.0 - u.0)) * area.signum()
+                    };
+                    if e(a, b) >= 0.0 && e(b, c) >= 0.0 && e(c, a) >= 0.0 {
+                        cover[py * w + px] = true;
+                    }
+                }
+            }
+        }
+    }
+    let solid = at(&mut h, opacity, false);
+    let px = |p: &[u8], i: usize| [p[i * 3], p[i * 3 + 1], p[i * 3 + 2]];
+    let far = |a: [u8; 3], b: [u8; 3], by: u8| a.iter().zip(b).any(|(x, y)| x.abs_diff(y) > by);
+    // past the ppm's header, the same in all three
+    let head = gone.len() - w * ht * 3;
+    let (gone, ghost, solid) = (&gone[head..], &ghost[head..], &solid[head..]);
+    // the body: where it stands and, solid, it is seen (not where it would match what's behind)
+    let body: Vec<usize> = (0..w * ht)
+        .filter(|&i| cover[i] && far(px(gone, i), px(solid, i), 24))
+        .collect();
+    assert!(body.len() > w * ht / 100, "the body covers {} px", body.len());
+    let seen = body
+        .iter()
+        .filter(|&&i| far(px(ghost, i), px(gone, i), 12) && far(px(ghost, i), px(solid, i), 12))
+        .count();
+    assert!(
+        seen * 4 >= body.len() * 3,
+        "the ghost seen over {seen} of the body's {} px",
+        body.len()
+    );
 }
 
 /// A seen-through body is drawn at its opacity (the coordinator, after RENDER-STUDIO found the

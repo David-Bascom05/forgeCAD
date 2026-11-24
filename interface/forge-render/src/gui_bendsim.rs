@@ -43,7 +43,7 @@ pub struct BendView {
     envelope: Option<(usize, [f32; 3], [f32; 3])>,
     /// The bodies drawn, in placement order: what see-through tests against.
     bodies: Vec<Body>,
-    /// See-through's faces drawn as ghosts (the x-ray window's pieces).
+    /// See-through's faces drawn as ghosts (the bodies that hide the bend, whole).
     pub ghosts: Vec<crate::render::FaceColour>,
     /// Each body's see-through state: frames it has blocked running, and how far it has faded
     /// (0 solid, 1 at the set opacity).
@@ -98,6 +98,17 @@ pub fn silhouette(m: &Mesh, eye: [f32; 3]) -> Vec<[[f32; 3]; 2]> {
         .map(|e| [e.1, e.2])
         .collect()
 }
+
+/// See-through's tint, in linear light (the ghost is blended linear and shown in sRGB): a
+/// ghost is drawn flat (unlit), so its own colour is first taken down to a mid tone
+/// (XRAY_SHADE: the light grey of tool steel or paint, drawn flat at that, is the floor's and
+/// the backdrop's and could not be seen), then a light, desaturated blue (sRGB about 150, 180,
+/// 225) mixed in by XRAY_MIX (David: "make part of the opacity slightly blue"); its outline a
+/// darker blue (sRGB about 60, 95, 150).
+pub const XRAY_SHADE: f32 = 0.25;
+pub const XRAY_BLUE: [f32; 3] = [0.3, 0.46, 0.75];
+pub const XRAY_MIX: f32 = 0.3;
+pub const XRAY_LINE: [f32; 3] = [0.045, 0.11, 0.3];
 
 /// Frames a body must block the bend for, running, before it starts to fade (hysteresis).
 pub const FADE_AFTER: u8 = 3;
@@ -372,9 +383,9 @@ pub fn cutaway(
         .collect()
 }
 
-/// The x-ray window: where on the screen the bend being made and the punch's contact are, grown
-/// by a margin (normalised device coordinates: xmin, xmax, ymin, ymax), and how far from the
-/// eye they begin (clip w): what is nearer than that, inside the window, hides them.
+/// Where on the screen the bend being made and the punch's contact are, grown by a small
+/// margin (normalised device coordinates: xmin, xmax, ymin, ymax), and how far from the eye
+/// they begin (clip w): a body with something nearer than that inside it hides the bend.
 pub fn xray_window(bodies: &[Body], m: &[f32; 16]) -> Option<([f32; 4], f32)> {
     let zone = bounds(
         bodies
@@ -408,87 +419,73 @@ pub fn xray_window(bodies: &[Body], m: &[f32; 16]) -> Option<([f32; 4], f32)> {
         y1 = y1.max(y);
         w0 = w0.min(w);
     }
-    // a margin round it: a quarter of its size, at least a sixteenth of the view
-    let (mx, my) = ((0.25 * (x1 - x0)).max(0.125), (0.25 * (y1 - y0)).max(0.125));
+    // a margin round it: a tenth of its size, at least a fiftieth of the view
+    let (mx, my) = ((0.1 * (x1 - x0)).max(0.04), (0.1 * (y1 - y0)).max(0.04));
     Some(([x0 - mx, x1 + mx, y0 - my, y1 + my], w0 * 0.995))
 }
 
-/// A mesh split by the x-ray window's frustum: (inside it and nearer the eye than `wmax`,
-/// the rest). Each triangle is clipped against the window's sides and its depth in clip space,
-/// where they are planes (Sutherland-Hodgman); positions and normals carried linearly.
-pub fn xray_split(mesh: &Mesh, m: &[f32; 16], win: [f32; 4], wmax: f32) -> (Mesh, Mesh) {
-    type V = ([f32; 3], [f32; 3]);
+/// Whether a mesh hides the bend: some triangle of it, clipped to the window's frustum (its
+/// sides and nearer the eye than `wmax`, planes in clip space: Sutherland-Hodgman), is left
+/// with an area. The body is only tested, never cut: it is seen through whole or not at all.
+pub fn xray_blocks(mesh: &Mesh, m: &[f32; 16], win: [f32; 4], wmax: f32) -> bool {
     let clip = |p: [f32; 3], r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
-    let planes: [Box<dyn Fn([f32; 3]) -> f32>; 5] = [
-        Box::new(move |p| clip(p, 0) - win[0] * clip(p, 3)),
-        Box::new(move |p| win[1] * clip(p, 3) - clip(p, 0)),
-        Box::new(move |p| clip(p, 1) - win[2] * clip(p, 3)),
-        Box::new(move |p| win[3] * clip(p, 3) - clip(p, 1)),
-        Box::new(move |p| wmax - clip(p, 3)),
+    let planes: [&dyn Fn([f32; 3]) -> f32; 5] = [
+        &|p| clip(p, 0) - win[0] * clip(p, 3),
+        &|p| win[1] * clip(p, 3) - clip(p, 0),
+        &|p| clip(p, 1) - win[2] * clip(p, 3),
+        &|p| win[3] * clip(p, 3) - clip(p, 1),
+        &|p| wmax - clip(p, 3),
     ];
-    let lerp = |a: V, b: V, t: f32| -> V {
-        (
-            [0, 1, 2].map(|k| a.0[k] + (b.0[k] - a.0[k]) * t),
-            [0, 1, 2].map(|k| a.1[k] + (b.1[k] - a.1[k]) * t),
-        )
-    };
-    let push = |out: &mut Mesh, poly: &[V]| {
-        for k in 1..poly.len().saturating_sub(1) {
-            let base = out.pos.len() as u32;
-            for v in [poly[0], poly[k], poly[k + 1]] {
-                out.pos.push(v.0);
-                out.nrm.push(v.1);
-            }
-            out.tri.push([base, base + 1, base + 2]);
-        }
-    };
-    let (mut inside, mut outside) = (Mesh::default(), Mesh::default());
-    for t in &mesh.tri {
-        let mut poly: Vec<V> = t
-            .iter()
-            .map(|&i| (mesh.pos[i as usize], mesh.nrm[i as usize]))
-            .collect();
+    mesh.tri.iter().any(|t| {
+        let mut poly: Vec<[f32; 3]> = t.iter().map(|&i| mesh.pos[i as usize]).collect();
         for f in &planes {
-            let d: Vec<f32> = poly.iter().map(|v| f(v.0)).collect();
+            let d: Vec<f32> = poly.iter().map(|&v| f(v)).collect();
             if d.iter().all(|&x| x >= 0.0) {
                 continue;
             }
-            let (mut keep, mut drop) = (Vec::new(), Vec::new());
+            let mut keep = Vec::new();
             for i in 0..poly.len() {
                 let j = (i + 1) % poly.len();
-                let (a, b, da, db) = (poly[i], poly[j], d[i], d[j]);
-                if da >= 0.0 {
-                    keep.push(a);
-                } else {
-                    drop.push(a);
+                if d[i] >= 0.0 {
+                    keep.push(poly[i]);
                 }
-                if (da >= 0.0) != (db >= 0.0) {
-                    let c = lerp(a, b, da / (da - db));
-                    keep.push(c);
-                    drop.push(c);
+                if (d[i] >= 0.0) != (d[j] >= 0.0) {
+                    let t = d[i] / (d[i] - d[j]);
+                    keep.push([0, 1, 2].map(|k| poly[i][k] + (poly[j][k] - poly[i][k]) * t));
                 }
             }
-            push(&mut outside, &drop);
             poly = keep;
             if poly.len() < 3 {
-                break;
+                return false;
             }
         }
-        push(&mut inside, &poly);
-    }
-    (inside, outside)
+        true
+    })
 }
 
-/// The bodies an x-ray may see through: anything but the bend being made, the walls either
-/// side of it, a punch's tip (the contact), the floor, a witness and what is drawn red.
-fn xray_candidate(x: &Body, zone: Option<([f32; 3], [f32; 3])>) -> bool {
-    let touches = |m: &Mesh| match (zone, m.bounds()) {
-        (Some((zl, zh)), Some((a, c))) => (0..3).all(|k| a[k] <= zh[k] + 0.5 && c[k] >= zl[k] - 0.5),
+/// Whether a piece of the part is the bend being made or a wall either side of it (it touches
+/// the bend zone): never seen through.
+fn bending(x: &Body, zone: Option<([f32; 3], [f32; 3])>) -> bool {
+    x.look == Look::Sheet
+        && match (zone, x.mesh.bounds()) {
+            (Some((zl, zh)), Some((a, c))) => (0..3).all(|k| a[k] <= zh[k] + 0.5 && c[k] >= zl[k] - 0.5),
+            _ => false,
+        }
+}
+
+/// The bodies that may be seen through, from `eye`: anything but the bend being made and the
+/// walls either side of it, a punch's tip (the contact), the floor, a witness and what is drawn
+/// red. A die, and what stands no higher than the dies' top (the bed), only from below its top
+/// (UX-LEAD): from above it cannot hide the bend line.
+fn xray_candidate(x: &Body, zone: Option<([f32; 3], [f32; 3])>, die_top: Option<f32>, eye: [f32; 3]) -> bool {
+    let low = match (die_top, x.mesh.bounds()) {
+        (Some(d), Some((_, top))) => (x.name.contains("die:") || top[2] <= d + 0.5) && eye[2] >= top[2],
         _ => false,
     };
     !x.hit
+        && !low
         && match x.look {
-            Look::Sheet => !touches(&x.mesh),
+            Look::Sheet => !bending(x, zone),
             Look::Tool => !x.name.ends_with("/tip"),
             Look::Frame | Look::Gauge => true,
             Look::BendZone | Look::Floor | Look::Witness => false,
@@ -496,7 +493,7 @@ fn xray_candidate(x: &Body, zone: Option<([f32; 3], [f32; 3])>) -> bool {
 }
 
 impl BendView {
-    /// The outline of what is seen through, as world triangles: thin (1 px) low-contrast lines
+    /// The outline of what is seen through, as world triangles: thin (1 px) darker-blue lines
     /// facing this eye, as strong as the body has faded. The view's frame and a capture's (Render Studio's recorder) both draw them.
     pub fn outline_tris(
         &self,
@@ -505,15 +502,56 @@ impl BendView {
     ) -> Vec<crate::origin::WorldVert> {
         let mut out = Vec::new();
         for (e, level) in &self.outline {
-            crate::origin::polyline(e, 1.0, [0.78, 0.81, 0.86, 0.45 * level], camera, size, &mut out);
+            let [r, g, b] = XRAY_LINE;
+            crate::origin::polyline(e, 1.0, [r, g, b, 0.6 * level], camera, size, &mut out);
         }
         out
     }
 
-    /// The names of what is drawn now: a body seen through inside the x-ray window is drawn as
-    /// its solid rest (its own name) and its window piece (`name#xray`).
+    /// The names of what is drawn now.
     pub fn drawn_names(&self) -> Vec<String> {
         self.bodies.iter().map(|x| x.name.clone()).collect()
+    }
+
+    /// What is drawn seen through now.
+    pub fn ghosted(&self) -> Vec<&Body> {
+        self.ghosts
+            .iter()
+            .filter_map(|g| self.bodies.get(g.placement as usize))
+            .collect()
+    }
+
+    /// The names of what is drawn seen through now.
+    pub fn ghosted_names(&self) -> Vec<String> {
+        self.ghosts
+            .iter()
+            .filter_map(|g| self.bodies.get(g.placement as usize))
+            .map(|x| x.name.clone())
+            .collect()
+    }
+
+    /// The pieces of the part that are the bend being made and the walls either side of it.
+    pub fn bending_names(&self) -> Vec<String> {
+        let zone = bounds(
+            self.raw
+                .iter()
+                .filter(|x| x.look == Look::BendZone)
+                .map(|x| &x.mesh),
+        );
+        self.raw
+            .iter()
+            .filter(|x| bending(x, zone))
+            .map(|x| x.name.clone())
+            .collect()
+    }
+
+    /// Whether every body drawn is one of the instant's, whole: none cut.
+    pub fn whole(&self) -> bool {
+        self.bodies.iter().all(|d| {
+            self.raw
+                .iter()
+                .any(|x| x.name == d.name && x.mesh.pos == d.mesh.pos && x.mesh.tri == d.mesh.tri)
+        })
     }
 
     /// The view holds the simulation's bodies, not the design.
@@ -643,8 +681,8 @@ impl Gui {
     }
 
     /// What is drawn, kept up with the eye: the instant's bodies, the press's near walls cut
-    /// away, and whatever stands between the eye and the bend being made seen through inside the
-    /// x-ray window round the bend and the punch's contact (solid outside it), faded in and out.
+    /// away, and whatever stands between the eye and the bend being made seen through, each such
+    /// body whole (nothing is cut), faded in and out.
     fn bendsim_see_through(&mut self) {
         let Some(v) = &mut self.view else { return };
         let Some(b) = self.shell.sheet.bend_sim.as_ref() else {
@@ -669,7 +707,7 @@ impl Gui {
         };
         let cut = self.bend.cut.clone();
         let working: Vec<&Body> = self.bend.raw.iter().filter(|x| !cut.contains(&x.name)).collect();
-        // the x-ray: each candidate split by the window; what lies inside it, nearer than the
+        // the x-ray: a candidate with something inside the window round the bend, nearer than the
         // bend, blocks it
         let zone = bounds(
             working
@@ -678,15 +716,20 @@ impl Gui {
                 .map(|x| &x.mesh),
         );
         // the window is worked out even with see-through off: what is still fading out keeps
-        // its window piece until it is solid again
+        // fading until it is solid again
         let window = xray_window(&self.bend.raw, &m);
         let see = b.see_through;
-        let mut split: std::collections::HashMap<String, (Mesh, Mesh)> = Default::default();
+        let mut blocks: std::collections::HashSet<String> = Default::default();
         if let Some((win, wmax)) = window {
-            for x in working.iter().filter(|x| xray_candidate(x, zone)) {
-                let (inside, outside) = xray_split(&x.mesh, &m, win, wmax);
-                if !inside.tri.is_empty() {
-                    split.insert(x.name.clone(), (inside, outside));
+            let die_top = working
+                .iter()
+                .filter(|x| x.name.contains("die:"))
+                .filter_map(|x| x.mesh.bounds())
+                .map(|(_, top)| top[2])
+                .reduce(f32::max);
+            for x in working.iter().filter(|x| xray_candidate(x, zone, die_top, eye)) {
+                if xray_blocks(&x.mesh, &m, win, wmax) {
+                    blocks.insert(x.name.clone());
                 }
             }
         }
@@ -698,12 +741,7 @@ impl Gui {
         self.bend.fade.retain(|n, _| names.contains(n));
         for n in &names {
             let e = self.bend.fade.entry(n.clone()).or_insert((0, 0.0));
-            let blocking = see && split.contains_key(n);
-            if !split.contains_key(n) {
-                // nothing of it in the window: nothing to show; it comes in again from solid
-                *e = (0, 0.0);
-                continue;
-            }
+            let blocking = see && blocks.contains(n);
             e.0 = if blocking { e.0.saturating_add(1) } else { 0 };
             let target = if e.0 >= FADE_AFTER { 1.0 } else { 0.0 };
             let step = 1.0 / FADE_FRAMES as f32;
@@ -715,29 +753,16 @@ impl Gui {
             moving |= e.1 != target || (blocking && e.0 < FADE_AFTER);
         }
         self.bend.fading = moving;
-        // what is drawn: a seen-through body as its solid rest and its window piece
-        let mut drawn: Vec<Body> = Vec::new();
-        let mut xray: Vec<(usize, f32)> = Vec::new();
-        for x in &working {
-            let level = self.bend.fade.get(&x.name).map_or(0.0, |f| f.1);
-            match split.get(&x.name) {
-                Some((inside, outside)) if level > 0.0 => {
-                    if !outside.tri.is_empty() {
-                        drawn.push(Body {
-                            mesh: outside.clone(),
-                            ..(*x).clone()
-                        });
-                    }
-                    xray.push((drawn.len(), level));
-                    drawn.push(Body {
-                        name: format!("{}#xray", x.name),
-                        mesh: inside.clone(),
-                        ..(*x).clone()
-                    });
-                }
-                _ => drawn.push((*x).clone()),
-            }
-        }
+        // what is drawn: every body whole, never cut; one that hides the bend seen through
+        let drawn: Vec<Body> = working.iter().map(|x| (*x).clone()).collect();
+        let xray: Vec<(usize, f32)> = drawn
+            .iter()
+            .enumerate()
+            .filter_map(|(k, x)| {
+                let level = self.bend.fade.get(&x.name).map_or(0.0, |f| f.1);
+                (level > 0.0).then_some((k, level))
+            })
+            .collect();
         let material = b.material.as_deref();
         let opacity = b.opacity;
         // the drawn bodies into the view: the same ones, new triangles; else a renderer afresh
@@ -790,13 +815,18 @@ impl Gui {
             }
             self.bend.names = names;
         }
-        // the window pieces as ghosts: from solid down to the opacity set as they fade, a thin,
-        // low-contrast outline coming in with them
+        // what hides the bend as ghosts: from solid down to the opacity set as they fade, tinted
+        // toward a light blue (David: an x-ray, not missing), a thin darker-blue outline coming
+        // in with them
         self.bend.ghosts.clear();
         let mut outline: Vec<([[f32; 3]; 2], f32)> = Vec::new();
         for &(k, level) in &xray {
             v.scene.set_ghost(k, true);
-            let c = tint(&drawn[k], material);
+            let t = tint(&drawn[k], material);
+            let c = [0, 1, 2].map(|i| {
+                let t = t[i] * (1.0 - (1.0 - XRAY_SHADE) * level);
+                t + (XRAY_BLUE[i] - t) * XRAY_MIX * level
+            });
             let to8 = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
             let alpha = 1.0 - level * (1.0 - opacity);
             self.bend.ghosts.push(crate::render::FaceColour {
