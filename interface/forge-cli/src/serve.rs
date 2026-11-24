@@ -425,6 +425,40 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
     r
 }
 
+/// Where an export's `out` really goes: under the root, its folder there already, not in the
+/// repository's .git (git would run what's written there), and not through a link out of the
+/// root or into .git (`model.stl -> ~/.bashrc`, `g -> .git`).
+fn out_place(root: &std::path::Path, out: &str) -> Result<std::path::PathBuf, String> {
+    let git = |p: &std::path::Path| {
+        p.components()
+            .any(|c| c.as_os_str().to_string_lossy().eq_ignore_ascii_case(".git"))
+    };
+    let rel = std::path::Path::new(out);
+    if git(rel) {
+        return Err(format!("{out}: not into the repository's .git"));
+    }
+    let path = root.join(rel);
+    let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+        return Err(format!("{out} is outside the session's root"));
+    };
+    let dir = std::fs::canonicalize(dir).map_err(|_| format!("{out} is outside the session's root"))?;
+    if !dir.starts_with(root) {
+        return Err(format!("{out} is outside the session's root"));
+    }
+    let real = dir.join(name);
+    // a link there already: where it leads is where the old code would have written
+    if std::fs::symlink_metadata(&real).is_ok_and(|m| m.file_type().is_symlink()) {
+        let to = std::fs::canonicalize(&real).unwrap_or_else(|_| real.clone());
+        if !to.starts_with(root) || git(to.strip_prefix(root).unwrap_or(&to)) {
+            return Err(format!("{out} is a link out of the session's root"));
+        }
+    }
+    if git(real.strip_prefix(root).unwrap_or(&real)) {
+        return Err(format!("{out}: not into the repository's .git"));
+    }
+    Ok(real)
+}
+
 /// An export written to `out` under the session's root, not sent back: refused in a read-only
 /// session or outside the root.
 fn write_out(r: &mut Reply, out: &str) {
@@ -443,17 +477,14 @@ fn write_out(r: &mut Reply, out: &str) {
             "export out writes: the session is read-only (serve --writable)".into(),
         );
     }
-    let path = root.join(out);
-    let inside = path
-        .parent()
-        .and_then(|d| std::fs::canonicalize(d).ok())
-        .is_some_and(|d| d.starts_with(root))
-        && path.file_name().is_some();
-    if !inside {
-        return refuse(r, format!("{out} is outside the session's root"));
-    }
+    let path = match out_place(root, out) {
+        Ok(p) => p,
+        Err(e) => return refuse(r, e),
+    };
     let Some(bytes) = r.png.take() else { return };
-    if let Err(e) = std::fs::write(&path, &bytes) {
+    // as forgecad web writes: a file made new under a random name beside it, renamed over it,
+    // never written through a link
+    if let Err(e) = crate::web::put(&path, &bytes) {
         return refuse(r, format!("{out}: {e}"));
     }
     if let Json::Obj(f) = &mut r.json {
