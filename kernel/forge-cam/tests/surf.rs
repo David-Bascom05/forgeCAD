@@ -363,3 +363,34 @@ fn zlevel_on_a_curved_part_reaches_the_contour() {
         );
     }
 }
+
+/// A z-level whose every grid node is blocked (under the plate's top over an area wholly on the
+/// plate) has no contour at all: it must block everything, not free it. Roughing the dome down to
+/// −0.5 over such an area certifies, and no pass is made at that level.
+#[test]
+fn zlevel_with_every_node_blocked_cuts_nothing_there() {
+    let faces = dome();
+    let flat = tool("flat-10", 1);
+    let sf = Surfacer::new(&faces, &flat.shape.bodies[0], 0.5, TOL, 0.0).unwrap();
+    let c = Cut {
+        tool: &flat,
+        tidx: 0,
+        h: H,
+        feed: (1500.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
+    };
+    let p = surf::zlevel(&sf, c, [5.0, 5.0, 55.0, 55.0], 12.0, -0.5, 4.0, 4.0, 2.0).unwrap();
+    let low = p.moves.iter().any(|m| match *m {
+        PMove::Line {
+            to,
+            phase: ops::Phase::Cut,
+            ..
+        }
+        | PMove::Arc { to, .. } => to[2] < 0.25,
+        _ => false,
+    });
+    assert!(!low, "a pass at a level under the plate's top");
+    let s = certified(&p, &flat, &faces);
+    assert!(s.clear, "{:?}", s.checks);
+}

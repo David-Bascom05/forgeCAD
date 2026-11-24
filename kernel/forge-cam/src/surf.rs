@@ -1088,7 +1088,8 @@ pub fn zlevel(
 /// Each level's blocked tool-centre region bounded by its traced contours (`trace`: vertices on
 /// the free side of the CL = z crossing to within res, pieces proven at tol/2), each loop turned
 /// so the blocked side is on its left. None for a level where a contour reaches the grid's
-/// edge or traces to fewer than three vertices (that level takes the grid's cells).
+/// edge or traces to fewer than three vertices, or where every node is blocked (no contour at
+/// all): that level takes the grid's cells.
 fn traced_blocked(
     sf: &Surfacer,
     g: &ClGrid,
@@ -1101,7 +1102,11 @@ fn traced_blocked(
     let mut ok = vec![true; zs.len()];
     for (li, &z) in zs.iter().enumerate() {
         let cs = contours_closed(g, z);
-        if cs.iter().any(|(_, closed)| !closed) {
+        // no contour: every node on one side. All free is an empty blocked region; all blocked
+        // (the level under the part's floor, or the whole area over it) is the grid's cells,
+        // every one blocked. A node decides which.
+        let all_blocked = cs.is_empty() && g.hi.first().is_some_and(|&h| h > z);
+        if all_blocked || cs.iter().any(|(_, closed)| !closed) {
             ok[li] = false;
             of.push(Vec::new());
             continue;
