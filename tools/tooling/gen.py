@@ -64,7 +64,7 @@ GROUPS = [
     ("M", r"stainless|duplex|austenit"),
     ("K", r"cast iron|grey iron|gray iron|ductile|nodular"),
     ("N", r"alumin|copper|brass|bronze|magnes|zinc|non[- ]?ferrous"),
-    ("O", r"plastic|acrylic|acetal|delrin|nylon|polycarbonate|peek|ptfe|uhmw"),
+    ("O", r"plastic|acrylic|acetal|delrin|nylon|polycarbonate|peek|ptfe|uhmw|cfrp|carbon fiber|graphite|epoxy|laminate"),
     ("P", r"steel|carbon|alloy steel|tool steel|low carbon|medium carbon"),
 ]
 
@@ -862,6 +862,114 @@ def shop(vendor, r, outs, skips):
         skips[f"shop kind {k}"] += 1
 
 
+# Maker-published machine-readable libraries (research/cam/tooling/libraries.md), imported with
+# each value cited to the library file and its version. RobbJack only: its licence allows import
+# into CAM systems ("Free to import into CAM/CAD/tool-management systems ...").
+LIBS = os.path.join(os.path.dirname(RAW), "libraries")
+ROBBJACK = dict(
+    file=os.path.join(LIBS, "robbjack", "robbjack-fusion360.tools"),
+    url="https://robbjack.com/data/cam/robbjack-fusion360.tools#v1.1-2026-11-02",
+    version="schema v1.1, generated 2026-11-02 (sha256 75f115ba..., per the maker's manifest)",
+    taken="2026-11-24")
+FUSION_KIND = {"flat end mill": "flat", "ball end mill": "ball", "bull nose end mill": "bull"}
+CLASS_OF = [("slot", r"slotting"), ("finish", r"finishing"), ("rough", r"roughing")]
+
+
+def robbjack(skips):
+    import zipfile
+    lib = ROBBJACK
+    d = json.loads(zipfile.ZipFile(lib["file"]).read("tools.json"))
+    out = Out()
+    src = f"{lib['url']} ({lib['version']})"
+    for t in d["data"]:
+        kind = FUSION_KIND.get(t["type"])
+        if not kind:
+            skips[f"library type {t['type']}"] += 1
+            continue
+        inch = t["unit"].startswith("inch")
+        k = 25.4 if inch else 1.0
+        u = "in" if inch else "mm"
+        g = t["geometry"]
+        cite = lambda path, key: dict(path=path, status="published", source=lib["url"], taken=lib["taken"],
+                                      value=f"{key} {g[key]} {u}")
+        f = dict(type=kind, dc=g["DC"] * k, lcf=g["LCF"] * k, dcon=g["SFDM"] * k, oal=g["OAL"] * k, nof=g["NOF"])
+        cites = [cite("dc", "DC"), cite("lcf", "LCF"), cite("dcon", "SFDM"), cite("oal", "OAL"),
+                 dict(cite("nof", "NOF"), value=f"geometry.NOF {g['NOF']}")]
+        if kind == "bull":
+            if not g.get("RE"):
+                skips["library bull without RE"] += 1
+                continue
+            f["re"] = g["RE"] * k
+            cites.append(cite("re", "RE"))
+        f["material"] = t.get("BMC")
+        cites.append(dict(path="material", status="published", source=lib["url"], taken=lib["taken"],
+                          value=f"BMC {t.get('BMC')}"))
+        rows = []
+        for pr in t.get("start-values", {}).get("presets", []):
+            mat = re.sub(r"\s*\(RobbJack tested\)$", "", pr["name"])
+            grp = group_of(mat)
+            m = re.search(r"values — ([^:]+):", pr.get("description", ""))
+            cls = next((c for c, rx in CLASS_OF if m and re.search(rx, m.group(1))), "general")
+            if not grp or not pr.get("v_c") or not pr.get("f_z"):
+                skips["library preset without an ISO group (wood) or values"] += 1
+                continue
+            vc = pr["v_c"] * (0.3048 if inch else 1.0)
+            ap = pr["stepdown"] * k if pr.get("use-stepdown") else None
+            ae = pr["stepover"] * k if pr.get("use-stepover") else None
+            rows.append(dict(g=grp, cls=cls, vc=vc, fz=pr["f_z"] * k, ap=ap, ae=ae, mat=mat, pr=pr,
+                             c={"material": mat}))
+        presets = []
+        for key in sorted({(x["g"], x["cls"]) for x in rows},
+                          key=lambda kk: (GROUP_ORDER.index(kk[0]), CLASS_ORDER.index(kk[1]))):
+            grp_rows = [x for x in rows if (x["g"], x["cls"]) == key]
+            rep, how = representative(key[0], grp_rows)
+            # a group with one material: its representative is that material, named in the cite;
+            # with several, each also gets "<G> <class> <material>"
+            named = [(x, f"{key[0]} {key[1]} {x['mat']}", None) for x in grp_rows] if len(grp_rows) > 1 else []
+            for x, name, h in [(rep, f"{key[0]} {key[1]}", how)] + named:
+                pr = x["pr"]
+                basis = [f"'{x['mat']}' mapped to ISO 513 group {x['g']} by its name"]
+                if h and not h.startswith("the group's representative"):
+                    basis.append(h)
+                notes = []
+                value = (f"{pr['name']}: v_c {pr['v_c']} {'ft/min' if inch else 'm/min'}, f_z {pr['f_z']} {u}"
+                         + (f", stepdown {pr['stepdown']} {u}" if x["ap"] is not None else "")
+                         + (f", stepover {pr['stepover']} {u}" if x["ae"] is not None else ""))
+                presets.append(dict(name=name, group=x["g"], vc=x["vc"], fz=x["fz"], ap=x["ap"], ae=x["ae"],
+                                    cite=dict(path=f"preset.{name}", status="estimate", source=lib["url"],
+                                              taken=lib["taken"], value=value, basis="; ".join(basis),
+                                              note="; ".join(notes))))
+        head = dict(id=f"robbjack-{t['product-id']}", **f, vendor="RobbJack", product_id=t["product-id"], real=True,
+                    source=t.get("product-link") or lib["url"], taken=lib["taken"],
+                    note=t.get("description", "")[:120])
+        out.lines.append("[[tool]]")
+        for kk, v in head.items():
+            if v is not None and v != "":
+                out.lines.append(f"{kk} = {tv(v) if isinstance(v, (str, bool)) or kk == 'nof' else repr(round(float(v), 6))}")
+        for pr in presets:
+            out.lines.append("[[tool.preset]]")
+            for kk in ("name", "group", "vc", "fz", "ap", "ae"):
+                v = pr.get(kk)
+                if v is not None:
+                    out.lines.append(f"{kk} = {tv(v) if isinstance(v, str) else repr(round(float(v), 6))}")
+        for c in cites + [p["cite"] for p in presets]:
+            out.lines.append("[[tool.cite]]")
+            for kk in ("path", "status", "source", "taken", "value", "basis", "note"):
+                if c.get(kk):
+                    out.lines.append(f"{kk} = {tv(c[kk])}")
+        out.lines.append("")
+    os.makedirs(os.path.join(DATA, "libraries"), exist_ok=True)
+    path = os.path.join(DATA, "libraries", "robbjack.toml")
+    with open(path, "w") as fh:
+        fh.write("# RobbJack: imported from the maker's own Fusion tool library (licence: \"Free to import into\n"
+                 "# CAM/CAD/tool-management systems and to redistribute unmodified with attribution to RobbJack\n"
+                 "# Corporation\"). GENERATED by tools/tooling/gen.py; every value cites the library file\n"
+                 f"# ({lib['version']}). Inch values are converted exactly (in x 25.4, ft/min x 0.3048). Presets:\n"
+                 "# \"<G> <class>\" is the group's representative (FEEDS-SPEEDS' list), its material named in\n"
+                 "# the cite; a group with several materials also has \"<G> <class> <material>\".\n\n")
+        fh.write("\n".join(out.lines))
+
+
 def main():
     report = {}
     for vendor in VENDORS:
@@ -909,6 +1017,9 @@ def main():
             elif os.path.exists(path):
                 os.remove(path)
         report[vendor] = (dict(counts), dict(skips))
+    rs = collections.Counter()
+    robbjack(rs)
+    report["robbjack"] = ({}, dict(rs))
     for v, (c, s) in report.items():
         print(f"{v:10} {c}  skipped: {s}")
 

@@ -396,3 +396,31 @@ fn shop_part_tools() {
     let tm = l.tool("tungaloy-MTEC0807C171.5ISO").unwrap();
     assert_eq!((tm.dc, tm.tp, tm.nof), (7.0, 1.5, 3));
 }
+
+/// RobbJack's own Fusion library, imported in bulk (the `maker-libraries` feature): its end
+/// mills read, cite every value to the library file, and shape.
+#[cfg(feature = "maker-libraries")]
+#[test]
+fn robbjack_library() {
+    let l = Library::with_maker_libraries();
+    let rj: Vec<_> = l.tools.iter().filter(|t| t.vendor == "RobbJack").collect();
+    assert!(rj.len() >= 5000, "{}", rj.len());
+    let t = l.tool("robbjack-A1-201-04").unwrap();
+    assert_eq!(
+        (t.dc, t.lcf, t.dcon, t.oal, t.nof),
+        (3.175, 4.7625, 3.175, 38.1, 2)
+    );
+    let p = t.presets.iter().find(|p| p.name == "N rough").unwrap();
+    // 1965 ft/min, 0.0032 in/tooth (6061, RobbJack tested)
+    assert!((p.vc - 1965.0 * 0.3048).abs() < 1e-6 && (p.fz - 0.0032 * 25.4).abs() < 1e-9);
+    for t in rj.iter().step_by(97) {
+        assert!(
+            t.real
+                && t.cites
+                    .iter()
+                    .all(|c| c.source.starts_with("https://robbjack.com/"))
+        );
+        t.shape(t.lcf + 2.0, None)
+            .unwrap_or_else(|e| panic!("{}: {e:?}", t.id));
+    }
+}
