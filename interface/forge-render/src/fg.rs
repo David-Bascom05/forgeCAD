@@ -1157,6 +1157,9 @@ impl Worker {
             let view = self.gpu.take().map(|gpu| {
                 let parts = vec![mesh.clone()];
                 let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+                // the part's own box, so framing fits the part, not the sphere round it (a slender
+                // shaft filled a third of that sphere's cube)
+                scene.set_part_boxes(parts.iter().map(crate::explode::mesh_box).collect());
                 scene.set_explode(0.0);
                 make_view(gpu, parts, scene)
             });
@@ -1292,6 +1295,7 @@ impl Worker {
             let view = self.gpu.take().map(|gpu| {
                 let parts = vec![mesh.clone().unwrap_or_else(PartMesh::empty)];
                 let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+                scene.set_part_boxes(parts.iter().map(crate::explode::mesh_box).collect());
                 scene.set_explode(0.0);
                 make_view(gpu, parts, scene)
             });
