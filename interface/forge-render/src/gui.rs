@@ -2402,7 +2402,7 @@ impl Gui {
                     .collect(),
             });
             if let Some(p) = &mut self.shell.fg {
-                p.summary = b.summary();
+                p.summary = b.summary(crate::shell::ux::System::of_doc(self.shell.units));
                 // a part that gained a component is an assembly now (and back)
                 p.assembly = b.asm.is_some();
                 p.feats = b.feats;
