@@ -90,6 +90,9 @@ dependencies = [
 [[package]]
 name = "forge-cam-geom"
 version = "0.1.0"
+dependencies = [
+ "forge-num",
+]
 
 [[package]]
 name = "forge-cam-import"

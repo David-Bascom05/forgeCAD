@@ -6,5 +6,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[dependencies]
+# the exact numbers (Nat, the exact reals, Ival): one implementation, shared with forge-math
+forge-num = { path = "../forge-num" }
+
 [lints]
 workspace = true
