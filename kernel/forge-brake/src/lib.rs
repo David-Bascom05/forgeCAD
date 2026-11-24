@@ -15,6 +15,7 @@ pub mod model;
 pub mod num;
 pub mod plan;
 pub mod scene;
+pub mod schema;
 pub mod sim;
 pub mod tooling;
 pub mod view;
