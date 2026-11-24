@@ -2605,7 +2605,11 @@ impl Cam {
                         let nn = [u2[1], -u2[0]];
                         let len = ((pb.x - pa.x).powi(2) + (pb.y - pa.y).powi(2)).sqrt();
                         // the slope's length from the top's edge to the chamfer's bottom
-                        let qb = s / sin_b;
+                        let qb = if beta == 45.0 {
+                            s * std::f64::consts::SQRT_2
+                        } else {
+                            s / sin_b
+                        };
                         // bottom ends: moved out by s, or the corner
                         let ca = junction(prev, sg, *sg)?;
                         let cb = junction(sg, next, *next)?;
