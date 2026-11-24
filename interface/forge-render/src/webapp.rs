@@ -844,10 +844,7 @@ fn cam_json(g: &Gui) -> Json {
         ("text", w.text.clone().into()),
         ("said", w.said.clone().map_or(Json::Null, Json::from)),
         ("exported", (w.exported as f64).into()),
-        (
-            "colour_by",
-            w.focus.colour_by.map_or(Json::Null, |c| format!("{c:?}").into()),
-        ),
+        ("colour_by", w.focus.colour_by.map_or(Json::Null, |c| format!("{c:?}").into())),
         // each program's file as last read: name, state, path
         (
             "posted",
