@@ -362,3 +362,102 @@ fn a_lost_reference_refuses_its_solid_not_the_file() {
         Err(forge_step::ImportError::Parse(_))
     ));
 }
+
+/// A round bar as a spline system writes one: its side a linear extrusion of a closed rational
+/// B-spline circle (closed round u, open along v, as far as the model reaches), between two
+/// disks.
+fn extruded_bar(r: f64, h: f64) -> String {
+    let w = std::f64::consts::FRAC_1_SQRT_2;
+    let ring = [
+        (r, 0.0, 1.0),
+        (r, r, w),
+        (0.0, r, 1.0),
+        (-r, r, w),
+        (-r, 0.0, 1.0),
+        (-r, -r, w),
+        (0.0, -r, 1.0),
+        (r, -r, w),
+        (r, 0.0, 1.0),
+    ];
+    let mut pts = String::new();
+    let mut ids = Vec::new();
+    for (i, &(x, y, _)) in ring.iter().enumerate() {
+        pts += &format!("#{}=CARTESIAN_POINT('',({x:?},{y:?},0.));\n", 100 + i);
+        ids.push(format!("#{}", 100 + i));
+    }
+    let weights: Vec<String> = ring.iter().map(|&(_, _, w)| format!("{w:?}")).collect();
+    format!(
+        "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('bar','',(''),(''),'','','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));
+ENDSEC;
+DATA;
+#1=DIRECTION('',(0.,0.,1.));
+#2=DIRECTION('',(1.,0.,0.));
+#3=CARTESIAN_POINT('',(0.,0.,0.));
+#4=CARTESIAN_POINT('',(0.,0.,{h:?}));
+#5=AXIS2_PLACEMENT_3D('',#3,#1,#2);
+#6=AXIS2_PLACEMENT_3D('',#4,#1,#2);
+#7=CIRCLE('',#5,{r:?});
+#8=CIRCLE('',#6,{r:?});
+#9=CARTESIAN_POINT('',({r:?},0.,0.));
+#10=CARTESIAN_POINT('',({r:?},0.,{h:?}));
+#11=VERTEX_POINT('',#9);
+#12=VERTEX_POINT('',#10);
+#13=EDGE_CURVE('',#11,#11,#7,.T.);
+#14=EDGE_CURVE('',#12,#12,#8,.T.);
+#15=PLANE('',#5);
+#16=PLANE('',#6);
+{pts}#20=(BOUNDED_CURVE()B_SPLINE_CURVE(2,({ids}),.CIRCULAR_ARC.,.T.,.F.)B_SPLINE_CURVE_WITH_KNOTS((3,2,2,2,3),(0.,0.25,0.5,0.75,1.),.UNSPECIFIED.)CURVE()GEOMETRIC_REPRESENTATION_ITEM()RATIONAL_B_SPLINE_CURVE(({weights}))REPRESENTATION_ITEM(''));
+#21=VECTOR('',#1,1.);
+#22=SURFACE_OF_LINEAR_EXTRUSION('',#20,#21);
+#30=ORIENTED_EDGE('',*,*,#13,.T.);
+#31=ORIENTED_EDGE('',*,*,#14,.F.);
+#32=ORIENTED_EDGE('',*,*,#13,.F.);
+#33=ORIENTED_EDGE('',*,*,#14,.T.);
+#34=EDGE_LOOP('',(#30));
+#35=EDGE_LOOP('',(#31));
+#36=EDGE_LOOP('',(#32));
+#37=EDGE_LOOP('',(#33));
+#38=FACE_OUTER_BOUND('',#34,.T.);
+#39=FACE_BOUND('',#35,.T.);
+#40=FACE_OUTER_BOUND('',#36,.T.);
+#41=FACE_OUTER_BOUND('',#37,.T.);
+#42=ADVANCED_FACE('',(#38,#39),#22,.T.);
+#43=ADVANCED_FACE('',(#40),#15,.F.);
+#44=ADVANCED_FACE('',(#41),#16,.T.);
+#50=CLOSED_SHELL('',(#42,#43,#44));
+#51=MANIFOLD_SOLID_BREP('bar',#50);
+#60=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));
+#61=(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.));
+#62=(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT());
+#63=UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-06),#60,'','');
+#64=(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#63))GLOBAL_UNIT_ASSIGNED_CONTEXT((#60,#61,#62))REPRESENTATION_CONTEXT('',''));
+#65=ADVANCED_BREP_SHAPE_REPRESENTATION('',(#51),#64);
+ENDSEC;
+END-ISO-10303-21;
+",
+        ids = ids.join(","),
+        weights = weights.join(",")
+    )
+}
+
+/// A face on a surface closed one way only (a closed extrusion, open along v as far as the model
+/// reaches) has a box as far as its edges go, not the surface's whole domain: the box was
+/// +-1e6 mm along the extrusion (PARASOLID's Onshape extrude.x_t), which every box test lost.
+#[test]
+fn a_closed_extrusions_face_has_a_tight_box() {
+    let (r, h) = (10.0, 1.0);
+    let imp = import(extruded_bar(r, h).as_bytes(), &Limits::default()).unwrap();
+    assert!(imp.refusals.is_empty(), "{:?}", imp.refusals);
+    let b = &imp.solids[0].body;
+    assert!(check(b).is_empty(), "{:?}", check(b));
+    let bx = b.faces_box();
+    assert!(bx.z.lo > -0.2 && bx.z.hi < h + 0.2, "{bx:?}");
+    assert!(bx.x.lo > -r - 1.0 && bx.x.hi < r + 1.0, "{bx:?}");
+    let want = forge_math::dmath::PI * r * r * h;
+    let v = forge_topo::mass::mass_rel(b, 1e-6).unwrap().volume;
+    assert!((v - want).abs() < 1e-5 * want, "{v} vs {want}");
+}

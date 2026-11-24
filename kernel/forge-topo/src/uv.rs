@@ -406,6 +406,9 @@ pub(crate) fn procedural_box(body: &Body, f: FaceId, pr: &forge_geom::surface::P
     if pr.whole_box() {
         return pr.bbox(whole);
     }
+    if d.u.period.is_some() != d.v.period.is_some() {
+        return closed_one_way_box(body, f, pr, whole);
+    }
     let loops = if d.u.period.is_none() && d.v.period.is_none() {
         face_uv_loops(body, f)
     } else {
@@ -458,6 +461,41 @@ pub(crate) fn procedural_box(body: &Body, f: FaceId, pr: &forge_geom::surface::P
         }
     }
     b
+}
+
+/// The box of a face on a surface closed one way only (a pipe round a closed spine, a closed
+/// extrusion, a NURBS closed in u): the closed parameter whole, the other only as far as the face's
+/// loops reach, as a region's extremes along a parameter that does not close lie on its boundary
+/// (and to a pole at either end of the domain, which a cap reaches with no loop there). The whole
+/// domain instead gave a closed extrusion, open to the model's half size along v, a box of
+/// +-1e6 mm (an Onshape part, PARASOLID's extrude.x_t).
+fn closed_one_way_box(body: &Body, f: FaceId, pr: &forge_geom::surface::Proc, whole: forge_math::Box2) -> Box3 {
+    let closed_u = pr.domain().u.period.is_some();
+    let (w, across) = if closed_u { (whole.v, whole.u) } else { (whole.u, whole.v) };
+    let mut r = Interval::EMPTY;
+    for p in face_uv_loops(body, f).iter().flat_map(|l| &l.points) {
+        r.include(if closed_u { p.y } else { p.x });
+    }
+    if r.is_empty() {
+        return pr.bbox(whole);
+    }
+    let s = &body.face(f).surface;
+    let mid = 0.5 * (across.lo + across.hi);
+    for end in [w.lo, w.hi] {
+        let at = if closed_u { Point2::new(mid, end) } else { Point2::new(end, mid) };
+        if end.is_finite() && s.singular(at) {
+            r.include(end);
+        }
+    }
+    // padded as the columns are: a boundary curve bulges between its samples
+    let g = 0.05 * r.width() + 1e-9 * (1.0 + r.lo.abs().max(r.hi.abs()));
+    let r = Interval::new((r.lo - g).max(w.lo), (r.hi + g).min(w.hi));
+    let b = if closed_u {
+        forge_math::Box2::new(across, r)
+    } else {
+        forge_math::Box2::new(r, across)
+    };
+    pr.bbox(b)
 }
 
 /// The v a face holds over u in [lo, hi], as runs, from its uv loops: each stretch of boundary
