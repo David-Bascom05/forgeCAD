@@ -68,6 +68,9 @@ Don't:
   whole view over a 50 mm tool.
 - Animated subjects (bend, toolpath): the camera does not cut per step; it holds a frame that
   contains the whole motion envelope; "Follow" is opt-in.
+- Subjects the user moves by hand (driving a robot joint, jogging a machine axis): frame the
+  entry pose and keep the camera still while they drag; F / Fit All re-fits to the current pose.
+  The motion-envelope rule above is for playback the app animates, not for direct manipulation.
 - Helper: `frame::frame(bounds, view_rect, Framing::default(), obstacles)` (section 12). No environment computes its
   own fit distance.
 
