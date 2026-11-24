@@ -362,6 +362,12 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
     }
     super::lib_form::legend(ui, t);
     ui.separator();
+    // what the view draws that the record does not publish: the sheet shows the same values
+    let drawn = match r.kind.name() {
+        "vise" | "self_centring" => crate::library_mesh::vise_drawn(&r),
+        "chuck" => crate::library_mesh::chuck_drawn(&r),
+        _ => Vec::new(),
+    };
     let mut set: Option<(String, f64)> = None;
     let mut set_list: Option<(String, Vec<f64>)> = None;
     let mut set_word: Option<(String, String)> = None;
@@ -398,11 +404,18 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                             set = Some((f.path.clone(), x));
                                         }
                                     }
-                                    None => {
-                                        if super::lib_form::unknown_slot(ui, t, 140.0) {
-                                            set = Some((f.path.clone(), 1.0));
+                                    None => match drawn.iter().find(|d| d.key == f.path) {
+                                        Some(d) => {
+                                            if super::lib_form::drawn_cell(ui, t, d, f.unit.suffix(), 140.0) {
+                                                set = Some((f.path.clone(), d.value));
+                                            }
                                         }
-                                    }
+                                        None => {
+                                            if super::lib_form::unknown_slot(ui, t, 140.0) {
+                                                set = Some((f.path.clone(), 1.0));
+                                            }
+                                        }
+                                    },
                                 },
                                 Ty::Points(_) => {
                                     let mut v = r.lists.get(&f.path).cloned().unwrap_or_default();
@@ -444,10 +457,20 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                 }
                             }
                             let (w, _) = status(t, &r, &f.path);
+                            let shown = drawn
+                                .iter()
+                                .find(|d| d.key == f.path && !r.vals.contains_key(&f.path));
                             let not_given = matches!(&f.need, forge_library::schema::Need::Optional(_))
                                 && !r.vals.contains_key(&f.path)
-                                && !r.unknown.contains(&f.path);
-                            if not_given {
+                                && !r.unknown.contains(&f.path)
+                                && shown.is_none();
+                            if let Some(d) = shown {
+                                let p = match d.basis {
+                                    crate::library_mesh::Basis::Conflict => super::lib_form::Prov::Conflict,
+                                    _ => super::lib_form::Prov::Estimate,
+                                };
+                                super::lib_form::chip(ui, t, p, &d.why, false);
+                            } else if not_given {
                                 ui.label(RichText::new("not given").font(sans(10.5)).color(t.ink2));
                             } else {
                                 let detail = r

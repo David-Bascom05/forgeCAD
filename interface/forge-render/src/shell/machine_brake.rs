@@ -929,6 +929,12 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
     ui.separator();
     let real = matches!(st.table.get("real"), Some(Item::Bool(true)));
     let fields = forge_brake_builder::fields(st.word);
+    // what the view draws that the record does not publish: the sheet shows the same values
+    let drawn = if st.word == "press" {
+        crate::library_mesh::press_drawn(&st.table)
+    } else {
+        Vec::new()
+    };
     let mut change: Option<Change> = None;
     egui::ScrollArea::vertical().id_salt("brake:form").show(ui, |ui| {
         for sec in SECTIONS {
@@ -958,26 +964,45 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                                     change = Some(Change::Set(f.clone(), nv));
                                 }
                             }
-                            None if f.cited => {
-                                if lf::unknown_slot(ui, t, 140.0) {
-                                    change = Some(Change::Set(f.clone(), first_value(st.word, f)));
+                            None if f.cited => match drawn.iter().find(|d| d.key == f.path) {
+                                Some(d) => {
+                                    if lf::drawn_cell(ui, t, d, f.unit.suffix(), 140.0) {
+                                        change = Some(Change::Set(f.clone(), Item::Num(d.value)));
+                                    }
                                 }
-                            }
-                            None => {
-                                if ui
-                                    .add(
-                                        egui::Button::new(
-                                            RichText::new("not given · add").font(sans(11.0)).color(t.ink2),
+                                None => {
+                                    if lf::unknown_slot(ui, t, 140.0) {
+                                        change = Some(Change::Set(f.clone(), first_value(st.word, f)));
+                                    }
+                                }
+                            },
+                            None => match drawn.iter().find(|d| d.key == f.path) {
+                                Some(d) => {
+                                    if lf::drawn_cell(ui, t, d, f.unit.suffix(), 140.0) {
+                                        change = Some(Change::Set(f.clone(), Item::Num(d.value)));
+                                    }
+                                }
+                                None => {
+                                    if ui
+                                        .add(
+                                            egui::Button::new(
+                                                RichText::new("not given · add")
+                                                    .font(sans(11.0))
+                                                    .color(t.ink2),
+                                            )
+                                            .min_size(vec2(140.0, 18.0)),
                                         )
-                                        .min_size(vec2(140.0, 18.0)),
-                                    )
-                                    .clicked()
-                                {
-                                    change = Some(Change::Set(f.clone(), first_value(st.word, f)));
+                                        .clicked()
+                                    {
+                                        change = Some(Change::Set(f.clone(), first_value(st.word, f)));
+                                    }
                                 }
-                            }
+                            },
                         }
-                        if f.cited {
+                        let shown = drawn.iter().find(|d| v.is_none() && d.key == f.path);
+                        if let Some(d) = shown {
+                            lf::chip(ui, t, Prov::Estimate, &d.why, false);
+                        } else if f.cited {
                             let p = match status_of(&st.table, &f.path) {
                                 None if v.is_none() => Prov::Unknown,
                                 None if !real => Prov::StandIn,

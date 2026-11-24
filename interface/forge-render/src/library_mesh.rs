@@ -345,6 +345,93 @@ fn best(r: &forge_workholding::Record, k: &str) -> Option<(f64, Basis)> {
     None
 }
 
+/// A size the preview draws that the record does not publish: the value drawn (mm), how it was
+/// come by, and the rule or sources in words. The sheet shows the same value with its chip, so
+/// the sheet and the view never disagree (docs/ux/STANDARD.md §4.2).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Drawn {
+    pub key: &'static str,
+    pub value: f64,
+    pub basis: Basis,
+    pub why: String,
+}
+
+/// A vise's sizes as drawn: (key, value and basis, the rule used when it is an estimate).
+fn vise_dims(r: &forge_workholding::Record) -> Vec<(&'static str, (f64, Basis), &'static str)> {
+    let jw = best(r, "jaw_width");
+    let jh = best(r, "jaw_height");
+    let mo = best(r, "max_opening");
+    let bl = best(r, "body_length");
+    let bw = best(r, "body_width");
+    let h = best(r, "height");
+    let jt = best(r, "jaw_thickness");
+    let scale = [jw, bw, mo, bl]
+        .iter()
+        .flatten()
+        .map(|x| x.0)
+        .fold(0.0, f64::max)
+        .max(50.0);
+    let est = |v: Option<(f64, Basis)>, rule: f64| v.unwrap_or((rule, Basis::Estimate));
+    let (jw, jh) = (est(jw, scale), est(jh, scale * 0.3));
+    let jt = est(jt, jh.0 * 0.5);
+    let mo = est(mo, scale);
+    let bw = est(bw, jw.0);
+    let bl = est(bl, mo.0 + 4.0 * jt.0);
+    // the height: cited (or a conflict's first value) when above the jaws, else the base as tall
+    // as the jaws
+    let h = match h {
+        Some((v, b)) if v > jh.0 => (v, b),
+        _ => (2.0 * jh.0, Basis::Estimate),
+    };
+    vec![
+        ("jaw_width", jw, "the largest of the vise's other sizes"),
+        ("jaw_height", jh, "0.3 of the vise's largest size"),
+        ("max_opening", mo, "the largest of the vise's other sizes"),
+        ("body_length", bl, "the opening plus four jaw thicknesses"),
+        ("body_width", bw, "the jaw width"),
+        ("height", h, "a base as tall as the jaws, then the jaws"),
+        ("jaw_thickness", jt, "half the jaw height"),
+    ]
+}
+
+fn drawn_of(dims: &[(&'static str, (f64, Basis), &'static str)], conflict_note: &str) -> Vec<Drawn> {
+    dims.iter()
+        .filter(|(_, (_, b), _)| *b != Basis::Cited)
+        .map(|(k, (v, b), rule)| Drawn {
+            key: k,
+            value: *v,
+            basis: *b,
+            why: match b {
+                Basis::Conflict => format!("Sources disagree; drawn at the first cited. {conflict_note}"),
+                _ => format!("Not published: drawn at an estimate ({rule})."),
+            },
+        })
+        .collect()
+}
+
+/// What a vise's preview draws that its record does not publish.
+pub fn vise_drawn(r: &forge_workholding::Record) -> Vec<Drawn> {
+    drawn_of(&vise_dims(r), &r.note)
+}
+
+/// A chuck's sizes as drawn.
+fn chuck_dims(r: &forge_workholding::Record) -> Vec<(&'static str, (f64, Basis), &'static str)> {
+    let gmax = best(r, "grip_max");
+    let bd = best(r, "body_d").unwrap_or((gmax.map_or(200.0, |g| g.0 * 1.3), Basis::Estimate));
+    let bl = best(r, "body_len").unwrap_or((bd.0 * 0.4, Basis::Estimate));
+    let jl = best(r, "jaw_len").unwrap_or((bd.0 * 0.15, Basis::Estimate));
+    vec![
+        ("body_d", bd, "1.3 times the largest grip"),
+        ("body_len", bl, "0.4 of the body diameter"),
+        ("jaw_len", jl, "0.15 of the body diameter"),
+    ]
+}
+
+/// What a chuck's preview draws that its record does not publish.
+pub fn chuck_drawn(r: &forge_workholding::Record) -> Vec<Drawn> {
+    drawn_of(&chuck_dims(r), &r.note)
+}
+
 /// How a drawn size was come by.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Basis {
@@ -395,31 +482,20 @@ impl Preview {
 /// table) at z = 0, the clamp axis along x, the fixed jaw at -x.
 pub fn vise(r: &forge_workholding::Record) -> Preview {
     let mut p = Preview::default();
-    let jw = best(r, "jaw_width");
-    let jh = best(r, "jaw_height");
-    let mo = best(r, "max_opening");
-    let bl = best(r, "body_length");
-    let bw = best(r, "body_width");
-    let h = best(r, "height");
-    let jt = best(r, "jaw_thickness");
-    // a size from no source: the rule given in its label
-    let scale = [jw, bw, mo, bl]
-        .iter()
-        .flatten()
-        .map(|x| x.0)
-        .fold(0.0, f64::max)
-        .max(50.0);
-    let est = |v: Option<(f64, Basis)>, rule: f64| v.unwrap_or((rule, Basis::Estimate));
-    let (jw, jh) = (est(jw, scale), est(jh, scale * 0.3));
-    let jt = est(jt, jh.0 * 0.5);
-    let mo = est(mo, scale);
-    let bw = est(bw, jw.0);
-    let bl = est(bl, mo.0 + 4.0 * jt.0);
+    // every size as the sheet shows it (vise_drawn): the same numbers
+    let d = vise_dims(r);
+    let at = |k: &str| d.iter().find(|x| x.0 == k).expect("every vise size").1;
+    let (jw, jh, mo, bl, bw, jt) = (
+        at("jaw_width"),
+        at("jaw_height"),
+        at("max_opening"),
+        at("body_length"),
+        at("body_width"),
+        at("jaw_thickness"),
+    );
+    let h = Some(at("height"));
     // the base up to the jaws' seat: the height less the jaw height
-    let base = match h {
-        Some((h, b)) if h > jh.0 => (h - jh.0, b),
-        _ => (jh.0, Basis::Estimate),
-    };
+    let base = (h.map_or(jh.0, |x| x.0) - jh.0, h.map_or(Basis::Estimate, |x| x.1));
     let (x0, x1, y) = (-bl.0 / 2.0, bl.0 / 2.0, bw.0 / 2.0);
     let bt = base.0;
     p.solid_box([x0, -y, 0.0], [x1, y, bt], Look::MachinePaint);
@@ -455,7 +531,7 @@ pub fn vise(r: &forge_workholding::Record) -> Preview {
         ),
         Basis::Estimate => format!("{what} · not published (an estimate)"),
     };
-    if let Some((hv, hb)) = h.map(|x| (x.0, x.1)).or(Some((bt + jh.0, Basis::Estimate)))
+    if let Some((hv, hb)) = h
         && hb != Basis::Cited
     {
         p.mark([x0, -y, 0.0], [x0, -y, hv], say("Height", hv, hb));
@@ -494,9 +570,8 @@ pub fn vise(r: &forge_workholding::Record) -> Preview {
 pub fn chuck(r: &forge_workholding::Record) -> Preview {
     let mut p = Preview::default();
     let gmax = best(r, "grip_max");
-    let bd = best(r, "body_d").unwrap_or((gmax.map_or(200.0, |g| g.0 * 1.3), Basis::Estimate));
-    let bl = best(r, "body_len").unwrap_or((bd.0 * 0.4, Basis::Estimate));
-    let jl = best(r, "jaw_len").unwrap_or((bd.0 * 0.15, Basis::Estimate));
+    let d = chuck_dims(r);
+    let (bd, bl, jl) = (d[0].1, d[1].1, d[2].1);
     let n = best(r, "jaws").map_or(3, |n| n.0.round() as usize).clamp(2, 8);
     p.solid_cyl([0.0, 0.0, -bl.0], [0.0, 0.0, 1.0], bd.0 / 2.0, bl.0, Look::Steel);
     let r_in = gmax.map_or(bd.0 * 0.15, |x| x.0 / 2.0).min(bd.0 * 0.45);
@@ -565,6 +640,79 @@ fn sweep_x(outline_yz: &[[f64; 2]], x0: f64, x1: f64) -> Tris {
     t
 }
 
+/// A press's sizes as drawn: (key, value and basis, the rule, its name in a label).
+#[allow(clippy::type_complexity)]
+fn press_dims(
+    t: &forge_vendor::toml::Table,
+) -> Vec<(&'static str, (f64, Basis), &'static str, &'static str)> {
+    use crate::shell::machine_brake::get;
+    use forge_vendor::toml::Item;
+    let g = |k: &str| match get(t, k) {
+        Some(Item::Num(x)) if *x > 0.0 => Some(*x),
+        _ => None,
+    };
+    let or = |v: Option<f64>, e: f64| v.map_or((e, Basis::Estimate), |x| (x, Basis::Cited));
+    let bl = or(g("bed_length"), 3000.0);
+    let throat = or(g("throat"), 400.0);
+    vec![
+        (
+            "bed_length",
+            bl,
+            "3000 mm, a common bending length",
+            "bending length",
+        ),
+        (
+            "housing_gap",
+            or(g("housing_gap"), bl.0 * 0.8),
+            "0.8 of the bending length",
+            "width between housings",
+        ),
+        (
+            "open_height",
+            or(g("open_height"), 400.0),
+            "400 mm, a common open height",
+            "open height",
+        ),
+        (
+            "table_height",
+            or(g("table_height"), 900.0),
+            "900 mm, a common working height",
+            "table height",
+        ),
+        ("throat", throat, "400 mm, a common throat", "throat depth"),
+        (
+            "frame.thickness",
+            or(g("frame.thickness"), 90.0),
+            "90 mm plate",
+            "housing thickness",
+        ),
+        (
+            "frame.depth",
+            or(g("frame.depth"), throat.0 * 2.4),
+            "2.4 times the throat",
+            "housing depth",
+        ),
+        ("bed.front", or(g("bed.front"), 90.0), "90 mm", "bed"),
+        ("bed.back", or(g("bed.back"), 90.0), "90 mm", "bed"),
+        ("ram.front", or(g("ram.front"), 90.0), "90 mm", "ram"),
+        ("ram.back", or(g("ram.back"), 90.0), "90 mm", "ram"),
+    ]
+}
+
+/// What a press's preview draws that its record does not publish.
+pub fn press_drawn(t: &forge_vendor::toml::Table) -> Vec<Drawn> {
+    press_dims(t)
+        .into_iter()
+        .filter(|x| x.1.1 != Basis::Cited)
+        .map(|(k, (v, b), rule, _)| Drawn {
+            key: k,
+            value: v,
+            basis: b,
+            why: format!("Not published: drawn at an estimate ({rule})."),
+        })
+        .collect()
+}
+
 /// A press brake from its record (STANDARD §4.2): two C-frame side housings with the throat
 /// open in front, the bed below and the ram above at their cited sizes, and a punch and die in
 /// place (forgecad's stand-in set, said so); what the record does not give drawn at an estimate
@@ -580,25 +728,24 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
         long_axis: Some(0),
         ..Default::default()
     };
-    let mut est: Vec<&str> = Vec::new();
-    let mut or = |v: Option<f64>, e: f64, what: &'static str| {
-        v.unwrap_or_else(|| {
-            est.push(what);
-            e
-        })
-    };
-    let bl = or(g("bed_length"), 3000.0, "bending length");
-    let gap = or(g("housing_gap"), bl * 0.8, "width between housings");
-    let oh = or(g("open_height"), 400.0, "open height");
-    let th = or(g("table_height"), 900.0, "table height");
-    let throat = or(g("throat"), 400.0, "throat depth");
+    let d = press_dims(t);
+    let at = |k: &str| d.iter().find(|x| x.0 == k).expect("every press size").1.0;
+    let (bl, gap, oh, th, throat) = (
+        at("bed_length"),
+        at("housing_gap"),
+        at("open_height"),
+        at("table_height"),
+        at("throat"),
+    );
     let stroke = g("stroke");
-    let ft = or(g("frame.thickness"), 90.0, "housing thickness");
-    let fd = or(g("frame.depth"), throat * 2.4, "housing depth");
-    let (bf, bb) = (or(g("bed.front"), 90.0, "bed"), or(g("bed.back"), 90.0, "bed"));
-    let (rf, rb) = (or(g("ram.front"), 90.0, "ram"), or(g("ram.back"), 90.0, "ram"));
+    let (ft, fd) = (at("frame.thickness"), at("frame.depth"));
+    let (bf, bb, rf, rb) = (at("bed.front"), at("bed.back"), at("ram.front"), at("ram.back"));
     let est: Vec<&str> = {
-        let mut e = est;
+        let mut e: Vec<&str> = d
+            .iter()
+            .filter(|x| x.1.1 == Basis::Estimate)
+            .map(|x| x.3)
+            .collect();
         e.dedup();
         e
     };
@@ -760,6 +907,47 @@ mod tests {
         let e = dashed_box([0.0; 3], [10.0, 10.0, 10.0]);
         assert!(e.len() > 12);
         assert!(e.iter().all(|d| d.len() == 2));
+    }
+}
+
+#[cfg(test)]
+mod drawn_tests {
+    use super::*;
+
+    /// The sheet's values are the view's: the Haas vise's height (sources disagree) at the first
+    /// cited 110.74 mm, its unpublished jaw thickness at half the jaw height; the press's unknown
+    /// housings at their rule; nothing the record publishes is listed.
+    #[test]
+    fn what_the_view_draws_the_sheet_shows() {
+        let lib = forge_workholding::Library::builtin();
+        let r = lib.get("haas-vise-05-0404").unwrap();
+        let d = vise_drawn(r);
+        let h = d.iter().find(|x| x.key == "height").unwrap();
+        assert_eq!((h.value, h.basis), (110.74, Basis::Conflict));
+        assert!(h.why.contains("OAH 110.74"), "{}", h.why);
+        let jt = d.iter().find(|x| x.key == "jaw_thickness").unwrap();
+        let jh = r.vals["jaw_height"];
+        assert_eq!((jt.value, jt.basis), (jh * 0.5, Basis::Estimate));
+        assert!(d.iter().all(|x| !r.vals.contains_key(x.key)));
+        // the preview marks the height at that value
+        let p = vise(r);
+        let mark = p.ghosts.iter().find(|g| g.label.starts_with("Height")).unwrap();
+        let top = mark.edges.iter().flatten().map(|q| q[2]).fold(f64::MIN, f64::max);
+        assert!((top - 110.74).abs() < 1e-9, "{top}");
+
+        let press = forge_brake_builder::templates()
+            .into_iter()
+            .find(|r| r.kind == "press")
+            .unwrap();
+        let pd = press_drawn(&press.table);
+        for x in &pd {
+            assert_eq!(x.basis, Basis::Estimate);
+            assert!(
+                crate::shell::machine_brake::get(&press.table, x.key).is_none(),
+                "{}",
+                x.key
+            );
+        }
     }
 }
 

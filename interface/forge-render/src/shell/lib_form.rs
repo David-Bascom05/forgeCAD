@@ -174,6 +174,40 @@ pub fn unknown_slot(ui: &mut Ui, t: &Theme, w: f32) -> bool {
         .clicked()
 }
 
+/// A value the record does not publish but the view draws (a conflict's first cited value, an
+/// estimate by its rule): shown as drawn, in its chip's colour, the reason on hover; a click takes
+/// it as the user's own value. Lengths in the document's units.
+pub fn drawn_cell(ui: &mut Ui, t: &Theme, d: &crate::library_mesh::Drawn, unit: &str, w: f32) -> bool {
+    let p = match d.basis {
+        crate::library_mesh::Basis::Conflict => Prov::Conflict,
+        _ => Prov::Estimate,
+    };
+    let doc = DOC_UNITS.with(|c| c.get());
+    // an estimate to a tenth (its rule is no finer); a cited value as cited
+    let near = |x: f64| match d.basis {
+        crate::library_mesh::Basis::Estimate => (x * 10.0).round() / 10.0,
+        _ => x,
+    };
+    let shown = match forge_units::lookup(doc) {
+        Some((_, top, bottom)) if unit == "mm" && doc != "mm" => {
+            value_text(near(d.value / (top / bottom)), doc)
+        }
+        _ => value_text(near(d.value), unit),
+    };
+    let text = match d.basis {
+        crate::library_mesh::Basis::Estimate => format!("≈ {shown}"),
+        _ => shown,
+    };
+    let col = p.colour(t);
+    let b = egui::Button::new(RichText::new(text).font(sans(12.0)).color(t.ink))
+        .fill(col.gamma_multiply(0.08))
+        .stroke(Stroke::new(1.0, col.gamma_multiply(0.45)))
+        .min_size(vec2(w, 18.0));
+    ui.add(b)
+        .on_hover_text(format!("{} Click to take it as your own value.", d.why))
+        .clicked()
+}
+
 /// A section heading.
 pub fn section(ui: &mut Ui, t: &Theme, s: &str) {
     ui.add_space(4.0);
