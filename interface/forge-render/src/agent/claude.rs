@@ -145,6 +145,7 @@ impl Parser {
                     out.push(Event::Permission {
                         id: id.clone(),
                         tool,
+                        tool_use: str_of(r, "tool_use_id").to_string(),
                         summary,
                         input: whole,
                         always: always_words(&suggestions),

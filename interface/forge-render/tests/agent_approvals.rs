@@ -74,16 +74,20 @@ fn a_permission_request_reads_as_a_card_with_what_always_would_allow() {
             Event::Permission {
                 id,
                 tool,
+                tool_use,
                 summary,
                 input,
                 always,
-            } => Some((
-                id.as_str(),
-                tool.as_str(),
-                summary.as_str(),
-                input.as_str(),
-                always.as_deref(),
-            )),
+            } => {
+                assert!(tool_use.starts_with("toolu_perm_"), "its tool call: {tool_use}");
+                Some((
+                    id.as_str(),
+                    tool.as_str(),
+                    summary.as_str(),
+                    input.as_str(),
+                    always.as_deref(),
+                ))
+            }
             _ => None,
         })
         .collect();
@@ -437,4 +441,18 @@ fn shot(h: &mut forge_render::gui::Headless, name: &str) {
             std::fs::write(Path::new(&dir).join(format!("{name}.png")), png).unwrap();
         }
     }
+}
+
+#[test]
+fn a_tool_row_says_what_is_true_now() {
+    use forge_render::shell::agent::{not_done, present, progressive};
+    // asking: what it would do; running: what it's doing; declined: what it didn't
+    assert_eq!(present("Edited plate.fg"), "Edit plate.fg");
+    assert_eq!(progressive("Edited plate.fg"), "Editing plate.fg");
+    assert_eq!(progressive("Query plate.fg: holes"), "Querying plate.fg: holes");
+    assert_eq!(not_done("Edited plate.fg"), "Not edited plate.fg");
+    assert_eq!(not_done("Ran cargo build"), "Not run cargo build");
+    // a summary that doesn't start with a known verb stays as it is
+    assert_eq!(present("mcp__x__y"), "mcp__x__y");
+    assert_eq!(progressive("Read"), "Reading");
 }

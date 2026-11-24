@@ -58,6 +58,8 @@ pub enum Event {
     Permission {
         id: String,
         tool: String,
+        /// The tool call it's about: its row says it waits.
+        tool_use: String,
         summary: String,
         input: String,
         always: Option<String>,
@@ -126,6 +128,7 @@ pub enum Entry {
     Permission {
         id: String,
         tool: String,
+        tool_use: String,
         summary: String,
         input: String,
         always: Option<String>,
@@ -362,12 +365,14 @@ impl AgentTab {
             Event::Permission {
                 id,
                 tool,
+                tool_use,
                 summary,
                 input,
                 always,
             } => self.entries.push(Entry::Permission {
                 id,
                 tool,
+                tool_use,
                 summary,
                 input,
                 always,
@@ -557,42 +562,84 @@ pub fn prompt(text: &str, refs: &[String]) -> String {
     format!("{text}\n\n(Selected in the app: {})", ids.join(", "))
 }
 
+/// A tool row's verb in each tense: what it did, what it would do, what it's doing.
+const VERBS: [(&str, &str, &str); 27] = [
+    ("Applied", "Apply", "Applying"),
+    ("Asked", "Ask", "Asking"),
+    ("Built", "Build", "Building"),
+    ("Compared", "Compare", "Comparing"),
+    ("Created", "Create", "Creating"),
+    ("Edited", "Edit", "Editing"),
+    ("Isolated", "Isolate", "Isolating"),
+    ("Kept", "Keep", "Keeping"),
+    ("Listed", "List", "Listing"),
+    ("Looked", "Look", "Looking"),
+    ("Made", "Make", "Making"),
+    ("Measured", "Measure", "Measuring"),
+    ("Moved", "Move", "Moving"),
+    ("Put", "Put", "Putting"),
+    ("Queried", "Query", "Querying"),
+    ("Ran", "Run", "Running"),
+    ("Read", "Read", "Reading"),
+    ("Regenerated", "Regenerate", "Regenerating"),
+    ("Released", "Release", "Releasing"),
+    ("Restored", "Restore", "Restoring"),
+    ("Searched", "Search", "Searching"),
+    ("Selected", "Select", "Selecting"),
+    ("Showed", "Show", "Showing"),
+    ("Took", "Take", "Taking"),
+    ("Turned", "Turn", "Turning"),
+    ("Updated", "Update", "Updating"),
+    ("Wrote", "Write", "Writing"),
+];
+
+/// The summary with its first word (a past or present verb) in another tense: 0 past, 1
+/// present, 2 progressive; as it is when the word isn't a verb the table has.
+fn tense(summary: &str, form: usize) -> String {
+    let (first, rest) = summary.split_once(' ').unwrap_or((summary, ""));
+    let Some(v) = VERBS.iter().find(|v| v.0 == first || v.1 == first) else {
+        return summary.to_string();
+    };
+    let word = [v.0, v.1, v.2][form];
+    if rest.is_empty() {
+        word.to_string()
+    } else {
+        format!("{word} {rest}")
+    }
+}
+
 /// A tool row's words as a question asks them: "Edited plate.fg" (what it did) → "Edit plate.fg"
 /// (what it would do).
 pub fn present(summary: &str) -> String {
-    const VERBS: [(&str, &str); 26] = [
-        ("Applied", "Apply"),
-        ("Asked", "Ask"),
-        ("Built", "Build"),
-        ("Compared", "Compare"),
-        ("Created", "Create"),
-        ("Edited", "Edit"),
-        ("Isolated", "Isolate"),
-        ("Kept", "Keep"),
-        ("Listed", "List"),
-        ("Looked", "Look"),
-        ("Made", "Make"),
-        ("Measured", "Measure"),
-        ("Moved", "Move"),
-        ("Put", "Put"),
-        ("Ran", "Run"),
-        ("Read", "Read"),
-        ("Regenerated", "Regenerate"),
-        ("Released", "Release"),
-        ("Restored", "Restore"),
-        ("Searched", "Search"),
-        ("Selected", "Select"),
-        ("Showed", "Show"),
-        ("Took", "Take"),
-        ("Turned", "Turn"),
-        ("Updated", "Update"),
-        ("Wrote", "Write"),
-    ];
-    let (first, rest) = summary.split_once(' ').unwrap_or((summary, ""));
-    match VERBS.iter().find(|(past, _)| *past == first) {
-        Some((_, now)) if rest.is_empty() => now.to_string(),
-        Some((_, now)) => format!("{now} {rest}"),
-        None => summary.to_string(),
+    tense(summary, 1)
+}
+
+/// What a running tool is doing: "Querying plate.fg: holes".
+pub fn progressive(summary: &str) -> String {
+    tense(summary, 2)
+}
+
+/// What a declined tool didn't do: "Not edited plate.fg".
+pub fn not_done(summary: &str) -> String {
+    let past = tense(summary, 0);
+    // the participle where it isn't the past
+    let past = match past.split_once(' ') {
+        Some((v, rest)) => {
+            let p = match v {
+                "Ran" => "Run",
+                "Took" => "Taken",
+                "Showed" => "Shown",
+                "Wrote" => "Written",
+                v => v,
+            };
+            format!("{p} {rest}")
+        }
+        None => past,
+    };
+    let mut c = past.chars();
+    match c.next() {
+        Some(f) => format!("Not {}{}", f.to_lowercase(), c.as_str()),
+        None => "Not run".into(),
     }
 }
 
@@ -1475,6 +1522,15 @@ impl Shell {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 ui.add_space(8.0);
                 let mut tools_seen = 0;
+                // each tool call's question, if it was asked one
+                let asked_of: std::collections::HashMap<&str, Asked> = a
+                    .entries
+                    .iter()
+                    .filter_map(|e| match e {
+                        Entry::Permission { tool_use, state, .. } => Some((tool_use.as_str(), *state)),
+                        _ => None,
+                    })
+                    .collect();
                 if let Some(pr) = &a.problem {
                     problem_card(ui, &t, pr, w, &mut places);
                 }
@@ -1622,20 +1678,32 @@ impl Shell {
                             if resp.clicked() {
                                 toggles.push(id.clone());
                             }
-                            let ink = t.ink2;
-                            super::fg::disclosure(ui.painter(), pos2(PAD + 4.0, r.center().y), open, ink);
-                            let dot = match state {
-                                ToolState::Running => t.focus.gamma_multiply(0.5 + 0.5 * pulse(ui)),
-                                ToolState::Done => ADD_INK,
-                                ToolState::Failed => t.error,
+                            // what the row says: while a question about it waits, that it waits (not
+                            // that it happened); declined, that it didn't; running, that it is
+                            let asked = asked_of.get(id.as_str()).copied();
+                            let (said, ink, dot) = match (asked, state) {
+                                (Some(Asked::Waiting), _) => {
+                                    (format!("{} · waiting for you", present(summary)), t.warn, t.warn)
+                                }
+                                (Some(Asked::Denied), _) => {
+                                    (not_done(summary), t.ink2, t.ink2.gamma_multiply(0.6))
+                                }
+                                (_, ToolState::Running) => (
+                                    progressive(summary),
+                                    t.ink2,
+                                    t.focus.gamma_multiply(0.5 + 0.5 * pulse(ui)),
+                                ),
+                                (_, ToolState::Done) => (summary.clone(), t.ink2, ADD_INK),
+                                (_, ToolState::Failed) => (summary.clone(), t.ink2, t.error),
                             };
+                            super::fg::disclosure(ui.painter(), pos2(PAD + 4.0, r.center().y), open, ink);
                             ui.painter()
                                 .circle_filled(pos2(w - PAD - 4.0, r.center().y), 3.0, dot);
                             let clip = Rect::from_min_max(
                                 pos2(PAD + 14.0, r.top()),
                                 pos2(w - PAD - 12.0, r.bottom()),
                             );
-                            let g = ui.fonts_mut(|f| f.layout_no_wrap(summary.clone(), sans(12.0), ink));
+                            let g = ui.fonts_mut(|f| f.layout_no_wrap(said, sans(12.0), ink));
                             ui.painter().with_clip_rect(clip).galley(
                                 pos2(clip.left(), r.center().y - g.size().y * 0.5),
                                 g,
@@ -2284,6 +2352,9 @@ struct Card<'a> {
     first: bool,
 }
 
+/// Text on an amber (`t.focus`) fill, in both themes: near-black, over 8:1.
+const PRIMARY_INK: Color32 = Color32::from_rgb(0x1B, 0x1D, 0x21);
+
 /// Lines of a tool's input shown on its card; the rest is one "… more" line.
 const CARD_LINES: usize = 14;
 
@@ -2377,7 +2448,8 @@ fn permission_card(ui: &mut Ui, t: &Theme, c: Card, w: f32, places: &mut Vec<(St
             p.rect_filled(b, 4.0, if resp.hovered() { t.hover } else { t.field });
             p.rect_stroke(b, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
         }
-        let ink = if primary { Color32::WHITE } else { t.ink };
+        // dark ink on the amber: white on it is under 3:1 in either theme
+        let ink = if primary { PRIMARY_INK } else { t.ink };
         let room = if key.is_empty() {
             b.width() - 16.0
         } else {
@@ -2393,7 +2465,7 @@ fn permission_card(ui: &mut Ui, t: &Theme, c: Card, w: f32, places: &mut Vec<(St
                 key,
                 sans(11.0),
                 if primary {
-                    Color32::from_white_alpha(200)
+                    PRIMARY_INK.gamma_multiply(0.75)
                 } else {
                     t.ink2
                 },
