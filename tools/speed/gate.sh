@@ -142,7 +142,9 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   # directory, 9,436,604 from 14, 9,437,129 from 41), its letters do not. Always this one form)
   fill() {
     cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$1/"
-    mkdir "$1/parts" "$1/tmp"
+    # (benchparts' font folder made here: a counted run that had to create it paid 564 fewer
+    # instructions than one finding it there, so the first part counted differed from the rest)
+    mkdir -p "$1/parts" "$1/tmp/forge-benchparts"
     cp interface/forge-lang/parts/bench/*.fg "$1/parts/"
     cc -O2 -fno-builtin -ffreestanding -shared -fPIC -o "$1/fixedrandom.so" "$dir/fixedrandom.c"
   }
