@@ -257,7 +257,11 @@ Edit the part and every step follows: the jaws are recomputed from the new outli
 `clear`, `contour` and `adaptive` replace a retract between two cuts (up, across at the retract
 height, down: blocks that each start and stop) with a **hop**: up, across and down as G1 moves
 at the machine's feed limit, only as high as the material it crosses needs. Each hop is posted
-after a `(HOP)` comment, and the reply and the simulation show it as a link (phase `hop`).
+after a `(HOP n)` comment naming its n blocks, and the reply and the simulation show it as a
+link (phase `hop`). The certificate reads the posted text: a `(HOP n)` is believed only where
+its blocks are the planned hop's own (each end within the text's last digit), else the op is
+refused (`hop_label`). A hop block is checked as any feed block is; the label changes only
+that it does not count as a cut when the certificate decides a level is done.
 
 - It is G1, not G0: a G0 path is the control's own (some controls move each axis at its own
   rapid, a dog-leg), a G1 is the line posted.
