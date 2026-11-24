@@ -44,6 +44,14 @@ pub enum Unit {
     Mass,
     /// m/min (cutting speed)
     Speed,
+    /// N
+    Force,
+    /// kPa
+    Pressure,
+    /// N·m
+    Torque,
+    /// m³/h
+    Flow,
 }
 
 impl Unit {
@@ -60,6 +68,10 @@ impl Unit {
             Unit::Time => "s",
             Unit::Mass => "kg",
             Unit::Speed => "m/min",
+            Unit::Force => "N",
+            Unit::Pressure => "kPa",
+            Unit::Torque => "N·m",
+            Unit::Flow => "m³/h",
         }
     }
 }
