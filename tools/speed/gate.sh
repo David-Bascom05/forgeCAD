@@ -96,8 +96,27 @@ count() {
 }
 echo "counter: $counter (baseline $baseline)"
 export CARGO_TARGET_DIR="$target"
-cargo build -q --release -p forge-model --example regen1 --example bits
-cargo build -q --release -p forge-lang --example benchparts
+if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
+  # Built from one fixed source path, whatever the checkout's: the binaries carry their sources'
+  # paths (CARGO_MANIFEST_DIR in benchparts, and each path crate's metadata hash, which names its
+  # symbols), so two checkouts at paths of different lengths build binaries whose counts differ.
+  # The checkout's files (tracked, and untracked ones not ignored: the work in progress) are copied
+  # there with their times, under a lock (gates may run at once: each builds in turn, then counts
+  # in parallel), and built into this checkout's own target directory, so neither side of a
+  # comparison reuses the other's build.
+  src=/tmp/forge-gate-src
+  checkout=$PWD
+  exec 9>"$src.lock"
+  flock 9
+  rm -rf "$src"
+  mkdir "$src"
+  git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -xf - -C "$src"
+  (cd "$src" && cargo build -q --release -p forge-model --example regen1 --example bits \
+    && cargo build -q --release -p forge-lang --example benchparts) || exit 1
+else
+  cargo build -q --release -p forge-model --example regen1 --example bits
+  cargo build -q --release -p forge-lang --example benchparts
+fi
 bin="$target/release/examples"
 if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   # (the binaries at a path of one length whatever the checkout, and the fixed getrandom and
@@ -118,6 +137,24 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
     *) echo "gate dir $gatedir is not /tmp/forge-gate.XXXXXX: its length would move the counts" >&2; exit 64 ;;
   esac
   fill "$gatedir"
+  # (the binaries copied out, the source directory is free for the next gate's build)
+  flock -u 9
+  # the binaries were built from the fixed source path, not from this checkout's
+  if [ "${GATE_SELFTEST:-0}" = 1 ]; then
+    # (workspace crates name their sources relatively; benchparts holds its manifest's directory
+    # whole, CARGO_MANIFEST_DIR, which must be the fixed one)
+    for b in regen1 benchparts; do
+      if grep -q -a "$checkout/" "$gatedir/$b"; then
+        echo "self-test FAILED: $b carries this checkout's path ($checkout)" >&2
+        exit 66
+      fi
+    done
+    if ! grep -q -a "$src/" "$gatedir/benchparts"; then
+      echo "self-test FAILED: benchparts was not built from $src" >&2
+      exit 66
+    fi
+    echo "self-test: built from $src, no path of the checkout in the binaries"
+  fi
   # GATE_SELFTEST=1: the counts do not depend on which gate directory they are made in (nor on the
   # checkout's: workspace crates embed their sources' paths relative). A second directory of the
   # same form counts the process alone and one small part's line; any difference fails the gate

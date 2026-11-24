@@ -3,11 +3,13 @@
 pub mod adaptive;
 pub mod bore;
 pub mod engage;
+pub mod fit;
 pub mod fixture;
 pub mod leads;
 pub mod life;
 pub mod lower;
 pub mod lower3d;
+pub mod movememo;
 pub mod ops;
 pub mod section;
 pub mod stock;

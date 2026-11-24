@@ -17,6 +17,10 @@ decisions = []
 # every analytic pair's march checked by interval Krawczyk steps and exclusion, re-traced finer
 # once, else refused; off, nothing is compiled
 certified_trace = []
+# the tangent-node mend (src/node.rs) switched off, the trace kept as traced: for the mutation job
+# only (forge-lang's `node-mend-off`, .github/workflows/node-mutation.yml), which checks that
+# fg_mcp's plate is refused again
+node-mend-off = []
 
 [lints]
 workspace = true

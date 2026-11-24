@@ -5,6 +5,7 @@
 
 examples/rack18u/asm/order/*.step      # forgecad's release of examples/rack18u (FILE_NAME ... 'ForgeCAD','ForgeCAD')
 examples/sheetmetal/vendor/bracket.step   # exported from bracket_src.fg beside it (`fg run bracket_src.fg --step`), header 'ForgeCAD'
+examples/machined/well_island.step   # exported from well_island.fg beside it (well_island_step.fg imports it back; forge-cam-lang tests/sections.rs), header 'ForgeCAD'
 kernel/forge-step/tests/data/*.step    # forgecad repros written by research/step/repro/mk.py (their FILE_NAME says so)
 kernel/forge-step/tests/data/block_with_hole.igs   # a shape made for tests/iges.rs and written once by OpenCascade (that test's doc)
 verify/forge-read-fuzz/seeds/cam-*.igs  # UNVERIFIED: fuzz seeds added in d104a3a8 beside cam.brep, written by OpenCascade's IGES processor; where the geometry came from is not recorded
