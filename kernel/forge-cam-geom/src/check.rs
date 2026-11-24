@@ -572,16 +572,26 @@ struct Cell {
 /// The interval signed distance over a cell: ρ² and z of the face point relative to the tool
 /// tip by the mean-value form (second order at a tangency) intersected with the natural
 /// extension, then the body's (ρ, z) signed distance.
-fn cell_sd(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> Ival {
-    cell_eval(body, f, mv, c, pg, false).0
+/// `pl` is `mv.planar()`, computed once per (body, face, move) by the caller.
+fn cell_sd(body: &Body, f: &Face, mv: &Move, pl: Option<Planar>, c: &Cell, pg: f64) -> Ival {
+    cell_eval(body, f, mv, pl, c, pg, false).0
 }
 
 /// The signed distance over the cell, and each parameter's smear (how much of the enclosure's
 /// width it accounts for: |∂(ρ², z)| times its width), which picks what to split. With `smear`
 /// false the smear is not computed (all zeros): the signed distance is the same either way (it
 /// never depends on the smear), and only a cell that is split needs its smear.
-fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64, smear: bool) -> (Ival, [f64; 3]) {
-    if let Some(pl) = mv.planar()
+#[allow(clippy::too_many_arguments)]
+fn cell_eval(
+    body: &Body,
+    f: &Face,
+    mv: &Move,
+    pl: Option<Planar>,
+    c: &Cell,
+    pg: f64,
+    smear: bool,
+) -> (Ival, [f64; 3]) {
+    if let Some(pl) = pl
         && !matches!(pl, Planar::Vertical { .. } | Planar::Helix { .. })
     {
         let sd = cell_eval_planar(body, f, &pl, c, pg);
@@ -1140,7 +1150,10 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
     let lim_clear = limit + f.mu;
     let lim_hit = limit - f.mu;
     let pg = mv.path_gap();
-    let s0 = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
+    // the move's planar form, once: every cell of this search asks for it
+    let pl = mv.planar();
+    let line_or_arc = matches!(pl, Some(Planar::Line { .. } | Planar::Arc { .. }));
+    let s0 = if line_or_arc {
         Ival::pt(0.5)
     } else {
         Ival::new(0.0, 1.0)
@@ -1151,7 +1164,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
         s: s0,
     };
     let mut heap = Heap { v: Vec::new() };
-    heap.push(cell_sd(body, f, mv, &root, pg), root);
+    heap.push(cell_sd(body, f, mv, pl, &root, pg), root);
     let mut lower = f64::INFINITY;
     let mut spent = 0usize;
     let mut undecided = false;
@@ -1182,7 +1195,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
         // same cell); its smear is computed only if the cell is split
         let mut sd = sd0;
         if show_cells {
-            let smear = cell_eval(body, f, mv, &c, pg, true).1;
+            let smear = cell_eval(body, f, mv, pl, &c, pg, true).1;
             eprintln!("cell p {:?} q {:?} sd {:?} smear {:?}", c.p, c.q, sd, smear);
         }
         if holds == 0 && sd.lo < lim_clear {
@@ -1195,6 +1208,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     body,
                     f,
                     mv,
+                    pl,
                     &Cell {
                         p: Ival::pt(pm),
                         q: Ival::pt(qm),
@@ -1203,7 +1217,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     pg,
                 );
                 let img = f.surf.eval(c.p, c.q);
-                let mvd = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
+                let mvd = if line_or_arc {
                     0.0
                 } else {
                     diam(&mv.enclose(c.s))
@@ -1227,6 +1241,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                 body,
                 f,
                 mv,
+                pl,
                 &Cell {
                     p: Ival::pt(pm),
                     q: Ival::pt(qm),
@@ -1236,7 +1251,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
             );
             if w.hi < lim_hit {
                 let y = f.surf.eval(Ival::pt(pm), Ival::pt(qm));
-                let sm = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
+                let sm = if line_or_arc {
                     mv.nearest_s([y[0].mid(), y[1].mid()])
                 } else {
                     sm
@@ -1264,10 +1279,10 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
             }
             continue;
         }
-        let smear = cell_eval(body, f, mv, &c, pg, true).1;
+        let smear = cell_eval(body, f, mv, pl, &c, pg, true).1;
         let (a, b) = split_by(&c, &smear);
-        heap.push(cell_sd(body, f, mv, &a, pg), a);
-        heap.push(cell_sd(body, f, mv, &b, pg), b);
+        heap.push(cell_sd(body, f, mv, pl, &a, pg), a);
+        heap.push(cell_sd(body, f, mv, pl, &b, pg), b);
     }
     if undecided {
         return (Verdict::Undecided { lower, cells: spent }, spent);
@@ -1337,8 +1352,8 @@ fn best_split(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Cell, Cell) {
                     (Cell { s: x, ..*c }, Cell { s: y, ..*c })
                 }
             };
-            let la = cell_sd(body, f, mv, &a, mv.path_gap()).lo;
-            let lb = cell_sd(body, f, mv, &b, mv.path_gap()).lo;
+            let la = cell_sd(body, f, mv, mv.planar(), &a, mv.path_gap()).lo;
+            let lb = cell_sd(body, f, mv, mv.planar(), &b, mv.path_gap()).lo;
             let m = if la < lb { la } else { lb };
             let better = match &best {
                 None => true,
