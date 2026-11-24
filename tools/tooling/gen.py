@@ -112,11 +112,18 @@ class Out:
     def __init__(self):
         self.lines = []
 
-    def rec(self, header, fields, cites):
+    def rec(self, header, fields, cites, presets=()):
         self.lines.append(f"[[{header}]]")
         for k, v in fields.items():
             if v is not None and v != "":
                 self.lines.append(f"{k} = {tv(v)}")
+        for pr in presets:
+            self.lines.append(f"[[{header}.preset]]")
+            for k in ("name", "group", "vc", "fz", "ap", "ae"):
+                v = pr.get(k)
+                if v is not None:
+                    self.lines.append(f"{k} = {tv(v) if isinstance(v, str) else repr(round(float(v), 6))}")
+        cites = list(cites) + [pr["cite"] for pr in presets]
         for c in cites:
             self.lines.append(f"[[{header}.cite]]")
             for k in ("path", "status", "source", "taken", "value", "basis", "note"):
@@ -538,6 +545,76 @@ def collet(vendor, r, out, skips):
         skips[f"kind {kind}"] += 1
 
 
+TURN_VC = os.path.join(RAW, "turn-vc")
+
+
+def turn_vc_rows(vendor):
+    p = os.path.join(TURN_VC, f"{vendor}.json")
+    return json.load(open(p))["rows"] if os.path.exists(p) else []
+
+
+def nominal_or_low(x):
+    """(value, how): the maker's printed nominal ("start here") when given, else a range's low
+    end, else the single value; how is None for a single printed value."""
+    v = (x or {}).get("v")
+    if isinstance(v, dict):
+        if isinstance(v.get("nominal"), (int, float)):
+            return v["nominal"], None
+        v = v.get("range")
+    if isinstance(v, list):
+        v = [y for y in v if isinstance(y, (int, float))]
+        return (min(v), "the low end of the printed range") if v else (None, None)
+    return (v, None) if isinstance(v, (int, float)) else (None, None)
+
+
+def insert_presets(vendor, r, f, skips):
+    """FEEDS-SPEEDS' turning presets: per printed (ISO group, grade) vc for this insert's
+    chipbreaker, with the feed (mm/rev, in `fz`) and ap printed with it or on the insert's own
+    row; a vc without a feed is held back."""
+    out, names = [], set()
+    own = (r.get("cutting") or [None])[0]  # Korloy/Ingersoll: f and ap per chipbreaker row
+    for row in turn_vc_rows(vendor):
+        if r["id"] not in row.get("insert_ids", []):
+            continue
+        printed = row.get("iso_group")
+        g = printed or group_of(str(row.get("material_stated") or ""))
+        vc, vhow = nominal_or_low(row.get("vc"))
+        fx, ax, src2 = row.get("f"), row.get("ap"), None
+        if not fx and own and own.get("f"):
+            fx, ax, src2 = own.get("f"), ax or own.get("ap"), r["url"]
+        fz, fhow = nominal_or_low(fx)
+        ap, ahow = nominal_or_low(ax)
+        if not g or not vc or not fz:
+            skips["turning vc row held back (no group, vc or feed)"] += 1
+            continue
+        cb = f.get("chipbreaker") or row.get("chipbreaker") or ""
+        name = " ".join(x for x in (g, cb, row.get("grade") or "") if x)
+        if name in names:
+            skips["turning vc row repeating a group and grade"] += 1
+            continue
+        names.add(name)
+        basis, notes = [], []
+        if not printed:
+            basis.append(f"the maker's material '{row.get('material_stated')}' mapped to ISO 513 group {g} by its name")
+        for what, how in (("vc", vhow), ("f", fhow), ("ap", ahow)):
+            if how:
+                basis.append(f"{what} is {how}")
+        if src2:
+            notes.append(f"f and ap from the insert's own row ({src2}), vc from the grade table")
+        notes.append("fz holds the feed per revolution, mm/rev")
+        st = lambda x: (x or {}).get("stated", "")
+        value = "; ".join(v for v in (row.get("grade") or "", st(row.get("vc")), st(fx), st(ax)) if v)
+        if re.search(r"\b(SFM|IPR|ipr|inch|in)\b", value):
+            notes.append("metric values are exact conversions (SFM x 0.3048 m/min, IPR x 25.4 mm, in x 25.4 mm)")
+        if row.get("note"):
+            notes.append(row["note"])
+        cite = dict(path=f"preset.{name}", status="estimate" if basis else "published", source=row["url"],
+                    taken=r.get("taken", TAKEN), value=value, basis="; ".join(basis), note="; ".join(notes))
+        out.append(dict(name=name, group=g, vc=vc, fz=fz, ap=ap, cite=cite))
+    order = lambda p: (GROUP_ORDER.index(p["group"]) if p["group"] in GROUP_ORDER else 9, p["name"])
+    return sorted(out, key=order)
+
+
 def turning(vendor, r, out, skips):
     vals = r["values"]
     code = (r.get("iso_code") or "").replace(" ", "")
@@ -577,7 +654,7 @@ def turning(vendor, r, out, skips):
         rid = f"{vendor}-{r['id']}".replace(" ", "")
         for k, why in TURN_SKIP.get(vendor, {}).items():
             base["note"] = (base["note"] + "; " if base["note"] else "") + f"not mapped: {why}"
-        out.rec("insert", {"id": rid, **f, **base}, cites)
+        out.rec("insert", {"id": rid, **f, **base}, cites, insert_presets(vendor, r, f, skips))
         return
     # holders and bars: a row listing both hands becomes one record per hand
     kind = "holder" if r["kind"] == "turn_holder" else "bar"
