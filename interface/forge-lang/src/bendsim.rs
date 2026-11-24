@@ -1392,9 +1392,27 @@ fn contact_json(
         Some(n) => format!("step {n} (bend {bend})"),
         None => format!("bend {bend}'s best attempt"),
     };
+    // part against part: the other faces it meets, by name
+    let mut others: Vec<String> = Vec::new();
+    for o in &c.others {
+        if let Some(a) = part(sh, o).get("anchor").and_then(Json::str)
+            && !others.iter().any(|x| x == a)
+        {
+            others.push(a.to_string());
+        }
+    }
+    let target = if c.tool == "part" {
+        if others.is_empty() {
+            "the part itself".to_string()
+        } else {
+            others.join(" and ")
+        }
+    } else {
+        tool_words(&c.tool)
+    };
     let text = format!(
         "{anchor} {how} {} {}–{} mm from the bend's left end, {when} {step}",
-        tool_words(&c.tool),
+        target,
         r6s(ylo + half),
         r6s(yhi + half)
     );
@@ -1420,6 +1438,7 @@ fn contact_json(
         ("tool", c.tool.as_str().into()),
         ("estimate", c.estimate.into()),
         ("faces", Json::Arr(faces)),
+        ("others", Json::Arr(c.others.iter().map(|o| part(sh, o)).collect())),
         ("depth", c.depth.map_or(Json::Null, r6)),
         ("lower", r6(c.lower)),
         ("limit", r6(c.limit)),

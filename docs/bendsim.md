@@ -142,6 +142,7 @@ contacts[]  step (null: a blocked bend's attempt), bend, rule, severity, verdict
             `station2:..`), estimate, faces[{anchor, strip, name, surface, segment, cells, proven}],
             depth (the least proven distance of a real point, negative: that deep into the tool),
             lower, limit, when {angle_deg [a, b]} | {ram_mm [a, b]},
+            others[{anchor, ..}] (part against part: the faces met; tool is `part`),
             region {points (press frame, up to 64), tool_points (the tool's nearest), bbox,
                     cells, proven, complete, exact}, text
 ```

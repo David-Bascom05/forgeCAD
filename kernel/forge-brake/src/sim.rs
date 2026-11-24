@@ -277,6 +277,9 @@ pub struct Contact {
     /// Every cell settled within the extraction's budget (else what is left was kept whole).
     pub complete: bool,
     pub faces: Vec<ContactFace>,
+    /// Part against part (`self_collision`): the other piece's faces the region reaches (the
+    /// `tool` is then `part`); empty against a tool.
+    pub others: Vec<PartRef>,
     /// The motion's span over the region: the bend's turn (radians), or the ram's height (mm,
     /// approach and return).
     pub span: (f64, f64),
@@ -1416,6 +1419,7 @@ impl<'a> StepCtx<'a> {
                     near,
                     complete: r.complete,
                     faces,
+                    others: Vec::new(),
                     span: r.span().unwrap_or((s.lo, s.hi)),
                     points,
                     tool_points,
@@ -1515,6 +1519,107 @@ impl<'a> StepCtx<'a> {
         c.pass = true;
         c.phase = Some(Phase::Bend);
         c
+    }
+
+    /// The part against itself through the bend, where it comes within the self clearance:
+    /// each moving piece against each piece of the other side not proven clear, with its region
+    /// on both (the moving piece's faces and cells, the other's faces), as `contacts`.
+    pub fn self_contacts(&self) -> Vec<Contact> {
+        let limit = self.tl.self_clearance - 1e-5;
+        let res = 0.02;
+        let s = Interval::new(0.0, self.phimax);
+        let (a, b) = (self.bj.a, self.bj.b);
+        let wall_of = |pc: &Piece| match pc.kind {
+            Kind::Wall { w, .. } => Some(w),
+            _ => None,
+        };
+        let mut out = Vec::new();
+        for mv in self.pieces.iter().filter(|p| p.side != Side::A) {
+            for st in self.pieces.iter().filter(|p| p.side != Side::J) {
+                if st.side == mv.side
+                    || (mv.side == Side::J && (wall_of(st) == Some(a) || wall_of(st) == Some(b)))
+                {
+                    continue;
+                }
+                let pb = SelfPb {
+                    ctx: self,
+                    mv,
+                    st,
+                    frame: st.side,
+                };
+                let roots = self.roots(mv, s);
+                let near = match bb::certify(&pb, &roots, limit, res, BUDGET, false) {
+                    Verdict::Clear { lower, .. } if lower >= limit => continue,
+                    Verdict::Clear { lower, .. } => Some(lower),
+                    _ => None,
+                };
+                let r = crate::contact::region(&pb, &roots, limit, res, REGION_BUDGET);
+                if r.cells.is_empty() {
+                    continue;
+                }
+                let mut faces: Vec<ContactFace> = Vec::new();
+                let mut others: Vec<PartRef> = Vec::new();
+                let (mut points, mut near_points) = (Vec::new(), Vec::new());
+                let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+                for c in &r.cells {
+                    let (q, at) = match c.proven {
+                        Some((_, q, a)) => (q, a),
+                        None => {
+                            let q = c.cell.mid();
+                            (q, pb.image(q))
+                        }
+                    };
+                    let part = self.part_ref(mv, q);
+                    match faces.iter_mut().find(|f| f.part == part) {
+                        Some(f) => {
+                            f.cells.push(c.cell.p);
+                            f.proven += usize::from(c.proven.is_some());
+                        }
+                        None => faces.push(ContactFace {
+                            part,
+                            cells: vec![c.cell.p],
+                            proven: usize::from(c.proven.is_some()),
+                        }),
+                    }
+                    // the other piece where the point stands against it
+                    let pq = st.inv.apply(V3::new(at[0], at[1], at[2]));
+                    let o = self.part_ref(st, [pq.x, pq.y, pq.z, 0.0]);
+                    if !others.contains(&o) {
+                        others.push(o);
+                    }
+                    let pp = self.frame_to_press(at, st.side, q[3]);
+                    points.push(pp);
+                    near_points.push(pp);
+                    // the box: the cell's enclosure carried to the press frame over its turn
+                    let e = pb.enclose(&c.cell);
+                    let rr = self.rel(V3::new(e[0], e[1], e[2]), st.side, c.cell.p[3]);
+                    let z = rr.z + self.ztip(c.cell.p[3]);
+                    for (k, iv) in [rr.x, rr.y, z].into_iter().enumerate() {
+                        lo[k] = lo[k].min(iv.lo);
+                        hi[k] = hi[k].max(iv.hi);
+                    }
+                }
+                out.push(Contact {
+                    rule: Rule::SelfCollision,
+                    phase: Phase::Bend,
+                    severity: Severity::Error,
+                    tool: "part".into(),
+                    estimate: false,
+                    limit,
+                    depth: r.depth(),
+                    lower: near.unwrap_or(r.lower()).max(r.lower()),
+                    near,
+                    complete: r.complete,
+                    faces,
+                    others,
+                    span: r.span().unwrap_or((s.lo, s.hi)),
+                    points,
+                    tool_points: near_points,
+                    bbox: (lo, hi),
+                });
+            }
+        }
+        out
     }
 
     fn frame_to_press(&self, p: [f64; 3], side: Side, phi: f64) -> [f64; 3] {
@@ -2255,6 +2360,10 @@ mod tests {
 /// included), every piece against every tool not proven clear, with its region. A step whose
 /// tool checks all pass has none, and costs nothing.
 pub fn contacts_of(m: &Model, tl: &Tooling, done: &[bool], step: &Step) -> Vec<Contact> {
+    let selfs = step
+        .checks
+        .iter()
+        .any(|c| c.rule == Rule::SelfCollision && (!c.pass || c.near.is_some()));
     let mut phases: Vec<Phase> = step
         .checks
         .iter()
@@ -2264,7 +2373,7 @@ pub fn contacts_of(m: &Model, tl: &Tooling, done: &[bool], step: &Step) -> Vec<C
         .collect();
     phases.sort_by_key(|p| *p as u8);
     phases.dedup();
-    if phases.is_empty() {
+    if phases.is_empty() && !selfs {
         return Vec::new();
     }
     let mut ctx = StepCtx::new(m, tl, done, step.bend, step.setup, step.overbend);
@@ -2272,6 +2381,9 @@ pub fn contacts_of(m: &Model, tl: &Tooling, done: &[bool], step: &Step) -> Vec<C
         ctx = ctx.at_station(k);
     }
     let mut out = Vec::new();
+    if selfs {
+        out.extend(ctx.self_contacts());
+    }
     for ph in phases {
         out.extend(ctx.contacts(ph, step.gauge.as_ref()));
     }
@@ -2317,6 +2429,132 @@ mod contact_tests {
         s.flange(base, 1, q, h).unwrap();
         s.flange(base, 3, q, h).unwrap();
         s
+    }
+
+    fn boxed(w: f64, d: f64, h: f64) -> Sheet {
+        let pts = [(0.0, 0.0), (w, 0.0), (w, d), (0.0, d)];
+        let lp = ProfileLoop::new(
+            (0..4)
+                .map(|i| {
+                    let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                    (
+                        Segment::Line {
+                            a: Point2::new(a.0, a.1),
+                            b: Point2::new(b.0, b.1),
+                        },
+                        i as u64,
+                    )
+                })
+                .collect(),
+        );
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            Gauge {
+                thickness: 1.5,
+                radius: 1.5,
+                rule: BendRule::K(0.4),
+            },
+            Frame::WORLD,
+            &[lp],
+        )
+        .unwrap();
+        for seg in 0..4 {
+            s.flange(base, seg, dmath::PI / 2.0, h).unwrap();
+        }
+        s
+    }
+
+    /// The part against itself: a box's last flange meets its neighbours at the corners. With
+    /// the self clearance past that gap, every point of the moving side proven under it lies in a
+    /// contact cell, the neighbours are among the contact's other faces, and the box holds the
+    /// points.
+    #[test]
+    fn a_self_contact_holds_every_point_that_meets_the_part() {
+        let m = Model::new(&boxed(120.0, 60.0, 25.0)).unwrap();
+        let mut tl = crate::library::std_eu();
+        let su = Setup {
+            punch: 0,
+            die: 0,
+            rotate: false,
+        };
+        let done = [true, true, true, false];
+        let c0 = StepCtx::new(&m, &tl, &done, 3, su, 0.0).self_check(false);
+        assert!(c0.pass);
+        tl.self_clearance = c0.value + 0.03;
+        let ctx = StepCtx::new(&m, &tl, &done, 3, su, 0.0);
+        let cs = ctx.self_contacts();
+        assert!(!cs.is_empty());
+        assert!(
+            cs.iter()
+                .all(|c| c.rule == Rule::SelfCollision && c.tool == "part" && !c.others.is_empty())
+        );
+        let limit = tl.self_clearance - 1e-5;
+        let s = Interval::new(0.0, ctx.phimax);
+        let mut checked = 0;
+        for c in &cs {
+            for p in &c.points {
+                for ((x, lo), hi) in p.iter().zip(c.bbox.0).zip(c.bbox.1) {
+                    assert!(lo - 1e-6 <= *x && *x <= hi + 1e-6);
+                }
+            }
+        }
+        for mv in ctx.pieces.iter().filter(|p| p.side != Side::A) {
+            for st in ctx
+                .pieces
+                .iter()
+                .filter(|p| p.side != Side::J && p.side != mv.side)
+            {
+                // zone j borders walls a and b: never paired (as the check)
+                let borders = matches!(st.kind, Kind::Wall { w, .. } if w == ctx.bj.a || w == ctx.bj.b);
+                if mv.side == Side::J && borders {
+                    continue;
+                }
+                let pb = SelfPb {
+                    ctx: &ctx,
+                    mv,
+                    st,
+                    frame: st.side,
+                };
+                for root in ctx.roots(mv, s) {
+                    let n = 30;
+                    for i in 0..=n {
+                        for j in 0..=n {
+                            for w in [root.p[2].lo, root.p[2].hi] {
+                                for k in 0..=6 {
+                                    let f = |iv: Interval, t: usize, n: usize| {
+                                        iv.lo + iv.width() * t as f64 / n as f64
+                                    };
+                                    let q = [f(root.p[0], i, n), f(root.p[1], j, n), w, f(root.p[3], k, 6)];
+                                    let pt = Cell {
+                                        p: q.map(Interval::point),
+                                        tag: root.tag,
+                                    };
+                                    if !StepCtx::may_hold(mv, &pt) {
+                                        continue;
+                                    }
+                                    if pb.sd_bounds(pb.image(q)).1 < limit {
+                                        checked += 1;
+                                        let inside = cs.iter().any(|c| {
+                                            c.faces.iter().any(|fc| {
+                                                fc.cells.iter().any(|cl| {
+                                                    (0..4).all(|t| cl[t].lo <= q[t] && q[t] <= cl[t].hi)
+                                                })
+                                            })
+                                        });
+                                        assert!(
+                                            inside,
+                                            "{:?} vs {:?} {q:?}: in no contact cell",
+                                            mv.strip, st.strip
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 0, "the sample found where the part meets itself");
     }
 
     /// A narrow, tall channel on straight punches only: its second flange closes on the punch.

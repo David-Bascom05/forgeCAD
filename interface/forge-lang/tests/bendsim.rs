@@ -880,3 +880,48 @@ left = flange(base.edge(plan.outline[3]), height: 60)\n";
     );
     assert!(arr(&t.json, "contacts").is_empty(), "{}", t.text);
 }
+
+/// Part against part: a box whose tooling asks 3 mm between the part's own pieces; its flanges
+/// come within that of their neighbours. Each such contact names the moving faces and the faces
+/// they meet (`others`), and says so in words.
+#[test]
+fn collisions_of_the_part_with_itself_name_both_faces() {
+    let d = forge_dirs::temp_dir().join(format!("fg-bendsim-self-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&d).unwrap();
+    std::fs::write(
+        d.join("tight.json"),
+        r#"{"base": "std-eu", "id": "tight", "self_clearance": 3}"#,
+    )
+    .unwrap();
+    let src = "shared t = 1.5\nshared r = 1.5\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (120, 60))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+front = flange(base.edge(plan.outline[0]), height: 25)\n\
+right = flange(base.edge(plan.outline[1]), height: 25)\n\
+back = flange(base.edge(plan.outline[2]), height: 25)\n\
+left = flange(base.edge(plan.outline[3]), height: 25)\n";
+    let ask = forge_lang::bendsim::parse(
+        &["tooling", "tight.json", "sequence", "1,2,3,4", "collisions"].map(String::from),
+    )
+    .unwrap();
+    let a = ask_src(src, Some(d.clone()), None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let selfs: Vec<Json> = arr(&a.json, "contacts")
+        .into_iter()
+        .filter(|c| c.get("rule").and_then(Json::str) == Some("self_collision"))
+        .collect();
+    assert!(!selfs.is_empty(), "{}", a.text);
+    for c in &selfs {
+        assert_eq!(c.get("tool").and_then(Json::str), Some("part"));
+        let others = arr(c, "others");
+        assert!(!others.is_empty());
+        let text = c.get("text").and_then(Json::str).unwrap();
+        let other = others[0].get("anchor").and_then(Json::str).unwrap();
+        assert!(text.contains(other), "{text}");
+    }
+    // a flange meets its neighbour: the right flange and the front one
+    assert!(selfs.iter().any(|c| {
+        let t = c.get("text").and_then(Json::str).unwrap_or("");
+        t.starts_with("right.") && t.contains("front.")
+    }));
+}
