@@ -61,6 +61,7 @@ per_doc!(
         camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
         camsim_job: crate::gui_camsim_panel::SimJob,
         cam: Option<super::cam::CamWs>,
+        robot: Option<super::robot::RobotPanel>,
     ],
     app [
         theme, view, out, view_rect, places, cube_menu, cube_menu_fresh, cube_region, marking, window_box,
@@ -110,6 +111,7 @@ impl ShellDoc {
             camsim: None,
             camsim_job: Default::default(),
             cam: None,
+            robot: None,
         }
     }
 }

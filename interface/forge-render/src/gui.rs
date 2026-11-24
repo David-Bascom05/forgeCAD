@@ -42,6 +42,8 @@ pub mod gui_machine;
 pub mod gui_markup;
 #[path = "gui_overlay.rs"]
 mod gui_overlay;
+#[path = "gui_robot.rs"]
+pub mod gui_robot;
 #[path = "gui_sheet.rs"]
 mod gui_sheet;
 #[path = "gui_speech.rs"]
@@ -416,6 +418,12 @@ impl Gui {
             && forge_cam_lang::is_machining(&s)
         {
             return self.open_cam(path, &s);
+        }
+        // a robot document: its source with the Robot panel
+        if path.ends_with(".fg")
+            && forge_dirs::fs::read_to_string(path).is_ok_and(|s| forge_lang::robot::is_robot(&s))
+        {
+            return self.open_robot(path);
         }
         if path.ends_with(".fg") {
             return self.open_fg(path);
@@ -1308,6 +1316,9 @@ impl Gui {
         self.fg_hole_guess();
         self.fg_preview();
         if self.explode_tick() {
+            animating = true;
+        }
+        if self.robot_tick() {
             animating = true;
         }
         self.body_eye();
@@ -2366,6 +2377,7 @@ impl Gui {
                 self.fg_asm = Some((a.occ.clone(), a.placed.clone()));
                 self.fg_asm_boxes = a.boxes.clone();
                 self.explode.stale();
+                Self::robot_solved(&mut self.shell.robot);
                 asm_moved = true;
                 // which part is placed where changed: the view made again, the camera kept
                 if let Some(all) = &a.restage {

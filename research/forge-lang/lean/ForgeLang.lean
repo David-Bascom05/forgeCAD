@@ -60,3 +60,6 @@ import ForgeLang.Families
 import ForgeLang.LL1.Documents
 import ForgeLang.EditClosure
 import ForgeLang.FamiliesRename
+import ForgeLang.RenamePart
+import ForgeLang.LiftLiteral
+import ForgeLang.FamiliesArgs
