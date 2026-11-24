@@ -36,6 +36,17 @@ use forge_tooling::{Kind, Library, feeds};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+/// Builds the staged stock even where the checks against it cannot fail (tests/stock_skip.rs,
+/// the skip's differential test). Off by default.
+#[doc(hidden)]
+pub static FULL_STOCK: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// The peck retract and chip-break lift (mm) the posted cycles are read with: the controls'
+/// usual values by default; tests/peck.rs sets others to show the verdicts do not depend on them.
+#[doc(hidden)]
+pub static CYCLE_PARAMS: std::sync::Mutex<(f64, f64)> =
+    std::sync::Mutex::new((forge_post::PECK_CLEAR, forge_post::CHIP_LIFT));
+
 /// Whether a source is a machining document.
 pub fn is_machining(src: &str) -> bool {
     match syntax::parse(src) {
@@ -77,8 +88,12 @@ struct ViseSpec {
 
 #[derive(Clone, Debug)]
 enum StockSpec {
-    Margin([f64; 3]),
-    Box { min: [f64; 3], max: [f64; 3] },
+    /// Margins x, y, above, and below the part.
+    Margin([f64; 3], f64),
+    Box {
+        min: [f64; 3],
+        max: [f64; 3],
+    },
 }
 
 struct PartIn {
@@ -143,15 +158,25 @@ pub struct OpOut {
     target: Option<Vec<Face>>,
     /// Declared removals (Δ): what each is and where.
     pub removals: Vec<String>,
-    /// The paths as the posted text means them (read back from the program, in the part's
-    /// frame), one per path once a program posts the op: what the checks' `move_index` counts.
-    pub posted: Vec<OpPath>,
     /// The stock this op starts from (G2, G3 are checked against it).
     stock_before: Option<forge_cam::stock::InProcess>,
     /// What the op provably clears: (region, or the whole box; its final floor).
     voids: Vec<(Option<Region>, f64)>,
     /// The lowest tool tip of its posted paths, as the text reads back (∞ until posted).
     pub deepest: f64,
+    /// Its paths as the posted text reads back (what was certified; `Cam::check` checks them
+    /// again on demand).
+    pub posted: Vec<OpPath>,
+}
+
+/// `Cam::check`'s answer for one op: clear only if it was posted and every check passed.
+#[derive(Clone, Debug)]
+pub struct OpChecks {
+    pub op: String,
+    pub clear: bool,
+    pub checks: Vec<CheckOut>,
+    pub pairs: usize,
+    pub cells: usize,
 }
 
 pub struct ProgramOut {
@@ -307,7 +332,13 @@ impl Cam {
                 if fname == "box" {
                     let named = self.named(args, env)?;
                     if let Some(m) = named.get("margin").and_then(tuple3) {
-                        return Ok(V::Stock(StockSpec::Margin(m)));
+                        // `below:`: stock under the part too (it rests on that much)
+                        let below = match named.get("below") {
+                            None => 0.0,
+                            Some(V::Num(b)) if *b >= 0.0 => *b,
+                            Some(_) => return Err("box: below: a length ≥ 0".into()),
+                        };
+                        return Ok(V::Stock(StockSpec::Margin(m, below)));
                     }
                     if let (Some(lo), Some(hi)) = (
                         named.get("min").and_then(tuple3),
@@ -844,8 +875,8 @@ impl Cam {
                             max: ip.max,
                         }
                     }
-                    Some(V::Stock(StockSpec::Margin(m))) => Stock {
-                        min: [plo[0] - m[0], plo[1] - m[1], plo[2]],
+                    Some(V::Stock(StockSpec::Margin(m, below))) => Stock {
+                        min: [plo[0] - m[0], plo[1] - m[1], plo[2] - below],
                         max: [phi[0] + m[0], phi[1] + m[1], phi[2] + m[2]],
                     },
                     Some(V::Stock(StockSpec::Box { min, max })) => Stock { min: *min, max: *max },
@@ -2086,10 +2117,10 @@ impl Cam {
             leave: get_num(a, "leave", Some(0.0))?,
             target: None,
             removals: vec![],
-            posted: vec![],
             stock_before: Some(s.ip.clone()),
             voids: vec![],
             deepest: f64::INFINITY,
+            posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
         let paths: Result<Vec<OpPath>, String> = match kind {
@@ -2820,6 +2851,49 @@ fn opening(rg: &Region, r: f64) -> Option<Region> {
     out
 }
 
+/// The support under the stock when no workholding is declared: the plane of the stock's
+/// bottom, over the stock's box grown by 1 m each way (a path that leaves that square is far
+/// outside any table this phase models; G5 bounds it by the travel when the setup is placed).
+fn support_face(st: &Stock) -> Face {
+    use forge_cam_geom::check::{Surf, TSeg, Trim};
+    use forge_cam_geom::ival::Ival;
+    let g = 1000.0;
+    let (x0, y0) = (st.min[0] - g, st.min[1] - g);
+    let (w, h) = (st.max[0] - st.min[0] + 2.0 * g, st.max[1] - st.min[1] + 2.0 * g);
+    let rect = Trim {
+        segs: vec![
+            TSeg::Line {
+                a: [0.0, 0.0],
+                b: [w, 0.0],
+            },
+            TSeg::Line {
+                a: [w, 0.0],
+                b: [w, h],
+            },
+            TSeg::Line {
+                a: [w, h],
+                b: [0.0, h],
+            },
+            TSeg::Line {
+                a: [0.0, h],
+                b: [0.0, 0.0],
+            },
+        ],
+    };
+    Face::new(
+        Surf::Plane {
+            o: [x0, y0, st.min[2]],
+            u: [1.0, 0.0, 0.0],
+            v: [0.0, 1.0, 0.0],
+        },
+        Ival::new(0.0, w),
+        Ival::new(0.0, h),
+        Some(rect),
+        1e-9,
+        3000,
+    )
+}
+
 /// Each hole of a section as a pocket region: the hole's loop reversed (its inside on the
 /// left), with the islands standing in it, the loops it directly holds, reversed as holes. The
 /// section is validated (closed loops whose pieces meet only at shared ends), so one point
@@ -3056,6 +3130,205 @@ impl Cam {
         None
     }
 
+    /// The certified checks again, on demand, over what was posted (no op is generated again):
+    /// for each op (or the one named), every posted path checked by the full checker, the
+    /// staged in-process stock built for every path (none skipped), the fixture or support,
+    /// and G5's travel. The checks name the path they are on (`CheckOut::path`).
+    pub fn check(&self, op: Option<&str>) -> Vec<OpChecks> {
+        let mut out = vec![];
+        for (oi, o) in self.ops.iter().enumerate() {
+            if op.is_some_and(|n| n != o.name) {
+                continue;
+            }
+            let mut oc = OpChecks {
+                op: o.name.clone(),
+                clear: !o.posted.is_empty(),
+                checks: vec![],
+                pairs: 0,
+                cells: 0,
+            };
+            for (pi, posted) in o.posted.iter().enumerate() {
+                let mut sum = self.certify_posted(oi, posted, true);
+                if let Some(c) = self.axis_limits(oi, posted) {
+                    sum.clear = false;
+                    sum.checks.insert(0, c);
+                }
+                for c in &mut sum.checks {
+                    c.path = pi;
+                }
+                oc.clear &= sum.clear;
+                oc.pairs += sum.pairs;
+                oc.cells += sum.cells;
+                oc.checks.extend(sum.checks);
+            }
+            out.push(oc);
+        }
+        out
+    }
+
+    /// G1–G3 and the fixture (or support) for one posted path of op `oi`, against the staged
+    /// in-process stock: built where a check against it could fail, or always with `full_stock`
+    /// (the on-demand check). The checks' fixture names filled in.
+    fn certify_posted(&self, oi: usize, posted: &OpPath, full_stock: bool) -> ops::CheckSummary {
+        let s = &self.setups[self.ops[oi].setup];
+        let path = posted;
+        let tool = self.tools[path.tool].clone();
+        let part = &self.parts[s.part];
+        // the stock at each move: the op's start, then after each completed level (a
+        // retract after cutting at depth d), its voids cleared down to d (levels go down)
+        let base = self.ops[oi]
+            .stock_before
+            .clone()
+            .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
+        let faces_of = |ip: &forge_cam::stock::InProcess| {
+            // a clock only when asked: std's panics in a browser page
+            let t0 = std::env::var("FORGE_CAM_DEBUG").is_ok().then(forge_math::clock::Instant::now);
+            let r = ip.faces();
+            if let Some(t0) = t0 {
+                eprintln!(
+                    "{}: stock faces {:?} in {:?} (voids {}, under {})",
+                    s.name,
+                    r.as_ref().map(|f| f.len()),
+                    t0.elapsed(),
+                    ip.voids.len(),
+                    ip.under.len()
+                );
+            }
+            r.unwrap_or_else(|e| {
+                if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                    eprintln!("stock faces: {e}");
+                }
+                s.stock.faces()
+            })
+        };
+        // the stock is checked against the tool's non-cutting bodies, and against every body
+        // on a rapid. Where each such body stays, through each move, at least the
+        // clearance (and the stock faces' μ, with room) above the stock's top, no stock point
+        // comes within the limit (the stock lies under its top; the limit is at most the
+        // clearance): those checks cannot fail, and the staged stock is not built
+        // (Heights.lean `setDist_of_heights`). Else it is, as before.
+        let top = base.max[2];
+        let stock_needed = {
+            use forge_cam_geom::ival::Ival;
+            // the least a checked body's lowest point may be: top + clearance + room
+            let need = Ival::pt(top)
+                .add(Ival::pt(s.clearance.max(0.0)))
+                .add(Ival::pt(1e-3))
+                .hi;
+            ops::checker_moves(posted).iter().any(|(m, ph, _)| {
+                let tip = m.at(Ival::new(0.0, 1.0))[2].lo;
+                tool.shape.bodies.iter().any(|b| {
+                    let low = Ival::pt(tip).add(Ival::pt(b.z0)).lo;
+                    // above it (a NaN is not)
+                    let above = matches!(
+                        low.partial_cmp(&need),
+                        Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal)
+                    );
+                    (b.part == forge_cam_geom::tool::Part::NonCutting || *ph == Phase::Rapid) && !above
+                })
+            })
+        };
+        // FULL_STOCK: build it anyway (the differential test of the skip)
+        let stock_needed = stock_needed || full_stock;
+        let mut stages = if stock_needed {
+            vec![(0usize, faces_of(&base))]
+        } else {
+            vec![(0usize, vec![])]
+        };
+        let mut deepest = f64::INFINITY;
+        let mut cut_z: Option<f64> = None;
+        for (i, m) in posted.moves.iter().enumerate() {
+            match *m {
+                // a level's depth: the lowest point it cut (the feed back up is not one)
+                PMove::Line {
+                    to,
+                    phase: Phase::Cut,
+                    ..
+                }
+                | PMove::Arc { to, .. } => cut_z = Some(cut_z.map_or(to[2], |c: f64| c.min(to[2]))),
+                PMove::Line {
+                    phase: Phase::Link, ..
+                }
+                | PMove::Rapid { .. } => {
+                    if let Some(z) = cut_z.take()
+                        && stock_needed
+                        && z < deepest
+                        && !self.ops[oi].voids.is_empty()
+                    {
+                        deepest = z;
+                        let mut ip = base.clone();
+                        for (v, floor) in &self.ops[oi].voids {
+                            let f = floor.max(z);
+                            match v {
+                                None => ip.face_to(f),
+                                Some(r) => ip.cut(r.clone(), f),
+                            }
+                        }
+                        if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+                            let m = ip.material(z + 0.1).map(|m| {
+                                m.map(|m| {
+                                    (
+                                        m.loops.len(),
+                                        m.loops.iter().map(|l| l.segs.len()).collect::<Vec<_>>(),
+                                    )
+                                })
+                            });
+                            eprintln!("stage at {z}: levels {:?} material above {m:?}", ip.levels());
+                        }
+                        stages.push((i, faces_of(&ip)));
+                    }
+                }
+                _ => {}
+            }
+        }
+        if std::env::var("FORGE_CAM_DEBUG").is_ok() {
+            eprintln!(
+                "{}: voids {:?} stages {:?}",
+                self.ops[oi].name,
+                self.ops[oi]
+                    .voids
+                    .iter()
+                    .map(|v| (v.0.as_ref().map(|r| r.loops.len()), v.1))
+                    .collect::<Vec<_>>(),
+                stages.iter().map(|s| (s.0, s.1.len())).collect::<Vec<_>>()
+            );
+        }
+        // with no workholding declared, whatever holds the stock is under it: the plane of the
+        // stock's bottom is the support, and no body of the tool may reach it (G2)
+        let (ffaces, fclear) = match &s.fixture {
+            Some(f) => (f.faces(), f.clearance),
+            None => (vec![support_face(&s.stock)], 0.0),
+        };
+        let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
+        let mut sum = ops::certify_fixtured(
+            posted,
+            &tool,
+            target,
+            &stages,
+            &ffaces,
+            fclear,
+            s.tol,
+            s.clearance,
+        );
+        if let Some(f) = &s.fixture {
+            for c in &mut sum.checks {
+                if c.rule == "fixture_collision"
+                    && let Some(id) = c.other.strip_prefix("fixture face ").and_then(|x| x.parse().ok())
+                    && let Some(p) = f.piece_of(id)
+                {
+                    c.other = format!("{} ({p})", c.other);
+                }
+            }
+        } else {
+            for c in &mut sum.checks {
+                if c.rule == "fixture_collision" {
+                    c.other = "the support under the stock (no workholding declared)".into();
+                }
+            }
+        }
+        sum
+    }
+
     /// Posts the setups' ops, reads the text back, and certifies the path the text means.
     fn post(&mut self, name: &str, setups: &[usize], post: &str, number: u32) -> ProgramOut {
         let mut po = ProgramOut {
@@ -3076,6 +3349,8 @@ impl Cam {
         };
         let mut recs = vec![];
         let mut current_tool: Option<u32> = None;
+        // where the last path left the tool, in the part's frame
+        let mut last: Option<(usize, [f64; 3])> = None;
         // each op's records, and which records are whose
         let mut spans: Vec<(usize, usize, usize, usize)> = vec![];
         let op_ids: Vec<usize> = (0..self.ops.len())
@@ -3095,9 +3370,28 @@ impl Cam {
                 let start = recs.len();
                 let t = &self.tools[p.tool];
                 if current_tool != Some(t.t) {
+                    // GRBL changes tools by hand (M0) and has no machine-safe Z to go to: Z up to
+                    // the setup's clearance height in the work coordinates first (known in the
+                    // WCS without homing), and the operator told to set Z for the new tool
+                    if post == "grbl"
+                        && current_tool.is_some()
+                        && let Some((ls, l)) = last
+                        && ls == op.setup
+                    {
+                        recs.push(Rec::Rapid(w([l[0], l[1], s.heights.clear])));
+                    }
+                    if post == "grbl" && current_tool.is_some() {
+                        recs.push(Rec::Comment("set Z zero for the new tool before resuming".into()));
+                    }
                     if current_tool.is_some() {
                         recs.push(Rec::SpindleStop);
                         recs.push(Rec::Coolant(forge_post::Coolant::Off));
+                    }
+                    // Z to the machine's safe position first (the dialect's retract_home: G91 G28 Z0,
+                    // G53 G0 Z0): an M06 need not move Z, and a longer tool would come down
+                    // into the stock where the last one stood (GRBL has none: above)
+                    if post != "grbl" {
+                        recs.push(Rec::Home);
                     }
                     recs.push(Rec::ToolChange {
                         t: t.t,
@@ -3145,6 +3439,15 @@ impl Cam {
                         },
                     });
                 }
+                // where this path leaves the tool (the part's frame)
+                let mut at = p.start;
+                for m in &p.moves {
+                    match *m {
+                        PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => at = to,
+                        PMove::Cycle { holes, clear, .. } => at = [holes[0], holes[1], clear],
+                    }
+                }
+                last = Some((op.setup, at));
                 spans.push((oi, pi, start, recs.len()));
             }
         }
@@ -3159,6 +3462,7 @@ impl Cam {
                 op.time_s,
             ) = (0, 0, 0, 0.0, 0.0, 0.0);
             op.deepest = f64::INFINITY;
+            op.posted.clear();
         }
         recs.push(Rec::SpindleStop);
         recs.push(Rec::Coolant(forge_post::Coolant::Off));
@@ -3202,7 +3506,10 @@ impl Cam {
                 decimals: d.decimals,
                 feed_decimals: d.feed_decimals,
             };
-            let ms = forge_post::motions(&sub);
+            // the control's peck retract and chip-break lift: the posted program does not fix
+            // them; the path is certified so that any value in [0, the depth already drilled]
+            // gives the same verdicts (CYCLE_PARAMS: tests/peck.rs)
+            let ms = forge_post::motions_with(&sub, *CYCLE_PARAMS.lock().unwrap_or_else(|e| e.into_inner()));
             // G5's runtime half: what the text commands the spindle and the feed, as read back
             let runtime = self.runtime_limits(oi, &ms, d.feed_decimals);
             let back = |p: [i64; 3]| {
@@ -3216,6 +3523,7 @@ impl Cam {
             let mut moves = vec![];
             let mut start: Option<[f64; 3]> = None;
             let (mut lc, mut lr, mut time) = (0.0, 0.0, 0.0);
+            let mut column: Option<([f64; 2], f64, f64)> = None;
             let mut at = [0.0; 3];
             for m in &ms {
                 let (to, ph, f) = match m {
@@ -3254,6 +3562,7 @@ impl Cam {
                             f: *f as f64 / fscale,
                         });
                         at = t;
+                        column = None;
                         continue;
                     }
                     _ => continue,
@@ -3293,6 +3602,35 @@ impl Cam {
                 } else {
                     ph
                 };
+                // a rapid straight down within the span of this column the tool has already
+                // been through at this xy (a peck cycle's re-entry): it passes only where it has
+                // been, each such place checked already (by a rapid's stricter limits, or swept
+                // by the cutter), so it is a link, checked as the feed there is (the same limits).
+                // So the verdicts are the same for any peck retract or chip-break lift in [0, the
+                // depth drilled]
+                let ph = if ph == Phase::Rapid
+                    && to[0] == at[0]
+                    && to[1] == at[1]
+                    && to[2] < at[2]
+                    && column
+                        .is_some_and(|(xy, low, high)| xy == [to[0], to[1]] && to[2] >= low && at[2] <= high)
+                {
+                    Phase::Link
+                } else {
+                    ph
+                };
+                // the span of the column through the current xy the tool has passed (reset when
+                // the xy changes: the move arriving there gives its end only)
+                column = if to[0] == at[0] && to[1] == at[1] {
+                    match column {
+                        Some((xy, l, h)) if xy == [to[0], to[1]] => {
+                            Some((xy, l.min(to[2]).min(at[2]), h.max(to[2]).max(at[2])))
+                        }
+                        _ => Some(([to[0], to[1]], to[2].min(at[2]), to[2].max(at[2]))),
+                    }
+                } else {
+                    Some(([to[0], to[1]], to[2], to[2]))
+                };
                 moves.push(if ph == Phase::Rapid {
                     PMove::Rapid { to }
                 } else {
@@ -3315,119 +3653,9 @@ impl Cam {
                     low = low.min(to[2]);
                 }
             }
-            let tool = self.tools[path.tool].clone();
-            let part = &self.parts[s.part];
-            // the stock at each move: the op's start, then after each completed level (a
-            // retract after cutting at depth d), its voids cleared down to d (levels go down)
-            let base = self.ops[oi]
-                .stock_before
-                .clone()
-                .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
-            let faces_of = |ip: &forge_cam::stock::InProcess| {
-                let t0 = std::env::var("FORGE_CAM_DEBUG")
-                    .is_ok()
-                    .then(forge_math::clock::Instant::now);
-                let r = ip.faces();
-                if let Some(t0) = t0 {
-                    eprintln!(
-                        "{}: stock faces {:?} in {:?} (voids {}, under {})",
-                        s.name,
-                        r.as_ref().map(|f| f.len()),
-                        t0.elapsed(),
-                        ip.voids.len(),
-                        ip.under.len()
-                    );
-                }
-                r.unwrap_or_else(|e| {
-                    if std::env::var("FORGE_CAM_DEBUG").is_ok() {
-                        eprintln!("stock faces: {e}");
-                    }
-                    s.stock.faces()
-                })
-            };
-            let mut stages = vec![(0usize, faces_of(&base))];
-            let mut deepest = f64::INFINITY;
-            let mut cut_z: Option<f64> = None;
-            for (i, m) in posted.moves.iter().enumerate() {
-                match *m {
-                    // a level's depth: the lowest point it cut (the feed back up is not one)
-                    PMove::Line {
-                        to,
-                        phase: Phase::Cut,
-                        ..
-                    }
-                    | PMove::Arc { to, .. } => cut_z = Some(cut_z.map_or(to[2], |c: f64| c.min(to[2]))),
-                    PMove::Line {
-                        phase: Phase::Link, ..
-                    }
-                    | PMove::Rapid { .. } => {
-                        if let Some(z) = cut_z.take()
-                            && z < deepest
-                            && !self.ops[oi].voids.is_empty()
-                        {
-                            deepest = z;
-                            let mut ip = base.clone();
-                            for (v, floor) in &self.ops[oi].voids {
-                                let f = floor.max(z);
-                                match v {
-                                    None => ip.face_to(f),
-                                    Some(r) => ip.cut(r.clone(), f),
-                                }
-                            }
-                            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
-                                let m = ip.material(z + 0.1).map(|m| {
-                                    m.map(|m| {
-                                        (
-                                            m.loops.len(),
-                                            m.loops.iter().map(|l| l.segs.len()).collect::<Vec<_>>(),
-                                        )
-                                    })
-                                });
-                                eprintln!("stage at {z}: levels {:?} material above {m:?}", ip.levels());
-                            }
-                            stages.push((i, faces_of(&ip)));
-                        }
-                    }
-                    _ => {}
-                }
-            }
-            if std::env::var("FORGE_CAM_DEBUG").is_ok() {
-                eprintln!(
-                    "{}: voids {:?} stages {:?}",
-                    self.ops[oi].name,
-                    self.ops[oi]
-                        .voids
-                        .iter()
-                        .map(|v| (v.0.as_ref().map(|r| r.loops.len()), v.1))
-                        .collect::<Vec<_>>(),
-                    stages.iter().map(|s| (s.0, s.1.len())).collect::<Vec<_>>()
-                );
-            }
-            let (ffaces, fclear) = match &s.fixture {
-                Some(f) => (f.faces(), f.clearance),
-                None => (vec![], 0.0),
-            };
-            let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
-            let mut sum = ops::certify_fixtured(
-                &posted,
-                &tool,
-                target,
-                &stages,
-                &ffaces,
-                fclear,
-                s.tol,
-                s.clearance,
-            );
-            if let Some(f) = &s.fixture {
-                for c in &mut sum.checks {
-                    if c.rule == "fixture_collision"
-                        && let Some(id) = c.other.strip_prefix("fixture face ").and_then(|x| x.parse().ok())
-                        && let Some(p) = f.piece_of(id)
-                    {
-                        c.other = format!("{} ({p})", c.other);
-                    }
-                }
-            }
+            let mut sum =
+                self.certify_posted(oi, &posted, FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed));
+            self.ops[oi].posted.push(posted.clone());
             // G5: every position the posted path reaches, as the machine's joints see it
             if let Some(c) = self.axis_limits(oi, &posted) {
                 sum.clear = false;
@@ -3458,10 +3686,6 @@ impl Cam {
                 .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
                 .fold(f64::INFINITY, f64::min);
             let op = &mut self.ops[oi];
-            if op.posted.len() <= pi {
-                op.posted.resize(pi + 1, posted.clone());
-            }
-            op.posted[pi] = posted.clone();
             op.deepest = op.deepest.min(low);
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;
@@ -3481,6 +3705,10 @@ impl Cam {
                 op.fix = Some(match c.rule {
                     "machine_limit" => "a tool or feeds the machine can run (its spindle range and feed limit are in the machine's record), or another machine".into(),
                     "axis_limit" => "SetArg at: a work offset that keeps the program within travel, or the part placed elsewhere on the table (or a shorter tool for Z)".into(),
+                    "fixture_collision" if s.fixture.is_none() => format!(
+                        "the path reaches below the stock's bottom (z = {:.2}), where whatever holds it is: cut no lower than the stock, or SetArg stock: a box whose bottom is below the cut (the rest left to a second setup), or declare the workholding (SetArg fixture)",
+                        s.stock.min[2]
+                    ),
                     "fixture_collision" => {
                         let f = s.fixture.as_ref().expect("a fixture check has a fixture");
                         let seat = s.stock.min[2];
