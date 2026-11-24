@@ -92,6 +92,11 @@ pub enum VersionsAct {
         approver: String,
         numeric: bool,
     },
+    /// Who signs this project's saves (its own `user.name` and `user.email`), then the save.
+    Identity {
+        name: String,
+        email: String,
+    },
 }
 
 #[derive(Default)]
@@ -135,6 +140,11 @@ pub struct Versions {
     /// The history's files did not reach where the project is kept (the page's storage refused
     /// one): said under the graph until the page is reloaded, whatever else is said.
     pub lost: String,
+    /// The history has no name and email to sign saves with (none in the project's config or,
+    /// natively, the user's git config; a browser has none of its own): asked for above the graph.
+    pub unsigned: bool,
+    pub sig_name: String,
+    pub sig_email: String,
     pub out: Vec<VersionsAct>,
 }
 
@@ -248,6 +258,9 @@ impl Shell {
             return;
         }
         self.versions_top(ui);
+        if self.versions.unsigned {
+            self.versions_identity(ui);
+        }
         let comparing = self.versions.comparing.is_some();
         // the graph takes what the Compare panel, docked below it, leaves
         let panel = if comparing {
@@ -890,6 +903,43 @@ impl Shell {
                 self.versions.out.push(VersionsAct::EndCompare);
             }
         });
+    }
+}
+
+impl Shell {
+    /// No saves are kept till they can be signed: a name and an email for this project's saves.
+    fn versions_identity(&mut self, ui: &mut Ui) {
+        let t = self.theme;
+        ui.add_space(4.0);
+        ui.label(
+            egui::RichText::new("Saves are signed with a name and an email. Set them for this project:")
+                .font(sans(12.0))
+                .color(t.ink2),
+        );
+        let v = &mut self.versions;
+        ui.horizontal(|ui| {
+            ui.add(
+                egui::TextEdit::singleline(&mut v.sig_name)
+                    .hint_text("Name")
+                    .desired_width(110.0),
+            );
+            ui.add(
+                egui::TextEdit::singleline(&mut v.sig_email)
+                    .hint_text("Email")
+                    .desired_width(140.0),
+            );
+        });
+        let ok = !v.sig_name.trim().is_empty() && v.sig_email.contains('@');
+        let b = ui.add_enabled(ok, primary(&t, "Sign saves"));
+        self.places.push(("versions:sign".into(), b.rect));
+        if b.clicked() {
+            let v = &mut self.versions;
+            v.out.push(VersionsAct::Identity {
+                name: v.sig_name.trim().to_string(),
+                email: v.sig_email.trim().to_string(),
+            });
+        }
+        ui.add_space(4.0);
     }
 }
 

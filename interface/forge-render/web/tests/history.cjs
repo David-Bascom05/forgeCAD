@@ -3,7 +3,8 @@
 // never says "History is on" over the refusal.
 //   node web/tests/history.cjs OUT   (OUT: web/build.sh's output)
 // Before: the server refused every dot path, so every .git write failed (console only), the
-// status said "History is on: every save is kept", and a reload had no history.
+// status said "History is on: every save is kept", and a reload had no history; and in a page
+// (no git identity) no save could be signed, so none was kept, under the same words.
 // The page is 1280x800 (offscreen), so the chrome is where these coordinates say.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -15,7 +16,14 @@ const PART = `sketch plan(on: xy) {
 }
 base = extrude(plan, 5)
 `;
-const at = { versionsTab: [157, 190], turnOnHistory: [57, 250] };
+const at = {
+  versionsTab: [157, 190],
+  turnOnHistory: [57, 250],
+  // the form a history with no one to sign its saves shows (a browser has no git identity)
+  signName: [62, 312],
+  signEmail: [187, 312],
+  signSaves: [46, 336],
+};
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function turnOn(b, url) {
@@ -42,9 +50,25 @@ async function turnOn(b, url) {
     const s1 = await t.serve(dir, app);
     runs.push([s1.proc, dir]);
     let p = await turnOn(b, s1.url);
-    const st = await p.evaluate(() => window.forgecad.state());
-    assert.match(st.status, /History is on/, st.status);
+    // the page has no name and email to sign with: said, not "every save is kept"
+    let st = await p.evaluate(() => window.forgecad.state());
+    assert.match(st.status, /wasn't kept: no name and email/, st.status);
+    // typed fast, each field right after the click on it (a click and typing in one frame lost
+    // the typing: inputcut.rs)
+    await p.mouse.click(...at.signName);
+    await p.keyboard.type("Test User");
+    await p.mouse.click(...at.signEmail);
+    await p.keyboard.type("test@example.com");
+    await pause(500);
+    await p.mouse.click(...at.signSaves);
+    st = await t.until(p, (s) => /Saves are signed/.test(s.status), "the first save", 20000);
+    assert.match(st.status, /signed by Test User: every save is kept/, st.status);
+    await p.evaluate(() => window.forgecad.settled());
+    await pause(1000);
     assert.deepEqual(await p.evaluate(() => window.forgecad.problems), []);
+    const config = fs.readFileSync(path.join(dir, ".git/config"), "utf8");
+    assert.match(config, /name = Test User/);
+    assert.match(config, /email = test@example\.com/);
     for (const f of [".git/HEAD", ".git/config", ".gitignore"]) {
       assert.ok(fs.existsSync(path.join(dir, f)), `${f} kept on the machine`);
     }
