@@ -31,6 +31,7 @@ fn usage() -> ExitCode {
          forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
          forgecad tool|holder|collet|collet_nut|pull_stud|insert|turn_holder list | new ID --from ID [FIELD=VALUE..] [--project] | check ID|FILE   (your own tooling)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
+         forgecad workholding list [KIND] | new ID --from X [field=value ..] [--user] | check [ID ..] | show ID | schema [--json]   (vises, clamps, plates, chucks, collets)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
@@ -248,6 +249,15 @@ fn main() -> ExitCode {
                     ExitCode::from(1)
                 }
             }
+        }
+        Some("workholding") => {
+            let here = std::env::current_dir().unwrap_or_else(|_| ".".into());
+            let o = forge_workholding_builder::cli::run(&args[2..], &here, None);
+            print!("{}", o.text);
+            if !o.text.ends_with('\n') {
+                println!();
+            }
+            ExitCode::from(o.code)
         }
         Some("help" | "--help" | "-h") => {
             println!("{}", forge_lang::help(&args[2..].join(" ")));
