@@ -523,4 +523,123 @@ theorem walk_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (closes
 
 end walk
 
+section count
+variable {T : Type} (FI : topo_fans.FanTopo T) (t : T) {b : Body} {corners : Nat → Nat → List (Nat × Nat)}
+
+theorem fansGo_length_le (bef : Nat → Nat) (F : Nat) : ∀ (L S : List Nat),
+    (b.fansGo bef F L S).length ≤ L.length
+  | [], S => by simp [Body.fansGo]
+  | c0 :: rest, S => by
+    simp only [Body.fansGo]
+    split
+    · have := fansGo_length_le bef F rest S; simp; omega
+    · have := fansGo_length_le bef F rest (b.walk bef F c0 S).2; simp; omega
+
+theorem fansSeen_ok (H : Sound b) (W : b.WF) {bef : Nat → Nat} (hbef : BefUse (b := b) bef) (F : Nat) :
+    ∀ (L S : List Nat), (∀ x ∈ L, Use b x) → SeenOK b S → SeenOK b (fansSeen (b := b) bef F L S)
+  | [], S, _, hS => hS
+  | c0 :: rest, S, hL, hS => by
+    simp only [fansSeen]
+    split
+    · exact fansSeen_ok H W hbef F rest S (fun x hx => hL x (by simp [hx])) hS
+    · exact fansSeen_ok H W hbef F rest _ (fun x hx => hL x (by simp [hx]))
+        (walk_ok H W hbef F c0 S (hL c0 (by simp)) hS)
+
+/-- The coedges `items[lo..hi]`, as numbers. -/
+def frmOf (items : Slice Usize) (lo hi : Nat) : List Nat := ((items.val.drop lo).take (hi - lo)).map (·.val)
+
+theorem frmOf_succ (items : Slice Usize) (lo i hi : Nat) (h1 : lo ≤ i) (h2 : i < hi) (h3 : hi ≤ items.val.length) :
+    (frmOf items lo hi).take (i + 1 - lo) = (frmOf items lo hi).take (i - lo) ++ [(items.val[i]!).val] := by
+  unfold frmOf
+  rw [← List.map_take, ← List.map_take, List.take_take, List.take_take,
+    show min (i + 1 - lo) (hi - lo) = (i - lo) + 1 by omega, show min (i - lo) (hi - lo) = i - lo by omega,
+    List.take_succ_eq_append_getElem (by simp; omega)]
+  simp only [List.map_append, List.map_cons, List.map_nil, List.getElem_drop]
+  rw [getElem!_pos items.val i (by omega)]
+  simp [show lo + (i - lo) = i by omega]
+
+theorem count_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (closes : topo_fans.Closes)
+    (byc : Bool) (bef : Nat → Nat) (hB : BefSpec FI t (b := b) closes byc bef) (hbef : BefUse (b := b) bef)
+    (F : Nat) (hF : (allUses b).length < F)
+    (items : Slice Usize) (lo hi : Usize) (hlo : lo.val ≤ hi.val) (hhi : hi.val ≤ items.val.length)
+    (hfrm : ∀ x ∈ frmOf items lo.val hi.val, Use b x) (seen : alloc.vec.Vec Usize) :
+    topo_fans.count_fans FI t items lo hi closes byc seen ⦃ r =>
+      r.1.1.val = (b.fansGo bef F (frmOf items lo.val hi.val) []).length ∧
+      r.1.2.val ≤ r.2.val.length ∧
+      seenOf r.2 r.1.2.val = fansSeen (b := b) bef F (frmOf items lo.val hi.val) [] ⦄ := by
+  set frm := frmOf items lo.val hi.val with hfrmdef
+  have hfl : frm.length = hi.val - lo.val := by simp [hfrmdef, frmOf]; omega
+  unfold topo_fans.count_fans topo_fans.count_fans_loop0
+  apply WP.spec_bind (Pₘ := fun r : alloc.vec.Vec Usize × Usize × Usize =>
+      r.2.1.val = (b.fansGo bef F frm []).length ∧ r.2.2.val ≤ r.1.val.length ∧
+      seenOf r.1 r.2.2.val = fansSeen (b := b) bef F frm [])
+  · apply loop.spec_decr_nat
+      (fun (y : alloc.vec.Vec Usize × Usize × Usize × Usize) => hi.val - y.2.2.2.val)
+      (fun y => lo.val ≤ y.2.2.2.val ∧ y.2.2.2.val ≤ hi.val ∧
+        y.2.1.val = (b.fansGo bef F (frm.take (y.2.2.2.val - lo.val)) []).length ∧
+        y.2.2.1.val ≤ y.1.val.length ∧
+        seenOf y.1 y.2.2.1.val = fansSeen (b := b) bef F (frm.take (y.2.2.2.val - lo.val)) [])
+    · rintro ⟨sn, cnt, k, i⟩ ⟨hlo', hle, hcnt, hkl, hsk⟩
+      simp only at hlo' hle hcnt hkl hsk ⊢
+      have hSok : SeenOK b (seenOf sn k.val) := by
+        rw [hsk]; exact fansSeen_ok H W hbef F _ [] (fun x hx => hfrm x (List.mem_of_mem_take hx)) ⟨by simp, by simp⟩
+      unfold topo_fans.count_fans_loop0.body
+      split
+      · rename_i hlt
+        have hlt' : i.val < hi.val := by scalar_tac
+        have hix : i.val < items.length := by have : items.length = items.val.length := rfl; omega
+        step with Slice.index_usize_spec items i hix as ⟨c0, hc0⟩
+        have hc0' : c0 = items.val[i.val]! := by rw [hc0, getElem!_pos]
+        have hpre := frmOf_succ items lo.val i.val hi.val hlo' hlt' hhi
+        rw [← hfrmdef, ← hc0'] at hpre
+        have hcu : Use b c0.val := hfrm _ (by
+          have : c0.val ∈ frm.take (i.val + 1 - lo.val) := by rw [hpre]; simp
+          exact List.mem_of_mem_take this)
+        have hderef : (alloc.vec.Vec.deref sn).val = sn.val := by simp [alloc.vec.Vec.deref]
+        step with contains_spec (alloc.vec.Vec.deref sn) k c0 (by rw [hderef]; exact hkl) as ⟨isin, hisin⟩
+        rw [hderef] at hisin
+        have hcnt_le : cnt.val ≤ i.val - lo.val := by
+          rw [hcnt]; have := fansGo_length_le (b := b) bef F (frm.take (i.val - lo.val)) []; simp at this; omega
+        have hhx := le_max hi
+        have hU := hF
+        split
+        · rename_i hin
+          have hin' : c0.val ∈ seenOf sn k.val := by rw [← mem_seenOf]; simpa [hisin] using hin
+          step with usize_add_wspec i 1#usize (succ_le_max i hi hlt') as ⟨i1, hi1⟩
+          have hi1v : i1.val = i.val + 1 := by rw [hi1]; exact succ_val i hi hlt'
+          rw [hi1v]
+          refine ⟨by omega, by omega, ?_, hkl, ?_, by omega⟩
+          · rw [hpre, fansGo_snoc, ← hsk, hcnt]; simp [hin']
+          · rw [hpre, fansSeen_snoc, ← hsk]; simp [hin']
+        · rename_i hin
+          have hin' : c0.val ∉ seenOf sn k.val := by rw [← mem_seenOf]; simpa [hisin] using hin
+          have h1 : (1#usize).val = 1 := rfl
+          step with usize_add_wspec cnt 1#usize (by rw [h1]; omega) as ⟨cnt1, hcnt1⟩
+          have hcnt1v : cnt1.val = cnt.val + 1 := by
+            rw [hcnt1]; exact add_val cnt 1#usize (lt_size_of_le_max _ (by rw [h1]; omega))
+          step with walk_spec FI t R H W closes byc bef hB hbef sn k c0 hkl hcu hSok as ⟨s1, k1, hk1l, hS1, hs1⟩
+          step with usize_add_wspec i 1#usize (succ_le_max i hi hlt') as ⟨i1, hi1⟩
+          have hi1v : i1.val = i.val + 1 := by rw [hi1]; exact succ_val i hi hlt'
+          rw [hi1v]
+          have hwf := walk_fuel H W hbef ((allUses b).length + 1) F c0.val (seenOf sn k.val) hcu hSok
+            (by omega) (by omega)
+          refine ⟨by omega, by omega, ?_, hk1l, ?_, by omega⟩
+          · rw [hcnt1v, hpre, fansGo_snoc, ← hsk, hcnt]; simp [hin']
+          · rw [hs1, hpre, fansSeen_snoc, ← hsk, hwf]; simp [hin']
+      · rename_i hlt
+        have hi : i.val = hi.val := by scalar_tac
+        simp only [WP.spec_ok]
+        have htk : frm.take (i.val - lo.val) = frm := by rw [hi]; exact List.take_of_length_le (by omega)
+        rw [htk] at hcnt hsk
+        exact ⟨hcnt, hkl, hsk⟩
+    · have h0 : (0#usize).val = 0 := rfl
+      simp only [h0, Nat.sub_self, List.take_zero]
+      exact ⟨le_refl _, hlo, by simp [Body.fansGo], by simp, by simp [seenOf, fansSeen]⟩
+  · rintro ⟨sn, cnt, k⟩ ⟨h1, h2, h3⟩
+    show (ok ((cnt, k), sn) : Result _) ⦃ _ ⦄
+    simp only [WP.spec_ok]
+    exact ⟨h1, h2, h3⟩
+
+end count
+
 end forge_topo
