@@ -54,7 +54,8 @@ fn table() -> &'static Vec<(String, String, String, String)> {
 pub(super) fn scope(s: &Shell) -> &'static str {
     if s.drawing.is_some() {
         "drawing"
-    } else if s.is_asm() && s.tab == 0 {
+    } else if (s.is_asm() && s.tab == 0) || s.tab == super::super::ASM_TAB {
+        // the Assemble tab's own words (its Copy copies components, not the 3D Model's bodies)
         "asm"
     } else {
         match s.tab {
