@@ -49,6 +49,10 @@ pub struct Ask {
     /// Bends locked to a station (`lock rear=2,tab=1`: a bend's name or number, a station's
     /// number from 1, into `stations`): each made there; the order and the rest are searched.
     pub locks: Vec<(String, usize)>,
+    /// Answer only where the part and the tools collide (`collisions`), and of one step
+    /// (`step N`, from 1).
+    pub collisions: bool,
+    pub step: Option<usize>,
 }
 
 /// A station: its punch and die (library ids), its centre along the bed from the bed's centre,
@@ -101,6 +105,16 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
                     a.locks.push((b.trim().to_string(), k - 1));
                 }
             }
+            "collisions" => a.collisions = true,
+            "step" => {
+                a.step = Some(
+                    val("step")?
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|n| *n >= 1)
+                        .ok_or("step takes a step's number, from 1")?,
+                )
+            }
             "stations" => match val("stations")?.as_str() {
                 "auto" => a.stage = true,
                 other => {
@@ -130,7 +144,7 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
             }
             other => {
                 return Err(format!(
-                    "bendsim takes press P, punches A,B, dies C,D, tooling T, vendor V, sequence S, stations auto, lock B=N, sheet NAME, uts MPA; not `{other}`"
+                    "bendsim takes press P, punches A,B, dies C,D, tooling T, vendor V, sequence S, stations auto, lock B=N, collisions, step N, sheet NAME, uts MPA; not `{other}`"
                 ));
             }
         }
@@ -168,8 +182,49 @@ pub fn ask_file(path: &Path, root: Option<PathBuf>, ask: &Ask) -> Answer {
 
 pub fn ask_src(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Answer {
     match simulate(src, dir, root, ask) {
+        Ok(s) if ask.collisions => collisions(&s.answer, ask.step),
         Ok(s) => s.answer,
         Err(a) => a,
+    }
+}
+
+/// `bendsim collisions [step N]`: where the part and the tools collide, step by step (or one
+/// step's), schema `forgecad.bendsim.collisions/1`: every contact's faces on both bodies, its
+/// region (points, box), depth, when, and a line of words.
+pub fn collisions(full: &Answer, step: Option<usize>) -> Answer {
+    let j = &full.json;
+    let all = match j.get("contacts") {
+        Some(Json::Arr(v)) => v.clone(),
+        _ => Vec::new(),
+    };
+    let picked: Vec<Json> = all
+        .into_iter()
+        .filter(|c| step.is_none_or(|n| c.get("step").and_then(Json::num) == Some(n as f64)))
+        .collect();
+    let mut text = String::new();
+    for c in &picked {
+        if let Some(t) = c.get("text").and_then(Json::str) {
+            text.push_str(t);
+            text.push('\n');
+        }
+    }
+    if picked.is_empty() {
+        text.push_str("no collisions: every step's part is proven clear of the tools\n");
+    }
+    let keep = |k: &str| j.get(k).cloned().unwrap_or(Json::Null);
+    Answer {
+        ok: true,
+        text,
+        json: Json::obj(vec![
+            ("ok", true.into()),
+            ("schema", "forgecad.bendsim.collisions/1".into()),
+            ("sheet", keep("sheet")),
+            ("tooling", keep("tooling")),
+            ("feasible", keep("feasible")),
+            ("sequence", keep("sequence")),
+            ("step", step.map_or(Json::Null, |n| n.into())),
+            ("contacts", Json::Arr(picked)),
+        ]),
     }
 }
 
@@ -185,6 +240,45 @@ pub struct Sim {
     pub programs: Vec<fb::Program>,
     /// The staged program (`stations auto`): its stations and why; `tooling` and `plan` are its.
     pub stage: Option<fb::Staged>,
+}
+
+/// A made plan, kept by its whole question: (tooling as laid out, plan, ranked programs, staged
+/// program, the reply's stage field).
+type Made = (
+    fb::Tooling,
+    fb::Plan,
+    Option<Vec<fb::Program>>,
+    Option<fb::Staged>,
+    Option<Json>,
+);
+
+/// The last plans made in this process, each by its whole question (the model, tooling, options
+/// and what was asked, written out exactly): a reopened or re-simulated unchanged part is answered
+/// at once.
+static PLANS: std::sync::Mutex<Vec<(String, Made)>> = std::sync::Mutex::new(Vec::new());
+const PLANS_KEPT: usize = 8;
+
+/// Forget every kept plan (tests: a plan made afresh).
+#[doc(hidden)]
+pub fn forget_plans() {
+    if let Ok(mut v) = PLANS.lock() {
+        v.clear();
+    }
+}
+
+fn memo_get(key: &str) -> Option<Made> {
+    let v = PLANS.lock().ok()?;
+    v.iter().find(|(k, _)| k == key).map(|(_, m)| m.clone())
+}
+
+fn memo_put(key: String, made: Made) {
+    if let Ok(mut v) = PLANS.lock() {
+        v.retain(|(k, _)| *k != key);
+        v.push((key, made));
+        while v.len() > PLANS_KEPT {
+            v.remove(0);
+        }
+    }
 }
 
 /// `BENDSIM_TIME=1`: each phase's wall time on stderr (native only: no clock on wasm32).
@@ -215,6 +309,12 @@ impl Phases {
 
 /// The part's sheet simulated: Err is the typed error reply.
 pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Result<Sim, Answer> {
+    let sh = built(src, dir.clone(), root, ask)?;
+    simulate_sheet(&sh, dir.as_deref(), ask)
+}
+
+/// The part built and the sheet asked for (its first, unless `ask.sheet` names one).
+fn built(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Result<SheetOut, Answer> {
     let opts = Options {
         dir: dir.clone(),
         root,
@@ -262,12 +362,169 @@ pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &As
         },
         None => &r.sheets[0],
     };
-    simulate_sheet(sh, dir.as_deref(), ask)
+    Ok(sh.clone())
 }
 
 /// One built sheet simulated (for a caller that has run the part already, as `query F dfm`
 /// does): its vendor's tooling unless `ask` names other.
 pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Sim, Answer> {
+    let p = prepare(sh, dir, ask)?;
+    let made = match memo_get(&p.key) {
+        Some(hit) => hit,
+        None => {
+            let m = make(sh, dir, &p);
+            memo_put(p.key.clone(), m.clone());
+            m
+        }
+    };
+    Ok(assemble(sh, p, made))
+}
+
+/// A simulation made a little at a time, for an app that must not wait on it: `begin` builds the
+/// part and the tooling (milliseconds), so the press, its tools and the flat part can be drawn at
+/// once (`model`, `tooling`); `step(n)` plans until about `n` more setups are simulated and says how
+/// far it has got; `finish` is the very `Sim` that `simulate` gives. A kept plan (an unchanged
+/// part) is done at `begin`. A staged program or ranked programs are made whole by the first step.
+/// It holds what it reads (no references) but is not `Send` (the search's verdict memo is shared
+/// within it): a worker makes it on its own thread and sends back `Progress` and the `Sim`.
+pub struct Planning {
+    sh: SheetOut,
+    dir: Option<PathBuf>,
+    prep: Prep,
+    job: Option<fb::PlanJob>,
+    /// The plan found, its handling checked one step at a time: (plan, next step, checks).
+    handling: Option<Handling>,
+    made: Option<Made>,
+}
+
+/// A found plan whose handling is being checked: the plan, the next step, the checks so far.
+type Handling = (fb::Plan, usize, Vec<(usize, fb::Check)>);
+
+/// `simulate`, begun: the part built, the tooling and the model made, nothing planned yet.
+pub fn begin(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Result<Planning, Answer> {
+    let sh = built(src, dir.clone(), root, ask)?;
+    let prep = prepare(&sh, dir.as_deref(), ask)?;
+    let made = memo_get(&prep.key);
+    Ok(Planning {
+        sh,
+        dir,
+        prep,
+        job: None,
+        handling: None,
+        made,
+    })
+}
+
+impl Planning {
+    pub fn model(&self) -> &fb::Model {
+        &self.prep.model
+    }
+
+    /// The tooling as asked (a staged program's stations come with the plan).
+    pub fn tooling(&self) -> &fb::Tooling {
+        &self.prep.tooling
+    }
+
+    pub fn names(&self) -> &[String] {
+        &self.prep.bend_names
+    }
+
+    pub fn progress(&self) -> fb::Progress {
+        let bends = self.prep.model.bends.len();
+        match (&self.made, &self.job) {
+            (Some(m), _) => fb::Progress {
+                bends_planned: m.1.steps.len(),
+                bends,
+                setups_tried: m.1.explored,
+                done: true,
+            },
+            (None, Some(j)) => j.progress(&self.prep.model),
+            (None, None) if self.handling.is_some() => {
+                let h = self.handling.as_ref().unwrap();
+                fb::Progress {
+                    bends_planned: h.0.steps.len(),
+                    bends,
+                    setups_tried: h.0.explored,
+                    done: false,
+                }
+            }
+            (None, None) => fb::Progress {
+                bends_planned: 0,
+                bends,
+                setups_tried: 0,
+                done: false,
+            },
+        }
+    }
+
+    /// Plans on until about `n` more setups are simulated (a frame's slice, a worker's loop).
+    pub fn step(&mut self, n: usize) -> fb::Progress {
+        if self.made.is_some() {
+            return self.progress();
+        }
+        let p = &self.prep;
+        // a plain plan goes a slice at a time; a staged program or ranked programs whole
+        if p.ask.stage || p.ask.programs.is_some() {
+            let m = make(&self.sh, self.dir.as_deref(), p);
+            memo_put(p.key.clone(), m.clone());
+            self.made = Some(m);
+            return self.progress();
+        }
+        // the operator's move into each step after the first, checked one step a call (as
+        // fb::scene::annotate_handling does all at once)
+        if let Some((plan, k, checks)) = &mut self.handling {
+            if *k < plan.steps.len() {
+                let mut sc = fb::scene::Scene::new(&p.model, &p.tooling, plan);
+                if let Some(c) = sc.handling_check(*k) {
+                    checks.push((*k, c));
+                }
+                *k += 1;
+            }
+            if *k >= plan.steps.len() {
+                let (mut plan, _, checks) = self.handling.take().unwrap();
+                for (k, c) in checks {
+                    plan.steps[k].checks.push(c);
+                }
+                let m = (p.tooling.clone(), plan, None, None, None);
+                memo_put(p.key.clone(), m.clone());
+                self.made = Some(m);
+            }
+            return self.progress();
+        }
+        let job = self
+            .job
+            .get_or_insert_with(|| fb::PlanJob::new(&p.model, &p.tooling, &p.opts));
+        let pr = job.step(&p.model, &p.tooling, &p.opts, n);
+        if pr.done
+            && let Some(job) = self.job.take()
+            && let Some(plan) = job.plan(&p.model, &p.tooling, &p.opts)
+        {
+            self.handling = Some((plan, 1, Vec::new()));
+        }
+        self.progress()
+    }
+
+    /// The simulation (planned to the end first, if it is not yet).
+    pub fn finish(mut self) -> Sim {
+        while !self.step(usize::MAX / 2).done {}
+        let made = self.made.take().expect("planned");
+        assemble(&self.sh, self.prep, made)
+    }
+}
+
+/// A simulation's question, answered up to the plan: the tooling (stations set), the model, the
+/// bends' names, the options, and the memo's key.
+struct Prep {
+    ask: Ask,
+    tooling: fb::Tooling,
+    tsource: Json,
+    model: fb::Model,
+    bend_names: Vec<String>,
+    opts: fb::Options,
+    key: String,
+}
+
+fn prepare(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Prep, Answer> {
     // a program's stations: their tools are the ones on the press
     let mut ask = ask.clone();
     if !ask.stations.is_empty() {
@@ -278,9 +535,8 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         ask.punches.get_or_insert(ps);
         ask.dies.get_or_insert(ds);
     }
-    let ask = &ask;
     let mut ph = Phases::start();
-    let (mut tooling, tsource) = tooling(ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
+    let (mut tooling, tsource) = tooling(&ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
     ph.lap("tooling");
     for st in &ask.stations {
         let (Some(p), Some(d)) = (
@@ -361,18 +617,40 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         }),
         ..fb::Options::default()
     };
+    // a plan already made for this very model, tooling and options (a reopening, Simulate Again
+    // on an unchanged part): the planner is deterministic, so it is the same plan
+    let key = format!(
+        "{model:?}|{tooling:?}|{opts:?}|{:?}|{}|{bend_names:?}|{:?}",
+        ask.programs, ask.stage, ask.press
+    );
+    Ok(Prep {
+        ask,
+        tooling,
+        tsource,
+        model,
+        bend_names,
+        opts,
+        key,
+    })
+}
+
+/// The plan made (not kept): staged, or with its ranked programs, or alone; the handling checked.
+fn make(sh: &SheetOut, dir: Option<&Path>, p: &Prep) -> Made {
+    let (ask, model, opts, bend_names) = (&p.ask, &p.model, &p.opts, &p.bend_names);
+    let mut ph = Phases::start();
     // stage bending: the program's tools laid out along the bed, simulated all on the press
-    let mut tooling = tooling;
+    let mut tooling = p.tooling.clone();
     let mut staged: Option<fb::Staged> = None;
     let mut stage_json: Option<Json> = None;
+    let mut shared: Option<Vec<fb::Program>> = None;
     let mut plan = if ask.stage && tooling.stations.is_empty() && opts.sequence.is_none() {
-        match fb::stage(&model, &tooling, &opts, 8) {
+        match fb::stage(model, &tooling, opts, 8) {
             Ok(s) => {
                 let speeds = ask
                     .press
                     .as_deref()
                     .and_then(|p| catalog(dir).ok().and_then(|c| c.press(p).map(|r| r.speeds)));
-                stage_json = Some(staged_json(sh, &s, &bend_names, speeds.as_ref()));
+                stage_json = Some(staged_json(sh, &s, bend_names, speeds.as_ref()));
                 tooling = s.tooling.clone();
                 let p = s.plan.clone();
                 staged = Some(s);
@@ -393,18 +671,39 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
                     ("ok", false.into()),
                     ("why", why.as_str().into()),
                 ]));
-                fb::plan(&model, &tooling, &opts)
+                fb::plan(model, &tooling, opts)
             }
         }
+    } else if let Some(n) = ask.programs {
+        // the plan and the ranked programs from one search's learning
+        let (p, r) = fb::plan_and_programs(model, &tooling, opts, n);
+        shared = Some(r);
+        p
     } else {
-        fb::plan(&model, &tooling, &opts)
+        fb::plan(model, &tooling, opts)
     };
     ph.lap(if ask.stage { "stage" } else { "plan" });
-    let ranked = ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n));
+    let ranked = match shared {
+        Some(r) => Some(r),
+        None => ask.programs.map(|n| fb::programs(model, &tooling, opts, n)),
+    };
     ph.lap("programs");
     // the operator's move into each step after the first, checked (a warning if not proven clear)
-    fb::scene::annotate_handling(&model, &tooling, &mut plan);
+    fb::scene::annotate_handling(model, &tooling, &mut plan);
     ph.lap("handling");
+    (tooling, plan, ranked, staged, stage_json)
+}
+
+/// The simulation from its question and its plan: the reply, the tooling as laid out.
+fn assemble(sh: &SheetOut, p: Prep, made: Made) -> Sim {
+    let (tooling, plan, ranked, staged, stage_json) = made;
+    let Prep {
+        tsource,
+        model,
+        bend_names,
+        ..
+    } = p;
+    let mut ph = Phases::start();
     let mut answer = answer(sh, &model, &tooling, &plan, &bend_names);
     ph.lap("reply");
     if let Json::Obj(f) = &mut answer.json {
@@ -415,8 +714,12 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         if let Some(j) = stage_json {
             f.push(("stage".into(), j));
         }
+        f.push((
+            "contacts".into(),
+            Json::Arr(contacts_json(sh, &model, &tooling, &plan, &bend_names)),
+        ));
     }
-    Ok(Sim {
+    Sim {
         model,
         tooling,
         plan,
@@ -424,7 +727,7 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         answer,
         programs: ranked.unwrap_or_default(),
         stage: staged,
-    })
+    }
 }
 
 /// The simulation's findings in `query F dfm`'s Item shape: one per failing check of each step
@@ -939,6 +1242,230 @@ fn staged_json(
                 ),
             ]),
         ),
+    ])
+}
+
+/// A tool body's words: `punch:trumpf/OW300-S/body` the punch trumpf/OW300-S's body, ...
+fn tool_words(name: &str) -> String {
+    let (station, rest) = match name.strip_prefix("station").and_then(|r| r.split_once(':')) {
+        Some((k, r)) => (Some(k.to_string()), r),
+        None => (None, name),
+    };
+    let what = if let Some(r) = rest.strip_prefix("punch:") {
+        match r.rsplit_once('/') {
+            Some((id, part)) if part == "body" || part == "tip" => format!("the punch {id}'s {part}"),
+            _ => format!("the punch {r}"),
+        }
+    } else if let Some(id) = rest.strip_prefix("die:") {
+        format!("the die {id}")
+    } else if let Some(f) = rest.strip_prefix("backgauge:") {
+        format!("the backgauge's {f}")
+    } else if let Some(side) = rest.strip_prefix("frame:") {
+        format!("the press frame's {side} housing")
+    } else {
+        format!("the press's {rest}")
+    };
+    match station {
+        Some(k) => format!("{what} (station {k})"),
+        None => what,
+    }
+}
+
+/// Where a step's part and the tools come within the clearance, on both bodies: `contacts`.
+/// Only a step (or a blocked bend's best attempt) whose tool check failed or is Near pays for it.
+fn contacts_json(
+    sh: &SheetOut,
+    m: &fb::Model,
+    tl: &fb::Tooling,
+    plan: &fb::Plan,
+    names: &[String],
+) -> Vec<Json> {
+    let mut out = Vec::new();
+    let mut done = vec![false; m.bends.len()];
+    let mut items: Vec<(Option<usize>, Vec<bool>, &fb::Step)> = Vec::new();
+    for (i, st) in plan.steps.iter().enumerate() {
+        items.push((Some(i + 1), done.clone(), st));
+        done[st.bend] = true;
+    }
+    for b in &plan.blocking {
+        // a blocked bend not among the steps: its best attempt, after the bends it followed
+        if plan.steps.iter().any(|st| st.bend == b.bend) {
+            continue;
+        }
+        let mut d = vec![false; m.bends.len()];
+        for k in &b.after {
+            d[*k] = true;
+        }
+        items.push((None, d, &b.attempt));
+    }
+    for (n, done, st) in items {
+        for c in fb::contacts_of(m, tl, &done, st) {
+            out.push(contact_json(sh, m, &c, n, st, names));
+        }
+    }
+    out
+}
+
+fn contact_json(
+    sh: &SheetOut,
+    m: &fb::Model,
+    c: &fb::Contact,
+    n: Option<usize>,
+    st: &fb::Step,
+    names: &[String],
+) -> Json {
+    let res = (c.limit / 4.0).max(0.01);
+    let verdict = if c.depth.is_some() {
+        "hit"
+    } else if c.near.is_some() {
+        "near"
+    } else {
+        "undecided"
+    };
+    let bend = &names[st.bend];
+    let half = 0.5 * m.bends[st.bend].len;
+    let (ylo, yhi) = c.points.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |a, p| {
+        (a.0.min(p[1]), a.1.max(p[1]))
+    });
+    let faces: Vec<Json> = c
+        .faces
+        .iter()
+        .map(|f| {
+            let mut j = part(sh, &f.part);
+            if let Json::Obj(v) = &mut j {
+                v.push(("cells".into(), f.cells.len().into()));
+                v.push(("proven".into(), f.proven.into()));
+            }
+            j
+        })
+        .collect();
+    let anchor = c
+        .faces
+        .iter()
+        .max_by_key(|f| (f.proven, f.cells.len()))
+        .and_then(|f| {
+            part(sh, &f.part)
+                .get("anchor")
+                .and_then(Json::str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "the part".into());
+    let how = match (verdict, c.depth) {
+        (_, Some(d)) if d < 0.0 => format!("runs {} mm into", r6s(-d)),
+        (_, Some(d)) => format!(
+            "comes within {} mm (under the {} mm clearance) of",
+            r6s(d),
+            r6s(c.limit)
+        ),
+        ("near", _) => format!(
+            "comes within the {} mm resolution of the {} mm clearance to",
+            r6s(res),
+            r6s(c.limit)
+        ),
+        _ => format!("is not proven {} mm clear of", r6s(c.limit)),
+    };
+    let deg = |x: f64| (x.to_degrees() * 10.0).round() / 10.0;
+    let (when, span) = match c.phase {
+        fb::Phase::Bend => {
+            let (a, b) = (deg(c.span.0), deg(c.span.1));
+            let at = if (b - a).abs() < 0.05 {
+                format!("{a}°")
+            } else {
+                format!("{a}°–{b}°")
+            };
+            (
+                format!("at {at} of"),
+                Json::obj(vec![("angle_deg", Json::Arr(vec![a.into(), b.into()]))]),
+            )
+        }
+        fb::Phase::Approach | fb::Phase::Return => (
+            if c.phase == fb::Phase::Approach {
+                "as the ram comes down for".to_string()
+            } else {
+                "as the ram goes back up after".to_string()
+            },
+            Json::obj(vec![("ram_mm", Json::Arr(vec![r6(c.span.0), r6(c.span.1)]))]),
+        ),
+        fb::Phase::Static => ("lying on the die for".to_string(), Json::obj(vec![])),
+    };
+    let step = match n {
+        Some(n) => format!("step {n} (bend {bend})"),
+        None => format!("bend {bend}'s best attempt"),
+    };
+    // part against part: the other faces it meets, by name
+    let mut others: Vec<String> = Vec::new();
+    for o in &c.others {
+        if let Some(a) = part(sh, o).get("anchor").and_then(Json::str)
+            && !others.iter().any(|x| x == a)
+        {
+            others.push(a.to_string());
+        }
+    }
+    let target = if c.tool == "part" {
+        if others.is_empty() {
+            "the part itself".to_string()
+        } else {
+            others.join(" and ")
+        }
+    } else {
+        tool_words(&c.tool)
+    };
+    let text = format!(
+        "{anchor} {how} {} {}–{} mm from the bend's left end, {when} {step}",
+        target,
+        r6s(ylo + half),
+        r6s(yhi + half)
+    );
+    // at most 64 points each way, spread over the region
+    let pick = |v: &[[f64; 3]]| -> Json {
+        let k = v.len().div_ceil(64).max(1);
+        Json::Arr(
+            v.iter()
+                .step_by(k)
+                .map(|p| Json::Arr(p.iter().map(|x| r6(*x)).collect()))
+                .collect(),
+        )
+    };
+    let cells: usize = c.faces.iter().map(|f| f.cells.len()).sum();
+    let proven: usize = c.faces.iter().map(|f| f.proven).sum();
+    Json::obj(vec![
+        ("step", n.map_or(Json::Null, |n| n.into())),
+        ("bend", bend.as_str().into()),
+        ("rule", c.rule.word().into()),
+        ("severity", if c.severity == Severity::Error { "error" } else { "warning" }.into()),
+        ("verdict", verdict.into()),
+        ("phase", c.phase.word().into()),
+        ("tool", c.tool.as_str().into()),
+        ("estimate", c.estimate.into()),
+        ("faces", Json::Arr(faces)),
+        ("others", Json::Arr(c.others.iter().map(|o| part(sh, o)).collect())),
+        ("depth", c.depth.map_or(Json::Null, r6)),
+        ("lower", r6(c.lower)),
+        ("limit", r6(c.limit)),
+        ("when", span),
+        (
+            "region",
+            Json::obj(vec![
+                ("points", pick(&c.points)),
+                ("tool_points", pick(&c.tool_points)),
+                (
+                    "bbox",
+                    Json::Arr(vec![
+                        Json::Arr(c.bbox.0.iter().map(|x| r6(*x)).collect()),
+                        Json::Arr(c.bbox.1.iter().map(|x| r6(*x)).collect()),
+                    ]),
+                ),
+                ("cells", cells.into()),
+                ("proven", proven.into()),
+                ("complete", c.complete.into()),
+                (
+                    "exact",
+                    "proven cells hold a real point under the limit; the rest are bounded: the region is never smaller than the true contact"
+                        .into(),
+                ),
+            ]),
+        ),
+        ("text", text.as_str().into()),
     ])
 }
 

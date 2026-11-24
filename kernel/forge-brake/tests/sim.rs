@@ -765,3 +765,81 @@ fn a_locked_bend_is_made_at_its_station() {
     }
     assert_eq!(plan(&m, &tl, &opts), p, "deterministic: a re-plan keeps the lock");
 }
+
+/// The planner a little at a time (`Planner::step`, what a page's frames or a worker drive) gives
+/// the very plan `plan()` gives: stepped one setup at a time and seven at a time, on parts that
+/// plan, a box too deep for its width (refuted), a narrow channel with straight punches only
+/// (refuted), a box searched with a budget too small (cut short), and a stated sequence.
+#[test]
+fn the_planner_stepped_is_the_plan() {
+    let tl = eu();
+    let straight: Vec<usize> = (0..tl.punches.len())
+        .filter(|&k| tl.punches[k].kind == PunchKind::Straight)
+        .collect();
+    let cases: Vec<(Sheet, Options)> = vec![
+        (ell(30.0), Options::default()),
+        (boxed(80.0, 60.0, 25.0), Options::default()),
+        (boxed(120.0, 40.0, 30.0), Options::default()),
+        (
+            channel(30.0, 200.0, 60.0),
+            Options {
+                punches: Some(straight.clone()),
+                ..Options::default()
+            },
+        ),
+        (
+            boxed(80.0, 60.0, 25.0),
+            Options {
+                budget: 9,
+                ..Options::default()
+            },
+        ),
+        (
+            boxed(80.0, 60.0, 25.0),
+            Options {
+                sequence: Some(vec![3, 2, 1, 0]),
+                ..Options::default()
+            },
+        ),
+    ];
+    for (k, (s, opts)) in cases.iter().enumerate() {
+        let m = Model::new(s).unwrap();
+        let whole = plan(&m, &tl, opts);
+        for n in [1, 7] {
+            let mut pl = forge_brake::Planner::new(&m, &tl, opts);
+            let mut last = 0;
+            let mut ticks = 0;
+            loop {
+                let pr = pl.step(n);
+                assert!(pr.setups_tried >= last && pr.bends_planned <= pr.bends);
+                last = pr.setups_tried;
+                ticks += 1;
+                if pr.done {
+                    break;
+                }
+                assert!(ticks < 100_000, "case {k}: no end");
+            }
+            let p = pl.plan().expect("done");
+            assert_eq!(p, whole, "case {k}, {n} at a time");
+            if opts.sequence.is_none() && n == 1 && m.bends.len() > 1 {
+                assert!(ticks > 1, "case {k}: stepped, not all at once");
+            }
+        }
+    }
+}
+
+/// Planning is deterministic: the same question twice, from nothing each time, gives the same
+/// plan and the same ranked programs.
+#[test]
+fn planning_twice_gives_the_same_answer() {
+    let tl = eu();
+    for s in [boxed(80.0, 60.0, 25.0), channel(100.0, 200.0, 30.0)] {
+        let m = Model::new(&s).unwrap();
+        let a = forge_brake::plan_and_programs(&m, &tl, &Options::default(), 5);
+        let b = forge_brake::plan_and_programs(&m, &tl, &Options::default(), 5);
+        assert_eq!(a.0, b.0);
+        assert_eq!(a.1, b.1);
+        // and the plan is plan()'s
+        assert_eq!(a.0, plan(&m, &tl, &Options::default()));
+    }
+}
