@@ -77,14 +77,14 @@ fn the_flange_simulates_in_the_app() {
         let tag = format!("{}x{}", w as u32, hgt as u32);
         assert!(h.gui.camsim_state().is_some(), "the simulation's state");
         assert_eq!(h.gui.shell.camsim.as_ref().unwrap().sim.tl.ops.len(), 5);
-        h.gui.camsim_command("t=0;part=ghost").unwrap();
+        h.gui.camsim_command("t=0;part=hidden").unwrap();
         shot(&mut h, &format!("native-sim-01-start-{tag}"));
         h.gui.camsim_command("op=2;at=0.55").unwrap();
         shot(&mut h, &format!("native-sim-02-contour-{tag}"));
         h.gui.camsim_command("at=1;colour=compare;part=hidden").unwrap();
         shot(&mut h, &format!("native-sim-03-end-compare-{tag}"));
         h.gui
-            .camsim_command("colour=material;part=ghost;op=3;locate=3,0,40,0.5;tab=moves")
+            .camsim_command("colour=material;part=hidden;op=3;locate=3,0,40,0.5;tab=moves")
             .unwrap();
         shot(&mut h, &format!("native-sim-04-moves-{tag}"));
         if h.gui

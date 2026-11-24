@@ -22,7 +22,8 @@ pub mod look {
     pub const PLUNGE: [f32; 3] = rgb(0xD0508C);
     pub const LINK: [f32; 3] = rgb(0x8A9099);
     /// The share of a metal's F0 a baked diffuse light shows it at (the overlay has no specular)
-    const DIFFUSE: f32 = 0.62;
+    /// (0.5: machined aluminium reads as a mid-light metal, not a white box)
+    const DIFFUSE: f32 = 0.5;
     /// Machined aluminium: RENDER-STUDIO's "Aluminium, machined" (F0 [0.916, 0.923, 0.924],
     /// physicallybased.info) at DIFFUSE, until the sim draws with the studio's appearances
     pub const STOCK: [f32; 3] = [0.916 * DIFFUSE, 0.923 * DIFFUSE, 0.924 * DIFFUSE];
@@ -30,10 +31,10 @@ pub mod look {
     pub const UNDER: [f32; 3] = rgb(0x8E6BD8);
     pub const IN_TOL: [f32; 3] = rgb(0x3FAE5A);
     pub const GOUGE: [f32; 3] = rgb(0xE0453A);
-    /// Solid carbide, the flutes a shade darker than the shank: a stand-in grey (the appearance
-    /// library has no carbide yet)
-    pub const CUTTER: [f32; 3] = [0.17, 0.175, 0.18];
-    pub const SHANK: [f32; 3] = [0.24, 0.245, 0.25];
+    /// Solid carbide: RENDER-STUDIO's "Carbide" (a marked stand-in: tungsten's F0
+    /// [0.537, 0.536, 0.519]) at DIFFUSE; the fluted length a shade darker than the shank
+    pub const SHANK: [f32; 3] = [0.537 * DIFFUSE, 0.536 * DIFFUSE, 0.519 * DIFFUSE];
+    pub const CUTTER: [f32; 3] = [SHANK[0] * 0.72, SHANK[1] * 0.72, SHANK[2] * 0.72];
     /// Machined steel: RENDER-STUDIO's "Steel, machined" (F0 [0.53, 0.513, 0.494]) at DIFFUSE
     pub const HOLDER: [f32; 3] = [0.53 * DIFFUSE, 0.513 * DIFFUSE, 0.494 * DIFFUSE];
     pub const FIXTURE: [f32; 3] = HOLDER;

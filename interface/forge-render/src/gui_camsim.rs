@@ -69,7 +69,9 @@ impl Gui {
             // no view to draw in (the workspace's part isn't open): one of the simulation's own
             if self.view.is_none() && self.fg.is_none() {
                 self.camsim_view();
-            } else if first && self.fg.is_none() {
+            } else if first {
+                // entering the simulation frames its subject (the stock and the tool), with the
+                // part's document open or not (STANDARD §2)
                 self.camsim_fit();
             }
             if let Some(v) = &mut self.view {

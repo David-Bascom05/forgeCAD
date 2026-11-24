@@ -51,10 +51,10 @@ async function sim(p, cmd) {
       assert.equal(st.camsim.severe, 0, JSON.stringify(st.camsim));
       console.log(`ok - ${tag}: flange_cam.fg simulated: ${st.camsim.moves} moves, ${st.camsim.total.toFixed(1)} s, ${st.camsim.certification}`);
       const shots = [
-        ["web-sim-01-start", "t=0;part=ghost"],
+        ["web-sim-01-start", "t=0;part=hidden"],
         ["web-sim-02-contour", "op=2;at=0.55"],
         ["web-sim-03-end-compare", "at=1;colour=compare;part=hidden"],
-        ["web-sim-04-moves", "colour=material;part=ghost;op=3;locate=3,0,40,0.5;tab=moves"],
+        ["web-sim-04-moves", "colour=material;part=hidden;op=3;locate=3,0,40,0.5;tab=moves"],
       ];
       for (const [name, cmd] of shots) {
         st = await sim(p, cmd);
@@ -64,7 +64,7 @@ async function sim(p, cmd) {
         console.log(`ok - ${cmd}: t ${st.camsim.t.toFixed(2)} op ${st.camsim.op} (${t.shot(`${name}-${tag}.png`, f)})`);
       }
       // the posted program on its machine: placed (at:) and clear of the table, so no issue
-      st = await sim(p, "tab=program;source=machine;at=0.3;colour=material;part=ghost");
+      st = await sim(p, "tab=program;source=machine;at=0.3;colour=material;part=hidden");
       assert.deepEqual(st.camsim.machine_errors, []);
       assert.equal(st.camsim.source, "generic-vmc3", JSON.stringify(st.camsim));
       assert.equal(st.camsim.severe, 0, "the placed flange's posted code: no collision or limit");
