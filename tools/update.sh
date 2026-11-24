@@ -32,6 +32,10 @@ fi
 if [ -f tools/update.sh ]; then
     install -m 755 tools/update.sh "$install_root/bin/forgecad-update"
 fi
+# ffmpeg for recording video (tools/fetch-ffmpeg.sh); a failed fetch leaves the install as it is
+if [ -f tools/fetch-ffmpeg.sh ] && ! sh tools/fetch-ffmpeg.sh "$install_root"; then
+    printf '\nNo ffmpeg installed: recording saves PNG frames until forgecad-update succeeds.\n' >&2
+fi
 printf '\nUpdated ForgeCAD in %s/bin.\n' "$install_root"
 
 if [ -f tools/setup-speech.sh ]; then

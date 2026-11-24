@@ -75,6 +75,9 @@ pub struct CaptureUi {
     pub overlays: bool,
     /// The folder photos and recordings go to; empty: the document's folder.
     pub folder: String,
+    /// The exact file (a photo's PNG, a video's MP4, or the frames' folder) the next capture
+    /// writes instead of a fresh name in the folder: `forge-app --photo/--record`, `forgecad record`.
+    pub out: Option<String>,
     pub settings_open: bool,
     /// Asked, for the GUI.
     pub asks: Vec<Capture>,
@@ -96,6 +99,7 @@ impl Default for CaptureUi {
             format: Format::Mp4,
             overlays: false,
             folder: String::new(),
+            out: None,
             settings_open: false,
             asks: Vec::new(),
             recording: None,

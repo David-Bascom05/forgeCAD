@@ -1,0 +1,18 @@
+# The ffmpeg ForgeCAD records video with (research/render/record.md): built by
+# .github/workflows/ffmpeg.yml from these sources, LGPL (no GPL parts), published as release assets
+# of this repository, fetched by tools/fetch-ffmpeg.sh / .ps1. Bumping a version or BUILD here runs
+# the workflow (on main); then fill the ASSET_* hashes from its summary.
+FFMPEG_VERSION=7.1.1
+FFMPEG_URL=https://ffmpeg.org/releases/ffmpeg-7.1.1.tar.xz
+FFMPEG_SHA256=733984395e0dbbe5c046abda2dc49a5544e7e0e1e2366bba849222ae9e3a03b1
+OPENH264_VERSION=2.5.0
+OPENH264_URL=https://github.com/cisco/openh264/archive/refs/tags/v2.5.0.tar.gz
+# not yet pinned: this was set up where github.com's archives were out of reach; fill it with
+#   curl -sL "$OPENH264_URL" | sha256sum
+# and the workflow refuses to build until it is
+OPENH264_SHA256=
+BUILD=1
+# the published builds, filled after the workflow's first run; empty: none published yet
+ASSET_LINUX_X86_64_SHA256=
+ASSET_WINDOWS_X86_64_SHA256=
+ASSET_MACOS_ARM64_SHA256=

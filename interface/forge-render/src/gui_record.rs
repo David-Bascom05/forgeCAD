@@ -23,6 +23,9 @@ pub type PhotoDone = Result<String, String>;
 enum Sink {
     #[cfg(not(target_arch = "wasm32"))]
     Video(crate::record::ffmpeg::Video),
+    /// The browser's WebCodecs encoder, the MP4 written here.
+    #[cfg(target_arch = "wasm32")]
+    Web(crate::record::web::Video),
     /// PNG files in a folder (natively), or collected for a zip (the browser).
     Frames {
         dir: String,
@@ -37,6 +40,11 @@ enum Stage {
     /// It's in the window's state: draw it.
     Draw,
     Reading(Pending),
+    /// Every frame in: the browser's encoder finishing, then what it made.
+    #[cfg(target_arch = "wasm32")]
+    Finishing,
+    #[cfg(target_arch = "wasm32")]
+    Finished(Result<Vec<u8>, String>),
 }
 
 /// A recording under way.
@@ -122,6 +130,53 @@ impl Gui {
     }
 
     /// Whether a photo or a recording is under way (the window draws again until it's done).
+    /// A capture asked in words, Capture's settings first: `photo` or `record`, then any of
+    /// `WxH` (the picture's size), `fps=N`, `seconds=S` (a turntable's length), `frames` (PNG
+    /// frames, not MP4), `out=PATH`. For the browser's tests and scripts (`app_capture`).
+    pub fn capture_command(&mut self, words: &str) -> Result<(), String> {
+        use crate::shell::capture::Size;
+        let mut w = words.split_whitespace();
+        let ask = match w.next() {
+            Some("photo") => Capture::Photo,
+            Some("record") => Capture::Record,
+            _ => return Err(format!("capture: photo or record, not {words:?}")),
+        };
+        let c = &mut self.shell.capture;
+        c.format = Format::Mp4;
+        for word in w {
+            let bad = || format!("capture: {word:?}");
+            if let Some((a, b)) = word.split_once('x')
+                && let (Ok(a), Ok(b)) = (a.parse(), b.parse())
+            {
+                (c.photo_size, c.size) = (Size::Custom(a, b), Size::Custom(a, b));
+            } else if let Some(v) = word.strip_prefix("fps=") {
+                c.fps = v.parse::<u32>().map_err(|_| bad())?.max(1);
+            } else if let Some(v) = word.strip_prefix("seconds=") {
+                c.orbit_seconds = v.parse().map_err(|_| bad())?;
+            } else if let Some(v) = word.strip_prefix("out=") {
+                c.out = Some(v.into());
+            } else if word == "frames" {
+                c.format = Format::Frames;
+            } else {
+                return Err(bad());
+            }
+        }
+        c.asks.push(ask);
+        Ok(())
+    }
+
+    /// Where a recording is: seek, draw, reading, finishing (the browser's encoder); for tests.
+    pub fn capture_stage(&self) -> &'static str {
+        match self.recording.as_ref().map(|j| &j.stage) {
+            None => "",
+            Some(Stage::Seek) => "seek",
+            Some(Stage::Draw) => "draw",
+            Some(Stage::Reading(_)) => "reading",
+            #[cfg(target_arch = "wasm32")]
+            Some(Stage::Finishing | Stage::Finished(_)) => "finishing",
+        }
+    }
+
     pub fn capture_busy(&self) -> bool {
         self.photo.is_some() || self.recording.is_some()
     }
@@ -199,8 +254,12 @@ impl Gui {
         let _ = what;
         let n = ((duration * fps as f64).round() as u32).max(1);
         let (dir, stem) = self.capture_place();
+        let out = self.shell.capture.out.take();
         let frames_sink = |note: String| {
-            let d = Gui::fresh_name(&dir, &format!("{stem}-frames"), "");
+            let d = match &out {
+                Some(o) => o.strip_suffix(".mp4").unwrap_or(o).to_string(),
+                None => Gui::fresh_name(&dir, &format!("{stem}-frames"), ""),
+            };
             Sink::Frames {
                 dir: d,
                 zip: cfg!(target_arch = "wasm32").then(Vec::new),
@@ -212,7 +271,9 @@ impl Gui {
             #[cfg(not(target_arch = "wasm32"))]
             Format::Mp4 => match crate::record::ffmpeg::locate() {
                 Some(ff) => {
-                    let path = Gui::fresh_name(&dir, &stem, ".mp4");
+                    let path = out
+                        .clone()
+                        .unwrap_or_else(|| Gui::fresh_name(&dir, &stem, ".mp4"));
                     Sink::Video(crate::record::ffmpeg::Video::start(&ff, &path, size, fps)?)
                 }
                 None => frames_sink(format!(
@@ -221,7 +282,18 @@ impl Gui {
                 )),
             },
             #[cfg(target_arch = "wasm32")]
-            Format::Mp4 => frames_sink("MP4 in the browser is coming: PNG frames meanwhile".into()),
+            Format::Mp4 => {
+                let path = out
+                    .clone()
+                    .unwrap_or_else(|| Gui::fresh_name(&dir, &stem, ".mp4"));
+                match crate::record::web::Video::start(&path, size, fps) {
+                    Some(v) => Sink::Web(v),
+                    None => frames_sink(
+                        "This browser has no H.264 video encoder: saved PNG frames instead ({frames}.zip)"
+                            .into(),
+                    ),
+                }
+            }
         };
         if let Sink::Frames { dir, zip: None, .. } = &sink {
             forge_dirs::fs::create_dir_all(dir).map_err(|e| format!("{dir}: {e}"))?;
@@ -263,6 +335,30 @@ impl Gui {
                         let name = file_name(&p);
                         file = Some(p);
                         format!("Video saved: {name} ({} frames, {enc})", job.n)
+                    }
+                    Err(e) => format!("Couldn't record: {e}"),
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            Some(Sink::Web(video)) if cancelled => {
+                video.cancel();
+                "Recording stopped".to_string()
+            }
+            #[cfg(target_arch = "wasm32")]
+            Some(Sink::Web(video)) => {
+                let made = match std::mem::replace(&mut job.stage, Stage::Seek) {
+                    Stage::Finished(r) => r,
+                    _ => Err("the video never finished".into()),
+                };
+                match made {
+                    Ok(mp4) => {
+                        let name = file_name(&video.path);
+                        deliver(&video.path, &mp4);
+                        file = Some(video.path.clone());
+                        format!(
+                            "Video downloaded: {name} ({} frames, WebCodecs H.264)",
+                            video.frames
+                        )
                     }
                     Err(e) => format!("Couldn't record: {e}"),
                 }
@@ -313,7 +409,12 @@ impl Gui {
             let r = match ask {
                 Capture::Photo => {
                     let (dir, stem) = self.capture_place();
-                    let path = Gui::fresh_name(&dir, &stem, ".png");
+                    let path = self
+                        .shell
+                        .capture
+                        .out
+                        .take()
+                        .unwrap_or_else(|| Gui::fresh_name(&dir, &stem, ".png"));
                     self.photo_start(self.shell.capture.photo_size.pixels(self.window_px()), &path)
                 }
                 Capture::Reveal => {
@@ -374,6 +475,21 @@ impl Gui {
                 }
                 job.stage = Stage::Draw;
             }
+            #[cfg(target_arch = "wasm32")]
+            Stage::Draw if matches!(&job.sink, Some(Sink::Web(v)) if !v.ready()) => {}
+            #[cfg(target_arch = "wasm32")]
+            Stage::Finishing => {
+                if let Some(Sink::Web(v)) = &job.sink
+                    && let Some(r) = v.done()
+                {
+                    job.stage = Stage::Finished(r);
+                    self.recording = Some(job);
+                    self.record_end(false);
+                    return;
+                }
+            }
+            #[cfg(target_arch = "wasm32")]
+            Stage::Finished(_) => {}
             Stage::Draw => match self.draw_view_at(job.size) {
                 Ok(p) => job.stage = Stage::Reading(p),
                 Err(e) => {
@@ -393,6 +509,8 @@ impl Gui {
                     match job.sink.as_mut().expect("a sink while recording") {
                         #[cfg(not(target_arch = "wasm32"))]
                         Sink::Video(v) => v.push(&rgba),
+                        #[cfg(target_arch = "wasm32")]
+                        Sink::Web(v) => v.push(job.size, &rgba),
                         Sink::Frames { dir, zip, .. } => {
                             let bytes = png_bytes(job.size, &rgba)?;
                             let name = format!("frame_{:05}.png", job.k);
@@ -417,6 +535,14 @@ impl Gui {
                 job.stage = Stage::Seek;
                 if job.k >= job.n {
                     self.shell.capture.recording = Some((job.k, job.n));
+                    // the browser's encoder finishes on its own time: wait for it
+                    #[cfg(target_arch = "wasm32")]
+                    if let Some(Sink::Web(v)) = &job.sink {
+                        v.flush();
+                        job.stage = Stage::Finishing;
+                        self.recording = Some(job);
+                        return;
+                    }
                     self.recording = Some(job);
                     self.record_end(false);
                     return;

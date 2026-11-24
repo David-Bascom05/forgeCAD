@@ -70,6 +70,8 @@ enum Ask {
     Cam(String),
     /// A Machine Builder command (`Gui::machine_command`).
     Machine(String),
+    /// `Gui::capture_command`'s words: a photo or a recording, as Capture's settings say.
+    Capture(String),
 }
 
 thread_local! {
@@ -151,6 +153,17 @@ struct Host {
     frames: u64,
     /// A frame the app asked for later (a tooltip's delay), as `now_ms`.
     next: Option<f64>,
+    /// The last frame's GPU work not yet done, and a frame held back meanwhile: a frame waits
+    /// for the one before, as a native swapchain makes it, so a slow GPU (or an offscreen page,
+    /// which nothing paces) never queues frames without end, which a readback (a photo, a
+    /// recording's frame, a pick) would wait behind.
+    gpu: Arc<GpuPace>,
+}
+
+#[derive(Default)]
+struct GpuPace {
+    busy: std::sync::atomic::AtomicBool,
+    held: std::sync::atomic::AtomicBool,
 }
 
 struct App {
@@ -242,6 +255,7 @@ async fn open_host(
         unpick: false,
         frames: 0,
         next: None,
+        gpu: Arc::default(),
     })
 }
 
@@ -322,7 +336,13 @@ impl Host {
     }
 
     fn draw(&mut self) {
+        use std::sync::atomic::Ordering::SeqCst;
         use wgpu::CurrentSurfaceTexture as T;
+        if self.gpu.busy.load(SeqCst) {
+            // drawn when the last frame's work is done (below)
+            self.gpu.held.store(true, SeqCst);
+            return;
+        }
         // the canvas's pixels checked each frame: not every change of the pixel ratio comes as an
         // event (a page zoomed, a window dragged to another monitor)
         if self.surface.is_some()
@@ -358,6 +378,14 @@ impl Host {
             }
             (None, None) => return,
         };
+        self.gpu.busy.store(true, SeqCst);
+        let pace = self.gpu.clone();
+        self.gui.queue().on_submitted_work_done(move || {
+            pace.busy.store(false, SeqCst);
+            if pace.held.swap(false, SeqCst) {
+                wake();
+            }
+        });
         if std::mem::take(&mut self.unpick)
             && let Some(v) = &mut self.gui.view
         {
@@ -432,6 +460,11 @@ impl Host {
                 Ask::Env(e) => self.gui.env_asked = Some(e),
                 Ask::Machine(c) => {
                     let _ = self.gui.machine_command(&c);
+                }
+                Ask::Capture(c) => {
+                    if let Err(e) = self.gui.capture_command(&c) {
+                        self.gui.shell.status = e;
+                    }
                 }
                 Ask::Rebuild => {
                     if let Some(s) = &mut self.gui.fg {
@@ -734,6 +767,22 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("build_ms", doc.map_or(Json::Null, |s| num(s.build_ms))),
         ("built", built.unwrap_or(Json::Null)),
         ("camsim", g.camsim_state().unwrap_or(Json::Null)),
+        // a photo or recording under way, and what the last one said
+        (
+            "capture",
+            Json::obj(vec![
+                ("busy", g.capture_busy().into()),
+                ("stage", g.capture_stage().into()),
+                (
+                    "frame",
+                    g.shell
+                        .capture
+                        .recording
+                        .map_or(Json::Null, |(k, n)| Json::Arr(vec![num(k as f64), num(n as f64)])),
+                ),
+                ("last", g.shell.capture.last.clone().into()),
+            ]),
+        ),
         ("cam", cam_json(g)),
         // a pick of the view in flight (the host draws on until it is answered)
         ("pick_busy", g.pick_busy().into()),
@@ -1029,6 +1078,13 @@ pub fn app_pixels(then: js_sys::Function) {
 #[wasm_bindgen]
 pub fn app_machine(cmd: String) {
     ask(Ask::Machine(cmd));
+}
+
+/// A photo or a recording of the view (`Gui::capture_command`: `photo`, `record 320x200 fps=10
+/// seconds=1 frames`); it is handed over as a download, `capture` in the state says when.
+#[wasm_bindgen]
+pub fn app_capture(words: String) {
+    ask(Ask::Capture(words));
 }
 
 /// The app's state as JSON: see `state_json`.
