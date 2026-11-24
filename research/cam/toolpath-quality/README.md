@@ -229,7 +229,75 @@ See §0 for its weaknesses.
 
 *Not legal advice. Engineering analysis for David and counsel.*
 
-FTO_SUMMARY_PLACEHOLDER
+Read 2026-11-24 from Google Patents claims and legal-events pages [R]. USPTO Patent Center
+(term adjustment, terminal disclaimers) was not reachable; counsel confirms. Full matrix and 12
+questions for counsel: fto-adaptive.md.
+
+**Free now (expired or lapsed), usable as prior art:**
+- The Surfware/Truemill 2004 engagement-milling family except 7,577,490:
+  - 7,451,013 (passes shaped to a stored max engagement) expired 2025-05-23;
+  - 7,831,332 and 8,000,834 expired 2025-03-02;
+  - 8,694,149 (circular passes under an engagement cap) is expired and also fee-lapsed.
+- MTU 7,237,989 (2003; each path's curvature set from the previous one to hold max contact)
+  expired 2024-06-11.
+- GE adaptive feed: 4,833,617 (lapsed 1993) and 5,828,574 (expired 2017).
+- Surfware 6,704,611 (expired 2022) and MERL 9,575,486 (fee-lapsed 2021).
+
+**Truemill US 7,577,490.** It blocks only one construction: passes of two tangent arcs into a
+three-sided region (one arc tangent to each side, radii above and below half the opening). Google
+gives expiry 2026-12-17. It is a CIP of a 2005-03-02 filing, so it may already have expired
+(about 2026-10-27, if the implied adjustment counts from that date). That figure is inferred, not
+read; counsel confirms.
+
+**Live, closest to what we would build:**
+
+| patent(s) | owner | to | claim 1 in plain words |
+|---|---|---|---|
+| 8,489,224 cl.1; 9,052,704 cl.1 | SolidCAM | 2031 | select a max **and a min** engagement angle; engagement varies gradually between them |
+| 9,823,645; 10,895,861; 10,324,445 | SolidCAM | 2031 | a machine or product following asymmetric spiral loops whose engagement swings max→min within a loop, with no preselected values. **The hardest to design around; claim construction is for counsel.** |
+| 8,489,224 cl.45 and relatives | SolidCAM | 2031 | "moat" passes around islands |
+| 12,248,293 | SolidCAM | — | choose trochoid vs spiral by estimated time |
+| US 2025/0284264 (pending) | SolidCAM | — | choose a clearance-plane or stay-down link by estimated time |
+| 9,489,339 | Delcam, now Autodesk | 2035 | offset subsets with backfill; or, when the predicted engagement exceeds a set angle, **enlarge the preceding path's corner radius** |
+| 8,295,972; 8,880,212 | Celeritive | 2029–2030 | transition-area links |
+| 9,946,245; 10,579,040 | Celeritive | 2032–2033 | paths from a modified Voronoi diagram |
+| 10,108,176 | Celeritive | 2033 | **replace an arc of a previously generated path with curves holding a new arc closer to the boundary**. Broad. |
+| 8,560,113 | Truemill | 2031 | corner arcs joined back to a first arc by transition passes |
+| 9,778,649; 9,958,859; 10,488,847 | DP/Hexagon | 2033–2034 | blend radius from the allowed engagement change; smoothed offsets; trochoidal links |
+| 10,108,172 | Autodesk (inventor Abrahamsen) | 2036 | spiral for a pocket with a hole, from a modified Voronoi diagram and a "wave". **Only 2 of 22 claims read.** |
+| 8,676,372 | Boeing | 2032 | engagement chosen from an axial-vs-radial depth-of-cut plot |
+| **9,892,215** | MERL | 2035 | the **live adaptive-feed** claim: split the path where engagement varies beyond a range, then a feed per segment from an engagement function with a material "abrasive resistance" parameter |
+| 12,663,778 | CNC Software | — | the CAM pipeline as an ordered graph (architecture) |
+| 12,485,511 | OPEN MIND | 2044 | multi-axis links |
+
+**Candidate design that avoids at least one required element of every live independent claim
+that was read** (claim-element matrix in fto-adaptive.md §3). Open gaps: the SolidCAM spiral-loop
+machine/product claims, and the unread claims of 10,108,172 and 12,663,778.
+
+1. **Clearing** driven by a cleared-area simulation, steering each step to **one capped target**:
+   - no minimum and no band;
+   - output as open passes plus links, not spiral loops with designed spacing changes;
+   - no rewriting of earlier passes.
+2. **Links**: stay down on a straight move that lies inside the cleared area, otherwise retract.
+   It is a fixed rule: no transition areas, and no comparison of estimated times.
+3. **Feed** from the engagement per fixed-length sample, with chip thinning and the user's chip
+   load:
+   - no material-abrasion parameter;
+   - no splitting of the path by how much the engagement varies.
+4. **Islands** cleared by the same simulation, with no separate moat pass.
+5. **Offset and medial-axis modes** only in their plain forms.
+
+**What this changes in the ranked plan (§4):**
+- **Row 5, corner rounding.** Generate rounded passes directly, at a user-set radius. Never make
+  the radius depend on a predicted engagement (Delcam '339 cl.18 elements 2–3). Never revise an
+  already generated path's arcs toward the boundary (Celeritive '176).
+- **Row 3, per-move feed.** Fixed-length samples, chip-load based (avoids MERL 9,892,215
+  elements). Counsel question 6: does a user chip load count as an "abrasive resistance"
+  parameter?
+- **Row 4, links.** A fixed rule, not "choose by estimated time" (SolidCAM's pending application).
+- **Island pockets.** Counsel question 3, the "moat" claims: are island offsets generated
+  together with the boundary offsets a moat? This already touches today's pocket-with-islands
+  code (cam/pocket-islands).
 
 ---
 
@@ -248,9 +316,9 @@ Columns:
 |---|---|---|---|---|---|
 | 1 | **Quality report per op** in the `forgecad.cam/1` reply. Certified max engagement φ and chip h_max on the exact cleared region; air-cut %; retracts; min path radius; MRR profile; scallop max (S3). Plus a cycle time with per-axis accel/jerk (trapezoid now, FIR per Ward et al. next), checked never below Ruckig's bound. | Makes "good" measurable; it is the yardstick for every row below and for Fusion parity. A certified engagement, chip and scallop bound is something no commercial CAM publishes. | Engagement is exactly decidable on line/arc regions (L2). The removed-area identity; the corner formula (roughing-linking.md §6) | none | R1–R4, O-items, BETTER items |
 | 2 | **Fix feeds.rs power (hm)**, with cited intervals for kc1.1 and mc; sin κr, bull-nose and tilted-ball D_eff | Correct power and torque limits; tool life | Monotonicity lemma: interval upper ends are sound | none | F-items |
-| 3 | **Per-move feed from the real engagement** (GE 1987, expired): keep h_max ≤ h* on the in-process stock; cap by power, torque and a deflection limit at the interval upper bounds; corner and arc engagement per feeds-speeds.md §2.3 | Large: the corner overloads (46%+) go away; straights run faster. Fusion lacks this. | **The headline theorem**: every emitted move's chip ≤ h* (engagement bound + monotonicity). No commercial CAM claims it. | none known for GE-style; check later vendor refinements (patents-fto.md) | F-items (BETTER) |
-| 4 | **Stay-down links** inside the cleared region; minimum retraction otherwise; G0 retracts; optional microlift | Cuts today's 2 × loops × levels vertical moves at cutting feed. Big cycle-time win on every pocket. | A link is inside the cleared region (exact containment) → G1-safe by construction; proved once for the construction | design: no "transition toolpaths" (Celeritive) | L-items |
-| 5 | **Corner rounding** of offset passes with a user-set minimum radius, concentric; engagement *checked* (row 1), leftovers to rest | Corner spike 127° → about 52° at 10% stepover; higher reachable feed (√(aρ)) | Corner-formula theorem; the coverage theorem for offsets with stepover ≤ r | avoid DP's chained radius-from-engagement rule | R-items |
+| 3 | **Per-move feed from the real engagement** (GE 1987, expired): keep h_max ≤ h* on the in-process stock; cap by power, torque and a deflection limit at the interval upper bounds; corner and arc engagement per feeds-speeds.md §2.3 | Large: the corner overloads (46%+) go away; straights run faster. Fusion lacks this. | **The headline theorem**: every emitted move's chip ≤ h* (engagement bound + monotonicity). No commercial CAM claims it. | GE 1987 expired; avoid MERL 9,892,215 (segmenting by engagement variation + abrasion parameter): use fixed-length samples and chip load | F-items (BETTER) |
+| 4 | **Stay-down links** inside the cleared region; minimum retraction otherwise; G0 retracts; optional microlift | Cuts today's 2 × loops × levels vertical moves at cutting feed. Big cycle-time win on every pocket. | A link is inside the cleared region (exact containment) → G1-safe by construction; proved once for the construction | design: no "transition toolpaths" (Celeritive '972); a fixed stay/retract rule, not chosen by time (SolidCAM US 2025/0284264) | L-items |
+| 5 | **Corner rounding** of offset passes with a user-set minimum radius, concentric; engagement *checked* (row 1), leftovers to rest | Corner spike 127° → about 52° at 10% stepover; higher reachable feed (√(aρ)) | Corner-formula theorem; the coverage theorem for offsets with stepover ≤ r | generate rounded passes directly at a user radius; no radius from predicted engagement (Delcam/Autodesk '339 cl.18), no outward revision of an existing path's arcs (Celeritive '176), no chained radius (DP '649) | R-items |
 | 6 | **Finishing output**: 4 decimals for finishing; control tolerance (G187/G64 P Q/CYCLE832/Cycle 32) from the op's tolerance budget; point redistribution at constant arc length; arc fitting with re-certification | Finish marks, faceting and dwell marks go away; controllers can look ahead | S4 chord bound, S6 rounding (G6 already), S7 as a named hypothesis | none known (patents-fto.md §8) | S/O-items |
 | 7 | **Per-tool entry limits** (ramp angle, helix diameter range, centre-cutting) in forge-tooling, refused by the checker; predrill and outside entry | Tool breakage avoided | Entry-limit check proven complete over all entries an op emits | none | R/L-items |
 | 8 | **3-axis finishing done right** (with CAM-3AXIS): exact drop-cutter, scallop-driven stepover (S2 per parameter box), Parallel + Contour + **Steep-and-Shallow** with overlap, then pencil and reference-tool rest; OCL as the L6 oracle | Finish quality at Fusion level | S1–S3; G1 on every segment (existing) | none known for basic strategies; check before iso-scallop variants | S-items |
