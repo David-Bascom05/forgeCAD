@@ -62,6 +62,16 @@ forge-sheet = { path = "../../kernel/forge-sheet" }
 forge-brake = { path = "../../kernel/forge-brake" }
 forge-vendor = { path = "../../kernel/forge-vendor" }
 forge-step = { path = "../../kernel/forge-step" }
+# the Machine Builder: machine definitions, their kinematics and collision, the builder's
+# writer, levels and check, and the part-in-envelope check
+forge-machine = { path = "../../kernel/forge-machine" }
+forge-machine-builder = { path = "../forge-machine-builder" }
+forge-machine-lang = { path = "../forge-machine-lang" }
+forge-tooling = { path = "../../kernel/forge-tooling" }
+forge-tooling-builder = { path = "../forge-tooling-builder" }
+forge-library = { path = "../forge-library" }
+forge-workholding = { path = "../../kernel/forge-workholding" }
+forge-workholding-builder = { path = "../forge-workholding-builder" }
 png = "=0.18.1"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }

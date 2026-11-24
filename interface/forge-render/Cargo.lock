@@ -1085,6 +1085,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam-geom"
+version = "0.1.0"
+
+[[package]]
 name = "forge-dirs"
 version = "0.1.0"
 
@@ -1189,6 +1193,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-library"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+]
+
+[[package]]
+name = "forge-machine"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-machine-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-machine",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-machine-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-lang",
+ "forge-machine",
+ "forge-machine-builder",
+ "forge-math",
+ "forge-mesh",
+]
+
+[[package]]
 name = "forge-material"
 version = "0.1.0"
 dependencies = [
@@ -1241,6 +1283,14 @@ name = "forge-par"
 version = "0.1.0"
 
 [[package]]
+name = "forge-post"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-render"
 version = "0.1.0"
 dependencies = [
@@ -1259,6 +1309,10 @@ dependencies = [
  "forge-harness",
  "forge-history",
  "forge-lang",
+ "forge-library",
+ "forge-machine",
+ "forge-machine-builder",
+ "forge-machine-lang",
  "forge-material",
  "forge-math",
  "forge-mesh",
@@ -1269,8 +1323,12 @@ dependencies = [
  "forge-sketch",
  "forge-step",
  "forge-thermo",
+ "forge-tooling",
+ "forge-tooling-builder",
  "forge-topo",
  "forge-vendor",
+ "forge-workholding",
+ "forge-workholding-builder",
  "js-sys",
  "keyring-core",
  "png",
@@ -1338,6 +1396,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-tooling"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-math",
+]
+
+[[package]]
+name = "forge-tooling-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-topo"
 version = "0.1.0"
 dependencies = [
@@ -1364,6 +1440,24 @@ version = "0.1.0"
 dependencies = [
  "forge-math",
  "forge-ops",
+]
+
+[[package]]
+name = "forge-workholding"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-workholding-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-workholding",
 ]
 
 [[package]]

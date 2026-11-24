@@ -36,6 +36,8 @@ mod gui_explode;
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
 pub mod gui_inspect;
+#[path = "gui_machine.rs"]
+pub mod gui_machine;
 #[path = "gui_markup.rs"]
 pub mod gui_markup;
 #[path = "gui_overlay.rs"]
@@ -130,6 +132,8 @@ pub struct Gui {
     pub bend: gui_bendsim::BendView,
     /// An environment asked by name (a deep link, `--env`): entered once the document built.
     pub env_asked: Option<String>,
+    /// The Machine Builder's scene (`gui_machine.rs`).
+    pub mach: gui_machine::MachHost,
     pub ctx: egui::Context,
     /// The Agent tab's backend and its turns (`gui_agent.rs`).
     pub agent: gui_agent::AgentHost,
@@ -290,6 +294,7 @@ impl Gui {
             vers: Default::default(),
             bend: Default::default(),
             env_asked: None,
+            mach: Default::default(),
             agent: Default::default(),
             apps: Default::default(),
             speech: Default::default(),
@@ -938,6 +943,8 @@ impl Gui {
                 continue;
             }
             match a {
+                Action::MachineBuilder => self.machine_toggle(),
+                Action::Machine(c) => self.machine_cmd(c),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
                     let v = &mut self.shell.versions;
@@ -1305,6 +1312,7 @@ impl Gui {
         self.sheet_frame();
         self.env_frame();
         self.bendsim_frame();
+        self.machine_frame();
         self.fg_hole_guess();
         self.fg_preview();
         if self.explode_tick() {

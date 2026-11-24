@@ -28,8 +28,11 @@ fn usage() -> ExitCode {
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
          forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]   (the browser app on DIR's files)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
-         forgecad machine SETUP.toml [--json] | list   (posted G-code on a machine: timeline, collisions, removal)\n       \
+         forgecad machine SETUP.toml [--json]   (posted G-code on a machine: timeline, collisions, removal)\n       \
+         forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
+         forgecad tool|holder|collet|collet_nut|pull_stud|insert|turn_holder list | new ID --from ID [FIELD=VALUE..] [--project] | check ID|FILE   (your own tooling)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
+         forgecad workholding list [KIND] | new ID --from X [field=value ..] [--user] | check [ID ..] | show ID | schema [--json]   (vises, clamps, plates, chucks, collets)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
@@ -215,6 +218,20 @@ fn main() -> ExitCode {
         Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("machine") if args.len() >= 3 => machine(&args[2..]),
+        Some(w @ ("tool" | "holder" | "collet" | "collet_nut" | "pull_stud" | "insert" | "turn_holder"))
+            if args.len() >= 3 =>
+        {
+            let env = forge_tooling_builder::cli::Env {
+                project: std::path::PathBuf::from("."),
+                user_cam: forge_tooling_builder::user_cam(),
+            };
+            let o = forge_tooling_builder::cli::run(&env, w, &args[2..]).expect("a tooling kind");
+            let _ = write!(std::io::stdout(), "{}", o.out);
+            if !o.err.is_empty() {
+                eprintln!("{}", o.err.trim_end());
+            }
+            ExitCode::from(o.code)
+        }
         Some("vendor") => {
             let json = args.iter().any(|a| a == "--json");
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
@@ -233,6 +250,15 @@ fn main() -> ExitCode {
                     ExitCode::from(1)
                 }
             }
+        }
+        Some("workholding") => {
+            let here = std::env::current_dir().unwrap_or_else(|_| ".".into());
+            let o = forge_workholding_builder::cli::run(&args[2..], &here, None);
+            print!("{}", o.text);
+            if !o.text.ends_with('\n') {
+                println!();
+            }
+            ExitCode::from(o.code)
         }
         Some("help" | "--help" | "-h") => {
             println!("{}", forge_lang::help(&args[2..].join(" ")));
@@ -258,6 +284,22 @@ fn quoted(s: &str) -> String {
 
 /// Posted G-code simulated on a machine (forge-machine): `list` the machines, or run a setup file.
 fn machine(argv: &[String]) -> ExitCode {
+    let envelopes = |def: &forge_machine_lang::MachineDefRef, dir: &std::path::Path| {
+        forge_machine_lang::envelope_checks(def, dir)
+    };
+    let env = forge_machine_builder::cli::Env {
+        project: std::path::PathBuf::from("."),
+        user: forge_machine_builder::catalog::user_dir(),
+        today: forge_machine_builder::cli::today_utc(),
+        envelopes: &envelopes,
+    };
+    if let Some(o) = forge_machine_builder::cli::run(&env, argv) {
+        let _ = write!(std::io::stdout(), "{}", o.out);
+        if !o.err.is_empty() {
+            eprintln!("{}", o.err.trim_end());
+        }
+        return ExitCode::from(o.code);
+    }
     if argv[0] == "list" {
         let lib = match forge_machine_lang::library(std::path::Path::new(".")) {
             Ok(l) => l,

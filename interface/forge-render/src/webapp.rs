@@ -58,6 +58,8 @@ enum Ask {
     Env(String),
     /// The Bend Simulation at a step and an instant in it.
     BendAt(u32, f64),
+    /// A Machine Builder command (`Gui::machine_command`).
+    Machine(String),
 }
 
 thread_local! {
@@ -414,6 +416,9 @@ impl Host {
                         b.t = t.clamp(0.0, 1.0);
                         b.playing = false;
                     }
+                }
+                Ask::Machine(c) => {
+                    let _ = self.gui.machine_command(&c);
                 }
                 Ask::Rebuild => {
                     if let Some(s) = &mut self.gui.fg {
@@ -803,6 +808,13 @@ pub fn app_apply(op: &str) -> Result<(), JsValue> {
 #[wasm_bindgen]
 pub fn app_pixels(then: js_sys::Function) {
     ask(Ask::Pixels(then));
+}
+
+/// A Machine Builder command (`Gui::machine_command`: open, template KIND NAME, jog J V, check,
+/// save project, ...); its answer is the state's `status`, prefixed `machine:`.
+#[wasm_bindgen]
+pub fn app_machine(cmd: String) {
+    ask(Ask::Machine(cmd));
 }
 
 /// The app's state as JSON: see `state_json`.

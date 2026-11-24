@@ -138,6 +138,7 @@ dependencies = [
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-machine-builder",
  "forge-machine-lang",
  "forge-material",
  "forge-math",
@@ -145,8 +146,10 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-step",
+ "forge-tooling-builder",
  "forge-topo",
  "forge-turn-lang",
+ "forge-workholding-builder",
 ]
 
 [[package]]
@@ -314,6 +317,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-library"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+]
+
+[[package]]
 name = "forge-machine"
 version = "0.1.0"
 dependencies = [
@@ -323,11 +333,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-machine-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-machine",
+ "forge-machine-lang",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-machine-lang"
 version = "0.1.0"
 dependencies = [
  "forge-lang",
  "forge-machine",
+ "forge-machine-builder",
  "forge-math",
  "forge-mesh",
 ]
@@ -517,6 +540,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-tooling-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-topo"
 version = "0.1.0"
 dependencies = [
@@ -586,6 +619,29 @@ version = "0.1.0"
 dependencies = [
  "forge-math",
  "forge-ops",
+]
+
+[[package]]
+name = "forge-workholding"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-dirs",
+ "forge-lang",
+ "forge-math",
+ "forge-mesh",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-workholding-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-workholding",
 ]
 
 [[package]]

@@ -38,6 +38,10 @@ pub mod harness_look;
 pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
+pub mod machine;
+mod machine_parts;
+pub mod machine_tooling;
+pub mod machine_workholding;
 pub mod markup;
 pub mod materials;
 mod measure_ui;
@@ -181,6 +185,10 @@ pub enum Action {
     Env(env::EnvId, u16),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
     Versions(versions::VersionsCmd),
+    /// The Machine Builder workspace (shell/machine.rs), opened or closed.
+    MachineBuilder,
+    /// A Machine Builder command (its ribbon groups, the environment).
+    Machine(machine::MachineCmd),
     /// Measure, Section, iProperties and the centre of gravity.
     Inspect(inspect::InspectCmd),
     /// A sheet metal command, from the Sheet Metal or Flat Pattern tab.
@@ -396,6 +404,8 @@ pub struct Shell {
     /// The left panel's Agent tab (`agent.rs`).
     pub agent: agent::AgentTab,
     pub versions: versions::Versions,
+    /// The Machine Builder workspace, while it is open.
+    pub machine: Option<machine::MachineUi>,
     /// The open documents' tabs, and which is in the window.
     pub doc_tabs: Vec<docs::DocTab>,
     pub active_doc: usize,
@@ -458,6 +468,7 @@ impl Default for Shell {
             prefs: Default::default(),
             agent: Default::default(),
             versions: Default::default(),
+            machine: None,
             doc_tabs: Vec::new(),
             active_doc: 0,
             close_ask: None,
@@ -784,6 +795,7 @@ impl Shell {
         self.fg_issues_window(&ctx);
         self.cutlist_window(&ctx);
         self.sheet_ui(&ctx);
+        self.machine_ui(&ctx);
         self.build_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
