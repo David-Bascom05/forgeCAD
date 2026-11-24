@@ -1455,13 +1455,16 @@ impl<'a> StepCtx<'a> {
         } else {
             Check::rule(Rule::Stroke, travel, self.tl.press.stroke, true)
         });
-        let mut oh = if self.tl.press.unchecked.iter().any(|u| u == "open_height") {
+        // the clamps only take room: without them the tools already taller than the daylight
+        // leave the part none, a failure known without the clamps' heights
+        let room = Check::rule(Rule::OpenHeight, self.z_tdc, self.t + self.tl.clearance, false);
+        let mut oh = if room.pass && self.tl.press.unchecked.iter().any(|u| u == "open_height") {
             Check::not_checked(
                 Rule::OpenHeight,
                 "the tool clamps' heights under the press's open height",
             )
         } else {
-            Check::rule(Rule::OpenHeight, self.z_tdc, self.t + self.tl.clearance, false)
+            room
         };
         oh.phase = Some(Phase::Approach);
         out.push(oh);

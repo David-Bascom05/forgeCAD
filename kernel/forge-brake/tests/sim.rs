@@ -376,6 +376,12 @@ fn rules_just_pass_and_just_fail() {
         let mut t = tl.clone();
         t.press.open_height -= oh.value - oh.limit - d;
         assert_eq!(rule_of(&part, &t, su, 0.0, Rule::OpenHeight, None).pass, pass);
+        // the clamps' heights unknown: room left is not checked, none left fails all the same
+        // (the clamps only take room)
+        t.press.unchecked.push("open_height".into());
+        let c = rule_of(&part, &t, su, 0.0, Rule::OpenHeight, None);
+        assert_eq!(c.unchecked.is_some(), pass, "{c:?}");
+        assert!(pass || !c.pass, "{c:?}");
     }
     let len = rule_of(&part, &tl, su, 0.0, Rule::BedLength, None).value;
     assert!((len - 60.0).abs() < 1e-6, "{len}");

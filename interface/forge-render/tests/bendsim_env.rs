@@ -1404,3 +1404,107 @@ fn a_replan_keeps_the_users_stations() {
         "undo brings the user's station back"
     );
 }
+
+/// The punch and the part move on one clock (David: "the tool and the part bending do not line
+/// up"): every frame of every step, the punch tip never passes into the sheet, and while the bend
+/// turns the tip stands on the sheet, the turn growing only as the tip goes down. On the bench
+/// tooling and on the TruBend's five stations, whose 300 mm punch stands taller than the press's
+/// 385 mm open height leaves room for (the open height check fails: the punch then stood 15 mm
+/// under the sheet at the stroke's top and came up through the part).
+#[test]
+fn the_punch_meets_the_bend_every_frame() {
+    const TOL: f64 = 0.02;
+    let Some(mut h) = headless() else { return };
+    let part = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    );
+    open(&mut h, part);
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    for staged in [false, true] {
+        if staged {
+            let c = Choice {
+                press: Some("trumpf-trubend-5130".into()),
+                stations_auto: true,
+                ..Choice::default()
+            };
+            h.gui.shell.sheet.bend_sim.as_mut().unwrap().redo(c, "std-eu");
+            h.step();
+        }
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        let sim = b.sim.as_ref().unwrap();
+        let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
+        for k in 0..sim.plan.steps.len() {
+            let rp = sim.tooling.punches[sim.plan.steps[k].setup.punch].tip_radius;
+            // the punch left standing on the sheet only where the open height check fails
+            if sc.pose(k, 0.0).tip <= sc.pose(k, 0.4).tip {
+                let st = &sim.plan.steps[k];
+                assert!(
+                    st.failures()
+                        .iter()
+                        .any(|c| c.rule == forge_brake::sim::Rule::OpenHeight),
+                    "staged {staged} step {k}: no room over the sheet, the open height check passed"
+                );
+            }
+            let mut last: Option<forge_brake::scene::Pose> = None;
+            for i in 0..=120 {
+                let t = i as f64 / 120.0;
+                let pose = sc.pose(k, t);
+                let bodies = sc.bodies(k, t);
+                // the tip's drawn bottom is the pose's (to the arc's sampling: a chord's sag)
+                let low = bodies
+                    .iter()
+                    .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
+                    .flat_map(|x| x.mesh.pos.iter())
+                    .map(|p| p[2] as f64)
+                    .fold(f64::MAX, f64::min);
+                assert!(
+                    (low - pose.tip).abs() < 0.01,
+                    "step {k} t {t}: tip drawn at {low}, posed at {}",
+                    pose.tip
+                );
+                // the sheet's nearest point to the tip's round (inside it: in the punch)
+                let gap = bodies
+                    .iter()
+                    .filter(|x| x.look == forge_brake::scene::Look::BendZone)
+                    .flat_map(|x| x.mesh.pos.iter())
+                    .map(|q| {
+                        let (x, z) = (q[0] as f64, q[2] as f64 - (pose.tip + rp));
+                        (x * x + z * z).sqrt() - rp
+                    })
+                    .fold(f64::MAX, f64::min);
+                let what = format!(
+                    "staged {staged} step {k} t {t:.3} {:?} phi {:.2} tip {:.3} gap {gap:.3}",
+                    pose.stage,
+                    pose.phi.to_degrees(),
+                    pose.tip
+                );
+                use forge_brake::scene::Stage;
+                if pose.stage != Stage::Handle {
+                    assert!(gap > -TOL, "the punch in the sheet: {what}");
+                }
+                if matches!(pose.stage, Stage::Bend | Stage::Springback) {
+                    assert!(gap < TOL, "the bend turns with the punch off the sheet: {what}");
+                }
+                if let Some(a) = last.filter(|a| a.stage == pose.stage && pose.stage == Stage::Bend) {
+                    // the turn grows as the tip goes down, and only then
+                    assert!(
+                        pose.phi >= a.phi && pose.tip <= a.tip,
+                        "the turn against the stroke: {what}"
+                    );
+                    assert_eq!(
+                        pose.phi > a.phi,
+                        pose.tip < a.tip,
+                        "the turn without the stroke: {what}"
+                    );
+                }
+                if let Some(a) = last.filter(|a| pose.stage == Stage::Approach && a.stage == Stage::Approach)
+                {
+                    assert!(pose.tip <= a.tip, "the punch going up on its way down: {what}");
+                }
+                last = Some(pose);
+            }
+        }
+    }
+}
