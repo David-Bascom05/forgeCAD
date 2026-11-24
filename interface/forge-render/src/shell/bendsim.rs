@@ -1788,9 +1788,32 @@ fn view_settings(ui: &mut egui::Ui, st: &mut BendSimUi, rtl: bool) {
     }
 }
 
-/// The timeline: every step a block, its stages named in it; drag to scrub. `narrow`: the view's
-/// settings on a row of their own.
-pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi, narrow: bool) {
+/// How much room the play bar has: the view's width decides (STANDARD.md §5: nothing drawn
+/// over anything).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bar {
+    /// All on one row.
+    Wide,
+    /// The view's settings on a row of their own.
+    Narrow,
+    /// Icons, "1/2 · gauge", and the view's settings in a View menu.
+    Compact,
+}
+
+impl Bar {
+    pub fn for_width(w: f32) -> Bar {
+        if w < 560.0 {
+            Bar::Compact
+        } else if w < 900.0 {
+            Bar::Narrow
+        } else {
+            Bar::Wide
+        }
+    }
+}
+
+/// The timeline: every step a block, its stages named in it; drag to scrub.
+pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi, bar: Bar) {
     let n = st.steps();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -1814,28 +1837,42 @@ pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi, narrow: bool) {
         if transport(ui, "last", "Last bend (End)").clicked() && n > 0 {
             st.go(n - 1);
         }
-        ui.add_space(10.0);
+        ui.add_space(if bar == Bar::Compact { 6.0 } else { 10.0 });
         let (stage, _) = stage_at(st.t);
         let pose = st.pose();
-        ui.label(
-            egui::RichText::new(format!(
+        let words = match bar {
+            Bar::Compact => format!("{}/{} · {}", st.step + 1, n, stage.word()),
+            _ => format!(
                 "Bend {} of {} · {}{}",
                 st.step + 1,
                 n,
                 stage.word(),
                 pose.map_or(String::new(), |p| format!(" · {:.1}°", p.phi.to_degrees()))
-            ))
-            .color(egui::Color32::from_gray(230)),
-        );
+            ),
+        };
+        ui.label(egui::RichText::new(words).color(egui::Color32::from_gray(230)));
         // the view's own settings, at its foot: follow the bend, see through what hides it (on a
-        // row of their own when the view is narrow)
-        if !narrow {
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                view_settings(ui, st, true);
-            });
+        // row of their own when the view is narrow; in a menu when it is narrower still)
+        match bar {
+            Bar::Wide => {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    view_settings(ui, st, true);
+                });
+            }
+            Bar::Compact => {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.menu_button(
+                        egui::RichText::new("View").color(egui::Color32::from_gray(230)),
+                        |ui| {
+                            ui.vertical(|ui| view_settings(ui, st, false));
+                        },
+                    );
+                });
+            }
+            Bar::Narrow => {}
         }
     });
-    if narrow {
+    if bar == Bar::Narrow {
         ui.horizontal(|ui| view_settings(ui, st, false));
     }
     let w = ui.available_width().max(100.0);

@@ -357,7 +357,8 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
         }
     }
     // a narrow view: the view's settings on a row of their own, the bar taller for it
-    let narrow = view.width() < 900.0;
+    let bar = super::bendsim::Bar::for_width(view.width());
+    let narrow = bar == super::bendsim::Bar::Narrow;
     let band = Rect::from_min_max(
         egui::pos2(
             view.left() + 12.0,
@@ -375,7 +376,7 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
                 .inner_margin(6.0)
                 .show(ui, |ui| {
                     ui.set_width(band.width() - 12.0);
-                    super::bendsim::timeline_ui(ui, b, narrow);
+                    super::bendsim::timeline_ui(ui, b, bar);
                 });
         });
     s.places.push(("env:bendsim:view".into(), view));

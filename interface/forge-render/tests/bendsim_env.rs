@@ -233,9 +233,17 @@ fn a_small_window_holds_it_all() {
     }
     frame(&mut h, Framing::Work);
     shot(&mut h, "09-small-window-1024x700");
-    // the bar's settings on a row of their own: nothing drawn over the step's words
+    // the view is under 560 px here: the compact bar, one row (nothing drawn over the step's
+    // words); a view 560 to 900 px wide puts the settings on a row of their own
     let bar = h.gui.shell.place("env:bendsim:timeline").expect("the bar");
-    assert!(bar.height() > 90.0, "a taller bar in a narrow view: {bar:?}");
+    let w = h.gui.shell.place("env:bendsim:view").expect("the view").width();
+    assert_eq!(
+        forge_render::shell::bendsim::Bar::for_width(w),
+        forge_render::shell::bendsim::Bar::Compact
+    );
+    assert!(bar.height() < 80.0, "{bar:?}");
+    assert_eq!(forge_render::shell::bendsim::Bar::for_width(700.0), forge_render::shell::bendsim::Bar::Narrow);
+    assert_eq!(forge_render::shell::bendsim::Bar::for_width(1100.0), forge_render::shell::bendsim::Bar::Wide);
     let view = h.gui.shell.place("env:bendsim:view").expect("the view");
     let dock = h.gui.shell.place("env:bendsim:properties").expect("the sheet");
     assert!(
@@ -397,4 +405,29 @@ fn see_through_fades_and_never_flickers() {
     }
     assert!(ghosted > 0, "something stood in front of the bend at some instant");
     assert!(worst <= step, "a see-through jump of {worst} in one frame (a step is {step})");
+}
+
+/// At 1000 x 700 the view between the browser and the bend's sheet is under 400 px: the play
+/// bar goes compact (icons, "1/2 · stage", the view's settings in a View menu), one row, nothing
+/// over anything (UX-LEAD, STANDARD.md §5).
+#[test]
+fn a_narrow_view_gets_a_compact_bar() {
+    let Ok(mut h) = Headless::new((1000.0, 700.0), 1.0) else { return };
+    h.step();
+    enter(&mut h, CHANNEL, "narrow1000", "trumpf-trubend-5130", None);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.step = 0;
+        b.t = 0.6;
+    }
+    frame(&mut h, Framing::Work);
+    shot(&mut h, "14-compact-bar-1000x700");
+    let view = h.gui.shell.place("env:bendsim:view").expect("the view");
+    assert!(view.width() < 560.0, "{view:?}");
+    assert_eq!(
+        forge_render::shell::bendsim::Bar::for_width(view.width()),
+        forge_render::shell::bendsim::Bar::Compact
+    );
+    let bar = h.gui.shell.place("env:bendsim:timeline").expect("the bar");
+    assert!(bar.height() < 80.0, "one row and the track: {bar:?}");
 }
