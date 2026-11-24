@@ -841,24 +841,27 @@ impl std::hash::Hasher for NameMix {
     }
 }
 
-/// `forge_agent::select::lineage` with nothing copied, into a `Lineage`: each face's making
-/// features after feature `i` built `body`, given those before. A face keeps its origin while its
-/// name lives; a new face on a face before's surface, overlapping it, is that face's.
 /// `a == b`, kept inline here (codegen: don't "simplify" it back to `==`). The derived
 /// `Surface::eq` became an out-of-line call in `lineage` once forge-lang's code around it grew
 /// (28,643 calls on the heatsink gate part, +0.23%). Most pairs differ in kind, decided by the
-/// variant alone; planes, most of the rest, compare directly; anything else through `==`.
+/// variant alone; the analytic kinds compare their fields here, a procedural one through `==`.
 #[inline(always)]
 fn same_surface(a: &forge_geom::Surface, b: &forge_geom::Surface) -> bool {
-    if std::mem::discriminant(a) != std::mem::discriminant(b) {
-        return false;
-    }
+    use forge_geom::Surface as S;
     match (a, b) {
-        (forge_geom::Surface::Plane(x), forge_geom::Surface::Plane(y)) => x == y,
-        _ => a == b,
+        (S::Plane(x), S::Plane(y)) => x == y,
+        (S::Cylinder(x), S::Cylinder(y)) => x == y,
+        (S::Cone(x), S::Cone(y)) => x == y,
+        (S::Sphere(x), S::Sphere(y)) => x == y,
+        (S::Torus(x), S::Torus(y)) => x == y,
+        (S::Procedural(_), S::Procedural(_)) => a == b,
+        _ => false,
     }
 }
 
+/// `forge_agent::select::lineage` with nothing copied, into a `Lineage`: each face's making
+/// features after feature `i` built `body`, given those before. A face keeps its origin while its
+/// name lives; a new face on a face before's surface, overlapping it, is that face's.
 fn lineage(body: Work<'_>, prev: Option<(Work<'_>, &Lineage)>, i: usize) -> Lineage {
     let mut out = Lineage::with_capacity_and_hasher(body.len(), Default::default());
     for s in body.0 {
