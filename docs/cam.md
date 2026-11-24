@@ -283,8 +283,10 @@ that it does not count as a cut when the certificate decides a level is done.
   as a cut).
 - It climbs straight up from a cut's end that stands beside a wall (as the retract did),
   otherwise on a ramp; it is never higher than the retract it replaces; it lands only on a
-  start whose tool disk is clear of material. A retract that ends by entering material keeps
-  its own descent.
+  start whose tool's column is clear of material, coming straight down onto it where material
+  stands beside it (down the column the retract came down). A retract that ends above a plunge into material
+  hops down to 0.5 mm over the material there, and the plunge goes on from that height (its
+  slow feed only through the stock, not through the air above it).
 
 Measured (rough op, steel, equal volume, every op certified; jerk-limited S-curve planner
 over four sets of acceleration, jerk and blend tolerance, with G0 blended and with an exact
@@ -292,12 +294,12 @@ stop at every G0, the honest default where a control's rapid blending is not kno
 
 | part | op | retracts → left after hops | time saved (G0 blended) | (stop at every G0) |
 | --- | --- | --- | --- | --- |
-| deep_islands | adaptive | 397 → 204 | 3.5–4.6 % | 4.6–6.1 % |
-| deep_boss | adaptive | 157 → 43 | 4.8–6.3 % | 6.5–8.8 % |
+| deep_islands | adaptive | 397 → 69 | 5.2–7.0 % | 7.0–9.5 % |
+| deep_boss | adaptive | 157 → 11 | 5.7–7.7 % | 7.7–10.7 % |
 | deep_open_slot | adaptive | 19 → 8 | 0.9–1.4 % | 1.4–2.3 % |
-| deep_islands | clear | 12 → 6 | 1.0–1.2 % | 1.0–1.2 % |
+| deep_islands | clear | 12 → 5 | 1.1–1.4 % | 1.2–1.4 % |
 | deep_boss | clear | 8 → 4 | 0.8 % | 0.8–0.9 % |
-| deep_open_slot | clear | 21 → 5 | 2.8–4.4 % | 3.0–4.7 % |
+| deep_open_slot | clear | 21 → 5 | 3.9–5.6 % | 4.1–5.9 % |
 
 ### Adaptive against clear: measured
 
