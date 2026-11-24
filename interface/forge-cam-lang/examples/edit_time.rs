@@ -23,7 +23,18 @@ fn main() {
     let docp = std::path::PathBuf::from(args.next().expect("DOC.fg"));
     let src_dir = docp.parent().unwrap_or(std::path::Path::new(".")).to_path_buf();
     let doc = docp.file_name().expect("doc name").to_string_lossy().into_owned();
-    let work = std::env::temp_dir().join(format!("edit_time_{}", std::process::id()));
+    // EDIT_TIME_TMP: the scratch directory's parent (wasi has no temp_dir)
+    let tmp = std::env::var("EDIT_TIME_TMP")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::temp_dir());
+    let work = tmp.join(format!(
+        "edit_time_{}",
+        if cfg!(target_os = "wasi") {
+            0
+        } else {
+            std::process::id()
+        }
+    ));
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir_all(&work).expect("scratch");
     for e in std::fs::read_dir(&src_dir).expect("dir").flatten() {
