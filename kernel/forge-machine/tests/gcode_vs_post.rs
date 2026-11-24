@@ -221,7 +221,8 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
             | Ev::Clamp(_)
             | Ev::Stop { .. }
             | Ev::End
-            | Ev::Pallet => {}
+            | Ev::Pallet
+            | Ev::Wait(_) => {}
         }
     }
     out

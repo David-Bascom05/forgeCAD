@@ -9,12 +9,14 @@
 //! - `gcode`: the interpreter (posted text to control events, exact integers); its Lean spec is
 //!   verify/forge-machine.
 //! - `sim`: events to joint motion and the timeline; `setup`: setup files.
-//! - `collide`: every body through the motion; `removal`: the stock as cut.
+//! - `collide`: every body through the motion; `removal`: the stock as cut; `multi`: several
+//!   channels synchronised at waits, checked over every timing within the bounds.
 pub mod collide;
 pub mod def;
 pub mod gcode;
 pub mod kin;
 pub mod library;
+pub mod multi;
 pub mod removal;
 pub mod setup;
 pub mod sim;

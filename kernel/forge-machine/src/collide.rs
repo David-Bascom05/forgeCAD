@@ -774,3 +774,227 @@ pub fn dense_overlap(a: &CBody, b: &CBody, pose: &[Rigid]) -> bool {
     }
     false
 }
+
+// ------------------------------------------------------------------------------------------
+// Two channels (sim::multi): a pair of bodies, each moved by one channel's segment, with the two
+// segments' parameters independent (any relative timing).
+
+/// The channels (joint letter digits: Z2 is channel 2, Z channel 1) whose joints move a body.
+pub fn body_channels(def: &MachineDef, b: &CBody) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::new();
+    let Some(l) = b.link else { return out };
+    for j in def.chain(&def.joints[l].name).unwrap_or_default() {
+        let letter = &def.joints[j].letter;
+        let base = letter.trim_end_matches(|c: char| c.is_ascii_digit());
+        let ch: u8 = letter[base.len()..].parse().unwrap_or(1);
+        if !out.contains(&ch) {
+            out.push(ch);
+        }
+    }
+    out
+}
+
+/// The joints channel `ch` drives.
+pub fn channel_joints(def: &MachineDef, ch: u8) -> Vec<usize> {
+    (0..def.joints.len())
+        .filter(|&j| {
+            let letter = &def.joints[j].letter;
+            let base = letter.trim_end_matches(|c: char| c.is_ascii_digit());
+            letter[base.len()..].parse::<u8>().unwrap_or(1) == ch
+        })
+        .collect()
+}
+
+/// Body `a` moved by segment `sa` (channel A's joints `ja`) against body `b` moved by `sb` (the
+/// other joints), over every pair of times: Clear only if the pair keeps `clearance` for all
+/// sa ∈ [0, 1] and sb ∈ [0, 1] independently. A Hit's `s` is sa's.
+#[allow(clippy::too_many_arguments)]
+pub fn check_two(
+    def: &MachineDef,
+    sa: &Segment,
+    sb: &Segment,
+    ja: &[usize],
+    a: &CBody,
+    b: &CBody,
+    clearance: f64,
+    spans: &mut usize,
+) -> Verdict {
+    let mut budget = TWO_BUDGET;
+    two_span(
+        def,
+        sa,
+        sb,
+        ja,
+        a,
+        b,
+        [0.0, 1.0],
+        [0.0, 1.0],
+        clearance,
+        TWO_DEPTH,
+        spans,
+        &mut budget,
+    )
+}
+
+/// Two parameters split one at a time: this deep reaches 2^-12 of each segment. Past the
+/// budget of spans a pair is left Near (not proven clear), never Clear.
+const TWO_DEPTH: u32 = 24;
+const TWO_BUDGET: usize = 4096;
+
+#[allow(clippy::too_many_arguments)]
+fn two_span(
+    def: &MachineDef,
+    sa: &Segment,
+    sb: &Segment,
+    ja: &[usize],
+    a: &CBody,
+    b: &CBody,
+    ra: [f64; 2],
+    rb: [f64; 2],
+    clearance: f64,
+    depth_left: u32,
+    spans: &mut usize,
+    budget: &mut usize,
+) -> Verdict {
+    *spans += 1;
+    let qa = q_span(sa, ra[0], ra[1]);
+    let qb = q_span(sb, rb[0], rb[1]);
+    let q: Vec<Interval> = (0..qa.len())
+        .map(|j| if ja.contains(&j) { qa[j] } else { qb[j] })
+        .collect();
+    let pose = kin::ipose(def, &q);
+    let (ta, tb) = (ilink(&pose, a.link), ilink(&pose, b.link));
+    let pa: Vec<IPrim> = a.prims.iter().map(|p| place(p, &ta)).collect();
+    let pb: Vec<IPrim> = b.prims.iter().map(|p| place(p, &tb)).collect();
+    let mut worst = f64::INFINITY;
+    let mut wide = 0.0f64;
+    for x in &pa {
+        for y in &pb {
+            let g = gap_lo(x, y);
+            worst = worst.min(g);
+            if g < clearance {
+                wide = wide.max(width(x) + width(y));
+            }
+        }
+    }
+    if worst >= clearance {
+        return Verdict::Clear;
+    }
+    let (ma, mb) = (0.5 * (ra[0] + ra[1]), 0.5 * (rb[0] + rb[1]));
+    *budget = budget.saturating_sub(1);
+    if wide <= RES || depth_left == 0 || *budget == 0 {
+        let (xa, xb) = (sa.at(ma), sb.at(mb));
+        let qm: Vec<f64> = (0..xa.len())
+            .map(|j| if ja.contains(&j) { xa[j] } else { xb[j] })
+            .collect();
+        if let Some(w) = witness(a, b, &kin::pose(def, &qm)) {
+            return Verdict::Hit { s: ma, witness: w };
+        }
+        return Verdict::Near {
+            s0: ra[0],
+            s1: ra[1],
+            gap_lo: worst,
+        };
+    }
+    // split the parameter whose segment moves more over its span
+    let move_of = |sg: &Segment, r: [f64; 2]| -> f64 {
+        sg.q0
+            .iter()
+            .zip(&sg.q1)
+            .map(|(x, y)| (y - x).abs())
+            .fold(0.0, f64::max)
+            * (r[1] - r[0])
+    };
+    let halves: [([f64; 2], [f64; 2]); 2] = if move_of(sa, ra) >= move_of(sb, rb) {
+        [([ra[0], ma], rb), ([ma, ra[1]], rb)]
+    } else {
+        [(ra, [rb[0], mb]), (ra, [mb, rb[1]])]
+    };
+    let first = two_span(
+        def,
+        sa,
+        sb,
+        ja,
+        a,
+        b,
+        halves[0].0,
+        halves[0].1,
+        clearance,
+        depth_left - 1,
+        spans,
+        budget,
+    );
+    if matches!(first, Verdict::Hit { .. }) {
+        return first;
+    }
+    let second = two_span(
+        def,
+        sa,
+        sb,
+        ja,
+        a,
+        b,
+        halves[1].0,
+        halves[1].1,
+        clearance,
+        depth_left - 1,
+        spans,
+        budget,
+    );
+    match (&first, &second) {
+        (_, Verdict::Hit { .. }) | (Verdict::Clear, _) => second,
+        _ => first,
+    }
+}
+
+/// `check` over the pairs `keep` admits (a multi-channel run checks each channel's own pairs
+/// with this, the cross-channel ones with check_two).
+pub fn check_where(
+    s: &Setup,
+    tl: &Timeline,
+    work: &[CBody],
+    keep: &dyn Fn(&CBody, &CBody) -> bool,
+) -> Report {
+    let def = s.def;
+    let machine = machine_bodies(def);
+    let mut rep = Report::default();
+    for (si, seg) in tl.segments.iter().enumerate() {
+        let tools: Vec<CBody> = seg.tool.map(|t| tool_bodies(s, t)).unwrap_or_default();
+        let all: Vec<&CBody> = machine.iter().chain(tools.iter()).chain(work.iter()).collect();
+        for i in 0..all.len() {
+            for j in i + 1..all.len() {
+                let (a, b) = (all[i], all[j]);
+                if !may_pair(a, b, seg.kind) || !keep(a, b) {
+                    continue;
+                }
+                rep.pairs_checked += 1;
+                let v = check_span(
+                    def,
+                    seg,
+                    a,
+                    b,
+                    0.0,
+                    1.0,
+                    pair_clearance(def, a, b),
+                    MAX_DEPTH,
+                    &mut rep.spans,
+                );
+                if v != Verdict::Clear {
+                    rep.contacts.push(Contact {
+                        line: seg.line,
+                        segment: si,
+                        a: a.name.clone(),
+                        b: b.name.clone(),
+                        verdict: v,
+                    });
+                }
+            }
+        }
+    }
+    rep
+}
+
+/// may_pair and the pair's clearance, for sim::multi.
+pub fn pair_rule(def: &MachineDef, a: &CBody, b: &CBody, kind: SegKind) -> Option<f64> {
+    may_pair(a, b, kind).then(|| pair_clearance(def, a, b))
+}

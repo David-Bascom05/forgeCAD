@@ -96,13 +96,24 @@ impl<'a> Setup<'a> {
     /// letters of channel 1, joints starting at home, no tools and no offsets.
     pub fn new(def: &'a MachineDef, control: Control) -> Result<Setup<'a>, SimError> {
         let mut joint_of = Vec::new();
+        // the joint of each letter on the control's channel (Z on channel 2 is the joint Z2)
+        let ch = control.channel;
         for l in &control.letters {
             let j = def
                 .joints
                 .iter()
-                .position(|j| j.letter == l.to_string() || j.letter == format!("{l}1"))
-                .or_else(|| def.joints.iter().position(|j| j.letter.starts_with(*l)))
-                .ok_or_else(|| SimError::Setup(format!("the control's letter {l} drives no joint")))?;
+                .position(|j| {
+                    if ch == 1 {
+                        j.letter == l.to_string() || j.letter == format!("{l}1")
+                    } else {
+                        j.letter == format!("{l}{ch}")
+                    }
+                })
+                .ok_or_else(|| {
+                    SimError::Setup(format!(
+                        "the control's letter {l} drives no joint on channel {ch}"
+                    ))
+                })?;
             joint_of.push(j);
         }
         let tool_mount = def
@@ -262,6 +273,10 @@ pub enum Happening {
     /// M60: the pallet changer swaps the pallet in the machining position.
     PalletChange {
         seconds: f64,
+    },
+    /// A multi-channel wait (sim::multi synchronises the channels at it).
+    Wait {
+        n: u32,
     },
 }
 
@@ -766,6 +781,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             Ev::Clamp(c) => rpm_clamp = Some(*c),
             Ev::Coolant(c) => mark(&mut tl, t, Happening::Coolant(*c)),
             Ev::Stop { optional } => mark(&mut tl, t, Happening::Stop { optional: *optional }),
+            Ev::Wait(n) => mark(&mut tl, t, Happening::Wait { n: *n }),
             Ev::Pallet => {
                 let Some(p) = &def.pallets else {
                     return Err(SimError::At {
@@ -1311,6 +1327,7 @@ pub fn timeline_json(tl: &Timeline) -> String {
             Happening::Comment(c) => format!("\"comment\",\"text\":\"{}\"", esc(c)),
             Happening::End => "\"end\"".into(),
             Happening::PalletChange { seconds } => format!("\"pallet\",\"seconds\":{}", num(*seconds)),
+            Happening::Wait { n } => format!("\"wait\",\"n\":{n}"),
         };
         o.push_str(&format!(
             "{{\"line\":{},\"at\":{},\"what\":{what}}}",

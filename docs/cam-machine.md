@@ -246,6 +246,33 @@ pieces into material, the removal summary, and what is claimed.
 
 Native and wasm32 give the same bits (tests/bits.rs).
 
+## Several channels (`multi`)
+
+A Swiss lathe, a twin-turret lathe, a mill-turn's sub-spindle: each channel's program runs on its
+own letters (the joints with that channel digit: Z2, C2 for channel 2; a setup's `channel`), and the
+channels hold for each other at waits (the dialect's `wait_m = [lo, hi]`, e.g. Fanuc's M100–M199).
+`multi::run(def, channels, work)` returns each channel's timeline, each segment's time window,
+each channel's own collision report, the contacts between bodies of different channels, and where
+the time bounds were open. A wait some channel never reaches is refused (deadlock), naming the
+lines; a body moved by joints of two channels is refused.
+
+What is claimed, for every timing the bounds allow:
+- A move takes at least its `t_min` and at most its exact-stop time (the trapezoid under the
+  declared rates and accelerations, at 100 % override). With a moving joint whose acceleration or
+  rate is not declared there is no upper time: the windows after it are open, and the run says so.
+- Each channel's clock is an interval [earliest, latest]; a wait releases its channels at the
+  latest of their earliest arrivals and the latest of their latest ones.
+- Each segment is checked as its motion, under way at some time in [earliest start, latest end],
+  and its rest at the end pose until the latest start of the channel's next segment (the last
+  rests to the end; the start pose rests until the first move).
+- Two pieces of different channels are checked against each other, each over its whole motion
+  and independently of the other (any relative timing), whenever their windows meet and no wait
+  both channels share orders them. A contact reported this way may need a timing a real control
+  would not take; a Clear holds for every timing within the bounds.
+
+Not modelled: superimposition and synchronised spindles (a transfer is a wait with both chucks
+closed on the part).
+
 ## Setup files
 
 ```toml

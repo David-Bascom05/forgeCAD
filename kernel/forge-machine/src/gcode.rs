@@ -60,6 +60,10 @@ pub struct Control {
     pub chip_lift: f64,
     /// The machine has a pallet changer: M60 swaps the pallet.
     pub pallets: bool,
+    /// The M codes that are multi-channel waits (`wait_m = [lo, hi]` in the dialect).
+    pub wait_m: Option<(u32, u32)>,
+    /// The channel these letters drive (1: letters with no digit or a 1; 2: Z2, C2, ...).
+    pub channel: u8,
     /// The dialect's lexical extras, read in this shell before the words reach the core.
     pub lex: Lex,
 }
@@ -115,6 +119,8 @@ impl Control {
             peck_clear: forge_post::PECK_CLEAR,
             chip_lift: forge_post::CHIP_LIFT,
             pallets: false,
+            wait_m: None,
+            channel: 1,
             lex: Lex::default(),
         }
     }
@@ -197,6 +203,11 @@ impl Control {
             peck_clear: def.peck_clear.unwrap_or(forge_post::PECK_CLEAR),
             chip_lift: def.chip_lift.unwrap_or(forge_post::CHIP_LIFT),
             pallets: def.pallets.is_some(),
+            channel,
+            wait_m: toml::nums(d, "wait_m").and_then(|w| match w.as_slice() {
+                [lo, hi] if lo <= hi && *lo >= 0.0 => Some((*lo as u32, *hi as u32)),
+                _ => None,
+            }),
         })
     }
 
@@ -310,6 +321,9 @@ pub enum Ev {
     End,
     /// M60 on a machine with a pallet changer: the pallet in the machining position is swapped.
     Pallet,
+    /// A multi-channel wait (Fanuc M100–M199 by the dialect's `wait_m`): this channel holds until
+    /// every channel with the same wait reaches it.
+    Wait(u32),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -816,6 +830,7 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
             0 | 1 => stop = Some(Ev::Stop { optional: *m == 1 }),
             2 | 30 => stop = Some(Ev::End),
             60 if c.pallets => push(out, Ev::Pallet),
+            m if c.wait_m.is_some_and(|(lo, hi)| (lo..=hi).contains(m)) => push(out, Ev::Wait(*m)),
             m => return Err(ge(ln, format!("M{m} is not in the subset"))),
         }
     }
