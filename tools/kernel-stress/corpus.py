@@ -9,8 +9,9 @@ cases on the fewest faces. A row names the zip, the STEP file in it, the solid's
 a pair), the op and what it gave then. No geometry is in the corpus: `run` takes each solid out
 of its file on the branch haas-3d-models (extract.py), runs the op (verify/forge-stress) and
 says whether it now passes. Passing means: the solid reads valid (closed, checks, mass, a
-watertight mesh), and the op answers Ok and right; a refusal is not a pass, but it is no
-longer a wrong answer, and the runner says which.
+watertight mesh), and the op answers Ok and right. A row that was wrong (or hung, or crashed)
+and now refuses is `better`: no longer a wrong answer, not yet a pass. `harness`: the op's moved
+copy itself fails check, so the row says nothing of the boolean.
 """
 
 import json
@@ -138,10 +139,12 @@ def run(path, zipdir, only):
         shutil.rmtree(tmp, ignore_errors=True)
     width = max(len(r["class"]) for r, _ in results) if results else 10
     passed = 0
+    tally = {}
     for r, (verdict, now) in results:
         passed += verdict == "pass"
-        print(f"{r['id']}  {verdict:5}  {r['class'][:width]:{width}}  then {r['then']:8} now {now}")
-    print(f"{passed}/{len(results)} pass")
+        tally[verdict] = tally.get(verdict, 0) + 1
+        print(f"{r['id']}  {verdict:7}  {r['class'][:width]:{width}}  then {r['then']:8} now {now}")
+    print(f"{passed}/{len(results)} pass; " + ", ".join(f"{k} {v}" for k, v in sorted(tally.items())))
     return 0 if passed == len(results) else 1
 
 
@@ -168,6 +171,11 @@ def judge(r, evs, rc):
     worst = max(ops, key=lambda e: {"ok": 0, "empty": 0, "refused": 1, "wrong": 2, "panic": 3}.get(e["st"], 1))
     if worst["st"] in ("ok", "empty"):
         return "pass", "ok"
+    # a wrong answer, a hang or a crash that now refuses is better, not a pass: told apart
+    if worst["st"] == "refused" and r["then"] != "refused":
+        return "better", f"refused {variant(worst.get('d', ''))} (was {r['then']})"
+    if worst["st"] == "harness":
+        return "harness", variant(worst.get("d", ""))
     return "fail", f"{worst['st']} {variant(worst.get('d', ''))}"
 
 
