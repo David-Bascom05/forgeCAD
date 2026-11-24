@@ -81,6 +81,8 @@ fn a_pocket_emits_every_nonempty_level() {
                     tidx: 0,
                     h,
                     feed: (500.0, 100.0),
+                    ramp_feed: None,
+                    lead_feed: None,
                 },
                 ops::Span {
                     top: 0.0,
@@ -92,8 +94,9 @@ fn a_pocket_emits_every_nonempty_level() {
                 None,
             )
             .unwrap();
-            // the levels the proof needs: every nonempty offset at r + k s
+            // the levels the proof needs: every nonempty offset at r + k s, each cut whole
             let mut want = 0usize;
+            let mut segs = 0usize;
             let mut k = 0;
             loop {
                 let (ls, _) = offset(rg, r + k as f64 * s).unwrap();
@@ -101,10 +104,30 @@ fn a_pocket_emits_every_nonempty_level() {
                     break;
                 }
                 want += ls.len();
+                segs += ls
+                    .iter()
+                    .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
+                    .map(|l| l.segs.len())
+                    .sum::<usize>();
                 k += 1;
             }
-            // what the op emits: one plunge per pass loop per depth level
+            // what the op emits: every pass loop's every segment at every depth level (a loop is
+            // entered by a plunge or reached by a link at depth), and an entry per loop at most
             let depths = ops::levels(0.0, -2.0, 1.0).len();
+            let cut = p
+                .moves
+                .iter()
+                .filter(|m| {
+                    matches!(
+                        m,
+                        PMove::Line {
+                            phase: Phase::Cut,
+                            ..
+                        } | PMove::Arc { .. }
+                    )
+                })
+                .count();
+            assert_eq!(cut, segs * depths, "stepover {s}: {want} loops per level");
             let plunges = p
                 .moves
                 .iter()
@@ -118,7 +141,10 @@ fn a_pocket_emits_every_nonempty_level() {
                     )
                 })
                 .count();
-            assert_eq!(plunges, want * depths, "stepover {s}: {want} loops per level");
+            assert!(
+                plunges >= depths && plunges <= want * depths,
+                "stepover {s}: {plunges} plunges"
+            );
             // and the first emitted level is at exactly r (the opening's shallow points)
             let (first, _) = offset(rg, r).unwrap();
             assert!(!first.is_empty());

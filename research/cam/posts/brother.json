@@ -1,0 +1,276 @@
+{
+ "dialect": "brother",
+ "control": "Brother SPEEDIO CNC-C00 / CNC-D00",
+ "sources": [
+  {
+   "id": "S1",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/ncp-001-010.pdf",
+   "title": "Brother FAQ: パソコンでNC言語のプログラム作成をしたい (writing an NC-language program on a PC)",
+   "edition": "(c)2022 Brother Industries, 2 pp",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S2",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/ncp-001-006.pdf",
+   "title": "Brother FAQ: クーラントがオフのとき加工プログラムを起動しないようにしたい (macro example program)",
+   "edition": "(c)2021",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S3",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/ncp-001-002.pdf",
+   "title": "Brother FAQ: プログラムを実行するとワーク座標原点の値が変わってしまう (G10 L2/L20)",
+   "edition": "(c)2021",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S4",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/ncp-001-003.pdf",
+   "title": "Brother FAQ: ワーク座標原点をG54-G59の6カ所以上に設定したい (G54.1 P1-P48)",
+   "edition": "(c)2021",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S5",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/ncp-001-014.pdf",
+   "title": "Brother FAQ: レファレンス点復帰指令時の座標を変えたい (CNC-C00) (G28/G30)",
+   "edition": "(c)2024",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S6",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/ncp-001-015.pdf",
+   "title": "Brother FAQ: same, CNC-D00",
+   "edition": "(c)2024",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S7",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/r-001-002.pdf",
+   "title": "Brother FAQ: タップ加工で指令不可Gコード SM4001 (M140X1/M140X2/M200X3/M300X3; contains a reference program)",
+   "edition": "(c)2021",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S8",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/r-001-009.pdf",
+   "title": "Brother FAQ: SM4006 指令不可数値データエラー (malformed number)",
+   "edition": "(c)2021",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S9",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/r-001-013.pdf",
+   "title": "Brother FAQ: 同期タップ戻し機能の無い機械でタップ復旧動作をしたい (G133/G134)",
+   "edition": "(c)2022",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S10",
+   "url": "https://machinetool.global.brother/en-eu/cnc-d00/index.aspx",
+   "title": "Brother CNC-D00 product page, NC Unit Specifications",
+   "edition": "web page",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S11",
+   "url": "https://download.brother.com/pub/jp/machine/pdf/faq/ncp-001-013.pdf",
+   "title": "Brother FAQ: プログラムの途中から動作させたい (CNC-D00) (restart by sequence number)",
+   "edition": "(c)2024",
+   "taken": "2026-11-23"
+  }
+ ],
+ "items": {
+  "program_open": {
+   "value": "Program named O + 4 digits (e.g. O0001); file saved with extension .nc",
+   "source": "S1",
+   "where": "p1-2",
+   "note": "No statement found on a leading % or an O line inside the file; FAQ examples show '(O1001)' as a parenthesised title (S2). '%' marks: UNKNOWN."
+  },
+  "program_close": {
+   "value": "M30, and the M30 block must itself be terminated (Enter -> EOB)",
+   "source": "S1",
+   "where": "p1",
+   "note": ""
+  },
+  "comment": {
+   "value": "Parentheses: (text). Japanese comments need the file saved as ANSI (Shift-JIS), not UTF-8",
+   "source": "S2",
+   "where": "p1 example program; S1 p1 for encoding",
+   "note": "Semicolon is the EOB character, not a comment (S1). Safe choice: ASCII text in ( )."
+  },
+  "line_numbers": {
+   "value": "N words allowed (e.g. N1000 as a GOTO target); restart can be by sequence number or by block count 'B30'",
+   "source": "S2",
+   "where": "p1 example",
+   "note": "S11 p1-2 for restart by sequence number. Required/maximum digits: UNKNOWN."
+  },
+  "block_end": {
+   "value": "Newline in the PC file; becomes ';' (EOB) on the control",
+   "source": "S1",
+   "where": "p1",
+   "note": ""
+  },
+  "safe_start": {
+   "value": "Accepted in one block in a Brother reference program: G54 G0 G90 G17 G97 G94 G98 ;",
+   "source": "S7",
+   "where": "p1 reference program",
+   "note": "Example is for M-series (milling-turning) models. G21/G71, G40, G49, G80: UNKNOWN (not in any open Brother document fetched). CNC-D00 lists inch/metric switching and cutter compensation as functions (S10) without codes."
+  },
+  "tool_change": {
+   "value": "G100 T<n> ... (Brother tool-change G code, in a block that also carries positioning, G43 H and S/M words), e.g. G100T2G94X0Y-10.A0.C0G43H2Z70.M141G97;",
+   "source": "S7",
+   "where": "p1 reference program",
+   "note": "Seen only in an M-series example. M6: UNKNOWN (memory says M06 Tnn is also accepted, unverified). D word: UNKNOWN."
+  },
+  "tool_length_comp": {
+   "value": "G43 H<n> with a Z move (e.g. G43H1Z30.)",
+   "source": "S7",
+   "where": "p1 reference program",
+   "note": "Tool length offsets are measured into the tool list (FAQ tset-001-008). G49: UNKNOWN."
+  },
+  "spindle": {
+   "value": "S word for rpm (S2000, S500)",
+   "source": "S7",
+   "where": "p1; S9 p1",
+   "note": "M3/M4/M5: UNKNOWN in open docs. S7 shows M-series-specific M141/M142/M303, not general milling codes."
+  },
+  "work_offset": {
+   "value": "G54-G59 (6), plus extended G54.1 P1..P48 (48); set by program with G10 L2 P_ (G54-G59) and G10 L20 P_ (G54.1)",
+   "source": "S4",
+   "where": "p1",
+   "note": "S3 p1 for G10 L2/L20. Also external work offset and macro system variables (S3)."
+  },
+  "arc_format": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "rapid_linear": {
+   "value": "G0 / G01 (both written forms appear)",
+   "source": "S7",
+   "where": "p1; S8 p1 'G01 X100.0 F1000;'",
+   "note": ""
+  },
+  "feed": {
+   "value": "F word; G94 feed per minute, G95 feed per revolution both appear (F1000 with G94 mode, F0.05 with G95)",
+   "source": "S8",
+   "where": "p1 example; S7 p1",
+   "note": "Unit (mm/min under G94) is the usual meaning and is consistent with F1000 / F0.05 values, but no sentence states it: treat as inferred."
+  },
+  "decimal_point": {
+   "value": "A value with two decimal points (X100.0.) raises SM4006; values written with a point (Z30., X10.0). Meaning of a value without a point (X10 = 10 mm or 10 um): UNKNOWN",
+   "source": "S8",
+   "where": "p1",
+   "note": "Post should always emit a decimal point."
+  },
+  "max_digits": {
+   "value": "Least input increment 0.001 mm (0.0001 inch, 0.001 deg); max programmable dimension +/-999999.999 mm (+/-99999.9999 inch) -> 6.3 format",
+   "source": "S10",
+   "where": "NC Unit Specifications",
+   "note": "CNC-D00 figure; CNC-C00 not checked in an open source."
+  },
+  "retract_home": {
+   "value": "G28 X_ Y_ Z_ (A_ B_ C_) returns to the reference point; G30 P2..P6 X_ Y_ Z_ to the 2nd-6th reference point (P omitted = 2nd)",
+   "source": "S5",
+   "where": "p1 (CNC-C00)",
+   "note": "S6 p1 same for CNC-D00. Whether the G28 coordinates are an intermediate point, and the G91 G28 Z0 idiom: not stated -> keep UNKNOWN for that form. G53: UNKNOWN."
+  },
+  "coolant": {
+   "value": "M8 coolant on appears in a reference program",
+   "source": "S7",
+   "where": "p1 ('G18G54M8;')",
+   "note": "M7, M9, through-spindle code: UNKNOWN."
+  },
+  "dwell": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "drill_G81": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "dwell_drill_G82": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "peck_G83": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "chipbreak_G73": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "rigid_tap_G84": {
+   "value": null,
+   "status": "UNKNOWN",
+   "source": "S7",
+   "where": "p1 (G77); S9 p1 (G133/G134)",
+   "note": "G84 not found. Brother-specific seen instead: G77 Z_ R_ I<pitch> S_ (tapping, M-series example); G133/G134 Z_ I<pitch mm> | J<threads/inch> S_ synchronised tap forward/reverse (G134 = back-out of right-hand thread). What F means in G84: UNKNOWN. Do not map G84 onto G77 without the manual."
+  },
+  "bore_G85": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "return_level": {
+   "value": "G98 is accepted in a start-of-program modal block",
+   "source": "S7",
+   "where": "p1",
+   "note": "Its meaning (initial-level return) is not stated in the source; G99: UNKNOWN."
+  },
+  "cycle_cancel": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "peck_depth_word": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "cycle_dwell_units": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "native_language": {
+   "value": "Two program formats: NC language (G-code) and conversation (Brother conversational), switched by parameter; a conversation program can be converted to an NC-language program. Macro (#vars, IF..GOTO, #3000 alarm) in NC mode",
+   "source": "S10",
+   "where": "NC Unit Specifications 'Program format'",
+   "note": "Macro syntax from S2 p1."
+  },
+  "iso_mode_select": {
+   "value": "By parameter (NC language vs conversation)",
+   "source": "S10",
+   "where": "NC Unit Specifications",
+   "note": "Which parameter: UNKNOWN."
+  },
+  "iso_program_start": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  }
+ },
+ "unknown": [
+  "arc_format",
+  "dwell",
+  "drill_G81",
+  "dwell_drill_G82",
+  "peck_G83",
+  "chipbreak_G73",
+  "rigid_tap_G84",
+  "bore_G85",
+  "cycle_cancel",
+  "peck_depth_word",
+  "cycle_dwell_units",
+  "iso_program_start"
+ ],
+ "notes": "No Brother NC programming/instruction manual is openly downloadable: the manual ships with the machine and the machinetool.global.brother download portal (bilim.my.salesforce-sites.com) is for catalogs and returned 503 'CatalogInMaintenance'. All values come from Brother's own published FAQ PDFs (download.brother.com/pub/jp/machine/pdf/faq/, Japanese) and the CNC-D00 spec page. Several values are only seen inside example programs, mostly from an M-series (mill-turn) FAQ; treat them as 'accepted', not as the full rule. Third-party copies (Scribd 'Brother TC-S2D Programming Manual', eBay listing of a CNC-C00 NC programming manual) noted, not used."
+}

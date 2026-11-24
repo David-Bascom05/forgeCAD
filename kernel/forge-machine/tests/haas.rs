@@ -82,6 +82,8 @@ fn the_haas_library_is_real_and_cited() {
                 CiteStatus::Estimate | CiteStatus::Unknown => {
                     assert!(!c.basis.is_empty(), "{} {c:?}", m.name)
                 }
+                // a shop's own value: never in a built-in record
+                CiteStatus::User => panic!("{}: a built-in record with a user value {c:?}", m.name),
             }
         }
         for p in m.cite_paths() {
@@ -96,19 +98,22 @@ fn the_haas_library_is_real_and_cited() {
 fn published_numbers_land_where_the_cites_say() {
     let m = haas("haas-vf-2");
     assert_eq!(m.kind, Kind::Vmc3);
-    assert_eq!(joint(&m, "X").range, [-762.0, 0.0]); // 30 in
-    assert_eq!(joint(&m, "Y").range, [-406.0, 0.0]); // 16 in
-    assert_eq!(joint(&m, "Z").range, [-508.0, 0.0]); // 20 in
+    assert_eq!(joint(&m, "X").range, Some([-762.0, 0.0])); // 30 in
+    assert_eq!(joint(&m, "Y").range, Some([-406.0, 0.0])); // 16 in
+    assert_eq!(joint(&m, "Z").range, Some([-508.0, 0.0])); // 20 in
     for n in ["X", "Y", "Z"] {
-        assert_eq!(joint(&m, n).rapid, 25400.0); // 1000 ipm
-        assert_eq!(joint(&m, n).max_feed, 16500.0); // 650 ipm restated as 16.5 m/min
+        assert_eq!(joint(&m, n).rapid, Some(25400.0)); // 1000 ipm
+        assert_eq!(joint(&m, n).max_feed, Some(16500.0)); // 650 ipm restated as 16.5 m/min
     }
     let s = &m.spindles[0];
-    assert_eq!(s.rpm[1], 8100.0);
+    assert_eq!(s.rpm.unwrap()[1], 8100.0);
     assert_eq!(s.nose[2], 610.0); // spindle nose to table, max: 24 in
-    assert_eq!(s.nose[2] + joint(&m, "Z").range[0], 102.0); // ... min: 4 in
+    assert_eq!(s.nose[2] + joint(&m, "Z").range.unwrap()[0], 102.0); // ... min: 4 in
     let c = m.changer.as_ref().unwrap();
-    assert_eq!((c.pockets, c.change_s, c.max_tool_kg), (20, 4.5, 5.4));
+    assert_eq!(
+        (c.pockets, c.change_s, c.max_tool_kg),
+        (Some(20), Some(4.5), Some(5.4))
+    );
     // the power curve never exceeds the published 22.4 kW peak nor 122 N·m
     for w in s.power.windows(2) {
         assert!(w[1][1] <= 22.4);
@@ -118,16 +123,16 @@ fn published_numbers_land_where_the_cites_say() {
     }
 
     let ss = haas("haas-vf-2ss");
-    assert_eq!(joint(&ss, "X").rapid, 35600.0); // 1400 ipm restated as 35.6 m/min
-    assert_eq!(ss.spindles[0].rpm[1], 12000.0);
+    assert_eq!(joint(&ss, "X").rapid, Some(35600.0)); // 1400 ipm restated as 35.6 m/min
+    assert_eq!(ss.spindles[0].rpm.unwrap()[1], 12000.0);
 
     let u = haas("haas-umc-750");
     assert_eq!(u.kind, Kind::TableTable);
-    assert_eq!(joint(&u, "B").range, [-35.0, 120.0]);
-    assert_eq!(joint(&u, "B").rapid, 3000.0); // 50 deg/s
-    assert_eq!(joint(&u, "C").rapid, 3000.0);
-    assert_eq!(joint(&u, "X").rapid, 22900.0); // 900 ipm restated as 22.9 m/min
-    assert_eq!(joint(&u, "Y").range, [-508.0, 0.0]);
+    assert_eq!(joint(&u, "B").range, Some([-35.0, 120.0]));
+    assert_eq!(joint(&u, "B").rapid, Some(3000.0)); // 50 deg/s
+    assert_eq!(joint(&u, "C").rapid, Some(3000.0));
+    assert_eq!(joint(&u, "X").rapid, Some(22900.0)); // 900 ipm restated as 22.9 m/min
+    assert_eq!(joint(&u, "Y").range, Some([-508.0, 0.0]));
     // the conflicting Haas UK rapid is recorded, not silently dropped
     assert!(
         u.cites
@@ -139,15 +144,15 @@ fn published_numbers_land_where_the_cites_say() {
     assert_eq!(t.kind, Kind::Lathe);
     let x = joint(&t, "X");
     assert!(x.diameter);
-    assert_eq!(x.range[1] - x.range[0], 213.0); // 8.4 in of X
-    assert_eq!(x.range[1], 165.0); // max turning diameter 13 in (330 mm)
-    assert_eq!(joint(&t, "Z").range, [0.0, 572.0]); // 22.5 in
-    assert_eq!(t.spindles[0].rpm[1], 4000.0);
-    assert_eq!(t.turrets[0].stations, 12);
+    assert_eq!(x.range.unwrap()[1] - x.range.unwrap()[0], 213.0); // 8.4 in of X
+    assert_eq!(x.range.unwrap()[1], 165.0); // max turning diameter 13 in (330 mm)
+    assert_eq!(joint(&t, "Z").range, Some([0.0, 572.0])); // 22.5 in
+    assert_eq!(t.spindles[0].rpm.unwrap()[1], 4000.0);
+    assert_eq!(t.turrets[0].stations, Some(12));
 
     let y = haas("haas-st-20y");
     assert_eq!(y.kind, Kind::MillTurn);
-    assert_eq!(joint(&y, "Y").range, [-51.0, 51.0]); // ± 2 in
+    assert_eq!(joint(&y, "Y").range, Some([-51.0, 51.0])); // ± 2 in
     let d = haas("haas-ds-30y");
     assert_eq!(d.kind, Kind::MillTurn);
     assert!(d.mount("sub").is_some());

@@ -1,0 +1,7029 @@
+{
+ "vendor": "Guhring",
+ "blocked": [
+  "https://guhring.com/BrowseProducts/Products/Drills (and other product browse pages): product data script-loaded; used catalog PDFs served from https://guhring.com/Catalogs/CatalogPDF/..."
+ ],
+ "records": [
+  {
+   "kind": "drill",
+   "id": "9055100030000",
+   "name": "3xD Ratio drills, Series 5510, 3.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 3.00 / inch 0.1181"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 mm 6.00"
+    },
+    "oal": {
+     "v": 62.0,
+     "unit": "mm",
+     "stated": "l1 mm 62.00"
+    },
+    "lcf": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "l2 mm 20.00"
+    },
+    "tmax": {
+     "v": 15.5,
+     "unit": "mm",
+     "stated": "tmax mm 15.50 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100060000",
+   "name": "3xD Ratio drills, Series 5510, 6.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.00 / inch 0.2362"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 mm 6.00"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "mm",
+     "stated": "l1 mm 66.00"
+    },
+    "lcf": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "l2 mm 28.00"
+    },
+    "tmax": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "tmax mm 19.00 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100063500",
+   "name": "3xD Ratio drills, Series 5510, 6.35 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.35 / inch 0.2500 (1/4 E)"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d2 mm 8.00"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "mm",
+     "stated": "l1 mm 79.00"
+    },
+    "lcf": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "l2 mm 34.00"
+    },
+    "tmax": {
+     "v": 24.48,
+     "unit": "mm",
+     "stated": "tmax mm 24.48 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    },
+    "size_designation": {
+     "v": "1/4 E",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.254,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0100 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.3175,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0125 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.1651,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0065 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.4064,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0160 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.4064,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0160 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.127,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0050 at 1/4 in. 6.350 mm"
+     }
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100065300",
+   "name": "3xD Ratio drills, Series 5510, 6.53 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.53,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.53 / inch 0.2571 (F)"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d2 mm 8.00"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "mm",
+     "stated": "l1 mm 79.00"
+    },
+    "lcf": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "l2 mm 34.00"
+    },
+    "tmax": {
+     "v": 24.21,
+     "unit": "mm",
+     "stated": "tmax mm 24.21 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    },
+    "size_designation": {
+     "v": "F",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100068000",
+   "name": "3xD Ratio drills, Series 5510, 6.80 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.8,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.80 / inch 0.2677"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d2 mm 8.00"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "mm",
+     "stated": "l1 mm 79.00"
+    },
+    "lcf": {
+     "v": 34.0,
+     "unit": "mm",
+     "stated": "l2 mm 34.00"
+    },
+    "tmax": {
+     "v": 23.8,
+     "unit": "mm",
+     "stated": "tmax mm 23.80 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100040000",
+   "name": "3xD Ratio drills, Series 5510, 4.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 4.00 / inch 0.1575"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 mm 6.00"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "mm",
+     "stated": "l1 mm 66.00"
+    },
+    "lcf": {
+     "v": 24.0,
+     "unit": "mm",
+     "stated": "l2 mm 24.00"
+    },
+    "tmax": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "tmax mm 18.00 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100079400",
+   "name": "3xD Ratio drills, Series 5510, 7.94 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.94,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 7.94 / inch 0.3125 (5/16)"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d2 mm 8.00"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "mm",
+     "stated": "l1 mm 79.00"
+    },
+    "lcf": {
+     "v": 41.0,
+     "unit": "mm",
+     "stated": "l2 mm 41.00"
+    },
+    "tmax": {
+     "v": 29.09,
+     "unit": "mm",
+     "stated": "tmax mm 29.09 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    },
+    "size_designation": {
+     "v": "5/16",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100050000",
+   "name": "3xD Ratio drills, Series 5510, 5.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 5.00 / inch 0.1969"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 mm 6.00"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "mm",
+     "stated": "l1 mm 66.00"
+    },
+    "lcf": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "l2 mm 28.00"
+    },
+    "tmax": {
+     "v": 20.5,
+     "unit": "mm",
+     "stated": "tmax mm 20.50 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100080000",
+   "name": "3xD Ratio drills, Series 5510, 8.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 8.00 / inch 0.3150"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d2 mm 8.00"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "mm",
+     "stated": "l1 mm 79.00"
+    },
+    "lcf": {
+     "v": 41.0,
+     "unit": "mm",
+     "stated": "l2 mm 41.00"
+    },
+    "tmax": {
+     "v": 29.0,
+     "unit": "mm",
+     "stated": "tmax mm 29.00 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100051100",
+   "name": "3xD Ratio drills, Series 5510, 5.11 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.11,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 5.11 / inch 0.2012 (#7)"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 mm 6.00"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "mm",
+     "stated": "l1 mm 66.00"
+    },
+    "lcf": {
+     "v": 28.0,
+     "unit": "mm",
+     "stated": "l2 mm 28.00"
+    },
+    "tmax": {
+     "v": 20.34,
+     "unit": "mm",
+     "stated": "tmax mm 20.34 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    },
+    "size_designation": {
+     "v": "#7",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100085000",
+   "name": "3xD Ratio drills, Series 5510, 8.50 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.5,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 8.50 / inch 0.3346"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 mm 10.00"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "mm",
+     "stated": "l1 mm 89.00"
+    },
+    "lcf": {
+     "v": 47.0,
+     "unit": "mm",
+     "stated": "l2 mm 47.00"
+    },
+    "tmax": {
+     "v": 34.25,
+     "unit": "mm",
+     "stated": "tmax mm 34.25 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100095200",
+   "name": "3xD Ratio drills, Series 5510, 9.52 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.52,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 9.52 / inch 0.3750 (3/8)"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 mm 10.00"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "mm",
+     "stated": "l1 mm 89.00"
+    },
+    "lcf": {
+     "v": 47.0,
+     "unit": "mm",
+     "stated": "l2 mm 47.00"
+    },
+    "tmax": {
+     "v": 32.72,
+     "unit": "mm",
+     "stated": "tmax mm 32.72 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    },
+    "size_designation": {
+     "v": "3/8",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.3175,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0125 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.4064,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0160 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.2032,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0080 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.508,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0200 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.508,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0200 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)",
+     "fn_or_fz": {
+      "v": 0.1651,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0065 at 3/8 in. 9.520 mm"
+     }
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100100000",
+   "name": "3xD Ratio drills, Series 5510, 10.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 10.00 / inch 0.3937"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 mm 10.00"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "mm",
+     "stated": "l1 mm 89.00"
+    },
+    "lcf": {
+     "v": 47.0,
+     "unit": "mm",
+     "stated": "l2 mm 47.00"
+    },
+    "tmax": {
+     "v": 32.0,
+     "unit": "mm",
+     "stated": "tmax mm 32.00 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100102000",
+   "name": "3xD Ratio drills, Series 5510, 10.20 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.2,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 10.20 / inch 0.4016"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d2 mm 12.00"
+    },
+    "oal": {
+     "v": 102.0,
+     "unit": "mm",
+     "stated": "l1 mm 102.00"
+    },
+    "lcf": {
+     "v": 55.0,
+     "unit": "mm",
+     "stated": "l2 mm 55.00"
+    },
+    "tmax": {
+     "v": 39.7,
+     "unit": "mm",
+     "stated": "tmax mm 39.70 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9055100120000",
+   "name": "3xD Ratio drills, Series 5510, 12.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 12.00 / inch 0.4724"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d2 mm 12.00"
+    },
+    "oal": {
+     "v": 102.0,
+     "unit": "mm",
+     "stated": "l1 mm 102.00"
+    },
+    "lcf": {
+     "v": 55.0,
+     "unit": "mm",
+     "stated": "l2 mm 55.00"
+    },
+    "tmax": {
+     "v": 37.0,
+     "unit": "mm",
+     "stated": "tmax mm 37.00 (tmax = l2-(1.5 x d1))"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° point angle icon"
+    },
+    "material": {
+     "v": "Solid Carbide",
+     "unit": "text",
+     "stated": "Tool material Solid Carbide"
+    },
+    "coating": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Surface: \"F\" icon (name of the surface not spelled out on the page)"
+    },
+    "type": {
+     "v": "RT 100 U",
+     "unit": "text",
+     "stated": "RT 100 U type icon; 3xD Ratio drills"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "shank": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA shank-form icon; \"For L3 dimensions per DIN 6537, please see page 466\""
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 144.78,
+      "unit": "m/min",
+      "stated": "SFM 475"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 170.69,
+      "unit": "m/min",
+      "stated": "SFM 560"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 54.86,
+      "unit": "m/min",
+      "stated": "SFM 180"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 210.31,
+      "unit": "m/min",
+      "stated": "SFM 690"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 309.37,
+      "unit": "m/min",
+      "stated": "SFM 1015"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 45.72,
+      "unit": "m/min",
+      "stated": "SFM 150"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Feed (IPR) is tabulated per nominal diameter column; attached only where the drill equals a column diameter (1/4, 3/8 in)."
+  },
+  {
+   "kind": "drill",
+   "id": "9006510030000",
+   "name": "Jobber length drills, Series 651, 3.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 3.00 / inch 0.1181"
+    },
+    "dcon": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "l1 mm 61.00"
+    },
+    "lcf": {
+     "v": 33.0,
+     "unit": "mm",
+     "stated": "l2 mm 33.00"
+    },
+    "tmax": {
+     "v": 28.5,
+     "unit": "mm",
+     "stated": "tmax mm 28.50"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510040000",
+   "name": "Jobber length drills, Series 651, 4.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 4.00 / inch 0.1575"
+    },
+    "dcon": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 75.0,
+     "unit": "mm",
+     "stated": "l1 mm 75.00"
+    },
+    "lcf": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "l2 mm 43.00"
+    },
+    "tmax": {
+     "v": 37.0,
+     "unit": "mm",
+     "stated": "tmax mm 37.00"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510050000",
+   "name": "Jobber length drills, Series 651, 5.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 5.00 / inch 0.1969"
+    },
+    "dcon": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 86.0,
+     "unit": "mm",
+     "stated": "l1 mm 86.00"
+    },
+    "lcf": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "l2 mm 52.00"
+    },
+    "tmax": {
+     "v": 44.5,
+     "unit": "mm",
+     "stated": "tmax mm 44.50"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510079400",
+   "name": "Jobber length drills, Series 651, 7.94 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.94,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 7.94 / inch 0.3126 (5/16)"
+    },
+    "dcon": {
+     "v": 7.94,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 117.0,
+     "unit": "mm",
+     "stated": "l1 mm 117.00"
+    },
+    "lcf": {
+     "v": 75.0,
+     "unit": "mm",
+     "stated": "l2 mm 75.00"
+    },
+    "tmax": {
+     "v": 63.09,
+     "unit": "mm",
+     "stated": "tmax mm 63.09"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    },
+    "size_designation": {
+     "v": "5/16",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510080000",
+   "name": "Jobber length drills, Series 651, 8.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 8.00 / inch 0.3150"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 117.0,
+     "unit": "mm",
+     "stated": "l1 mm 117.00"
+    },
+    "lcf": {
+     "v": 75.0,
+     "unit": "mm",
+     "stated": "l2 mm 75.00"
+    },
+    "tmax": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "tmax mm 63.00"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510051100",
+   "name": "Jobber length drills, Series 651, 5.11 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.11,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 5.11 / inch 0.2012 (#7)"
+    },
+    "dcon": {
+     "v": 5.11,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 86.0,
+     "unit": "mm",
+     "stated": "l1 mm 86.00"
+    },
+    "lcf": {
+     "v": 52.0,
+     "unit": "mm",
+     "stated": "l2 mm 52.00"
+    },
+    "tmax": {
+     "v": 44.34,
+     "unit": "mm",
+     "stated": "tmax mm 44.34"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    },
+    "size_designation": {
+     "v": "#7",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510085000",
+   "name": "Jobber length drills, Series 651, 8.50 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.5,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 8.50 / inch 0.3346"
+    },
+    "dcon": {
+     "v": 8.5,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 117.0,
+     "unit": "mm",
+     "stated": "l1 mm 117.00"
+    },
+    "lcf": {
+     "v": 75.0,
+     "unit": "mm",
+     "stated": "l2 mm 75.00"
+    },
+    "tmax": {
+     "v": 62.25,
+     "unit": "mm",
+     "stated": "tmax mm 62.25"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510060000",
+   "name": "Jobber length drills, Series 651, 6.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.00 / inch 0.2362"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 93.0,
+     "unit": "mm",
+     "stated": "l1 mm 93.00"
+    },
+    "lcf": {
+     "v": 57.0,
+     "unit": "mm",
+     "stated": "l2 mm 57.00"
+    },
+    "tmax": {
+     "v": 48.0,
+     "unit": "mm",
+     "stated": "tmax mm 48.00"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510095200",
+   "name": "Jobber length drills, Series 651, 9.52 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.52,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 9.52 / inch 0.3748 (3/8)"
+    },
+    "dcon": {
+     "v": 9.52,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 133.0,
+     "unit": "mm",
+     "stated": "l1 mm 133.00"
+    },
+    "lcf": {
+     "v": 87.0,
+     "unit": "mm",
+     "stated": "l2 mm 87.00"
+    },
+    "tmax": {
+     "v": 72.72,
+     "unit": "mm",
+     "stated": "tmax mm 72.72"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    },
+    "size_designation": {
+     "v": "3/8",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)",
+     "fn_or_fz": {
+      "v": 0.254,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)",
+     "fn_or_fz": {
+      "v": 0.254,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)",
+     "fn_or_fz": {
+      "v": 0.254,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
+     }
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510063500",
+   "name": "Jobber length drills, Series 651, 6.35 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.35 / inch 0.2500 (1/4 E)"
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 101.0,
+     "unit": "mm",
+     "stated": "l1 mm 101.00"
+    },
+    "lcf": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "l2 mm 63.00"
+    },
+    "tmax": {
+     "v": 53.48,
+     "unit": "mm",
+     "stated": "tmax mm 53.48"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    },
+    "size_designation": {
+     "v": "1/4 E",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)",
+     "fn_or_fz": {
+      "v": 0.2032,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)",
+     "fn_or_fz": {
+      "v": 0.2032,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)",
+     "fn_or_fz": {
+      "v": 0.2032,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
+     }
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510065300",
+   "name": "Jobber length drills, Series 651, 6.53 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.53,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.53 / inch 0.2571 (F)"
+    },
+    "dcon": {
+     "v": 6.53,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 101.0,
+     "unit": "mm",
+     "stated": "l1 mm 101.00"
+    },
+    "lcf": {
+     "v": 63.0,
+     "unit": "mm",
+     "stated": "l2 mm 63.00"
+    },
+    "tmax": {
+     "v": 53.21,
+     "unit": "mm",
+     "stated": "tmax mm 53.21"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    },
+    "size_designation": {
+     "v": "F",
+     "unit": "text",
+     "stated": "inch / wire/ltr columns"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510100000",
+   "name": "Jobber length drills, Series 651, 10.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 10.00 / inch 0.3937"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 133.0,
+     "unit": "mm",
+     "stated": "l1 mm 133.00"
+    },
+    "lcf": {
+     "v": 87.0,
+     "unit": "mm",
+     "stated": "l2 mm 87.00"
+    },
+    "tmax": {
+     "v": 72.0,
+     "unit": "mm",
+     "stated": "tmax mm 72.00"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510068000",
+   "name": "Jobber length drills, Series 651, 6.80 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.8,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.80 / inch 0.2677"
+    },
+    "dcon": {
+     "v": 6.8,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 109.0,
+     "unit": "mm",
+     "stated": "l1 mm 109.00"
+    },
+    "lcf": {
+     "v": 69.0,
+     "unit": "mm",
+     "stated": "l2 mm 69.00"
+    },
+    "tmax": {
+     "v": 58.8,
+     "unit": "mm",
+     "stated": "tmax mm 58.80"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510102000",
+   "name": "Jobber length drills, Series 651, 10.20 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.2,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 10.20 / inch 0.4016"
+    },
+    "dcon": {
+     "v": 10.2,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 133.0,
+     "unit": "mm",
+     "stated": "l1 mm 133.00"
+    },
+    "lcf": {
+     "v": 87.0,
+     "unit": "mm",
+     "stated": "l2 mm 87.00"
+    },
+    "tmax": {
+     "v": 71.7,
+     "unit": "mm",
+     "stated": "tmax mm 71.70"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "9006510120000",
+   "name": "Jobber length drills, Series 651, 12.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 12.00 / inch 0.4724"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 151.0,
+     "unit": "mm",
+     "stated": "l1 mm 151.00"
+    },
+    "lcf": {
+     "v": 101.0,
+     "unit": "mm",
+     "stated": "l2 mm 101.00"
+    },
+    "tmax": {
+     "v": 83.0,
+     "unit": "mm",
+     "stated": "tmax mm 83.00"
+    },
+    "sig": {
+     "v": 118,
+     "unit": "deg",
+     "stated": "118° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "coating": {
+     "v": "S",
+     "unit": "text",
+     "stated": "Surface: \"S\" icon (name of the surface not spelled out on the page)"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 39.62,
+      "unit": "m/min",
+      "stated": "SFM 130"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ]
+  },
+  {
+   "kind": "spot",
+   "id": "9005570030000",
+   "name": "90° NC spot drills, Series 557, 3.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 3.00 / inch 0.1181"
+    },
+    "dcon": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 46.0,
+     "unit": "mm",
+     "stated": "l1 mm 46.00"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l2 mm 12.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "90° NC spot drills; 90° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon; Guhring Std. (WN)"
+    },
+    "dc_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 32.0,
+      "unit": "m/min",
+      "stated": "SFM 105"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 6.1,
+      "unit": "m/min",
+      "stated": "SFM 20"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 70.1,
+      "unit": "m/min",
+      "stated": "SFM 230"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "coating"
+   ],
+   "notes": "Coating row shows an empty circle icon; not read as a coating name."
+  },
+  {
+   "kind": "spot",
+   "id": "9005570040000",
+   "name": "90° NC spot drills, Series 557, 4.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 4.00 / inch 0.1575"
+    },
+    "dcon": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 55.0,
+     "unit": "mm",
+     "stated": "l1 mm 55.00"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l2 mm 12.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "90° NC spot drills; 90° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon; Guhring Std. (WN)"
+    },
+    "dc_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 32.0,
+      "unit": "m/min",
+      "stated": "SFM 105"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 6.1,
+      "unit": "m/min",
+      "stated": "SFM 20"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 70.1,
+      "unit": "m/min",
+      "stated": "SFM 230"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "coating"
+   ],
+   "notes": "Coating row shows an empty circle icon; not read as a coating name."
+  },
+  {
+   "kind": "spot",
+   "id": "9005570050000",
+   "name": "90° NC spot drills, Series 557, 5.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 5.00 / inch 0.1969"
+    },
+    "dcon": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 62.0,
+     "unit": "mm",
+     "stated": "l1 mm 62.00"
+    },
+    "lcf": {
+     "v": 14.0,
+     "unit": "mm",
+     "stated": "l2 mm 14.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "90° NC spot drills; 90° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon; Guhring Std. (WN)"
+    },
+    "dc_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 32.0,
+      "unit": "m/min",
+      "stated": "SFM 105"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 6.1,
+      "unit": "m/min",
+      "stated": "SFM 20"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 70.1,
+      "unit": "m/min",
+      "stated": "SFM 230"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "coating"
+   ],
+   "notes": "Coating row shows an empty circle icon; not read as a coating name."
+  },
+  {
+   "kind": "spot",
+   "id": "9005570060000",
+   "name": "90° NC spot drills, Series 557, 6.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.00 / inch 0.2362"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "mm",
+     "stated": "l1 mm 66.00"
+    },
+    "lcf": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "l2 mm 16.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "90° NC spot drills; 90° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon; Guhring Std. (WN)"
+    },
+    "dc_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 32.0,
+      "unit": "m/min",
+      "stated": "SFM 105"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 6.1,
+      "unit": "m/min",
+      "stated": "SFM 20"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 70.1,
+      "unit": "m/min",
+      "stated": "SFM 230"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "coating"
+   ],
+   "notes": "Coating row shows an empty circle icon; not read as a coating name."
+  },
+  {
+   "kind": "spot",
+   "id": "9005570063500",
+   "name": "90° NC spot drills, Series 557, 6.35 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 6.35 / inch 0.2500 (1/4 E)"
+    },
+    "dcon": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 70.0,
+     "unit": "mm",
+     "stated": "l1 mm 70.00"
+    },
+    "lcf": {
+     "v": 17.0,
+     "unit": "mm",
+     "stated": "l2 mm 17.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "90° NC spot drills; 90° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon; Guhring Std. (WN)"
+    },
+    "dc_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.16,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 32.0,
+      "unit": "m/min",
+      "stated": "SFM 105"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.16,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 6.1,
+      "unit": "m/min",
+      "stated": "SFM 20"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.0787,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0031 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.16,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 70.1,
+      "unit": "m/min",
+      "stated": "SFM 230"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.2007,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0079 at 1/4 in. 6.350 mm"
+     }
+    }
+   ],
+   "unknown": [
+    "nof",
+    "coating"
+   ],
+   "notes": "Coating row shows an empty circle icon; not read as a coating name."
+  },
+  {
+   "kind": "spot",
+   "id": "9005570080000",
+   "name": "90° NC spot drills, Series 557, 8.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 8.00 / inch 0.3150"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "mm",
+     "stated": "l1 mm 79.00"
+    },
+    "lcf": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "l2 mm 21.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "90° NC spot drills; 90° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon; Guhring Std. (WN)"
+    },
+    "dc_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 32.0,
+      "unit": "m/min",
+      "stated": "SFM 105"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 6.1,
+      "unit": "m/min",
+      "stated": "SFM 20"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 70.1,
+      "unit": "m/min",
+      "stated": "SFM 230"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "coating"
+   ],
+   "notes": "Coating row shows an empty circle icon; not read as a coating name."
+  },
+  {
+   "kind": "spot",
+   "id": "9005570095200",
+   "name": "90° NC spot drills, Series 557, 9.52 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.52,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 9.52 / inch 0.3748 (3/8)"
+    },
+    "dcon": {
+     "v": 9.52,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "mm",
+     "stated": "l1 mm 89.00"
+    },
+    "lcf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "l2 mm 25.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "90° NC spot drills; 90° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon; Guhring Std. (WN)"
+    },
+    "dc_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.2489,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 32.0,
+      "unit": "m/min",
+      "stated": "SFM 105"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.2489,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 6.1,
+      "unit": "m/min",
+      "stated": "SFM 20"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.1245,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0049 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.2489,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
+     }
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 70.1,
+      "unit": "m/min",
+      "stated": "SFM 230"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)",
+     "fn_or_fz": {
+      "v": 0.315,
+      "unit": "mm/rev",
+      "stated": "Feed Rate - IPR 0.0124 at 3/8 in. 9.520 mm"
+     }
+    }
+   ],
+   "unknown": [
+    "nof",
+    "coating"
+   ],
+   "notes": "Coating row shows an empty circle icon; not read as a coating name."
+  },
+  {
+   "kind": "spot",
+   "id": "9005570100000",
+   "name": "90° NC spot drills, Series 557, 10.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 10.00 / inch 0.3937"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "mm",
+     "stated": "l1 mm 89.00"
+    },
+    "lcf": {
+     "v": 25.0,
+     "unit": "mm",
+     "stated": "l2 mm 25.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "90° NC spot drills; 90° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon; Guhring Std. (WN)"
+    },
+    "dc_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 32.0,
+      "unit": "m/min",
+      "stated": "SFM 105"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 6.1,
+      "unit": "m/min",
+      "stated": "SFM 20"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 70.1,
+      "unit": "m/min",
+      "stated": "SFM 230"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "coating"
+   ],
+   "notes": "Coating row shows an empty circle icon; not read as a coating name."
+  },
+  {
+   "kind": "spot",
+   "id": "9005570120000",
+   "name": "90° NC spot drills, Series 557, 12.00 mm",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 64)",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Diameter (d1) mm 12.00 / inch 0.4724"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Shank diameter = cut diameter"
+    },
+    "oal": {
+     "v": 102.0,
+     "unit": "mm",
+     "stated": "l1 mm 102.00"
+    },
+    "lcf": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "l2 mm 30.00"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "90° NC spot drills; 90° point angle icon"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Tool material HSS"
+    },
+    "type": {
+     "v": "N",
+     "unit": "text",
+     "stated": "Type N icon; Guhring Std. (WN)"
+    },
+    "dc_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Common structural steels, BHN ≤ 150",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Free-cutting steels, HRC ≤ 25, BHN ≤ 255",
+     "vc": {
+      "v": 32.0,
+      "unit": "m/min",
+      "stated": "SFM 105"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337",
+     "vc": {
+      "v": 6.1,
+      "unit": "m/min",
+      "stated": "SFM 20"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Cast iron, HRC ≤ 23, BHN ≤ 242",
+     "vc": {
+      "v": 30.48,
+      "unit": "m/min",
+      "stated": "SFM 100"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Aluminium and Al-alloys, BHN ≤ 120",
+     "vc": {
+      "v": 70.1,
+      "unit": "m/min",
+      "stated": "SFM 230"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "coating"
+   ],
+   "notes": "Coating row shows an empty circle icon; not read as a coating name."
+  },
+  {
+   "kind": "tap",
+   "id": "9039010063500",
+   "name": "UNC through-hole tap, Series 3901, 1/4-20",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "1/4-20",
+     "unit": "text",
+     "stated": "d1 - P 1/4-20"
+    },
+    "limit": {
+     "v": "H4/H5",
+     "unit": "text",
+     "stated": "H Limits H4/H5"
+    },
+    "tap_drill_range": {
+     "v": "0.196 - 0.207",
+     "unit": "inch",
+     "stated": "Tap Drill Range inch 0.196 - 0.207"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 6.477,
+     "unit": "mm",
+     "stated": "d2 inch 0.255"
+    },
+    "square": {
+     "v": 4.8514,
+     "unit": "mm",
+     "stated": "SW inch 0.191"
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "l1 inch 2.500"
+    },
+    "tap_style": {
+     "v": "Spiral Point, Straight flute",
+     "unit": "text",
+     "stated": "Spiral Point, Straight flute; Through holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form B • 3.5 - 5",
+     "unit": "text",
+     "stated": "Chamfer Form B • 3.5 - 5"
+    },
+    "class_of_fit": {
+     "v": "2B",
+     "unit": "text",
+     "stated": "Class of Fit 2B"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "6.350",
+     "unit": "text",
+     "stated": "Order Code 6.350"
+    },
+    "thread_length": {
+     "v": 29.9974,
+     "unit": "mm",
+     "stated": "l3 inch 1.181"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [
+    "tp"
+   ],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039010079380",
+   "name": "UNC through-hole tap, Series 3901, 5/16-18",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "5/16-18",
+     "unit": "text",
+     "stated": "d1 - P 5/16-18"
+    },
+    "limit": {
+     "v": "H4/H5",
+     "unit": "text",
+     "stated": "H Limits H4/H5"
+    },
+    "tap_drill_range": {
+     "v": "0.252 - 0.265",
+     "unit": "inch",
+     "stated": "Tap Drill Range inch 0.252 - 0.265"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 8.0772,
+     "unit": "mm",
+     "stated": "d2 inch 0.318"
+    },
+    "square": {
+     "v": 6.0452,
+     "unit": "mm",
+     "stated": "SW inch 0.238"
+    },
+    "oal": {
+     "v": 69.1134,
+     "unit": "mm",
+     "stated": "l1 inch 2.721"
+    },
+    "tap_style": {
+     "v": "Spiral Point, Straight flute",
+     "unit": "text",
+     "stated": "Spiral Point, Straight flute; Through holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form B • 3.5 - 5",
+     "unit": "text",
+     "stated": "Chamfer Form B • 3.5 - 5"
+    },
+    "class_of_fit": {
+     "v": "2B",
+     "unit": "text",
+     "stated": "Class of Fit 2B"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "7.938",
+     "unit": "text",
+     "stated": "Order Code 7.938"
+    },
+    "thread_length": {
+     "v": 34.9758,
+     "unit": "mm",
+     "stated": "l3 inch 1.377"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [
+    "tp"
+   ],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039010095250",
+   "name": "UNC through-hole tap, Series 3901, 3/8-16",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "3/8-16",
+     "unit": "text",
+     "stated": "d1 - P 3/8-16"
+    },
+    "limit": {
+     "v": "H5/H6",
+     "unit": "text",
+     "stated": "H Limits H5/H6"
+    },
+    "tap_drill_range": {
+     "v": "0.307 - 0.321",
+     "unit": "inch",
+     "stated": "Tap Drill Range inch 0.307 - 0.321"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 9.6774,
+     "unit": "mm",
+     "stated": "d2 inch 0.381"
+    },
+    "square": {
+     "v": 7.2644,
+     "unit": "mm",
+     "stated": "SW inch 0.286"
+    },
+    "oal": {
+     "v": 74.7014,
+     "unit": "mm",
+     "stated": "l1 inch 2.941"
+    },
+    "tap_style": {
+     "v": "Spiral Point, Straight flute",
+     "unit": "text",
+     "stated": "Spiral Point, Straight flute; Through holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form B • 3.5 - 5",
+     "unit": "text",
+     "stated": "Chamfer Form B • 3.5 - 5"
+    },
+    "class_of_fit": {
+     "v": "2B",
+     "unit": "text",
+     "stated": "Class of Fit 2B"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "9.525",
+     "unit": "text",
+     "stated": "Order Code 9.525"
+    },
+    "thread_length": {
+     "v": 36.9824,
+     "unit": "mm",
+     "stated": "l3 inch 1.456"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [
+    "tp"
+   ],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039040063500",
+   "name": "UNC blind-hole tap, Series 3904, 1/4-20",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "1/4-20",
+     "unit": "text",
+     "stated": "d1 - P 1/4-20"
+    },
+    "limit": {
+     "v": "H4/H5",
+     "unit": "text",
+     "stated": "H Limits H4/H5"
+    },
+    "tap_drill_range": {
+     "v": "0.196 - 0.207",
+     "unit": "inch",
+     "stated": "Tap Drill Range inch 0.196 - 0.207"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 6.477,
+     "unit": "mm",
+     "stated": "d2 inch 0.255"
+    },
+    "square": {
+     "v": 4.8514,
+     "unit": "mm",
+     "stated": "SW inch 0.191"
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "l1 inch 2.500"
+    },
+    "tap_style": {
+     "v": "Spiral Flute, 40° Helix",
+     "unit": "text",
+     "stated": "Spiral Flute, 40° Helix; Blind holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form C • 2-3",
+     "unit": "text",
+     "stated": "Chamfer Form C • 2-3"
+    },
+    "class_of_fit": {
+     "v": "2B",
+     "unit": "text",
+     "stated": "Class of Fit 2B"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "6.350",
+     "unit": "text",
+     "stated": "Order Code 6.350"
+    },
+    "thread_length": {
+     "v": 29.9974,
+     "unit": "mm",
+     "stated": "l3 inch 1.181"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [
+    "tp"
+   ],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039040079380",
+   "name": "UNC blind-hole tap, Series 3904, 5/16-18",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "5/16-18",
+     "unit": "text",
+     "stated": "d1 - P 5/16-18"
+    },
+    "limit": {
+     "v": "H4/H5",
+     "unit": "text",
+     "stated": "H Limits H4/H5"
+    },
+    "tap_drill_range": {
+     "v": "0.252 - 0.265",
+     "unit": "inch",
+     "stated": "Tap Drill Range inch 0.252 - 0.265"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 8.0772,
+     "unit": "mm",
+     "stated": "d2 inch 0.318"
+    },
+    "square": {
+     "v": 6.0452,
+     "unit": "mm",
+     "stated": "SW inch 0.238"
+    },
+    "oal": {
+     "v": 69.1134,
+     "unit": "mm",
+     "stated": "l1 inch 2.721"
+    },
+    "tap_style": {
+     "v": "Spiral Flute, 40° Helix",
+     "unit": "text",
+     "stated": "Spiral Flute, 40° Helix; Blind holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form C • 2-3",
+     "unit": "text",
+     "stated": "Chamfer Form C • 2-3"
+    },
+    "class_of_fit": {
+     "v": "2B",
+     "unit": "text",
+     "stated": "Class of Fit 2B"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "7.938",
+     "unit": "text",
+     "stated": "Order Code 7.938"
+    },
+    "thread_length": {
+     "v": 34.9758,
+     "unit": "mm",
+     "stated": "l3 inch 1.377"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [
+    "tp"
+   ],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039040095250",
+   "name": "UNC blind-hole tap, Series 3904, 3/8-16",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "3/8-16",
+     "unit": "text",
+     "stated": "d1 - P 3/8-16"
+    },
+    "limit": {
+     "v": "H5/H6",
+     "unit": "text",
+     "stated": "H Limits H5/H6"
+    },
+    "tap_drill_range": {
+     "v": "0.307 - 0.321",
+     "unit": "inch",
+     "stated": "Tap Drill Range inch 0.307 - 0.321"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 9.6774,
+     "unit": "mm",
+     "stated": "d2 inch 0.381"
+    },
+    "square": {
+     "v": 7.2644,
+     "unit": "mm",
+     "stated": "SW inch 0.286"
+    },
+    "oal": {
+     "v": 74.7014,
+     "unit": "mm",
+     "stated": "l1 inch 2.941"
+    },
+    "tap_style": {
+     "v": "Spiral Flute, 40° Helix",
+     "unit": "text",
+     "stated": "Spiral Flute, 40° Helix; Blind holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form C • 2-3",
+     "unit": "text",
+     "stated": "Chamfer Form C • 2-3"
+    },
+    "class_of_fit": {
+     "v": "2B",
+     "unit": "text",
+     "stated": "Class of Fit 2B"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "9.525",
+     "unit": "text",
+     "stated": "Order Code 9.525"
+    },
+    "thread_length": {
+     "v": 36.9824,
+     "unit": "mm",
+     "stated": "l3 inch 1.456"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [
+    "tp"
+   ],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039000060000",
+   "name": "METRIC through-hole tap, Series 3900, M6 X 1.00",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6 X 1.00",
+     "unit": "text",
+     "stated": "d1 - P M6 X 1.00"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "4.917 - 5.153",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 4.917 - 5.153"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 6.477,
+     "unit": "mm",
+     "stated": "d2 inch 0.255"
+    },
+    "square": {
+     "v": 4.8514,
+     "unit": "mm",
+     "stated": "SW inch 0.191"
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "l1 inch 2.500"
+    },
+    "tap_style": {
+     "v": "Spiral Point, Straight flute",
+     "unit": "text",
+     "stated": "Spiral Point, Straight flute; Through holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form B • 3.5 - 5",
+     "unit": "text",
+     "stated": "Chamfer Form B • 3.5 - 5"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "6.000",
+     "unit": "text",
+     "stated": "Order Code 6.000"
+    },
+    "thread_length": {
+     "v": 29.9974,
+     "unit": "mm",
+     "stated": "l3 inch 1.181"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "d1 - P M6 X 1.00"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039000080000",
+   "name": "METRIC through-hole tap, Series 3900, M8 X 1.25",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M8 X 1.25",
+     "unit": "text",
+     "stated": "d1 - P M8 X 1.25"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "6.647 - 6.912",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 6.647 - 6.912"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 8.0772,
+     "unit": "mm",
+     "stated": "d2 inch 0.318"
+    },
+    "square": {
+     "v": 6.0452,
+     "unit": "mm",
+     "stated": "SW inch 0.238"
+    },
+    "oal": {
+     "v": 69.1134,
+     "unit": "mm",
+     "stated": "l1 inch 2.721"
+    },
+    "tap_style": {
+     "v": "Spiral Point, Straight flute",
+     "unit": "text",
+     "stated": "Spiral Point, Straight flute; Through holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form B • 3.5 - 5",
+     "unit": "text",
+     "stated": "Chamfer Form B • 3.5 - 5"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "8.000",
+     "unit": "text",
+     "stated": "Order Code 8.000"
+    },
+    "thread_length": {
+     "v": 34.9758,
+     "unit": "mm",
+     "stated": "l3 inch 1.377"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "d1 - P M8 X 1.25"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039000100000",
+   "name": "METRIC through-hole tap, Series 3900, M10 X 1.50",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10 X 1.50",
+     "unit": "text",
+     "stated": "d1 - P M10 X 1.50"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "8.376 - 8.676",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 8.376 - 8.676"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 9.6774,
+     "unit": "mm",
+     "stated": "d2 inch 0.381"
+    },
+    "square": {
+     "v": 7.2644,
+     "unit": "mm",
+     "stated": "SW inch 0.286"
+    },
+    "oal": {
+     "v": 74.7014,
+     "unit": "mm",
+     "stated": "l1 inch 2.941"
+    },
+    "tap_style": {
+     "v": "Spiral Point, Straight flute",
+     "unit": "text",
+     "stated": "Spiral Point, Straight flute; Through holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form B • 3.5 - 5",
+     "unit": "text",
+     "stated": "Chamfer Form B • 3.5 - 5"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "10.000",
+     "unit": "text",
+     "stated": "Order Code 10.000"
+    },
+    "thread_length": {
+     "v": 36.9824,
+     "unit": "mm",
+     "stated": "l3 inch 1.456"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "d1 - P M10 X 1.50"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039030060000",
+   "name": "METRIC blind-hole tap, Series 3903, M6 X 1.00",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6 X 1.00",
+     "unit": "text",
+     "stated": "d1 - P M6 X 1.00"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "4.917 - 5.153",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 4.917 - 5.153"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 6.477,
+     "unit": "mm",
+     "stated": "d2 inch 0.255"
+    },
+    "square": {
+     "v": 4.8514,
+     "unit": "mm",
+     "stated": "SW inch 0.191"
+    },
+    "oal": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "l1 inch 2.500"
+    },
+    "tap_style": {
+     "v": "Spiral Flute, 40° Helix",
+     "unit": "text",
+     "stated": "Spiral Flute, 40° Helix; Blind holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form C • 2-3",
+     "unit": "text",
+     "stated": "Chamfer Form C • 2-3"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "6.000",
+     "unit": "text",
+     "stated": "Order Code 6.000"
+    },
+    "thread_length": {
+     "v": 29.9974,
+     "unit": "mm",
+     "stated": "l3 inch 1.181"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "d1 - P M6 X 1.00"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039030080000",
+   "name": "METRIC blind-hole tap, Series 3903, M8 X 1.25",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M8 X 1.25",
+     "unit": "text",
+     "stated": "d1 - P M8 X 1.25"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "6.647 - 6.912",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 6.647 - 6.912"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 8.0772,
+     "unit": "mm",
+     "stated": "d2 inch 0.318"
+    },
+    "square": {
+     "v": 6.0452,
+     "unit": "mm",
+     "stated": "SW inch 0.238"
+    },
+    "oal": {
+     "v": 69.1134,
+     "unit": "mm",
+     "stated": "l1 inch 2.721"
+    },
+    "tap_style": {
+     "v": "Spiral Flute, 40° Helix",
+     "unit": "text",
+     "stated": "Spiral Flute, 40° Helix; Blind holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form C • 2-3",
+     "unit": "text",
+     "stated": "Chamfer Form C • 2-3"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "8.000",
+     "unit": "text",
+     "stated": "Order Code 8.000"
+    },
+    "thread_length": {
+     "v": 34.9758,
+     "unit": "mm",
+     "stated": "l3 inch 1.377"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "d1 - P M8 X 1.25"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9039030100000",
+   "name": "METRIC blind-hole tap, Series 3903, M10 X 1.50",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10 X 1.50",
+     "unit": "text",
+     "stated": "d1 - P M10 X 1.50"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "8.376 - 8.676",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 8.376 - 8.676"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 9.6774,
+     "unit": "mm",
+     "stated": "d2 inch 0.381"
+    },
+    "square": {
+     "v": 7.2644,
+     "unit": "mm",
+     "stated": "SW inch 0.286"
+    },
+    "oal": {
+     "v": 74.7014,
+     "unit": "mm",
+     "stated": "l1 inch 2.941"
+    },
+    "tap_style": {
+     "v": "Spiral Flute, 40° Helix",
+     "unit": "text",
+     "stated": "Spiral Flute, 40° Helix; Blind holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form C • 2-3",
+     "unit": "text",
+     "stated": "Chamfer Form C • 2-3"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "ANSI",
+     "unit": "text",
+     "stated": "Standard ANSI"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "10.000",
+     "unit": "text",
+     "stated": "Order Code 10.000"
+    },
+    "thread_length": {
+     "v": 36.9824,
+     "unit": "mm",
+     "stated": "l3 inch 1.456"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "d1 - P M10 X 1.50"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9008030060000",
+   "name": "METRIC through-hole tap, Series 803, M6 X 1.00",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6 X 1.00",
+     "unit": "text",
+     "stated": "d1 - P M6 X 1.00"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "4.917 - 5.153",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 4.917 - 5.153"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 mm 6.00"
+    },
+    "square": {
+     "v": 4.9,
+     "unit": "mm",
+     "stated": "SW mm 4.90"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "l1 mm 80.00"
+    },
+    "tap_style": {
+     "v": "Spiral Point, Straight flute",
+     "unit": "text",
+     "stated": "Spiral Point, Straight flute; Through holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form B • 3.5 - 5",
+     "unit": "text",
+     "stated": "Chamfer Form B • 3.5 - 5"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "DIN 371",
+     "unit": "text",
+     "stated": "Standard DIN 371"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "6.000",
+     "unit": "text",
+     "stated": "Order Code 6.000"
+    },
+    "thread_length": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "l3 mm 30.00"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "d1 - P M6 X 1.00"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9008030080000",
+   "name": "METRIC through-hole tap, Series 803, M8 X 1.25",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M8 X 1.25",
+     "unit": "text",
+     "stated": "d1 - P M8 X 1.25"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "6.647 - 6.912",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 6.647 - 6.912"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d2 mm 8.00"
+    },
+    "square": {
+     "v": 6.2,
+     "unit": "mm",
+     "stated": "SW mm 6.20"
+    },
+    "oal": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "l1 mm 90.00"
+    },
+    "tap_style": {
+     "v": "Spiral Point, Straight flute",
+     "unit": "text",
+     "stated": "Spiral Point, Straight flute; Through holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form B • 3.5 - 5",
+     "unit": "text",
+     "stated": "Chamfer Form B • 3.5 - 5"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "DIN 371",
+     "unit": "text",
+     "stated": "Standard DIN 371"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "8.000",
+     "unit": "text",
+     "stated": "Order Code 8.000"
+    },
+    "thread_length": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "l3 mm 35.00"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "d1 - P M8 X 1.25"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9008030100000",
+   "name": "METRIC through-hole tap, Series 803, M10 X 1.50",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10 X 1.50",
+     "unit": "text",
+     "stated": "d1 - P M10 X 1.50"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "8.376 - 8.676",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 8.376 - 8.676"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 mm 10.00"
+    },
+    "square": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "SW mm 8.00"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "l1 mm 100.00"
+    },
+    "tap_style": {
+     "v": "Spiral Point, Straight flute",
+     "unit": "text",
+     "stated": "Spiral Point, Straight flute; Through holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form B • 3.5 - 5",
+     "unit": "text",
+     "stated": "Chamfer Form B • 3.5 - 5"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "DIN 371",
+     "unit": "text",
+     "stated": "Standard DIN 371"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "10.000",
+     "unit": "text",
+     "stated": "Order Code 10.000"
+    },
+    "thread_length": {
+     "v": 39.0,
+     "unit": "mm",
+     "stated": "l3 mm 39.00"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "d1 - P M10 X 1.50"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9008100060000",
+   "name": "METRIC blind-hole tap, Series 810, M6 X 1.00",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6 X 1.00",
+     "unit": "text",
+     "stated": "d1 - P M6 X 1.00"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "4.917 - 5.153",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 4.917 - 5.153"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 mm 6.00"
+    },
+    "square": {
+     "v": 4.9,
+     "unit": "mm",
+     "stated": "SW mm 4.90"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "l1 mm 80.00"
+    },
+    "tap_style": {
+     "v": "Spiral Flute, 40° Helix",
+     "unit": "text",
+     "stated": "Spiral Flute, 40° Helix; Blind holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form C • 2-3",
+     "unit": "text",
+     "stated": "Chamfer Form C • 2-3"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "DIN 371",
+     "unit": "text",
+     "stated": "Standard DIN 371"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "6.000",
+     "unit": "text",
+     "stated": "Order Code 6.000"
+    },
+    "thread_length": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "l3 mm 30.00"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "d1 - P M6 X 1.00"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9008100080000",
+   "name": "METRIC blind-hole tap, Series 810, M8 X 1.25",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M8 X 1.25",
+     "unit": "text",
+     "stated": "d1 - P M8 X 1.25"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "6.647 - 6.912",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 6.647 - 6.912"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d2 mm 8.00"
+    },
+    "square": {
+     "v": 6.2,
+     "unit": "mm",
+     "stated": "SW mm 6.20"
+    },
+    "oal": {
+     "v": 90.0,
+     "unit": "mm",
+     "stated": "l1 mm 90.00"
+    },
+    "tap_style": {
+     "v": "Spiral Flute, 40° Helix",
+     "unit": "text",
+     "stated": "Spiral Flute, 40° Helix; Blind holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form C • 2-3",
+     "unit": "text",
+     "stated": "Chamfer Form C • 2-3"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "DIN 371",
+     "unit": "text",
+     "stated": "Standard DIN 371"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "8.000",
+     "unit": "text",
+     "stated": "Order Code 8.000"
+    },
+    "thread_length": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "l3 mm 35.00"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "d1 - P M8 X 1.25"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  },
+  {
+   "kind": "tap",
+   "id": "9008100100000",
+   "name": "METRIC blind-hole tap, Series 810, M10 X 1.50",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (Full Line Tap Catalog)",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10 X 1.50",
+     "unit": "text",
+     "stated": "d1 - P M10 X 1.50"
+    },
+    "limit": {
+     "v": "D4/D5",
+     "unit": "text",
+     "stated": "D Limits D4/D5"
+    },
+    "tap_drill_range": {
+     "v": "8.376 - 8.676",
+     "unit": "mm",
+     "stated": "Tap Drill Range mm 8.376 - 8.676"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of Flutes 3"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 mm 10.00"
+    },
+    "square": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "SW mm 8.00"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "l1 mm 100.00"
+    },
+    "tap_style": {
+     "v": "Spiral Flute, 40° Helix",
+     "unit": "text",
+     "stated": "Spiral Flute, 40° Helix; Blind holes"
+    },
+    "chamfer": {
+     "v": "Chamfer Form C • 2-3",
+     "unit": "text",
+     "stated": "Chamfer Form C • 2-3"
+    },
+    "class_of_fit": {
+     "v": "ISO 2(6H)",
+     "unit": "text",
+     "stated": "Class of Fit ISO 2(6H)"
+    },
+    "standard": {
+     "v": "DIN 371",
+     "unit": "text",
+     "stated": "Standard DIN 371"
+    },
+    "material": {
+     "v": "HSS-E (Cobalt)",
+     "unit": "text",
+     "stated": "Tool Material HSS-E (Cobalt)"
+    },
+    "coating": {
+     "v": "Bright finish",
+     "unit": "text",
+     "stated": "Bright finish"
+    },
+    "order_code": {
+     "v": "10.000",
+     "unit": "text",
+     "stated": "Order Code 10.000"
+    },
+    "thread_length": {
+     "v": 39.0,
+     "unit": "mm",
+     "stated": "l3 mm 39.00"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "d1 - P M10 X 1.50"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": null,
+     "material_stated": "Structural steels, free-cutting steels, HB <180",
+     "vc": {
+      "v": [
+       9.14,
+       15.24
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 30-50"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed case hardened steels, Rc <20, HB <230",
+     "vc": {
+      "v": [
+       6.1,
+       12.19
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 20-40"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    },
+    {
+     "iso_group": null,
+     "material_stated": "Unalloyed heat-treatable steels, Rc <25, HB <250",
+     "vc": {
+      "v": [
+       4.57,
+       10.67
+      ],
+      "unit": "m/min",
+      "stated": "Recommended SFM, HSS-E bright finish 15-35"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/ea5d1884-7c23-4a3d-9904-dbf4ceacbead (catalog p.32 YELLOW RING CUT TAPS section table)",
+     "note": "Section-level table for Yellow Ring cut taps; series assigned by catalog section."
+    }
+   ],
+   "unknown": [],
+   "notes": "l3 is the dimension labelled l3 in the drawing (thread length region); taken as printed."
+  }
+ ]
+}

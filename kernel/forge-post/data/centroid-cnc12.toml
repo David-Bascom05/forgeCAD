@@ -1,0 +1,238 @@
+# Centroid CNC12 (mill): restated from the CNC12 v4.12 mill operator's manual (centroidcnc.com);
+# every code is cited below. Parentheses are expressions on this control, not comments: comments
+# are ; to the end of the line. G0 moves Z first going up (a dog-leg): simulate with dogleg = true.
+[dialect]
+name = "centroid-cnc12"
+extension = "nc"
+decimals = 4
+feed_decimals = 1
+point = "always"
+program_open = ["; {title}"]
+program_close = ["M30"]
+comment = "; {text}"
+comment_eol = ";"
+comment_strip = ";()[]"
+line_numbers = false
+safe_start = ["G17 G21 G40 G49 G80 G90 G94"]
+tool_change = ["T{t} M6"]
+length_comp = "G43 H{h}"
+spindle_cw = "S{rpm} M3"
+spindle_ccw = "S{rpm} M4"
+spindle_stop = "M5"
+wcs = "G{n}"
+wcs_first = 54
+wcs_count = 6
+arc = "ijk"
+retract_home = ["G91 G28 Z0.", "G90"]
+coolant_flood = "M8"
+coolant_mist = "M7"
+coolant_off = "M9"
+dwell = "G4 P{s}"
+cycle_drill = "G98 G81 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_dwell = "G98 G82 X{x} Y{y} Z{z} R{r} P{s} F{f}"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "G98 G84 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_ream = "G98 G85 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_next = "X{x} Y{y}"
+cycle_cancel = "G80"
+source = "Centroid CNC12 v4.12 mill operator's manual (cited per code)"
+taken = "2026-11-23"
+note = "M30 does nothing unless customised (Intercon posts it); M2 would restart the program, so it is never written"
+cite_required = true
+
+[[dialect.cite]]
+key = "program_open"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.6 O - Program Number p192"
+note = "no start code; a ; comment names the program"
+
+[[dialect.cite]]
+key = "program_close"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 13.19 M30 p247; 13.5 M02 p244"
+note = "M30 (customised end; M2 restarts the program)"
+
+[[dialect.cite]]
+key = "comment"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.12, 11.2.13, 11.2.14 p194"
+note = "; to the end of the line; ( ) [ ] are expressions"
+
+[[dialect.cite]]
+key = "comment_eol"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.12, 11.2.13, 11.2.14 p194"
+note = "; to the end of the line"
+
+[[dialect.cite]]
+key = "line_numbers"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.5 p192"
+note = "N optional: not written"
+
+[[dialect.cite]]
+key = "safe_start"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.x; 11.2.5 example p192"
+note = "G17 G21 G40 G49 G80 G90 G94"
+
+[[dialect.cite]]
+key = "tool_change"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.11 p193-194; 13.9 p244"
+note = "T M6 (M6 always moves Z home first)"
+
+[[dialect.cite]]
+key = "length_comp"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.4 p192; 12.15 p215"
+note = "G43 H"
+
+[[dialect.cite]]
+key = "spindle_cw"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.10 p193; 13.6-13.8 p244"
+note = "S M3"
+
+[[dialect.cite]]
+key = "spindle_ccw"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.10 p193; 13.6-13.8 p244"
+note = "S M4"
+
+[[dialect.cite]]
+key = "spindle_stop"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.10 p193; 13.6-13.8 p244"
+note = "M5"
+
+[[dialect.cite]]
+key = "wcs"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.21 p217; 11.2.2 p191"
+note = "G54..G59"
+
+[[dialect.cite]]
+key = "arc"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.3 p205-208"
+note = "I J K incremental from the start (default)"
+
+[[dialect.cite]]
+key = "retract_home"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 13.17 p246; 12.11 p212; 12.20 p217"
+note = "G28 G91 Z0: Z straight home"
+
+[[dialect.cite]]
+key = "coolant_flood"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 13.10-13.12 p245"
+note = "M8"
+
+[[dialect.cite]]
+key = "coolant_mist"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 13.10-13.12 p245"
+note = "M7"
+
+[[dialect.cite]]
+key = "coolant_off"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 13.10-13.12 p245"
+note = "M9"
+
+[[dialect.cite]]
+key = "dwell"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.4 p208; 11.2.7 p193"
+note = "G4 P seconds"
+
+[[dialect.cite]]
+key = "cycle_drill"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.31 p227; 12.27 p223"
+note = "G81"
+
+[[dialect.cite]]
+key = "cycle_dwell"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.33 p229"
+note = "G82 P seconds"
+
+[[dialect.cite]]
+key = "cycle_peck"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.34 p230-231"
+note = "G83 clearance set by G10 P83: posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_chipbreak"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.28 p225"
+note = "G73 retract set by G10 P73: posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_tap"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.35 p232"
+note = "floating G84: F (units/min) with S sets the lead"
+
+[[dialect.cite]]
+key = "cycle_ream"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.36 p233"
+note = "G85"
+
+[[dialect.cite]]
+key = "cycle_next"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.27 p223"
+note = "cycles need X and/or Y on each hole"
+
+[[dialect.cite]]
+key = "cycle_cancel"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.27 p223"
+note = "G80"
+
+[[dialect.cite]]
+key = "point"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 12.2 p205; 12.34 p231"
+note = "always a point: integers may be reinterpreted by parameters 245/246"
+
+[[dialect.cite]]
+key = "decimals"
+source = "https://www.centroidcnc.com/centroid_diy/downloads/CNC12-v412_operator_manuals/centroid-cnc12-oak-allin1dc-mill-operator-manual-v4.12.pdf"
+taken = "2026-11-23"
+where = "Centroid M-Series Operator's Manual, CNC12 (Oak/Allin1DC mill), chapters 11-13, CNC12 Version 4.12, (c) 2018; 11.2.3 p192"
+note = "4 decimals written"

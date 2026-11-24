@@ -885,7 +885,7 @@ extrude1 = extrude(s1, 5)
         .unwrap();
     let with_tol = |t: f64| {
         let mut b = base.clone();
-        b.vertices[hair.index()].tol = t;
+        b.grow_vertex_tol(hair, t);
         forge_topo::check(&b)
     };
     let hides = |p: &forge_topo::Problem| matches!(p, forge_topo::Problem::VertexTolerance { .. });

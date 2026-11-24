@@ -142,29 +142,29 @@ inductive surface.Surface where
 | Procedural : surface.Proc → surface.Surface
 
 /-- [forge_geom::intersect::plane_cone::{closure}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1121:19-1121:73 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1165:19-1165:73 -/
 @[reducible]
 def intersect.plane_cone.closure := forge_math.frame.Frame
 
 /-- [forge_geom::intersect::plane_cone::{closure#3}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1186:19-1186:66 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1230:19-1230:66 -/
 def intersect.plane_cone.closure_3 :=
   intersect.plane_cone.closure × forge_math.vec.Vec3 × forge_math.vec.Vec3 ×
   forge_math.vec.UnitVec3
 
 /-- [forge_geom::intersect::plane_cone::{closure#2}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1185:20-1185:73 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1229:20-1229:73 -/
 @[reducible]
 def intersect.plane_cone.closure_2 := forge_math.frame.Frame
 
 /-- [forge_geom::intersect::plane_cone::{closure#1}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1163:36-1171:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1207:36-1215:9 -/
 def intersect.plane_cone.closure_1 :=
   forge_math.vec.Vec3 × F64 × forge_math.vec.UnitVec3 × F64 ×
   forge_math.vec.Point3 × forge_math.frame.Frame
 
 /-- [forge_geom::intersect::plane_torus::{closure}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1101:38-1105:9 -/
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1145:38-1149:9 -/
 def intersect.plane_torus.closure :=
   surface.Torus × forge_math.vec.UnitVec3 × F64 × forge_math.vec.UnitVec3 ×
   F64
