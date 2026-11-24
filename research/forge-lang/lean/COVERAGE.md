@@ -83,6 +83,19 @@ argument it gives is listed), `FamiliesArgs.misspelled_refused`, and for an exte
 `FamiliesArgs.checkArgs_extend` (a built-in that gains arguments takes every call it took) and
 `FamiliesArgs.checkArgs_new`.
 
+An argument's value words (`fit: "H7"`, `seat: "flat"`: strings a built-in checks against a list,
+the lists `not-names` rows below) are not names and not modelled. An extension that takes a value
+it refused before changes no document it accepted. Checked by hand, case by case, for each
+extension so far:
+* `hole(.., fit: CLASS)` without `screw` (CAM-CORE, cam/parity caa8c49a, kept in a `Vec` since 9e215596; `holes.rs`
+  `HOLE_CLASSES`, recorded in `Eval::hole_fits` for CAM's ream plan, the feature unchanged).
+  Before, any `fit:` without `screw` was `NotApplicable`. After:
+  * with `screw`, the same checks;
+  * without `fit:`, the same (`word` gives `None`);
+  * `fit:` without `screw`: a screw's word (close, normal, loose, tap) is still `NotApplicable`;
+    a class is taken; any other string is `UnknownWord`; a non-string is `WrongType`.
+  Only documents refused before can change. GAP: no theorem (values are not in the model).
+
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
 | args | `cam::part` | `#0`, `group`, `material` | `interface/forge-cam-lang/src/lib.rs` `ARGS`; `named_of` refuses any other | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` |
