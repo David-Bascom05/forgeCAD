@@ -71,6 +71,8 @@ impl Placed for Host<'_> {
                 let mut sizing = false;
                 let ir = egui::Area::new(id)
                     .fixed_pos(r.min)
+                    // at the rect, always: content wider than it is clipped, never shifts it
+                    .constrain(false)
                     .order(egui::Order::Middle)
                     .fade_in(false)
                     .show(ctx, |ui| {

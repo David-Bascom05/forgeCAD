@@ -589,8 +589,9 @@ fn knife_boss(x: f64) -> String {
 }
 
 /// Knife edges one after another, each refused plain and built blunted: a retry rebuilding the part
-/// through retries of its own doubled with each (16 took 30 s, 20 over 40). Linear: under a minute in
-/// any profile, however loaded.
+/// through retries of its own doubled with each (16 took 30 s, 20 over 40). That they stay linear is
+/// counted, not timed, in kernel/forge-model/tests/knife_linear.rs (the features stepped, under the
+/// decision log); here they build, both ways, and the time is printed for a person.
 #[test]
 fn many_knife_edges_stay_linear() {
     for bodies in [false, true] {
@@ -615,7 +616,7 @@ b{k} = extrude(boss{k}, 8)
         let b = built(&src);
         b.seq().expect("sequential");
         b.nary(1).expect("n-ary");
-        assert!(t.elapsed().as_secs() < 60, "{:?}", t.elapsed());
+        eprintln!("40 knife edges, bodies {bodies}: {:?}", t.elapsed());
     }
 }
 

@@ -1563,6 +1563,10 @@ impl Gui {
                     world.extend(local);
                 }
             }
+            // what the bend simulation sees through, outlined
+            if self.bend.showing() {
+                world.extend(self.bend.outline_tris(&v.nav.camera, v.size));
+            }
             let solid = match self.shell.camsim.as_deref_mut() {
                 Some(st) if self.shell.tab == crate::shell::CAM_TAB => {
                     gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world)
@@ -1727,6 +1731,9 @@ impl Gui {
         } else {
             Some(delay)
         };
+        // the sketches of the forge-lang runs this frame made on this thread (a tool's quick run,
+        // and in a page with one thread every build): freed between frames, none in use then
+        crate::plat::release_sketches();
         FrameOut {
             platform: output.platform_output,
             host,

@@ -317,6 +317,7 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                         let helix = val(vals, "helix").and_then(|x| x.num());
                         let tc = ToolClass {
                             family: forge_tooling::feeds::family_of_text(&text),
+                            hardness: forge_tooling::feeds::hardness_band_of_text(&text),
                             tier: Some(tier_of(vendor)),
                             flutes: Some(z.max(1)),
                             coated: ToolClass::coated(&coating),
@@ -670,13 +671,14 @@ pub fn generic_table(rows: &[Row], without: Option<&str>) -> Vec<Generic> {
     {
         let tc = ToolClass {
             family: forge_tooling::feeds::family_of_text(&r.material),
+            hardness: forge_tooling::feeds::hardness_band_of_text(&r.material),
             tier: Some(tier_of(&r.vendor)),
             flutes: Some(r.z.max(1)),
             coated: ToolClass::coated(&r.coating),
             helix: r.helix,
         };
         let op = generic_class(&r.op, r.ae, r.d);
-        for keep in forge_tooling::feeds::GENERIC_LEVELS {
+        for keep in forge_tooling::feeds::generic_levels() {
             if let Some(k) = forge_tooling::feeds::generic_key(r.group, op, &tc, keep) {
                 classes.entry(k).or_default().push(r);
             }
@@ -700,11 +702,12 @@ pub fn generic_table(rows: &[Row], without: Option<&str>) -> Vec<Generic> {
         out.push(Generic {
             group: f[0].into(),
             family: f[1].into(),
-            op: f[2].into(),
-            tier: f[3].into(),
-            flutes: f[4].parse().unwrap_or(0),
-            coating: f[5].into(),
-            helix: f[6].into(),
+            hardness: f[2].into(),
+            op: f[3].into(),
+            tier: f[4].into(),
+            flutes: f[5].parse().unwrap_or(0),
+            coating: f[6].into(),
+            helix: f[7].into(),
             n: sel.len(),
             makers,
             vc,
@@ -732,9 +735,10 @@ pub fn generic_toml(table: &[Generic]) -> String {
     };
     for g in table {
         s.push_str(&format!(
-            "\n[[generic]]\ngroup = \"{}\"\nfamily = \"{}\"\nop = \"{}\"\ntier = \"{}\"\nflutes = {}\ncoating = \"{}\"\nhelix = \"{}\"\nn = {}\nmakers = [{}]\nvc = {}\nchip = {}\nreal = true\n",
+            "\n[[generic]]\ngroup = \"{}\"\nfamily = \"{}\"\nhardness = \"{}\"\nop = \"{}\"\ntier = \"{}\"\nflutes = {}\ncoating = \"{}\"\nhelix = \"{}\"\nn = {}\nmakers = [{}]\nvc = {}\nchip = {}\nreal = true\n",
             g.group,
             g.family,
+            g.hardness,
             g.op,
             g.tier,
             g.flutes,
@@ -785,6 +789,7 @@ pub fn generic_held_out(rows: &[Row]) -> Vec<(usize, f64, Option<f64>, String)> 
         {
             let tc = ToolClass {
                 family: forge_tooling::feeds::family_of_text(&r.material),
+            hardness: forge_tooling::feeds::hardness_band_of_text(&r.material),
                 tier: Some(tier_of(&r.vendor)),
                 flutes: Some(r.z.max(1)),
                 coated: ToolClass::coated(&r.coating),

@@ -34,10 +34,19 @@ pub mod look {
     /// Solid carbide: RENDER-STUDIO's "Carbide" (a marked stand-in: tungsten's F0
     /// [0.537, 0.536, 0.519]) at DIFFUSE; the fluted length a shade darker than the shank
     pub const SHANK: [f32; 3] = [0.537 * DIFFUSE, 0.536 * DIFFUSE, 0.519 * DIFFUSE];
-    pub const CUTTER: [f32; 3] = [SHANK[0] * 0.72, SHANK[1] * 0.72, SHANK[2] * 0.72];
+    pub const CUTTER: [f32; 3] = [SHANK[0] * 0.5, SHANK[1] * 0.5, SHANK[2] * 0.5];
+    /// A TiN coating's gold and an AlTiN-family coating's dark violet grey (their usual colours,
+    /// stand-ins until the appearance library has coatings), at DIFFUSE
+    pub const COAT_TIN: [f32; 3] = [0.83 * DIFFUSE, 0.62 * DIFFUSE, 0.22 * DIFFUSE];
+    pub const COAT_ALTIN: [f32; 3] = [0.16 * DIFFUSE, 0.14 * DIFFUSE, 0.18 * DIFFUSE];
+    /// High-speed steel: RENDER-STUDIO's "Tool steel, ground" stand-in, a brighter steel than
+    /// carbide's grey
+    pub const HSS: [f32; 3] = [0.56 * DIFFUSE, 0.56 * DIFFUSE, 0.57 * DIFFUSE];
     /// Machined steel: RENDER-STUDIO's "Steel, machined" (F0 [0.53, 0.513, 0.494]) at DIFFUSE
     pub const HOLDER: [f32; 3] = [0.53 * DIFFUSE, 0.513 * DIFFUSE, 0.494 * DIFFUSE];
     pub const FIXTURE: [f32; 3] = HOLDER;
+    /// A collet nut: the holder's steel a shade darker, so it reads apart from the body
+    pub const NUT: [f32; 3] = [HOLDER[0] * 0.7, HOLDER[1] * 0.7, HOLDER[2] * 0.7];
     pub const PART: [f32; 3] = rgb(0x8FA6BF);
     pub const LEFTOVER: [f32; 3] = rgb(0xF08A24);
     pub const FAIL: [f32; 3] = rgb(0xF03A3A);
@@ -413,43 +422,7 @@ pub fn tool(shape: &Shape, p: [f64; 3], fail: bool, out: &mut Vec<WorldVert>) {
             Part::NonCutting => look::SHANK,
         };
         let base = if fail { look::FAIL } else { base };
-        // the profile as a polyline in (ρ, z)
-        let mut prof: Vec<[f64; 2]> = vec![];
-        for s in &b.chain {
-            match *s {
-                PSeg::Line { a, b } => {
-                    if prof.last() != Some(&a) {
-                        prof.push(a);
-                    }
-                    prof.push(b);
-                }
-                PSeg::Arc { a, b, c, r, ccw } => {
-                    let a0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
-                    let mut a1 = dmath::atan2(b[1] - c[1], b[0] - c[0]);
-                    let tau = std::f64::consts::TAU;
-                    if ccw {
-                        while a1 < a0 {
-                            a1 += tau;
-                        }
-                    } else {
-                        while a1 > a0 {
-                            a1 -= tau;
-                        }
-                    }
-                    if prof.last() != Some(&a) {
-                        prof.push(a);
-                    }
-                    for k in 1..=8 {
-                        let t = a0 + (a1 - a0) * k as f64 / 8.0;
-                        prof.push(if k == 8 {
-                            b
-                        } else {
-                            [c[0] + r * dmath::cos(t), c[1] + r * dmath::sin(t)]
-                        });
-                    }
-                }
-            }
-        }
+        let prof = profile(b);
         for w in prof.windows(2) {
             let (q0, q1) = (w[0], w[1]);
             if q0 == q1 {
@@ -704,4 +677,45 @@ impl Values {
             (f32::INFINITY, look::OVER, "> 150° (slotting)".into()),
         ]
     }
+}
+
+/// A tool body's profile as a polyline in (ρ, z), its arcs in short chords.
+pub fn profile(b: &forge_cam_geom::tool::Body) -> Vec<[f64; 2]> {
+    let mut prof: Vec<[f64; 2]> = vec![];
+    for s in &b.chain {
+        match *s {
+            PSeg::Line { a, b } => {
+                if prof.last() != Some(&a) {
+                    prof.push(a);
+                }
+                prof.push(b);
+            }
+            PSeg::Arc { a, b, c, r, ccw } => {
+                let a0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
+                let mut a1 = dmath::atan2(b[1] - c[1], b[0] - c[0]);
+                let tau = std::f64::consts::TAU;
+                if ccw {
+                    while a1 < a0 {
+                        a1 += tau;
+                    }
+                } else {
+                    while a1 > a0 {
+                        a1 -= tau;
+                    }
+                }
+                if prof.last() != Some(&a) {
+                    prof.push(a);
+                }
+                for k in 1..=8 {
+                    let t = a0 + (a1 - a0) * k as f64 / 8.0;
+                    prof.push(if k == 8 {
+                        b
+                    } else {
+                        [c[0] + r * dmath::cos(t), c[1] + r * dmath::sin(t)]
+                    });
+                }
+            }
+        }
+    }
+    prof
 }

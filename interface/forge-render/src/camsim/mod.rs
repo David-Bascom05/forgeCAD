@@ -10,6 +10,7 @@
 pub mod draw;
 pub mod machine;
 pub mod timeline;
+pub mod tools;
 pub mod zmap;
 
 use forge_cam_lang::Cam;
@@ -61,6 +62,8 @@ pub struct Sim {
     pub setups: Vec<SimSetup>,
     /// Per tool (`Cam::sim_tools` index): its cutting envelope, if its profile has one.
     pub cutters: Vec<Option<Cutter>>,
+    /// Each tool as drawn (fluted cutter, neck, shank, holder), meshed once: display only.
+    pub looks: Vec<tools::ToolLook>,
     /// Per tool: its shank and holder's lowest envelope (the non-cutting bodies).
     pub holders: Vec<Option<Cutter>>,
     /// Per setup: the part's triangles in that setup's frame (empty if it could not be built).
@@ -96,6 +99,12 @@ impl Sim {
         let tl = Timeline::of(&cam);
         let setups = cam.sim_setups();
         let cutters = cam.sim_tools().iter().map(|t| Cutter::of(&t.shape)).collect();
+        let helix = tools::helices();
+        let looks = cam
+            .sim_tools()
+            .iter()
+            .map(|t| tools::build(t, helix.get(&t.tool.id).copied()))
+            .collect();
         let holders = cam
             .sim_tools()
             .iter()
@@ -106,6 +115,7 @@ impl Sim {
             tl,
             setups,
             cutters,
+            looks,
             holders,
             part_tris,
             part_maps: vec![],
@@ -424,14 +434,7 @@ impl Sim {
                     verdict: c.verdict.to_string(),
                     at: c.at,
                     t,
-                    text: format!(
-                        "{} {} — {} {} at move {} ({}): {:.4} vs {:.4} mm",
-                        op.name, c.rule, c.tool_part, c.verdict, c.move_index, c.phase, c.value, c.limit
-                    ) + &if c.other.is_empty() {
-                        String::new()
-                    } else {
-                        format!(" on {}", c.other)
-                    },
+                    text: format!("{}: {}", op.name, check_sentence(c)),
                     region: None,
                 });
             }
@@ -517,4 +520,104 @@ pub fn part_triangles(s: &SimSetup) -> Vec<[[f64; 3]; 3]> {
             v
         })
         .collect()
+}
+
+/// A failed check in words: who meets what, on which motion, how far (rounded, with units).
+/// "Holder hits the stock on the plunge at move 3 (2.75 mm into it)".
+pub fn check_sentence(c: &forge_cam::ops::CheckOut) -> String {
+    let who = match c.tool_part {
+        "" => "The tool".to_string(),
+        p => {
+            let mut w = p.replace('_', " ");
+            if let Some(f) = w.get(0..1) {
+                w = f.to_uppercase() + &w[1..];
+            }
+            w
+        }
+    };
+    let what = {
+        let o = c.other.to_ascii_lowercase();
+        if o.starts_with("stock") {
+            "the stock".to_string()
+        } else if o.starts_with("part") {
+            "the part".to_string()
+        } else if o.contains("fixture")
+            || o.contains("vise")
+            || o.contains("clamp")
+            || o.contains("workholding")
+        {
+            "the workholding".to_string()
+        } else if o.is_empty() {
+            "the part".to_string()
+        } else {
+            c.other.clone()
+        }
+    };
+    let phase = match c.phase {
+        "" => String::new(),
+        p => format!(" on the {}", p.replace('_', " ")),
+    };
+    let mm = |v: f64| format!("{:.2} mm", v.abs());
+    if c.value < -0.005 {
+        format!(
+            "{who} hits {what}{phase} at move {} ({} into it)",
+            c.move_index,
+            mm(c.value)
+        )
+    } else if c.value < 0.005 {
+        format!(
+            "{who} touches {what}{phase} at move {} (needs {} clear)",
+            c.move_index,
+            mm(c.limit)
+        )
+    } else {
+        format!(
+            "{who} comes {} from {what}{phase} at move {} (needs {})",
+            mm(c.value),
+            c.move_index,
+            mm(c.limit)
+        )
+    }
+}
+
+/// A run's message tidied for a person: a parser's `NotPrism { face: 38 }` said in words and
+/// numbers with long tails rounded to 3 decimals. The message itself stays on hover.
+pub fn tidy(msg: &str) -> String {
+    // a leading op key ("thread_mill: ...") is the run's, not a sentence's
+    let msg = match msg.split_once(": ") {
+        Some((k, rest)) if !k.is_empty() && k.chars().all(|c| c.is_ascii_lowercase() || c == '_') => {
+            let mut r = rest.to_string();
+            if let Some(f) = r.get(0..1) {
+                r = f.to_uppercase() + &r[1..];
+            }
+            r
+        }
+        _ => msg.to_string(),
+    };
+    let s = msg
+        .replace("NotPrism { face: ", "isn't a prism (face ")
+        .replace(" }", ")");
+    let mut out = String::with_capacity(s.len());
+    let cs: Vec<char> = s.chars().collect();
+    let mut i = 0;
+    while i < cs.len() {
+        let start = i;
+        let neg = cs[i] == '-' && i + 1 < cs.len() && cs[i + 1].is_ascii_digit();
+        if cs[i].is_ascii_digit() || neg {
+            i += 1;
+            while i < cs.len() && (cs[i].is_ascii_digit() || cs[i] == '.') {
+                i += 1;
+            }
+            let tok: String = cs[start..i].iter().collect();
+            let decimals = tok.split_once('.').map_or(0, |(_, d)| d.len());
+            match tok.parse::<f64>() {
+                Ok(v) if decimals > 3 => out.push_str(&format!("{v:.3}")),
+                _ => out.push_str(&tok),
+            }
+        } else {
+            out.push(cs[i]);
+            i += 1;
+        }
+    }
+    out
 }

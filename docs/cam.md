@@ -60,7 +60,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:, leave_axial:)` | zig-zag over the stock down to `to` |
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, leave_axial:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
-| `adaptive(SETUP, tool:, from:, to:, step:, engagement:, step_length:, leave:, sweep:, passes:)` | **opt-in, never the default**: roughing around the part (clear's region) with the radial engagement held under one cap (`engagement`, degrees, default 60) by simulating the cleared area step by step. Passes are one-direction peels within 75° of `sweep` (degrees from +x), or with `passes: "two_way"` a zigzag across the sweep. Links stay at depth where the cleared area allows: straight, or back along what the tool already cut at that depth then straight (within a fixed length cap), else a retract. Then plain offset rings only where material is left, and a wall pass. Closed pockets are not offered (use `pocket`). **A tool-load option, not a time-saver: it reduces and steadies tool load (engagement capped); check cycle time on your machine.** Measured on our benchmark (verify/forge-cam-quality, deep_boss: an open level 2.5 D deep, Ø6, generic-vmc3): it cuts faster than clear (steel t_min 399 s two-way vs 462 s) but its path has about 5× the moves, 3× the sharp corners and about 90 retracts against 3, so on a jerk-limited machine model it was slower than clear: +5 to +14 % in steel, +21 to +42 % in aluminium (four acceleration/jerk sets fitted from a Spinner U5-620's logs). On shallow levels and thin bands round an island (RPTU parts) clear is faster too. The voids it claims are only cells provably inside the tool's flat end's sweep |
+| `adaptive(SETUP, tool:, from:, to:, step:, engagement:, step_length:, leave:, sweep:, passes:)` | **opt-in, never the default**: roughing around the part (clear's region) with the radial engagement held under one cap (`engagement`, degrees, default 60) by simulating the cleared area step by step, so the full flute can cut at a steady load. Passes are one-direction peels within 75° of `sweep` (degrees from +x), or with `passes: "two_way"` a zigzag across the sweep; a pass curves no tighter than the tool's radius. Where a sweep stops with material left away from the walls, the level is swept again from the other directions; anything still left is reported as a warning. Links stay at depth where the cleared area allows (straight, back along the pass, or through the cleared area) and run at a link feed just under the machine's limit; else a low retract just over the stock. Then plain offset rings where material is left, and a wall pass. Closed pockets are not offered (use `pocket`). **It reduces and steadies tool load. On deep open levels (≥ 2 D) it was faster than clear on our jerk-limited benchmark in steel (2–44 %) and on an open slot in aluminium (27–39 %); round several islands, on shallow levels and on deep_boss in aluminium it was slower** (table below). Check cycle time on your machine. The voids it claims are only cells provably inside the tool's flat end's sweep |
 | `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:, lead:, lead_radius:, lead_sweep:, lead_length:, entry:, overlap:, tabs:, tab_spacing:, tab_at:, tab_width:, tab_height:, tab_shape:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, leave_axial:, ramp:)` | a hole feature's circle, to its depth |
 | `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, leave_axial:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
@@ -163,10 +163,11 @@ the tool's finish preset's ae where wider) finish, else rough; the rest general.
 kernel/forge-tooling/data/generic.toml (generated from the makers' cited rows by
 verify/feeds-vs-makers, `cargo run -p feeds-vs-makers -- --generic`): a class is material group ×
 material family (the part's forge-material family: N splits aluminium / copper, S titanium /
-nickel) × op class × maker tier (material-specific / general-purpose, an estimate from the
+nickel) × hardness band (soft up to 98 HRB, 21–36 HRC, 36–50 HRC: the makers' printed classes,
+an unmarked row counted soft; the part's from its record's cited hardness) × op class × maker tier (material-specific / general-purpose, an estimate from the
 makers' product lines) × flutes × coating × helix band, written only with ≥ 10 rows from ≥ 2
 makers; where the tool's class has fewer, the lookup opens helix, then tier, coating, flutes, op
-class, and last the family (the note names the class used). A part that names only its group
+class; the material (family, then hardness) is kept longest (the note names the class used). A part that names only its group
 gets the whole group (in N, copper's speeds among them). P10, not the median, because the costs are asymmetric: too fast breaks tools, too
 slow only costs time. Speed is the class's P10 speed; the chip is the class's P10 slot chip relative to
 the group's slot chip at the diameter; a rough or finish op's factor is the class's own P10
@@ -252,6 +253,27 @@ the top and the outline down to just above the jaws; `soft_jaw(.., from: op1)` m
 op1 left; `opj` cuts the jaws' pocket; op2 holds the part turned over in them and cuts the rest.
 Edit the part and every step follows: the jaws are recomputed from the new outline.
 
+### Adaptive against clear: measured
+
+verify/forge-cam-quality, rough op only, Ø6 flat end mill on generic-vmc3, every level cleared to
+the same volume as clear (tests/guards.rs checks it) with the chip at its target. Time under
+CAM-MACHINE's jerk-limited planner (`plan_scurve`) with four acceleration/jerk sets fitted from a
+Spinner U5-620's logs (750/2e4, 500/5e4, 3000/1e4, 250/1e6 mm/s², mm/s³), against clear's time:
+
+| part (level) | material | adaptive one-way | adaptive two-way |
+|---|---|---|---|
+| deep_boss (open, round a boss, 14.8 mm) | steel (P) | −11.4 / −10.2 / −8.6 / −2.3 % | −14.3 / −12.5 / −12.4 / −3.0 % |
+| deep_open_slot (12 wide, 15 deep) | steel | −44.2 / −44.4 / −42.9 / −42.0 % | −43.7 / −43.1 / −42.7 / −39.0 % |
+| deep_islands (round three islands, 15 deep) | steel | +22 / +23 / +26 / +33 % | +42 / +45 / +48 / +65 % |
+| deep_boss | aluminium (N) | +5.3 / +7.5 / +10.2 / +21.5 % | +4.8 / +8.3 / +8.2 / +24.7 % |
+| deep_open_slot | aluminium | −38.2 / −38.5 / −35.9 / −34.4 % | −34.9 / −33.9 / −33.2 / −27.3 % |
+| deep_islands | aluminium | +46 / +48 / +55 / +67 % | +83 / +89 / +94 / +123 % |
+
+On shallow levels (the RPTU parts, 4 mm) clear is faster. Each pass is posted as long arcs and
+lines with one feed each: on deep_boss 1,040 blocks one-way and 941 two-way (mean move 10.9 and
+13.5 mm) against clear's 1,171 (5.5 mm); on deep_open_slot 162 against 389. These are simulations, not machine trials; the planner has
+no block-rate limit.
+
 ## Probing
 
 A touch probe is a tool that cuts nothing, and probing ops measure with it.
@@ -291,7 +313,13 @@ contact, as if the probe never triggered. Every body of the probe keeps the setu
 from the part and the stock on every move. The one exception is the ball inside the contact
 window, from `entry` before the contact to `over` past it. A probe is never spun. It posts as
 the dialect's cited probe move: G38.2 on linuxcnc and grbl, then a move straight back to where
-the search started. A control with no openly published probe move refuses the program. The
+the search started. On a control whose probing macros are cited instead (Haas: Renishaw Inspection Plus,
+H-2000-6222), a probe path is written with them: the probe switched on (G65 P9832), every feed
+move a protected positioning move (P9810), each probe move a single-surface measure (P9811, Q
+the overtravel, S the work offset for a `surface` probe with `wcs:`, so `sets_wcs` is true
+there), then switched off (P9833) and Z home, as the macros require. A probe move not along X, Y
+or Z cannot be a single-surface measure and is refused. A control with neither refuses the
+program. The
 reply's op carries `probe`: the kind, what it measures, its points (each surface point and the
 direction of travel), the work offset, `sets_wcs` (false: a G38.2 post leaves the result in
 the control's variables and writes no offset), and the inspection's nominal and tolerance.

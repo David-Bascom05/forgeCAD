@@ -102,8 +102,11 @@ function openDialog() {
     }
     await importFiles(got);
     d.close();
-    const first = got.map((f) => cleanPath(f.path)).find((p) => /\.(fg|dwg)$/i.test(p));
+    const paths = got.map((f) => cleanPath(f.path));
+    const first = paths.find((p) => /\.(fg|dwg)$/i.test(p));
     if (first) fc.app_open(`${MOUNT}/${first}`);
+    // nothing to open (a STEP model, a font: read by a part): said, not silently added
+    else if (paths.length) fc.app_say(`Added ${paths.length > 3 ? `${paths.length} files` : paths.join(", ")} to the project`);
   };
   d.querySelector("#forge-open-file").onchange = (e) => take(e.target, false);
   d.querySelector("#forge-open-dir").onchange = (e) => take(e.target, true);
@@ -138,7 +141,7 @@ let mirror = null;
 const problems = [];
 // the app's own settings and state (`/home`): kept in this browser, whatever serves the files
 const home = store ? new Mirror(await localBackend("_app"), "/home", fc, (e) => console.error(`forge-app: ${e}`)) : null;
-// a photo or a recording, handed to the person (gui_record.rs)
+// a file the app made (a photo, a recording, File > Export STL / 3MF / OBJ), to the downloads
 window.forge_download = (name, bytes) => download(name, new Blob([bytes.slice()]));
 
 // MP4 recording (gui_record.rs, record/web.rs): WebCodecs' H.264 encoder, its frames handed back
@@ -258,20 +261,39 @@ window.forge_export = async (json) => {
   download(fname, blob);
   window.forge_exported = fname;
 };
-// File > Export STL / 3MF / OBJ: the file the app made, to the browser's downloads
-window.forge_download = (name, bytes) => download(name, new Blob([bytes]));
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
-  if (n) fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
+  if (!n) return;
+  // a name outside the project is refused, and the app says so (it threw, and nothing said)
+  try {
+    fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
+  } catch {
+    // (cleanPath refuses only a path that climbs out with `..`)
+    fc.app_say(`Couldn't save as ${n}: it isn't in this project.`);
+  }
 };
-const asked = q.get("open");
-// the app first, with the part asked for: the project's other files follow behind its first frame
-// (hundreds of them took a round trip each before it showed)
-await Promise.all([home?.load(), asked && mirror?.loadOne(cleanPath(asked))]);
+// the link's file, when it is a path the project may hold; else the app starts with none and
+// says why (`?open=../x` threw here, before the app started: a dead page)
+let asked = null;
+let refused = null;
+if (q.get("open")) {
+  try {
+    asked = cleanPath(q.get("open"));
+  } catch {
+    refused = `Couldn't open ${q.get("open")}: it isn't in this project.`;
+  }
+}
+// the app first: the project's files follow behind its first frame (hundreds of them took a
+// round trip each before it showed). A linked file opens once they have all come: opened before,
+// what it reads (a machining document's part, a drawing's) was missing from its first build
+// ("0/5 ops certified" on a good part, its export refused, until a rebuild)
+await home?.load();
 // ?noapp: the files and the kernel only, no canvas (the parity test)
 if (!q.has("noapp")) {
-  fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
-  if (q.get("env")) fc.app_env(q.get("env"));
+  fc.start_app(undefined, q.get("offscreen") ?? undefined);
+  if (asked) fc.app_say("Loading project…");
+  else if (q.get("env")) fc.app_env(q.get("env"));
+  if (refused) fc.app_say(refused);
 }
 say("started");
 const loaded = (async () => {
@@ -286,9 +308,10 @@ const loaded = (async () => {
   }
   if (q.has("noapp")) return;
   if (asked) {
-    // what the part reads (an assembly's parts, a font) may have come since its first build
-    fc.app_rebuild();
-  } else {
+    fc.app_open(`${MOUNT}/${asked}`);
+    if (q.get("env")) fc.app_env(q.get("env"));
+  } else if (!refused) {
+    // (a link refused: nothing else opened in its place, the status saying why)
     const first = files().filter((p) => p.endsWith(".fg")).sort()[0];
     if (first) fc.app_open(`${MOUNT}/${first}`);
   }

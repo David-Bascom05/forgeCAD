@@ -1360,10 +1360,20 @@ pub fn zlevel_voids(
     // the part's material above each level exactly, where its faces are prisms (each band
     // between face heights one section); else the CL grid's cells
     let bands = prism_bands(sf.faces, bottom - sf.leave);
+    // off it, the contours are traced with the tool grown 2·tol more: each traced piece then
+    // has that much room to be proven at tol/2 (a contour exactly at the tool's tangency to a
+    // curved face, its rim on a fillet, leaves the proof none), for at most that much left
+    let wide;
+    let sg: &Surfacer = if bands.is_some() {
+        sf
+    } else {
+        wide = Surfacer::new(sf.faces, &sf.cutter, sf.leave + 2.0 * sf.tol, sf.tol, sf.floor)?;
+        &wide
+    };
     let g = if bands.is_some() {
         None
     } else {
-        Some(ClGrid::new(sf, area, h)?)
+        Some(ClGrid::new(sg, area, h)?)
     };
     let mut runs: Vec<([f64; 3], Vec<PMove>)> = Vec::new();
     let mut voids = Vec::new();
@@ -1387,7 +1397,7 @@ pub fn zlevel_voids(
     // off the prism route: each level's blocked region bounded by its traced contours (the
     // waterline's, to within res of the CL = z contour on the free side), where they close
     let traced = match &g {
-        Some(g) => traced_blocked(sf, g, &zs, h)?,
+        Some(g) => traced_blocked(sg, g, &zs, h)?,
         None => Vec::new(),
     };
     // each level on its own (its blocked region, free region, void and passes depend on no other

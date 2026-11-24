@@ -202,6 +202,7 @@ dependencies = [
  "forge-dirs",
  "forge-geom",
  "forge-import",
+ "forge-keep",
  "forge-lang",
  "forge-machine-builder",
  "forge-machine-lang",
@@ -215,6 +216,7 @@ dependencies = [
  "forge-topo",
  "forge-turn-lang",
  "forge-urdf",
+ "forge-wall",
  "forge-workholding-builder",
 ]
 
@@ -352,6 +354,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-keep"
+version = "0.1.0"
+
+[[package]]
 name = "forge-lang"
 version = "0.1.0"
 dependencies = [
@@ -367,6 +373,7 @@ dependencies = [
  "forge-git",
  "forge-harness",
  "forge-history",
+ "forge-keep",
  "forge-material",
  "forge-math",
  "forge-mesh",
@@ -449,6 +456,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-num",
  "forge-par",
 ]
 
@@ -494,6 +502,10 @@ dependencies = [
  "forge-sketch",
  "forge-topo",
 ]
+
+[[package]]
+name = "forge-num"
+version = "0.1.0"
 
 [[package]]
 name = "forge-ops"
@@ -737,6 +749,17 @@ dependencies = [
  "forge-dirs",
  "forge-material",
  "forge-sheet",
+]
+
+[[package]]
+name = "forge-wall"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-topo",
 ]
 
 [[package]]

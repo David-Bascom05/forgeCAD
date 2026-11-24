@@ -2457,11 +2457,7 @@ impl<'s> Eval<'s> {
         r?;
         {
             let mut skb = sk.borrow_mut();
-            // kept without a strong way back to this sketch (`sketch::detach`)
-            let mut named: Vec<(String, Value)> = scope
-                .into_iter()
-                .map(|(k, (v, _))| (k, crate::sketch::detach(v, &sk)))
-                .collect();
+            let mut named: Vec<(String, Value)> = scope.into_iter().map(|(k, (v, _))| (k, v)).collect();
             named.sort_by(|a, b| a.0.cmp(&b.0));
             skb.named = named;
         }
@@ -2492,6 +2488,9 @@ impl<'s> Eval<'s> {
         let last = self.feats.last_mut().expect("pushed");
         last.frame = Some(sk.borrow().frame);
         last.reads.extend(reads);
+        // kept for the app to free between builds (`forge_keep`; a sketch with a named entity is
+        // an Rc cycle, and a run frees nothing)
+        forge_keep::keep(sk.clone());
         Ok(Value::Sketch(sk))
     }
 

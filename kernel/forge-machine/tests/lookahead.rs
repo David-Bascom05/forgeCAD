@@ -319,7 +319,12 @@ fn the_program_estimates_count_tool_changes_and_dwells() {
     // two dwells (5 s) and two changes: off the segments, and counted once each
     assert!(off >= 5.0 + 2.0 * change - 1e-9, "{off}");
     assert!(tl.t_min <= tl.t_la + 1e-9, "t_min {} t_la {}", tl.t_min, tl.t_la);
-    assert!(tl.t_min <= tl.t_scurve + 1e-9, "t_min {} t_scurve {}", tl.t_min, tl.t_scurve);
+    assert!(
+        tl.t_min <= tl.t_scurve + 1e-9,
+        "t_min {} t_scurve {}",
+        tl.t_min,
+        tl.t_scurve
+    );
     let la: f64 = tl.seg_la.iter().sum();
     let sc: f64 = tl.seg_scurve.iter().sum();
     assert!(close(tl.t_la, la + off), "{} vs {}", tl.t_la, la + off);
@@ -341,7 +346,12 @@ fn a_block_cycle_holds_each_block_to_one_cycle() {
     let m = no_accel(m);
     let base = lookahead::SCurve::default();
     let on_moves = |per: &[f64]| -> f64 {
-        tl.segments.iter().zip(per).filter(|(g, _)| g.line >= 5).map(|(_, t)| *t).sum()
+        tl.segments
+            .iter()
+            .zip(per)
+            .filter(|(g, _)| g.line >= 5)
+            .map(|(_, t)| *t)
+            .sum()
     };
     let free = on_moves(&lookahead::plan_scurve(&m, &tl, &base).0);
     let cyc = lookahead::SCurve {
@@ -349,11 +359,23 @@ fn a_block_cycle_holds_each_block_to_one_cycle() {
         ..base
     };
     let (per, total) = lookahead::plan_scurve(&m, &tl, &cyc);
-    let moves: Vec<f64> = tl.segments.iter().zip(&per).filter(|(g, _)| g.line >= 5).map(|(_, t)| *t).collect();
+    let moves: Vec<f64> = tl
+        .segments
+        .iter()
+        .zip(&per)
+        .filter(|(g, _)| g.line >= 5)
+        .map(|(_, t)| *t)
+        .collect();
     assert_eq!(moves.len(), n);
     assert!(moves.iter().all(|t| *t >= 0.004 - 1e-12), "{:?}", &moves[..5]);
-    assert!(total >= n as f64 * 0.004 && on_moves(&per) >= n as f64 * 0.004, "{total}");
-    assert!(free < n as f64 * 0.004, "{free}: the test needs blocks faster than the cycle");
+    assert!(
+        total >= n as f64 * 0.004 && on_moves(&per) >= n as f64 * 0.004,
+        "{total}"
+    );
+    assert!(
+        free < n as f64 * 0.004,
+        "{free}: the test needs blocks faster than the cycle"
+    );
     // the record's keys reach the program estimate
     let mut m2 = m.clone();
     m2.block_cycle = Some(0.004);
@@ -383,7 +405,10 @@ fn a_shallow_look_ahead_slows_short_moves() {
         .1
     };
     let (all, w50, w5, w1) = (t(None), t(Some(50)), t(Some(5)), t(Some(1)));
-    assert!(all <= w50 + 1e-12 && w50 <= w5 + 1e-12 && w5 <= w1 + 1e-12, "{all} {w50} {w5} {w1}");
+    assert!(
+        all <= w50 + 1e-12 && w50 <= w5 + 1e-12 && w5 <= w1 + 1e-12,
+        "{all} {w50} {w5} {w1}"
+    );
     assert!(w1 > 1.5 * all, "{w1} vs {all}");
     // a window as long as the run is the whole run
     assert!(close(t(Some(1000)), all));
@@ -396,7 +421,12 @@ fn the_record_keys_parse_and_refuse() {
     let with = |extra: &str| format!("{}{}\n{}", &src[..i], extra, &src[i..]);
     let ok = forge_machine::MachineDef::parse_all(&with("block_cycle = 0.002\nlookahead = 150")).unwrap();
     assert_eq!((ok[0].block_cycle, ok[0].lookahead), (Some(0.002), Some(150)));
-    for bad in ["block_cycle = 0", "block_cycle = -1", "lookahead = 0", "lookahead = 2.5"] {
+    for bad in [
+        "block_cycle = 0",
+        "block_cycle = -1",
+        "lookahead = 0",
+        "lookahead = 2.5",
+    ] {
         assert!(forge_machine::MachineDef::parse_all(&with(bad)).is_err(), "{bad}");
     }
 }
