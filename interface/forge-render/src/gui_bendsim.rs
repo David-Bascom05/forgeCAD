@@ -113,6 +113,10 @@ pub const XRAY_BLUE: [f32; 3] = [0.3, 0.46, 0.75];
 pub const XRAY_MIX: f32 = 0.3;
 pub const XRAY_LINE: [f32; 3] = [0.045, 0.11, 0.3];
 
+/// The profile view's yaw and pitch (degrees): looking along +y, down the bend line.
+pub const PROFILE_YAW: f32 = 262.0;
+pub const PROFILE_PITCH: f32 = 12.0;
+
 /// Frames a body must block the bend for, running, before it starts to fade (hysteresis).
 pub const FADE_AFTER: u8 = 3;
 /// Frames a fade in or out takes (about 150 ms at 60 frames a second).
@@ -231,6 +235,7 @@ pub fn framing(
     envelope: Option<([f32; 3], [f32; 3])>,
     how: Framing,
     handling: bool,
+    profile: bool,
     size: (u32, u32),
 ) -> Option<(crate::camera::Camera, [f32; 3], [f32; 3])> {
     let (mut lo, mut hi) = match envelope {
@@ -292,9 +297,13 @@ pub fn framing(
     ];
     let radius = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
     let mut cam = crate::camera::Camera::fit(center, radius);
-    let (yaw, pitch) = match how {
-        Framing::Work => (215f32, 28f32),
-        Framing::Overview => (220f32, 20f32),
+    // the working view three-quarter from the operator's side and above; or (profile) end on,
+    // down the bend line from the bed's end, a little toward the operator and above: the bend's
+    // profile, as press-brake simulations show it (David to choose)
+    let (yaw, pitch) = match (how, profile) {
+        (Framing::Work, false) => (215f32, 28f32),
+        (Framing::Work, true) => (PROFILE_YAW, PROFILE_PITCH),
+        (Framing::Overview, _) => (220f32, 20f32),
     };
     cam.yaw = yaw.to_radians();
     cam.pitch = pitch.to_radians();
@@ -412,85 +421,126 @@ pub fn cutaway(
         .collect()
 }
 
-/// Where on the screen the bend being made and the punch's contact are, grown by a small
-/// margin (normalised device coordinates: xmin, xmax, ymin, ymax), and how far from the eye
-/// they begin (clip w): a body with something nearer than that inside it hides the bend.
-pub fn xray_window(bodies: &[Body], m: &[f32; 16]) -> Option<([f32; 4], f32)> {
-    let zone = bounds(
-        bodies
-            .iter()
-            .filter(|x| x.look == Look::BendZone)
-            .map(|x| &x.mesh),
-    )?;
-    let (lo, hi) = zone;
-    let mut aims: Vec<[f32; 3]> = (0..8)
-        .map(|k| [0, 1, 2].map(|i| if k >> i & 1 == 0 { lo[i] } else { hi[i] }))
-        .collect();
-    for x in bodies
+/// What the user watches (David): points on the bend being made (the zone's top, along it),
+/// on the punch tip where it meets the sheet, and on any check's witness. A body is seen through
+/// only where it stands between the eye and these.
+pub fn roi_samples(bodies: &[Body]) -> Vec<[f32; 3]> {
+    // up to `n` of a mesh's points, spread along its length (y: along the bed)
+    fn spread(pts: Vec<[f32; 3]>, n: usize) -> Vec<[f32; 3]> {
+        if pts.len() <= n {
+            return pts;
+        }
+        let mut pts = pts;
+        pts.sort_by(|a, b| {
+            a[1].total_cmp(&b[1])
+                .then(a[2].total_cmp(&b[2]))
+                .then(a[0].total_cmp(&b[0]))
+        });
+        (0..n).map(|k| pts[k * (pts.len() - 1) / (n - 1)]).collect()
+    }
+    let mut out = Vec::new();
+    out.extend(spread(zone_top(bodies), 48));
+    // the tip's contact edge: its points within a millimetre of its lowest
+    let tips: Vec<&Body> = bodies
         .iter()
         .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
+        .collect();
+    if let Some(low) = tips
+        .iter()
+        .flat_map(|x| x.mesh.pos.iter())
+        .map(|p| p[2])
+        .reduce(f32::min)
     {
-        if let Some(p) = x.mesh.pos.iter().min_by(|a, b| a[2].total_cmp(&b[2])) {
-            aims.push(*p);
-        }
+        let edge: Vec<[f32; 3]> = tips
+            .iter()
+            .flat_map(|x| x.mesh.pos.iter().copied())
+            .filter(|p| p[2] <= low + 1.0)
+            .collect();
+        out.extend(spread(edge, 16));
     }
-    let clip = |p: [f32; 3], r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
-    let (mut x0, mut x1, mut y0, mut y1, mut w0) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN, f32::MAX);
-    for p in &aims {
-        let w = clip(*p, 3);
-        if w <= 1e-6 {
-            return None;
-        }
-        let (x, y) = (clip(*p, 0) / w, clip(*p, 1) / w);
-        x0 = x0.min(x);
-        x1 = x1.max(x);
-        y0 = y0.min(y);
-        y1 = y1.max(y);
-        w0 = w0.min(w);
-    }
-    // a margin round it: a tenth of its size, at least a fiftieth of the view
-    let (mx, my) = ((0.1 * (x1 - x0)).max(0.04), (0.1 * (y1 - y0)).max(0.04));
-    Some(([x0 - mx, x1 + mx, y0 - my, y1 + my], w0 * 0.995))
+    let wit: Vec<[f32; 3]> = bodies
+        .iter()
+        .filter(|x| x.look == Look::Witness)
+        .flat_map(|x| x.mesh.pos.iter().copied())
+        .collect();
+    out.extend(spread(wit, 8));
+    out
 }
 
-/// Whether a mesh hides the bend: some triangle of it, clipped to the window's frustum (its
-/// sides and nearer the eye than `wmax`, planes in clip space: Sutherland-Hodgman), is left
-/// with an area. The body is only tested, never cut: it is seen through whole or not at all.
-pub fn xray_blocks(mesh: &Mesh, m: &[f32; 16], win: [f32; 4], wmax: f32) -> bool {
-    let clip = |p: [f32; 3], r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
-    let planes: [&dyn Fn([f32; 3]) -> f32; 5] = [
-        &|p| clip(p, 0) - win[0] * clip(p, 3),
-        &|p| win[1] * clip(p, 3) - clip(p, 0),
-        &|p| clip(p, 1) - win[2] * clip(p, 3),
-        &|p| win[3] * clip(p, 3) - clip(p, 1),
-        &|p| wmax - clip(p, 3),
-    ];
-    mesh.tri.iter().any(|t| {
-        let mut poly: Vec<[f32; 3]> = t.iter().map(|&i| mesh.pos[i as usize]).collect();
-        for f in &planes {
-            let d: Vec<f32> = poly.iter().map(|&v| f(v)).collect();
-            if d.iter().all(|&x| x >= 0.0) {
-                continue;
-            }
-            let mut keep = Vec::new();
-            for i in 0..poly.len() {
-                let j = (i + 1) % poly.len();
-                if d[i] >= 0.0 {
-                    keep.push(poly[i]);
-                }
-                if (d[i] >= 0.0) != (d[j] >= 0.0) {
-                    let t = d[i] / (d[i] - d[j]);
-                    keep.push([0, 1, 2].map(|k| poly[i][k] + (poly[j][k] - poly[i][k]) * t));
-                }
-            }
-            poly = keep;
-            if poly.len() < 3 {
+/// The bend zone's top along the bend line: at each place along it (to half a millimetre), its
+/// highest point; the bend as one looks onto it, not its outside, which lies in the die's V.
+pub fn zone_top(bodies: &[Body]) -> Vec<[f32; 3]> {
+    let mut top: std::collections::BTreeMap<i64, [f32; 3]> = Default::default();
+    for p in bodies
+        .iter()
+        .filter(|x| x.look == Look::BendZone)
+        .flat_map(|x| x.mesh.pos.iter())
+    {
+        let e = top.entry((p[1] * 2.0).round() as i64).or_insert(*p);
+        if p[2] > e[2] {
+            *e = *p;
+        }
+    }
+    top.into_values().collect()
+}
+
+/// How many of `aims` a mesh hides from `eye`: the segment to each, short of it by half a
+/// millimetre, passing through one of its triangles (Moller-Trumbore; its box first).
+pub fn roi_blocked(mesh: &Mesh, eye: [f32; 3], aims: &[[f32; 3]]) -> usize {
+    let Some((lo, hi)) = mesh.bounds() else {
+        return 0;
+    };
+    let sub = |a: [f32; 3], b: [f32; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let cross = |a: [f32; 3], b: [f32; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    aims.iter()
+        .filter(|&&p| {
+            let d = sub(p, eye);
+            let len = dot(d, d).sqrt();
+            if len < 1e-3 {
                 return false;
             }
-        }
-        true
-    })
+            // short of the aim, so a surface it lies on does not hide it
+            let tmax = 1.0 - 0.5 / len;
+            let end = [0, 1, 2].map(|k| eye[k] + d[k] * tmax);
+            if !hits(eye, end, lo, hi) {
+                return false;
+            }
+            mesh.tri.iter().any(|t| {
+                let [a, b, c] = t.map(|i| mesh.pos[i as usize]);
+                let (e1, e2) = (sub(b, a), sub(c, a));
+                let h = cross(d, e2);
+                let det = dot(e1, h);
+                if det.abs() < 1e-12 {
+                    return false;
+                }
+                let f = 1.0 / det;
+                let s0 = sub(eye, a);
+                let u = f * dot(s0, h);
+                if !(0.0..=1.0).contains(&u) {
+                    return false;
+                }
+                let q = cross(s0, e1);
+                let v = f * dot(d, q);
+                if v < 0.0 || u + v > 1.0 {
+                    return false;
+                }
+                let tt = f * dot(e2, q);
+                tt > 1e-6 && tt < tmax
+            })
+        })
+        .count()
 }
+
+/// A body hides the bend when it hides at least this share of what is watched (and two points at
+/// least): a corner grazing one line of sight does not.
+pub const ROI_SHARE: f32 = 0.04;
 
 /// Whether a piece of the part is the bend being made or a wall either side of it (it touches
 /// the bend zone): never seen through.
@@ -502,23 +552,17 @@ fn bending(x: &Body, zone: Option<([f32; 3], [f32; 3])>) -> bool {
         }
 }
 
-/// The bodies that may be seen through, from `eye`: anything but the bend being made and the
-/// walls either side of it, a punch's tip (the contact), the floor, a witness and what is drawn
-/// red. A die, and what stands no higher than the dies' top (the bed), only from below its top
-/// (UX-LEAD): from above it cannot hide the bend line.
-fn xray_candidate(x: &Body, zone: Option<([f32; 3], [f32; 3])>, die_top: Option<f32>, eye: [f32; 3]) -> bool {
-    let low = match (die_top, x.mesh.bounds()) {
-        (Some(d), Some((_, top))) => (x.name.contains("die:") || top[2] <= d + 0.5) && eye[2] >= top[2],
-        _ => false,
-    };
-    !x.hit
-        && !low
-        && match x.look {
-            Look::Sheet => !bending(x, zone),
-            Look::Tool => !x.name.ends_with("/tip"),
-            Look::Frame | Look::Gauge => true,
-            Look::BendZone | Look::Floor | Look::Witness => false,
-        }
+/// The bodies that may be seen through: anything but the bend being made and the walls either
+/// side of it, a punch's tip (the contact), the floor and a witness; what is drawn red too, in its
+/// red. Whether one is, is the eye's: only when it hides what is watched (`roi_blocked`), the die
+/// and the bed included (seen low, a die's shoulder hides the bend in its V).
+fn xray_candidate(x: &Body, zone: Option<([f32; 3], [f32; 3])>) -> bool {
+    match x.look {
+        Look::Sheet => !bending(x, zone),
+        Look::Tool => !x.name.ends_with("/tip"),
+        Look::Frame | Look::Gauge => true,
+        Look::BendZone | Look::Floor | Look::Witness => false,
+    }
 }
 
 impl BendView {
@@ -540,6 +584,11 @@ impl BendView {
     /// The names of what is drawn now.
     pub fn drawn_names(&self) -> Vec<String> {
         self.bodies.iter().map(|x| x.name.clone()).collect()
+    }
+
+    /// What is drawn now, whole.
+    pub fn drawn(&self) -> &[Body] {
+        &self.bodies
     }
 
     /// What is drawn seen through now.
@@ -679,7 +728,7 @@ impl Gui {
                 }
                 Framing::Overview => None,
             };
-            if let Some((cam, lo, hi)) = framing(&bodies, envelope, how, handling, v.size) {
+            if let Some((cam, lo, hi)) = framing(&bodies, envelope, how, handling, b.profile, v.size) {
                 self.bend.subject = (how == Framing::Work).then_some((lo, hi));
                 if how == Framing::Work && !handling {
                     // the cube's home is the working zone
@@ -734,7 +783,6 @@ impl Gui {
             return;
         }
         self.bend.derived = Some(key);
-        let m = cam.view(v.size.0.max(1), v.size.1.max(1)).matrix;
         // the cut-away, for this eye and the press as it stands at this instant (the ram comes
         // down through the picture as a bend forms: it is cut as it does)
         self.bend.cut = match self.bend.subject {
@@ -743,28 +791,23 @@ impl Gui {
         };
         let cut = self.bend.cut.clone();
         let working: Vec<&Body> = self.bend.raw.iter().filter(|x| !cut.contains(&x.name)).collect();
-        // the x-ray: a candidate with something inside the window round the bend, nearer than the
-        // bend, blocks it
+        // the x-ray, from this eye: a candidate hiding enough of what is watched (the bend's zone,
+        // the punch's contact, a witness) from it
         let zone = bounds(
             working
                 .iter()
                 .filter(|x| x.look == Look::BendZone)
                 .map(|x| &x.mesh),
         );
-        // the window is worked out even with see-through off: what is still fading out keeps
-        // fading until it is solid again
-        let window = xray_window(&self.bend.raw, &m);
+        // worked out even with see-through off: what is still fading out keeps fading until it is
+        // solid again
+        let aims = roi_samples(&self.bend.raw);
+        let need = ((aims.len() as f32 * ROI_SHARE).ceil() as usize).max(2);
         let see = b.see_through;
         let mut blocks: std::collections::HashSet<String> = Default::default();
-        if let Some((win, wmax)) = window {
-            let die_top = working
-                .iter()
-                .filter(|x| x.name.contains("die:"))
-                .filter_map(|x| x.mesh.bounds())
-                .map(|(_, top)| top[2])
-                .reduce(f32::max);
-            for x in working.iter().filter(|x| xray_candidate(x, zone, die_top, eye)) {
-                if xray_blocks(&x.mesh, &m, win, wmax) {
+        if !aims.is_empty() {
+            for x in working.iter().filter(|x| xray_candidate(x, zone)) {
+                if roi_blocked(&x.mesh, eye, &aims) >= need {
                     blocks.insert(x.name.clone());
                 }
             }
@@ -859,9 +902,11 @@ impl Gui {
         for &(k, level) in &xray {
             v.scene.set_ghost(k, true);
             let t = tint(&drawn[k], material);
+            // a failing body keeps its red (no blue mixed in): what fails still reads as failing
+            let blue = if drawn[k].hit { 0.0 } else { XRAY_MIX };
             let c = [0, 1, 2].map(|i| {
                 let t = t[i] * (1.0 - (1.0 - XRAY_SHADE) * level);
-                t + (XRAY_BLUE[i] - t) * XRAY_MIX * level
+                t + (XRAY_BLUE[i] - t) * blue * level
             });
             let to8 = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
             let alpha = 1.0 - level * (1.0 - opacity);

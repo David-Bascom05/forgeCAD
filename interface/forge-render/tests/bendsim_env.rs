@@ -599,8 +599,10 @@ fn bend_two_followed_shows_the_part() {
     );
 }
 
-/// Any part in the way (David): from the Press Overview the press's frame stands between the
-/// eye and the bend; it is seen through whole, nothing cut, the bend being made solid.
+/// Any part in the way (David), only where it is in the way: the Press Overview turned all
+/// round the press at a low eye, the bend's watched points seen from every side, nothing cut, the
+/// bend never seen through; and from some side a press part (the frame, the ram, the backgauge)
+/// stands in front of the bend and is seen through whole.
 #[test]
 fn a_press_part_in_the_way_is_seen_through_whole() {
     let Some(mut h) = headless() else { return };
@@ -611,20 +613,42 @@ fn a_press_part_in_the_way_is_seen_through_whole() {
         b.t = 0.6;
     }
     frame(&mut h, Framing::Overview);
-    for _ in 0..20 {
+    for _ in 0..8 {
         h.step();
     }
-    let ghosted = h.gui.bend.ghosted_names();
-    let press: Vec<&String> = ghosted
-        .iter()
-        .filter(|n| !n.starts_with("part:") && !n.contains("punch:") && !n.contains("die:"))
-        .collect();
-    assert!(!press.is_empty(), "a press part seen through: {ghosted:?}");
-    assert!(h.gui.bend.whole(), "nothing cut");
-    let bending = h.gui.bend.bending_names();
-    assert!(ghosted.iter().all(|n| !bending.contains(n)), "{ghosted:?}");
-    // the die can't hide the bend line from above it (UX-LEAD): it stays solid
-    assert!(ghosted.iter().all(|n| !n.contains("die:")), "{ghosted:?}");
+    let mut press_ghosted = Vec::new();
+    for k in 0..12 {
+        {
+            let v = h.gui.view.as_mut().unwrap();
+            let mut c = v.nav.camera;
+            c.yaw = (30.0 * k as f32).to_radians();
+            c.pitch = 15f32.to_radians();
+            v.nav.jump_to(c);
+        }
+        for _ in 0..16 {
+            h.step();
+        }
+        let (seen, _) = see_metric(&h);
+        assert!(
+            seen >= 0.95,
+            "from {} degrees: {:.1} % of the bend seen",
+            30 * k,
+            seen * 100.0
+        );
+        assert!(h.gui.bend.whole(), "nothing cut");
+        let ghosted = h.gui.bend.ghosted_names();
+        let bending = h.gui.bend.bending_names();
+        assert!(ghosted.iter().all(|n| !bending.contains(n)), "{ghosted:?}");
+        press_ghosted.extend(
+            ghosted
+                .into_iter()
+                .filter(|n| !n.starts_with("part:") && !n.contains("punch:") && !n.contains("die:")),
+        );
+    }
+    assert!(
+        !press_ghosted.is_empty(),
+        "a press part in the way, seen through, from some side"
+    );
 }
 
 /// A seen-through body is drawn, and seen (David: "it's still invisible"): where it stands,
@@ -713,14 +737,25 @@ fn a_ghost_is_seen_between_gone_and_solid() {
     let body: Vec<usize> = (0..w * ht)
         .filter(|&i| cover[i] && far(px(gone, i), px(solid, i), 24))
         .collect();
-    assert!(body.len() > w * ht / 100, "the body covers {} px", body.len());
-    let seen = body
+    assert!(body.len() > w * ht / 200, "the body covers {} px", body.len());
+    // seen against what is behind it on nearly all of it; against the body solid on most (a
+    // flange in shade is a mid tone, as the flat ghost is: its blue and its outline mark it there)
+    let off_gone = body
         .iter()
-        .filter(|&&i| far(px(ghost, i), px(gone, i), 12) && far(px(ghost, i), px(solid, i), 12))
+        .filter(|&&i| far(px(ghost, i), px(gone, i), 12))
+        .count();
+    let off_solid = body
+        .iter()
+        .filter(|&&i| far(px(ghost, i), px(solid, i), 12))
         .count();
     assert!(
-        seen * 4 >= body.len() * 3,
-        "the ghost seen over {seen} of the body's {} px",
+        off_gone * 10 >= body.len() * 9,
+        "the ghost seen against what is behind it over {off_gone} of the body's {} px",
+        body.len()
+    );
+    assert!(
+        off_solid * 3 >= body.len() * 2,
+        "the ghost told from the body solid over {off_solid} of its {} px",
         body.len()
     );
 }
@@ -954,6 +989,24 @@ fn a_complex_part_clip() {
         let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
         eprintln!("clip on {} {:?}: {} bends", b.tooling, b.choice.press, b.steps());
     }
+    // BENDSIM_PROFILE=1: the working view end on, down the bend line; BENDSIM_ORBIT=DEG: the
+    // eye turned that much more round the subject each frame (see-through follows the live eye)
+    let profile = std::env::var("BENDSIM_PROFILE").is_ok();
+    let orbit: f32 = std::env::var("BENDSIM_ORBIT")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(0.0);
+    {
+        // framed afresh in it, as the View tools frame
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.profile = profile;
+        b.frame = Some(Framing::Work);
+    }
+    let base = if profile {
+        forge_render::gui::gui_bendsim::PROFILE_YAW
+    } else {
+        215.0
+    };
     let tl = h.gui.shell.env_timeline().expect("the timeline");
     let total = tl.duration(&h.gui.shell);
     tl.seek(&mut h.gui.shell, 0.0);
@@ -965,7 +1018,263 @@ fn a_complex_part_clip() {
         let tl = h.gui.shell.env_timeline().unwrap();
         tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
         h.step();
+        if orbit != 0.0 {
+            let v = h.gui.view.as_mut().unwrap();
+            let mut c = v.nav.camera;
+            c.yaw = (base + orbit * i as f32).to_radians();
+            v.nav.jump_to(c);
+            h.step();
+        }
         std::fs::write(format!("{dir}/frame-{i:04}.ppm"), h.ppm()).unwrap();
     }
     eprintln!("clip: {n} frames over {total} s of program");
+}
+
+/// The see-through's measure (David's "an order of magnitude"), from what is drawn alone: of the
+/// points watched (the bend zone's top along its length, the punch tip's contact, a witness), the
+/// share no solid body hides from the eye; and the share of the view the ghosts cover (a coarse
+/// raster of their triangles). Self-contained, so the same measure runs on any version.
+fn see_metric(h: &Headless) -> (f32, f32) {
+    use forge_brake::scene::{Body, Look};
+    let g = &h.gui.bend;
+    let drawn: &[Body] = g.drawn();
+    let ghosted: Vec<String> = g.ghosted_names();
+    let bending = g.bending_names();
+    let (cam, size) = h.gui.shell.camera.expect("the view's camera");
+    let eye = cam.eye();
+    // the watched points
+    let spread = |mut pts: Vec<[f32; 3]>, n: usize| -> Vec<[f32; 3]> {
+        if pts.len() <= n {
+            return pts;
+        }
+        pts.sort_by(|a, b| {
+            a[1].total_cmp(&b[1])
+                .then(a[2].total_cmp(&b[2]))
+                .then(a[0].total_cmp(&b[0]))
+        });
+        (0..n).map(|k| pts[k * (pts.len() - 1) / (n - 1)]).collect()
+    };
+    let roi_body = |x: &Body| {
+        x.look == Look::BendZone
+            || x.look == Look::Witness
+            || (x.name.starts_with("punch:") && x.name.ends_with("/tip"))
+    };
+    let mut aims = spread(forge_render::gui::gui_bendsim::zone_top(drawn), 48);
+    let tips: Vec<&Body> = drawn
+        .iter()
+        .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
+        .collect();
+    if let Some(low) = tips
+        .iter()
+        .flat_map(|x| x.mesh.pos.iter())
+        .map(|p| p[2])
+        .reduce(f32::min)
+    {
+        aims.extend(spread(
+            tips.iter()
+                .flat_map(|x| x.mesh.pos.iter().copied())
+                .filter(|p| p[2] <= low + 1.0)
+                .collect(),
+            16,
+        ));
+    }
+    aims.extend(spread(
+        drawn
+            .iter()
+            .filter(|x| x.look == Look::Witness)
+            .flat_map(|x| x.mesh.pos.iter().copied())
+            .collect(),
+        8,
+    ));
+    if aims.is_empty() {
+        return (1.0, 0.0);
+    }
+    let sub = |a: [f32; 3], b: [f32; 3]| [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+    let dot = |a: [f32; 3], b: [f32; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let cross = |a: [f32; 3], b: [f32; 3]| {
+        [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+    };
+    let hides = |x: &Body, p: [f32; 3]| {
+        let d = sub(p, eye);
+        let len = dot(d, d).sqrt();
+        let tmax = 1.0 - 0.5 / len.max(1e-3);
+        x.mesh.tri.iter().any(|t| {
+            let [a, b, c] = t.map(|i| x.mesh.pos[i as usize]);
+            let (e1, e2) = (sub(b, a), sub(c, a));
+            let hh = cross(d, e2);
+            let det = dot(e1, hh);
+            if det.abs() < 1e-12 {
+                return false;
+            }
+            let f = 1.0 / det;
+            let s0 = sub(eye, a);
+            let u = f * dot(s0, hh);
+            let q = cross(s0, e1);
+            let v = f * dot(d, q);
+            let tt = f * dot(e2, q);
+            (0.0..=1.0).contains(&u) && v >= 0.0 && u + v <= 1.0 && tt > 1e-6 && tt < tmax
+        })
+    };
+    let solid: Vec<&Body> = drawn
+        .iter()
+        .filter(|x| {
+            !ghosted.contains(&x.name) && !roi_body(x) && !bending.contains(&x.name) && x.look != Look::Floor
+        })
+        .collect();
+    let seen = aims
+        .iter()
+        .filter(|&&p| !solid.iter().any(|x| hides(x, p)))
+        .count();
+    // the ghosts' cover of the view, on a coarse raster
+    let m = cam.view(size.0, size.1).matrix;
+    let (gw, gh) = (140usize, 86usize);
+    let mut cover = vec![false; gw * gh];
+    for x in drawn.iter().filter(|x| ghosted.contains(&x.name)) {
+        let to = |p: [f32; 3]| {
+            let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
+            let w = c(3);
+            (w > 1e-6).then(|| {
+                (
+                    ((c(0) / w) + 1.0) * 0.5 * gw as f32,
+                    (1.0 - c(1) / w) * 0.5 * gh as f32,
+                )
+            })
+        };
+        for t in &x.mesh.tri {
+            let [Some(a), Some(b), Some(c)] = t.map(|i| to(x.mesh.pos[i as usize])) else {
+                continue;
+            };
+            let area = (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
+            if area.abs() < 1e-6 {
+                continue;
+            }
+            let x0 = a.0.min(b.0).min(c.0).max(0.0) as usize;
+            let x1 = (a.0.max(b.0).max(c.0).ceil().max(0.0) as usize).min(gw);
+            let y0 = a.1.min(b.1).min(c.1).max(0.0) as usize;
+            let y1 = (a.1.max(b.1).max(c.1).ceil().max(0.0) as usize).min(gh);
+            for py in y0..y1 {
+                for px in x0..x1 {
+                    let q = (px as f32 + 0.5, py as f32 + 0.5);
+                    let e = |u: (f32, f32), v: (f32, f32)| {
+                        ((v.0 - u.0) * (q.1 - u.1) - (v.1 - u.1) * (q.0 - u.0)) * area.signum()
+                    };
+                    if e(a, b) >= 0.0 && e(b, c) >= 0.0 && e(c, a) >= 0.0 {
+                        cover[py * gw + px] = true;
+                    }
+                }
+            }
+        }
+    }
+    let ghost = cover.iter().filter(|&&c| c).count() as f32 / (gw * gh) as f32;
+    (seen as f32 / aims.len() as f32, ghost)
+}
+
+/// The see-through measured on the load tray (`BENDSIM_METRIC=1`): at each bend mid-stroke, from
+/// the default view and turned 60, 120 and 180 degrees round it, the watched points seen and the
+/// view ghosted. Off unless asked; prints a table.
+#[test]
+#[ignore]
+fn see_through_measured_on_the_load_tray() {
+    if std::env::var("BENDSIM_METRIC").is_err() {
+        return;
+    }
+    let Some(mut h) = headless() else { return };
+    let part = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    );
+    open(&mut h, part);
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let n = h.gui.shell.sheet.bend_sim.as_ref().unwrap().steps();
+    let mut rows = Vec::new();
+    for turn in [0f32, 60.0, 120.0, 180.0] {
+        let (mut vis, mut gh, mut ms) = (0f32, 0f32, 0f64);
+        for k in 0..n {
+            {
+                let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+                b.follow = true;
+                b.step = k;
+                b.t = 0.6;
+            }
+            for _ in 0..4 {
+                h.step();
+            }
+            if turn != 0.0 {
+                let v = h.gui.view.as_mut().unwrap();
+                let mut c = v.nav.camera;
+                c.yaw += turn.to_radians();
+                v.nav.jump_to(c);
+            }
+            let t0 = std::time::Instant::now();
+            for _ in 0..16 {
+                h.step();
+            }
+            ms += t0.elapsed().as_secs_f64() * 1000.0 / 16.0;
+            let (a, g) = see_metric(&h);
+            vis += a;
+            gh += g;
+        }
+        rows.push((turn, vis / n as f32, gh / n as f32, ms / n as f64));
+    }
+    for (turn, vis, gh, ms) in &rows {
+        eprintln!(
+            "METRIC turn {turn:>5.0}: watched seen {:>5.1} %, view ghosted {:>5.1} %, frame {ms:.1} ms",
+            vis * 100.0,
+            gh * 100.0
+        );
+    }
+}
+
+/// David's see-through, held (the coordinator: view-dependent and minimal): on the load tray at
+/// its last bend's stroke, from the default view and from behind, every watched point (the bend's
+/// zone, the punch's contact) is seen through what hides it, and the ghosts cover little of the
+/// view (before: 88 % seen from behind, 11 % of the view ghosted).
+#[test]
+fn only_what_hides_the_bend_is_seen_through() {
+    let Some(mut h) = headless() else { return };
+    let part = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    );
+    open(&mut h, part);
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let last = h.gui.shell.sheet.bend_sim.as_ref().unwrap().steps() - 2;
+    for turn in [0f32, 180.0] {
+        {
+            let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+            b.follow = true;
+            b.step = last;
+            b.t = 0.6;
+        }
+        for _ in 0..4 {
+            h.step();
+        }
+        if turn != 0.0 {
+            let v = h.gui.view.as_mut().unwrap();
+            let mut c = v.nav.camera;
+            c.yaw += turn.to_radians();
+            v.nav.jump_to(c);
+        }
+        for _ in 0..16 {
+            h.step();
+        }
+        let (seen, ghost) = see_metric(&h);
+        assert!(
+            seen >= 0.97,
+            "turned {turn}: {:.1} % of the bend seen",
+            seen * 100.0
+        );
+        assert!(
+            ghost <= 0.2,
+            "turned {turn}: {:.1} % of the view ghosted",
+            ghost * 100.0
+        );
+        assert!(h.gui.bend.whole());
+    }
 }

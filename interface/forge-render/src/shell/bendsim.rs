@@ -101,6 +101,8 @@ pub struct BendSimUi {
     pub opacity: f32,
     /// The user's units are inches (the status bar's switch): lengths shown in them.
     pub inch: bool,
+    /// The working view end on, down the bend line (the profile), not three-quarter.
+    pub profile: bool,
     pub see_press: bool,
     /// The tool library shows only what fits the press and the part.
     pub fit_only: bool,
@@ -213,6 +215,7 @@ impl BendSimUi {
             see_through: true,
             opacity: 0.45,
             inch: false,
+            profile: false,
             see_press: false,
             fit_only: true,
             all_checks: false,
@@ -276,6 +279,7 @@ impl BendSimUi {
             see_through: true,
             opacity: 0.45,
             inch: false,
+            profile: false,
             see_press: false,
             fit_only: true,
             all_checks: false,
