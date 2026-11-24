@@ -91,7 +91,32 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
     let stl = downloads.join("VF2 table.stl");
     std::fs::write(&stl, box_stl([0.0; 3], [size[0] * 1.05, size[1], size[2]])).unwrap();
 
-    // the user's note is required
+    // the user's note is required: the Attach button is off until it is given, its reason on hover
+    m.model_from.clear();
+    h.gui.shell.machine = Some(m);
+    for _ in 0..4 {
+        h.step();
+    }
+    let at = h
+        .gui
+        .shell
+        .machine
+        .as_ref()
+        .unwrap()
+        .attach_at
+        .expect("the Attach model… button");
+    h.move_to(at.center().x, at.center().y);
+    for _ in 0..30 {
+        h.step();
+    }
+    shot(&mut h, "models-00a-source-empty");
+    let mut m = h.gui.shell.machine.take().unwrap();
+    m.model_from = "Haas download, my licence".into();
+    h.gui.shell.machine = Some(m);
+    h.move_to(5.0, 5.0);
+    shot(&mut h, "models-00b-source-given");
+    let mut m = h.gui.shell.machine.take().unwrap();
+    m.model_from.clear();
     let e = m
         .attach_model(Some("table".into()), stl.to_str().unwrap())
         .unwrap_err();
@@ -184,11 +209,43 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
     assert!(msg.contains("2 separate parts"), "{msg}");
     let i = m2.models.iter().position(|x| x.body.is_none()).unwrap();
     m2.open_split(i).unwrap();
-    let (_, sizes, to) = m2.split.as_mut().unwrap();
-    assert_eq!(sizes.len(), 2);
-    assert!((sizes[0].0[0] - 36.0 * 25.4).abs() < 1e-6, "{sizes:?}");
-    to[0] = Some("table".into());
-    to[1] = Some("head".into());
+    {
+        let sp = m2.split.as_ref().unwrap();
+        assert_eq!(sp.parts.len(), 2);
+        let (lo, hi) = sp.parts[0].bounds;
+        assert!((hi[0] - lo[0] - 36.0 * 25.4).abs() < 1e-6);
+        assert!(sp.count_line().starts_with("2 parts"), "{}", sp.count_line());
+    }
+    // in the view: the dialog's first row under the pointer, its part lit
+    m2.tab = Tab::Bodies;
+    h.gui.shell.machine = Some(m2);
+    for _ in 0..4 {
+        h.step();
+    }
+    let row = h.gui.shell.machine.as_ref().unwrap().split.as_ref().unwrap().rows[0];
+    h.move_to(row.center().x, row.center().y);
+    for _ in 0..4 {
+        h.step();
+    }
+    assert_eq!(
+        h.gui
+            .shell
+            .machine
+            .as_ref()
+            .unwrap()
+            .split
+            .as_ref()
+            .unwrap()
+            .hover,
+        Some(0)
+    );
+    shot(&mut h, "models-03-split-hover");
+    let mut m2 = h.gui.shell.machine.take().unwrap();
+    m2.split.as_mut().unwrap().parts[0].dest = None;
+    assert!(m2.apply_split().is_err(), "a part not decided keeps Split off");
+    let sp = m2.split.as_mut().unwrap();
+    sp.parts[0].dest = Some(Some("table".into()));
+    sp.parts[1].dest = Some(Some("head".into()));
     let msg = m2.apply_split().unwrap();
     assert!(msg.contains("table") && msg.contains("head"), "{msg}");
     assert_eq!(m2.models.len(), 2, "the table's earlier model is replaced");

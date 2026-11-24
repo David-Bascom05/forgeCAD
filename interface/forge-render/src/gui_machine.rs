@@ -466,8 +466,17 @@ impl Gui {
             }
         }
         let Some(m) = &self.shell.machine else { return };
-        // the chosen body's envelope, while its model is drawn in its place
+        // the chosen body's envelope, while its model is drawn in its place; a split's part
+        // under the pointer, lit
         self.mach.envelope.clear();
+        if let Some(sp) = &m.split
+            && let Some(p) = sp.hover.and_then(|k| sp.parts.get(k))
+        {
+            let f = |a: [f64; 3]| a.map(|x| x as f32);
+            self.mach
+                .envelope
+                .push(crate::frame::Bounds::new(f(p.bounds.0), f(p.bounds.1)));
+        }
         if tooling.is_none()
             && m.problem.is_none()
             && m.tab == crate::shell::machine::Tab::Bodies

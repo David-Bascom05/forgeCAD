@@ -124,8 +124,9 @@ pub struct MachineUi {
     /// The note the next attach carries: where the file came from and the user's right to use it
     /// (required: forge_machine_builder::model_files::require_from).
     pub model_from: String,
-    /// A whole-machine model being split: (its index, each part's size and triangles, the body
-    /// each part goes to; None drops it).
+    /// Where the Attach model… button was last drawn (tests point at it).
+    pub attach_at: Option<egui::Rect>,
+    /// A whole-machine model being split.
     pub split: Option<Split>,
     /// The chosen body's envelope boxes on the screen (8 corners each, bit 0 x, 1 y, 2 z) while
     /// its model is drawn in its place, and where the model is farthest outside it (the host's,
@@ -190,7 +191,9 @@ impl MachineUi {
             tooling_seen: String::new(),
             models: Vec::new(),
             model_checks: Vec::new(),
-            model_from: String::new(),
+            // the last source the user gave, to start from
+            model_from: crate::plat::kv_get(MODEL_SOURCE).unwrap_or_default(),
+            attach_at: None,
             split: None,
             envelope_px: Vec::new(),
             out_px: None,
@@ -302,41 +305,71 @@ impl MachineUi {
             &self.model_from,
             &forge_machine_builder::model_files::Placing::default(),
         )?;
+        crate::plat::kv_set(MODEL_SOURCE, self.model_from.trim());
         self.models.push(m);
         self.models_changed();
         Ok(said)
     }
 
-    /// Opens the split of model `i`: its parts read, each given no body yet.
+    /// Opens the split of model `i`: its parts read, each with a guessed body.
     pub fn open_split(&mut self, i: usize) -> Result<(), String> {
-        let m = self.models.get(i).ok_or("no such model")?;
+        let m = self.models.get(i).ok_or("no such model")?.clone();
+        let def = self.def.as_ref().ok_or("no machine")?;
         let dir = self
             .models_dir()
             .ok_or("no folder for your library on this system")?;
         let ps = forge_machine_builder::model_files::read_file(&dir.join(&m.file))?;
-        let sizes = ps
-            .iter()
-            .map(|p| {
-                let (lo, hi) = p.bounds().unwrap_or(([0.0; 3], [0.0; 3]));
-                ([0, 1, 2].map(|k| (hi[k] - lo[k]) * m.scale), p.tri.len())
+        let parts = ps
+            .into_iter()
+            .map(|piece| {
+                let bounds =
+                    models::bounds(piece.pos.iter().map(|p| m.place(*p))).unwrap_or(([0.0; 3], [0.0; 3]));
+                let guess = guess_body(def, bounds);
+                SplitPart {
+                    piece,
+                    bounds,
+                    suggested: guess.is_some(),
+                    dest: guess.map(Some),
+                }
             })
-            .collect::<Vec<_>>();
-        let n = sizes.len();
-        self.split = Some((i, sizes, vec![None; n]));
+            .collect();
+        self.split = Some(Split {
+            model: i,
+            parts,
+            hover: None,
+            rows: Vec::new(),
+        });
         Ok(())
     }
 
     /// Applies the open split: each part given a body becomes that body's model.
     pub fn apply_split(&mut self) -> Result<String, String> {
-        let (i, _, to) = self.split.take().ok_or("no split open")?;
+        let sp = self.split.take().ok_or("no split open")?;
+        if !sp.decided() {
+            let n = sp.parts.iter().filter(|p| p.dest.is_none()).count();
+            self.split = Some(sp);
+            return Err(format!(
+                "{n} parts are not decided: give each a body or leave it out"
+            ));
+        }
+        let to: Vec<Option<String>> = sp.parts.iter().map(|p| p.dest.clone().flatten()).collect();
         let dir = self
             .models_dir()
             .ok_or("no folder for your library on this system")?;
+        let file = self
+            .models
+            .get(sp.model)
+            .map(|m| m.file.clone())
+            .ok_or("no such model")?;
         // a body given a part loses the model it had
         for b in to.iter().flatten() {
             self.models.retain(|m| m.body.as_deref() != Some(b.as_str()));
         }
-        let i = i.min(self.models.len().saturating_sub(1));
+        let i = self
+            .models
+            .iter()
+            .position(|m| m.file == file)
+            .ok_or("no such model")?;
         let made = forge_machine_builder::model_files::split(&dir, &mut self.models, i, &to)?;
         self.models_changed();
         Ok(format!(
@@ -1799,6 +1832,7 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
                     kept: st.user.is_some(),
                     from: &mut st.model_from,
                     split: &mut st.split,
+                    attach_at: &mut st.attach_at,
                 };
                 tab_bodies(ui, &c, &mut d2, &mut st.pick, &mut st.file_in, ms, &mut touch)
             }
@@ -2445,9 +2479,73 @@ fn tab_mounts(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
     ));
 }
 
-/// A whole-machine model being split: its index, each part's size (mm) and triangles, and the
-/// body each part goes to (None drops it).
-pub type Split = (usize, Vec<([f64; 3], usize)>, Vec<Option<String>>);
+/// Where the last source the user gave for a model is kept (plat::kv).
+const MODEL_SOURCE: &str = "machine-model-source";
+
+/// A whole-machine model being split (the Bodies tab's dialog).
+#[derive(Clone, Debug)]
+pub struct Split {
+    /// The model's index.
+    pub model: usize,
+    pub parts: Vec<SplitPart>,
+    /// The row under the pointer: its part is lit in the view.
+    pub hover: Option<usize>,
+    /// Each row where it was last drawn (tests point at them).
+    pub rows: Vec<egui::Rect>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SplitPart {
+    /// Its triangles in the file's coordinates (for its picture).
+    pub piece: forge_machine_builder::model_files::Piece,
+    /// Its bounds placed in the machine's frame at home (mm).
+    pub bounds: ([f64; 3], [f64; 3]),
+    /// None: not decided; Some(None): left out; Some(Some(body)).
+    pub dest: Option<Option<String>>,
+    /// The destination is forgecad's guess, not the user's yet.
+    pub suggested: bool,
+}
+
+impl Split {
+    /// "12 parts · 9 assigned · 3 left out" (and how many are still to decide).
+    pub fn count_line(&self) -> String {
+        let n = self.parts.len();
+        let given = self
+            .parts
+            .iter()
+            .filter(|p| matches!(p.dest, Some(Some(_))))
+            .count();
+        let out = self.parts.iter().filter(|p| matches!(p.dest, Some(None))).count();
+        let open = n - given - out;
+        let mut s = format!("{n} parts · {given} assigned · {out} left out");
+        if open > 0 {
+            s.push_str(&format!(" · {open} to decide"));
+        }
+        s
+    }
+
+    pub fn decided(&self) -> bool {
+        self.parts.iter().all(|p| p.dest.is_some())
+    }
+}
+
+/// A guess at the body a part belongs to: the body whose envelope at home overlaps the part's
+/// placed bounds most (by the shared volume over the part's), if any overlaps at all.
+pub fn guess_body(def: &MachineDef, part: ([f64; 3], [f64; 3])) -> Option<String> {
+    let vol = |lo: [f64; 3], hi: [f64; 3]| (0..3).map(|k| (hi[k] - lo[k]).max(0.0)).product::<f64>();
+    let own = vol(part.0, part.1).max(1e-9);
+    def.bodies
+        .iter()
+        .filter_map(|b| {
+            let (lo, hi) = models::prims_bounds(&b.prims)?;
+            let ilo: [f64; 3] = std::array::from_fn(|k| lo[k].max(part.0[k]));
+            let ihi: [f64; 3] = std::array::from_fn(|k| hi[k].min(part.1[k]));
+            let shared = vol(ilo, ihi) / own;
+            (shared > 0.05).then_some((shared, b.name.clone()))
+        })
+        .max_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|x| x.1)
+}
 
 /// The Bodies tab's view of the attached models.
 struct ModelsCtx<'a> {
@@ -2456,6 +2554,7 @@ struct ModelsCtx<'a> {
     /// The note the next attach carries (required).
     from: &'a mut String,
     split: &'a mut Option<Split>,
+    attach_at: &'a mut Option<egui::Rect>,
     /// The user's library has a folder here (models are kept in it).
     kept: bool,
 }
@@ -2493,17 +2592,23 @@ fn model_rows(
         }
     });
     ui.horizontal(|ui| {
-        label_w(ui, t, "Source");
-        ch |= ui
-            .add(
-                egui::TextEdit::singleline(&mut m.from)
-                    .hint_text("URL or note")
-                    .desired_width(200.0),
-            )
-            .on_hover_text(
-                "Where you got the file (the maker's page, your own drawing): kept with it for your notes",
-            )
-            .lost_focus();
+        label_w(ui, t, "");
+        // its provenance: the user's own statement, as a badge; click the words to change them
+        let shown = format!("from {}", m.from);
+        if let Some(v) =
+            super::lib_form::text_cell_as(ui, t, ("machine:model-from", i), &m.from, Some(&shown), 170.0)
+            && !v.trim().is_empty()
+        {
+            m.from = v;
+            ch = true;
+        }
+        super::ux::badge(
+            ui,
+            t,
+            &super::ux::Source::User(
+                "your statement of where the file came from and your right to use it".into(),
+            ),
+        );
     });
     ui.horizontal(|ui| {
         label_w(ui, t, "Units");
@@ -2654,10 +2759,10 @@ fn tab_bodies(
     let why_off = if !ms.kept {
         "no folder for your library on this system"
     } else {
-        "first say where the file came from and your right to use it (Source of the file)"
+        "first fill in Source: where the file came from and your right to use it"
     };
     ui.horizontal(|ui| {
-        label_w(ui, t, "Source of file");
+        label_w(ui, t, "Source");
         ui.add(
             egui::TextEdit::singleline(ms.from)
                 .hint_text("e.g. Haas download, my licence")
@@ -2682,48 +2787,103 @@ fn tab_bodies(
     {
         touch.attach_model = Some((None, f));
     }
-    // a split being set up: each part, its size, the body it goes to
-    if let Some((_, sizes, to)) = ms.split.as_mut() {
+    // a split being set up: each part's picture, its size, the body it goes to
+    if let Some(sp) = ms.split.as_mut() {
         ui.add_space(4.0);
         ui.label(RichText::new("Split into parts").font(semi(12.0)).color(t.ink));
         ui.label(small(
             t,
-            "Largest first. Give each part the body it moves with, or drop it.",
+            "Largest first. Give each part the body it moves with, or leave it out. Point at a row to see its part in the view.",
         ));
         let doc = super::lib_form::doc_units();
         let per = forge_units::lookup(doc).map_or(1.0, |(_, top, bottom)| top / bottom);
         let bodies: Vec<String> = d.bodies.iter().map(|b| b.name.clone()).collect();
-        for (k, ((size, n), dest)) in sizes.iter().zip(to.iter_mut()).enumerate() {
-            ui.horizontal(|ui| {
-                let dim = |x: f64| forge_units::trim((x / per * 10.0).round() / 10.0);
-                ui.label(
-                    RichText::new(format!(
-                        "Part {} · {} × {} × {} {doc}",
-                        k + 1,
-                        dim(size[0]),
-                        dim(size[1]),
-                        dim(size[2])
-                    ))
-                    .font(sans(11.5))
-                    .color(t.ink),
-                )
-                .on_hover_text(format!("{n} triangles"));
-                egui::ComboBox::from_id_salt(("machine:split", k))
-                    .width(110.0)
-                    .selected_text(dest.clone().unwrap_or_else(|| "drop".into()))
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(dest, None, "drop");
-                        for b in &bodies {
-                            ui.selectable_value(dest, Some(b.clone()), b);
-                        }
+        let mut hover = None;
+        let mut rows = Vec::new();
+        for (k, part) in sp.parts.iter_mut().enumerate() {
+            let row = ui
+                .horizontal(|ui| {
+                    // its picture: the part alone, drawn by the CPU thumbnail renderer
+                    let key = super::lib_form::row_key(&[
+                        "split",
+                        &k.to_string(),
+                        &part.piece.tri.len().to_string(),
+                        &format!("{:?}", part.bounds),
+                    ]);
+                    super::ux::thumbnail(ui, t, key, 48.0, || {
+                        let pos: Vec<[f32; 3]> = part.piece.pos.iter().map(|q| q.map(|x| x as f32)).collect();
+                        crate::thumb::render(
+                            &[crate::thumb::Mesh {
+                                pos: &pos,
+                                tri: &part.piece.tri,
+                                colour: [0.62, 0.64, 0.68],
+                            }],
+                            96,
+                            0.82,
+                        )
                     });
-            });
+                    ui.vertical(|ui| {
+                        let (lo, hi) = part.bounds;
+                        let dim = |k: usize| forge_units::trim(((hi[k] - lo[k]) / per * 10.0).round() / 10.0);
+                        ui.label(
+                            RichText::new(format!(
+                                "Part {} · {} × {} × {} {doc}",
+                                k + 1,
+                                dim(0),
+                                dim(1),
+                                dim(2)
+                            ))
+                            .font(sans(11.5))
+                            .color(t.ink),
+                        )
+                        .on_hover_text(format!("{} triangles", part.piece.tri.len()));
+                        ui.horizontal(|ui| {
+                            let shown = match &part.dest {
+                                None => "choose…".to_string(),
+                                Some(None) => "Leave out".to_string(),
+                                Some(Some(b)) => b.clone(),
+                            };
+                            let mut dest = part.dest.clone();
+                            egui::ComboBox::from_id_salt(("machine:split", k))
+                                .width(110.0)
+                                .selected_text(shown)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut dest, Some(None), "Leave out");
+                                    for b in &bodies {
+                                        ui.selectable_value(&mut dest, Some(Some(b.clone())), b);
+                                    }
+                                });
+                            if dest != part.dest {
+                                part.dest = dest;
+                                part.suggested = false;
+                            }
+                            if part.suggested {
+                                ui.label(
+                                    RichText::new("suggested")
+                                        .font(sans(10.5))
+                                        .color(t.ink2.gamma_multiply(0.8)),
+                                )
+                                .on_hover_text(
+                                    "forgecad's guess: the body whose envelope this part overlaps most",
+                                );
+                            }
+                        });
+                    });
+                })
+                .response;
+            if ui.rect_contains_pointer(row.rect) {
+                hover = Some(k);
+            }
+            rows.push(row.rect);
         }
-        let any = to.iter().any(Option::is_some);
+        sp.hover = hover;
+        sp.rows = rows;
+        ui.label(small(t, sp.count_line()));
+        let ready = sp.decided();
         ui.horizontal(|ui| {
             if ui
-                .add_enabled(any, egui::Button::new("Split"))
-                .on_disabled_hover_text("give at least one part a body")
+                .add_enabled(ready, egui::Button::new("Split"))
+                .on_disabled_hover_text("give every part a body or leave it out")
                 .clicked()
             {
                 touch.apply_split = true;
@@ -2780,8 +2940,9 @@ fn tab_bodies(
         None => {
             ui.horizontal(|ui| {
                 label_w(ui, t, "Model");
-                if ui
-                    .add_enabled(ms.kept && noted, egui::Button::new("Attach model…"))
+                let r = ui.add_enabled(ms.kept && noted, egui::Button::new("Attach model…"));
+                *ms.attach_at = Some(r.rect);
+                if r
                     .on_hover_text("your own STEP, IGES or STL of this body (the maker's, say): drawn in its place, placed on its envelope; kept in your library, never in the project")
                     .on_disabled_hover_text(why_off)
                     .clicked()
