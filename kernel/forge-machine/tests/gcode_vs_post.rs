@@ -268,7 +268,7 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
                     out.push(Motion::Home);
                 }
             }
-            Ev::Comment(_) | Ev::NotModelled { .. } => {}
+            Ev::Comment(_) | Ev::NotModelled { .. } | Ev::Comp { .. } => {}
             Ev::Select(_)
             | Ev::Length(_)
             | Ev::Wcs(_)

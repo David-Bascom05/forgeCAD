@@ -344,6 +344,7 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                     start: home.clone(),
                     start_tool: None,
                     skip_stops: Vec::new(),
+                    radius: Vec::new(),
                 };
                 for seg in segs {
                     let tl = sim::Timeline {

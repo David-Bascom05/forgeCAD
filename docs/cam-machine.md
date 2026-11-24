@@ -385,6 +385,7 @@ same core; what the subset does not hold is refused with the block's line and th
 | `T="name"`, `T0`, `M6` | the setup tool of that `name`; T0 M6 empties the spindle (PGsl 4.2.2 pp. 58–59). An unknown name is refused |
 | `D0`, `D1` | G49 / the loaded tool's length (G43 H of its number) (PGsl 5.6 p. 73). After M6 the length is machine data until a D is programmed: a Z move before it is refused. A D with no tool loaded by the program selects an offset the manual does not state: reported not modelled, and a Z move under it is refused. D2 and up refused |
 | `MCALL CYCLE81(RTP, RFP, SDIS, DP)` … `MCALL` | modal drilling: after each later block with path motion, rapid to RFP + SDIS (toward RTP), feed to DP, rapid to RTP (PGZ 2.1.3 pp. 42–44; PGAsl 1.24.3.4 p. 191). All four given; DPR and other cycles refused |
+| `G41`/`G42` … `G40` with `NORM` and `G450`/`G451` | cutter radius compensation (comp.rs, PGsl 10.1–10.3): each line shifted by the register's radius R to the side (G41 left of travel, G42 right; a negative R the other side), each arc about its centre with radius ∓ R; the G41/G42 block straight to the first contour block's start displaced perpendicular to it (NORM), the G40 block straight from the last one's displaced end; an outside corner on a circle of radius R about it (G450) or to the equidistants' intersection (G451), an inside one to the intersection. R is the tool's `radius` in the setup: with the path compensated in CAM, the wear; with the contour programmed, the radius plus the wear. NORM and G450/G451 must be programmed (their defaults are machine data, MD20150). Refused: KONT/KONTC/KONTT, a rapid, a block with no X/Y motion, an arc outside G17, a D or tool change while on; equidistants that do not meet within their blocks (a bottleneck: the control's look-ahead, CDON/CDOF, PGsl 10.5, is not modelled); an arc whose compensated radius is ≤ 0. Positions rounded to the control's units (each within half a unit of the exact) |
 | `CYCLE832(…)` | not modelled (`unchecked`: `cycle832`): its tolerance and mode select the machine's smoothing, compression and velocity control (PGZ 3.17 pp. 265–268), so the time under it is not `t_min`'s; `t_min` stays a lower bound only up to that, `t_stop` assumes exact stops |
 | `CYCLE800()` | taken as no motion, reported not modelled (`cycle800`): it deselects the swivel data record (PGZ 3.16 p. 216); a machine's cycle settings may retract |
 | an M in the setup's `m_no_motion` | no motion, reported not modelled (`M27` …) |
@@ -475,6 +476,8 @@ body = [5, 0, 30, 20, 30, 100]   # (radius, from, to) from the tip; the first is
 mill = [5, 0]              # radius, corner (or nose = [rn, dr, dz] for an insert, or probe = r:
                            # a touch probe's ball radius: it removes nothing)
 h = 100                    # its length register (mills)
+radius = 0                 # optional: its cutter radius register for G41/G42 (840D: D1's radius):
+                           # the wear when CAM compensated the path, radius + wear for a contour
 
 [[setup.geo]]              # lathe offset registers, per letter (T0101 → n = 1)
 n = 1

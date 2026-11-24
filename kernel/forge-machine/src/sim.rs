@@ -84,6 +84,10 @@ pub struct Setup<'a> {
     /// machine's stop (the moves after a skip are still reported not checked, `skip.end`,
     /// estimated). A skip move with no entry is taken to its end.
     pub skip_stops: Vec<(usize, f64)>,
+    /// Each tool's cutter radius register (SINUMERIK: its D1's radius), what G41/G42 offsets the
+    /// path by: with the path compensated in CAM, the wear alone; with the contour programmed, the
+    /// radius plus the wear (comp.rs).
+    pub radius: Vec<(u32, f64)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -156,6 +160,7 @@ impl<'a> Setup<'a> {
             start: def.joints.iter().map(|j| j.home).collect(),
             start_tool: None,
             skip_stops: Vec::new(),
+            radius: Vec::new(),
             control,
         })
     }
@@ -559,6 +564,20 @@ pub fn simulate(text: &str, s: &Setup) -> Result<Timeline, SimError> {
 }
 
 pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError> {
+    // cutter compensation: the tool centre's path in place of the programmed one
+    let compensated;
+    let blocks = if blocks.iter().any(|b| matches!(b.ev, Ev::Comp { .. })) {
+        let ix = match (s.control.idx('X'), s.control.idx('Y')) {
+            (Some(x), Some(y)) => [x, y],
+            _ => return Err(SimError::Setup("cutter compensation needs X and Y".into())),
+        };
+        let radius = |t: u32| s.radius.iter().find(|(n, _)| *n == t).map(|(_, r)| *r);
+        compensated = crate::comp::apply(blocks, ix, s.control.decimals, s.start_tool, &radius)
+            .map_err(|(line, what)| SimError::At { line, what })?;
+        &compensated[..]
+    } else {
+        blocks
+    };
     let def = s.def;
     let n = def.joints.len();
     let k = s.control.decimals;
@@ -956,6 +975,8 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     })?;
             }
             Ev::Comment(c) => mark(&mut tl, t, Happening::Comment(c.clone())),
+            // consumed by comp::apply above
+            Ev::Comp { .. } => {}
             Ev::NotModelled { path, check } => mark(
                 &mut tl,
                 t,

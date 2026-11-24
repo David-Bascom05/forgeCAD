@@ -389,6 +389,14 @@ pub enum Ev {
         path: String,
         check: &'static str,
     },
+    /// Cutter radius compensation (SINUMERIK G41/G42 with NORM, PGsl 10.1-10.3): on, to the
+    /// left (G41) or right (G42) of the programmed path, or off (G40); `arc`: an outside corner on
+    /// a circle about it (G450) or to the equidistants' intersection (G451). The next move is the
+    /// approach (on) or the retract (off). sim applies it (comp::apply) from the setup's radii.
+    Comp {
+        left: Option<bool>,
+        arc: bool,
+    },
     Rapid(Vec<Option<Q>>),
     Feed {
         to: Vec<Option<Q>>,
