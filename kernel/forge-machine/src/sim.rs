@@ -444,6 +444,18 @@ pub enum Happening {
         code: u16,
         stop: Option<f64>,
     },
+    /// A probing macro switched the probe on or off: its small Z move (unpublished) is not
+    /// simulated (`unchecked`: `probe.switch`).
+    ProbeSwitch {
+        on: bool,
+    },
+    /// A single-surface measure macro starts: the segment after this mark is its search, swept
+    /// to `q` past the surface like a skip move (`stop` as for Skip); the machine then returns to
+    /// the start (the search's line, already swept), so the position after it is known. Its
+    /// time is not modelled (0 in t_min; `unchecked`: `probe.measure_time`).
+    Measure {
+        stop: Option<f64>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -619,6 +631,57 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     push_seg(&mut tl, &mut t, &mut t_est, seg);
                 }
                 q = qh;
+            }
+            Ev::ProbeSwitch(on) => mark(&mut tl, t, Happening::ProbeSwitch { on: *on }),
+            Ev::Protected { to, f } => {
+                let q1 = to_q(to, &q, &wcs, &toff);
+                let seg = feed_seg(
+                    s,
+                    ln,
+                    SegKind::Feed,
+                    &q,
+                    &q1,
+                    Path::Line,
+                    q_to_f(*f, fk),
+                    FeedMode::PerMin,
+                    spindle,
+                    css_now,
+                    t,
+                    tool,
+                    &mut tl,
+                )?;
+                push_seg(&mut tl, &mut t, &mut t_est, seg);
+                q = q1;
+            }
+            Ev::Surface { to, .. } => {
+                let q1 = to_q(to, &q, &wcs, &toff);
+                let stop = s
+                    .skip_stops
+                    .iter()
+                    .find(|(l, _)| *l == ln)
+                    .map(|(_, u)| u.clamp(0.0, 1.0));
+                mark(&mut tl, t, Happening::Measure { stop });
+                // the search, swept to its end; its feed is the macro's (not modelled): a nominal
+                // 1 mm/min only to build the segment, its times zeroed
+                let mut seg = feed_seg(
+                    s,
+                    ln,
+                    SegKind::Feed,
+                    &q,
+                    &q1,
+                    Path::Line,
+                    1.0,
+                    FeedMode::PerMin,
+                    spindle,
+                    css_now,
+                    t,
+                    tool,
+                    &mut tl,
+                )?;
+                seg.t_min = 0.0;
+                seg.t_stop = 0.0;
+                push_seg(&mut tl, &mut t, &mut t_est, seg);
+                // back at the start
             }
             Ev::Skip { to, f, code } => {
                 let q1 = to_q(to, &q, &wcs, &toff);
@@ -1535,6 +1598,10 @@ pub fn timeline_json(tl: &Timeline) -> String {
                 let stop = stop.map_or("null".to_string(), num);
                 format!("\"skip\",\"g\":\"{g}\",\"stop\":{stop}")
             }
+            Happening::ProbeSwitch { on } => format!("\"probe_switch\",\"on\":{on}"),
+            Happening::Measure { stop } => {
+                format!("\"measure\",\"stop\":{}", stop.map_or("null".to_string(), num))
+            }
         };
         o.push_str(&format!(
             "{{\"line\":{},\"at\":{},\"what\":{what}}}",
@@ -1728,6 +1795,19 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
             // where a skip move stops is never known here (the real part's position is what the
             // probing is for): the moves after it are checked from one stop only
             Happening::Skip { stop, .. } => skips.push((m.line, stop.is_some())),
+            // a probing macro's own motion and time are not modelled
+            Happening::ProbeSwitch { .. } => note(
+                "probe.switch".into(),
+                false,
+                m.line,
+                "the probe switch macro's Z move",
+            ),
+            Happening::Measure { .. } => note(
+                "probe.measure_time".into(),
+                false,
+                m.line,
+                "a measuring macro's time",
+            ),
             _ => {}
         }
     }

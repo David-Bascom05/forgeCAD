@@ -62,6 +62,30 @@ fn skip_codes(d: &forge_tooling::toml::Table) -> Vec<u16> {
     out
 }
 
+/// The probing macros a dialect's templates call: (P number, which).
+fn macro_codes(d: &forge_tooling::toml::Table) -> Vec<(u32, Macro)> {
+    use forge_tooling::toml;
+    let mut out = Vec::new();
+    for (k, m) in [
+        ("probe_on", Macro::On),
+        ("probe_off", Macro::Off),
+        ("probe_protected", Macro::Protected),
+        ("probe_surface", Macro::Surface),
+    ] {
+        let Some(t) = toml::text(d, k) else { continue };
+        if !t.split_whitespace().any(|w| w == "G65") {
+            continue;
+        }
+        if let Some(p) = t
+            .split_whitespace()
+            .find_map(|w| w.strip_prefix('P').and_then(|p| p.parse::<u32>().ok()))
+        {
+            out.push((p, m));
+        }
+    }
+    out
+}
+
 /// What the interpreter needs to know about the control and the machine's words.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Control {
@@ -94,6 +118,21 @@ pub struct Control {
     /// The skip (probe) moves this dialect cites, in tenths (G38.2 = 382, G31 = 310): from its
     /// `probe_move` template. Empty: a skip move is refused as outside the subset.
     pub skip: Vec<u16>,
+    /// The probing macros this dialect cites (G65 P<n>): each template's P number and what it is
+    /// (`probe_on`, `probe_off`, `probe_protected`, `probe_surface`). Others are refused.
+    pub macros: Vec<(u32, Macro)>,
+}
+
+/// A probing macro the simulation models from its published description.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Macro {
+    /// Probe on / off: a small Z move of unpublished size inside.
+    On,
+    Off,
+    /// A feed move to the target that stops with an alarm if the probe triggers.
+    Protected,
+    /// Along one axis toward the surface, `Q` past it, then back to the start.
+    Surface,
 }
 
 /// A dialect's text conventions beyond the Fanuc words the core interprets (forge-post's
@@ -151,6 +190,7 @@ impl Control {
             channel: 1,
             lex: Lex::default(),
             skip: Vec::new(),
+            macros: Vec::new(),
         }
     }
 
@@ -238,6 +278,7 @@ impl Control {
                 _ => None,
             }),
             skip: skip_codes(d),
+            macros: macro_codes(d),
         })
     }
 
@@ -363,6 +404,23 @@ pub enum Ev {
         f: Q,
         code: u16,
     },
+    /// A probing macro switched the probe on or off: its small Z move is not published, so Z is
+    /// unknown to the interpreter afterwards (the simulation does not move it).
+    ProbeSwitch(bool),
+    /// A protected positioning macro: a feed move to `to` that alarms if the probe triggers.
+    Protected {
+        to: Vec<Option<Q>>,
+        f: Q,
+    },
+    /// A single-surface measure macro along letter index `axis` toward `at`, `q` past it (`to`:
+    /// that end, the only word set), then back to the start (the macro's own feeds are not
+    /// modelled: its time is unknown).
+    Surface {
+        axis: usize,
+        at: Q,
+        q: Q,
+        to: Vec<Option<Q>>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -385,6 +443,8 @@ pub struct State {
     pub centre: Option<(Q, Q)>,
     /// A tool a `Lex::tool_comment` comment named, waiting for its M0.
     pub comment_tool: Option<u32>,
+    /// The protected positioning macro's feed: modal to that macro only (Inspection Plus O9810).
+    pub protected_f: Option<Q>,
 }
 
 impl State {
@@ -405,6 +465,7 @@ impl State {
             selected: None,
             centre: None,
             comment_tool: None,
+            protected_f: None,
         }
     }
 }
@@ -701,6 +762,7 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
     // the G codes we know, by group; anything else is refused
     for g in &gs {
         let ok = c.skip.contains(g)
+            || (*g == 650 && !c.macros.is_empty())
             || matches!(
                 *g,
                 0 | 10
@@ -966,6 +1028,102 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         for i in axes {
             st.core.pos[i] = None;
         }
+        for e in stop.into_iter().chain(after_stop) {
+            push(out, e);
+        }
+        return Ok(());
+    }
+    // 5b'. a probing macro call (G65 P<n>, the dialect's cited ones): the shell's, outside the
+    // proven core, modelled from the macro's published description
+    if has_g(65) {
+        let p = get('P').and_then(|v| v.trim_end_matches('.').parse::<u32>().ok());
+        let Some(&(_, mac)) = c.macros.iter().find(|(n, _)| Some(*n) == p) else {
+            return Err(ge(
+                ln,
+                format!("G65 P{}: not a probing macro this dialect cites", p.unwrap_or(0)),
+            ));
+        };
+        if gs.len() > 1 {
+            return Err(ge(ln, "a probing macro call with other G codes in the block"));
+        }
+        if !st.core.absolute {
+            return Err(ge(
+                ln,
+                "a probing macro in G91 is not modelled: its words are positions",
+            ));
+        }
+        let zi = c.idx('Z');
+        match mac {
+            Macro::On | Macro::Off => {
+                push(out, Ev::ProbeSwitch(mac == Macro::On));
+                if let Some(z) = zi {
+                    st.core.pos[z] = None;
+                }
+            }
+            Macro::Protected => {
+                // its F is modal to this macro only
+                let f = f_word
+                    .or(st.protected_f)
+                    .ok_or_else(|| ge(ln, "a protected move with no feed"))?;
+                st.protected_f = Some(f);
+                let mut to = vec![None; axis.len()];
+                for i in 0..axis.len() {
+                    if let Some(v) = axis[i] {
+                        if st.core.pos[i].is_none() {
+                            // the move starts from where the machine is: unknown here
+                            return Err(ge(ln, "a protected move from an unknown position"));
+                        }
+                        to[i] = Some(v);
+                    }
+                }
+                if !any_axis {
+                    return Err(ge(ln, "a protected move with no axis word"));
+                }
+                push(out, Ev::Protected { to: to.clone(), f });
+                for (i, t) in to.iter().enumerate() {
+                    if let Some(v) = t {
+                        st.core.pos[i] = Some(*v);
+                    }
+                }
+            }
+            Macro::Surface => {
+                let named: Vec<usize> = (0..axis.len()).filter(|&i| axis[i].is_some()).collect();
+                let [ax] = named[..] else {
+                    return Err(ge(ln, "a single-surface measure names one axis"));
+                };
+                if c.letters[ax] != 'X' && c.letters[ax] != 'Y' && c.letters[ax] != 'Z' {
+                    return Err(ge(ln, "a single-surface measure on X, Y or Z only"));
+                }
+                if st.core.pos.iter().any(|p| p.is_none()) {
+                    return Err(ge(ln, "a single-surface measure from an unknown position"));
+                }
+                let q = coord('Q')?.ok_or_else(|| {
+                    ge(
+                        ln,
+                        "a single-surface measure with no Q (its default is not assumed)",
+                    )
+                })?;
+                if q <= 0 {
+                    return Err(ge(ln, "a single-surface measure needs Q > 0"));
+                }
+                let at = axis[ax].unwrap_or(0);
+                let from = st.core.pos[ax].unwrap_or(0);
+                if at == from {
+                    return Err(ge(ln, "a single-surface measure starting on its surface"));
+                }
+                let end = if at > from {
+                    at.checked_add(q)
+                } else {
+                    at.checked_sub(q)
+                }
+                .ok_or_else(|| ge(ln, "a coordinate past the word range"))?;
+                let mut to = vec![None; axis.len()];
+                to[ax] = Some(end);
+                push(out, Ev::Surface { axis: ax, at, q, to });
+            }
+        }
+        st.core.mode = None;
+        st.core.cyc = None;
         for e in stop.into_iter().chain(after_stop) {
             push(out, e);
         }

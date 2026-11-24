@@ -452,7 +452,12 @@ pub fn mill_with(
     let skip_lines: Vec<usize> = tl
         .marks
         .iter()
-        .filter(|m| matches!(m.what, crate::sim::Happening::Skip { .. }))
+        .filter(|m| {
+            matches!(
+                m.what,
+                crate::sim::Happening::Skip { .. } | crate::sim::Happening::Measure { .. }
+            )
+        })
         .map(|m| m.line)
         .collect();
     let mut removed = vec![0.0; tl.segments.len()];
@@ -708,7 +713,12 @@ pub fn mill_probing(
             passes = tl
                 .marks
                 .iter()
-                .filter(|m| matches!(m.what, crate::sim::Happening::Skip { .. }))
+                .filter(|m| {
+                    matches!(
+                        m.what,
+                        crate::sim::Happening::Skip { .. } | crate::sim::Happening::Measure { .. }
+                    )
+                })
                 .count()
                 + 1;
         }

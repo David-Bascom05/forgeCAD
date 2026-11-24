@@ -221,3 +221,67 @@ fn the_trigger_is_the_balls_first_contact_with_the_stock_as_cut() {
     assert_eq!(r.probe_hits.len(), 1, "{:?}", r.probe_hits);
     assert!((r.probe_hits[0].depth - 2.0).abs() < 1e-6, "{:?}", r.probe_hits);
 }
+
+/// The haas dialect with the Inspection Plus templates forge-post's probing/post adds.
+fn haas_with_macros() -> String {
+    Control::dialect_src("haas").unwrap().replacen(
+        "[dialect]\n",
+        "[dialect]\nprobe_on = \"G65 P9832\"\nprobe_off = \"G65 P9833\"\nprobe_protected = \"G65 P9810 X{x} Y{y} Z{z} F{f}\"\nprobe_surface = \"G65 P9811 {axis}{at} Q{q}{set}\"\n",
+        1,
+    )
+}
+
+#[test]
+fn inspection_plus_macros_are_read_and_simulated() {
+    use forge_machine::gcode::Macro;
+    use forge_machine::removal;
+    let m = builtin().remove(0);
+    let c = Control::for_machine(&m, &haas_with_macros(), 1).unwrap();
+    assert_eq!(
+        c.macros,
+        vec![
+            (9832, Macro::On),
+            (9833, Macro::Off),
+            (9810, Macro::Protected),
+            (9811, Macro::Surface)
+        ]
+    );
+    // refused where the dialect does not cite them
+    let plain = Control::for_dialect(&m, "haas", 1).unwrap();
+    assert!(gcode::run("G90 G0 X0. Y0. Z10.\nG65 P9810 Z5. F3000.\n", &plain).is_err());
+    let mut s = Setup::new(&m, c.clone()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -300.0])];
+    s.tools = vec![SimTool {
+        t: 20,
+        name: "probe".into(),
+        tip: [0.0, 0.0, -100.0],
+        body: vec![(3.0, 0.0, 50.0), (20.0, 50.0, 100.0)],
+        cut: Cut::Probe { r: 3.0 },
+    }];
+    s.h = vec![(20, 100.0)];
+    // probe on; protected move down to Z5; measure Z toward Z0 with 4 mm search; then up
+    let prog = "G90 G17 G21\nT20 M06\nG54\nG43 H20\nG0 X0. Y0. Z50.\nG65 P9832\nG0 Z50.\nG65 P9810 Z5. F3000.\nG65 P9811 Z0. Q4.\nG65 P9810 Z50.\nG65 P9833\n";
+    let (bs, _) = gcode::run(prog, &c).unwrap();
+    assert!(
+        bs.iter()
+            .any(|b| matches!(&b.ev, Ev::Surface { to, .. } if to[2] == Some(-4000)))
+    );
+    // a G91 word after the switch's unknown Z is refused
+    assert!(gcode::run("G90 G0 X0. Y0. Z50.\nG65 P9832\nG91 G0 Z1.\n", &c).is_err());
+    let (tl, r) = removal::mill_probing(&s, prog, [-20.0, -20.0, 180.0], [20.0, 20.0, 200.0], 0.5).unwrap();
+    // the measure triggers at the stock top (word Z0 = part 200) after 5 of its 9 mm
+    assert_eq!(r.triggers.len(), 1, "{:?}", r.triggers);
+    assert!((r.triggers[0].tip[2] - 200.0).abs() < 1e-6);
+    assert!((r.triggers[0].s - 5.0 / 9.0).abs() < 1e-6);
+    assert!(r.probe_hits.is_empty(), "{:?}", r.probe_hits);
+    // the measure returns to its start: the next protected move starts at Z5
+    let after = tl.segments.iter().find(|sg| sg.line == 10).unwrap();
+    let z = tl.joints.iter().position(|j| j == "Z").unwrap();
+    let before = tl.segments.iter().find(|sg| sg.line == 8).unwrap();
+    assert_eq!(after.q0[z], before.q1[z]);
+    let un = sim::unchecked(&m, &tl);
+    for p in ["probe.switch", "probe.measure_time"] {
+        assert!(un.iter().any(|u| u.path == p), "{p}");
+    }
+    assert!(sim::timeline_json(&tl).contains("\"measure\""));
+}
