@@ -777,9 +777,11 @@ fn led(
             let e = lo.last().or(ov.last()).unwrap_or(&body[body.len() - 1]).end();
             first.get_or_insert(s);
             // the loop cut at its tabs' ends: even pieces cut, odd ones lifted
+            // a loop with no length or width (the tool exactly fits a hole or slot) holds no tab
+            let total: f64 = body.iter().map(leads::seg_len).sum();
+            let solid = total > 1e-6 && 2.0 * leads::area(&body).abs() > 1e-6 * total;
             let tabbed = match tabs {
-                // a point loop (the tool exactly fits a round hole) has no length to hold a tab
-                Some(t) if body.iter().map(leads::seg_len).sum::<f64>() > 1e-6 => {
+                Some(t) if solid => {
                     let iv = tabs::intervals(&body, t, tool_d, ld.overlap.max(0.0) + 1e-6)
                         .map_err(OpError::Region)?;
                     let cuts: Vec<f64> = iv.iter().flat_map(|&(a, b)| [a, b]).collect();
