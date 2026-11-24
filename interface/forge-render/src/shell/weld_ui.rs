@@ -185,7 +185,9 @@ impl Shell {
         let v = self.view_rect;
         let mut places: Vec<(String, Rect)> = Vec::new();
         let (mut close, mut copy, mut export) = (false, false, false);
-        let w = W.min(v.width() - 32.0).max(420.0);
+        // fits the window it's in; under theme::NARROW the table scrolls sideways inside it
+        let area = super::dialog_area(ctx);
+        let w = W.min(v.width() - 32.0).max(420.0).min(area.width() - 16.0);
         let shown = egui::Window::new("Cut List")
             .id(egui::Id::unique("weld-cutlist"))
             .title_bar(false)
@@ -223,7 +225,7 @@ impl Shell {
                     .color(t.ink2),
                 );
                 ui.add_space(S1);
-                egui::ScrollArea::vertical()
+                egui::ScrollArea::both()
                     .max_height((v.height() * 0.5).max(160.0))
                     .auto_shrink([false, true])
                     .show(ui, |ui| {

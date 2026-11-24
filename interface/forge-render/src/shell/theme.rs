@@ -115,6 +115,10 @@ pub const CONTROL_H: f32 = 26.0;
 pub const TITLE_ROW_H: f32 = 28.0;
 
 /// Group labels, hints, secondary meta.
+/// The smallest text the app draws (STANDARD §10: nothing under 11 px): every size asked of
+/// `sans`, `medium`, `semi` and `mono` is held at it or above, so a 9.5 px line can't come back.
+pub const MIN_TEXT: f32 = 11.0;
+
 pub fn caption() -> FontId {
     sans(11.0)
 }
@@ -168,19 +172,19 @@ pub fn edge(t: &Theme) -> Color32 {
 }
 
 pub fn sans(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Proportional)
+    FontId::new(size.max(MIN_TEXT), FontFamily::Proportional)
 }
 
 pub fn medium(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Name("medium".into()))
+    FontId::new(size.max(MIN_TEXT), FontFamily::Name("medium".into()))
 }
 
 pub fn semi(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Name("semi".into()))
+    FontId::new(size.max(MIN_TEXT), FontFamily::Name("semi".into()))
 }
 
 pub fn mono(size: f32) -> FontId {
-    FontId::new(size, FontFamily::Monospace)
+    FontId::new(size.max(MIN_TEXT), FontFamily::Monospace)
 }
 
 /// Public Sans and IBM Plex Mono, bundled.
