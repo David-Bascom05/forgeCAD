@@ -658,3 +658,79 @@ pass whose purpose is to encircle an island on first contact. Counsel Q3 stands.
 
 **Added to counsel Q2:** the concrete output above (an emergent, cap-driven rectangular spiral
 of about 30 loops with corner engagement peaks), and the 300° split variant.
+
+## 9. Review of the peel design (cam/quality @41d99cd3, kernel/forge-cam/src/adaptive.rs), 2026-11-24
+
+Engineering review for David and counsel; **not legal advice**. Asked by TOOLPATH-QUALITY and the
+coordinator. The design as described to me, and checked against the module header:
+1. Per level, a cleared-area grid. Each step takes the largest turn toward material whose
+   engagement is at most ONE cap; no minimum, no band.
+2. Every pass heads within ±75° of one fixed, user-set sweep direction, so its total turn is at
+   most 150°. A pass ends at the boundary, when no turn keeps the cap, or after about two radii in
+   air.
+3. Starts are in cleared air with material ahead (an open side first); a plain helix only if
+   there is none.
+4. Links follow a fixed rule: straight at depth if clear, else retract, rapid, plunge.
+5. Afterwards come plain offset rings (offsets of boundary and islands together, uniform spacing),
+   only where material remains, then the plain wall ring.
+6. Islands are met only by the sweep.
+7. Closed pockets are refused (they go to the offset pocket, §8 (a)).
+8. Feeds are set per fixed-length sample.
+
+| live claim (§1) | required element the design lacks | verdict |
+|---|---|---|
+| SolidCAM '224 cl.1/5, '704 cl.1 | a selected or preselected **minimum** (one cap only) | avoids |
+| '224 cl.13; '645 cl.1, '861 cl.1, '445 cl.1 | a **spiral** with sequential loops (each pass turns at most 150° about one fixed direction, so it cannot wind round a point) | avoids, if the two-way rule below holds |
+| '224 cl.30/36, '704 cl.2-3, '445 cl.2-3 | a spiral portion; a split chosen by time | avoids |
+| '224 cl.45/51, '704 cl.4, '445 cl.4 (moat) | a path run "when the path meets an island" to surround it (6: the sweep meets islands; the step-5 rings are a final clean-up of the whole region from boundary and island offsets together, not a response to meeting an island) | avoids, on my reading; **counsel Q3 stays open** (see below) |
+| '224 cl.57-75 (channels) | separating channels; a time comparison | avoids |
+| '607 | depth and width picked automatically from spindle power | avoids, if power stays a check |
+| Celeritive '972/'212 | transition toolpaths or areas | avoids |
+| Celeritive '245/'040, Autodesk '172 | a (modified) Voronoi diagram | avoids |
+| Celeritive '176 | revising arcs of a previously generated path | avoids (steps are never revised) |
+| Delcam/Autodesk '339 cl.1/18 | offset subsets with a larger stepover plus backfill; enlarging the preceding path's radius | avoids |
+| DP '649/'859/'847 | a blend radius from the allowed engagement change; trochoidal links | avoids |
+| Truemill '113; '490 (to 2026-12-17) | corner arcs plus transition passes; the two-tangent-arc construction | avoids |
+| Boeing 8,676,372 | an engagement taken from an axial-vs-radial depth-of-cut plot | avoids, if the UI takes the cap as a number and offers no such plot |
+| Boeing 9,164,503 | a medial-axis slot with circular end recesses, then an outward spiral | avoids |
+| MERL 9,892,215 | segmentation by engagement variation; an abrasion parameter | avoids (fixed-length samples) |
+| SolidCAM US 2025/0284264 (pending) | a link type chosen by estimated time | avoids (fixed rule) |
+| Surfware 9,317,030; Truemill 9,931,703 | a stepped helix; a two-hole entry | avoids (plain helix) |
+| CNC Software '778 | a de-gouging node that modifies the path, … | avoids (the checker only refuses) |
+| OPEN MIND 12,485,511 | Q9 (axis-group interpolation in links) | open, but it applies to every CAM's retracts, not to this design |
+
+**Step 5 (rings around islands).** On my reading the rings avoid the moat element:
+- they are a final clean-up of the whole region, from offsets of boundary and islands together
+  (classic contour-parallel pocketing with islands, Held 1991);
+- they are emitted only where material remains;
+- they are not triggered by the path meeting an island.
+
+Two ways to make that stronger, both cheap:
+- emit only the arcs of a ring that actually cut material (partial rings), so that no ring is
+  generated *in order to* encircle an island;
+- make no ring around an island before the sweep has finished the level.
+
+The plain wall ring is a finishing contour (old prior art). Counsel Q3 still decides.
+
+**The two-way variant.** Each pass picks +sweep or −sweep at its start, never both. It stays in
+(b), with one condition. Two consecutive passes in opposite directions on opposite sides of an
+island, or of any uncut core, together with their links, trace a loop around it. That loop is a
+spiral-like and moat-like pattern, made from parts that are each fine.
+
+Rule: order the passes so that their positions across the sweep advance monotonically, like a
+zigzag (boustrophedon). Never follow a +sweep pass on one side of an island or core with a
+−sweep pass on its other side.
+
+Test: for every island, and for a grid of points in the region, the winding number of the whole
+path (passes plus links, closed by its start–end chord) is 0. It must also be 0 for the one-way
+variant. Raster zigzag with alternating directions is classic direction-parallel pocketing (prior
+art), so with that ordering rule the two-way variant is fine.
+
+**Written OK (engineering, not legal).** The peel design as built at 41d99cd3, with closed
+pockets refused, avoids at least one required element of every live independent claim read.
+The conditions:
+1. Rings around islands may be partial, and are emitted only after the sweep.
+2. The two-way variant keeps a monotone cross-sweep order and passes the winding-number test.
+3. Power is a check only, and the cap is a number (no ae-vs-ap plot).
+Residual for counsel: Q3 (moat), Q9 (applies to all CAM), and Q10 (whether a generator alone can
+infringe).
