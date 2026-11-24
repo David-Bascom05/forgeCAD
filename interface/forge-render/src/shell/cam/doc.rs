@@ -83,7 +83,7 @@ pub fn unquote(t: &str) -> String {
 
 /// The op built-ins this workspace knows: forge-cam-lang's (milling), then forge-turn-lang's
 /// (turning).
-pub const OP_FUNCS: [&str; 16] = [
+pub const OP_FUNCS: [&str; 17] = [
     "facing",
     "clear",
     "contour",
@@ -92,6 +92,7 @@ pub const OP_FUNCS: [&str; 16] = [
     "engrave",
     "thread_mill",
     "edge_break",
+    "bore",
     "turn_face",
     "turn_rough",
     "turn_finish",
@@ -453,6 +454,7 @@ prog = program(op1, post: \"fanuc\", number: 1001)
         let s = read(DOC).unwrap();
         assert_eq!(free_name(&s, "skim"), "skim2");
         assert_eq!(free_name(&s, "pocket"), "pocket2");
-        assert_eq!(free_name(&s, "bore"), "bore");
+        assert_eq!(free_name(&s, "bore"), "bore2", "a built-in is never a name");
+        assert_eq!(free_name(&s, "boss"), "boss");
     }
 }

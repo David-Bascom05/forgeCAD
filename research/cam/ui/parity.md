@@ -30,10 +30,13 @@ closes it:
 | Passes: direction climb / conventional / both ways (R4, R5) | contour: `direction:` climb / conventional | done on cam/ui-parity (contour); pocket/clear: QUAL |
 | Passes: tolerance, smoothing (arc fit) (S17) | setup `tol:`; arcs posted where the path is arcs | partly |
 | Linking: retraction policy, high-feed mode, stay-down, lift height, safe distance (L1–L5, L11) | retract to the setup's retract height; Linking tab says so and opens Setup Heights | partly; policies LANG |
-| Linking: leads (horizontal / vertical radii) (L6) | none | LANG |
+| Linking: leads (horizontal / vertical radii) (L6) | contour: lead none/arc/line, radius, sweep, length, entry point, overlap (CAM-2D-FINISH) | done on cam/ui-parity (contour) |
 | Linking: ramp type and angle (L9, R16, R17) | helical `ramp:` angle on clear/pocket | partly; other types LANG |
 | Feed optimisation at corners (F4) | none | LANG (generator) |
 | Templates (save op as template, insert) | none | UI next: an op's text copied into a template file and inserted by AddFeature |
+
+| Tabs (holding tabs on a profile) | contour: tabs by count, spacing or positions; width, height, shape | done on cam/ui-parity |
+| Bore, thread milling options (passes, spring, hand, starts) | Bore op (pitch or ramp, finishing stock, spring); thread mill passes, spring, hand, starts, lead | done on cam/ui-parity |
 
 ## Setups
 
