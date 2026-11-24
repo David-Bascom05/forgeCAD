@@ -328,6 +328,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 marks: &marks,
                 world: &[],
                 behind: &[],
+                solid: &[],
             };
             drawn = r.frame(&target.view, &mut s.scene, &s.camera, overlay);
             r.wait();
@@ -364,6 +365,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 marks: &[],
                 world: &[],
                 behind: &[],
+                solid: &[],
             };
             if a.hover {
                 let p = now_ms();

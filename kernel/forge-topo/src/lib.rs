@@ -17,6 +17,8 @@ pub mod small;
 pub mod topo;
 pub mod topo_shell;
 pub mod topo_edges;
+pub mod topo_euler;
+pub mod topo_fans;
 pub mod uv;
 
 pub use body::{

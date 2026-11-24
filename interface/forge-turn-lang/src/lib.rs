@@ -21,8 +21,11 @@
 //! ```
 //!
 //! Also `bore_rough(op, tool:, leave:, step:, to:, from: D)` (D the drilled hole's diameter; then
-//! `turn_finish` with a boring tool finishes the bore), `turn_groove(op, tool:, from:, to:, r:)`, `turn_thread(op, tool:, d:, pitch:, from:,
-//! to:, passes:)`, `part_off(op, tool:, at:)`, `turn_drill(op, tool:, to:, peck:)`. Every op is
+//! `turn_finish` with a boring tool finishes the bore), `turn_groove(op, tool:, from:, to:, r:)`
+//! (with an ID grooving bar, also `bore:` the bore's diameter on the way in), `turn_thread(op,
+//! tool:, d:, pitch:, from:, to:, passes:)` (an ID thread insert cuts an internal thread),
+//! `part_off(op, tool:, at:)`, `turn_drill(op, tool:, to:, peck:)`; `turn_rough` and
+//! `turn_finish` with a left-hand tool work up the profile, `from:` Z0 `to:` Z1. Every op is
 //! posted, read back (the round trip), and the path the text means is what is certified
 //! (forge_turn::ops::certify). The reply is `forgecad.cam/1` with `"process": "turning"`.
 use forge_agent::json::Json;
@@ -86,10 +89,14 @@ pub struct TurnCam {
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
     pub report: Option<Report>,
+    /// The exact in-process stock and the G4 leftover (`cam F check`); otherwise the normal
+    /// path: the stock as columns, no leftover.
+    pub exact: bool,
     parts: Vec<forge_turn::profile::HalfProfile>,
     tools: Vec<(TurnTool, u32)>,
     setups: Vec<(String, Setup)>,
     paths: Vec<(String, usize, OpPath)>,
+    lib: forge_tooling::Library,
 }
 
 fn named<'a>(a: &'a BTreeMap<String, V>, k: &str) -> Result<&'a V, String> {
@@ -101,6 +108,32 @@ fn num(a: &BTreeMap<String, V>, k: &str, default: Option<f64>) -> Result<f64, St
         Some(V::Num(x)) => Ok(*x),
         Some(v) => Err(format!("`{k}:` is not a number ({v:?})")),
         None => default.ok_or_else(|| format!("missing `{k}:`")),
+    }
+}
+
+/// `k: (z0, z1)` or `k: ((z0, z1), (z2, z3), ..)`: z ranges; none when absent.
+fn ranges(a: &BTreeMap<String, V>, k: &str) -> Result<Vec<(f64, f64)>, String> {
+    let pair = |v: &V| match v {
+        V::Tuple(p) => match p.as_slice() {
+            [V::Num(x), V::Num(y)] => Some((*x, *y)),
+            _ => None,
+        },
+        _ => None,
+    };
+    match a.get(k) {
+        None => Ok(vec![]),
+        Some(v) => {
+            if let Some(p) = pair(v) {
+                return Ok(vec![p]);
+            }
+            match v {
+                V::Tuple(xs) => xs
+                    .iter()
+                    .map(|x| pair(x).ok_or_else(|| format!("`{k}:` holds z ranges (z0, z1)")))
+                    .collect(),
+                _ => Err(format!("`{k}:` holds z ranges (z0, z1)")),
+            }
+        }
     }
 }
 
@@ -207,7 +240,8 @@ impl TurnCam {
             "part" => {
                 let file = text(a, "#0", None)?;
                 let path = dir.join(&file);
-                let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let src =
+                    forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
                 if !run.ok() {
                     return Err(format!(
@@ -222,8 +256,16 @@ impl TurnCam {
                 Ok(V::Part(self.parts.len() - 1))
             }
             "lathe_tool" => {
-                let id = text(a, "#0", None)?;
-                let t = insert::builtin(&id).map_err(|e| e.to_string())?;
+                let t = if a.contains_key("blade") {
+                    self.blade_of_records(a)?
+                } else if a.contains_key("drill") {
+                    self.drill_of_records(a)?
+                } else if a.contains_key("holder") {
+                    self.tool_of_records(a)?
+                } else {
+                    let id = text(a, "#0", None)?;
+                    insert::builtin(&id).map_err(|e| e.to_string())?
+                };
                 let st = num(a, "t", None)? as u32;
                 self.tools.push((t, st));
                 Ok(V::Tool(self.tools.len() - 1))
@@ -236,9 +278,7 @@ impl TurnCam {
                     return Err("`chuck:` is a chuck(..)".into());
                 };
                 let machine = match a.get("machine") {
-                    Some(V::Str(m)) => {
-                        Some(machine::lathe(machine::BUILTIN, m).map_err(|e| format!("{e:?}"))?)
-                    }
+                    Some(V::Str(m)) => Some(machine::builtin(m).map_err(|e| format!("{e:?}"))?),
                     None => None,
                     Some(v) => return Err(format!("`machine:` is a name, not {v:?}")),
                 };
@@ -274,6 +314,7 @@ impl TurnCam {
                     tol: num(a, "tol", Some(0.002))?,
                     machine,
                     place,
+                    fixtures: Vec::new(),
                 };
                 s.check().map_err(|e| format!("{e:?}"))?;
                 self.setups.push((name.to_string(), s));
@@ -295,16 +336,17 @@ impl TurnCam {
                 let si = self.setup_of(a)?;
                 let (t, st) = self.tool_of(a)?;
                 let s = &self.setups[si].1;
-                let top = num(a, "top", Some(s.part.bbox[3]))?;
-                let r = ops::rough(
-                    s,
-                    &t,
-                    st,
+                let (leave, step, to) = (
                     num(a, "leave", Some(0.3))?,
                     num(a, "step", Some(t.ap))?,
                     num(a, "to", None)?,
-                    top,
                 );
+                // a left-hand tool roughs up, from `from:` to `to:`
+                let r = if t.left {
+                    ops::rough_up(s, &t, st, leave, step, num(a, "from", None)?, to)
+                } else {
+                    ops::rough(s, &t, st, leave, step, to, num(a, "top", Some(s.part.bbox[3]))?)
+                };
                 op(self, "rough", r, si)
             }
             "bore_rough" => {
@@ -327,32 +369,44 @@ impl TurnCam {
             "turn_finish" => {
                 let si = self.setup_of(a)?;
                 let (t, st) = self.tool_of(a)?;
-                let r = ops::finish(
+                let (s, leave, to) = (
                     &self.setups[si].1,
-                    &t,
-                    st,
                     num(a, "leave", Some(0.0))?,
                     num(a, "to", None)?,
                 );
+                // a left-hand tool finishes up the profile, from `from:` to `to:`
+                let r = if t.left {
+                    ops::finish_up(s, &t, st, leave, num(a, "from", None)?, to)
+                } else {
+                    ops::finish_skip(s, &t, st, leave, to, &ranges(a, "skip")?)
+                };
                 op(self, "finish", r, si)
             }
             "turn_groove" => {
                 let si = self.setup_of(a)?;
                 let (t, st) = self.tool_of(a)?;
-                let r = ops::groove(
+                let (s, z0, z1, rho) = (
                     &self.setups[si].1,
-                    &t,
-                    st,
                     num(a, "from", None)?,
                     num(a, "to", None)?,
                     num(a, "r", None)?,
                 );
+                let r = if t.kind == insert::Kind::IdGroove {
+                    ops::id_groove(s, &t, st, z0, z1, rho, 0.5 * num(a, "bore", None)?)
+                } else {
+                    ops::groove(s, &t, st, z0, z1, rho)
+                };
                 op(self, "groove", r, si)
             }
             "turn_thread" => {
                 let si = self.setup_of(a)?;
                 let (t, st) = self.tool_of(a)?;
-                let r = ops::thread(
+                let thread = if t.kind == insert::Kind::IdThread {
+                    ops::id_thread
+                } else {
+                    ops::thread
+                };
+                let r = thread(
                     &self.setups[si].1,
                     &t,
                     st,
@@ -419,7 +473,11 @@ impl TurnCam {
                 let q = post::quantize(&job, number, name, &d).map_err(|e| format!("{e:?}"))?;
                 let (text, motions) = post::round_trip(&q, &d)?;
                 let posted = post::posted_moves(&motions, &job, &d);
-                let rep = ops::certify(s, &job, Some(&posted))?;
+                let rep = if self.exact {
+                    ops::certify(s, &job, Some(&posted))?
+                } else {
+                    ops::certify_fast(s, &job, Some(&posted))?
+                };
                 Ok((text, rep))
             });
         match r {
@@ -475,6 +533,130 @@ impl TurnCam {
     }
 
     /// The program's text, when every op is certified.
+    /// `lathe_tool(holder: H, insert: I, t: N)`: a holder or boring bar and an insert from the
+    /// tooling library (records by id: the built-in makers' records and the user's and the
+    /// project's, `run_with_library`), assembled by their ISO codes as the built-in tools are.
+    fn tool_of_records(&self, a: &BTreeMap<String, V>) -> Result<TurnTool, String> {
+        let hid = text(a, "holder", None)?;
+        let iid = text(a, "insert", None)?;
+        let h = self
+            .lib
+            .turn_holders
+            .iter()
+            .find(|h| h.id == hid)
+            .ok_or_else(|| format!("no turning holder or bar `{hid}` in the tooling library"))?;
+        let i = self
+            .lib
+            .inserts
+            .iter()
+            .find(|i| i.id == iid)
+            .ok_or_else(|| format!("no insert `{iid}` in the tooling library"))?;
+        let id = format!("{hid} + {iid}");
+        let t = match h.kind {
+            forge_tooling::turning::HolderKind::Holder => insert::turning_tool(&id, &i.code, &h.code, None),
+            forge_tooling::turning::HolderKind::Bar => insert::boring_tool(&id, &i.code, &h.code, None),
+        };
+        t.map_err(|e| e.to_string())
+    }
+
+    /// `lathe_tool(blade: B, insert: I, block: K?, t: N)`: a parting blade and a grooving insert from the
+    /// tooling library: the insert's width, corner, length and side clearance (2° when not
+    /// stated), the blade's thickness, reach, height and largest bar. Its reach makes it a part-off
+    /// blade when it reaches 20 or more, else a grooving one.
+    fn blade_of_records(&self, a: &BTreeMap<String, V>) -> Result<TurnTool, String> {
+        let bid = text(a, "blade", None)?;
+        let iid = text(a, "insert", None)?;
+        let b = self
+            .lib
+            .blades
+            .iter()
+            .find(|b| b.id == bid)
+            .ok_or_else(|| format!("no blade `{bid}` in the tooling library"))?;
+        let i = self
+            .lib
+            .groove_inserts
+            .iter()
+            .find(|i| i.id == iid)
+            .ok_or_else(|| format!("no grooving insert `{iid}` in the tooling library"))?;
+        let kind = if b.cdx >= 20.0 {
+            insert::Kind::Part
+        } else {
+            insert::Kind::Groove
+        };
+        // the tool block, `block:` (its record), else generic
+        let block = match a.get("block") {
+            None => None,
+            Some(_) => {
+                let kid = text(a, "block", None)?;
+                let k = self
+                    .lib
+                    .tool_blocks
+                    .iter()
+                    .find(|k| k.id == kid)
+                    .ok_or_else(|| format!("no tool block `{kid}` in the tooling library"))?;
+                Some([k.h, k.b, k.l1])
+            }
+        };
+        insert::blade_tool(
+            &format!("{bid} + {iid}"),
+            kind,
+            i.width,
+            i.re,
+            i.head.unwrap_or(6.0),
+            i.clearance.unwrap_or(2.0),
+            b.t_blade,
+            b.cdx,
+            b.h,
+            b.max_bar,
+            block,
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    /// `lathe_tool(drill: D, t: N)`: a drill from the tooling library on the centre line: its
+    /// diameter, point angle (180: flat-bottomed, an indexable drill), usable depth and shank.
+    fn drill_of_records(&self, a: &BTreeMap<String, V>) -> Result<TurnTool, String> {
+        let did = text(a, "drill", None)?;
+        let d = self
+            .lib
+            .tools
+            .iter()
+            .find(|d| d.id == did)
+            .ok_or_else(|| format!("no drill `{did}` in the tooling library"))?;
+        if d.kind != forge_tooling::Kind::Drill {
+            return Err(format!("`{did}` is not a drill"));
+        }
+        insert::drill_tool_len(
+            &did,
+            d.dc,
+            d.angle,
+            d.lcf,
+            d.dcon.max(d.dc),
+            (d.oal - d.lcf).max(1.0),
+        )
+        .map_err(|e| e.to_string())
+    }
+
+    /// The parts, each as its exact half-profile in (ρ, z) (read-only: for a view).
+    pub fn parts(&self) -> &[forge_turn::profile::HalfProfile] {
+        &self.parts
+    }
+
+    /// The setups by name: the part, the bar (`bar_r`, `bar_front`; `Setup::bar()` its region),
+    /// the chuck (`Setup::chuck_region()` its envelope as it turns), the fixtures, Z0 the part's
+    /// own z = 0, the machine and its placement.
+    pub fn setups(&self) -> &[(String, Setup)] {
+        &self.setups
+    }
+
+    /// The ops' paths as generated, in document order: (op name, index into `setups`, path). A
+    /// path's points are the tool's reference point (the nose centre); `path.tool.tip` added
+    /// gives the imaginary tip the program states. `forge_turn::ops::steps_to_moves` gives its
+    /// moves.
+    pub fn paths(&self) -> &[(String, usize, OpPath)] {
+        &self.paths
+    }
+
     pub fn program_text(&self) -> Option<&str> {
         self.programs.iter().find_map(|p| p.text.as_deref())
     }
@@ -547,9 +729,14 @@ impl TurnCam {
             ("programs", Json::Arr(programs)),
             ("checks", Json::Num(checks as f64)),
             (
+                "stock_model",
+                Json::Str(self.report.as_ref().map_or(String::new(), |r| r.stock_model.clone())),
+            ),
+            (
                 "leftover",
                 Json::obj(vec![
-                    ("rule", Json::Str("G4: final stock ⊆ (part ⊕ B_tol) ∪ these regions ∪ the declared removals, in (ρ, z)".into())),
+                    ("computed", self.report.as_ref().is_some_and(|r| r.leftover_done).into()),
+                    ("rule", Json::Str("G4: final stock ⊆ (part ⊕ B_tol) ∪ these regions ∪ the declared removals, in (ρ, z); computed by `cam F check`".into())),
                     ("regions", Json::Arr(leftover)),
                 ]),
             ),
@@ -557,9 +744,28 @@ impl TurnCam {
     }
 }
 
-/// Runs a turning document (its file's directory finds the part).
+/// Runs a turning document (its file's directory finds the part): the normal path.
 pub fn run(src: &str, dir: &Path) -> TurnCam {
+    run_with(src, dir, false, forge_tooling::Library::builtin())
+}
+
+/// `run` with the exact in-process stock and the G4 leftover (`forgecad cam F check`).
+pub fn run_checked(src: &str, dir: &Path) -> TurnCam {
+    run_with(src, dir, true, forge_tooling::Library::builtin())
+}
+
+/// `run` (or, `exact`, `run_checked`) on a given tooling library: the one the user's levels make
+/// (forge-tooling-builder's `library(project, user_cam)`: the project's records over the user's
+/// over the built-in), so inserts and turning holders made in the builder reach
+/// `lathe_tool(holder:, insert:)`.
+pub fn run_with_library(src: &str, dir: &Path, exact: bool, lib: forge_tooling::Library) -> TurnCam {
+    run_with(src, dir, exact, lib)
+}
+
+fn run_with(src: &str, dir: &Path, exact: bool, lib: forge_tooling::Library) -> TurnCam {
     let mut cam = TurnCam {
+        lib,
+        exact,
         ok: true,
         errors: vec![],
         warnings: vec![],
@@ -606,7 +812,17 @@ pub fn run(src: &str, dir: &Path) -> TurnCam {
                     };
                     env.insert(name.clone(), v);
                 }
-                StmtKind::Expr(_) => {}
+                // a bare call would be evaluated for nothing and report nothing: every operation
+                // is named (the header, the first statement, is skipped above)
+                StmtKind::Expr(e) => {
+                    return Err(match &e.kind {
+                        ExprKind::Call(f, _) => match &f.kind {
+                            ExprKind::Name(n) => format!("an operation needs a name: `name = {n}(..)`"),
+                            _ => "an operation needs a name: `name = f(..)`".into(),
+                        },
+                        _ => "a bare expression does nothing here: name it (`name = ..`)".into(),
+                    });
+                }
                 _ => return Err("a statement a turning document does not take".into()),
             }
             Ok(())

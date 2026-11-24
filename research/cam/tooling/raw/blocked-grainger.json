@@ -1,0 +1,10 @@
+{
+ "source": "Grainger",
+ "blocked": [
+  {
+   "url": "https://www.grainger.com/search?searchQuery=CNMG432",
+   "why": "returns a \"Whoops, we couldn't find that\" page to a plain client; no product page reached"
+  }
+ ],
+ "records": []
+}

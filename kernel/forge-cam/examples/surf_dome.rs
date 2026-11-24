@@ -126,6 +126,8 @@ fn main() {
         tidx: 0,
         h,
         feed: (1500.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let t0 = std::time::Instant::now();
     let rough = surf::zlevel(&sfr, c, [-5.0, -5.0, 65.0, 65.0], 12.0, 0.5, 2.0, 4.0, 1.0).unwrap();
@@ -158,6 +160,8 @@ fn main() {
         tidx: 0,
         h,
         feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let t0 = std::time::Instant::now();
     let p = surf::parallel(&sf, c, area, step, 0.0, 1.0).unwrap();

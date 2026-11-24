@@ -10,14 +10,14 @@ pub(super) mod tips;
 
 pub(super) use sketch_tab::close_drop;
 
-pub(super) struct Tool {
+pub(in crate::shell) struct Tool {
     pub(super) name: &'static str,
     pub(super) icon: &'static str,
     pub(super) action: Option<Action>,
     pub(super) on: bool,
 }
 
-pub(super) struct Group {
+pub(in crate::shell) struct Group {
     pub(super) name: &'static str,
     pub(super) big: Vec<Tool>,
     pub(super) small: Vec<Tool>,
@@ -261,6 +261,9 @@ fn groups(s: &Shell) -> Vec<Group> {
             })
             .collect();
     }
+    if let Some(gs) = super::env::groups(s) {
+        return gs;
+    }
     let v = s.view;
     if s.tab == super::HARNESS_TAB {
         return super::harness_ui::groups(s)
@@ -284,24 +287,6 @@ fn groups(s: &Shell) -> Vec<Group> {
         && let Some(gs) = asm_groups(s)
     {
         return gs;
-    }
-    if s.tab == super::THERMO_TAB {
-        return super::thermo_ui::groups(s)
-            .into_iter()
-            .map(|(name, big, small)| {
-                let tool = |(name, icon, action, on)| Tool {
-                    name,
-                    icon,
-                    action,
-                    on,
-                };
-                g(
-                    name,
-                    big.into_iter().map(tool).collect(),
-                    small.into_iter().map(tool).collect(),
-                )
-            })
-            .collect();
     }
     let asm_explode = s.fg.as_ref().and_then(|f| f.asm.as_ref()).map(|a| a.explode_open);
     let asm_glyphs = s.fg.as_ref().and_then(|f| f.asm.as_ref()).map(|a| a.glyphs.all);
@@ -442,6 +427,7 @@ fn groups(s: &Shell) -> Vec<Group> {
         }))
         .collect(),
         super::SHEET_TAB => super::sheetui::sheet_groups(s),
+        // the Flat Pattern environment's, kept for a flat shown before its environment is set
         super::FLAT_TAB => super::sheetui::flat_groups(s),
         // drawn by sketch_tab, its split buttons and dropdowns
         1 => vec![],
@@ -561,6 +547,16 @@ fn groups(s: &Shell) -> Vec<Group> {
                 ],
             ),
             g(
+                "Machines",
+                vec![go(
+                    "Machine Builder",
+                    "gear",
+                    Action::MachineBuilder,
+                    s.machine.is_some(),
+                )],
+                vec![],
+            ),
+            g(
                 "Options",
                 vec![go("Settings", "options", Action::Settings, s.prefs.open)],
                 vec![],
@@ -638,7 +634,11 @@ impl Shell {
             return self.sketch_ribbon(ui, w);
         }
         let mut gx = 0.0;
-        let gs = groups(self);
+        let mut gs = groups(self);
+        // the Machine Builder's own commands, on the Manage tab while it is open
+        if self.machine.is_some() && self.tab == 4 {
+            gs.extend(super::machine::groups(self));
+        }
         // too wide for the window: small buttons lose their words, as Inventor's ribbon shrinks
         let full: f32 = gs
             .iter()

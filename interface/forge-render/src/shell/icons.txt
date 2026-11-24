@@ -239,3 +239,13 @@ endtrim M3 7h11M3 17h15M3 7v10M14 7l4 10M20 5v16
 endcap M3 7h12v10H3M15 5h4v14h-4z
 cornerplate M4 3v18h18M7 18v-8l8 8zM4 3h3M19 21v-3
 cutlist M6 5h14M6 10h14M6 15h14M6 20h9M3 4v2M3 9v2M3 14v2M3 19v2
+# ux toolkit (shell/ux.rs): transport, reorder, add
+play M8 5v14l11-7z
+pause M8 5v14M16 5v14
+first M6 5v14M18 5v14l-10-7z
+last M18 5v14M6 5v14l10-7z
+stepback M17 5v14l-10-7zM6 5v14
+stepfwd M7 5v14l10-7zM18 5v14
+up M12 19V5M6 11l6-6 6 6
+down M12 5v14M6 13l6 6 6-6
+plus M12 5v14M5 12h14

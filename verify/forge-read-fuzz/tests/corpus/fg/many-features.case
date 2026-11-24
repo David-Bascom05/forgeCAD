@@ -1,0 +1,7 @@
+# 65536 U of rack holes: a loop made 65536 sketches and cutouts, 1.5 GB in `fg check`. A run makes
+# at most 20000 features and executes at most 1e7 statements.
+from: examples/rack18u/frame/rail.fg
+replace: shared n_u = count(18)
+with: shared n_u = count(65536.)
+expect: refused
+max-ms: 10000

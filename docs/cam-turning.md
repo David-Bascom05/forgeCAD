@@ -4,7 +4,9 @@ A turning document is a machining document whose setup is a `lathe_setup(..)`. `
 plans it, posts it, reads the text back, and certifies the path the text means; the reply is
 `forgecad.cam/1` with `"process": "turning"`. The program is written (`-o F.nc`) only when every
 op is certified. Exit 0: certified in full; 3: certified except G5 (no machine, or not placed);
-1: refused.
+1: refused. `forgecad cam F check` also keeps the exact in-process stock and lists the G4
+leftover; the normal path keeps the stock as columns (a superset by construction: sound for the
+rapid and holder checks, and about four times faster).
 
 ```
 machining
@@ -21,7 +23,10 @@ fin   = turn_finish(op1, tool: t2, to: -55)
 prog  = lathe_program(op1, post: "fanuc-lathe", number: 1)
 ```
 
-The whole example is examples/machined/shaft_turn.fg (with a thread and a part-off).
+The whole example is examples/machined/shaft_turn.fg (with a thread and a part-off); inside work
+(drill, bore, a thread relief groove, an M30 x 1.5 internal thread) is examples/machined/nut_turn.fg;
+a left-hand finish up a back chamfer is examples/machined/collar_turn.fg; every op on one hollow part
+is examples/machined/hub_turn.fg (CAM-CORE's shop test part).
 
 ## The part
 
@@ -35,21 +40,26 @@ spheres and tori about it. Any other face (a flat, a cross hole) is refused by n
 |---|---|
 | `part("F.fg")` | the part, lowered to its half-profile in (ρ, z) |
 | `lathe_tool("ID", t: N)` | a tool of the built-in library (kernel/forge-turn/data/turning.toml) at station N |
+| `lathe_tool(blade: "B", insert: "I", block: "K", t: N)` | a parting or grooving blade and its insert from the tooling library's `[[blade]]` and `[[groove_insert]]` records (makers' data: the insert's width, corner, length and side clearance; the blade's thickness, reach, height; a bar over the blade's largest is refused; `block:` its `[[tool_block]]`, else a generic block) |
+| `lathe_tool(drill: "D", t: N)` | a drill from the tooling library (`[[tool]]` type drill: diameter, point angle, 180 for an indexable drill's flat bottom, usable depth, shank) |
+| `lathe_tool(holder: "H", insert: "I", t: N)` | a holder or boring bar and an insert from the tooling library (forge-tooling's makers' records, and the user's and the project's where the caller passes them: `forge_turn_lang::run_with_library`), assembled by their ISO codes |
 | `chuck(face:, grip:, jaw:, body_r: 80, body_len: 60)` | the three-jaw chuck's envelope as it turns |
 | `lathe_setup(PART, bar: D, front: Z, chuck:, machine:, at:, offsets:, tol: 0.002, clearance: 1, holder_clearance: 0.25, rapid_clearance: 0.2)` | the bar (diameter D, front face at Z); `machine:` a lathe by name; `at:` (the machine Z of the part's Z0) and `offsets:` ((station, x, z), …: each tool's geometry offsets) place the setup, and G5 is then checked on every joint position |
 | `turn_face(op, tool:, to: Z, step:)` | face from the bar's front to Z, the nose centre to the centre line |
 | `turn_rough(op, tool:, leave:, step:, to: Z, top:)` | axial passes at every `step` and at every diameter of the part, down to the part grown by the nose radius and `leave`, or to Z |
-| `turn_finish(op, tool:, leave: 0, to: Z)` | the profile, the nose centre on the exact offset of the part by the nose radius (compensation done exactly; posted as the imaginary tip with G40) |
+| `turn_finish(op, tool:, leave: 0, to: Z, skip: ((Z0, Z1), ..))` | the profile, the nose centre on the exact offset of the part by the nose radius (compensation done exactly; posted as the imaginary tip with G40). On a hollow part it starts at the front face's inner edge. `skip:` z ranges it bridges (out at the top's radius and down, the far side of the gap) instead of diving in: the grooves their own ops cut |
+| `turn_rough(op, tool: LEFT, leave:, step:, from: Z0, to: Z1)` | with a left-hand tool: axial passes up (+z) from Z0 (room already cut) to the part grown by the nose and leave, or Z1 |
+| `turn_finish(op, tool: LEFT, leave: 0, from: Z0, to: Z1)` | with a left-hand tool: up the profile (+z) from Z0 to Z1, for the flanks that face the chuck (a collar's back chamfer, reached from a neck cut first) |
 | `bore_rough(op, tool:, leave:, step:, to: Z, from: D)` | boring: the drilled hole (diameter D) opened outward in axial passes down to the bore grown by the nose radius and `leave`, or to Z; `turn_finish` with a boring tool then finishes the bore |
-| `turn_groove(op, tool:, from: Z0, to: Z1, r: R)` | a groove between Z0 and Z1 to radius R, by plunges |
-| `turn_thread(op, tool:, d:, pitch:, from:, to:, passes: 8)` | an ISO metric external thread (60°), radial infeed of equal chip area; the thread is a declared removal (the part shows the major diameter) |
+| `turn_groove(op, tool:, from: Z0, to: Z1, r: R)` | a groove between Z0 and Z1 to radius R, by plunges; with an ID grooving bar also `bore: D` (the smallest diameter on the way in): an internal groove, the blade entering along the axis and plunging outward |
+| `turn_thread(op, tool:, d:, pitch:, from:, to:, passes: 8)` | an ISO metric thread (60°), radial infeed of equal chip area; the thread is a declared removal. External with a thread insert (the part shows the major diameter); internal with an ID thread insert (the part shows the minor diameter, d − 5H/4, H = p·√3/2) |
 | `part_off(op, tool:, at: Z)` | the blade's side on the part's back face at Z, through the centre |
 | `turn_drill(op, tool:, to: Z, peck: 0)` | a drill on the centre line |
 | `lathe_program(op, post:, number:)` | posts and certifies the setup's ops: `fanuc-lathe`, `haas-lathe`, `linuxcnc-lathe` |
 
 The built-in tools: `od-rough-cnmg` (CNMG120408 in PCLNR2525M12), `od-finish-dnmg` (DNMG150404 in
-PDJNR2525M15), `od-profile-vbmt` (VBMT160404 in SVJBR2525M16), `groove-3`, `part-3`,
-`thread-60`, `drill-8`, `drill-26`, and for bores `id-bore-ccmt` (CCMT09T304 in S20R-SCLCR09: a Ø20 bar; its body is checked as the cylinder it is). Inserts and holders are decoded from their ISO codes; holder heads are
+PDJNR2525M15), `od-profile-vbmt` (VBMT160404 in SVJBR2525M16), `groove-3`, `part-3`, `part-3-deep` (reach 40, bars to about Ø78),
+`thread-60`, `drill-8`, `drill-26`, `drill-26-4d` (110 flute), and for bores `id-bore-ccmt` (CCMT09T304 in S20R-SCLCR09: a Ø20 bar; its body is checked as the cylinder it is), `id-groove-2` (a 2 mm blade reaching 3 above a Ø16 bar) and `id-thread-60` (a 60° insert, pitch 0.5–2, on a Ø16 bar); left hand, `od-profile-vbmt-left` (VBMT160404 in SVJBL2525M16: an L holder is its R twin mirrored across z, tip number 4). Inserts (ISO 1832: C D V T S W R) and holders and bars (ISO 5608, 6261; right or left hand) are decoded from their ISO codes; holder heads are
 generic: verify with the vendor. The built-in machine: `generic-lathe` (CAM-MACHINE's generic
 2-axis lathe; placeholders, not a real machine).
 
@@ -63,8 +73,10 @@ generic: verify with the vendor. The built-in machine: `generic-lathe` (CAM-MACH
 - G5: with a machine, the turret station, the spindle's range (CSS under the G50 clamp), and the
   joints (placed) or the spans (not placed).
 - G6: the posted text reads back as the program; the path it means is the one checked.
-- G4: the leftover, listed with a reason: "nose radius r" (a corner no finishing nose reaches) or
-  "uncut".
+- G4: the leftover, listed with a reason: "nose radius r" (an inside corner no disc of radius r
+  reaches, decided to within 2·tol: every piece of its boundary is r − 2·tol from where such a disc's
+  centre can be; r the smallest finishing nose or grooving blade corner that holds it) or "uncut"
+  (a band left by a leave among them).
 
 The tool is checked as a solid, below centre height too (the insert's body falls away by its
 clearance angle, and its points off the centre plane are further from the axis). Why a check in

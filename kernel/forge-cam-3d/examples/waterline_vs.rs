@@ -45,6 +45,8 @@ fn main() {
         tidx: 0,
         h,
         feed: (1500.0, 500.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let theirs = surf::waterline(&sf, c, area, &zs, 0.5).unwrap();
     let g1 = t0.elapsed().as_secs_f64();

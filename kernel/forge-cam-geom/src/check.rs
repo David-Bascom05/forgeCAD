@@ -465,7 +465,8 @@ pub enum Move {
     /// The checker takes the arc swept over every height between z0 and z1, a superset of the
     /// helix; `at` encloses heights by that range (its z is linear in s, which is the
     /// machine's height only at the ends: only enclosures over all of [0, 1] are taken). The
-    /// general branch and bound does not take it (undecided).
+    /// general branch and bound takes the arc at each instant at every height of the range
+    /// (`Move::enclose`).
     Helix {
         c: V3,
         x: V3,
@@ -481,6 +482,24 @@ pub enum Move {
 impl Move {
     pub fn at(&self, s: Ival) -> [Ival; 3] {
         self.at_n(s)
+    }
+
+    /// An enclosure of the move's positions over the instants s: `at`, except that a helix's
+    /// height is its whole range (its z is linear in s only at the ends).
+    pub fn enclose(&self, s: Ival) -> [Ival; 3] {
+        let mut g = self.at(s);
+        if let Some(z) = self.helix_heights() {
+            g[2] = z;
+        }
+        g
+    }
+
+    /// A helix's range of heights, None for any other move.
+    fn helix_heights(&self) -> Option<Ival> {
+        match *self {
+            Move::Helix { z0, z1, .. } => Some(Ival::new(z0.min(z1), z0.max(z1))),
+            _ => None,
+        }
     }
 
     pub fn at_n<T: Num>(&self, s: T) -> [T; 3] {
@@ -561,7 +580,7 @@ fn cell_sd(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> Ival {
 /// width it accounts for: |∂(ρ², z)| times its width), which picks what to split.
 fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> (Ival, [f64; 3]) {
     if let Some(pl) = mv.planar()
-        && !matches!(pl, Planar::Vertical { .. })
+        && !matches!(pl, Planar::Vertical { .. } | Planar::Helix { .. })
     {
         return cell_eval_planar(body, f, &pl, c, pg);
     }
@@ -569,7 +588,10 @@ fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> (Ival, [f64
     // at the centre
     let (pc, qc, sc) = (Ival::pt(c.p.mid()), Ival::pt(c.q.mid()), Ival::pt(c.s.mid()));
     let yc = f.surf.eval(pc, qc);
-    let gc = mv.at(sc);
+    // a helix: its arc at the instant, at every height of its range (a superset of the helix,
+    // whose height at an instant is somewhere in that range); the height is a constant of the
+    // cell, so the mean-value form below holds for each height and so over all of them
+    let gc = mv.enclose(sc);
     let rc = [yc[0].sub(gc[0]), yc[1].sub(gc[1]), yc[2].sub(gc[2])];
     let r2c = rc[0].sqr().add(rc[1].sqr());
     if c.p.width() == 0.0 && c.q.width() == 0.0 && c.s.width() == 0.0 {
@@ -577,7 +599,13 @@ fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> (Ival, [f64
     }
     // over the box, with derivatives
     let y: [D; 3] = f.surf.eval_n(D::var(c.p, 0), D::var(c.q, 1));
-    let g: [D; 3] = mv.at_n(D::var(c.s, 2));
+    let mut g: [D; 3] = mv.at_n(D::var(c.s, 2));
+    if let Some(z) = mv.helix_heights() {
+        g[2] = D {
+            v: z,
+            g: [Ival::pt(0.0); 3],
+        };
+    }
     let rel = [y[0].sub(g[0]), y[1].sub(g[1]), y[2].sub(g[2])];
     let r2 = rel[0].sqr().add(rel[1].sqr());
     let r2b = mean_value(&r2, r2c, x);
@@ -679,12 +707,30 @@ impl Move {
                 // ccw in xy iff the frame is right-handed (x × y = +z) and t increases
                 let up = x[0] * y[1] - x[1] * y[0] > 0.0;
                 let ccw = up == (t1 > t0);
-                let _ = r;
+                let (a, b) = ([e0[0].mid(), e0[1].mid()], [e1[0].mid(), e1[1].mid()]);
+                // the closed forms take arcs proven strictly under a half turn in their sense
+                // (cross(a − c, b − c) of the sign, in intervals: DistArc.lean); a vanishing arc
+                // (a near-tangent corner's, ~1e-17 rad) is not provably so: no planar form, the
+                // branch and bound takes it
+                let (ua, ub) = (
+                    [
+                        Ival::pt(a[0]).sub(Ival::pt(c[0])),
+                        Ival::pt(a[1]).sub(Ival::pt(c[1])),
+                    ],
+                    [
+                        Ival::pt(b[0]).sub(Ival::pt(c[0])),
+                        Ival::pt(b[1]).sub(Ival::pt(c[1])),
+                    ],
+                );
+                let cr = ua[0].mul(ub[1]).sub(ua[1].mul(ub[0]));
+                if !(if ccw { cr.lo > 0.0 } else { cr.hi < 0.0 }) {
+                    return None;
+                }
                 Some(Planar::Arc {
                     c: [c[0], c[1]],
                     r,
-                    a: [e0[0].mid(), e0[1].mid()],
-                    b: [e1[0].mid(), e1[1].mid()],
+                    a,
+                    b,
                     ccw,
                     z: c[2],
                 })
@@ -1088,16 +1134,8 @@ pub fn certify_shared(
 
 /// The branch and bound itself (any face, any move).
 pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
-    // a helical piece is checked in closed form against prism faces only
-    if matches!(mv, Move::Helix { .. }) {
-        return (
-            Verdict::Undecided {
-                lower: f64::NEG_INFINITY,
-                cells: 0,
-            },
-            0,
-        );
-    }
+    // a helical piece is taken as its arc swept over every height it passes (cell_eval): a
+    // Clear holds for the helix; a Hit holds too, its bound taken over all those heights
     let lim_clear = limit + f.mu;
     let lim_hit = limit - f.mu;
     let pg = mv.path_gap();
@@ -1163,7 +1201,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                 let mvd = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
                     0.0
                 } else {
-                    diam(&mv.at(c.s))
+                    diam(&mv.enclose(c.s))
                 };
                 let lip = Ival::pt(w.lo).sub(Ival::pt(diam(&img))).sub(Ival::pt(mvd)).lo;
                 if lip > sd.lo {

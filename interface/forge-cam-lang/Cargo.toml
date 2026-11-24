@@ -7,19 +7,23 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# the filesystem a browser page has too (its in-memory tree)
+forge-dirs = { path = "../../kernel/forge-dirs" }
+# machines as data and the posted text simulated on them (the app's machine simulation)
+forge-machine = { path = "../../kernel/forge-machine" }
 forge-lang = { path = "../forge-lang" }
 forge-agent = { path = "../forge-agent" }
 forge-cam = { path = "../../kernel/forge-cam" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 forge-cam-3d = { path = "../../kernel/forge-cam-3d" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
+forge-material = { path = "../../kernel/forge-material" }
+# tool instances as a library kind (cam/tool-instances/ at the project and user levels)
+forge-library = { path = "../forge-library" }
 forge-post = { path = "../../kernel/forge-post" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
-
-[dev-dependencies]
-forge-dirs = { path = "../../kernel/forge-dirs" }
 
 [lints]
 workspace = true

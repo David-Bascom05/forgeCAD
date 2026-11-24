@@ -107,6 +107,8 @@ fn finishing_ops_certify_on_the_dome() {
         tidx: 0,
         h: H,
         feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let area = [10.0, 10.0, 50.0, 50.0];
     let mut paths = vec![("parallel", surf::parallel(&sf, c, area, 2.0, 30.0, 1.0).unwrap())];
@@ -154,6 +156,8 @@ fn zlevel_roughing_certifies_and_the_map_holds_the_stock() {
         tidx: 0,
         h: H,
         feed: (1500.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let p = surf::zlevel(&sf, c, [-5.0, -5.0, 65.0, 65.0], 12.0, 0.5, 4.0, 4.0, 2.0).unwrap();
     let s = certified(&p, &flat, &faces);
@@ -233,6 +237,8 @@ fn surfacing_paths_are_the_same_bits_everywhere() {
         tidx: 0,
         h: H,
         feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let area = [10.0, 10.0, 50.0, 50.0];
     let flat = tool("flat-10", 2);
@@ -242,6 +248,8 @@ fn surfacing_paths_are_the_same_bits_everywhere() {
         tidx: 0,
         h: H,
         feed: (1500.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let paths = [
         surf::parallel(&sf, c, area, 3.0, 30.0, 1.0).unwrap(),

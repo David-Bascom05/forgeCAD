@@ -1,0 +1,14 @@
+{
+ "source": "Kyocera",
+ "blocked": [
+  {
+   "url": "https://www.kyocera-cuttingtool.com/",
+   "why": "proxy CONNECT failed (502) - host not reachable from this session"
+  },
+  {
+   "url": "https://www.kyocera.com/cuttingtools/",
+   "why": "redirects to kyoceraprecisiontools.com and returns HTTP 404"
+  }
+ ],
+ "records": []
+}

@@ -1,0 +1,524 @@
+# ForgeCAD appearances: how a surface looks in the Render Studio (physically based, metal/rough).
+# Engineering values (density, strength) live in forge-material; this file says how they render,
+# and which materials and families each appearance is the default for.
+#
+# Keys:
+#   name          what a user picks                 family   metal | plastic | glass | rubber | wood | paint | other
+#   base          linear sRGB [r, g, b]: a metal's F0 (normal reflectance), else its albedo
+#   metal         1 for a conductor, 0 otherwise
+#   tint          a metal's specular colour: its reflectance at 82 degrees over Schlick's there
+#                 (the F82-tint model, Hoffman 2023; OpenPBR's specular_color)
+#   rough         perceptual roughness 0..1 (GGX alpha is its square)
+#   ior           a dielectric's refractive index (plastic, glass, coats are 1.5)
+#   transmission  1 for clear glass or plastic
+#   coat, coat_rough  a clear coat over it (paint, anodising)
+#   part_colour   true: a part's own colour (forge-material's `colour`) replaces `base`
+#   materials     forge-material names this is the default appearance for
+#   families      forge-material families this is the default for, when no name matches
+#   source        covers every value; source_<key> overrides one; kind_<key> = cited | user | stand-in
+#   note
+#
+# Measured sources:
+#   [PB] Physically Based, the CC0 database of physically based values, A. Palmqvist et al.,
+#        https://physicallybased.info (API https://api.physicallybased.info/materials, read
+#        2026-11-24); metals' F0 and F82 tint computed there from measured complex IORs on
+#        refractiveindex.info (each record names its data set).
+# Roughness has no published mapping from a finish's Ra to GGX: every roughness here is a
+# stand-in, judged against photographs, until we measure (research/render/studio.md).
+
+# ---------------------------------------------------------------- aluminium
+
+[[appearance]]
+name = "Aluminium, machined"
+family = "metal"
+base = [0.916, 0.923, 0.924]
+metal = 1
+tint = [0.989, 0.989, 0.972]
+rough = 0.25
+families = ["aluminium"]
+source = "[PB] Aluminum: complex IOR of Al (Cheng et al., refractiveindex.info shelf main, book Al, page Cheng)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Aluminium, polished"
+family = "metal"
+base = [0.916, 0.923, 0.924]
+metal = 1
+tint = [0.989, 0.989, 0.972]
+rough = 0.06
+source = "[PB] Aluminum"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Aluminium, brushed"
+family = "metal"
+base = [0.916, 0.923, 0.924]
+metal = 1
+tint = [0.989, 0.989, 0.972]
+rough = 0.32
+source = "[PB] Aluminum"
+kind_rough = "stand-in"
+note = "Isotropic until the tracer has brushed (anisotropic) roughness."
+
+[[appearance]]
+name = "Aluminium, bead-blasted"
+family = "metal"
+base = [0.916, 0.923, 0.924]
+metal = 1
+tint = [0.989, 0.989, 0.972]
+rough = 0.55
+source = "[PB] Aluminum"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Aluminium, anodised clear"
+family = "metal"
+base = [0.80, 0.81, 0.82]
+metal = 1
+tint = [0.989, 0.989, 0.972]
+rough = 0.45
+coat = 0.6
+coat_rough = 0.3
+source = "[PB] Aluminum (tint); the oxide's dimming of F0 and its coat are stand-ins"
+kind_base = "stand-in"
+kind_rough = "stand-in"
+kind_coat = "stand-in"
+kind_coat_rough = "stand-in"
+
+[[appearance]]
+name = "Aluminium, anodised black"
+family = "metal"
+base = [0.025, 0.025, 0.028]
+metal = 0
+rough = 0.4
+ior = 1.65
+coat = 0.5
+coat_rough = 0.25
+source = "Stand-in: black dye in a porous oxide, seen as a dark dielectric"
+kind_base = "stand-in"
+kind_rough = "stand-in"
+kind_ior = "stand-in"
+kind_coat = "stand-in"
+kind_coat_rough = "stand-in"
+
+[[appearance]]
+name = "Aluminium, anodised red"
+family = "metal"
+base = [0.62, 0.05, 0.05]
+metal = 1
+tint = [1.0, 0.6, 0.6]
+rough = 0.35
+coat = 0.8
+coat_rough = 0.2
+source = "Stand-in: dyed oxide over aluminium, seen as a tinted conductor under a coat"
+kind_base = "stand-in"
+kind_tint = "stand-in"
+kind_rough = "stand-in"
+kind_coat = "stand-in"
+kind_coat_rough = "stand-in"
+
+[[appearance]]
+name = "Aluminium, anodised blue"
+family = "metal"
+base = [0.06, 0.18, 0.62]
+metal = 1
+tint = [0.6, 0.7, 1.0]
+rough = 0.35
+coat = 0.8
+coat_rough = 0.2
+source = "Stand-in: dyed oxide over aluminium, seen as a tinted conductor under a coat"
+kind_base = "stand-in"
+kind_tint = "stand-in"
+kind_rough = "stand-in"
+kind_coat = "stand-in"
+kind_coat_rough = "stand-in"
+
+# ---------------------------------------------------------------- steels and irons
+
+[[appearance]]
+name = "Steel, machined"
+family = "metal"
+base = [0.53, 0.513, 0.494]
+metal = 1
+tint = [0.612, 0.541, 0.422]
+rough = 0.28
+families = ["steel"]
+source = "[PB] Iron: complex IOR of iron (refractiveindex.info shelf 3d, book metals, page iron)"
+kind_rough = "stand-in"
+note = "Carbon steel's optical constants are iron's within the data's spread."
+
+[[appearance]]
+name = "Steel, polished"
+family = "metal"
+base = [0.53, 0.513, 0.494]
+metal = 1
+tint = [0.612, 0.541, 0.422]
+rough = 0.06
+source = "[PB] Iron"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Steel, mill finish"
+family = "metal"
+base = [0.36, 0.35, 0.34]
+metal = 1
+tint = [0.612, 0.541, 0.422]
+rough = 0.55
+source = "[PB] Iron (tint); the scale's darkening is a stand-in"
+kind_base = "stand-in"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Steel, black oxide"
+family = "metal"
+base = [0.035, 0.035, 0.04]
+metal = 0
+rough = 0.45
+ior = 2.4
+source = "Stand-in: a thin magnetite layer, seen as a dark dielectric"
+kind_base = "stand-in"
+kind_rough = "stand-in"
+kind_ior = "stand-in"
+
+[[appearance]]
+name = "Steel, galvanised"
+family = "metal"
+base = [0.808, 0.844, 0.865]
+metal = 1
+tint = [0.854, 0.922, 0.923]
+rough = 0.4
+source = "[PB] Zinc: complex IOR of Zn (Werner et al. DFT, refractiveindex.info)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Cast iron"
+family = "metal"
+base = [0.42, 0.41, 0.40]
+metal = 1
+tint = [0.612, 0.541, 0.422]
+rough = 0.65
+families = ["iron"]
+source = "[PB] Iron (tint); the cast surface's darkening is a stand-in"
+kind_base = "stand-in"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Stainless steel, brushed"
+family = "metal"
+base = [0.669, 0.639, 0.598]
+metal = 1
+tint = [0.804, 0.791, 0.714]
+rough = 0.3
+families = ["stainless"]
+source = "[PB] Stainless Steel: complex IOR (refractiveindex.info shelf 3d, book metals, page stainless_steel)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Stainless steel, polished"
+family = "metal"
+base = [0.669, 0.639, 0.598]
+metal = 1
+tint = [0.804, 0.791, 0.714]
+rough = 0.05
+source = "[PB] Stainless Steel"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Stainless steel, bead-blasted"
+family = "metal"
+base = [0.669, 0.639, 0.598]
+metal = 1
+tint = [0.804, 0.791, 0.714]
+rough = 0.55
+source = "[PB] Stainless Steel"
+kind_rough = "stand-in"
+
+# ---------------------------------------------------------------- other metals
+
+[[appearance]]
+name = "Brass"
+family = "metal"
+base = [0.91, 0.778, 0.423]
+metal = 1
+tint = [0.995, 0.974, 0.747]
+rough = 0.2
+materials = ["C26000", "C36000"]
+source = "[PB] Brass: complex IOR (refractiveindex.info shelf 3d, book metals, page brass)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Copper"
+family = "metal"
+base = [0.932, 0.623, 0.522]
+metal = 1
+tint = [0.999, 0.9, 0.744]
+rough = 0.2
+families = ["copper"]
+source = "[PB] Copper: complex IOR (Johnson & Christy 1972, refractiveindex.info)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Titanium"
+family = "metal"
+base = [0.441, 0.4, 0.361]
+metal = 1
+tint = [0.67, 0.641, 0.52]
+rough = 0.3
+families = ["titanium"]
+source = "[PB] Titanium: complex IOR (Palm et al., refractiveindex.info)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Chrome plating"
+family = "metal"
+base = [0.654, 0.685, 0.701]
+metal = 1
+tint = [0.591, 0.675, 0.703]
+rough = 0.03
+source = "[PB] Chromium: complex IOR (Sytchkova et al., refractiveindex.info)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Nickel plating"
+family = "metal"
+base = [0.697, 0.641, 0.563]
+metal = 1
+tint = [0.855, 0.805, 0.675]
+rough = 0.12
+source = "[PB] Nickel: complex IOR (Johnson & Christy, refractiveindex.info)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Gold"
+family = "metal"
+base = [1.0, 0.773, 0.307]
+metal = 1
+tint = [1.0, 0.985, 0.523]
+rough = 0.1
+source = "[PB] Gold: complex IOR (Babar & Weaver, refractiveindex.info); F0 red 1.059 clipped to 1"
+kind_rough = "stand-in"
+
+# ---------------------------------------------------------------- plastics
+
+[[appearance]]
+name = "Plastic, satin"
+family = "plastic"
+base = [0.5, 0.5, 0.5]
+rough = 0.35
+ior = 1.5
+part_colour = true
+families = ["plastic"]
+source = "Stand-in: a moulded part with a light texture; the colour is the part's"
+kind_rough = "stand-in"
+kind_ior = "stand-in"
+
+[[appearance]]
+name = "Plastic, gloss"
+family = "plastic"
+base = [0.5, 0.5, 0.5]
+rough = 0.08
+ior = 1.5
+part_colour = true
+source = "Stand-in: a polished mould"
+kind_rough = "stand-in"
+kind_ior = "stand-in"
+
+[[appearance]]
+name = "Plastic, matte textured"
+family = "plastic"
+base = [0.5, 0.5, 0.5]
+rough = 0.65
+ior = 1.5
+part_colour = true
+source = "Stand-in: a spark-eroded (VDI 3400 ~30) mould texture"
+kind_rough = "stand-in"
+kind_ior = "stand-in"
+
+[[appearance]]
+name = "Acrylic, clear"
+family = "glass"
+base = [1.0, 1.0, 1.0]
+rough = 0.0
+ior = 1.4905
+transmission = 1
+source = "[PB] Plastic (Acrylic): refractive index of PMMA (polymerdatabase.com)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Polycarbonate, clear"
+family = "glass"
+base = [1.0, 1.0, 1.0]
+rough = 0.0
+ior = 1.5848
+transmission = 1
+source = "[PB] Plastic (PC): refractive index of polycarbonate (refractiveindex.info shelf 3d, plastics, pc)"
+kind_rough = "stand-in"
+
+# ---------------------------------------------------------------- glass
+
+[[appearance]]
+name = "Glass, clear"
+family = "glass"
+base = [1.0, 1.0, 1.0]
+rough = 0.0
+ior = 1.52
+transmission = 1
+source = "[PB] Glass: soda-lime clear (refractiveindex.info shelf 3d, glass, soda-lime-clear)"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Glass, frosted"
+family = "glass"
+base = [1.0, 1.0, 1.0]
+rough = 0.35
+ior = 1.52
+transmission = 1
+source = "[PB] Glass (index); the frosting's roughness is a stand-in"
+kind_rough = "stand-in"
+
+# ---------------------------------------------------------------- rubber, wood, paint, studio
+
+[[appearance]]
+name = "Rubber, black"
+family = "rubber"
+base = [0.023, 0.023, 0.023]
+rough = 0.7
+ior = 1.5
+families = ["rubber"]
+source = "[PB] Tire: albedo and roughness"
+kind_ior = "stand-in"
+
+[[appearance]]
+name = "Wood, oak"
+family = "wood"
+base = [0.42, 0.26, 0.13]
+rough = 0.55
+ior = 1.5
+families = ["wood"]
+source = "Stand-in: an oiled oak's colour, until texture maps"
+kind_base = "stand-in"
+kind_rough = "stand-in"
+kind_ior = "stand-in"
+
+[[appearance]]
+name = "Wood, walnut"
+family = "wood"
+base = [0.17, 0.09, 0.05]
+rough = 0.5
+ior = 1.5
+source = "Stand-in"
+kind_base = "stand-in"
+kind_rough = "stand-in"
+kind_ior = "stand-in"
+
+[[appearance]]
+name = "Paint, gloss"
+family = "paint"
+base = [0.5, 0.5, 0.5]
+rough = 0.3
+ior = 1.5
+coat = 1
+coat_rough = 0.03
+part_colour = true
+source = "Stand-in: a pigmented base under a clear coat; the colour is the part's"
+kind_rough = "stand-in"
+kind_coat_rough = "stand-in"
+
+[[appearance]]
+name = "Powder coat"
+family = "paint"
+base = [0.5, 0.5, 0.5]
+rough = 0.42
+ior = 1.5
+part_colour = true
+source = "Stand-in: a satin powder coat; the colour is the part's"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Grey card"
+family = "other"
+base = [0.18, 0.18, 0.18]
+rough = 0.9
+ior = 1.5
+source = "[PB] Gray Card: 18 % reflectance and roughness"
+
+[[appearance]]
+name = "Studio floor"
+family = "other"
+base = [0.40, 0.40, 0.40]
+rough = 0.55
+ior = 1.5
+source = "Stand-in: a light grey seamless paper sweep"
+kind_base = "stand-in"
+kind_rough = "stand-in"
+
+[[appearance]]
+name = "Carbide"
+family = "metal"
+base = [0.537, 0.536, 0.519]
+metal = 1
+tint = [0.45, 0.409, 0.193]
+rough = 0.2
+source = "Stand-in: [PB] Tungsten's F0 and tint for cemented tungsten carbide (no measured WC data found)"
+kind_base = "stand-in"
+kind_tint = "stand-in"
+kind_rough = "stand-in"
+note = "Cutting inserts and carbide end mills (asked by UX-LEAD for CAM and the Machine Builder)."
+# ---------------------------------------------------------------- machines (asked by BEND-SIM)
+
+[[appearance]]
+name = "Tool steel, ground"
+family = "metal"
+base = [0.53, 0.513, 0.494]
+metal = 1
+tint = [0.612, 0.541, 0.422]
+rough = 0.18
+source = "[PB] Iron: tool steel's optical constants taken as iron's (as carbon steel's above)"
+kind_rough = "stand-in"
+note = "A ground press-brake punch or die face; for BEND-SIM's tooling (id tool-steel-ground)."
+
+[[appearance]]
+name = "Paint, machine gloss"
+family = "paint"
+base = [0.5, 0.5, 0.5]
+rough = 0.35
+ior = 1.5
+coat = 1
+coat_rough = 0.08
+part_colour = true
+source = "Stand-in: an enamelled machine frame under a light clear; the colour is the part's"
+kind_rough = "stand-in"
+kind_coat_rough = "stand-in"
+note = "For BEND-SIM's frames (id paint-machine-gloss); pass the frame's colour."
+
+[[appearance]]
+name = "Concrete floor"
+family = "other"
+base = [0.51, 0.51, 0.51]
+rough = 0.5
+ior = 1.5
+source = "[PB] Concrete: albedo and roughness"
+kind_ior = "stand-in"
+note = "A shop floor (BEND-SIM's id concrete-floor)."
+
+[[appearance]]
+name = "Highlight red"
+family = "other"
+base = [0.8, 0.04, 0.03]
+rough = 0.4
+ior = 1.5
+source = "Not a material: a signal colour for a failing or colliding body (BEND-SIM's id highlight-red)"
+kind_base = "user"
+kind_rough = "user"
+kind_ior = "user"
+
+[[appearance]]
+name = "Highlight bend"
+family = "other"
+base = [0.85, 0.52, 0.08]
+rough = 0.4
+ior = 1.5
+source = "Not a material: a signal colour for the bending zone (BEND-SIM's id highlight-bend)"
+kind_base = "user"
+kind_rough = "user"
+kind_ior = "user"

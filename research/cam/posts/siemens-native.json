@@ -1,0 +1,227 @@
+{
+ "dialect": "siemens-native",
+ "control": "SINUMERIK 840D sl / 828D, Siemens mode (G290, default)",
+ "sources": [
+  {
+   "id": "S2",
+   "url": "https://cache.industry.siemens.com/dl/files/554/74475554/att_56792/v1/PGsl_0313_en_en-US.pdf",
+   "title": "SINUMERIK 840D sl / 828D Fundamentals Programming Manual",
+   "edition": "03/2013, 6FC5398-1BP40-3BA1; CNC software 4.5 SP2",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S3",
+   "url": "https://cache.industry.siemens.com/dl/files/633/109443633/att_829767/v1/PGZ_1106_en.pdf",
+   "title": "SINUMERIK 840D sl/840D/840Di sl/840Di/810D Cycles Programming Manual",
+   "edition": "11/2006, 6FC5398-3BP20-0BA0; NCU system SW 1.4, cycles 7.3",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S1",
+   "url": "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf",
+   "title": "SINUMERIK 802D sl/840D/840D sl/840Di/840Di sl/810D Programming Manual ISO Milling (PGM)",
+   "edition": "04.2007, 6FC5398-7BP10-0BA0; valid for 840D sl/DE sl SW 1.4 (828D not in validity list)",
+   "taken": "2026-11-23"
+  }
+ ],
+ "items": {
+  "native_language_and_iso_mode": {
+   "value": "Siemens mode is default; G291 switches to ISO Dialect, G290 back, each in its own block.",
+   "source": "S1",
+   "where": "1.1.1-1.1.3 pp. 1-11..1-12",
+   "note": ""
+  },
+  "program_open": {
+   "value": "No mandatory start block. Program name up to 24 chars (letters, digits, '_'; start with 2 letters or '_'+letter). Punch-tape files start with '%<name>_xxx', e.g. %_N_SHAFT123_MPF. Recommended milling header: T=\"name\"/T<n>, M6, D1, G54 G17, G0 ... S.. M3 M8.",
+   "source": "S2",
+   "where": "2.1 pp. 33-34; 3.3 p. 46",
+   "note": ""
+  },
+  "program_close": {
+   "value": "M2, M17 or M30 as last block (M2 = M30 for main program; M17 = end of subprogram).",
+   "source": "S2",
+   "where": "2.2.1 p. 37; 13.1 p. 363",
+   "note": ""
+  },
+  "comment": {
+   "value": "';' to end of block. (Round brackets are not native comments.)",
+   "source": "S2",
+   "where": "2.2.4 p. 39; character list 3.2 p. 45",
+   "note": ""
+  },
+  "line_numbers": {
+   "value": "Optional: N + positive integer at start of block; any order, rising recommended; must be unique for searches.",
+   "source": "S2",
+   "where": "2.2.2 p. 37",
+   "note": "Max N value not stated."
+  },
+  "block_end": {
+   "value": "LF (newline); block max 512 characters including comment and LF.",
+   "source": "S2",
+   "where": "2.2.2 p. 37",
+   "note": ""
+  },
+  "safe_start": {
+   "value": "G90 G94 G17 G71 (or G710) G40, D0 cancels tool offsets, G500 deselects settable ZO, MCALL (no name) cancels modal cycle call; S2 suggests CYCLE800() and TRAFOOF at program start when transforms may be active.",
+   "source": "S2",
+   "where": "G90 8.3.1 p. 156; G94 7.1 p. 101; G17 8.2 p. 153; G71/G710 8.3.5 pp. 165-166; D0/G40 5.6 p. 73; G500 8.1 p. 150; CYCLE800/TRAFOOF 3.3 p. 46; MCALL S3 2.2 p. 86",
+   "note": "No G49/G80 equivalents in native mode: length comp off = D0 (or T0); cycles are subprogram calls, modal only via MCALL."
+  },
+  "tool_change": {
+   "value": "T<n> (or T=\"name\") selects; M6 changes and activates tool + offset (milling); D<n> selects cutting-edge offset (D1 typical). On machines configured without M6 the T word changes directly. T range 0..32000.",
+   "source": "S2",
+   "where": "4.1.1-4.1.2 pp. 53-55; 5.6 p. 73",
+   "note": ""
+  },
+  "tool_length_comp": {
+   "value": "Automatic: length offset of active D takes effect when D is programmed (applied on first move of the length axis); D0 cancels. Can be active without D if MD auto-edge activation is set.",
+   "source": "S2",
+   "where": "5.6 p. 73",
+   "note": ""
+  },
+  "spindle": {
+   "value": "S rpm with M3 CW / M4 CCW / M5 stop.",
+   "source": "S2",
+   "where": "6.1 p. 81; 13.1 p. 363",
+   "note": ""
+  },
+  "work_offset": {
+   "value": "G54..G57 (1st-4th), G505..G599 (5th-99th); 828D uses G58/G59 for 5th/6th instead of G505/G506. G500 deselect; G53/G153/SUPA suppress offsets non-modally.",
+   "source": "S2",
+   "where": "8.1 pp. 149-151",
+   "note": ""
+  },
+  "arc_format": {
+   "value": "G2/G3 X Y Z with I J K (center, incremental from start by default; I=AC(..) for absolute) or CR= radius; G90/G91 only governs the end point.",
+   "source": "S2",
+   "where": "9.6.2 pp. 196-197; CR= 9.6 p. 193, 200",
+   "note": ""
+  },
+  "rapid_linear": {
+   "value": "G0 rapid, G1 linear at F.",
+   "source": "S2",
+   "where": "9.4 p. 186; 9.5 p. 190",
+   "note": ""
+  },
+  "feed_word": {
+   "value": "F mm/min under G94 (also inch/min or deg/min); G95 mm/rev.",
+   "source": "S2",
+   "where": "7.1 p. 101; p. 141",
+   "note": ""
+  },
+  "decimal_point": {
+   "value": "Value without a point is in whole units: manual example X90 -> X = 90 mm, Z-5 -> -5 mm, F500 -> 500 mm/min. Leading zeros and '+' optional.",
+   "source": "S2",
+   "where": "2.2.1 p. 35; example 8.3.5 p. 167",
+   "note": ""
+  },
+  "max_digits": {
+   "value": null,
+   "source": "UNKNOWN",
+   "where": null,
+   "note": "Not stated in S2 for axis words. M values INT 0..2147483647 (S2 13.1 p. 362); T and D 0..32000 (pp. 54, 73)."
+  },
+  "retract_home": {
+   "value": "G74 X1=0 Y1=0 Z1=0 (reference point approach, own block); G75 Z1=0 FP=<n> (fixed point from MD30600, e.g. tool change point); or G0 SUPA Z.. (machine coords, all offsets suppressed).",
+   "source": "S2",
+   "where": "14.4 p. 376; 14.5 pp. 377-378; 8.1 p. 150",
+   "note": ""
+  },
+  "coolant_flood": {
+   "value": "M8 used for 'cooling on' in the manual's examples; not in the predefined M list, so machine-builder defined.",
+   "source": "S2",
+   "where": "3.3 p. 46; example 3 p. 51; 13.1 p. 363",
+   "note": ""
+  },
+  "coolant_mist": {
+   "value": null,
+   "source": "UNKNOWN",
+   "where": null,
+   "note": "Not in S2."
+  },
+  "coolant_through_spindle": {
+   "value": null,
+   "source": "UNKNOWN",
+   "where": null,
+   "note": "Not in S2; machine-builder M code."
+  },
+  "coolant_off": {
+   "value": "M9 used for 'cooling off' in examples (machine-builder defined).",
+   "source": "S2",
+   "where": "example 3 p. 51",
+   "note": ""
+  },
+  "dwell": {
+   "value": "G4 F<s> (seconds) or G4 S<rev> (spindle revolutions), in its own block; F/S of the G4 block do not overwrite modal feed/speed.",
+   "source": "S2",
+   "where": "14.7 pp. 386-387",
+   "note": ""
+  },
+  "drill_G81": {
+   "value": "CYCLE81(RTP, RFP, SDIS, DP, DPR): RTP retract plane abs, RFP reference plane abs, SDIS clearance (unsigned), DP final depth abs or DPR depth relative to RFP (unsigned). Feed/speed from preceding blocks.",
+   "source": "S3",
+   "where": "2.1.3 pp. 42-43",
+   "note": ""
+  },
+  "dwell_drill_G82": {
+   "value": "CYCLE82(RTP, RFP, SDIS, DP, DPR, DTB); DTB dwell at final depth in seconds.",
+   "source": "S3",
+   "where": "2.1.4 pp. 45-47",
+   "note": ""
+  },
+  "peck_G83": {
+   "value": "CYCLE83(RTP, RFP, SDIS, DP, DPR, FDEP, FDPR, DAM, DTB, DTS, FRF, VARI, _AXN, _MDEP, _VRT, _DTD, _DIS1); VARI=1 chip removal (full retract), VARI=0 chip breaking; FDEP/FDPR first depth, DAM degression.",
+   "source": "S3",
+   "where": "2.1.5 pp. 48-50",
+   "note": ""
+  },
+  "chip_break_G73": {
+   "value": "CYCLE83 with VARI=0 (chip breaking), _VRT retract amount (0 = 1 mm).",
+   "source": "S3",
+   "where": "2.1.5 p. 49",
+   "note": ""
+  },
+  "rigid_tap_G84": {
+   "value": "CYCLE84(RTP, RFP, SDIS, DP, DPR, DTB, SDAC, MPIT, PIT, POSS, SST, SST1, _AXN, _PTAB, _TECHNO, _VARI, _DAM, _VRT): pitch given as MPIT (metric size 3..48) or PIT (pitch value, sign = hand); SST tapping speed, SST1 retract speed; SDAC spindle direction after cycle (3/4/5). No F word for the tap: pitch + speed define it. Needs position-controlled spindle. Floating holder: CYCLE840 (S3 2.1.7 p. 63).",
+   "source": "S3",
+   "where": "2.1.6 pp. 56-59",
+   "note": ""
+  },
+  "bore_ream_G85": {
+   "value": "CYCLE85(RTP, RFP, SDIS, DP, DPR, DTB, FFR, RFF): FFR feed in, RFF retract feed.",
+   "source": "S3",
+   "where": "2.1.8 p. 70",
+   "note": ""
+  },
+  "return_level_G98_G99": {
+   "value": "No G98/G99: retraction is to RTP given in each cycle call.",
+   "source": "S3",
+   "where": "2.1.3 p. 42",
+   "note": ""
+  },
+  "cycle_cancel_G80": {
+   "value": "Cycles are one-shot subprogram calls; modal repetition only with 'MCALL CYCLE8x(...)'; 'MCALL' alone cancels.",
+   "source": "S3",
+   "where": "2.2 p. 86",
+   "note": ""
+  },
+  "peck_depth_word": {
+   "value": "FDEP (abs) / FDPR (relative) first depth + DAM degression (CYCLE83 parameters, positional).",
+   "source": "S3",
+   "where": "2.1.5 p. 49",
+   "note": ""
+  },
+  "cycle_dwell_units": {
+   "value": "DTB in seconds (CYCLE82, CYCLE84); in CYCLE83 DTB/DTS/_DTD >0 = seconds, <0 = revolutions.",
+   "source": "S3",
+   "where": "pp. 47, 49, 54, 59",
+   "note": ""
+  }
+ },
+ "notes": "Cycle manual S3 is the 11/2006 edition (cycles 7.3). Current SINUMERIK Operate cycles take more parameters (memory says, unverified); positional parameters may be omitted with empty commas. S2 is 2013 (SW 4.5 SP2).",
+ "unknown": [
+  "max_digits",
+  "coolant_mist",
+  "coolant_through_spindle"
+ ]
+}

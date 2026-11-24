@@ -529,20 +529,25 @@ def ratSqrt? (q : Rat) : Option Rat :=
     let sd := d.sqrt
     if sn * sn == n && sd * sd == d then some ((sn : Rat) / (sd : Rat)) else none
 
-/-- The real roots of `p` (assumed square-free), each isolated or rational. -/
-def realRoots (p : Poly) (fuel : Nat := 60) : Array Num := Id.run do
+/-- The real roots of `p`, each isolated or rational: `none` unless the cover is complete
+(every interval of `[−B, B]` cleared by Descartes' rule or isolated within the fuel and the
+step budget). Above degree 2 it works on the square-free part, whose roots are `p`'s. A root
+dropped is never silent: decisions that need every root take `none` as undecided. -/
+def realRoots (p : Poly) (fuel : Nat := 60) : Option (Array Num) := Id.run do
   let p := Poly.trim p
-  if Poly.deg p == 0 then return #[]
+  if Poly.isZero p then return none
+  if Poly.deg p == 0 then return some #[]
   -- linear and quadratic: rational roots exactly
-  if Poly.deg p == 1 then return #[.rat (-(p[0]!) / p[1]!)]
+  if Poly.deg p == 1 then return some #[.rat (-(p[0]!) / p[1]!)]
   if Poly.deg p == 2 then
     let (c, b, a) := (p[0]!, p[1]!, p[2]!)
     let disc := b * b - 4 * a * c
-    if disc < 0 then return #[]
-    if disc == 0 then return #[.rat (-b / (2 * a))]
+    if disc < 0 then return some #[]
+    if disc == 0 then return some #[.rat (-b / (2 * a))]
     match ratSqrt? disc with
-    | some r => return #[.rat ((-b - r) / (2 * a)), .rat ((-b + r) / (2 * a))]
+    | some r => return some #[.rat ((-b - r) / (2 * a)), .rat ((-b + r) / (2 * a))]
     | none => pure ()
+  let p := if Poly.deg p ≥ 3 then Poly.trim (Poly.sqfree p) else p
   let B := rootBound p
   let mut out : Array Num := #[]
   let mut stack : List (Rat × Rat × Nat) := [(-B, B, 0)]
@@ -563,11 +568,12 @@ def realRoots (p : Poly) (fuel : Nat := 60) : Array Num := Id.run do
         if a < s && s < b && Poly.ev p s == 0 then out := out.push (.rat s)
         else out := out.push (.iso iso)
         continue
-      if d ≥ fuel then continue
+      if d ≥ fuel then return none
       let m := (a + b) / 2
       if Poly.ev p m == 0 then out := out.push (.rat m)
       stack := (a, m, d + 1) :: (m, b, d + 1) :: stack
-  return out
+  if !stack.isEmpty then return none
+  return some out
 
 /-- A rational root inside the number's interval, if there is one (tried at the simplest
 rational of the interval as it is refined). -/
@@ -760,7 +766,11 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
     let D : V3 := ⟨v2[0]! - w * v1[0]!, v2[1]! - w * v1[1]!, v2[2]! - w * v1[2]!⟩
     let gi := alongLine qi P D
     let ls := others.map fun k => (k, alongLine A.qs[k]! P D)
-    let rootsOthers0 := ls.foldl (fun acc (_, g) => acc ++ realRoots g) #[]
+    -- every root is needed (the subdivision): an incomplete cover leaves the contact undecided
+    let rootsOthers0? : Option (Array Num) := ls.foldl (fun acc (_, g) =>
+      match acc, (if Poly.isZero g then some #[] else realRoots g) with
+      | some a, some r => some (a ++ r)
+      | _, _ => none) (some #[])
     -- along a contact line the transversal form S(w, w) and the cross term S(D, w), with
     -- w = ∇q_i(P + sD) × D, are polynomials in s (degree 2 and 1): their roots join the
     -- subdivision, so the test at one point of an interval holds on all of it
@@ -770,8 +780,15 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
     let w1 := n1.cross D
     let ww : Poly := [bil M w0 w0, 2 * bil M w0 w1, bil M w1 w1]
     let dw : Poly := [bil M D w0, bil M D w1]
-    let rootsOthers := if Poly.isZero gi then rootsOthers0 ++ realRoots (Poly.sqfree ww) ++ realRoots dw
-      else rootsOthers0
+    let extra? : Option (Array Num) :=
+      if !Poly.isZero gi then some #[]
+      else match (if Poly.isZero ww then some #[] else realRoots (Poly.sqfree ww)),
+          (if Poly.isZero dw then some #[] else realRoots dw) with
+        | some a, some b => some (a ++ b)
+        | _, _ => none
+    let some rootsOthers0 := rootsOthers0? | return mk none (some "a contact line's subdivision: roots not all isolated")
+    let some extra := extra? | return mk none (some "a contact line's subdivision: roots not all isolated")
+    let rootsOthers := rootsOthers0 ++ extra
     if Poly.isZero gi then
       -- a contact line: each interval between the other quadrics' roots
       match sortNums rootsOthers with
@@ -795,7 +812,8 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
     else
       -- isolated contact points: q_i's roots on the line
       let mut opn : Option String := none
-      for α in realRoots gi do
+      let some gr := realRoots gi | return mk none (some "contact points: roots not all isolated")
+      for α in gr do
         match α with
         | .rat c =>
           let (bad, op) := judge (P + c * D) none
@@ -832,7 +850,8 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
     let mut found := false
     for D0 in #[U, V, U + V, U - V] do
       let g := alongLine qi P D0
-      for α in realRoots g do
+      -- any rational point serves; an incomplete cover only finds fewer (then undecided)
+      for α in (realRoots g).getD #[] do
         match α with
         | .rat c =>
           let p := P + c * D0
@@ -846,6 +865,41 @@ def contactAt (A : Arr) (i j : Nat) (t : Rat) : Option Contact := Id.run do
   | _ => return mk none none
 
 /-! ## Singular points: cone apexes, decided exactly -/
+
+/-- The link of a cone's apex as cells: the caps (nodes 0, 1) and the sectors (`2 + τ`) of
+`n ≤ 3` planes with independent normals. Is the kept region empty, all, or a disc: connected,
+with connected complement, and no checkerboard round a vertex (two planes' line)? -/
+def linkDisc (n : Nat) (kPlus kMinus : Bool) (cell : Nat → Bool) (own anti : Nat) : Bool := Id.run do
+  let N := 2 + 2 ^ n
+  let kept : Nat → Bool := fun v => if v == 0 then kPlus else if v == 1 then kMinus else cell (v - 2)
+  let adj : Nat → Nat → Bool := fun u v =>
+    (u == 0 && v == 2 + own) || (v == 0 && u == 2 + own) ||
+    (u == 1 && v == 2 + anti) || (v == 1 && u == 2 + anti) ||
+    (u ≥ 2 && v ≥ 2 && (let x := (u - 2) ^^^ (v - 2); x != 0 && x &&& (x - 1) == 0))
+  let conn := fun (val : Bool) => Id.run do
+    let nodes := (List.range N).filter fun v => kept v == val
+    match nodes.head? with
+    | none => return true
+    | some s0 =>
+      let mut seen : Array Nat := #[s0]
+      let mut stack : Array Nat := #[s0]
+      while !stack.isEmpty do
+        let u := stack.back!
+        stack := stack.pop
+        for v in [0:N] do
+          if kept v == val && adj u v && !seen.contains v then
+            seen := seen.push v; stack := stack.push v
+      return seen.size == nodes.length
+  if (List.range N).all (kept · == kept 0) then return true
+  if !(conn true && conn false) then return false
+  -- vertices: for planes a < b, the four cells round their line, the other bits fixed
+  for a in [0:n] do
+    for b in [a + 1:n] do
+      for rest in [0:2 ^ n] do
+        if (rest >>> a) % 2 == 1 || (rest >>> b) % 2 == 1 then continue
+        let c := fun (x y : Nat) => cell (rest ||| (x <<< a) ||| (y <<< b))
+        if c 0 0 == c 1 1 && c 0 1 == c 1 0 && c 0 0 != c 0 1 then return false
+  return true
 
 /-- The result at a cone's apex `p` lying on other surfaces, decided at first order.
 `C` is the cone's tangent cone at `p`: one nappe about its axis `a`, of half-angle
@@ -879,16 +933,17 @@ def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String 
       -- the axis into the nappe: r c + s (d · z) grows along s z
       let ax : V3 := f.s * f.z
       let through := (Array.range A.qs.size).filter fun m => m != k && (A.qs[m]!).eval p == 0
-      -- the nappe's own plane: through p, normal along the axis
+      -- the nappe's own plane: through p, normal along the axis. It is only the selector of the
+      -- cone's half unless a face lies on it or another solid's literal uses it; then it is a
+      -- surface through p like any other (it separates C: its normal is the axis)
       let isNappe := fun (m : Nat) => (A.qs[m]!).qnorm == 0 && (((A.qs[m]!).grad p).cross f.z).isZero
-      let J := through.filter fun m => !isNappe m
-      if J.isEmpty then continue
-      -- the nappe's plane, if another solid bounds itself by it too, varies off C: not covered
-      let shared := through.any fun m => isNappe m &&
-        (Array.range A.solids.size).any fun si => si != f.solid && (A.solids[si]!).2.any (·.idx == m)
-      if shared then
-        und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: its nappe's plane bounds another solid"
-        continue
+      let matters := fun (m : Nat) => isNappe m && (!(A.faces.getD m #[]).isEmpty ||
+        (Array.range A.solids.size).any fun si => si != f.solid && (A.solids[si]!).2.any (·.idx == m))
+      -- another solid using the cone quadric itself: its opposite nappe −C matters too
+      let kShared := (Array.range A.solids.size).any fun si =>
+        si != f.solid && (A.solids[si]!).2.any (·.idx == k)
+      let J := through.filter fun m => !isNappe m || matters m
+      if J.isEmpty && !kShared then continue
       -- every tangent plane must separate C
       let s2 := f.s * f.s
       let k2 := f.s * f.s + f.c * f.c
@@ -906,7 +961,7 @@ def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String 
         -- vertices; the kept cells must be one proper run of it (§3, Theorem 3.5)
         let g := if J.size == 1 then (A.qs[J[0]!]!).grad p else ⟨0, 0, 0⟩
         let ga := g.dot ax
-        if J.size == 1 && !g.isZero && ga * ga * k2 < s2 * g.norm2 * ax.norm2 then
+        if J.size == 1 && !kShared && !g.isZero && ga * ga * k2 < s2 * g.norm2 * ax.norm2 then
           let j := J[0]!
           let inSign := decide ((A.qs[k]!).quad ax > 0)
           let other : Nat → Bool := fun m =>
@@ -932,27 +987,24 @@ def apexDecide (A : Arr) (solids : Array QSolid) : Array String × Array String 
       if !indep then
         und := und.push s!"the apex {fmt p} of face {f.solid}.{f.index}: dependent normals there"
         continue
-      -- signs: the cone quadric in C is the sign of its quadratic part on the axis
+      -- the link at p: the caps D₊ (C) and D₋ (−C), and the cells O_τ of the tangent planes
+      -- off them (every sector meets the link off the caps: each plane separates C from −C)
       let inSign := decide ((A.qs[k]!).quad ax > 0)
-      let base : Nat → Bool := fun m =>
+      let other : Nat → Bool := fun m => decide ((A.qs[m]!).eval p > 0)
+      let σ : Nat → Bool := fun m => decide (((A.qs[m]!).grad p).dot ax > 0)
+      let capKept := fun (plus : Bool) => A.keptOn fun m =>
         if m == k then inSign
-        else if through.contains m then decide (((A.qs[m]!).grad p).dot ax > 0)
-        else decide ((A.qs[m]!).eval p > 0)
-      let kC := A.keptOn base
-      -- off C: the cone quadric outside, the sector τ on J
-      let sector := fun (τ : Nat) => A.keptOn fun m =>
+        else if J.contains m || through.contains m then (if plus then σ m else !σ m)
+        else other m
+      let cellKept := fun (τ : Nat) => A.keptOn fun m =>
         if m == k then !inSign
         else match J.findIdx? (· == m) with
           | some i => (τ >>> i) % 2 == 1
-          | none => base m
-      let own : Nat := (Array.range J.size).foldl (fun acc i =>
-        if (sides.find? (·.1 == J[i]!)).any (·.2) then acc + 2 ^ i else acc) 0
-      let all := (List.range (2 ^ J.size)).map sector
-      let ownKept := sector own
-      let anyOther := (List.range (2 ^ J.size)).any fun τ => τ != own && sector τ
-      let allKept := all.all id
-      if (kC && !ownKept && anyOther) || (!kC && ownKept && !allKept) then
-        bad := bad.push s!"the apex {fmt p} of face {f.solid}.{f.index} touches the rest of the result there"
+          | none => if through.contains m then σ m else other m
+      let own : Nat := (Array.range J.size).foldl (fun acc i => if σ J[i]! then acc + 2 ^ i else acc) 0
+      let anti : Nat := 2 ^ J.size - 1 - own
+      if !linkDisc J.size (capKept true) (capKept false) cellKept own anti then
+        bad := bad.push s!"the apex {fmt p} of face {f.solid}.{f.index}: the result there is not a manifold (its link is not a disc)"
   return (bad, und)
 
 /-! ## Singular points: cone apexes -/
@@ -1187,9 +1239,49 @@ def nearTouch (A : Arr) (boxes : Array Box) (l : Float) (i j : Nat) : Option Str
       return some s!"surfaces {i}, {j} come within LINEAR of touching near ({px}, {py}, {pz})"
   return none
 
+/-- Every rational root of `p`, or `none` if the roots could not all be isolated. Clear `p` to
+a primitive integer polynomial: a rational root `u/v` in lowest terms has `v | L`, its leading
+coefficient, so every candidate lies on the grid `(1/L)ℤ`. Each isolating interval is halved
+below width `1/L`; then at most one grid point lies in it, and it is tested exactly. -/
+def rationalRoots (p : Poly) : Option (Array Rat) := Id.run do
+  let p := Poly.trim (Poly.sqfree (Poly.trim p))
+  if Poly.isZero p then return none
+  if Poly.deg p == 0 then return some #[]
+  let some rs := realRoots p | return none
+  let den := p.foldl (fun m c => Nat.lcm m c.den) 1
+  let ints : List Int := p.map fun c => (c * (den : Rat)).num
+  let content := ints.foldl (fun g c => Nat.gcd g c.natAbs) 0
+  let L : Int := (ints.getLast!.natAbs / (max content 1) : Nat)
+  let Lq : Rat := (L : Rat)
+  let mut out : Array Rat := #[]
+  for r in rs do
+    match r with
+    | .rat c => out := out.push c
+    | .iso iso =>
+      let q := iso.p
+      let mut a := iso.a
+      let mut b := iso.b
+      let sa0 := Poly.ev q a
+      let mut hit : Option Rat := none
+      for _ in [0:4000] do
+        if (b - a) * Lq < 1 then break
+        let m := (a + b) / 2
+        let sm := Poly.ev q m
+        if sm == 0 then hit := some m; break
+        if (sm > 0) == (sa0 > 0) then a := m else b := m
+      match hit with
+      | some m => if Poly.ev p m == 0 then out := out.push m
+      | none =>
+        if (b - a) * Lq ≥ 1 then return none
+        -- the grid point in [a, b], if any
+        let k := (a * Lq).ceil
+        let c : Rat := (k : Rat) / Lq
+        if a ≤ c && c ≤ b && Poly.ev p c == 0 then out := out.push c
+  return some out
+
 /-- Every contact between two of the arrangement's quadrics: for each rational root `t` of the
-pencil's determinant (proposed in floating point, kept only if exact), the member `A_i + t A_j`
-tried for a certificate. -/
+pencil's determinant (all of them, exactly: `rationalRoots`), the member `A_i + t A_j` tried
+for a certificate. -/
 def contacts (A : Arr) : Array Contact := Id.run do
   let mut out : Array Contact := #[]
   for i in [0:A.qs.size] do
@@ -1200,11 +1292,11 @@ def contacts (A : Arr) : Array Contact := Id.run do
       if qi.qnorm == 0 && qj.qnorm == 0 then continue
       let d := pencilDet qi qj
       if Poly.isZero d then continue
-      let sq := Poly.sqfree d
-      let mut ts : Array Rat := #[]
-      for r in floatRoots sq do
-        for t in convergents r do
-          if Poly.ev d t == 0 && !ts.contains t then ts := ts.push t
+      -- every rational root of the pencil's determinant, exactly; none: the pair undecided
+      let some ts := rationalRoots d
+        | out := out.push ⟨i, j, ⟨i, true, i, false⟩, none,
+            some s!"surfaces {i}, {j}: the pencil's roots not all isolated"⟩
+          continue
       for t in ts do
         if t == 0 then continue
         match contactAt A i j t with
@@ -1267,10 +1359,10 @@ def edgeTouches (A : Arr) : Array String := Id.run do
           d := padd d (pscale (ys[k]! / den) basis)
         d := Poly.trim d
         if Poly.isZero d then continue
-        let mut cands : Array Rat := #[]
-        for r in floatRoots (Poly.sqfree d) do
-          for t in convergents r do
-            if Poly.ev d t == 0 && !cands.contains t then cands := cands.push t
+        -- every rational root, exactly (a missed one would be a missed undecided contact)
+        let some cands := rationalRoots d
+          | out := out.push s!"surfaces {ia}, {ib}, {ic}: the plane pencil's roots not all isolated"
+            continue
         for t in cands do
           let some v := null3 (cb.add (cc.smul t)) | continue
           let p := P0 + (v[0]! / v[2]!) * U + (v[1]! / v[2]!) * V
@@ -1364,7 +1456,7 @@ def tripleCurves (A : Arr) : Array String × Array String := Id.run do
         let mut found := false
         for D0 in #[U, V, U + V, U - V] do
           if found then break
-          for α in realRoots (alongLine A.qs[ib]! P0 D0) do
+          for α in (realRoots (alongLine A.qs[ib]! P0 D0)).getD #[] do
             match α with
             | .rat t =>
               let p := P0 + t * D0

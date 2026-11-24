@@ -1,0 +1,4325 @@
+# Mazak machines: the maker's published specifications, restated (never copied); each record's
+# `source` is the page or catalogue read and `taken` the date. Estimates and UNKNOWNs are named in
+# each record's `note` and beside the field. Bodies are conservative envelopes from published
+# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.
+
+# ---------------------------------------------------------------------------------------------
+# Mazak VCN-530C-L: 40-taper VMC, MAZATROL SmoothG. X 1050 Y 530 Z 510, table 1300 x 550,
+# 12000 rpm BT40, 30 tools.
+[[machine]]
+name = "mazak-vcn-530c-l"
+kind = "vmc3"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/ | https://mazak.com/id-en/products/vcn"
+taken = "2026-11-23"
+note = "the China-built VCN-530C L: the only VCN-530C page Mazak still publishes (the 530C/530C HS are no longer listed); architecture assumed: fixed column, X table on a Y saddle (Mazak's page does not say: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle power published as ratings only (25% ED 18.5 kW, cont 7.5 kW): no curve, no power check; tool change time UNKNOWN; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; overall 2950 x 2973 x 2808, 6800 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control also runs MAZATROL conversational; posted EIA/ISO G-code is the dialect (mazak-eia: not in forge-post yet)."
+real = true
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-265, 265]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-525, 525]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-510, 0]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 660]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [350, 80]
+interface = "BT40"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 8
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 660]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-vcn-530c-l/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-650, -640, -700]
+max = [650, 1050, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/mazak/mazak-vcn-530c-l/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-390, 600, -400]
+max = [390, 1050, 1310]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/mazak/mazak-vcn-530c-l/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-520, -275, -250]
+max = [520, 275, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/mazak/mazak-vcn-530c-l/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-650, -275, -100]
+max = [650, 275, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-vcn-530c-l/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 660]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-vcn-530c-l/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 810]
+max = [140, 600, 1260]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "Y stroke 530 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "X stroke 1050 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "Z stroke 510 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 12000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.mazak.com/my-en/detail/china/vertical/lg-vn530cel/"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak VCN-700: 40-taper VMC, MAZATROL SmoothG. X 1300 Y 700 Z 650, table 1500 x 700,
+# 15000 rpm CAT40 (spec page; the product page says BT40), 30 tools.
+[[machine]]
+name = "mazak-vcn-700"
+kind = "vmc3"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/ | https://www.mazak.com/uk-en/products/vcn/"
+taken = "2026-11-23"
+note = "UK-built VCN-700; table load 1,800 kg; architecture assumed: fixed column, X table on a Y saddle (Mazak's page does not say: UNKNOWN); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle power published as ratings only (10% ED 22 kW, cont 11 kW, 119.4 N.m max, 57.3 N.m cont): no curve, no power check; tool change time UNKNOWN; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; overall 3400 x 3901 x 3050, 8500 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the control also runs MAZATROL conversational; posted EIA/ISO G-code is the dialect (mazak-eia: not in forge-post yet)."
+real = true
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-350, 350]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-650, 650]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-650, 0]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 800]
+rpm = [1, 15000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [350, 80]
+interface = "CAT40 (spec page; the product page says BT40)"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 8
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 800]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-vcn-700/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-750, -800, -700]
+max = [750, 1210, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/mazak/mazak-vcn-700/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-450, 760, -400]
+max = [450, 1210, 1450]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/mazak/mazak-vcn-700/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-600, -350, -250]
+max = [600, 350, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/mazak/mazak-vcn-700/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-750, -350, -100]
+max = [750, 350, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-vcn-700/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 800]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-vcn-700/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 950]
+max = [140, 760, 1400]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "Y stroke 700 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "X stroke 1300 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "Z stroke 650 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 15000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn700/"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak VARIAXIS I-600 NEO: 5-axis trunnion, MAZATROL SmoothAi. A tilts the cradle about X
+# (-120..+30 deg) and carries the C table (600 dia, 500 kg). X 508 Y 914.4 Z 508, 18,000 rpm CAT40.
+[[machine]]
+name = "mazak-variaxis-i-600"
+kind = "table-table"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood", "through"]
+clearance = 1
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/ | https://www.mazak.com/us-en/products/variaxis-i-neo/"
+taken = "2026-11-23"
+note = "A's sign: Mazak publishes -120..+30; the direction of +A (which way the table tilts) is UNKNOWN; modelled right-handed about +X; A's pivot below the table top UNKNOWN: 150 mm (estimate); C range and A/C speeds UNKNOWN; architecture of X/Y/Z UNKNOWN (Mazak does not say which unit carries which); the tool-to-part motion is the same either way; the spec page says CAT40 18,000 rpm 30 kW (40% ED) / 26 kW cont, 120 N.m max; the product summary says BT40 12,000 rpm: the spec page is used; spindle power as ratings only: no curve, no power check; tool change time UNKNOWN; 2-pallet changer optional; C's speed and turning: none (milling only); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; overall 2235.2 x 4445 x 3225.8, 13000 kg; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; mazak-eia is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-254, 254]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-457.2, 457.2]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-508, 0]
+rapid = 56000
+max_feed = 56000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "A"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [1, 0, 0]
+pivot = [0, 0, -150]
+range = [-120, 30]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "A"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 584.2]
+rpm = [1, 18000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [304.8, 101.6]
+interface = "CAT40"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 8.2
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 584.2]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-variaxis-i-600/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-554, -757.2, -943.411941]
+max = [554, 757.2, -543.411941]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/mazak/mazak-variaxis-i-600/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-540, -360, -550]
+max = [-400, 360, 0]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/mazak/mazak-variaxis-i-600/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [400, -360, -550]
+max = [540, 360, 0]
+
+[[machine.body]]
+name = "cradle"
+link = "A"
+part = "parts/mazak/mazak-variaxis-i-600/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-380, -320, -200]
+max = [380, 320, -80]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/mazak/mazak-variaxis-i-600/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 300
+h = 80
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-variaxis-i-600/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 584.2]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-variaxis-i-600/head.fg"
+[[machine.body.box]]
+min = [-150, -150, 734.2]
+max = [150, 150, 1184.2]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "X stroke 508 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "Y stroke 914.4 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "Z stroke 508 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "56000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "-120..30 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 18000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "8.2 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri600nn/"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak VARIAXIS I-700 NEO: 5-axis trunnion, MAZATROL SmoothAi. A tilts the cradle about X
+# (-120..+30 deg) and carries the C table (700 dia, 700 kg). X 635 Y 1092.2 Z 609.6, 18,000 rpm CAT40.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
+[[machine]]
+name = "mazak-variaxis-i-700"
+kind = "table-table"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood", "through"]
+clearance = 1
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/ | https://www.mazak.com/us-en/products/variaxis-i-neo/"
+taken = "2026-11-23"
+note = "A's sign: Mazak publishes -120..+30; the direction of +A (which way the table tilts) is UNKNOWN; modelled right-handed about +X; A's pivot below the table top UNKNOWN: 150 mm (estimate); C range and A/C speeds UNKNOWN; architecture of X/Y/Z UNKNOWN (Mazak does not say which unit carries which); the tool-to-part motion is the same either way; the spec page says CAT40 18,000 rpm 30 kW (40% ED) / 26 kW cont, 120 N.m max; the product summary says BT40 12,000 rpm: the spec page is used; spindle power as ratings only: no curve, no power check; tool change time UNKNOWN; 2-pallet changer optional; C's speed and turning: none (milling only); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; overall 2387.6 x 4445 x 3454.4 (the page's weight is a misprint); joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; mazak-eia is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-317.5, 317.5]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-546.1, 546.1]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-609.6, 0]
+rapid = 56000
+max_feed = 56000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "A"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [1, 0, 0]
+pivot = [0, 0, -150]
+range = [-120, 30]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "A"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 711.2]
+rpm = [1, 18000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [355.6, 101.6]
+interface = "CAT40"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 8.2
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 711.2]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-variaxis-i-700/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-617.5, -846.1, -989.249296]
+max = [617.5, 846.1, -589.249296]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/mazak/mazak-variaxis-i-700/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-590, -410, -550]
+max = [-450, 410, 0]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/mazak/mazak-variaxis-i-700/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [450, -410, -550]
+max = [590, 410, 0]
+
+[[machine.body]]
+name = "cradle"
+link = "A"
+part = "parts/mazak/mazak-variaxis-i-700/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-430, -370, -200]
+max = [430, 370, -80]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/mazak/mazak-variaxis-i-700/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 350
+h = 80
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-variaxis-i-700/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 711.2]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-variaxis-i-700/head.fg"
+[[machine.body.box]]
+min = [-150, -150, 861.2]
+max = [150, 150, 1311.2]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "X stroke 635 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "Y stroke 1092.2 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "Z stroke 609.6 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "56000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "-120..30 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 18000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "8.2 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/5axis/vri700nn/"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak HCN-5000: HMC, MAZATROL SmoothG, two 500 mm pallets. X 736.6 Y 736.6 Z 812.8, spindle 101.6-838.2
+# above the pallet, 12,000 rpm CAT40 (40% ED 18.5 kW, cont 15 kW, 82 N.m), 40 tools, max work 800 dia x 1000.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
+[[machine]]
+name = "mazak-hcn-5000"
+kind = "vmc4"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood", "through"]
+clearance = 1
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/ | https://www.mazak.com/us-en/products/hcn/"
+taken = "2026-11-23"
+note = "two-pallet changer: change time, pallet load and B index increment UNKNOWN; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: put at 100-912.8 (estimate, the Z stroke from 100); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); which unit Mazak moves on Z is UNKNOWN; the tool-to-part motion is the same either way; B modelled as a full rotary; whether it indexes (1 deg) or contours is UNKNOWN; power as ratings only: no curve, no power check; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; overall 2616.2 x 5765.8 x 2819.4, 11,430 kg; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; mazak-eia is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-368.3, 368.3]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [0, 736.6]
+home = 736.6
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-812.8, 0]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000
+cyclic = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 101.6, 912.8]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [508, 101.6]
+interface = "CAT40"
+
+[[machine.changer]]
+pockets = 40
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 11.8
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 101.6, 912.8]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "pallet"
+kind = "part"
+link = "B"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "pallet"
+link = "B"
+part = "parts/mazak/mazak-hcn-5000/pallet.fg"
+ignore = ["table"]
+[[machine.body.box]]
+min = [-250, -120, -250]
+max = [250, 0, 250]
+
+[[machine.body]]
+name = "table"
+link = "base"
+part = "parts/mazak/mazak-hcn-5000/table.fg"
+ignore = ["pallet", "bed"]
+[[machine.body.cyl]]
+base = [0, -370, 0]
+axis = [0, 1, 0]
+r = 355
+h = 249
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-hcn-5000/bed.fg"
+ignore = ["table", "column"]
+[[machine.body.box]]
+min = [-768.3, -770, -655]
+max = [768.3, -371, 3005.6]
+
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/mazak/mazak-hcn-5000/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-310, -370, 2415.6]
+max = [310, 1398.2, 2905.6]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-hcn-5000/nose.fg"
+[[machine.body.cyl]]
+base = [0, 101.6, 912.8]
+axis = [0, 0, 1]
+r = 120
+h = 180
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-hcn-5000/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-160, -58.4, 1092.8]
+max = [160, 261.6, 1592.8]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/"
+taken = "2026-11-23"
+value = "X stroke 736.6 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/"
+taken = "2026-11-23"
+value = "Y stroke 736.6 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/"
+taken = "2026-11-23"
+value = "Z stroke 812.8 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 12000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/"
+taken = "2026-11-23"
+value = "40"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/horizontal/hn5000e/"
+taken = "2026-11-23"
+value = "11.8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak INTEGREX i-200 NEO: mill-turn, B-axis milling head (-30..+210 deg, 12,000 rpm HSK-A63, 40% ED
+# 18.5 kW), main spindle 5,000 rpm 8 in chuck (40% ED 22 kW, cont 15 kW), tailstock; X 533.4 Y 203.2 Z 635,
+# max 609.6 dia x 584.2, 36 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
+[[machine]]
+name = "mazak-integrex-i-200"
+kind = "mill-turn"
+control = "mazak-eia"
+length_joint = "X"
+coolants = ["flood", "through"]
+clearance = 1
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/ | https://www.mazak.com/us-en/products/integrex-i-neo/"
+taken = "2026-11-23"
+note = "the plain i-200 NEO has a tailstock, not a second spindle (the i-200S has one): no sub-spindle; the tailstock is not modelled; B's zero and sign (which way +B turns the head) UNKNOWN: modelled with the tool along -x (radial) at B = 0, right-handed about +y; C's speed and the chuck's length UNKNOWN; the head's size an estimate; where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); power as ratings only: no curve, no power check; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; overall 3505.2 x 2743.2 x 2438.4, 10,780 kg; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; mazak-eia (lathe) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "C"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000
+cyclic = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-0.8, 634.2]
+home = 634.2
+rapid = 40000
+max_feed = 40000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-228.6, 304.8]   # radius; the program's X word is twice it
+home = 304.8
+rapid = 48000
+max_feed = 48000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-101.6, 101.6]
+rapid = 40000
+max_feed = 40000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "Y"
+side = "head"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [250, 0, 0]
+range = [-30, 210]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000
+
+[[machine.spindle]]
+name = "main"
+link = "C"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 5000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [609.6, 584.2]
+interface = "(chuck 8 in)"
+c_joint = "C"
+
+[[machine.spindle]]
+name = "mill"
+link = "B"
+kind = "milling"
+axis = [1, 0, 0]
+nose = [150, 0, 0]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [304.8, 101.6]
+interface = "HSK-A63"
+
+[[machine.changer]]
+pockets = 36
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 5
+
+[[machine.mount]]
+name = "bhead"
+kind = "tool"
+link = "B"
+at = [150, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "main"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/mazak/mazak-integrex-i-200/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-196.6, -196.6, -610]
+max = [196.6, 196.6, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "C"
+part = "parts/mazak/mazak-integrex-i-200/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 116.6
+h = 110
+
+[[machine.body]]
+name = "bnose"
+link = "B"
+part = "parts/mazak/mazak-integrex-i-200/bnose.fg"
+[[machine.body.cyl]]
+base = [150, 0, 0]
+axis = [1, 0, 0]
+r = 60
+h = 100
+
+[[machine.body]]
+name = "bhead"
+link = "B"
+part = "parts/mazak/mazak-integrex-i-200/bhead.fg"
+[[machine.body.box]]
+min = [250, -100, -100]
+max = [450, 100, 100]
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "Z stroke 635 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "X stroke 533.4 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "48000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "Y stroke 203.2 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "-30..210 deg"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max cutting feed UNKNOWN (unpublished): = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 5000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "swing and max turning length"
+
+[[machine.cite]]
+path = "spindle.mill.rpm"
+status = "unknown"
+basis = "max 12000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.mill.nose"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.mill.max"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "36"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/japan/integrex-h/i200nen/"
+taken = "2026-11-23"
+value = "5.0 kg"
+
+[[machine.cite]]
+path = "mount.bhead.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.main.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bnose"
+status = "estimate"
+basis = "the milling spindle nose (estimate, kept large); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bhead"
+status = "estimate"
+basis = "the B head housing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak QUICK TURN 200 (US-built): 2-axis lathe, 8 in chuck, 76.2 mm bar, 5,000 rpm 26 kW (30-min),
+# 12-station turret; X 203.2 Z 558.8, swing 609.6, max 355.6 dia x 508.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
+[[machine]]
+name = "mazak-quick-turn-200"
+kind = "lathe"
+control = "mazak-eia-lathe"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt2002eky/ | https://www.mazak.com/us-en/products/quick-turn/"
+taken = "2026-11-23"
+note = "rapids, feeds, turret index time, control model, tailstock, size and weight UNKNOWN (not on the page); the page prints a 21.13 in Y row on this non-Y model: not used; where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); power as a 30-min rating only: no curve, no power check; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (the bed's slant is not modelled); mazak-eia-lathe is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-0.8, 558]
+home = 558
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-25.4, 177.8]   # radius; the program's X word is twice it
+home = 177.8
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 5000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [609.6, 508]
+interface = "(chuck 8 in, bar 76.2)"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 12
+index_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0)
+center = [316.6, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [156.6, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/mazak/mazak-quick-turn-200/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-196.6, -196.6, -610]
+max = [196.6, 196.6, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/mazak/mazak-quick-turn-200/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 116.6
+h = 110
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/mazak/mazak-quick-turn-200/turret.fg"
+[[machine.body.cyl]]
+base = [316.6, 0, -45]
+axis = [0, 0, 1]
+r = 160
+h = 90
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt2002eky/"
+taken = "2026-11-23"
+value = "Z stroke 558.8 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt2002eky/"
+taken = "2026-11-23"
+value = "X stroke 203.2 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 5000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt2002eky/"
+taken = "2026-11-23"
+value = "swing and max turning length"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt2002eky/"
+taken = "2026-11-23"
+value = "12"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "turret size and position not published: placed so the disc clears the chuck (note)"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak VCN-460: VCN, MAZATROL SmoothG (named in the machine-size row only).
+# X 560 Y 460 Z 510; 12000 rpm BT40; 30 tools.
+[[machine]]
+name = "mazak-vcn-460"
+kind = "vmc3"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/ | https://www.mazak.com/jp-en/products/vcn"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle power as published: cont 11 kW; peak/other: 18.5 kW (10% ED); torque cont 57.3 N.m; torque max 119 N.m (no curve: no power check); max tool diameter 80 with the neighbouring pockets full, 125 with them empty; overall 2074 x 2901 x 2812; machine 4800 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the dialect (mazak-eia) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-230, 230]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-280, 280]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-510, 0]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 660]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [350, 80]
+interface = "BT40"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 8
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 660]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-vcn-460/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-450, -560, -700]
+max = [450, 970, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/mazak/mazak-vcn-460/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-300, 520, -400]
+max = [300, 970, 1310]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/mazak/mazak-vcn-460/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-360, -230, -250]
+max = [360, 230, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/mazak/mazak-vcn-460/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-450, -230, -100]
+max = [450, 230, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-vcn-460/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 660]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-vcn-460/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 810]
+max = [140, 520, 1260]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "Y stroke 460 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "X stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "Z stroke 510 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 12000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn460e/"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak VCN-500: VCN, MAZATROL SmoothG (named in the machine-size row only).
+# X 800 Y 500 Z 550; 15000 rpm CAT40; 30 tools.
+[[machine]]
+name = "mazak-vcn-500"
+kind = "vmc3"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/ | https://www.mazak.com/uk-en/products/vcn/"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle power as published: cont 11 kW; peak/other: 22 kW (10% ED); page prints '22 (25 HP)'; torque cont 57.3 N.m; torque max 119.4 N.m (no curve: no power check); max tool diameter 80 with the neighbouring pockets full, 125 with them empty; overall 2330 x 3329 x 2900; machine 5700 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the dialect (mazak-eia) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-250, 250]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-400, 400]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-550, 0]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 700]
+rpm = [1, 15000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [350, 80]
+interface = "CAT40"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 8
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 700]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-vcn-500/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-525, -600, -700]
+max = [525, 1010, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/mazak/mazak-vcn-500/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-315, 560, -400]
+max = [315, 1010, 1350]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/mazak/mazak-vcn-500/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-420, -250, -250]
+max = [420, 250, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/mazak/mazak-vcn-500/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-525, -250, -100]
+max = [525, 250, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-vcn-500/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 700]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-vcn-500/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 850]
+max = [140, 560, 1300]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "Y stroke 500 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "X stroke 800 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "Z stroke 550 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 15000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/uk/vertical/uk-vcn500/"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak VCN-600: VCN, MAZATROL SmoothG (named in the machine-size row only).
+# X 1050 Y 600 Z 510; 12000 rpm BT40; 30 tools.
+[[machine]]
+name = "mazak-vcn-600"
+kind = "vmc3"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/ | https://www.mazak.com/jp-en/products/vcn"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle power as published: cont 11 kW; peak/other: 18.5 kW (10% ED); torque cont 57.3 N.m; torque max 119 N.m (no curve: no power check); max tool diameter 80 with the neighbouring pockets full, 125 with them empty; overall 2880 x 3266 x 2817; machine 6800 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the dialect (mazak-eia) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-300, 300]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-525, 525]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-510, 0]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 660]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [350, 80]
+interface = "BT40"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 8
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 660]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-vcn-600/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-650, -700, -700]
+max = [650, 1110, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/mazak/mazak-vcn-600/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-390, 660, -400]
+max = [390, 1110, 1310]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/mazak/mazak-vcn-600/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-520, -300, -250]
+max = [520, 300, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/mazak/mazak-vcn-600/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-650, -300, -100]
+max = [650, 300, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-vcn-600/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 660]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-vcn-600/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 810]
+max = [140, 660, 1260]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "Y stroke 600 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "X stroke 1050 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "Z stroke 510 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 12000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/vertical/vcn600e/"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak VCN-535C: VCN, MAZATROL SmoothG (named in the machine-size row only).
+# X 1050 Y 530 Z 560; 8000 rpm BT50; 24 tools.
+[[machine]]
+name = "mazak-vcn-535c"
+kind = "vmc3"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/ | https://www.mazak.com/uk-en/products/vcn/"
+taken = "2026-11-23"
+note = "architecture assumed: X table on a Y saddle, Z head on a fixed column (the maker's page does not say which unit carries which: UNKNOWN unless stated above); spindle centre to column UNKNOWN: put at the least that clears the table at full Y (estimate); spindle power as published: cont 22 kW; peak/other: 30 kW (40% ED); torque cont 147 N.m; torque max 175 N.m (no curve: no power check); max tool diameter 105 with the neighbouring pockets full, 210 with them empty; overall 2948 x 3286 x 2810; machine 7830 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the dialect (mazak-eia) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "Y"
+parent = "base"
+side = "table"
+type = "linear"
+axis = [0, -1, 0]
+range = [-265, 265]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Y"
+side = "table"
+type = "linear"
+axis = [-1, 0, 0]
+range = [-525, 525]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-560, 0]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 710]
+rpm = [1, 8000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [350, 105]
+interface = "BT50"
+
+[[machine.changer]]
+pockets = 24
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 20
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 710]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "X"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-vcn-535c/bed.fg"
+ignore = ["saddle", "column"]
+[[machine.body.box]]
+min = [-650, -640, -700]
+max = [650, 1050, -400]
+
+[[machine.body]]
+name = "column"
+link = "base"
+part = "parts/mazak/mazak-vcn-535c/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-390, 600, -400]
+max = [390, 1050, 1360]
+
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/mazak/mazak-vcn-535c/saddle.fg"
+ignore = ["bed", "table"]
+[[machine.body.box]]
+min = [-520, -275, -250]
+max = [520, 275, -100]
+
+[[machine.body]]
+name = "table"
+link = "X"
+part = "parts/mazak/mazak-vcn-535c/table.fg"
+ignore = ["saddle"]
+[[machine.body.box]]
+min = [-650, -275, -100]
+max = [650, 275, 0]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-vcn-535c/nose.fg"
+ignore = ["column"]
+[[machine.body.cyl]]
+base = [0, 0, 710]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-vcn-535c/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-140, -140, 860]
+max = [140, 600, 1310]
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "Y stroke 530 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "X stroke 1050 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "Z stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 8000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "24"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "20 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/vertical/vn535cem/"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the saddle; from the floor (estimate) to the saddle ways; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "behind the spindle from the published spindle-to-column distance; width and depth estimates; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.saddle"
+status = "estimate"
+basis = "the Y saddle under the table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the published table top; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head on the column ways (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak VARIAXIS C-600: VARIAXIS C, MAZATROL SmoothAi (named in the machine-size row only).
+# X 650 Y 550 Z 530; 12000 rpm BT40 / CAT40; 30 tools.
+[[machine]]
+name = "mazak-variaxis-c-600"
+kind = "table-table"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/ | https://www.mazak.com/uk-en/products/variaxis-c/"
+taken = "2026-11-23"
+note = "B tilts the cradle about Y (-30..120 deg, published) and carries C; the sense of +B (which way the table tips) is UNKNOWN: modelled right-handed about +y; B's pivot below the table top UNKNOWN: 150 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; spindle power as published: cont 11 kW; peak/other: 11 kW (40% ED); torque cont 57.3 N.m; torque max 70 N.m (no curve: no power check); max tool diameter 80 with the neighbouring pockets full, 130 with them empty; overall 2350 x 2962 x 3039; machine 10000 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the dialect (mazak-eia) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-325, 325]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-275, 275]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-530, 0]
+rapid = 42000
+max_feed = 42000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, -150]
+range = [-30, 120]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "B"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 580]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [300, 80]
+interface = "BT40 / CAT40"
+
+[[machine.changer]]
+pockets = 30
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 8
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 580]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-variaxis-c-600/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-625, -575, -943.411941]
+max = [625, 575, -543.411941]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/mazak/mazak-variaxis-c-600/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-360, -540, -550]
+max = [360, -400, 0]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/mazak/mazak-variaxis-c-600/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-360, 400, -550]
+max = [360, 540, 0]
+
+[[machine.body]]
+name = "cradle"
+link = "B"
+part = "parts/mazak/mazak-variaxis-c-600/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-320, -380, -200]
+max = [320, 380, -80]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/mazak/mazak-variaxis-c-600/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 300
+h = 80
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-variaxis-c-600/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 580]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-variaxis-c-600/head.fg"
+[[machine.body.box]]
+min = [-150, -150, 730]
+max = [150, 150, 1180]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "X stroke 650 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "Y stroke 550 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "Z stroke 530 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "42000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "-30..120 deg"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 12000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "published"
+source = "https://www.mazak.com/uk-en/detail/japan/5axis/vrc600n/"
+taken = "2026-11-23"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak HCN-4000: HCN, MAZATROL SmoothG (named in the machine-size row only).
+# X 560 Y 640 Z 640; 12000 rpm BT40 (JP page) / CAT40 (US page); 40 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
+[[machine]]
+name = "mazak-hcn-4000"
+kind = "vmc4"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/ | https://www.mazak.com/us-en/detail/japan/horizontal/hn4000e/ | https://www.mazak.com/us-en/products/hcn/"
+taken = "2026-11-23"
+note = "pallets: count UNKNOWN, 400 square, change time UNKNOWN, load 400 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle power as published: cont 15 kW; 30min 18.5 kW; torque cont 60 N.m; torque max 82 N.m (no curve: no power check); max tool diameter 95 with the neighbouring pockets full, 170 with them empty; overall 2400 x 5454 x 2713; machine 10720 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the dialect (mazak-eia) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-280, 280]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [0, 640]
+home = 640
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-640, 0]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 80, 740]
+rpm = [1, 12000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [420, 95]
+interface = "BT40 (JP page) / CAT40 (US page)"
+
+[[machine.changer]]
+pockets = 40
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 12
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 80, 740]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "pallet"
+kind = "part"
+link = "B"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "pallet"
+link = "B"
+part = "parts/mazak/mazak-hcn-4000/pallet.fg"
+ignore = ["table"]
+[[machine.body.box]]
+min = [-200, -120, -200]
+max = [200, 0, 200]
+
+[[machine.body]]
+name = "table"
+link = "base"
+part = "parts/mazak/mazak-hcn-4000/table.fg"
+ignore = ["pallet", "bed"]
+[[machine.body.cyl]]
+base = [0, -370, 0]
+axis = [0, 1, 0]
+r = 284
+h = 249
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-hcn-4000/bed.fg"
+ignore = ["table", "column"]
+[[machine.body.box]]
+min = [-680, -770, -584]
+max = [680, -371, 2660]
+
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/mazak/mazak-hcn-4000/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-310, -370, 2070]
+max = [310, 1280, 2560]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-hcn-4000/nose.fg"
+[[machine.body.cyl]]
+base = [0, 80, 740]
+axis = [0, 0, 1]
+r = 120
+h = 180
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-hcn-4000/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-160, -80, 920]
+max = [160, 240, 1420]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/"
+taken = "2026-11-23"
+value = "X stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/"
+taken = "2026-11-23"
+value = "Y stroke 640 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/"
+taken = "2026-11-23"
+value = "Z stroke 640 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 12000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/"
+taken = "2026-11-23"
+value = "40"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn4000e/"
+taken = "2026-11-23"
+value = "12 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak HCN-6000: HCN, MAZATROL SmoothG (named in the machine-size row only).
+# X 800 Y 800 Z 800; 10000 rpm BT50 (JP page) / CAT50 (US page); 43 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
+[[machine]]
+name = "mazak-hcn-6000"
+kind = "vmc4"
+control = "mazak-eia"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/ | https://www.mazak.com/us-en/detail/japan/horizontal/hn6000e/ | https://www.mazak.com/us-en/products/hcn/"
+taken = "2026-11-23"
+note = "pallets: count UNKNOWN, 500 square, change time UNKNOWN, load 1000 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle power as published: cont 30 kW; peak/other: 37 kW (40% ED); torque cont 239 N.m; torque max 350 N.m (no curve: no power check); max tool diameter 125 with the neighbouring pockets full, 250 with them empty; overall 3091 x 6813 x 3380; machine 15800 kg; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the dialect (mazak-eia) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-400, 400]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [0, 800]
+home = 800
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-800, 0]
+rapid = 60000
+max_feed = 60000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 100, 900]
+rpm = [1, 10000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [500, 125]
+interface = "BT50 (JP page) / CAT50 (US page)"
+
+[[machine.changer]]
+pockets = 43
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 30
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 100, 900]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "pallet"
+kind = "part"
+link = "B"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "pallet"
+link = "B"
+part = "parts/mazak/mazak-hcn-6000/pallet.fg"
+ignore = ["table"]
+[[machine.body.box]]
+min = [-250, -120, -250]
+max = [250, 0, 250]
+
+[[machine.body]]
+name = "table"
+link = "base"
+part = "parts/mazak/mazak-hcn-6000/table.fg"
+ignore = ["pallet", "bed"]
+[[machine.body.cyl]]
+base = [0, -370, 0]
+axis = [0, 1, 0]
+r = 355
+h = 249
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/mazak/mazak-hcn-6000/bed.fg"
+ignore = ["table", "column"]
+[[machine.body.box]]
+min = [-800, -770, -655]
+max = [800, -371, 2980]
+
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/mazak/mazak-hcn-6000/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-310, -370, 2390]
+max = [310, 1460, 2880]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/mazak/mazak-hcn-6000/nose.fg"
+[[machine.body.cyl]]
+base = [0, 100, 900]
+axis = [0, 0, 1]
+r = 120
+h = 180
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/mazak/mazak-hcn-6000/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-160, -60, 1080]
+max = [160, 260, 1580]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/"
+taken = "2026-11-23"
+value = "X stroke 800 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/"
+taken = "2026-11-23"
+value = "Y stroke 800 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/"
+taken = "2026-11-23"
+value = "Z stroke 800 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "unknown"
+basis = "max 10000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/"
+taken = "2026-11-23"
+value = "43"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.mazak.com/jp-en/products/detail/horizontal/hn6000e/"
+taken = "2026-11-23"
+value = "30 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Mazak QUICK TURN 250: QUICK TURN.
+# X 228.6 Z 533.4; 4000 rpm.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
+[[machine]]
+name = "mazak-quick-turn-250"
+kind = "lathe"
+control = "mazak-eia-lathe"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt25eky-all0/ | https://www.mazak.com/us-en/products/quick-turn/"
+taken = "2026-11-23"
+note = "spindle power as published: 30min 26 kW (no curve: no power check); where each stroke sits relative to the spindle centreline and chuck face is UNKNOWN: X's top end is put at the max turning radius and Z's at the max turning length + 50 mm (estimates); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled; the base frame is turned so x is the slide's X (a slant bed's angle is not modelled); the tailstock is not modelled; the dialect (mazak-eia-lathe) is not in forge-post yet."
+real = true
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-0.8, 532.6]
+home = 532.6
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-50.8, 177.8]   # radius; the program's X word is twice it
+home = 177.8
+rapid = 100000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 100000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [1, 4000]   # rpm min UNKNOWN (unpublished): 1 = no lower check
+max = [609.6, 482.6]
+interface = " (bar 76.2)"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 12
+index_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0)
+center = [357.8, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [197.8, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/mazak/mazak-quick-turn-250/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-222, -222, -610]
+max = [222, 222, -110]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/mazak/mazak-quick-turn-250/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -110]
+axis = [0, 0, 1]
+r = 142
+h = 110
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/mazak/mazak-quick-turn-250/turret.fg"
+[[machine.body.cyl]]
+base = [357.8, 0, -45]
+axis = [0, 0, 1]
+r = 160
+h = 90
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt25eky-all0/"
+taken = "2026-11-23"
+value = "Z stroke 533.4 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt25eky-all0/"
+taken = "2026-11-23"
+value = "X stroke 228.6 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound; errs high so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "spindle.main.rpm"
+status = "unknown"
+basis = "max 4000 rpm published; rpm min UNKNOWN (unpublished): 1 = no lower check"
+
+[[machine.cite]]
+path = "spindle.main.nose"
+status = "estimate"
+basis = "the chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.main.max"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt25eky-all0/"
+taken = "2026-11-23"
+value = "swing and max turning length"
+
+[[machine.cite]]
+path = "turret.T1.stations"
+status = "published"
+source = "https://www.mazak.com/us-en/detail/usa/turning/us-qt25eky-all0/"
+taken = "2026-11-23"
+value = "12"
+
+[[machine.cite]]
+path = "turret.T1.index_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0)"
+
+[[machine.cite]]
+path = "turret.T1.center"
+status = "estimate"
+basis = "turret size and position not published: placed so the disc clears the chuck (note)"
+
+[[machine.cite]]
+path = "mount.turret.at"
+status = "estimate"
+basis = "the tool gauge point on the turret/head: not published, placed as the note says"
+
+[[machine.cite]]
+path = "mount.chuck.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.headstock"
+status = "estimate"
+basis = "the headstock behind the chuck (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.chuck"
+status = "estimate"
+basis = "the published chuck size plus jaw stand-out (estimate); length an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.turret"
+status = "estimate"
+basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"

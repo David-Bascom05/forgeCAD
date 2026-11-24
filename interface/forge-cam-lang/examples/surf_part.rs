@@ -57,6 +57,8 @@ fn main() {
             retract: 40.0,
         },
         feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let t0 = std::time::Instant::now();
     let r = surf::parallel(&sf, c, [-30.0, -24.0, 30.0, 24.0], 4.0, 0.0, 0.5);

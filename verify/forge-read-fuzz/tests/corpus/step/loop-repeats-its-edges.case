@@ -1,0 +1,6 @@
+# An EDGE_LOOP naming its eight edges a hundred times over: the mesh cut the repeats finer each
+# round until 3 GB ran out. A face now goes along an edge at most once each way (`finish`).
+from: examples/rack18u/asm/order/RACK-141_side_panel.step
+replace: #673=EDGE_LOOP('',(#665,#666,#667,#668,#669,#670,#671,#672));
+with: #673=EDGE_LOOP('',(#665,#666,#667,#668,#669,#670,#671,#672repeat 100: ,#668,#669,#670,#671,#672));
+max-ms: 5000
