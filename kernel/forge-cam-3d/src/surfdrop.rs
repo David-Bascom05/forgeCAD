@@ -9,7 +9,6 @@
 //!   the leave as the points do.
 
 use crate::drop::{Band, DropCutter, seg_band};
-use forge_cam::ops::{OpPath, PMove, checker_moves};
 use forge_cam::surf::{Surfacer, XyGrid};
 use forge_cam_geom::check::Move;
 use forge_cam_geom::drop::{Column, Gap, gap_move};
@@ -85,22 +84,69 @@ impl DropCutter for SurfDrop<'_, '_> {
         self.clear(a, b, -slack.max(0.0))
     }
 
-    /// The arc as the checker takes it (`ops::checker_moves`: quarter-turn pieces, a helical
-    /// one swept over its height range), each proven as a line is.
+    /// The arc by its chords: the arc's sweep cut into n equal angles Δ, each piece within its
+    /// sagitta s ≤ r Δ²/8 (widened, at most a quarter of the slack) of its chord at the same
+    /// fraction. The cutter's signed distance is 1-Lipschitz in its position, and the column
+    /// grown by s holds the cutter anywhere within s of the chord: so each chord proven, per
+    /// face, by the closed form at the slack less s, or by the grown column's gap at the slack,
+    /// proves the arc. Undecided: not proven.
     fn arc3_below(&self, a: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool, slack: f64) -> bool {
         let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
-        if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite())) {
+        let slack = slack.max(0.0);
+        if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite()) && slack.is_finite() && slack > 0.0) {
             return false;
         }
-        let p = OpPath {
-            tool: 0,
-            start: a,
-            moves: vec![PMove::Arc { to, c, cw, f: 1.0 }],
-            rpm: 0.0,
-            coolant: forge_post::Coolant::Off,
+        let tau = std::f64::consts::TAU;
+        let a0 = forge_math::dmath::atan2(a[1] - c[1], a[0] - c[0]);
+        let mut a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
+        if cw {
+            while a1 >= a0 {
+                a1 -= tau;
+            }
+        } else {
+            while a1 <= a0 {
+                a1 += tau;
+            }
+        }
+        let sweep = a1 - a0;
+        // chords of sagitta at most slack/4 (Δ = √(2 slack / r)), at least one per quarter turn
+        let dmax = (2.0 * slack / r).sqrt().min(0.5 * std::f64::consts::PI);
+        let n = ((sweep.abs() / dmax).ceil() as usize).max(1);
+        if n > 4096 {
+            return false;
+        }
+        let d = sweep.abs() / n as f64;
+        let sag = 1.01 * r * d * d / 8.0 + 1e-12 * (1.0 + r + c[0].abs().max(c[1].abs()));
+        let Some(grown) = self.chk.grow(sag) else {
+            return false;
         };
-        let mvs: Vec<Move> = checker_moves(&p).into_iter().map(|m| m.0).collect();
-        self.clear_moves(&mvs, [c[0] - r, c[1] - r], [c[0] + r, c[1] + r], -slack.max(0.0))
+        let at = |k: usize| -> [f64; 3] {
+            if k == 0 {
+                return a;
+            }
+            if k == n {
+                return to;
+            }
+            let t = k as f64 / n as f64;
+            let (sn, cs) = forge_math::dmath::sin_cos(a0 + sweep * t);
+            [c[0] + r * cs, c[1] + r * sn, a[2] + (to[2] - a[2]) * t]
+        };
+        let w = r + grown.r;
+        let idx = self.grid.near(c[0] - w, c[1] - w, c[0] + w, c[1] + w);
+        for k in 0..n {
+            let mv = Move::Line { a: at(k), b: at(k + 1) };
+            for &i in &idx {
+                let f = &self.sf.faces[i as usize];
+                if forge_cam_geom::contact::clear(&self.sf.cutter, f, &mv, self.sf.leave - slack + sag).is_some() {
+                    continue;
+                }
+                match gap_move(&grown, f, &mv, -slack, self.sf.res, GAP_BUDGET).0 {
+                    Gap::Clear { .. } => {}
+                    _ => return false,
+                }
+            }
+        }
+        true
     }
 
     fn extent(&self) -> [[f64; 2]; 2] {
