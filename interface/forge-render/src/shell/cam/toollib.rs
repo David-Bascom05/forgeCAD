@@ -101,7 +101,12 @@ pub fn matches(f: &Find, t: &Tool) -> bool {
 
 /// The tools' materials, each once, in order.
 pub fn materials(lib: &Library) -> Vec<String> {
-    let mut m: Vec<String> = lib.tools.iter().map(|t| t.material.clone()).filter(|m| !m.is_empty()).collect();
+    let mut m: Vec<String> = lib
+        .tools
+        .iter()
+        .map(|t| t.material.clone())
+        .filter(|m| !m.is_empty())
+        .collect();
     m.sort();
     m.dedup();
     m
@@ -174,7 +179,12 @@ impl ToolForm {
     /// A tool from nothing: a 10 mm flat by default.
     pub fn blank(lib: &Library, kind: Kind) -> ToolForm {
         let id = free_id(lib, &format!("my-{}", kind.name().replace('_', "-")));
-        let mut f = ToolForm { from: None, id, kind, vals: vec![] };
+        let mut f = ToolForm {
+            from: None,
+            id,
+            kind,
+            vals: vec![],
+        };
         f.set_kind(kind);
         f
     }
@@ -187,7 +197,13 @@ impl ToolForm {
             match k {
                 "dc" => "10",
                 "lcf" => "25",
-                "nof" => if kind == Kind::Drill { "2" } else { "3" },
+                "nof" => {
+                    if kind == Kind::Drill {
+                        "2"
+                    } else {
+                        "3"
+                    }
+                }
                 "dcon" => "10",
                 "oal" => "75",
                 "re" => "1",
@@ -202,7 +218,14 @@ impl ToolForm {
         };
         self.vals = form_fields(kind)
             .into_iter()
-            .map(|(k, _, _)| (k, old.iter().find(|o| o.0 == k).map_or_else(|| dflt(k), |o| o.1.clone())))
+            .map(|(k, _, _)| {
+                (
+                    k,
+                    old.iter()
+                        .find(|o| o.0 == k)
+                        .map_or_else(|| dflt(k), |o| o.1.clone()),
+                )
+            })
             .collect();
     }
 
@@ -212,7 +235,10 @@ impl ToolForm {
             from: Some(t.id.clone()),
             id: free_id(lib, &format!("{}-custom", t.id)),
             kind: t.kind,
-            vals: form_fields(t.kind).into_iter().map(|(k, _, _)| (k, value_of(t, k))).collect(),
+            vals: form_fields(t.kind)
+                .into_iter()
+                .map(|(k, _, _)| (k, value_of(t, k)))
+                .collect(),
         }
     }
 
@@ -246,7 +272,11 @@ impl ToolForm {
         };
         let table = match &self.from {
             Some(from) => {
-                let src = lib.tools.iter().find(|t| &t.id == from).ok_or(format!("no library tool `{from}`"))?;
+                let src = lib
+                    .tools
+                    .iter()
+                    .find(|t| &t.id == from)
+                    .ok_or(format!("no library tool `{from}`"))?;
                 // only what changed is an override (cited `user`); the rest keeps the source's cites
                 let mut over = vec![];
                 for (k, v) in &self.vals {
@@ -281,7 +311,10 @@ impl ToolForm {
 }
 
 fn label(kind: Kind, k: &str) -> &'static str {
-    form_fields(kind).into_iter().find(|f| f.0 == k).map_or("value", |f| f.1)
+    form_fields(kind)
+        .into_iter()
+        .find(|f| f.0 == k)
+        .map_or("value", |f| f.1)
 }
 
 /// `base`, or `base-2`, `base-3`.. : an id no library tool has.
@@ -290,7 +323,10 @@ pub fn free_id(lib: &Library, base: &str) -> String {
     if !taken(base) {
         return base.to_string();
     }
-    (2..).map(|k| format!("{base}-{k}")).find(|s| !taken(s)).unwrap_or_default()
+    (2..)
+        .map(|k| format!("{base}-{k}"))
+        .find(|s| !taken(s))
+        .unwrap_or_default()
 }
 
 /// A record's table as a library file writes it: `[[key]]`, its values, then its sub-tables
@@ -331,7 +367,10 @@ fn scalar(v: &Val) -> String {
     match v {
         Val::Str(s) => format!(
             "\"{}\"",
-            s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\t', "\\t")
+            s.replace('\\', "\\\\")
+                .replace('"', "\\\"")
+                .replace('\n', "\\n")
+                .replace('\t', "\\t")
         ),
         Val::Num(x) => {
             if x.fract() == 0.0 && x.abs() < 1e15 {
@@ -368,13 +407,24 @@ mod tests {
             dmax: hi.into(),
             material: String::new(),
         };
-        let ids = |f: &Find| lib.tools.iter().filter(|t| matches(f, t)).map(|t| t.id.clone()).collect::<Vec<_>>();
+        let ids = |f: &Find| {
+            lib.tools
+                .iter()
+                .filter(|t| matches(f, t))
+                .map(|t| t.id.clone())
+                .collect::<Vec<_>>()
+        };
         assert!(ids(&f("flat", None, "", "")).contains(&"flat-10".to_string()));
         assert!(ids(&f("Ø10", Some(0), "", "")).contains(&"flat-10".to_string()));
         let small = ids(&f("", Some(0), "", "6"));
         assert!(small.contains(&"flat-6".to_string()) && !small.contains(&"flat-10".to_string()));
         let balls = ids(&f("", Some(1), "", ""));
-        assert!(!balls.is_empty() && balls.iter().all(|i| lib.tools.iter().any(|t| &t.id == i && t.kind == Kind::Ball)));
+        assert!(
+            !balls.is_empty()
+                && balls
+                    .iter()
+                    .all(|i| lib.tools.iter().any(|t| &t.id == i && t.kind == Kind::Ball))
+        );
     }
 
     #[test]
@@ -390,7 +440,13 @@ mod tests {
         l.add("cam/tools.toml", &text).unwrap();
         let t = l.tools.iter().find(|t| t.id == "flat-10-custom").unwrap();
         assert_eq!((t.dc, t.lcf, t.kind, t.real), (src.dc, 40.0, src.kind, false));
-        assert!(t.cites.iter().any(|c| format!("{c:?}").contains("lcf") && format!("{c:?}").contains("User")), "{:?}", t.cites);
+        assert!(
+            t.cites
+                .iter()
+                .any(|c| format!("{c:?}").contains("lcf") && format!("{c:?}").contains("User")),
+            "{:?}",
+            t.cites
+        );
         // taken ids and bad numbers are refused, nothing written
         form.id = "flat-10".into();
         assert!(form.toml(&lib).unwrap_err().contains("taken"));
