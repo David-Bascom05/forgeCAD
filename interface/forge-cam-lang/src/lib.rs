@@ -2401,8 +2401,17 @@ impl Cam {
         let (r0, rt) = (0.5 * t.tool.tip_d, 0.5 * t.tool.dc);
         // the chamfer's angle from the wall: half the tool's; its depth s_v for a width s
         let beta = 0.5 * t.tool.angle;
-        let (sin_b, cos_b) = forge_math::dmath::sin_cos(beta.to_radians());
-        let tan_b = sin_b / cos_b;
+        // 45° exactly for the 90° tool (tan β = 1, as the 45° construction always was)
+        let (sin_b, cos_b, tan_b) = if beta == 45.0 {
+            (
+                std::f64::consts::FRAC_1_SQRT_2,
+                std::f64::consts::FRAC_1_SQRT_2,
+                1.0,
+            )
+        } else {
+            let (sn, cs) = forge_math::dmath::sin_cos(beta.to_radians());
+            (sn, cs, sn / cs)
+        };
         // the tip below the chamfer's bottom (default 0.2), and the axis that far times tan β
         // further out than where the tip's edge would touch
         let tip_off = get_num(a, "tip_offset", Some(0.2))?;
