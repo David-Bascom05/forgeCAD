@@ -9,6 +9,7 @@ writes: no embedded schema, the schema named by number only.
 |---|---|---|
 | `extrude.x_t` | github.com/Hk-Hacker-Harsh/Onshape-Mouse, `Top - Part 2 (Eye Red 1).x_t` | SCH_3700209_36001 |
 | `extrude_native.x_t` | the same, rewritten | SCH_3700209_36001 |
+| `skull.x_t` | github.com/Hk-Hacker-Harsh/Onshape-Mouse, `Top - Part 1 (White Skull).x_t` | SCH_3700209_36001 |
 | `box.x_t` | github.com/SimScaleGmbH/simscale-python-sdk, `examples/fixtures/flow-around-sphere-v3.x_t` | SCH_3300229_32001 |
 | `pipe_native.x_t` | the same repository, `examples/fixtures/pipe_junction_model_tutorial.x_t`, rewritten | SCH_3300229_32001 |
 | `housing.x_t` | github.com/betterengineering/open-keyless, `assets/reader/housing/back/reader-housing-back.x_t` | SCH_3100249_31001 |

@@ -277,6 +277,8 @@ fn onshape_exports_read_and_check() {
         ("onshape/extrude.x_t", "Part 2", 370.947963),
         ("onshape/box.x_t", "box", 995811.209795),
         ("onshape/housing.x_t", "Part 1", 25385.318609),
+        // notches whose rim runs past a periodic B-curve's closing point (split there)
+        ("onshape/skull.x_t", "Part 1", 46610.266711),
     ] {
         let imp = import(&data(f), &Limits::default()).unwrap_or_else(|e| panic!("{f}: {e}"));
         assert!(imp.refusals.is_empty(), "{f}: {:?}", imp.refusals);

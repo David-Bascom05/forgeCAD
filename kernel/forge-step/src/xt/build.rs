@@ -342,6 +342,48 @@ impl Build<'_, '_> {
         let (a, b) = (self.vertex(start)?, self.vertex(end)?);
         // the proto edge runs the way its curve's parameter increases
         let (s0, t0, flipped) = if against { (b, a, true) } else { (a, b, false) };
+        // on a curve closed in fact whose parameter does not wrap (a periodic B-curve), an edge
+        // running with it past its closing point: two edges, met there
+        let d = curve.domain();
+        if d.period.is_none() && d.lo.is_finite() && d.hi.is_finite() && s0 != t0 {
+            let lin = forge_math::tol::LINEAR;
+            let (e0, e1) = (curve.eval(d.lo), curve.eval(d.hi));
+            let (pa, pb) = (self.p.verts[s0].0, self.p.verts[t0].0);
+            if e0.distance(e1) <= lin && pa.distance(e0) > lin && pb.distance(e0) > lin {
+                let whole = Interval::new(d.lo, d.hi);
+                let (ta, tb) = (curve.closest(pa, whole), curve.closest(pb, whole));
+                if tb < ta {
+                    let off = curve.eval(ta).distance(pa).max(curve.eval(tb).distance(pb));
+                    self.stats.vertex_off_curve = self.stats.vertex_off_curve.max(off);
+                    if off > lin {
+                        self.stats.vertices_off += 1;
+                    }
+                    self.p
+                        .verts
+                        .push((e0, self.salt.with_str("closing").with(u64::from(idx))));
+                    let vs = self.p.verts.len() - 1;
+                    self.p.edges.push(PEdge {
+                        curve: curve.clone(),
+                        range: Interval::new(ta, d.hi),
+                        start: s0,
+                        end: vs,
+                        name: name.with(0u64),
+                    });
+                    self.p.edges.push(PEdge {
+                        curve,
+                        range: Interval::new(d.lo, tb),
+                        start: vs,
+                        end: t0,
+                        name: name.with(1u64),
+                    });
+                    let n = self.p.edges.len();
+                    self.stats.edges += 2;
+                    let e = (vec![n - 2, n - 1], flipped);
+                    self.edges.insert(idx, e.clone());
+                    return Ok(e);
+                }
+            }
+        }
         let (range, off, back) = edge_range(&curve, self.p.verts[s0].0, self.p.verts[t0].0, s0 == t0);
         let (s0, t0, flipped) = if back {
             (t0, s0, !flipped)
