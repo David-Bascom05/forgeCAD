@@ -1379,7 +1379,7 @@ fn md_line(line: &str, ink: Color32, code_ink: Color32) -> Vec<(String, TextForm
         return inline(q, fmt(sans(13.0), ink.gamma_multiply(0.7)), code_ink);
     }
     if t == "---" || t == "***" {
-        return vec![("────────".into(), fmt(sans(13.0), ink.gamma_multiply(0.4)))];
+        return vec![("————————".into(), fmt(sans(13.0), ink.gamma_multiply(0.4)))];
     }
     let mut out = vec![];
     let body = match t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
