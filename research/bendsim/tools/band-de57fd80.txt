@@ -1,0 +1,100 @@
+speed band: main 0de84ac1 (tools/speed/baseline-valgrind.txt, the main-only gate) vs bendsim/tools de57fd80, official tools/speed/gate.sh, GATE_COUNTER=callgrind (exact); bits identical
+start-up taken off: yes
+bracket   app           9169371 base        9173383 -0.0437%
+bracket   cli          15765607 base       15769487 -0.0246%
+bracket   edit         17591380 base       17598993 -0.0433%
+bracket   nary1         6747173 base        6747173 +0.0000%  (diagnostic)
+bracket   seq           6872492 base        6872492 +0.0000%  (diagnostic)
+clamp     app          10627324 base       10627598 -0.0026%
+clamp     cli          24062401 base       24062539 -0.0006%
+clamp     edit         20517626 base       20518026 -0.0019%
+clamp     nary1         8039250 base        8039250 +0.0000%  (diagnostic)
+clamp     seq           8035009 base        8035009 +0.0000%  (diagnostic)
+conrod    app          57163163 base       57163516 -0.0006%
+conrod    cli         219020019 base      219020400 -0.0002%
+conrod    edit        114228068 base      114228581 -0.0004%
+conrod    nary1        50151908 base       50151908 +0.0000%  (diagnostic)
+conrod    seq          51626687 base       51626687 +0.0000%  (diagnostic)
+coplanar  nary1       146388496 base      146388496 +0.0000%
+coplanar  seq         172334411 base      172334411 +0.0000%
+crank     app         283114889 base      283113703 +0.0004%
+crank     cli         498455989 base      498455070 +0.0002%
+crank     edit        563959554 base      563957248 +0.0004%
+crank     nary1       266233180 base      266233180 +0.0000%  (diagnostic)
+crank     seq         231829404 base      231829404 +0.0000%  (diagnostic)
+frame     app         402542983 base      402540679 +0.0006%
+frame     cli         756986041 base      756983582 +0.0003%
+frame     edit        696413535 base      696408592 +0.0007%
+frame     nary1       332969028 base      332969028 +0.0000%  (diagnostic)
+frame     seq         267134333 base      267134333 +0.0000%  (diagnostic)
+gearbox   app         226598343 base      226594292 +0.0018%
+gearbox   cli         478780096 base      478777237 +0.0006%
+gearbox   edit        448115187 base      448108960 +0.0014%
+gearbox   nary1       238523363 base      238523363 +0.0000%  (diagnostic)
+gearbox   seq         206731459 base      206731459 +0.0000%  (diagnostic)
+guard     app          55089118 base       55089183 -0.0001%
+guard     cli          72144310 base       72144440 -0.0002%
+guard     edit        109517107 base      109517396 -0.0003%
+guard     nary1        52865040 base       52865040 +0.0000%  (diagnostic)
+guard     seq          52872091 base       52872091 +0.0000%  (diagnostic)
+heatsink  app          87681575 base       87682230 -0.0007%
+heatsink  cli         157576810 base      157576366 +0.0003%
+heatsink  edit        171753070 base      171751984 +0.0006%
+heatsink  nary1        69758732 base       69758732 +0.0000%  (diagnostic)
+heatsink  seq          78211511 base       78211511 +0.0000%  (diagnostic)
+hole-grid nary1       104440687 base      104440687 +0.0000%
+hole-grid seq         111550534 base      111550534 +0.0000%
+housing   nary1       135366194 base      135366194 +0.0000%
+housing   seq         127553837 base      127553837 +0.0000%
+hub       app          21977294 base       21976548 +0.0034%
+hub       cli          34193413 base       34193216 +0.0006%
+hub       edit         40598261 base       40597040 +0.0030%
+hub       nary1        15478486 base       15478486 +0.0000%  (diagnostic)
+hub       seq          16571806 base       16571806 +0.0000%  (diagnostic)
+insert    app          25473594 base       25473796 -0.0008%
+insert    cli          33951400 base       33951774 -0.0011%
+insert    edit         44992758 base       44993237 -0.0011%
+insert    nary1        17930298 base       17930298 +0.0000%  (diagnostic)
+insert    seq          17368232 base       17368232 +0.0000%  (diagnostic)
+jack      app         371797077 base      371797017 +0.0000%
+jack      cli         751722714 base      751722629 +0.0000%
+jack      edit        580924811 base      580924663 +0.0000%
+jack      nary1       162977025 base      162977025 +0.0000%  (diagnostic)
+jack      seq         207585583 base      207585583 +0.0000%  (diagnostic)
+manifold  app         241090667 base      241089735 +0.0004%
+manifold  cli         391759561 base      391758703 +0.0002%
+manifold  edit        548224089 base      548221904 +0.0004%
+manifold  nary1       155969057 base      155969057 +0.0000%  (diagnostic)
+manifold  seq         155939401 base      155939401 +0.0000%  (diagnostic)
+mixed     nary1      1474483113 base     1474483113 +0.0000%
+mixed     seq        1647484825 base     1647484825 +0.0000%
+patterns  nary1       139721221 base      139721221 +0.0000%
+patterns  seq         178336564 base      178336564 +0.0000%
+plate     nary1       120873585 base      120873585 +0.0000%
+plate     seq         131959204 base      131959204 +0.0000%
+quadarm   app          46888608 base       46888938 -0.0007%
+quadarm   cli          62135349 base       62135240 +0.0002%
+quadarm   edit         92482000 base       92482742 -0.0008%
+quadarm   nary1        38750235 base       38750235 +0.0000%  (diagnostic)
+quadarm   seq          38692492 base       38692492 +0.0000%  (diagnostic)
+shaft     nary1       408226788 base      408226788 +0.0000%
+shaft     seq         446924656 base      446924656 +0.0000%
+torture   nary1       120873560 base      120873560 +0.0000%
+torture   seq         131959179 base      131959179 +0.0000%
+tour      nary1         7929707 base        7929707 +0.0000%
+tour      seq           8963274 base        8963274 +0.0000%
+upto      nary1        27458731 base       27458731 +0.0000%
+upto      seq          37279290 base       37279290 +0.0000%
+upto-flat nary1        10981499 base       10981499 +0.0000%
+upto-flat seq          13758042 base       13758042 +0.0000%
+valve     app         122714556 base      122714331 +0.0002%
+valve     cli         582854315 base      582854192 +0.0000%
+valve     edit        240678807 base      240678521 +0.0001%
+valve     nary1       113942643 base      113942643 +0.0000%  (diagnostic)
+valve     seq         111884612 base      111884612 +0.0000%  (diagnostic)
+volute    app        1047957486 base     1047953357 +0.0004%
+volute    cli        1431159220 base     1431155775 +0.0002%
+volute    edit       2105005936 base     2104997828 +0.0004%
+volute    nary1       476657275 base      476657275 +0.0000%  (diagnostic)
+volute    seq         476684681 base      476684681 +0.0000%  (diagnostic)
+strict total 20020302879 base 20020272068 +0.0002%  worst strict line +0.0034% ('hub', 'app')

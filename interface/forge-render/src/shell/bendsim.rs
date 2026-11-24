@@ -20,6 +20,8 @@ pub mod look {
     pub const FAIL: Color32 = Color32::from_rgb(0xE0, 0x40, 0x40);
     pub const PASS: Color32 = Color32::from_rgb(0x3A, 0xA8, 0x5A);
     pub const WARN: Color32 = Color32::from_rgb(0xE8, 0xA0, 0x30);
+    /// Near: the warning amber at about 70 % (UX-LEAD: weaker than a warning, clearly not green).
+    pub const NEAR: Color32 = Color32::from_rgba_premultiplied(0xA2, 0x70, 0x22, 0xB3);
     pub const MUTED: Color32 = Color32::from_rgb(0x90, 0x94, 0x9A);
 }
 
@@ -37,6 +39,9 @@ pub struct Choice {
     pub sequence: Option<Vec<String>>,
     /// Keep the last step's tools where they pass (a ranked program applied).
     pub keep_tools: bool,
+    /// Lay the program's tools out as stations along the bed (stage bending), each bend at its
+    /// station, all of them on the press.
+    pub stations_auto: bool,
 }
 
 /// The panel's pages.
@@ -97,11 +102,24 @@ pub struct BendSimUi {
     /// `opacity`; with `see_press`, the press's frame too.
     pub see_through: bool,
     pub opacity: f32,
+    /// The user's units are inches (the status bar's switch): lengths shown in them.
+    pub inch: bool,
+    /// The working view end on, down the bend line (the profile), not three-quarter.
+    pub profile: bool,
     pub see_press: bool,
     /// The tool library shows only what fits the press and the part.
     pub fit_only: bool,
     /// The planner's ranked programs asked for (the ribbon's Suggest Order): their list opened.
     pub suggest: bool,
+    /// The ranked programs have been searched for (they are not on opening: four-fifths of the
+    /// time a part took to open was that search; BENDSIM-TOOLS' measure).
+    pub programs_found: bool,
+    /// A re-plan that would replace the bending document's stations and order (another press or
+    /// tooling, or Plan Stations), held for the user's choice (UX-LEAD's P1): the choice and the
+    /// tooling it asks for.
+    pub pending_replace: Option<(Choice, String)>,
+    /// What the last re-plan around the document could not do, said in the panel.
+    pub note: Option<String>,
     /// The step's checks all shown, not only failures and those not checked.
     pub all_checks: bool,
     /// Each step's picture, for the simulation they were drawn from (its address).
@@ -155,8 +173,9 @@ impl BendSimUi {
             dies: choice.dies.clone(),
             sequence: choice.sequence.as_ref().map(|s| s.join(",")),
             keep_tools: choice.keep_tools,
-            // the ranked alternatives, offered beside the order shown (never applied unasked)
-            programs: Some(5),
+            stage: choice.stations_auto,
+            // the ranked alternatives are searched for when asked (find_programs), not on opening
+            programs: None,
             ..Ask::default()
         };
         let mut sim = simulate(source, dir.clone(), None, &ask).map_err(|a| a.text);
@@ -208,10 +227,15 @@ impl BendSimUi {
             follow: false,
             see_through: true,
             opacity: 0.45,
+            inch: false,
+            profile: false,
             see_press: false,
             fit_only: true,
             all_checks: false,
             suggest: false,
+            programs_found: false,
+            pending_replace: None,
+            note: None,
             pictures: None,
         };
         if let Some(p) = b.choice.press.clone() {
@@ -270,10 +294,15 @@ impl BendSimUi {
             follow: false,
             see_through: true,
             opacity: 0.45,
+            inch: false,
+            profile: false,
             see_press: false,
             fit_only: true,
             all_checks: false,
             suggest: false,
+            programs_found: false,
+            pending_replace: None,
+            note: None,
             pictures: None,
         };
         if let Some(p) = b.choice.press.clone() {
@@ -330,7 +359,7 @@ impl BendSimUi {
     }
 
     /// Read again from the document (or the choice, if the document is gone), step kept.
-    fn reload(&mut self) {
+    pub fn reload(&mut self) {
         let cat = self.catalog.take();
         let (source, path, tooling, choice) = (
             self.source.clone(),
@@ -359,6 +388,49 @@ impl BendSimUi {
     /// bending document, the choice planned and written to it (one undo step).
     pub fn redo(&mut self, choice: Choice, tooling: &str) {
         if self.doc.is_some() {
+            // the same press and tools: re-planned around the document's own stations (what the
+            // user set stays); anything else would replace them: the user is asked first
+            let same = choice.press == self.choice.press
+                && tooling == self.tooling
+                && choice.punches == self.choice.punches
+                && choice.dies == self.choice.dies
+                && !choice.stations_auto;
+            if same {
+                self.replan_keep();
+            } else {
+                self.pending_replace = Some((choice, tooling.to_string()));
+            }
+            return;
+        }
+        self.redo_fresh(choice, tooling);
+    }
+
+    /// The document's stations kept (their places, stack lengths and tools, as the user set
+    /// them): the order and each bend's station planned again among them (BENDSIM-TOOLS' planner:
+    /// stations given, no sequence), written back (undoable).
+    pub fn replan_keep(&mut self) {
+        self.note = None;
+        let Some(d) = self.doc.as_ref() else { return };
+        let dir = dir_of(&self.path);
+        // BENDSIM-TOOLS' replan: the order planned around the document's stations and locks,
+        // the document rewritten (its stations, comments and locks kept); refused, nothing written
+        match forge_bend_lang::replan(&d.src, &self.source, dir.as_deref()) {
+            Ok((text, _)) => {
+                if let Err(e) = self.commit_doc(text) {
+                    self.note = Some(e);
+                }
+            }
+            Err(why) => {
+                let lines: Vec<String> = why.iter().map(|(at, w)| format!("{at}: {w}")).collect();
+                self.note = Some(format!("The program is kept. {}", lines.join("; ")));
+            }
+        }
+    }
+
+    /// The re-plan the user chose to let replace the document's stations and order.
+    pub fn redo_replacing(&mut self, choice: Choice, tooling: &str) {
+        self.pending_replace = None;
+        if self.doc.is_some() {
             let cat = self.catalog.take();
             let mut planned = BendSimUi::plan_with(&self.source.clone(), &self.path.clone(), tooling, choice);
             planned.catalog = cat;
@@ -369,6 +441,10 @@ impl BendSimUi {
             *self = planned;
             return;
         }
+        self.redo_fresh(choice, tooling);
+    }
+
+    fn redo_fresh(&mut self, choice: Choice, tooling: &str) {
         let cat = self.catalog.take();
         let mut fresh = BendSimUi::open_with(&self.source.clone(), &self.path.clone(), tooling, choice);
         if fresh.catalog.is_none() {
@@ -376,6 +452,30 @@ impl BendSimUi {
         }
         fresh.resume(self);
         *self = fresh;
+    }
+
+    /// The planner's ranked alternatives to the order shown (up to five), searched for once, when
+    /// asked: the ribbon's Suggest Order or the program's "Find other orders".
+    pub fn find_programs(&mut self) {
+        if self.programs_found {
+            return;
+        }
+        self.programs_found = true;
+        let Ok(sim) = self.sim.as_mut() else { return };
+        let c = &self.choice;
+        let ask = Ask {
+            tooling: c.press.is_none().then(|| self.tooling.clone()),
+            press: c.press.clone(),
+            punches: c.punches.clone(),
+            dies: c.dies.clone(),
+            keep_tools: c.keep_tools,
+            stage: c.stations_auto,
+            programs: Some(5),
+            ..Ask::default()
+        };
+        if let Ok(found) = simulate(&self.source, dir_of(&self.path), None, &ask) {
+            sim.programs = found.programs;
+        }
     }
 
     /// The step and instant of an earlier simulation, where it still has that step.
@@ -1042,7 +1142,7 @@ pub fn layout_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
             .plan
             .steps
             .iter()
-            .filter(|x| (x.setup.punch, x.setup.die) == (s.punch, s.die))
+            .filter(|x| x.station == Some(k))
             .filter_map(|x| x.force)
             .fold(None, |m: Option<f64>, f| Some(m.map_or(f, |m| m.max(f))));
         let line = match (cap.is_finite(), most) {
@@ -1110,6 +1210,7 @@ pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
     let names: Vec<String> = sim.plan.steps.iter().map(|s| sim.names[s.bend].clone()).collect();
     let passes: Vec<bool> = sim.plan.steps.iter().map(fb::Step::pass).collect();
     let rotated: Vec<bool> = sim.plan.steps.iter().map(|s| s.setup.rotate).collect();
+    let feasible = sim.plan.feasible;
     let progs: Vec<(Vec<String>, [usize; 4])> = sim
         .programs
         .iter()
@@ -1122,17 +1223,7 @@ pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
         .collect();
     // the station each step works at (its punch and die), and the stations there are
     let stations: Vec<String> = st.doc.as_ref().map(|d| d.stations.clone()).unwrap_or_default();
-    let at: Vec<Option<usize>> = sim
-        .plan
-        .steps
-        .iter()
-        .map(|s| {
-            sim.tooling
-                .stations
-                .iter()
-                .position(|x| (x.punch, x.die) == (s.setup.punch, s.setup.die))
-        })
-        .collect();
+    let at: Vec<Option<usize>> = sim.plan.steps.iter().map(|s| s.station).collect();
     let ids: Vec<String> = match &st.doc {
         Some(d) => d.bends.clone(),
         // as the document written from this program will name them
@@ -1274,8 +1365,15 @@ pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
         st.go(i);
     }
     doc_buttons(ui, st);
-    // the planner's ranked programs: offered, applied only by a click
+    // the planner's ranked programs: searched for when asked, offered, applied only by a click
     let mut apply: Option<Vec<String>> = None;
+    if st.suggest && !st.programs_found {
+        st.find_programs();
+        return;
+    }
+    if !st.programs_found && feasible && ui.link("Find other orders").clicked() {
+        st.suggest = true;
+    }
     if !progs.is_empty() {
         let open = std::mem::take(&mut st.suggest).then_some(true);
         egui::CollapsingHeader::new(format!("Suggested programs ({})", progs.len()))
@@ -1363,7 +1461,102 @@ fn prop(ui: &mut egui::Ui, t: &Theme, label: &str, value: String, key: Option<&s
 /// press's part in it, and its checks as a table (Check, Result, Measured, Limit) with human
 /// names and units; failures and checks that could not run first, the passes on asking.
 /// Returns the bend's name when its "flat pattern" link is clicked.
+/// A step's checks that are not passes, counted by kind, worst first, each in its colour: "1 fail",
+/// "2 warnings", "1 not checked", "1 near" (UX-LEAD: nothing that is not a pass goes uncounted).
+/// A check whose envelope (the part's boxes through the operator's move, against the press
+/// bodies' boxes) overlaps: not proven clear, not a measured collision (BENDSIM-TOOLS' undecided
+/// handling; UX-LEAD: counted apart from the warnings, never printed as a negative clearance).
+pub fn not_proven(c: &fb::Check) -> bool {
+    !c.pass && c.undecided && c.severity == fb::Severity::Warning && c.unchecked.is_none() && c.near.is_none()
+}
+
+/// What an envelope check is, on hover.
+pub const ENVELOPE_METHOD: &str = "Checked with the part's bounding boxes through the operator's move, against the press's bodies: a pass is proven; this overlap is of those boxes, not a measured collision.";
+
+fn tally(checks: &[fb::Check]) -> Vec<(String, egui::Color32)> {
+    let n = |f: &dyn Fn(&fb::Check) -> bool| checks.iter().filter(|c| !c.pass && f(c)).count();
+    let fail = n(&|c| c.severity == fb::Severity::Error);
+    let warn = n(&|c| c.severity == fb::Severity::Warning && c.unchecked.is_none() && c.near.is_none() && !not_proven(c));
+    let unproven = n(&not_proven);
+    let unchecked = n(&|c| c.unchecked.is_some());
+    let near = n(&|c| c.near.is_some());
+    let plural = |k: usize, w: &str| {
+        if k == 1 {
+            format!("{k} {w}")
+        } else {
+            format!("{k} {w}s")
+        }
+    };
+    [
+        (
+            fail,
+            if fail == 1 {
+                "1 fail".to_string()
+            } else {
+                format!("{fail} fail")
+            },
+            look::FAIL,
+        ),
+        (warn, plural(warn, "warning"), look::WARN),
+        (unproven, format!("{unproven} not proven"), look::NEAR),
+        (unchecked, format!("{unchecked} not checked"), look::MUTED),
+        (near, format!("{near} near"), look::NEAR),
+    ]
+    .into_iter()
+    .filter(|x| x.0 > 0)
+    .map(|x| (x.1, x.2))
+    .collect()
+}
+
 pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<String> {
+    // a re-plan that would replace what the user set in the document: asked, never silent
+    if let Some((c, tooling)) = st.pending_replace.clone() {
+        egui::Frame::new()
+            .fill(look::WARN.gamma_multiply(0.12))
+            .stroke(egui::Stroke::new(1.0, look::WARN))
+            .corner_radius(5.0)
+            .inner_margin(egui::Margin::same(8))
+            .show(ui, |ui| {
+                let file = st
+                    .doc
+                    .as_ref()
+                    .and_then(|d| d.path.file_name())
+                    .map_or("the bending document".to_string(), |f| f.to_string_lossy().into_owned());
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(format!(
+                            "Re-planning replaces your stations, stack lengths and tools in {file}. Undo brings them back."
+                        ))
+                        .color(t.ink),
+                    )
+                    .wrap(),
+                );
+                // Keep mine is the default: it holds the focus (Enter keeps); Esc keeps too (the
+                // shell's one level back, escape_one_level)
+                let mut keep = false;
+                ui.horizontal(|ui| {
+                    // drawn as the default button (filled with the accent)
+                    let k = ui.add(
+                        egui::Button::new(egui::RichText::new("Keep mine").color(egui::Color32::WHITE))
+                            .fill(t.accent),
+                    );
+                    if !ui.memory(|m| m.has_focus(k.id)) && ui.memory(|m| m.focused().is_none()) {
+                        k.request_focus();
+                    }
+                    keep |= k.clicked();
+                    if ui.button("Replace").clicked() {
+                        st.redo_replacing(c.clone(), &tooling);
+                    }
+                });
+                if keep {
+                    st.pending_replace = None;
+                }
+            });
+        ui.add_space(6.0);
+    }
+    if let Some(n) = st.note.clone() {
+        ui.add(egui::Label::new(egui::RichText::new(n).color(look::WARN)).wrap());
+    }
     let mut flat = None;
     let all = st.all_checks;
     let mut toggle = false;
@@ -1380,28 +1573,75 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
     let cat = st.catalog.as_ref().and_then(|c| c.as_ref().ok());
     if let Some(s) = plan.steps.get(st.step) {
         let ok = s.pass();
-        ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new(format!("Bend {} · {}", st.step + 1, names[s.bend]))
-                    .font(super::theme::semi(14.0))
-                    .color(t.ink),
-            );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let c = if ok { look::PASS } else { look::FAIL };
+        let title = format!("Bend {} · {}", st.step + 1, names[s.bend]);
+        // the badge beside the title when both fit, else on its own row under it (its words
+        // never run over the title)
+        let fits = {
+            let p = ui.painter();
+            let words: Vec<String> = tally(&s.checks).into_iter().map(|x| x.0).collect();
+            let badge = p
+                .layout_no_wrap(
+                    format!("Passes · {}", words.join(" · ")),
+                    egui::FontId::proportional(12.0),
+                    t.ink,
+                )
+                .size()
+                .x
+                + 24.0;
+            let head = p
+                .layout_no_wrap(title.clone(), super::theme::semi(14.0), t.ink)
+                .size()
+                .x;
+            head + badge + 12.0 <= ui.available_width()
+        };
+        let badge = |ui: &mut egui::Ui| {
+                // the outline amber once anything warns (UX-LEAD); a pass's green otherwise
+                let warns = s.checks.iter().any(|c| {
+                    !c.pass
+                        && c.severity == fb::Severity::Warning
+                        && c.unchecked.is_none()
+                        && c.near.is_none()
+                        && !not_proven(c)
+                });
+                let c = if !ok {
+                    look::FAIL
+                } else if warns {
+                    look::WARN
+                } else {
+                    look::PASS
+                };
                 egui::Frame::new()
                     .fill(c.gamma_multiply(0.18))
                     .stroke(egui::Stroke::new(1.0, c))
                     .corner_radius(9.0)
                     .inner_margin(egui::Margin::symmetric(8, 2))
                     .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(if ok { "Passes" } else { "Fails" })
-                                .color(c)
-                                .size(12.0),
-                        );
+                        // laid out right to left (the badge's row): the near after the word
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 4.0;
+                            // nothing that is not a pass hidden behind the word (UX-LEAD), the
+                            // worst first: right to left, so the last first
+                            for (w, col) in tally(&s.checks).into_iter().rev() {
+                                ui.label(egui::RichText::new(format!("· {w}")).color(col).size(12.0));
+                            }
+                            // the word in its own colour (a feasible step passes), the outline warning
+                            ui.label(
+                                egui::RichText::new(if ok { "Passes" } else { "Fails" })
+                                    .color(if ok { look::PASS } else { look::FAIL })
+                                    .size(12.0),
+                            );
+                        });
                     });
-            });
+        };
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(&title).font(super::theme::semi(14.0)).color(t.ink));
+            if fits {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), badge);
+            }
         });
+        if !fits {
+            ui.horizontal(|ui| ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), badge));
+        }
         ui.label(
             egui::RichText::new(format!("step {} of {}", st.step + 1, plan.steps.len()))
                 .small()
@@ -1464,11 +1704,8 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
             flat = Some(names[s.bend].clone());
         }
         head(ui, t, "Tooling");
-        let station = sim
-            .tooling
-            .stations
-            .iter()
-            .position(|x| (x.punch, x.die) == (s.setup.punch, s.setup.die));
+        // the station the simulation worked the step at (the same tools may stand at two)
+        let station = s.station;
         egui::Grid::new("bendsim-sheet-tools")
             .num_columns(2)
             .spacing([12.0, 4.0])
@@ -1533,7 +1770,43 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
             });
         // the checks: what failed and what could not be checked; the passes on asking
         let passing = s.checks.iter().filter(|c| c.pass).count();
-        let shown: Vec<&fb::Check> = s.checks.iter().filter(|c| all || !c.pass).collect();
+        let kinds = tally(&s.checks);
+        // failures first, then warnings and what could not be checked, then the nears (seen,
+        // not shouting), then the passes (UX-LEAD)
+        let rank = |c: &fb::Check| {
+            if c.pass {
+                3
+            } else if c.near.is_some() || not_proven(c) {
+                2
+            } else if c.severity == fb::Severity::Warning || c.unchecked.is_some() {
+                1
+            } else {
+                0
+            }
+        };
+        let mut shown: Vec<&fb::Check> = s.checks.iter().filter(|c| all || !c.pass).collect();
+        shown.sort_by_key(|c| rank(c));
+        // a length in the user's units, to a hundredth of a mm (a thousandth of an inch) as the
+        // other rows show it; a proven lower bound rounded down, so its "≥" stays true
+        let fixed = |mm: f64, down: bool| {
+            let (x, d, unit) = if st.inch {
+                (mm / 25.4, 1000.0, "in")
+            } else {
+                (mm, 100.0, "mm")
+            };
+            let x = if down {
+                (x * d).floor() / d
+            } else {
+                (x * d).round() / d
+            };
+            if st.inch {
+                format!("{x:.3} {unit}")
+            } else {
+                format!("{x:.2} {unit}")
+            }
+        };
+        let len = |mm: f64| fixed(mm, false);
+        let len_down = |mm: f64| fixed(mm, true);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
@@ -1543,9 +1816,14 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     .color(t.ink),
             );
             ui.label(
-                egui::RichText::new(format!("{passing} of {} pass", s.checks.len()))
-                    .small()
-                    .color(t.ink2),
+                egui::RichText::new(
+                    std::iter::once(format!("{passing} of {} pass", s.checks.len()))
+                        .chain(kinds.iter().map(|k| k.0.clone()))
+                        .collect::<Vec<_>>()
+                        .join(" · "),
+                )
+                .small()
+                .color(t.ink2),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.link(if all { "Failures only" } else { "Show all" }).clicked() {
@@ -1562,11 +1840,55 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     ui.label(egui::RichText::new(h).small().color(t.ink2));
                 }
                 ui.end_row();
+                // the checks that could not run collapsed into one row (UX-LEAD): they share a
+                // cause (a press or tool value unknown), each named on hover
+                let unchecked: Vec<&&fb::Check> = shown.iter().filter(|c| c.unchecked.is_some()).collect();
+                let mut unchecked_drawn = unchecked.len() < 2;
                 for c in &shown {
+                    if c.unchecked.is_some() && !unchecked_drawn {
+                        unchecked_drawn = true;
+                        let why: Vec<String> = unchecked
+                            .iter()
+                            .map(|c| {
+                                format!(
+                                    "{}: {} unknown",
+                                    cards::rule_label(c.rule),
+                                    c.unchecked.as_deref().unwrap_or("")
+                                )
+                            })
+                            .collect();
+                        let why = why.join("\n");
+                        ui.label(
+                            egui::RichText::new(format!("Not checked ({})", unchecked.len())).color(t.ink),
+                        )
+                        .on_hover_text(&why);
+                        ui.label(egui::RichText::new("not checked").color(look::MUTED))
+                            .on_hover_text(&why);
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new("values unknown (hover)")
+                                    .font(super::theme::caption())
+                                    .color(t.ink2),
+                            )
+                            .wrap(),
+                        )
+                        .on_hover_text(&why);
+                        ui.end_row();
+                        continue;
+                    }
+                    if c.unchecked.is_some() && unchecked.len() >= 2 {
+                        continue;
+                    }
                     let (col, verdict) = if c.pass {
                         (look::PASS, "pass")
                     } else if c.unchecked.is_some() {
                         (look::MUTED, "not checked")
+                    } else if c.near.is_some() {
+                        // proven within the resolution of the limit, not at it (David): a word, in
+                        // a muted amber, weaker than a warning (UX-LEAD)
+                        (look::NEAR, "near")
+                    } else if not_proven(c) {
+                        (look::NEAR, "not proven")
                     } else if c.severity == fb::Severity::Warning {
                         (look::WARN, "warning")
                     } else if c.undecided {
@@ -1578,6 +1900,17 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     // it was against
                     let why = match (&c.unchecked, &c.tool) {
                         (Some(u), _) => format!("not checked: {u} unknown"),
+                        _ if c.near.is_some() => format!(
+                            "Proven at least {}; the limit is {}. That is within the simulation's resolution ({}), so it isn't proven clear.",
+                            len_down(c.value),
+                            len(c.limit),
+                            len(c.near.unwrap_or(0.0))
+                        ),
+                        (None, Some(x)) if not_proven(c) => format!(
+                            "{ENVELOPE_METHOD}\nThe envelopes overlap by {} against {}.",
+                            len((-c.value).max(0.0)),
+                            cards::body_words(cat, x)
+                        ),
                         (None, Some(x)) => format!("against {}", cards::body_words(cat, x)),
                         _ => String::new(),
                     };
@@ -1622,11 +1955,41 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                                 .wrap(),
                             );
                         }
+                        // an envelope's overlap, not a clearance: said so, muted; the method on hover
+                        None if not_proven(c) => {
+                            hover(
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(format!(
+                                            "envelope overlaps by {}",
+                                            len((-c.value).max(0.0))
+                                        ))
+                                        .font(super::theme::caption())
+                                        .color(t.ink2),
+                                    )
+                                    .wrap(),
+                                ),
+                            );
+                        }
+                        // only a lower bound is known (near, undecided): what was proven, the limit
+                        None if c.near.is_some() || c.undecided => {
+                            hover(ui.label(format!("≥ {} · {}", len_down(c.value), len(c.limit))));
+                        }
+                        // no limit to hold it to: the value alone, the rule on hover (UX-LEAD)
+                        None if c.limit == 0.0 && !c.at_most => {
+                            hover(ui.label(cards::rule_value(c.rule, c.value)));
+                        }
+                        // the relation as it is: a failing row's is the other way (UX-LEAD)
                         None => {
+                            let rel = match (c.at_most, c.pass) {
+                                (true, true) => "≤",
+                                (true, false) => ">",
+                                (false, true) => "≥",
+                                (false, false) => "<",
+                            };
                             hover(ui.label(format!(
-                                "{} {} {}",
+                                "{} {rel} {}",
                                 cards::rule_value(c.rule, c.value),
-                                if c.at_most { "≤" } else { "≥" },
                                 cards::rule_value(c.rule, c.limit)
                             )));
                         }
@@ -1675,7 +2038,7 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                 .and_then(|s| s.plan.steps.get(st.step))
                 .and_then(|x| {
                     let sim = st.sim.as_ref().ok()?;
-                    sim.tooling.station(x.setup.punch, x.setup.die).map(|k| k.y)
+                    x.station.and_then(|k| sim.tooling.stations.get(k)).map(|k| k.y)
                 })
                 .unwrap_or(0.0);
             [a[0], a[1] + oy, a[2]]
@@ -1993,12 +2356,13 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
                 ),
                 Some(c) => (
                     format!(
-                        "operator handling: not proven clear{}",
+                        "operator handling: not proven clear{}{}",
                         c.tool
                             .as_deref()
-                            .map_or(String::new(), |t| format!(" of {}", cards::body_words(cat, t)))
+                            .map_or(String::new(), |t| format!(" of {}", cards::body_words(cat, t))),
+                        if not_proven(c) { " (envelope check)" } else { "" }
                     ),
-                    look::WARN,
+                    if not_proven(c) { look::NEAR } else { look::WARN },
                 ),
                 None => ("operator handling: the first step, none".into(), look::MUTED),
             });
@@ -2020,22 +2384,43 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
             ));
         }
     }
+    // on a backing plate (the view chips' style), wrapped short of the view cube's corner, so
+    // the text reads on the light bed and never runs under the cube (UX-LEAD)
+    let wrap = (rect.width() - 24.0 - OVERLAY_CUBE_ROOM).max(120.0);
     let mut y = rect.top() + 44.0;
     for (l, c) in lines {
-        p.text(
-            egui::pos2(rect.left() + 12.0, y),
-            egui::Align2::LEFT_TOP,
-            l,
-            egui::FontId::proportional(13.0),
-            c,
-        );
-        y += 18.0;
+        let g = p.layout(l, egui::FontId::proportional(13.0), c, wrap);
+        let at = egui::pos2(rect.left() + 12.0, y);
+        let plate = egui::Rect::from_min_size(at, g.size()).expand2(egui::vec2(6.0, 2.0));
+        p.rect_filled(plate, 4.0, egui::Color32::from_black_alpha(170));
+        y += g.size().y + 6.0;
+        p.galley(at, g, c);
     }
 }
+
+/// The room the view cube takes at the view's top right, kept clear of the overlay's text.
+pub const OVERLAY_CUBE_ROOM: f32 = 130.0;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An envelope overlap of the handling check is counted as not proven, never as a warning
+    /// (UX-LEAD): "1 not proven", the badge outline not amber for it.
+    #[test]
+    fn an_envelope_overlap_is_not_proven_not_a_warning() {
+        let mut c = fb::Check::rule(fb::Rule::Handling, -21.0, 0.5, false);
+        c.severity = fb::Severity::Warning;
+        c.undecided = true;
+        assert!(not_proven(&c));
+        let words: Vec<String> = tally(std::slice::from_ref(&c)).into_iter().map(|x| x.0).collect();
+        assert_eq!(words, ["1 not proven"]);
+        // a warning that is not an envelope stays a warning
+        c.undecided = false;
+        assert!(!not_proven(&c));
+        let words: Vec<String> = tally(&[c]).into_iter().map(|x| x.0).collect();
+        assert_eq!(words, ["1 warning"]);
+    }
 
     const L: &str = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
         sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (120, 60))\n}\n\

@@ -165,6 +165,13 @@ impl Seg {
                 }
             }
             Seg::Arc { c, r, start, sweep } => {
+                // a point above, below or right of the whole circle meets no piece of it: every
+                // point of the arc is within r of its centre (a margin past r for sin_cos's
+                // rounding), so the count below would be 0 too, without the sines and cosines
+                let e = r.abs() * (1.0 + 1e-9);
+                if p.y > c.y + e || p.y < c.y - e || p.x >= c.x + e {
+                    return 0;
+                }
                 let mut n = 0;
                 for (s0, sw) in Seg::monotone(start, sweep) {
                     let (q0, q1) = (at(c, r, s0), at(c, r, s0 + sw));
@@ -786,6 +793,43 @@ pub fn sd_prism(sec: &Region, y0: f64, y1: f64, p: [f64; 3]) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    /// An arc's crossing count with the circle pre-check equals the count made piece by piece
+    /// (the pre-check only skips points the pieces would count 0 for): arcs of every start,
+    /// sweep and radius, points around, on and past their circles.
+    #[test]
+    fn arc_crossings_precheck_changes_no_count() {
+        let mut x = 0x2545_f491_4f6c_dd1du64;
+        let mut rnd = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            (x >> 11) as f64 / (1u64 << 53) as f64
+        };
+        for _ in 0..4000 {
+            let c = Point2::new(rnd() * 20.0 - 10.0, rnd() * 20.0 - 10.0);
+            let r = 0.01 + rnd() * 30.0;
+            let start = rnd() * 7.0 - 1.0;
+            let sweep = (rnd() * 2.0 - 1.0) * 6.3;
+            let a = Seg::Arc { c, r, start, sweep };
+            for _ in 0..40 {
+                // points near the circle's extremes most of all
+                let p = Point2::new(c.x + (rnd() * 2.6 - 1.3) * r, c.y + (rnd() * 2.6 - 1.3) * r);
+                let mut n = 0;
+                for (s0, sw) in Seg::monotone(start, sweep) {
+                    let (q0, q1) = (at(c, r, s0), at(c, r, s0 + sw));
+                    if (q0.y > p.y) != (q1.y > p.y) {
+                        let dy = ((p.y - c.y) / r).clamp(-1.0, 1.0);
+                        let dx = (1.0 - dy * dy).max(0.0).sqrt() * r;
+                        let mid = at(c, r, s0 + 0.5 * sw);
+                        let xx = if mid.x >= c.x { c.x + dx } else { c.x - dx };
+                        n += u32::from(xx > p.x);
+                    }
+                }
+                assert_eq!(a.crossings(p), n, "{a:?} {p:?}");
+            }
+        }
+    }
+
     use super::*;
 
     fn square() -> Region {

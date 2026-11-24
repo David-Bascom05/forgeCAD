@@ -28,6 +28,21 @@ MCP: query {file: F, sel: "bendsim", tooling?, vendor?, sequence?}   (or all of 
   `[tooling]`.
 - `S`: the bends in order, comma separated, by name (the flange's feature name) or number (1 is the
   sheet's first bend, as `bends` lists them). Left out, the order is searched.
+- `stations auto` (stage bending): the program's tools laid out as stations along the bed, all
+  on the press for every step. Each station is a punch, a die and their stacks' lengths; a bend
+  works at the station holding its tools whose stacks cover it and stand inside it, so the same
+  tools may stand twice (a box's last sides want shorter stacks). Stations go left to right in
+  the order the program first uses them, spaced so the part at one stays off its neighbours'
+  stacks (else packed tight and checked), on a 5 mm grid, centred on the bed; the whole program
+  is then simulated with every station on the press, every check certified. The reply's `stage`:
+  `stations[{n, punch, die, kind, y, punch_length, die_length, reach, bends, why, punch_clear}]`,
+  `steps[{bend, station, travel [approach, bend, return] mm, seconds}]`, `flips`, `turns`,
+  `shifts` (moves between stations), `time {ram_seconds, counted, not_counted}`: the ram's motion
+  at the press's published speeds; handling and moves between stations are not timed (no
+  published times). `{ok: false, why}` when no layout fits and passes.
+- Tools that cannot make a bend at all (the die's or the punch's angle, the punch's radius,
+  decided in closed form) are named in `choice.rejected` with their rule, never simulated: the
+  search's budget goes to setups that may pass.
 - `--uts`: tensile strength for the force check; else the part's material's, if the material
   library has it; else there is no force check.
 
@@ -75,6 +90,7 @@ blocking[]          (infeasible) bend, after[], punch, die, checks[] (the failin
 fixes[]             typed edit ops (SetParam on a flange height's param, else SetArg)
 suggestions[]       {kind: LengthenFlange, bend, wall, by} | {kind: NeedTool, bend, rule, what}
 explored, exhausted the setups simulated; whether the search hit its budget
+contacts[]          where the part and a tool collide (below)
 ```
 
 A check: `rule`, `pass`, `severity` (error|warning), `value`, `limit`, `compare` (`>=` or `<=`:
@@ -112,13 +128,41 @@ z up from the die's top.
 | `tonnage` | air-bending force (1.42 UTS t² / V per metre) vs the press, or kN/m vs a tool |
 | `withdraw` | (warning) the punch coming back up past the sprung part |
 
+### Contacts: where it collides, on both bodies
+
+For every step (and every blocked bend's best attempt) whose tool check failed or is Near, every
+piece of the part against every tool not proven clear gets its region: the branch and bound's cells
+kept down to its leaf size wherever they are not proven at least the clearance away. A cell is
+`proven` when a real point of it, at a real instant, is under the clearance; the rest are bounded.
+The cells are never fewer than the true contact. A step whose tool checks pass pays nothing.
+
+```
+contacts[]  step (null: a blocked bend's attempt), bend, rule, severity, verdict (hit | near |
+            undecided), phase, tool (`punch:ID/body`, `die:ID`, `ram`, `backgauge:finger1`,
+            `station2:..`), estimate, faces[{anchor, strip, name, surface, segment, cells, proven}],
+            depth (the least proven distance of a real point, negative: that deep into the tool),
+            lower, limit, when {angle_deg [a, b]} | {ram_mm [a, b]},
+            others[{anchor, ..}] (part against part: the faces met; tool is `part`),
+            region {points (press frame, up to 64), tool_points (the tool's nearest), bbox,
+                    cells, proven, complete, exact}, text
+```
+
+`text` says it in a line: "right.top runs 3.252 mm into the punch std-eu/P85-R08-H120's body
+50–198.438 mm from the bend's left end, at 0°–90° of step 2 (bend left)".
+`query F bendsim collisions [step N]` answers only the contacts (schema
+`forgecad.bendsim.collisions/1`), one line each in text; the kernel's `forge_brake::contacts_of`
+gives each contact's cells in the piece's own parameters (u, v, w and the motion) for drawing.
+
 ### Exactness
 
 Fold states are the exact partial refolds of the folded part (the neutral layer kept). Distances
 are certified, not sampled: each piece is enclosed over boxes of its parameters and of the motion
 by outward-rounded interval arithmetic and branch and bound, so a pass holds at every instant of
-the bend (to the stated resolution: distance >= limit - res), and a fail names a real point whose
-distance, its error budget added, is under the limit. Anything else is `undecided`, never a pass.
+the bend (distance >= limit, proven), and a fail names a real point whose distance, its error
+budget added, is under the limit. A distance proven only to within the search's resolution of the
+limit (limit - res <= distance, not proven >= limit, and no point found under it) is `near`: a
+warning, not a pass, that leaves the program feasible (the reply gives its `resolution`). Anything
+else is `undecided`, never a pass.
 The double signed distances carry a stated error budget (`forge_brake::bb::sd_err`), an
 assumption still to be proven. Contacts the bend is made by (the punch tip on the zone,
 the legs on the die's shoulders) are decided by the closed-form rules. The search is deterministic.
