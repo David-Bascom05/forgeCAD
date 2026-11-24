@@ -5935,11 +5935,14 @@ fn local_split(c: LocalSplit) -> Option<Local> {
 
 /// A point on face `f` a little inside its boundary, beside the middle of its first edge.
 pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
-    face_point_by(body, f, 1.0)
+    face_point_by(body, f, 1.0, false)
 }
 
-/// `face_point`, its step in from the edge scaled by `scale`.
-fn face_point_by(body: &Body, f: FaceId, scale: f64) -> Option<Point3> {
+/// `face_point`, its step in from the edge scaled by `scale`; with `reach`, no more than half as
+/// far as the face reaches that way, by its loops' vertices, and None where that is no more than
+/// two tolerances (on a plane: a curved face's vertices may all lie on a seam, level with the
+/// edge).
+fn face_point_by(body: &Body, f: FaceId, scale: f64, reach: bool) -> Option<Point3> {
     let face = body.face(f);
     let c = body.lp(*face.loops.first()?).coedges().next()?;
     let co = body.coedge(c);
@@ -5953,17 +5956,38 @@ fn face_point_by(body: &Body, f: FaceId, scale: f64) -> Option<Point3> {
         .eval(edge.range.lo)
         .distance(d.p)
         .max(d.p.distance(edge.curve.eval(edge.range.hi)));
-    let q = d.p + inward * (scale * (0.01 * len.max(1e-3)).min(0.05));
+    let mut step = scale * (0.01 * len.max(1e-3)).min(0.05);
+    if reach {
+        // the first vertex twice the step in settles it, nearly always on the first loop (a
+        // curved edge may bulge further than the vertices: the step is only shorter for it)
+        let mut most = 0.0f64;
+        for k in face.loops.iter().flat_map(|&l| body.lp(l).coedges()) {
+            most = most.max((body.vertex(body.coedge_start(k)).point - d.p).dot(inward.get()));
+            if most >= 2.0 * step {
+                break;
+            }
+        }
+        if most <= 2.0 * tol::LINEAR {
+            return None;
+        }
+        step = step.min(0.5 * most);
+    }
+    let q = d.p + inward * step;
     Some(face.surface.eval(face.surface.project(q)))
 }
 
-/// `face_point`, if it lies within the face's box: on a face narrower than the step in from its
-/// edge (a sliver a boolean cut within tolerance of a wall) the step overshoots, and the point,
-/// off the face, may lie on the other side of a body the face does not reach (a wall unioned
-/// flush beside the sliver read the sliver as inside it, and dropped it: an open shell, a wrong
-/// Ok; research/booleans/drift.md §6). Off it, shorter steps are tried; None leaves the face to be
-/// decided in pieces.
+/// `face_point`, where it lies on the face: on a face narrower than the step in from its edge (a
+/// sliver a boolean cut within tolerance of a wall) the step overshoots, and the point, off the
+/// face, may lie on the other side of a body the face does not reach (a wall unioned flush beside
+/// the sliver read the sliver as inside it, and dropped it: an open shell, a wrong Ok;
+/// research/booleans/drift.md §6). On a plane the step goes no more than half as far as the face
+/// reaches in (a box would not do: a sliver running diagonally has a wide one); on a curved face
+/// the point is kept only within the face's box, shorter steps tried off it. None leaves the face
+/// to be decided in pieces.
 fn face_point_in(body: &Body, f: FaceId) -> Option<Point3> {
+    if matches!(body.face(f).surface, forge_geom::Surface::Plane(_)) {
+        return face_point_by(body, f, 1.0, true);
+    }
     let p = face_point(body, f)?;
     // (the box worked out with nothing kept: no cache of the body's grows for it)
     let within = body.face_box_unkept(f).grow(tol::LINEAR);
@@ -5973,13 +5997,14 @@ fn face_point_in(body: &Body, f: FaceId) -> Option<Point3> {
     nearer_face_point(body, f, &within)
 }
 
-/// `face_point_in` where the usual step overshot its face: steps a 32nd and a 1024th as long.
+/// `face_point_in` on a curved face where the usual step overshot it: steps a 32nd and a 1024th
+/// as long.
 #[cold]
 #[inline(never)]
 fn nearer_face_point(body: &Body, f: FaceId, within: &Box3) -> Option<Point3> {
     [1.0 / 32.0, 1.0 / 1024.0]
         .into_iter()
-        .filter_map(|s| face_point_by(body, f, s))
+        .filter_map(|s| face_point_by(body, f, s, false))
         .find(|&p| within.contains(p))
 }
 

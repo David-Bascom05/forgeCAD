@@ -31,7 +31,7 @@ touches this). The tool is `verify/forge-exact/fuzz/examples/drift_adv.rs`.
   - The strict bound (the vertex's own tolerance alone) does not.
   - Making it hold costs a distance per settled vertex. That is a decision for David (§5).
 - **A different wrong Ok turned up: an open shell after two ops** (§6). It was a sliver face
-  decided by a point off it. Fixed.
+  decided by a point off it. Fixed, with the diagonal kind a search then built (§6).
 - **Re-snapping does not stop the ratchet (§7).**
   - At merge, it never meets the drifting vertices: they were never merged, and their tolerance
     never grew.
@@ -203,12 +203,28 @@ main and with the fix of §4, and it is not about tolerances:
 - On the sliver the step overshoots to y = −0.036, inside the wall. The sliver is read as inside
   the wall and dropped.
 
-Fix (proof/open-shell): `face_point_in` keeps the point only if it lies in the face's box, grown
-by LINEAR; otherwise the face is decided in pieces like any other. Test:
-`a_wall_unioned_flush_on_a_notched_face_stays_closed` (2 ops; the volume is checked too).
+Fix (proof/open-shell), first version: `face_point_in` kept the point only if it lay in the
+face's box, grown by LINEAR. Test: `a_wall_unioned_flush_on_a_notched_face_stays_closed` (2 ops;
+the volume is checked too).
 
-A diagonal sliver, whose box is wide while the face is not, could still put the point off the
-face inside its box. That case is UNKNOWN: no search here made one.
+A box can be wide where the face is not: a sliver running diagonally. `drift_adv diag` builds the
+edge family turned 45° about z, plate and all, to make one. It did, through the sequential
+boolean: five ops (2, 9, 10, 26 and 41 of the n-ary plane search's sequence) end in a union with
+three edges used once, the sliver again read as inside the wall beside it. So on a plane the box
+test is gone. `face_point_in` limits the step instead: no more than half as far as the face
+reaches in from the edge's middle, measured along the inward direction to the face's loop
+vertices (the first vertex twice the step in settles it). Where the face reaches in no more than
+two tolerances, there is no point: the face is decided in pieces. Test:
+`a_wall_unioned_flush_on_a_diagonal_notched_face_stays_closed` (5 ops; fails with the box test).
+
+A curved face keeps the box test. Its vertices say nothing about how far it reaches: a whole
+cylinder's all lie on its seam, level with the edge. With the reach on every face, housing's
+cylinders all went to pieces (+0.3% on the gate). A diagonal sliver on a curved face is
+UNKNOWN: the families here are all planar.
+
+The diag searches (300 rounds, both objectives, sequential and n-ary) and every saved sequence
+of every family replay with no wrong Ok from these changes. One replay finds an older wrong Ok;
+see §8.
 
 With this fixed, the edge search found a sequence where the vertex growth of §4 reaches past the
 middle of a 3e-5 edge, so the edge is shorter than the balls at its ends (`check`:
@@ -269,8 +285,18 @@ answer is to record the distance (§4), or to refuse.
 
 ## 8. Open
 
-- A diagonal sliver (§6).
 - The strict vertex bound (§5): ruled composed for now; David may reopen it.
+- **A sequential wrong Ok, on main too**, found when the n-ary diag search's best sequence was
+  replayed through `boolean`. Two unions of `drift_adv edge` (or `diag`), by original index:
+  - q25 = [-0.4870355810546001, 0.1901779229804108, -0.27625441155899466, -0.295604682866215,
+    -0.9833093286502677, 1.0];
+  - q43 = [0.029814267349035806, -0.5315581713293835, -0.2762644949939368, -1.0,
+    -0.8423443716357213, 0.4469800308709223].
+
+  Wall 25 lies flush, 5.5e-6 off, against the plate's y = 0 wall, from below the plate's bottom
+  to above its middle. Wall 43 lies almost wholly inside wall 25, its own face flush too. The
+  second union drops the plate's bottom and the flush face below it: eight edges used once.
+  Not yet traced.
 - The n-ary boolean's refusals of §9 are refusals, not fixes: the sequential boolean builds
   each of those inputs validly.
 - A Lean statement of the composed bound per merge (δ_out = δ_in + edge tol, per entity), from

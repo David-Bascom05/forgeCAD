@@ -1,6 +1,6 @@
 //! FLAT-SITES δ-accumulation: adversarial drift search (research/booleans/drift.md).
-//! `drift_adv FAMILY N ITERS [check]`: N sequential booleans on one plate (FAMILY edge, top or
-//! angle), their parameters hill-climbed for ITERS rounds (seed 11) to maximise the largest vertex
+//! `drift_adv FAMILY N ITERS [check]`: N sequential booleans on one plate (FAMILY edge, top,
+//! angle or diag), their parameters hill-climbed for ITERS rounds (seed 11) to maximise the largest vertex
 //! distance from its planes; per op of the best sequence: that distance, the distance from the
 //! exact meet of its best triple, the largest vertex tol, validity, refusal, and (with `check`) the
 //! exact reference's verdict on the op's own inputs. Then: the most a vertex is past its tol from
@@ -118,6 +118,15 @@ thread_local! {
     static UNDER: std::cell::Cell<f64> = const { std::cell::Cell::new(f64::NEG_INFINITY) };
 }
 
+/// The frame a family's plate and tools are built in: the world's, or turned 45° about z (`diag`).
+fn base(fam: &str) -> Frame {
+    if fam == "diag" {
+        Frame::WORLD.rotated_about_z(std::f64::consts::FRAC_PI_4)
+    } else {
+        Frame::WORLD
+    }
+}
+
 /// The tool of op i in a family, from its parameters (each in [-1, 1]).
 fn tool(fam: &str, i: usize, q: &[f64]) -> Option<(Body, Op)> {
     let id = 100 + i as u64;
@@ -127,12 +136,14 @@ fn tool(fam: &str, i: usize, q: &[f64]) -> Option<(Body, Op)> {
         Op::Union
     };
     match fam {
-        // a wall near the plate's y = 0 wall, its ends within ±2 LINEAR of it, over a stretch
-        "edge" => {
+        // a wall near the plate's y = 0 wall, its ends within ±2 LINEAR of it, over a stretch; `diag`:
+        // the same turned 45° about z, plate and all, so its slivers run diagonally and their
+        // boxes are wide where the faces are not (drift.md §6)
+        "edge" | "diag" => {
             let (x0, x1) = (50.0 + 45.0 * q[0], 50.0 + 45.0 * q[0] + 5.0 + 40.0 * (q[1] + 1.0));
             let (e0, e1) = (2.0 * L * q[2], 2.0 * L * q[3]);
             let z0 = -1.0 + 6.0 * (q[4] + 1.0);
-            let f = Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z0));
+            let f = base(fam).compose(&Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z0)));
             let pts = if op == Op::Subtract {
                 vec![(x0, -10.0), (x1, -10.0), (x1, 5.0 + e1), (x0, 5.0 + e0)]
             } else {
@@ -372,7 +383,7 @@ struct Run {
 
 fn run(fam: &str, qs: &[Vec<f64>], keep: bool) -> (Run, Vec<(Body, Body, Op)>) {
     let mut body = prism(
-        Frame::WORLD,
+        base(fam),
         &[(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)],
         10.0,
         1,

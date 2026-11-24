@@ -974,6 +974,24 @@ fn an_imprinted_edges_end_vertex_holds_its_new_face() {
 /// `drift_adv edge`'s op `i` from its parameters `q` (each in [-1, 1]): a cut (even ops) or a wall
 /// (odd ops) whose faces end within two tolerances of a 100 x 100 x 10 plate's y = 0 wall.
 fn edge_wall(i: usize, q: [f64; 6]) -> (Body, Op) {
+    edge_wall_in(Frame::WORLD, i, q)
+}
+
+/// The 100 x 100 x 10 plate the walls of `edge_wall` stand on, in frame `base`.
+fn wall_plate(base: Frame) -> Body {
+    extrude(
+        &Profile {
+            plane: base,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 100.0, 100.0, 10)],
+        },
+        10.0,
+        1,
+    )
+    .unwrap()
+}
+
+/// `edge_wall`, plate and tool built in frame `base` (`drift_adv diag`: turned 45° about z).
+fn edge_wall_in(base: Frame, i: usize, q: [f64; 6]) -> (Body, Op) {
     const L: f64 = 1e-5;
     let id = 100 + i as u64;
     let op = if i.is_multiple_of(2) {
@@ -984,7 +1002,7 @@ fn edge_wall(i: usize, q: [f64; 6]) -> (Body, Op) {
     let (x0, x1) = (50.0 + 45.0 * q[0], 50.0 + 45.0 * q[0] + 5.0 + 40.0 * (q[1] + 1.0));
     let (e0, e1) = (2.0 * L * q[2], 2.0 * L * q[3]);
     let z0 = -1.0 + 6.0 * (q[4] + 1.0);
-    let f = Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z0));
+    let f = base.compose(&Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z0)));
     let pts = if op == Op::Subtract {
         [(x0, e0 - 3.0), (x1, e1 - 3.0), (x1, e1), (x0, e0)]
     } else {
@@ -1012,19 +1030,6 @@ fn edge_wall(i: usize, q: [f64; 6]) -> (Body, Op) {
     )
     .unwrap();
     (body, op)
-}
-
-/// The 100 x 100 x 10 plate the walls of `edge_wall` stand on, in frame `base`.
-fn wall_plate(base: Frame) -> Body {
-    extrude(
-        &Profile {
-            plane: base,
-            loops: vec![Profile::rectangle(Point2::ORIGIN, 100.0, 100.0, 10)],
-        },
-        10.0,
-        1,
-    )
-    .unwrap()
 }
 
 /// Walls and notches within two tolerances of a plate's wall: an imprint grows an edge's end
@@ -1308,4 +1313,82 @@ fn nary_edges_shorter_than_their_tolerances_are_refused() {
     };
     run(&walls, edge_wall);
     run(&slabs, top_slab);
+}
+
+/// The notches and walls of `a_wall_unioned_flush_on_a_notched_face_stays_closed`'s kind, turned
+/// 45° about z, plate and all (`drift_adv diag`): the sliver a notch leaves runs diagonally, so its
+/// box is wide where the face is not, and the point a step in from its edge, off the face but in
+/// its box, lay inside the wall unioned beside it; the sliver was dropped and the union came out an
+/// open shell (three edges used once), a wrong Ok. Five ops of a hill-climbed fifty, by their
+/// original indices (research/booleans/drift.md §6).
+#[test]
+fn a_wall_unioned_flush_on_a_diagonal_notched_face_stays_closed() {
+    let base = Frame::WORLD.rotated_about_z(std::f64::consts::FRAC_PI_4);
+    let mut body = wall_plate(base);
+    let ops: [(usize, [f64; 6]); 5] = [
+        (
+            2,
+            [
+                0.8234008506443795,
+                1.0,
+                0.9816978534888866,
+                -0.9265032466161587,
+                0.04905408202770589,
+                0.8838505963032673,
+            ],
+        ),
+        (
+            9,
+            [
+                -0.14336190423823236,
+                0.32007579953348275,
+                0.08482040944165237,
+                0.4465830093433477,
+                1.0,
+                0.39367157788269225,
+            ],
+        ),
+        (
+            10,
+            [
+                -0.08371573368001006,
+                0.00689904248278117,
+                -0.39004145013251035,
+                0.13185010546027787,
+                -0.009849046413234586,
+                0.2954004841119977,
+            ],
+        ),
+        (
+            26,
+            [
+                0.17380094844587457,
+                0.8576087878475563,
+                -0.18109883026769524,
+                -0.015880172925941904,
+                0.00011761254002262689,
+                0.388185391233117,
+            ],
+        ),
+        (
+            41,
+            [
+                0.8962183512510973,
+                0.8434506663474743,
+                -0.5744924207274574,
+                -1.0,
+                0.1389087155465082,
+                -0.2806420579990162,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = edge_wall_in(base, i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            body = r;
+        }
+    }
 }
