@@ -6126,6 +6126,32 @@ mod loop_band_tests {
         let far = path(&[3.0 + lcf + 1.0, 3.0], -10.0);
         assert!(loop_band(&far, &froms(&far), 0, far.moves.len(), 3.0, &tool, 3.0 + lcf).is_none());
         assert!(loop_band(&p, &f, 0, p.moves.len(), 3.0, &tool, 6.0 + lcf + 1.0).is_none());
+        // a closed curve that crosses itself (a figure eight) is not a region's boundary: no band
+        let eight = |z: f64| -> Vec<PMove> {
+            let c = |x: f64, y: f64| PMove::Line {
+                to: [x, y, z],
+                f: 500.0,
+                phase: Phase::Cut,
+            };
+            vec![c(10.0, 10.0), c(10.0, -10.0), c(-10.0, 10.0), c(-10.0, -10.0)]
+        };
+        let mut moves = vec![];
+        for z in [6.0, 3.0] {
+            moves.push(PMove::Line {
+                to: [-10.0, -10.0, z],
+                f: 200.0,
+                phase: Phase::Plunge,
+            });
+            moves.extend(eight(z));
+        }
+        let fig = OpPath {
+            tool: 0,
+            start: [-10.0, -10.0, 20.0],
+            moves,
+            rpm: 8000.0,
+            coolant: forge_post::Coolant::Flood,
+        };
+        assert!(loop_band(&fig, &froms(&fig), 0, fig.moves.len(), 3.0, &tool, 8.0).is_none());
     }
 }
 
