@@ -667,7 +667,7 @@ def ssi.nearly_flush
   | forge_geom.surface.Surface.Procedural _ => ok none
 
 /-- [forge_bool::ssi::sphere_sphere]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 523:0-551:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 553:0-581:1 -/
 def ssi.sphere_sphere
   (s : forge_geom.surface.Sphere) (t : forge_geom.surface.Sphere) :
   Result forge_geom.intersect.SurfaceSurface
@@ -736,7 +736,7 @@ def ssi.sphere_sphere
           ok (forge_geom.intersect.SurfaceSurface.Curves ret)
 
 /-- [forge_bool::ssi::equal_crossing]: loop body 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 506:4-521:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 536:4-551:1 -/
 @[rust_loop_body]
 def ssi.equal_crossing_loop.body
   (r : F64) (a : forge_math.vec.Vec3) (o : forge_math.vec.Point3)
@@ -784,7 +784,7 @@ def ssi.equal_crossing_loop.body
       ok (done o3)
 
 /-- [forge_bool::ssi::equal_crossing]: loop 0:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 506:4-521:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 536:4-551:1 -/
 @[rust_loop]
 def ssi.equal_crossing_loop
   (iter : core.array.iter.IntoIter forge_math.vec.Vec3 2#usize) (r : F64)
@@ -799,7 +799,7 @@ def ssi.equal_crossing_loop
     (iter, out)
 
 /-- [forge_bool::ssi::equal_crossing]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 494:0-521:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 524:0-551:1 -/
 def ssi.equal_crossing
   (c : forge_geom.surface.Cylinder) (d : forge_geom.surface.Cylinder) :
   Result (Option forge_geom.intersect.SurfaceSurface)
@@ -845,7 +845,7 @@ def ssi.equal_crossing
       ssi.equal_crossing_loop iter c.radius a o m out
 
 /-- [forge_bool::ssi::crossing_touch]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 464:0-489:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 494:0-519:1 -/
 def ssi.crossing_touch
   (c : forge_geom.surface.Cylinder) (d : forge_geom.surface.Cylinder) :
   Result (Option forge_geom.intersect.SurfaceSurface)
@@ -922,7 +922,7 @@ def ssi.crossing_touch
       forge_geom.intersect.SurfaceSurface residual
 
 /-- [forge_bool::ssi::cylinder_cylinder::{impl core::ops::function::Fn<(f64,), forge_math::vec::Point3> for forge_bool::ssi::cylinder_cylinder::{closure}<'_0, '_1, '_2, '_3>}::call]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 447:13-447:54 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 477:13-477:54 -/
 def ssi.cylinder_cylinder.closure.Insts.CoreOpsFunctionFnTupleF64Point3.call
   (c : ssi.cylinder_cylinder.closure) (tupled_args : F64) :
   Result forge_math.vec.Point3
@@ -937,7 +937,7 @@ def ssi.cylinder_cylinder.closure.Insts.CoreOpsFunctionFnTupleF64Point3.call
   forge_math.vec.Point3.Insts.CoreOpsArithAddVec3Point3.add p v3
 
 /-- [forge_bool::ssi::cylinder_cylinder]:
-    Source: 'kernel/forge-bool/src/ssi.rs', lines 419:0-457:1 -/
+    Source: 'kernel/forge-bool/src/ssi.rs', lines 449:0-487:1 -/
 def ssi.cylinder_cylinder
   (c : forge_geom.surface.Cylinder) (d : forge_geom.surface.Cylinder) :
   Result forge_geom.intersect.SurfaceSurface
