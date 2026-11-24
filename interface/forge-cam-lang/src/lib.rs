@@ -1338,6 +1338,11 @@ pub struct Cam {
     tools: Vec<ToolUse>,
     /// The user's feeds and speeds given on each tool (`tool(.., vc: 300)`), under the op's.
     tool_asks: Vec<Ask>,
+    /// Per setup, the stock as `hop_links` left it after the setup's last hopped op: its map, each
+    /// op's moves swept into it (the map hops plan against, carried from op to op so a later op
+    /// starts from what earlier ones cut, not only from the recorded voids). None until one ran,
+    /// or after an op of the setup did not build.
+    hop_maps: Vec<Option<forge_cam::engage::HeightMap>>,
     setups: Vec<SetupIn>,
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
@@ -2270,6 +2275,7 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
     let mut cam = Cam {
         leftover: vec![],
         leftover_done: false,
+        hop_maps: vec![],
         ok: true,
         errors: vec![],
         error_codes: vec![],
@@ -4393,19 +4399,36 @@ impl Cam {
             .collect();
         let cell = (t.tool.dc / 30.0).clamp(0.05, 0.25);
         let trusted = !self.ops.iter().any(|o| o.setup == su && o.status != "built");
-        let mut map = if trusted {
-            HeightMap::of_stock(&s.ip, cell)
-        } else {
-            HeightMap::new(s.ip.min, s.ip.max, cell)
+        // the setup's map as its last hopped op left it (on the same grid), lowered to the voids
+        // recorded since; else the recorded voids alone. Every op of the setup built: else the
+        // uncut box
+        let carried = self
+            .hop_maps
+            .get(su)
+            .and_then(|m| m.as_ref())
+            .filter(|m| m.h == cell && trusted)
+            .cloned();
+        let mut map = match carried {
+            Some(mut m) => {
+                m.lower_voids(&s.ip);
+                m
+            }
+            None if trusted => HeightMap::of_stock(&s.ip, cell),
+            None => HeightMap::new(s.ip.min, s.ip.max, cell),
         };
-        paths
+        let paths = paths
             .into_iter()
             .map(|mut p| {
                 let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, &bodies, feed);
                 p.moves = moves;
                 p
             })
-            .collect()
+            .collect();
+        if self.hop_maps.len() <= su {
+            self.hop_maps.resize(su + 1, None);
+        }
+        self.hop_maps[su] = trusted.then_some(map);
+        paths
     }
 
     fn feeds_from_engagement(
