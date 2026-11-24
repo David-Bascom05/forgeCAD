@@ -231,7 +231,9 @@ pub fn adaptive(
     } else {
         0.125 * tool.tool.dc
     };
-    let margin = 0.01 + ds * ds / (8.0 * (0.5 * tool.tool.dc));
+    // (an arc fitted through the steps, radius ≥ r and within 0.005 of them, bulges past a
+    // chord by as much again)
+    let margin = 0.01 + 0.005 + 2.0 * ds * ds / (8.0 * (0.5 * tool.tool.dc));
     // allowed centres: the region shrunk by the tool radius and a margin; the reachable target:
     // that grown back by the radius (the opening)
     let (cl, _) = offset(rg, r + margin).map_err(|e| OpError::Region(format!("{e:?}")))?;
@@ -537,13 +539,9 @@ pub fn adaptive(
             }
             // drop the trailing air steps already swept (they cut nothing) from the path
             let keep = pass.len().saturating_sub(air_run);
-            for q in &pass[..keep] {
-                mv.push(PMove::Line {
-                    to: *q,
-                    f: feed.0,
-                    phase: Phase::Cut,
-                });
-            }
+            let mut pts = vec![target];
+            pts.extend_from_slice(&pass[..keep]);
+            fit_arcs(&pts, f.r, feed.0, &mut mv);
             at = Some(if keep > 0 { pass[keep - 1] } else { target });
             if keep == 0 || removed < 1e-3 * f.r * f.r * f.r {
                 // nothing cut from here: mark this start used by sweeping its disk (no material
@@ -643,6 +641,97 @@ pub fn adaptive(
         },
         voids,
     })
+}
+
+/// The pass through `pts` (one height) as moves: greedy arcs through runs of points, each
+/// within `TOL_FIT` of every point it replaces, of radius at least r (so a step's dip across it
+/// stays within the margin the centres keep) and at most 10 r (G5 bounds an arc by its circle's
+/// box), under 170° and turning one way; else lines.
+fn fit_arcs(pts: &[[f64; 3]], r: f64, f: f64, mv: &mut Vec<PMove>) {
+    const TOL_FIT: f64 = 0.005;
+    let circle = |a: [f64; 3], b: [f64; 3], c: [f64; 3]| -> Option<([f64; 2], f64)> {
+        let (ax, ay, bx, by, cx, cy) = (a[0], a[1], b[0], b[1], c[0], c[1]);
+        let d = 2.0 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+        if d.abs() < 1e-12 {
+            return None;
+        }
+        let a2 = ax * ax + ay * ay;
+        let b2 = bx * bx + by * by;
+        let c2 = cx * cx + cy * cy;
+        let ux = (a2 * (by - cy) + b2 * (cy - ay) + c2 * (ay - by)) / d;
+        let uy = (a2 * (cx - bx) + b2 * (ax - cx) + c2 * (bx - ax)) / d;
+        let rr = ((ax - ux) * (ax - ux) + (ay - uy) * (ay - uy)).sqrt();
+        Some(([ux, uy], rr))
+    };
+    // signed turn of the polyline a → b → c (+ counter-clockwise)
+    let turn =
+        |a: [f64; 3], b: [f64; 3], c: [f64; 3]| (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]);
+    let ok = |i: usize, j: usize| -> Option<([f64; 2], bool)> {
+        let m = (i + j) / 2;
+        let (c, rr) = circle(pts[i], pts[m], pts[j])?;
+        // at most 10 r: G5 bounds an arc by its whole circle's box against the travel
+        if rr < r || rr > 10.0 * r {
+            return None;
+        }
+        let ccw = turn(pts[i], pts[m], pts[j]) > 0.0;
+        let mut total = 0.0;
+        for k in i..j {
+            let (a, b) = (pts[k], pts[k + 1]);
+            let db = ((b[0] - c[0]).powi(2) + (b[1] - c[1]).powi(2)).sqrt();
+            if (db - rr).abs() > TOL_FIT {
+                return None;
+            }
+            let a0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
+            let a1 = dmath::atan2(b[1] - c[1], b[0] - c[0]);
+            let mut sw = a1 - a0;
+            while sw > std::f64::consts::PI {
+                sw -= std::f64::consts::TAU;
+            }
+            while sw < -std::f64::consts::PI {
+                sw += std::f64::consts::TAU;
+            }
+            if (sw > 0.0) != ccw || sw == 0.0 {
+                return None;
+            }
+            total += sw.abs();
+        }
+        if total > 170f64.to_radians() {
+            return None;
+        }
+        Some((c, ccw))
+    };
+    let n = pts.len();
+    let mut i = 0;
+    while i + 1 < n {
+        let mut best: Option<(usize, [f64; 2], bool)> = None;
+        let mut j = i + 2;
+        while j < n {
+            match ok(i, j) {
+                Some((c, ccw)) => best = Some((j, c, ccw)),
+                None => break,
+            }
+            j += 1;
+        }
+        match best {
+            Some((j, c, ccw)) => {
+                mv.push(PMove::Arc {
+                    to: pts[j],
+                    c,
+                    cw: !ccw,
+                    f,
+                });
+                i = j;
+            }
+            None => {
+                mv.push(PMove::Line {
+                    to: pts[i + 1],
+                    f,
+                    phase: Phase::Cut,
+                });
+                i += 1;
+            }
+        }
+    }
 }
 
 /// The cells of side H (r/2) whose every point lies within the tool's flat end (r_flat) of a
