@@ -1133,11 +1133,12 @@ fn classify(
             rec.detail = format!("\"{}\"", judge::short(&words));
         }
     }
-    if status_new && let Some(why) = judge::debug_text(&after.status) {
+    // what the bar draws is what's judged (it may say a path by its file's name)
+    if status_new && let Some(why) = judge::debug_text(&after.status_drawn) {
         rec.findings.push(judge::finding(
             "raw-text",
             true,
-            format!("status \"{}\" ({why})", judge::short(&after.status)),
+            format!("status \"{}\" ({why})", judge::short(&after.status_drawn)),
         ));
     }
     if rec.class == Class::Mode {
