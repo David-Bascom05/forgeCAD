@@ -368,6 +368,16 @@ list on main: this branch's new strings add none).
   bundled flange_cam.fg do nothing visible: refused as "certified except G5", the reason only in
   the CAM state's `said`, never on screen.
 
+## 23. Placing a dimension in a drawing file hung the app (ui/bughunt-3)
+
+- File > New Drawing, Annotate > Dimension, two edges of a view, then the place: the app froze
+  for good, on the desktop and in the page. `DrawingEnv::doc()` (shell/drawing.rs) read a drawing
+  block's doc but, for a drawing file (no block), called itself, without end (gdb: doc ← doc ←
+  … ← fresh ← add ← click). Every annotation that reads the doc (dimension, note, the item under
+  the pointer) went through it. It reads the file's own text now (`doc::read(&self.src)`).
+- Test: `tests/drawing_dimension.rs` (the clicks in a headless window on a thread with a
+  watchdog; the dimension `d1 = dim(top, …)` is in the file). Before: the watchdog fired at 240 s.
+
 ## Open (reported, not fixed here)
 
 
