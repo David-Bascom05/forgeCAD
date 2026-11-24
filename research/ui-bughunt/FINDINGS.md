@@ -290,8 +290,18 @@ list on main: this branch's new strings add none).
 - Tests: `measure::tests::the_tree_finds_the_wall_every_pair_does_bit_for_bit` (the old loop
   kept as the reference: a plate with holes, a tube). Also every example compared old vs new
   with `forgecad measure F wall exact`: identical.
-- Still open: about 3.5 s natively (likely 2-3x that in wasm) on the single-threaded page's
-  thread. The threaded page and the desktop run it off the UI thread.
+- Then (coordinator): in the single-threaded page Wall no longer measures on open. The panel
+  shows "Measure thinnest wall", and the search (`forge_agent::measure::WallSearch`, `wall`
+  stepped, the same rays in the same order) then runs 25 ms per frame. The page keeps drawing,
+  the panel shows "Working it out... N%", and Cancel stops it. On the desktop and in the
+  threaded page it still measures on open, on a worker, which now reports how far it is and
+  stops when the panel is closed or cancelled (`WallCtl`). A stopped search's answer never
+  lands (`STOPPED`, and a new measurement id).
+  Tests: `tests/wall_panel.rs` (desktop: measured on open, 6 mm; Cancel holds it and nothing
+  lands; Measure thinnest wall measures again) and `web/tests/wall.cjs` (single-threaded: the
+  gate frame waits for the button, runs between frames while the page keeps drawing, and
+  Cancel stops it; the plate reads 6 mm. Threaded: measured on open).
+  Shots: `shots/page-wall-held.png`, `shots/page-wall-busy.png`.
 
 ## 19. The page drew window controls that did nothing (ui/bughunt-3)
 

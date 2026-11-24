@@ -848,6 +848,29 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("robot", robot_json(g)),
         // a pick of the view in flight (the host draws on until it is answered)
         ("pick_busy", g.pick_busy().into()),
+        // Inspect > Wall: waiting for its button, working (how far), and its reading
+        (
+            "wall",
+            g.shell
+                .inspect
+                .measure
+                .as_ref()
+                .filter(|m| m.wall)
+                .map_or(Json::Null, |m| {
+                    Json::obj(vec![
+                        ("held", m.wall_held.into()),
+                        ("busy", m.busy.into()),
+                        ("done", num(m.wall_done.into())),
+                        (
+                            "at",
+                            match &m.wall_at {
+                                Some(Ok((t, _))) => num(*t),
+                                _ => Json::Null,
+                            },
+                        ),
+                    ])
+                }),
+        ),
         // where the shell's named things are, for the tests' clicks (`app_click`)
         (
             "places",
@@ -860,6 +883,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                             || n.starts_with("tab:")
                             || n.starts_with("tool:")
                             || n.starts_with("robot:")
+                            || n.starts_with("measure:")
                     })
                     .map(|(n, r)| {
                         Json::obj(vec![

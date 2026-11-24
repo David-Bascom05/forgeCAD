@@ -43,60 +43,114 @@ pub fn mass(m: &TriMesh) -> Mass {
 /// The thinnest wall: from each triangle, straight in against its normal to the next surface
 /// the ray leaves the solid through. The thickness and where it is.
 pub fn wall(body: &Body, m: &TriMesh) -> Option<(f64, Point3)> {
-    // faces meeting at an edge make a wedge there, not a wall
-    let mut touching: std::collections::HashMap<u32, Vec<u32>> = Default::default();
-    for e in body.edge_ids() {
-        let fs = select::faces_of_edge(body, e);
-        for &a in &fs {
-            touching.entry(a.0).or_default().extend(fs.iter().map(|b| b.0));
-        }
-    }
-    for t in touching.values_mut() {
-        t.sort_unstable();
-        t.dedup();
-    }
-    let tri = |t: &[u32; 3]| t.map(|i| m.positions[i as usize]);
-    let normals: Vec<Option<Vec3>> = m
-        .triangles
-        .iter()
-        .map(|t| m.triangle_normal(*t).normalize().map(|n| n.get()))
-        .collect();
-    // each ray tries only the triangles whose boxes it passes through before the thinnest wall
-    // so far (every triangle against every other took minutes on a welded frame); the same
-    // tests on those, so the same answer: a triangle left out could not have been nearer
-    let tree = Tree::new(&m.triangles.iter().map(tri).collect::<Vec<_>>());
-    let mut best: Option<(f64, Point3)> = None;
-    let (mut near, mut stack) = (vec![], vec![]);
-    let mut seen = vec![u32::MAX; m.triangles.len()];
-    for (i, t) in m.triangles.iter().enumerate() {
-        let Some(n) = normals[i] else { continue };
-        let [a, b, c] = tri(t);
-        let o = a + ((b - a) + (c - a)) * (1.0 / 3.0);
-        let d = -n;
-        let wedge = touching.get(&m.face_of[i]).map_or(&[][..], |t| &t[..]);
-        tree.along(
-            (o, d, best.map(|b| b.0)),
-            (&mut near, &mut stack),
-            (&mut seen, i as u32),
-        );
-        for &j in &near {
-            let j = j as usize;
-            // only the far side: a face the ray leaves through looks along it
-            if j == i
-                || normals[j].is_none_or(|nj| nj.dot(d) <= 1e-9)
-                || wedge.binary_search(&m.face_of[j]).is_ok()
-            {
-                continue;
-            }
-            if let Some(s) = hit(o, d, tri(&m.triangles[j]))
-                && s > 1e-7
-                && best.is_none_or(|b| s < b.0)
-            {
-                best = Some((s, o + d * (s / 2.0)));
+    let mut w = WallSearch::new(body, m);
+    while !w.step(usize::MAX) {}
+    w.found()
+}
+
+/// `wall`, a few triangles at a time: a caller that may not block for it all (a page's one
+/// thread) steps it between frames, shows how far it is, and drops it to cancel. The same rays
+/// in the same order as `wall`, so the same answer.
+pub struct WallSearch<M: std::borrow::Borrow<TriMesh>> {
+    m: M,
+    /// Each face's faces met at an edge: a wedge there, not a wall.
+    touching: std::collections::HashMap<u32, Vec<u32>>,
+    normals: Vec<Option<Vec3>>,
+    tree: Tree,
+    best: Option<(f64, Point3)>,
+    /// The next triangle's ray.
+    next: usize,
+    near: Vec<u32>,
+    stack: Vec<usize>,
+    seen: Vec<u32>,
+}
+
+impl<M: std::borrow::Borrow<TriMesh>> WallSearch<M> {
+    pub fn new(body: &Body, m: M) -> Self {
+        // faces meeting at an edge make a wedge there, not a wall
+        let mut touching: std::collections::HashMap<u32, Vec<u32>> = Default::default();
+        for e in body.edge_ids() {
+            let fs = select::faces_of_edge(body, e);
+            for &a in &fs {
+                touching.entry(a.0).or_default().extend(fs.iter().map(|b| b.0));
             }
         }
+        for t in touching.values_mut() {
+            t.sort_unstable();
+            t.dedup();
+        }
+        let mesh = m.borrow();
+        let tri = |t: &[u32; 3]| t.map(|i| mesh.positions[i as usize]);
+        let normals: Vec<Option<Vec3>> = mesh
+            .triangles
+            .iter()
+            .map(|t| mesh.triangle_normal(*t).normalize().map(|n| n.get()))
+            .collect();
+        // each ray tries only the triangles whose boxes it passes through before the thinnest
+        // wall so far (every triangle against every other took minutes on a welded frame); the
+        // same tests on those, so the same answer: a triangle left out could not have been nearer
+        let tree = Tree::new(&mesh.triangles.iter().map(tri).collect::<Vec<_>>());
+        let seen = vec![u32::MAX; mesh.triangles.len()];
+        WallSearch {
+            m,
+            touching,
+            normals,
+            tree,
+            best: None,
+            next: 0,
+            near: vec![],
+            stack: vec![],
+            seen,
+        }
     }
-    best
+
+    /// The next `rays` triangles' rays (at most); whether every one is done.
+    pub fn step(&mut self, rays: usize) -> bool {
+        let m = self.m.borrow();
+        let tri = |t: &[u32; 3]| t.map(|i| m.positions[i as usize]);
+        let end = self.next.saturating_add(rays).min(m.triangles.len());
+        for i in self.next..end {
+            let Some(n) = self.normals[i] else { continue };
+            let [a, b, c] = tri(&m.triangles[i]);
+            let o = a + ((b - a) + (c - a)) * (1.0 / 3.0);
+            let d = -n;
+            let wedge = self.touching.get(&m.face_of[i]).map_or(&[][..], |t| &t[..]);
+            self.tree.along(
+                (o, d, self.best.map(|b| b.0)),
+                (&mut self.near, &mut self.stack),
+                (&mut self.seen, i as u32),
+            );
+            for &j in &self.near {
+                let j = j as usize;
+                // only the far side: a face the ray leaves through looks along it
+                if j == i
+                    || self.normals[j].is_none_or(|nj| nj.dot(d) <= 1e-9)
+                    || wedge.binary_search(&m.face_of[j]).is_ok()
+                {
+                    continue;
+                }
+                if let Some(s) = hit(o, d, tri(&m.triangles[j]))
+                    && s > 1e-7
+                    && self.best.is_none_or(|b| s < b.0)
+                {
+                    self.best = Some((s, o + d * (s / 2.0)));
+                }
+            }
+        }
+        self.next = end;
+        self.next == m.triangles.len()
+    }
+
+    /// How far it is, 0 to 1.
+    pub fn done(&self) -> f32 {
+        let n = self.m.borrow().triangles.len();
+        if n == 0 { 1.0 } else { self.next as f32 / n as f32 }
+    }
+
+    /// The thinnest wall so far: the answer once every ray is done.
+    pub fn found(&self) -> Option<(f64, Point3)> {
+        self.best
+    }
 }
 
 /// Triangles' boxes in a tree, to find those a ray may hit.
@@ -1667,6 +1721,10 @@ mod tests {
             let (fast, slow) = (wall(&b, &m), every_pair(&b, &m));
             assert!(fast.is_some(), "part {k}: no wall");
             assert_eq!(bits(fast), bits(slow), "part {k}: {fast:?} vs {slow:?}");
+            // a few rays at a time, as a page steps it between frames: the same
+            let mut w = WallSearch::new(&b, &m);
+            while !w.step(7) {}
+            assert_eq!(bits(w.found()), bits(slow), "part {k}, stepped");
         }
     }
 }

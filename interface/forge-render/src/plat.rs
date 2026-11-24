@@ -7,6 +7,10 @@ pub use std::time::Instant;
 #[cfg(target_arch = "wasm32")]
 pub use web_time::Instant;
 
+/// Jobs run on the caller's thread, before `spawn` returns: the single-threaded browser build. A
+/// long one there blocks the page for its whole length.
+pub const INLINE_JOBS: bool = cfg!(all(target_arch = "wasm32", not(target_feature = "atomics")));
+
 /// Runs `f` off the caller's thread where there are threads: natively a named thread; in the
 /// threaded browser build a Web Worker on the page's memory (`threads`); in the single-threaded
 /// browser build right away, before this returns. A job's result goes back through a channel
