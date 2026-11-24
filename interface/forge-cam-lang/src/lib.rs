@@ -3306,6 +3306,17 @@ impl Cam {
                                     shallow.push(region_box(&rg));
                                     continue;
                                 }
+                                // a hole or slot the tool only just fits (no room 1e-3 beyond its
+                                // radius: a drilled hole or a slot of the tool's size) is left as
+                                // one it does not fit: its own op cuts it (a plunge or a slot),
+                                // and its walls at no gap are the costliest to certify
+                                if matches!(
+                                    forge_cam_geom::offset::offset(&rg, 0.5 * d + leave + 1e-3),
+                                    Ok((l, _)) if l.is_empty()
+                                ) {
+                                    skipped.push(region_box(&rg));
+                                    continue;
+                                }
                                 let p = ops::pocket(
                                     &rg,
                                     ops::Cut {
@@ -3358,7 +3369,7 @@ impl Cam {
                             }
                             if !skipped.is_empty() {
                                 self.warnings.push(format!(
-                                    "{name}: {} of {total} holes in the section are too small for the {d} mm tool and are left uncut (G4 lists them): {}",
+                                    "{name}: {} of {total} holes in the section are too small for the {d} mm tool (or fit it within 0.001) and are left uncut (G4 lists them): {}",
                                     skipped.len(),
                                     boxes(&skipped)
                                 ));
