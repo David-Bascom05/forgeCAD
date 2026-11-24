@@ -69,6 +69,12 @@ enum Ask {
     StoreFailed(String, String),
     /// The page's word for the status line (a link's file it would not open, say).
     Say(String),
+    /// A link's file waits for the project's files (`?open=`): said, the empty view spinning.
+    Waiting(String),
+    /// The project is in: the link's file opened (project path, as the link named it, `?env=`),
+    /// unless the person opened or made something meanwhile, which is kept and the link said not
+    /// opened.
+    OpenLinked(String, String, Option<String>),
     /// Words for the toolpath simulation (`app_camsim`).
     CamSim(String),
     /// A click on what the shell noted by this name (`app_click`): the tests' hand. The button
@@ -501,6 +507,22 @@ impl Host {
         for a in INBOX.with(|b| std::mem::take(&mut *b.borrow_mut())) {
             match a {
                 Ask::Open(p) => self.gui.open(&p),
+                Ask::Waiting(f) => {
+                    self.gui.shell.status = crate::shell::empty::waiting_words(&f);
+                    self.gui.shell.waiting = Some(f);
+                }
+                Ask::OpenLinked(p, shown, env) => {
+                    self.gui.shell.waiting = None;
+                    if self.gui.shell.name.is_empty() {
+                        self.gui.open(&p);
+                        if env.is_some() {
+                            self.gui.env_asked = env;
+                        }
+                    } else {
+                        self.gui.shell.status =
+                            format!("{shown} not opened: you opened {}", self.gui.shell.name);
+                    }
+                }
                 Ask::SaveAs(p) => self.gui.save_as(&p),
                 Ask::Save => self.gui.fg_save(),
                 Ask::Env(e) => self.gui.env_asked = Some(e),
@@ -1162,6 +1184,19 @@ fn ask(a: Ask) {
 #[wasm_bindgen]
 pub fn app_open(path: String) {
     ask(Ask::Open(path));
+}
+
+/// A link's file waits for the project's files: the status and the empty view say so.
+#[wasm_bindgen]
+pub fn app_waiting(file: String) {
+    ask(Ask::Waiting(file));
+}
+
+/// The project is in: opens the link's file (`path`; `shown` as the link named it; `env` from
+/// `?env=`), unless something was opened or made while it waited.
+#[wasm_bindgen]
+pub fn app_open_linked(path: String, shown: String, env: Option<String>) {
+    ask(Ask::OpenLinked(path, shown, env));
 }
 
 /// Saves the document under this path (File > Save As's answer).

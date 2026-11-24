@@ -26,7 +26,7 @@ pub mod dwgdoc;
 mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
-mod empty;
+pub(crate) mod empty;
 pub mod env;
 pub mod fg;
 pub mod fgasm;
@@ -340,6 +340,9 @@ pub struct Shell {
     pub tab: usize,
     pub name: String,
     pub status: String,
+    /// A link's file the page opens once the project's files are in (`?open=`): the empty view
+    /// says so, with a spinner, until then.
+    pub waiting: Option<String>,
     pub view: ViewState,
     pub out: Vec<Action>,
     /// Where the viewport is, in logical pixels, snapped to device pixels.
@@ -444,6 +447,7 @@ impl Default for Shell {
             theme: theme::DARK,
             tab: 0,
             name: String::new(),
+            waiting: None,
             status: String::new(),
             view: ViewState::default(),
             out: Vec::new(),

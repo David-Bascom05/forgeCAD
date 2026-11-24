@@ -393,6 +393,12 @@ list on main: this branch's new strings add none).
   (Playwright route on /api/bundle): says "Loading project…", and no generation is seen that
   is not certified in full. Before: "flange_cam.fg · 0/5 ops certified" on the way.
   `lib.cjs`'s `page()` takes an optional `prepare(p)` run before the page loads.
+- UX-LEAD's follow-ups: the words name what is coming ("Loading project · opening FILE when
+  it's in", no "…", which §5 keeps for commands that open a dialog); the empty view shows them
+  beside a spinner above Start a part (`shots/page-link-waiting.png`); and what the person opens
+  or makes from the empty view meanwhile is kept: the app, not the page, decides when the files
+  are in (`Ask::OpenLinked`), and says "FILE not opened: you opened NAME". deeplink.cjs covers it
+  (New part during a held load: kept, no machining workspace, the link said not opened).
 
 ## Open (reported, not fixed here)
 

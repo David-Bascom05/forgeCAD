@@ -213,7 +213,7 @@ await home?.load();
 // ?noapp: the files and the kernel only, no canvas (the parity test)
 if (!q.has("noapp")) {
   fc.start_app(undefined, q.get("offscreen") ?? undefined);
-  if (asked) fc.app_say("Loading project…");
+  if (asked) fc.app_waiting(asked);
   else if (q.get("env")) fc.app_env(q.get("env"));
   if (refused) fc.app_say(refused);
 }
@@ -230,8 +230,8 @@ const loaded = (async () => {
   }
   if (q.has("noapp")) return;
   if (asked) {
-    fc.app_open(`${MOUNT}/${asked}`);
-    if (q.get("env")) fc.app_env(q.get("env"));
+    // (what the person opened or made meanwhile is kept: the app says the link's file wasn't)
+    fc.app_open_linked(`${MOUNT}/${asked}`, asked, q.get("env") ?? undefined);
   } else if (!refused) {
     // (a link refused: nothing else opened in its place, the status saying why)
     const first = files().filter((p) => p.endsWith(".fg")).sort()[0];
