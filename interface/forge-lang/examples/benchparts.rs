@@ -125,6 +125,8 @@ fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let arg = |k: usize| args.get(k).map(String::as_str).expect("see the usage above");
     match arg(0) {
+        // the process alone, nothing built: what the speed gate takes off each whole-process count
+        "noop" => {}
         "resolve" => {
             std::hint::black_box(bench(arg(1)));
         }
