@@ -134,6 +134,9 @@ pub struct ToolData<'a> {
     pub coating: &'a str,
     /// The tool as a cantilever out of its holder, where its substrate's modulus is known.
     pub beam: Option<Beam>,
+    /// The op's class and its chip factor against the slot chip, with its source (rough applies
+    /// only below ae = D/2); None: slot or general, or the preset already is the class's.
+    pub class: Option<(&'a str, f64, &'a str)>,
     /// The tool's cutting data for the part's group, and its cite.
     pub preset: Option<(&'a Preset, Option<&'a Cite>)>,
 }
@@ -203,6 +206,10 @@ pub struct Resolved {
     /// feed may move it along the path to hold that chip; false when the user programmed `fz`
     /// or `feed` (used as given, never moved).
     pub held_chip: bool,
+    /// The slot chip before the class factor (NaN: the chip was the user's fz/feed), and the
+    /// class applied, for engagement feed (rough only where a sample's ae < D/2).
+    pub slot_chip: f64,
+    pub class: Option<(String, f64)>,
     /// Material removal rate, cm³/min.
     pub mrr: f64,
     /// The user's own power and torque limits (kW, N·m), as asked: engagement feed holds them
@@ -403,6 +410,7 @@ pub fn milling_on(
     // chip and feed
     let r = (ae.v / d_radial.max(1e-9)).clamp(0.0, 1.0);
     let k = feeds::thinning(r) * ct.sin_kappa;
+    let mut slot_chip = f64::NAN;
     let (chip, fz) = if let Some(f) = ask.feed {
         let fz = f / (n * z);
         (
@@ -437,6 +445,21 @@ pub fn milling_on(
                 Source::Material,
                 format!("group {}: {}", g.group, g.source),
             )
+        };
+        // the op's class against the slot chip (cutting.toml [[op_class]]). A user's chip is
+        // used as given.
+        slot_chip = chip.v;
+        let chip = match tool.class {
+            // a rough chip only where the engagement is measured under 90° (engagement feed, per
+            // sample): the op's static feed also runs entries and moves nobody measured, which
+            // may cut full width, so it keeps the slot chip
+            Some((name, f, src)) if chip.source != Source::User && name != "rough" => Val::new(
+                chip.v * f,
+                "mm",
+                chip.source,
+                format!("{}; ×{f} for a {name} cut ({src})", chip.note),
+            ),
+            _ => chip,
         };
         let fz = if k > 0.0 {
             (chip.v / k).min(THIN_CAP * chip.v)
@@ -770,6 +793,8 @@ pub fn milling_on(
         max_feed,
         feeds: derived,
         held_chip: ask.feed.is_none() && ask.fz.is_none(),
+        slot_chip,
+        class: tool.class.map(|(n, f, _)| (n.to_string(), f)),
         deflection,
         max_power_ask: ask.max_power,
         max_deflection_ask: ask.max_deflection,
@@ -1559,6 +1584,7 @@ mod tests {
             substrate: Substrate::Carbide,
             coating: "",
             beam: None,
+            class: None,
             preset: p,
         }
     }
@@ -2053,5 +2079,44 @@ mod tests {
         // no modulus: not computed
         let r3 = milling(&ask, &tool(None), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
         assert!(r3.deflection.is_nan());
+    }
+
+    /// Op classes: a finish holds 0.75× the slot chip; a rough class is carried (engagement feed
+    /// applies it per sample under 90°) while the static chip stays the slot chip; a user's chip
+    /// is never scaled.
+    #[test]
+    fn op_class_chip_factors() {
+        let g = group();
+        let base = Ask {
+            rpm: Some(8000.0),
+            ae: Some(3.0),
+            ap: Some(5.0),
+            ..Ask::default()
+        };
+        let plain = milling(&base, &tool(None), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        let with = |c: (&'static str, f64)| ToolData {
+            class: Some((c.0, c.1, "test")),
+            ..tool(None)
+        };
+        // rough: the static chip stays the slot chip; the class is carried for engagement feed
+        let rough = milling(&base, &with(("rough", 1.466)), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert_eq!(rough.chip.v, plain.chip.v);
+        assert_eq!(rough.class, Some(("rough".to_string(), 1.466)));
+        assert!((rough.slot_chip - plain.chip.v).abs() < 1e-15);
+        let fin = milling(&base, &with(("finish", 0.75)), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert!((fin.chip.v - 0.75 * plain.chip.v).abs() < 1e-12);
+        let full = Ask {
+            ae: Some(12.7),
+            ..base
+        };
+        let r = milling(&full, &with(("rough", 1.466)), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        let p = milling(&full, &tool(None), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert_eq!(r.chip.v, p.chip.v);
+        let user = Ask {
+            chip: Some(0.05),
+            ..base
+        };
+        let u = milling(&user, &with(("rough", 1.466)), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert_eq!(u.chip.v, 0.05);
     }
 }

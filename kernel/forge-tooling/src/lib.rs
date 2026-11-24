@@ -607,6 +607,8 @@ pub struct Library {
     pub drilling: Vec<feeds::DrillRow>,
     /// Generic tapping speeds per group and substrate.
     pub tapping: Vec<feeds::TapRow>,
+    /// Chip factors per op class (rough, finish) against the slot chip.
+    pub op_classes: Vec<feeds::OpClassData>,
     /// Elastic data per tool substrate (deflection).
     pub substrates: Vec<feeds::SubstrateData>,
     pub vises: Vec<Vise>,
@@ -943,6 +945,9 @@ impl Library {
         for r in tables(&t, "substrate") {
             self.substrates.push(feeds::SubstrateData::from_table(r)?);
         }
+        for r in tables(&t, "op_class") {
+            self.op_classes.push(feeds::OpClassData::from_table(r)?);
+        }
         for r in tables(&t, "tap") {
             self.tapping.push(feeds::TapRow::from_table(r)?);
         }
@@ -1043,6 +1048,10 @@ impl Library {
     /// Elastic data for a substrate ("carbide" | "hss").
     pub fn substrate(&self, name: &str) -> Option<&feeds::SubstrateData> {
         self.substrates.iter().find(|x| x.name == name)
+    }
+    /// The chip factor record of an op class ("rough" | "finish").
+    pub fn op_class(&self, name: &str) -> Option<&feeds::OpClassData> {
+        self.op_classes.iter().find(|x| x.name == name)
     }
     /// Generic tapping speed for a group and substrate ("hss" | "carbide").
     pub fn tapping(&self, group: &str, substrate: &str) -> Option<&feeds::TapRow> {

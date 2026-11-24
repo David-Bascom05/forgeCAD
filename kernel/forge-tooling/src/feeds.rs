@@ -94,7 +94,10 @@ impl Group {
         if mc_range.is_some() {
             required.push("mc_range".into());
         }
-        let (fz_d_rows, fz_rows) = (nums(t, "fz_d_rows").unwrap_or_default(), nums(t, "fz_rows").unwrap_or_default());
+        let (fz_d_rows, fz_rows) = (
+            nums(t, "fz_d_rows").unwrap_or_default(),
+            nums(t, "fz_rows").unwrap_or_default(),
+        );
         if fz_d_rows.len() != fz_rows.len() || fz_d_rows.windows(2).any(|w| w[0] >= w[1]) {
             return Err(LibError::Bad {
                 record: rec.clone(),
@@ -510,6 +513,42 @@ pub fn tip_deflection(f: f64, beam: &Beam) -> f64 {
     let i = |d: f64| std::f64::consts::PI * d.powi(4) / 64.0;
     let (is, i_f) = (i(beam.dcon.max(1e-9)), i(beam.de.max(1e-9)));
     f / (3.0 * beam.e_mpa.max(1e-9)) * ((l.powi(3) - b.powi(3)) / is + b.powi(3) / i_f)
+}
+
+/// An op class's chip relative to the slot chip (cutting.toml `[[op_class]]`, cited): what the
+/// makers' rough and finish columns hold against their slot column for the same tool.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct OpClassData {
+    /// "rough" | "finish".
+    pub name: String,
+    pub chip_factor: f64,
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+impl OpClassData {
+    pub fn from_table(t: &Table) -> Result<OpClassData, LibError> {
+        let name = text(t, "name")
+            .ok_or_else(|| LibError::Missing {
+                record: "[[op_class]]".into(),
+                field: "name",
+                fix: "give `name` (rough | finish)".into(),
+            })?
+            .to_string();
+        let rec = format!("op class `{name}`");
+        let chip_factor = num(t, "chip_factor").ok_or_else(|| LibError::Missing {
+            record: rec.clone(),
+            field: "chip_factor",
+            fix: "give `chip_factor`".into(),
+        })?;
+        let (real, cites) = cite::read(t, &rec, &["chip_factor".to_string()], &["name"])?;
+        Ok(OpClassData {
+            name,
+            chip_factor,
+            real,
+            cites,
+        })
+    }
 }
 
 /// What the engine was asked for.

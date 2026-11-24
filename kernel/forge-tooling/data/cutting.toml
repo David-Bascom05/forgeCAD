@@ -628,3 +628,33 @@ source = "https://cdn.dgisupply.ca/pdf//manufacturers/OSG%20Literature/OSG-A-Bra
 taken = "2026-11-24"
 value = "Aluminium 6061/7075: SFM 70-120 (A-SFT 16505 and A-POT 16515)"
 basis = "the low end of the slower list (70 SFM), held for other HSS cut taps in group N; OSG's are PM-HSS with V coating, a plain HSS tap may want less"
+
+# Op classes: the chip a class holds against the slot chip, for the generic table (a tool's own
+# classed preset is used as given). Derived from the makers' own columns: for each tool and
+# material with a slot row, the chip its rough or finish row produces (fz x radial thinning at
+# its stated ae) over its slot chip; the median over all pairs. Rough applies only below ae = D/2
+# (the makers' rough columns are at 30-50% ae; a full-width cut keeps the slot chip).
+
+[[op_class]]
+name = "rough"
+real = true
+chip_factor = 1.466
+[[op_class.cite]]
+path = "chip_factor"
+status = "estimate"
+source = "verify/feeds-vs-makers (rows.tsv): Harvey and Helical rough vs slot columns, same tool and material"
+taken = "2026-11-24"
+value = "median 1.466 over 345 pairs (10th-90th 1.166-1.833); Harvey 1.167, Helical 1.705"
+basis = "rough-row chip (fz x 2 sqrt(r - r^2) at its stated ae, r = ae/D < 0.5) over the same tool's slot-row chip, median of the cited rows"
+
+[[op_class]]
+name = "finish"
+real = true
+chip_factor = 0.75
+[[op_class.cite]]
+path = "chip_factor"
+status = "estimate"
+source = "verify/feeds-vs-makers (rows.tsv): Harvey and Helical finish vs slot columns, same tool and material"
+taken = "2026-11-24"
+value = "median 0.750 over 378 pairs (10th-90th 0.517-0.934); Harvey 0.750, Helical 0.716"
+basis = "finish-row chip (fz x radial thinning at its stated ae) over the same tool's slot-row chip, median of the cited rows"

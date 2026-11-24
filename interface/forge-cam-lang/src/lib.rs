@@ -2475,10 +2475,25 @@ impl Cam {
             .map(|p| {
                 let samples = schedule_samples(p, &mut map, &prof, &sc);
                 let n = samples.len();
+                // the chip held per sample: a rough class's factor only where the sample's width is
+                // under D/2 (a full-width sample keeps the slot chip)
+                let rough = match &r.class {
+                    Some((n, f)) if n == "rough" && r.slot_chip.is_finite() => Some((r.slot_chip, *f)),
+                    _ => None,
+                };
+                let target = |e: &Option<forge_cam::engage::Engage>| match (rough, e) {
+                    // engaged under 90° (ae < D/2 on a straight cut): the peak chip is thinned
+                    (Some((slot, f)), Some(g)) if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 => {
+                        slot * f
+                    }
+                    (Some((slot, _)), Some(_)) => slot,
+                    _ => sc.fz,
+                };
                 let want = |e: &Option<forge_cam::engage::Engage>| -> (f64, bool) {
+                    let fz0 = target(e);
                     match e {
-                        Some(g) if g.cos_max * sc.cap > 1.0 => (sc.fz / g.cos_max, false),
-                        _ => (sc.cap * sc.fz, true),
+                        Some(g) if g.cos_max * sc.cap > 1.0 => (fz0 / g.cos_max, false),
+                        _ => (sc.cap * fz0, true),
                     }
                 };
                 let mut feed: Vec<(f64, bool)> = Vec::with_capacity(n);
@@ -2718,15 +2733,50 @@ impl Cam {
 
     /// The op's feeds and speeds: the user's (op over tool) over the tool's preset for the
     /// part's group over the group's data, clamped by the machine (forge_tooling::resolve).
-    fn resolve_for(&self, su: usize, ti: usize, ask: &Ask, nominal: (f64, f64)) -> Option<resolve::Resolved> {
+    fn resolve_for(
+        &self,
+        su: usize,
+        ti: usize,
+        kind: &str,
+        ask: &Ask,
+        nominal: (f64, f64),
+    ) -> Option<resolve::Resolved> {
         let group_name = &self.parts[self.setups[su].part].group;
         let g = self.lib.group(group_name);
         let m = self.lib.machine(&self.setups[su].machine).ok()?;
         let t = &self.tools[ti];
-        let preset = t.tool.presets.iter().find(|p| &p.group == group_name).map(|p| {
+        // the op's class: slot for a slot, rough for clearing and facing (by its width), general
+        // for the rest; a tool preset named for the class ("N rough") is taken first, then a
+        // general one, then any for the group; a classed preset carries its class itself
+        let class = match kind {
+            "slot" => "slot",
+            "clear" | "pocket" | "facing" | "contour" => "rough",
+            _ => "general",
+        };
+        let of_group: Vec<&forge_tooling::Preset> =
+            t.tool.presets.iter().filter(|p| &p.group == group_name).collect();
+        let named = |c: &str| {
+            of_group
+                .iter()
+                .copied()
+                .find(|p| p.name.split_whitespace().any(|w| w == c))
+        };
+        let (preset, classed) = match named(class) {
+            Some(p) => (Some(p), true),
+            None => (named("general").or_else(|| of_group.first().copied()), false),
+        };
+        let preset = preset.map(|p| {
             let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
             (p, t.tool.cites.iter().find(|c| c.path == path))
         });
+        let class_rec = if classed || class == "slot" || class == "general" {
+            None
+        } else {
+            self.lib.op_class(class)
+        };
+        let class_src = class_rec
+            .and_then(|c| c.cites.first())
+            .map_or("", |c| c.source.as_str());
         let part = &self.parts[self.setups[su].part];
         let stock = part.stock.as_ref();
         resolve::milling_on(
@@ -2739,6 +2789,7 @@ impl Cam {
                 substrate: feeds::Substrate::of(&t.tool.material),
                 coating: &t.tool.coating,
                 beam: self.beam_of(ti),
+                class: class_rec.map(|c| (c.name.as_str(), c.chip_factor, class_src)),
                 preset,
             },
             g,
@@ -2872,7 +2923,7 @@ impl Cam {
                         arc = Some((rc, rm));
                     }
                 }
-                let mut rs = self.resolve_for(su, ti, &ask, nominal);
+                let mut rs = self.resolve_for(su, ti, kind, &ask, nominal);
                 if let (Some(phi), Some(r)) = (arc_phi, rs.as_mut())
                     && r.ae.source == resolve::Source::Default
                 {

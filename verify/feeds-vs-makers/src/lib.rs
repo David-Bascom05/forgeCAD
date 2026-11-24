@@ -187,6 +187,7 @@ pub fn rows(raw: &Path) -> (Vec<Row>, Skips) {
                             substrate: sub,
                             coating: "",
                             beam: None,
+                            class: None,
                             preset: None,
                         };
                         // with no engagement stated the maker's chip is compared as a slot's

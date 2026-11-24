@@ -98,6 +98,13 @@ centre path, held as the straight cut of the same angle (source `default`, said 
 chip is held at the edge, and the centre is fed r_c/r_m of the edge's feed (plunge, ramp and
 lead-in alike). A user `ae:`/`max_angle:` or programmed `fz:`/`feed:` is used as given.
 
+Op classes (cutting.toml `[[op_class]]`, cited: medians of the makers' own rough and finish
+columns against their slot column for the same tool, verify/feeds-vs-makers): a tool preset named
+for the op's class (`N rough`, `P slot`, ...) is taken first, then a `general` one. With generic
+data, slot and general hold the slot chip; finish holds 0.75× it; rough holds 1.466× it only where
+engagement feed measures a sample engaged under 90° (ae < D/2): the op's static feed, which also
+runs entries and unmeasured moves, keeps the slot chip.
+
 Engagement feed (clear, pocket, contour, slot, facing; not when the user programmed `fz:`/`feed:`):
 TOOLPATH-QUALITY's measurement on the in-process stock gives each FIXED-LENGTH sample (one tool
 diameter) its engaged angle, ap and ae; the feed holds the resolved chip through radial thinning,
