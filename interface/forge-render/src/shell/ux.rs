@@ -133,7 +133,7 @@ pub fn label(key: &str) -> String {
         "apmx" => "Max depth of cut",
         "oal" | "lf" => "Overall length",
         "lu" => "Usable length",
-        "nof" | "z" => "Flutes",
+        "nof" => "Flutes",
         "re" => "Corner radius",
         "sig" => "Point angle",
         "kapr" => "Lead angle",
@@ -233,7 +233,7 @@ impl Source {
             Source::Estimate(_) => t.warn,
             Source::Conflict(_) => t.error,
             Source::Unknown | Source::Uncited => t.ink2,
-            Source::User(_) => Color32::from_rgb(0xB3, 0x8C, 0xF0),
+            Source::User(_) => user_colour(t),
         }
     }
 
@@ -243,6 +243,15 @@ impl Source {
             Source::Unknown => "Not published in any source we read.",
             Source::Uncited => "Given without a source.",
         }
+    }
+}
+
+/// "Yours": violet, lighter on the dark theme, deeper on the light one so it reads on white.
+pub fn user_colour(t: &Theme) -> Color32 {
+    if t.dark {
+        Color32::from_rgb(0xB3, 0x8C, 0xF0)
+    } else {
+        Color32::from_rgb(0x6A, 0x3F, 0xC0)
     }
 }
 
@@ -352,7 +361,9 @@ impl<'a> Sheet<'a> {
                     let (shown, unit) = convert(x, q, self.sys);
                     let resp = ui.add_sized(
                         vec2(self.value_w - 44.0, theme::CONTROL_H),
-                        egui::TextEdit::singleline(buf).align(egui::Align2::RIGHT_CENTER),
+                        egui::TextEdit::singleline(buf)
+                            .id_salt(("ux-sheet", key))
+                            .align(egui::Align2::RIGHT_CENTER),
                     );
                     if !resp.has_focus() && !resp.lost_focus() {
                         *buf = match q {
@@ -439,8 +450,15 @@ impl<'a> Sheet<'a> {
 // ----- empty and loading states ----------------------------------------------------------------
 
 /// An empty list or view (§7): what it is, and the next step as buttons. Returns the index of the
-/// button pressed.
-pub fn empty_state(ui: &mut Ui, t: &Theme, what: &str, hint: &str, actions: &[&str]) -> Option<usize> {
+/// button pressed. Each button's rect goes into `places` as `empty:<label>`, for tests to click.
+pub fn empty_state(
+    ui: &mut Ui,
+    t: &Theme,
+    what: &str,
+    hint: &str,
+    actions: &[&str],
+    places: &mut Vec<(String, egui::Rect)>,
+) -> Option<usize> {
     let mut hit = None;
     ui.vertical_centered(|ui| {
         ui.add_space(theme::S3);
@@ -451,7 +469,9 @@ pub fn empty_state(ui: &mut Ui, t: &Theme, what: &str, hint: &str, actions: &[&s
         ui.add_space(theme::S2);
         ui.horizontal_wrapped(|ui| {
             for (k, a) in actions.iter().enumerate() {
-                if ui.button(*a).clicked() {
+                let b = ui.button(*a);
+                places.push((format!("empty:{a}"), b.rect));
+                if b.clicked() {
                     hit = Some(k);
                 }
             }
@@ -472,7 +492,8 @@ pub fn loading(ui: &mut Ui, t: &Theme, doing: &str) {
 // ----- thumbnails ------------------------------------------------------------------------------
 
 /// A record's thumbnail (§8), drawn from its real geometry by `crate::thumb` the first time `key`
-/// is seen and kept as a texture after that. `key` must change when the geometry does (hash the
+/// is seen and kept as a texture after that (for the session: no eviction, fine for libraries of
+/// a few thousand records at 96 px; add an LRU if that changes). `key` must change when the geometry does (hash the
 /// record). `mesh` is only called on a miss. None geometry draws the kind's ghost icon.
 pub fn thumbnail(
     ui: &mut Ui,
