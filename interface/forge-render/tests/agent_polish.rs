@@ -246,3 +246,28 @@ fn a_long_tool_output_shows_all_of_itself_when_asked() {
     h.step();
     assert!(!h.gui.shell.agent.open.contains("all:t"));
 }
+
+/// The audit's: "+" on an empty chat did nothing and said nothing. Now it's off, and says why;
+/// with a chat, it starts a new one.
+#[test]
+fn new_chat_is_off_on_an_empty_chat_and_starts_one_otherwise() {
+    use forge_render::shell::agent::Entry;
+    let Ok(mut h) = forge_render::gui::Headless::new((1400.0, 860.0), 1.0) else {
+        return;
+    };
+    h.step();
+    assert!(h.click("side:tab:Agent"));
+    h.step();
+    assert!(h.click("agent:new"));
+    h.step();
+    assert!(h.gui.shell.agent.entries.is_empty());
+    assert!(h.gui.shell.agent.out.is_empty(), "nothing asked of the host");
+    h.gui.shell.agent.restore_entries(vec![Entry::Note {
+        text: "an earlier chat".into(),
+        error: false,
+    }]);
+    h.step();
+    assert!(h.click("agent:new"));
+    h.step();
+    assert!(h.gui.shell.agent.entries.is_empty(), "a new chat");
+}

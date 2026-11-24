@@ -1682,18 +1682,34 @@ impl Shell {
             }
         } else if self.agent.tab == SideTab::Agent {
             let r = Rect::from_min_size(pos2(w - 30.0, y + 3.0), vec2(24.0, 24.0));
+            // off, and saying why, when there's nothing to start afresh from or a turn runs
+            let off = if self.agent.running {
+                Some("Stop the turn to start a new chat")
+            } else if self.agent.entries.is_empty()
+                && self.agent.pictures.is_empty()
+                && self.agent.input.trim().is_empty()
+            {
+                Some("This chat is empty")
+            } else {
+                None
+            };
             let resp = ui
                 .interact(r, ui.scope_id().with("agent-new"), Sense::click())
-                .on_hover_text("New chat");
-            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "New chat"));
-            if resp.hovered() {
+                .on_hover_text(off.unwrap_or("New chat: this one stays in Chats"));
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, off.is_none(), "New chat"));
+            if resp.hovered() && off.is_none() {
                 p.rect_filled(r, 4.0, t.hover);
             }
-            let (c, ink) = (r.center(), if resp.hovered() { t.ink } else { t.ink2 });
+            let ink = match (off, resp.hovered()) {
+                (Some(_), _) => t.ink2.gamma_multiply(0.45),
+                (None, true) => t.ink,
+                (None, false) => t.ink2,
+            };
+            let c = r.center();
             p.hline(c.x - 6.0..=c.x + 6.0, c.y, Stroke::new(1.5, ink));
             p.vline(c.x, c.y - 6.0..=c.y + 6.0, Stroke::new(1.5, ink));
             self.note("agent:new", r);
-            if resp.clicked() {
+            if resp.clicked() && off.is_none() {
                 self.agent.new_chat();
             }
         }
@@ -3662,7 +3678,21 @@ impl Shell {
                 || marks > 0
                 || self.agent.attach_view
                 || !self.agent.pictures.is_empty());
-        let s_resp = ui.interact(sr, ui.scope_id().with("agent-send"), Sense::click());
+        // off, it says why (as the ribbon's buttons do)
+        let why = if can {
+            "Send (Enter)"
+        } else if self.agent.trust_ask.is_some() {
+            "Answer the question above first"
+        } else if self.agent.voice.busy() {
+            "Wait for the dictation to finish"
+        } else if self.agent.markup.sending {
+            "The markup is still being sent"
+        } else {
+            "Type a request first"
+        };
+        let s_resp = ui
+            .interact(sr, ui.scope_id().with("agent-send"), Sense::click())
+            .on_hover_text(why);
         s_resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, can, word));
         let fill = if can {
             t.focus.gamma_multiply(if s_resp.hovered() { 1.0 } else { 0.85 })
