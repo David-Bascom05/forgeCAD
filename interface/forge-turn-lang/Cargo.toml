@@ -1,0 +1,16 @@
+[package]
+name = "forge-turn-lang"
+description = "The machining document for lathes: turning in .fg (`forgecad cam`), its reply forgecad.cam/1"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-lang = { path = "../forge-lang" }
+forge-agent = { path = "../forge-agent" }
+forge-turn = { path = "../../kernel/forge-turn" }
+forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
+
+[lints]
+workspace = true
