@@ -113,6 +113,22 @@ reached from the page are covered by the twiggy check above, not by the lint.
 
 ## Open (reported, not fixed here)
 
+- 8. Memory kept by every forge-lang run (a reference cycle), natively too. A long session grows
+  without bound: in the page, ~30 KB per edit of a 137-byte part (16 -> 63 MB over 1500
+  SetParam edits alternating two values; idle and plain rebuilds stay flat). Natively
+  `tools/ui-hunt/leak` (its own workspace): `forge_lang::run` of the same text keeps 5.5 KB per
+  run (11 MB after 2000), `edit::apply_checked_in` 22 KB per edit (44 MB after 2000).
+  Root cause: `eval.rs` `sketch_inner` stores the sketch block's names in `Sk.named`
+  (`Vec<(String, Value)>`); a named entity is `Value::Ent(Ent { sk, .. })` whose `sk` is the same
+  `Rc<RefCell<Sk>>`, so every sketch with a named entity is an Rc cycle and is never freed
+  (massif: the retained heap is all `Sk::finish`'s sketch clones, profiles, `sketch_block`'s
+  values). Confirmed: with `named` emptied the same 2000 runs hold 15 KB, flat.
+  Not fixed here: `named` is read after the run (member access `plan.outline`, `sketch_view`,
+  anchors) and values cross `Eval`s (used files, components), so the fix belongs in how `named`
+  holds its entities (e.g. by id and loop, the `Ent` rebuilt from the sketch at access), and it
+  is on forge-lang's run path, so the bench's app/edit/cli lines need the band (freeing each
+  run's sketches adds deallocation work).
+
 - 6. Agent tab in a page defaults to "Claude Code" and offers the microphone, both desktop only
   (docs/web.md); a send says "operation not supported on this platform". UX decision.
 - 7. Versions under `forgecad web`: the page keeps `.git` in its memory, but the server refuses
