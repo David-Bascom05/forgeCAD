@@ -809,3 +809,55 @@ not run here):
 
 The engineering OK of §9 covers that commit. It is not train-ready on performance (it does not
 yet beat `clear` on our parts). Counsel Q3, Q9 and Q10 stay open.
+
+## 10. Chained at-depth links (question from TOOLPATH-QUALITY, 2026-11-24)
+
+**The case** (cam/quality-adaptive-wip @20f8e1e6): on a deep open level (14.8 mm, Ø6), adaptive
+cuts 33–40% less time than `clear`, close to Bílek's measured −23%. It still loses overall
+(steel: 543.6 s against 468.8 s) because of about 213 retracts per level. The next start is rarely
+in a straight line of sight through cleared air.
+
+**The proposal.** A link made of a short chain of straight moves at depth. Each segment is tested
+as now: the tool disk stays clear of material along it, inside the allowed centres. The chain is
+found by a fixed rule, either:
+- (A) back along the previous pass's own swath to its start, then straight to the next start; or
+- (B) the shortest path on a visibility graph of cleared-region vertices.
+
+**Reading against Celeritive '972 cl.1/17 and '212 cl.1/10/22/26** (§1.2; engineering, not legal
+advice). Both need element (2): *computing transition toolpaths*, each defining a *transition
+area that intersects the cuts*. '972 adds (3), trimming the cuts at those areas. '212 adds (5):
+the milling *removes material from part of a transition area*. That is, the transitions are
+cutting paths made in order to give the links room. The proposal has no such element:
+- No toolpath is computed to make room for links. The links run only through area already
+  cleared by the ordinary passes.
+- No cut is trimmed or altered for a link.
+- No link removes material.
+The remaining argument would be that "the cleared region" is itself a "transition area". It is
+not computed as a transition toolpath, and it does not intersect the cuts as a separate
+construction: it *is* the union of the cuts. On this reading the proposal **avoids** '972 and
+'212. It is the same element the matrix already relied on for single straight links. "Straight
+moves checked against the cleared area" in patents.md §3 covers chains on this reading.
+
+**Conditions:**
+1. **Links never cut.** Every segment's swept disk, plus a margin, is clear of material at the
+   moment the link runs (asserted, as now).
+2. **The link geometry comes only from the existing cleared region and the passes already made.**
+   No new geometry, area or toolpath is built to make links possible. No cut is trimmed, extended
+   or reordered to make a link fit.
+3. **The fixed rule is geometric, not time-based.** Take the chain if one exists within a fixed
+   length cap (for example ≤ c·straight distance + d, with constants in the op's parameters),
+   else retract. Do not compare a link's estimated time with a retract's estimated time.
+   SolidCAM's pending US 2025/0284264 claims choosing the link kind by estimated time; pending
+   claims can change, and a fixed geometric cap stays clear of a time comparison.
+4. **Prefer (A).** It is deterministic and trivially clear, since the swath was just cut. It is
+   also the at-depth twin of the retract return already accepted in §9. (B) is acceptable if it
+   is deterministic (exact comparisons, a fixed tie-break, native = wasm).
+5. **The §9 winding tests stay** (`path_winds_round_nothing`), with links included. A visibility
+   chain that goes round an island must fail them, and is then refused for a retract.
+
+**Prior art for staying down in cleared area.** Fusion's documented "keep tool down" with a
+maximum stay-down distance (fusion-benchmark.md); FreeCAD Adaptive's `IsClearPath` /
+`ResolveLinkPath` (2018, opensource-oracles.md §1.1).
+
+**Verdict: OK to build (engineering, not legal),** with conditions 1–5. Counsel Q10 (liability)
+is unchanged.
