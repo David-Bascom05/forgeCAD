@@ -1,16 +1,16 @@
-# haas-umc-750 head (unpublished sizes, conservative)
+# haas-umc-750 head (measured on Haas's model)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
 shared ax = 381
 shared ay = 254
 shared nz = 611
-shared nr = 94
-shared nh = 159
-shared x0 = 192
-shared y0 = 65
-shared z0 = 770
-shared lx = 378
-shared ly = 608
-shared lz = 419
+shared nr = 69
+shared nh = 44
+shared x0 = 203
+shared y0 = -34
+shared z0 = 655
+shared lx = 356
+shared ly = 540
+shared lz = 1487
 
 sketch plan(on: offset(xy, z0)) {
   outline = rect(corner: (x0, y0), size: (lx, ly))

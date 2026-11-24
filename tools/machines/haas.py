@@ -19,6 +19,25 @@ FACTS = os.path.join(ROOT, "research/cam/machines/haas/machinetoolindex-2026-11-
 OUT = os.path.join(ROOT, "kernel/forge-machine/data/machines/haas.toml")
 PARTS = os.path.join(ROOT, "kernel/forge-machine/parts/haas")
 TAKEN = "2026-11-23"
+# Haas's own solid models (provided by the repo owner, 2026-11-24), split, placed in each record's
+# frame and decimated into kernel/forge-machine/data/models/haas/<machine> by
+# tools/machines/import_haas.py; sizes below were measured on those meshes in the record's frame.
+MODEL_TAKEN = "2026-11-24"
+MODEL_SRC = {
+    "haas-vf-2": "Haas solid model VF-2_STEP__1_2023.step (kernel/forge-machine/data/models/haas/haas-vf-2)",
+    "haas-umc-750": "Haas solid model rpl_modular_umc-750_09-2026 1.STEP (kernel/forge-machine/data/models/haas/haas-umc-750)",
+}
+# measured: the spindle axis (x, y) at home where the model stands at home (the VF-2's does: its nose
+# face is 609.6 mm over the table, the published 610), the nose (radius, height over the nose face),
+# the head housing above it, and a table-table's tilt axis height, cradle and supports
+MODEL = {
+    "haas-vf-2": dict(spindle_xy=(381.0, 211.6), nose=(70.0, 70.0), housing=([176, 96], [700, 674, 1070]),
+                      table=([-674, -201, -210], [674, 201, 0])),
+    "haas-umc-750": dict(nose=(70.0, 45.0), housing=([202, -35], [560, 507, 2143]), pivot_z=51.2,
+                         cradle=([-225, -470, -360], [225, 370, 10]),
+                         supports={"l": ([-160, -560, -360], [160, -470, 120]),
+                                   "r": ([-270, 370, -320], [270, 675, 310])}),
+}
 # Records whose own bodies can meet within published travel (tests/collide.rs pins those contacts):
 # they cite `zones` unknown (train 4b, d6d9c62d).
 ZONES_UNPUBLISHED = {"haas-umc-750", "haas-st-10", "haas-st-20", "haas-st-30", "haas-st-10y", "haas-st-20y",
@@ -268,8 +287,11 @@ def vmc(r, kind_note, changer_note=""):
     assert re.search(r"mm\)$", r.f("Table Size")), r.f("Table Size")
     rapid = mm_per_min(r.f("Rapid Traverse Rate"))
     feed = mm_per_min(r.f("Max Cutting Feedrate")) if r.has("Max Cutting Feedrate") else rapid
-    # spindle over the table centre at mid-travel; at home (0, 0, 0) it is at +x/2, +y/2
-    ax, ay = tx / 2, ty / 2
+    # spindle over the table centre at mid-travel; at home (0, 0, 0) it is at +x/2, +y/2 (or as
+    # Haas's model has it)
+    ax, ay = MODEL.get(r.name, {}).get("spindle_xy", (tx / 2, ty / 2))
+    centred = CENTRED if "spindle_xy" not in MODEL.get(r.name, {}) else (
+        f"measured on {MODEL_SRC.get(r.name)} at home: ({ax:g}, {ay:g})")
     table(r, "machine", name=r.name, kind="vmc3", control="haas", real=True, length_joint="Z",
           coolants=["flood"], clearance=1.0,
           source=r.url + " (restating haascnc.com; see the cites)", taken=TAKEN,
@@ -308,7 +330,7 @@ def vmc(r, kind_note, changer_note=""):
           interface=r.f("Spindle Taper").split("/")[0].strip())
     r.pub("spindle.S1.rpm", "Max Spindle Speed", note=MIN_RPM)
     r.pub("spindle.S1.nose", "Spindle Nose to Table (max)", "Spindle Nose to Table (min)",
-          note="nose height at Z = 0 published (max = min + Z travel); x, y: " + CENTRED)
+          note="nose height at Z = 0 published (max = min + Z travel); x, y: " + centred)
     if tool_len and tool_dia:
         r.pub("spindle.S1.max", "Max Tool Length", "Max Tool Diameter (full magazine)")
     else:
@@ -322,28 +344,41 @@ def vmc(r, kind_note, changer_note=""):
         r.pub("changer.max_tool_kg", "Max Tool Weight")
     table(r, "machine.mount", name="spindle", kind="tool", link="Z", at=nose, dir=[0, 0, -1])
     r.pub("mount.spindle.at", "Spindle Nose to Table (max)",
-          note="gauge point taken at the spindle nose face (the taper gauge line is a few mm inside: unmodelled); x, y: " + CENTRED)
+          note="gauge point taken at the spindle nose face (the taper gauge line is a few mm inside: unmodelled); x, y: " + centred)
     table(r, "machine.mount", name="table", kind="part", link="X", at=[0, 0, 0], dir=[0, 0, 1], xdir=[1, 0, 0])
     r.pub("mount.table.at", "Table Size", note="the table top centre is the frame origin")
     # bodies
     th = 90.0
     lo, hi = [-tl / 2, -tw / 2, -th], [tl / 2, tw / 2, 0.0]
+    mdl = MODEL.get(r.name, {})
+    if "table" in mdl:
+        lo, hi = [float(x) for x in mdl["table"][0]], [float(x) for x in mdl["table"][1]]
     slot = (0, 0, tl, 16, 14)
     body(r, "table", "X", [("box", lo, hi)],
          fg_box(f"{r.name} table: {tl:g} x {tw:g} published, thickness estimated; one T-slot", *shrink_box(lo, hi), cut=slot),
          status="published", source=r.url, value=f"Table Size: {r.f('Table Size')}",
          basis="")
-    r.cite("body.table", "estimate", basis=f"thickness {th:g} mm unpublished (only the top surface and outline matter for tool collisions)")
+    if "table" in mdl:
+        r.cite("body.table", "published", source=MODEL_SRC[r.name], taken=MODEL_TAKEN,
+               value=f"table casting with its drive bracket: {lo} .. {hi} mm, measured on the model")
+    else:
+        r.cite("body.table", "estimate", basis=f"thickness {th:g} mm unpublished (only the top surface and outline matter for tool collisions)")
     nr, nh = 95.0, 160.0
     hb_lo = [ax - 190, ay - 190, nmax + nh]
     hb_hi = [ax + 190, ay + 420, nmax + nh + 420]
+    if "housing" in mdl:
+        nr, nh = mdl["nose"]
+        hb_lo = [float(mdl["housing"][0][0]), float(mdl["housing"][0][1]), nmax + nh]
+        hb_hi = [float(x) for x in mdl["housing"][1]]
     body(r, "head", "Z", [("cyl", [ax, ay, nmax], [0, 0, 1], nr, nh), ("box", hb_lo, hb_hi)],
-         fg_head(f"{r.name} head: spindle nose cylinder and housing (unpublished sizes, conservative)",
+         fg_head(f"{r.name} head: spindle nose cylinder and housing" + (" (measured on Haas's model)" if "housing" in mdl else " (unpublished sizes, conservative)"),
                  ax, ay, nmax + 1, nr - 1, nh - 1, [hb_lo[0] + 1, hb_lo[1] + 1, hb_lo[2]], [hb_hi[0] - 1, hb_hi[1] - 1, hb_hi[2] - 1]),
-         status="unknown",
+         **(dict(status="published", source=MODEL_SRC[r.name], taken=MODEL_TAKEN,
+                 value=f"nose r {nr:g} x {nh:g} mm and housing {hb_lo} .. {hb_hi} mm, measured on the model")
+            if "housing" in mdl else dict(status="unknown",
          basis=(f"no head dimensions published: nose cylinder r {nr:g} mm x {nh:g} mm and a housing "
                 f"{hb_hi[0]-hb_lo[0]:g} x {hb_hi[1]-hb_lo[1]:g} x {hb_hi[2]-hb_lo[2]:g} mm chosen larger than a 40-taper nose "
-                "(errs large: a short tool deep in a pocket may report a hit the real nose would clear)"))
+                "(errs large: a short tool deep in a pocket may report a hit the real nose would clear)"))))
 
 
 def umc(r):
@@ -389,7 +424,8 @@ def umc(r):
         r.cite(f"joint.{n}.rapid", "conflict", source=UK_UMC750, value="Rapids on X/Y/Z: 1200 in/min (30.5 m/min)",
                note=f"Haas UK lists 1200 ipm; the cited page (restating haascnc.com, verified 2026-10-02) lists 900 ipm. The record holds 900 ipm = {rapid:g} mm/min (current listing; slower rapids give longer, not shorter, time estimates)")
         r.pub(f"joint.{n}.max_feed", "Max Cutting Feedrate")
-    pivot_z = -150.0
+    mdl = MODEL.get(r.name, {})
+    pivot_z = mdl.get("pivot_z", -150.0)
     table(r, "machine.joint", name="B", parent="base", side="table", type="rotary", axis=[0, -1, 0],
           pivot=[0, 0, pivot_z], range=[blo, bhi], home=0, rapid=brate, max_feed=brate, tcp=True)
     r.pub("joint.B.range", "B Axis Travel")
@@ -400,9 +436,14 @@ def umc(r):
         r.cite("joint.B.range", "published", source=UK_UMC750, value="B Axis - Tilt Travel: +120 to -35")
     r.pub("joint.B.rapid", "B Axis Max Speed", note="50 deg/s = 3000 deg/min")
     r.cite("joint.B.max_feed", "unknown", basis="no rotary feed limit published; taken equal to the rapid (errs permissive)")
-    r.cite("joint.B.pivot", "unknown",
-           basis=(f"the tilt axis height under the platter is unpublished (Haas sets it per machine as MRZP, settings 254-257 / 300-305); "
-                  f"{-pivot_z:g} mm below the platter top is a stand-in. Collision verdicts at B != 0 depend on it"))
+    if "pivot_z" in mdl:
+        r.cite("joint.B.pivot", "published", source=MODEL_SRC[r.name], taken=MODEL_TAKEN,
+               value=f"the B shaft's axis {pivot_z:g} mm above the platter top, measured on the model",
+               note="a machine's own MRZP (settings 254-257 / 300-305) is the value to probe and use")
+    else:
+        r.cite("joint.B.pivot", "unknown",
+               basis=(f"the tilt axis height under the platter is unpublished (Haas sets it per machine as MRZP, settings 254-257 / 300-305); "
+                      f"{-pivot_z:g} mm below the platter top is a stand-in. Collision verdicts at B != 0 depend on it"))
     r.cite("joint.B.axis", "estimate", basis="see machine.kinematics; the sign (+B direction) is UNKNOWN, table convention of docs/cam-machine.md")
     table(r, "machine.joint", name="C", parent="B", side="table", type="rotary", axis=[0, 0, -1], pivot=[0, 0, 0],
           range=[-360, 360], home=0, rapid=crate, max_feed=crate, cyclic=True, tcp=True)
@@ -442,11 +483,25 @@ def umc(r):
          fg_cyl_z(f"{r.name} platter: {pd:g} mm published, 60 mm thick (estimate)", 0, 0, -59, pr - 1, 58, bore=20),
          ignore=["cradle"], status="published", source=r.url, value=f"Platter Diameter: {r.f('Platter Diameter')}")
     r.cite("body.platter", "estimate", basis="platter thickness 60 mm unpublished")
-    cl, ch = [-(pr + 60), -(pr + 20), pivot_z - 90], [pr + 60, pr + 20, -60]
-    body(r, "cradle", "B", [("box", cl, ch)], fg_box(f"{r.name} trunnion cradle (unpublished, conservative)", *shrink_box(cl, ch)),
-         ignore=["platter", "support-l", "support-r"], status="unknown",
-         basis="cradle size unpublished: a box under the platter, wider than it by 60 mm a side, down to 90 mm under the tilt axis (stand-in)")
+    msrc = dict(status="published", source=MODEL_SRC.get(r.name, ""), taken=MODEL_TAKEN)
+    if "cradle" in mdl:
+        cl, ch = [float(x) for x in mdl["cradle"][0]], [float(x) for x in mdl["cradle"][1]]
+        body(r, "cradle", "B", [("box", cl, ch)], fg_box(f"{r.name} trunnion cradle (measured on Haas's model)", *shrink_box(cl, ch)),
+             ignore=["platter", "support-l", "support-r"], **msrc,
+             value=f"the cradle hung under the platter between its B shaft and drive: {cl} .. {ch} mm at B = 0, measured on the model")
+    else:
+        cl, ch = [-(pr + 60), -(pr + 20), pivot_z - 90], [pr + 60, pr + 20, -60]
+        body(r, "cradle", "B", [("box", cl, ch)], fg_box(f"{r.name} trunnion cradle (unpublished, conservative)", *shrink_box(cl, ch)),
+             ignore=["platter", "support-l", "support-r"], status="unknown",
+             basis="cradle size unpublished: a box under the platter, wider than it by 60 mm a side, down to 90 mm under the tilt axis (stand-in)")
     for side, s in (("l", -1), ("r", 1)):
+        if "supports" in mdl:
+            lo_, hi_ = [float(x) for x in mdl["supports"][side][0]], [float(x) for x in mdl["supports"][side][1]]
+            body(r, f"support-{side}", "base", [("box", lo_, hi_)],
+                 fg_box(f"{r.name} trunnion support {side} (measured on Haas's model)", *shrink_box(lo_, hi_)),
+                 ignore=["cradle"], **msrc,
+                 value=f"the {'shaft-side support tower (base casting)' if side == 'l' else 'B drive housing'}: {lo_} .. {hi_} mm, measured on the model")
+            continue
         y0 = s * (pr + 20)
         lo_, hi_ = [-160, min(y0, y0 + s * 140), pivot_z - 400], [160, max(y0, y0 + s * 140), 40]
         body(r, f"support-{side}", "base", [("box", lo_, hi_)],
@@ -455,10 +510,20 @@ def umc(r):
              basis="trunnion supports unpublished: 140 mm thick boxes at the ends of the B axis, to 40 mm above the platter top (stand-in)")
     nr, nh = 95.0, 160.0
     hb_lo, hb_hi = [ax - 190, ay - 190, nmax + nh], [ax + 190, ay + 420, nmax + nh + 420]
-    body(r, "head", "Z", [("cyl", [ax, ay, nmax], [0, 0, 1], nr, nh), ("box", hb_lo, hb_hi)],
-         fg_head(f"{r.name} head (unpublished sizes, conservative)", ax, ay, nmax + 1, nr - 1, nh - 1,
-                 [hb_lo[0] + 1, hb_lo[1] + 1, hb_lo[2]], [hb_hi[0] - 1, hb_hi[1] - 1, hb_hi[2] - 1]),
-         status="unknown", basis="no head dimensions published; the VMC head stand-in (errs large)")
+    if "housing" in mdl:
+        nr, nh = mdl["nose"]
+        hb_lo = [float(mdl["housing"][0][0]), float(mdl["housing"][0][1]), nmax + nh]
+        hb_hi = [float(x) for x in mdl["housing"][1]]
+        body(r, "head", "Z", [("cyl", [ax, ay, nmax], [0, 0, 1], nr, nh), ("box", hb_lo, hb_hi)],
+             fg_head(f"{r.name} head (measured on Haas's model)", ax, ay, nmax + 1, nr - 1, nh - 1,
+                     [hb_lo[0] + 1, hb_lo[1] + 1, hb_lo[2]], [hb_hi[0] - 1, hb_hi[1] - 1, hb_hi[2] - 1]),
+             **msrc, value=(f"nose r {nr:g} x {nh:g} mm and housing with its Z ram {hb_lo} .. {hb_hi} mm, measured on "
+                            "the model (its head moved to the record's home: the model stands at Z 319 mm below it)"))
+    else:
+        body(r, "head", "Z", [("cyl", [ax, ay, nmax], [0, 0, 1], nr, nh), ("box", hb_lo, hb_hi)],
+             fg_head(f"{r.name} head (unpublished sizes, conservative)", ax, ay, nmax + 1, nr - 1, nh - 1,
+                     [hb_lo[0] + 1, hb_lo[1] + 1, hb_lo[2]], [hb_hi[0] - 1, hb_hi[1] - 1, hb_hi[2] - 1]),
+             status="unknown", basis="no head dimensions published; the VMC head stand-in (errs large)")
 
 
 def frame_bodies(r, kind):
