@@ -180,6 +180,10 @@ pub struct Check {
     /// A distance failing against a body whose envelope is an estimate erring large (a real
     /// press's beams, with no published geometry): a refusal, not a proven collision.
     pub estimate: bool,
+    /// Near (David): a distance proven at least `bound` (= `value`), within this resolution of
+    /// the limit but not proven at or past it. Not a pass (a pass is proven at the limit); a
+    /// mild warning, so it does not block a plan.
+    pub near: Option<f64>,
 }
 
 impl Check {
@@ -214,7 +218,19 @@ impl Check {
             phase: None,
             unchecked: None,
             estimate: false,
+            near: None,
         }
+    }
+
+    /// A distance proven at least `lower`, within `res` of `limit` but not proven at it: Near.
+    pub fn near(rule: Rule, lower: f64, limit: f64, res: f64) -> Check {
+        let mut c = Check::rule(rule, lower, limit, false);
+        c.pass = false;
+        c.severity = Severity::Warning;
+        c.certified = false;
+        c.bound = Some(lower);
+        c.near = Some(res);
+        c
     }
 }
 
@@ -951,6 +967,8 @@ impl<'a> StepCtx<'a> {
             _ => 0,
         };
         let mut lowest = (f64::INFINITY, f64::INFINITY, String::new());
+        // the least proven lower bound of all, and against what: under the limit, a Near
+        let mut least = (f64::INFINITY, String::new());
         // the pairs, nearest first by their whole bound, so a measured distance cuts the rest short
         let mut pairs: Vec<(f64, &Element, &Piece)> = Vec::new();
         for el in &els {
@@ -1061,6 +1079,9 @@ impl<'a> StepCtx<'a> {
                             lowest = (lower, upper, el.name.clone());
                         }
                         lowest.0 = lowest.0.min(lower);
+                        if lower < least.0 {
+                            least = (lower, el.name.clone());
+                        }
                         continue;
                     }
                     Verdict::Hit { d, q, at } => (true, d, Some(q), Some(at)),
@@ -1120,6 +1141,13 @@ impl<'a> StepCtx<'a> {
         for (k, w) in worst.into_iter().enumerate() {
             match w {
                 Some(c) => out.push(c),
+                // every distance proven within the resolution of the limit, one not at it: Near
+                None if k == slot(main) && least.0 < limit => {
+                    let mut c = Check::near(main, least.0, limit, res);
+                    c.tool = Some(least.1.clone());
+                    c.phase = Some(phase);
+                    out.push(c);
+                }
                 None if k == slot(main) => {
                     let mut c = Check::rule(main, lowest.1.min(1e9), limit, false);
                     c.bound = Some(lowest.0.min(1e9));
@@ -1167,6 +1195,8 @@ impl<'a> StepCtx<'a> {
             _ => None,
         };
         let mut lowest = (f64::INFINITY, f64::INFINITY);
+        // the least proven lower bound of every pair (the bound; under the limit, a Near)
+        let mut least = f64::INFINITY;
         let movers: Vec<&Piece> = self.pieces.iter().filter(|p| p.side != Side::A).collect();
         for mv in &movers {
             for st in self.pieces.iter().filter(|p| p.side != Side::J) {
@@ -1203,6 +1233,7 @@ impl<'a> StepCtx<'a> {
                         if upper < lowest.1 {
                             lowest = (lower, upper);
                         }
+                        least = least.min(lower);
                     }
                     v => {
                         let mut c = Check::rule(Rule::SelfCollision, 0.0, limit, false);
@@ -1231,8 +1262,13 @@ impl<'a> StepCtx<'a> {
                 }
             }
         }
+        if least < limit {
+            let mut c = Check::near(Rule::SelfCollision, least, limit, res);
+            c.phase = Some(Phase::Bend);
+            return c;
+        }
         let mut c = Check::rule(Rule::SelfCollision, lowest.1.min(1e9), limit, false);
-        c.bound = Some(lowest.0.min(1e9));
+        c.bound = Some(least.min(1e9));
         c.pass = true;
         c.phase = Some(Phase::Bend);
         c

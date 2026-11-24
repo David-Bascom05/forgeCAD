@@ -1567,6 +1567,9 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                         (look::PASS, "pass")
                     } else if c.unchecked.is_some() {
                         (look::MUTED, "not checked")
+                    } else if c.near.is_some() {
+                        // proven within the resolution of the limit, not at it (David): mild
+                        (look::WARN.gamma_multiply(0.75), "≈ clear")
                     } else if c.severity == fb::Severity::Warning {
                         (look::WARN, "warning")
                     } else if c.undecided {
@@ -1578,6 +1581,12 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     // it was against
                     let why = match (&c.unchecked, &c.tool) {
                         (Some(u), _) => format!("not checked: {u} unknown"),
+                        _ if c.near.is_some() => format!(
+                            "Within the simulation's resolution ({}) of the clearance: at least {} proven, not proven at {}",
+                            cards::rule_value(c.rule, c.near.unwrap_or(0.0)),
+                            cards::rule_value(c.rule, c.value),
+                            cards::rule_value(c.rule, c.limit)
+                        ),
                         (None, Some(x)) => format!("against {}", cards::body_words(cat, x)),
                         _ => String::new(),
                     };

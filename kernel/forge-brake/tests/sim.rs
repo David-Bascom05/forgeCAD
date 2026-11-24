@@ -443,6 +443,28 @@ fn clearances_just_pass_and_just_fail() {
     let mut t = tl.clone();
     t.clearance = lower - 0.01;
     assert!(measure(&t).pass);
+    // between a limit that passes and one a real point is under (halved till then): proven
+    // within the resolution of the limit, not at it, and no point under it: Near (David), a mild
+    // warning, not a pass
+    let (mut lo, mut hi) = (lower - 0.01, upper + 0.01);
+    let mut c = measure(&t);
+    for _ in 0..40 {
+        t.clearance = 0.5 * (lo + hi);
+        c = measure(&t);
+        match (c.pass, c.near) {
+            (_, Some(_)) => break,
+            (true, None) => lo = t.clearance,
+            (false, None) => hi = c.value.min(t.clearance),
+        }
+    }
+    assert!(
+        !c.pass
+            && c.near.is_some()
+            && c.severity == forge_brake::Severity::Warning
+            && c.bound
+                .is_some_and(|b| b < t.clearance && b >= t.clearance - c.near.unwrap()),
+        "{c:?}"
+    );
     t.clearance = upper + 0.01;
     let c = measure(&t);
     assert!(!c.pass && c.value < t.clearance && c.certified, "{c:?}");
