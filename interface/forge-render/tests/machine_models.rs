@@ -91,6 +91,12 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
     let stl = downloads.join("VF2 table.stl");
     std::fs::write(&stl, box_stl([0.0; 3], [size[0] * 1.05, size[1], size[2]])).unwrap();
 
+    // the user's note is required
+    let e = m
+        .attach_model(Some("table".into()), stl.to_str().unwrap())
+        .unwrap_err();
+    assert!(e.contains("Haas download, my licence"), "{e}");
+    m.model_from = "Haas download, my licence".into();
     let msg = m
         .attach_model(Some("table".into()), stl.to_str().unwrap())
         .unwrap();
@@ -160,7 +166,34 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
     m2.user = Some(user.clone());
     m2.reload_catalog();
     m2.pick_record("haas-vf-2").unwrap();
-    assert_eq!(m2.models, vec![md]);
+    assert_eq!(m2.models, vec![md.clone()]);
+    assert_eq!(m2.models[0].from, "Haas download, my licence");
+
+    // a whole-machine download in two parts, split onto the table and the head: each part then
+    // moves with its body's link
+    let two = format!(
+        "{}{}",
+        box_stl([0.0; 3], [36.0, 14.0, 3.5]),
+        box_stl([10.0, 4.0, 20.0], [20.0, 10.0, 30.0])
+    );
+    std::fs::write(downloads.join("VF-2 whole.stl"), two).unwrap();
+    m2.model_from = "Haas download, my licence".into();
+    let msg = m2
+        .attach_model(None, downloads.join("VF-2 whole.stl").to_str().unwrap())
+        .unwrap();
+    assert!(msg.contains("2 separate parts"), "{msg}");
+    let i = m2.models.iter().position(|x| x.body.is_none()).unwrap();
+    m2.open_split(i).unwrap();
+    let (_, sizes, to) = m2.split.as_mut().unwrap();
+    assert_eq!(sizes.len(), 2);
+    assert!((sizes[0].0[0] - 36.0 * 25.4).abs() < 1e-6, "{sizes:?}");
+    to[0] = Some("table".into());
+    to[1] = Some("head".into());
+    let msg = m2.apply_split().unwrap();
+    assert!(msg.contains("table") && msg.contains("head"), "{msg}");
+    assert_eq!(m2.models.len(), 2, "the table's earlier model is replaced");
+    assert!(m2.models.iter().all(|x| x.body.is_some() && x.scale == 25.4));
+    assert!(!kept.join("VF2_table.stl").exists());
     m2.models.clear();
     m2.models_changed();
     assert!(!kept.join("VF2_table.stl").exists());

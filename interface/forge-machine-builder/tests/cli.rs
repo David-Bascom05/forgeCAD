@@ -185,3 +185,145 @@ fn dates() {
     assert_eq!(cli::date_of_days(20_780), "2026-11-23");
     assert_eq!(cli::date_of_days(11_016), "2000-02-29");
 }
+
+/// `machine model ...`: a "downloaded" whole-machine STL (two separate parts, in inches) attached
+/// with the user's licence note, split so its parts follow haas-vf-2's table and head, checked,
+/// listed and removed; nothing written into the project; an empty note and an X_T refused.
+#[test]
+fn model_attach_split_check_list_remove() {
+    use forge_machine_builder::model_files::Piece;
+    let root = tmp("models");
+    let e = env(&root);
+    std::fs::create_dir_all(root.join("proj")).unwrap();
+    let cube = |lo: [f64; 3], hi: [f64; 3]| {
+        let c =
+            |k: usize| -> [f64; 3] { std::array::from_fn(|a| if k >> a & 1 == 1 { hi[a] } else { lo[a] }) };
+        let faces = [
+            [0, 2, 3, 1],
+            [4, 5, 7, 6],
+            [0, 1, 5, 4],
+            [2, 6, 7, 3],
+            [0, 4, 6, 2],
+            [1, 3, 7, 5],
+        ];
+        Piece {
+            pos: (0..8).map(c).collect(),
+            tri: faces
+                .iter()
+                .flat_map(|f| [[f[0], f[1], f[2]], [f[0], f[2], f[3]]])
+                .collect(),
+        }
+    };
+    // a 36 x 14 x 3.5 in table and a smaller head well above it, in one file
+    let stl = Piece::join(&[
+        cube([0.0; 3], [36.0, 14.0, 3.5]),
+        cube([10.0, 4.0, 20.0], [20.0, 10.0, 30.0]),
+    ]);
+    let dl = root.join("downloads");
+    std::fs::create_dir_all(&dl).unwrap();
+    std::fs::write(dl.join("VF-2.stl"), stl.to_stl("download")).unwrap();
+    let file = dl.join("VF-2.stl");
+    let file = file.to_str().unwrap();
+
+    let o = run(&e, &["model", "attach", "haas-vf-2", file, "--from", " "]);
+    assert_eq!(o.code, 1);
+    assert!(o.err.contains("Haas download, my licence"), "{}", o.err);
+    let o = run(
+        &e,
+        &[
+            "model",
+            "attach",
+            "haas-vf-2",
+            file,
+            "--from",
+            "Haas download, my licence",
+        ],
+    );
+    assert_eq!(o.code, 0, "{}", o.err);
+    assert!(
+        o.out.contains("inches") && o.out.contains("2 separate parts"),
+        "{}",
+        o.out
+    );
+    let kept = root.join("user/models/haas-vf-2");
+    assert!(kept.join("VF-2.stl").is_file());
+    assert!(!root.join("proj/cam").exists(), "nothing in the project");
+
+    // its parts, largest first; then the table's and the head's
+    let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl"]);
+    assert!(
+        o.out.starts_with("part 1: 12 triangles, 36.0 x 14.0 x 3.5"),
+        "{}",
+        o.out
+    );
+    let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl", "table", "nope"]);
+    assert_eq!(o.code, 1);
+    assert!(o.err.contains("no body `nope`"), "{}", o.err);
+    let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl", "table", "head"]);
+    assert_eq!(o.code, 0, "{}", o.err);
+    assert!(!kept.join("VF-2.stl").exists(), "the whole file goes once split");
+    let o = run(&e, &["model", "list", "haas-vf-2", "--json"]);
+    assert!(o.out.contains("\"file\":\"VF-2-table.stl\",\"body\":\"table\",\"from\":\"Haas download, my licence\",\"scale\":25.4"), "{}", o.out);
+    assert!(o.out.contains("\"body\":\"head\""), "{}", o.out);
+
+    // checked against the envelopes: placed for the whole machine, they need not fit each body
+    let o = run(&e, &["model", "check", "haas-vf-2"]);
+    assert!(o.out.contains("VF-2-table.stl (table): "), "{}", o.out);
+    // a model given its own offset and scale
+    let o = run(&e, &["model", "remove", "haas-vf-2", "VF-2-head.stl"]);
+    assert_eq!(o.code, 0, "{}", o.err);
+    assert!(!kept.join("VF-2-head.stl").exists());
+    std::fs::write(dl.join("head.stl"), cube([0.0; 3], [10.0; 3]).to_stl("h")).unwrap();
+    let o = run(
+        &e,
+        &[
+            "model",
+            "attach",
+            "haas-vf-2",
+            dl.join("head.stl").to_str().unwrap(),
+            "--body",
+            "head",
+            "--from",
+            "my own drawing",
+            "--scale",
+            "1",
+            "--rotate",
+            "0,0,90",
+            "--offset",
+            "1,2,3",
+        ],
+    );
+    assert_eq!(o.code, 0, "{}", o.err);
+    let o = run(&e, &["model", "list", "haas-vf-2", "--json"]);
+    assert!(o.out.contains("\"file\":\"head.stl\",\"body\":\"head\",\"from\":\"my own drawing\",\"scale\":1,\"rotate\":[0,0,90],\"offset\":[1,2,3]"), "{}", o.out);
+    let o = run(
+        &e,
+        &[
+            "model",
+            "attach",
+            "haas-vf-2",
+            dl.join("head.stl").to_str().unwrap(),
+            "--body",
+            "head",
+            "--from",
+            "x",
+        ],
+    );
+    assert_eq!(o.code, 1, "one model per body");
+
+    std::fs::write(dl.join("vf2.x_t"), "**PART1;").unwrap();
+    let o = run(
+        &e,
+        &[
+            "model",
+            "attach",
+            "haas-vf-2",
+            dl.join("vf2.x_t").to_str().unwrap(),
+            "--from",
+            "x",
+        ],
+    );
+    assert_eq!(o.code, 1);
+    assert!(o.err.contains("STEP"), "{}", o.err);
+    let _ = std::fs::remove_dir_all(&root);
+}
