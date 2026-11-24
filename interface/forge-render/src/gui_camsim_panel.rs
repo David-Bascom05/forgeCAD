@@ -707,7 +707,7 @@ fn source(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                 )
             },
             format!(
-                "{} body pairs checked through the motion: {} contacts, {} violations",
+                "{} body pairs (machine, tool, workholding) checked through the motion: {} contacts, {} violations; the tool against the stock is the certified checker's",
                 r.contacts.pairs_checked,
                 r.contacts.contacts.len(),
                 r.tl.violations.len()

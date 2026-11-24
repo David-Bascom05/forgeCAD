@@ -329,35 +329,15 @@ fn the_flanges_posted_program_on_its_machine() {
     for (k, sp) in mv.tl.ops.iter().enumerate() {
         assert!(sp.end > sp.first, "op {k} ({}) not in the program", sp.name);
     }
-    // the stock bottom sits on the table (the stated placement) and the contour goes to -0.5:
-    // the cutter enters the table, and the machine run says so
-    assert!(sim.setups[0].stock.min[2].abs() < 1e-9);
+    // with the stock 3 below the part (CAM-CORE's fix), nothing hits: no body of the machine
+    // or the workholding meets the tool (a drill breaking through may come within the
+    // clearance of the table: a `near`, said)
     assert!(
-        m.contacts
-            .contacts
-            .iter()
-            .any(|c| c.a == "table" && c.b.contains("cutter")),
+        m.contacts.contacts.iter().all(|c| !matches!(c.verdict, forge_machine::collide::Verdict::Hit { .. })),
         "{:?}",
-        m.contacts.contacts.first()
+        m.contacts.contacts.iter().find(|c| matches!(c.verdict, forge_machine::collide::Verdict::Hit { .. }))
     );
-    assert!(mv.markers.iter().any(|k| k.rule == "machine_collision"));
-    // the table hits are where the table is: at or below the stock's bottom (z 0), in the
-    // stock's footprint grown by the cutter
-    let st = sim.setups[0].stock;
-    for k in mv.markers.iter().filter(|k| k.text.contains("hits table")) {
-        assert!(k.at[2] <= 1e-6, "{:?}", k.at);
-        assert!(k.at[0] >= st.min[0] - 6.0 && k.at[0] <= st.max[0] + 6.0, "{:?}", k.at);
-    }
-    // T12 is loaded where T1 stood (M06 with no retract before it): its first rapid starts
-    // inside the stock; the check flags it (line 394, N3930), and the stock shows it below
-    let stock_lines: Vec<usize> = m
-        .contacts
-        .contacts
-        .iter()
-        .filter(|c| c.a == "stock" || c.b == "stock")
-        .map(|c| c.line)
-        .collect();
-    assert!(stock_lines.contains(&394), "{stock_lines:?}");
+    assert!(mv.markers.iter().all(|k| k.verdict != "fail"), "{:?}", mv.markers.first());
     // played as the source: the machine's time, the same stock at the end
     let end_tp = {
         let total = sim.tl.total;
@@ -374,8 +354,8 @@ fn the_flanges_posted_program_on_its_machine() {
         .zip(&end_tp.hi)
         .filter(|(a, b)| (**a - **b).abs() > 1e-3)
         .count();
-    // the same but where that rapid went through the boss
-    assert!(diff * 20 < end_tp.hi.len(), "{diff} columns differ");
+    // the same stock: the posted code does what the toolpath says
+    assert!(diff * 1000 < end_tp.hi.len(), "{diff} columns differ");
     // and back
     sim.set_source(None).unwrap();
     assert!(sim.machine().is_none());

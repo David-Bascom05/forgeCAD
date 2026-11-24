@@ -98,7 +98,8 @@ pub struct MachineRun {
     pub control: forge_machine::gcode::Control,
     pub tl: forge_machine::sim::Timeline,
     pub contacts: forge_machine::collide::Report,
-    /// The stock and workholding as the check took them (part frame on the machine).
+    /// The workholding as the check took it (part frame on the machine); the stock is left
+    /// to the certified checker (it changes as it is cut).
     pub work: Vec<forge_machine::collide::CBody>,
 }
 
@@ -257,15 +258,10 @@ impl Cam {
         };
         setup.wcs = vec![(54, wcs.clone())];
         let tl = sim::simulate(&text, &setup).map_err(|e| e.to_string())?;
-        let mut work = vec![collide::part_body(
-            &setup,
-            "stock",
-            &[forge_machine::def::Prim::Box {
-                min: mv(s.stock.min),
-                max: mv(s.stock.max),
-            }],
-            collide::Role::Stock,
-        )];
+        // the workholding only: the stock changes as it is cut, and its box would call every
+        // rapid over a cleared region a hit; the tool against the in-process stock is the
+        // certified checker's (G2, G3), not this one's
+        let mut work = vec![];
         if let Some(f) = &s.fixture {
             for (name, a, b) in f.boxes() {
                 work.push(collide::part_body(
