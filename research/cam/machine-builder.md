@@ -167,3 +167,15 @@ part's renderer and scene, restore on close).
 - app: headless (native) screenshots of the workspace per template, jogging into a collision, the
   validation panel; the same in the browser build (Playwright); under
   research/cam/machine-builder/.
+
+## 7. Known issue: browser shading of the machine's bodies
+
+In the browser build (Chromium, SwiftShader WebGPU, `web/tests/machine_builder.cjs`) the machine's
+bodies are drawn with the right shapes and poses but unlit (black, no edges, no view cube), while
+the part before the builder opens is shaded normally, and the native build (lavapipe Vulkan,
+`tests/machine_builder.rs`) draws the same meshes shaded with edges and the hit in red. No WebGPU
+error reaches the console. Tried without effect: edge segments in every mesh (no empty
+storage binding), the view set up as `show_loaded` does (`theme_view`, `ao`). Cause UNKNOWN. On a
+real GPU browser: not tried (none here). Everything else works in the page: the template, jog,
+live contact (status), check, save to the project folder through the page's storage, and the
+native CLI listing the saved machine.

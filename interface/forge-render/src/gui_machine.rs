@@ -37,6 +37,8 @@ struct Build {
     nrm: Vec<[f32; 3]>,
     tri: Vec<[u32; 3]>,
     faces: Vec<FaceRange>,
+    /// Edge polylines: drawn as the part's edges (and a WebGPU binding is never empty).
+    edges: Vec<Vec<[f32; 3]>>,
 }
 
 impl Build {
@@ -82,6 +84,22 @@ fn add_prim(b: &mut Build, p: &Prim) {
             b.quad([c(2), c(6), c(7), c(3)], [0.0, 1.0, 0.0]);
             b.quad([c(0), c(4), c(6), c(2)], [-1.0, 0.0, 0.0]);
             b.quad([c(1), c(3), c(7), c(5)], [1.0, 0.0, 0.0]);
+            for (i, j) in [
+                (0, 1),
+                (2, 3),
+                (4, 5),
+                (6, 7),
+                (0, 2),
+                (1, 3),
+                (4, 6),
+                (5, 7),
+                (0, 4),
+                (1, 5),
+                (2, 6),
+                (3, 7),
+            ] {
+                b.edges.push(vec![c(i), c(j)]);
+            }
         }
         Prim::Cyl { base, axis, r, h } => {
             let a = kin::scale(*axis, 1.0 / kin::norm(*axis));
@@ -115,6 +133,9 @@ fn add_prim(b: &mut Build, p: &Prim) {
                 b.nrm.extend_from_slice(&[n0, n1, n1, n0]);
                 b.tri.push([bi, bi + 1, bi + 2]);
                 b.tri.push([bi, bi + 2, bi + 3]);
+            }
+            for z in [0.0, *h] {
+                b.edges.push((0..=N).map(|k| at(k, z).0).collect());
             }
             for (z, s) in [(0.0, -1.0), (*h, 1.0)] {
                 let n = f3(kin::scale(a, s));
@@ -159,6 +180,28 @@ pub fn body_mesh(prims: &[Prim]) -> PartMesh {
         }
     }
     lod.faces = b.faces;
+    for (e, poly) in b.edges.iter().enumerate() {
+        let first = (lod.segments.len() / crate::mesh::SEGMENT) as u32;
+        for w in poly.windows(2) {
+            for (p, n) in [(w[0], [crate::mesh::ALWAYS, 0]), (w[1], [0, 0])] {
+                for v in p {
+                    lod.segments.extend_from_slice(&v.to_le_bytes());
+                }
+                lod.segments.extend_from_slice(&n[0].to_le_bytes());
+                lod.segments.extend_from_slice(&n[1].to_le_bytes());
+            }
+        }
+        lod.edges.push(crate::mesh::EdgeRange {
+            edge: e as u32,
+            first,
+            count: poly.len() as u32 - 1,
+            start: 0,
+            end: 0,
+            start_at: poly[0],
+            end_at: poly[poly.len() - 1],
+        });
+    }
+    lod.fins = (lod.segments.len() / crate::mesh::SEGMENT) as u32;
     let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
     for p in &b.pos {
         for k in 0..3 {
@@ -246,7 +289,10 @@ impl Gui {
                 .collect();
             if meshes.is_empty() {
                 // a scene needs a part: an empty mesh at the origin
-                meshes.push(body_mesh(&[]));
+                meshes.push(body_mesh(&[Prim::Box {
+                    min: [-0.001; 3],
+                    max: [0.001; 3],
+                }]));
             }
             let info = crate::render::part_info(&meshes);
             let placements: Vec<Placement> = (0..meshes.len())
@@ -260,7 +306,7 @@ impl Gui {
                 .collect();
             let mut scene = Scene::new(&info, placements);
             scene.set_explode(0.0);
-            let renderer = Renderer::new(
+            let mut renderer = Renderer::new(
                 self.device.clone(),
                 self.queue.clone(),
                 self.adapter.clone(),
@@ -269,13 +315,14 @@ impl Gui {
                 &meshes,
                 &scene,
             );
+            // as a part's view is set up (show_loaded)
+            self.theme_view(&mut renderer);
             match &mut self.view {
                 Some(v) => {
                     let mut renderer = renderer;
                     renderer.resize(v.size);
                     renderer.style = v.renderer.style;
-                    renderer.look = v.renderer.look.clone();
-                    renderer.back_colour = v.renderer.back_colour;
+                    renderer.ao = v.renderer.ao;
                     renderer.set_tints(&scene);
                     let fresh = self.mach.taken.is_none() && !self.mach.made_view;
                     let old_r = std::mem::replace(&mut v.renderer, renderer);
@@ -337,7 +384,7 @@ impl Gui {
 impl Gui {
     /// The Machine Builder by words, for the page and tests (`app_machine`): `open`, `close`,
     /// `pick NAME`, `template KIND NAME`, `clone NAME`, `jog JOINT VALUE`, `tab NAME`, `check`,
-    /// `save user|project`. The answer goes to the status line, prefixed `machine:`.
+    /// `save user|project`. The answer goes to the status line as `machine: [CMD] ANSWER`.
     pub fn machine_command(&mut self, cmd: &str) -> Result<String, String> {
         use crate::shell::machine::Tab;
         use forge_machine_builder::catalog::Level;
@@ -402,11 +449,17 @@ impl Gui {
                 Ok(())
             }
             ["save", level] => {
-                m.level = if *level == "project" { Level::Project } else { Level::User };
+                m.level = if *level == "project" {
+                    Level::Project
+                } else {
+                    Level::User
+                };
                 m.save();
                 Ok(())
             }
-            _ => Err(format!("`{cmd}`: open | close | pick NAME | template KIND NAME | clone NAME | jog JOINT VALUE | tab NAME | check | save user|project")),
+            _ => Err(format!(
+                "`{cmd}`: open | close | pick NAME | template KIND NAME | clone NAME | jog JOINT VALUE | tab NAME | check | save user|project"
+            )),
         };
         let say = match got {
             Ok(()) => {
@@ -418,14 +471,24 @@ impl Gui {
                 format!(
                     "{}{}{}{}",
                     m.def.as_ref().map_or("none".to_string(), |d| d.name.clone()),
-                    m.problem.as_ref().map_or(String::new(), |p| format!(" refused: {p}")),
-                    if live.is_empty() { String::new() } else { format!(" contact: {}", live.join(", ")) },
-                    if m.message.is_empty() { String::new() } else { format!(" | {}", m.message) }
+                    m.problem
+                        .as_ref()
+                        .map_or(String::new(), |p| format!(" refused: {p}")),
+                    if live.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" contact: {}", live.join(", "))
+                    },
+                    if m.message.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" | {}", m.message)
+                    }
                 )
             }
             Err(e) => e,
         };
-        self.shell.status = format!("machine: {say}");
+        self.shell.status = format!("machine: [{cmd}] {say}");
         Ok(say)
     }
 }
