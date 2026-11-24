@@ -545,6 +545,12 @@ impl IntCurve {
     }
 }
 
+thread_local! {
+    /// Set by a boolean's careful retry: two tori are traced in steps of a quarter of the smaller
+    /// tube's radius (`trace_marched`), not the region's 64th. Off, the trace is as it was.
+    pub static FINE_TUBES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// Every branch of the intersection of two surfaces inside `region`.
 ///
 /// Seeds come from an octree over the region: a cell can hold no point of
@@ -568,7 +574,16 @@ pub fn trace_marched(a: &Surface, b: &Surface, region: Box3, scale: f64) -> Opti
         Surface::Procedural(p) => p.feature(),
         _ => f64::INFINITY,
     };
-    let leaf = ((size / 64.0).min(feature(a)).min(feature(b)) * scale).max(10.0 * tol::LINEAR);
+    // two tori, on the careful retry (FINE_TUBES): a loop round a tube is about its minor radius across, and two such loops cross
+    // where the surfaces touch (equal O-rings side by side): steps of the region's 64th (1.5 mm
+    // round a tube of 1.77) jumped from one to the other at the crossing, and a seed's cell had the
+    // other loop wholly inside it (skipped as traced). A quarter of the smaller tube's radius keeps
+    // a covered cell well inside a loop (for every torus pair, on every try, it cost guard 3.5%)
+    let tubes = match (a, b) {
+        (Surface::Torus(s), Surface::Torus(t)) if FINE_TUBES.with(|k| k.get()) => 0.25 * s.minor.min(t.minor),
+        _ => f64::INFINITY,
+    };
+    let leaf = ((size / 64.0).min(feature(a)).min(feature(b)).min(tubes) * scale).max(10.0 * tol::LINEAR);
     let step = leaf * 0.5;
     let mut seeds: Vec<Point3> = Vec::new();
     // cells are cubes, each held as its circumscribed sphere: the root is the cube on the

@@ -1122,7 +1122,9 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, tried: &mut Tried) ->
                 careful: true,
                 ..Rung::PLAIN
             };
+            let fine = forge_geom::intcurve::FINE_TUBES.with(|k| k.replace(true));
             let r = plan_retried(a, b, op, scratch, careful, tried);
+            forge_geom::intcurve::FINE_TUBES.with(|k| k.set(fine));
             decided!(log::rung("CAREFUL", &r));
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
@@ -3665,6 +3667,7 @@ fn trim_in(
                 &bodies[0].face(faces[0]).surface,
                 &bodies[1].face(faces[1]).surface,
             ],
+            rung.careful,
         )
     };
     if branches[0] && !closed && !matches!(curve, Curve::Line(_)) {
@@ -5328,7 +5331,7 @@ pub(crate) fn branches_meet(curves: &[(Curve, Contact)]) -> bool {
 /// there, so the point is found from the normals, not from the curve's own tangent; a crossing
 /// is told from a smooth dip in the angle by the angle's falling off linearly into it.
 /// - https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/
-fn touch_params(c: &Curve, range: Interval, s: [&Surface; 2]) -> Vec<f64> {
+fn touch_params(c: &Curve, range: Interval, s: [&Surface; 2], every: bool) -> Vec<f64> {
     if s.iter()
         .any(|x| matches!(x, Surface::Plane(_) | Surface::Procedural(_)))
     {
@@ -5348,9 +5351,12 @@ fn touch_params(c: &Curve, range: Interval, s: [&Surface; 2]) -> Vec<f64> {
         _ => return Vec::new(),
     };
     let sin = |t: f64| sin_at(c.eval(t));
-    // chain point i sits at t = i
+    // chain point i sits at t = i; on the careful retry (`every`) every one is asked: the angle
+    // falls off linearly into a touch, so one point of every few can straddle it above the
+    // cut-off (an O-ring's tangent point between two of every 7th point, 1.5 mm apart round a
+    // tube of 1.77)
     let n = k.pts.len();
-    let stride = (n / 12).max(1);
+    let stride = if every { 1 } else { (n / 12).max(1) };
     let v: Vec<f64> = k.pts.iter().step_by(stride).map(|&p| sin_at(p)).collect();
     let mut out = Vec::new();
     for (m, i) in (0..n).step_by(stride).enumerate() {

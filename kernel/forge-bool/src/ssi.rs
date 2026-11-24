@@ -350,6 +350,12 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     if forge_geom::screw::misses(a, b, region) {
         return SurfaceSurface::Empty;
     }
+    // (two tori traced finely, on the careful retry: not the coarse answer kept under the same key)
+    if matches!((a, b), (Surface::Torus(_), Surface::Torus(_)))
+        && forge_geom::intcurve::FINE_TUBES.with(|k| k.get())
+    {
+        return search(a, b, region);
+    }
     let key = met(a, b, &region);
     if let Some(r) = MET.with(|m| m.borrow().0.get(&key).map(|e| e.2.clone())) {
         return r;

@@ -55,3 +55,69 @@ fn quarter_box(b: &Body) {
 fn a_box_on_a_torus_rings_seams() {
     quarter_box(&one("torus_ring_12faces.step"));
 }
+
+/// `b` moved by `d`, as forge-stress moves its copies (names salted, so the two do not share any).
+fn moved(b: &Body, d: forge_math::Vec3) -> Body {
+    use forge_geom::{CurveGeom, SurfaceGeom};
+    let f = Frame::WORLD.with_origin(Point3::ORIGIN + d);
+    let salt = forge_topo::Name::feature(0x5eed);
+    let mut c = b.clone();
+    for v in &mut c.vertices {
+        v.point = f.point_to_world(v.point);
+        v.name = v.name.salted(salt);
+    }
+    for e in &mut c.edges {
+        e.curve = e.curve.transformed(&f);
+        e.name = e.name.salted(salt);
+        e.bbox = Default::default();
+    }
+    for x in &mut c.faces {
+        x.surface = x.surface.transformed(&f);
+        x.name = x.name.salted(salt);
+        x.bbox = Default::default();
+        x.query = Default::default();
+    }
+    c.hulls = Default::default();
+    c
+}
+
+/// forge-stress's union_over2 and int_over2: with a copy moved 0.4137 of its width along x. Each
+/// answer checks, and union + intersection = twice the solid.
+fn over_copy(b: &Body) {
+    let w = b.faces_box().x.width();
+    let copy = moved(b, forge_math::Vec3::new(0.4137 * w, 0.0, 0.0));
+    let mut sum = 0.0;
+    for op in [Op::Union, Op::Intersect] {
+        let r = boolean(b, &copy, op, 9000).unwrap_or_else(|e| panic!("{op:?}: {e}"));
+        let p = check(&r);
+        assert!(p.is_empty(), "{op:?}: {p:?}");
+        sum += volume(&r);
+    }
+    let v = 2.0 * volume(b);
+    assert!((sum - v).abs() < 1e-6 * v, "{sum} vs {v}");
+}
+
+/// K004/K005, HRTA6 #14022: an O-ring of 4 torus patches with a copy beside it, overlapping. Two
+/// equal tori side by side are tangent where the plane between them crosses the top and bottom of
+/// the tube, and there the intersection's branches cross. Both ops were refused,
+/// Internal(InconsistentClassification).
+#[test]
+fn an_oring_with_a_copy_over_it() {
+    over_copy(&one("oring_4faces.step"));
+}
+
+/// K006, TRT210 #66296: the same on another O-ring.
+#[test]
+fn another_oring_with_a_copy_over_it() {
+    over_copy(&one("oring_k006.step"));
+}
+
+/// HRTA6 #56170 (167 faces, 18 tori): with a copy over it, main refuses
+/// (InconsistentClassification); once its tori are traced apart (above) the answer fails check
+/// (FaceWrongSide on a cone face). Open: the O-ring fix waits on it, a wrong answer being worse
+/// than a refusal.
+#[test]
+#[ignore = "open: a wrong answer once the tori trace apart"]
+fn a_part_with_tori_with_a_copy_over_it() {
+    over_copy(&one("tori_167faces.step"));
+}
