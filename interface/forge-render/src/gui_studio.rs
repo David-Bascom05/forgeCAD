@@ -93,11 +93,12 @@ pub(super) fn lit(
     }
     for (i, p) in scene.placements.iter().enumerate() {
         let k = p.part as usize;
-        // faint enough that the look under it still shows (the look is what's being changed)
+        // faint enough that the look under it still shows (the look is what's being changed); the
+        // ghost pass draws the far faces too, so layers add up: low per layer
         let a = if st.selected.contains(&k) {
-            75
+            45
         } else if st.hover_row.contains(&k) {
-            35
+            22
         } else {
             continue;
         };
