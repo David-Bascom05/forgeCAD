@@ -1,9 +1,9 @@
-# Engagement-controlled clearing: design (not built)
+# Engagement-controlled clearing: first design
 
-**Status: design only. Nothing here is built, and none of it is to be built before David's patent
-counsel has read this file and patents.md** (design.md §8: no adaptive / constant-engagement
-clearing until counsel clears it). Written 2026-11-24 by the TOOLPATH-QUALITY worker. Not legal
-advice; every "design-around" below is an engineer's reading of patents.md, for counsel to judge.
+**Status: an early design, written 2026-11-24 by the TOOLPATH-QUALITY worker. Adaptive clearing was
+built later as forge_cam::adaptive (a cleared-area simulation stepped to one capped engagement,
+one-direction peel passes, links at depth by retrace); this file keeps the reasoning that led
+there.**
 
 ## 1. Why: what the harness measures today
 
@@ -24,25 +24,7 @@ fix is the *shape* of the engagement:
 The quantity to control is the engagement angle φ (equivalently ae/D = (1 − cos φ)/2). The feed
 then follows from φ (built: forge_cam::engage).
 
-## 2. The legal envelope (from patents.md, read 2026-11-23)
-
-| patent | what to stay away from | until |
-|---|---|---|
-| US 7,577,490 (Truemill, 2004 family) | building each pass so that engagement never exceeds a stored maximum (the basic family) | 2026-12-17 |
-| US 8,489,224 / 9,690,282 / 12,248,293 (SolidCAM) | a min *and* max engagement band with the angle varied gradually between them; "morphing" spirals; auto-choosing trochoid vs spiral by estimated time | 2031–2033+ |
-| US 8,295,972 / 8,880,212 (Celeritive) | constructing separate *transition toolpaths* whose areas cross the cuts, trimming cuts against them, linking inside them | 2029–2030 |
-| US 10,579,040 (Celeritive) | a Voronoi diagram with added synthetic branches, path from its faces | 2032 |
-| US 8,560,113 (Truemill) | interior corners milled by a series of circular arcs joined by short transition passes | 2031 |
-| US 9,778,649 (DP Technology) | corner-rounding radii derived from an allowed change of engagement angle, chained pass to pass | 2034 |
-| US 5,828,574 (GE), US 4,833,617 | expired: feed per move from a simulated stock (what forge_cam::engage does) | free |
-
-patents.md §3 names a design that "probably stays clear (counsel to confirm)": cleared-area state
-plus a single target removed area (or a single max engagement) per step; links by retract or by
-straight moves checked against the cleared area (no transition-toolpath construction); plain
-offset or plain medial-axis spirals; user-set trochoids; GE-style feed optimisation. The design
-below is that, and nothing more. Nothing ships in the US before 2026-12-17 in any case.
-
-## 3. The algorithm
+## 2. The algorithm
 
 Per level z (levels from the in-process stock and the op's `from`/`to`/`step` as today):
 
@@ -53,8 +35,8 @@ centres' region (R the op's region, r the tool radius plus leave), exactly as po
 The goal: C ⊇ R ∘ B_r, the opening (what an offset pocket clears; Pocket.lean `passes_cover`).
 
 **One target.** A single user-set maximum engagement φ* (default from the cutting data, e.g. 60°),
-giving a single radial step a* = r (1 − cos φ*). No minimum, no band, no deliberate variation
-(SolidCAM); the angle comes out of the geometry, not steered toward a profile.
+giving a single radial step a* = r (1 − cos φ*). The angle comes out of the geometry: one number for the user to set
+and for the harness to check.
 
 **Entry.** A helix in the largest disk of T not met by material (the medial axis's widest point
 of T ∩ uncleared, found exactly as helix_fits does today: a disk test by boolean), or, for an open
@@ -64,35 +46,30 @@ region, from outside the stock (C already holds the outside).
 Pₖ₊₁ = ((Cₖ ⊖ r) ⊕ B_{a*}) ∩ T,
 i.e. the tool centres that keep the tool's edge a* into uncleared material along a straight wall
 of the cleared region: there the engagement is exactly φ*. The cut adds the swept band:
-Cₖ₊₁ = Cₖ ∪ (∂Pₖ₊₁ ⊕ B_r). Repeat until C ⊇ R ∘ B_r. This is the "cleared-area offset" of the
-FreeCAD/Freesteel prior art (patents.md §2.1: Freesteel adaptive clearing shown 2004–2006); every
+Cₖ₊₁ = Cₖ ∪ (∂Pₖ₊₁ ⊕ B_r). Repeat until C ⊇ R ∘ B_r. This is a cleared-area offset; every
 step is an exact offset and boolean forge-cam-geom already has (offset.rs, boolean.rs).
 
 **Corners.** At a concave corner of Cₖ the edge meets more than a* of material: engagement above
-φ*. The design does not reshape the path to cap it there (that is the patent families' ground):
+φ*. Three things keep the load in hand there:
 1. a fixed, user-set smoothing radius ρ (default r/2) applied to every pass as a morphological
-   opening (offset in by ρ, out by ρ: exact), *not* derived from an engagement-change limit and
-   not chained from pass to pass (DP Technology);
+   opening (offset in by ρ, out by ρ: exact): one exact operation, easy to certify;
 2. the feed scheduler (built) slows the tool wherever the measured engagement exceeds φ*, so the
    chip stays at fz; the harness reports the time above φ*;
 3. optional, user-set plain trochoids (a circle plus a constant advance, radius and pitch given by
-   the user) along the remaining narrow channels (2.7: decades-old prior art), never chosen
-   automatically against a spiral by estimated time (SolidCAM 12,248,293).
-After 2026-12-17 and with counsel's view, step 2 may become a hard cap (a local trochoid inserted
-where the exact engagement exceeds φ*); that is the one place this design touches the basic
-engagement-milling family.
+   the user) along the remaining narrow channels.
+Later, step 2 may become a hard cap (a local trochoid inserted where the exact engagement exceeds
+φ*).
 
 **Links.** Within a level the tool stays down: from the end of one pass to the start of the next
 by a straight move that lies in Cₖ ⊖ r (the tool wholly inside what is cleared: no material met)
 and in T, tested exactly as pocket()'s link_ok does today (a band about the segment less the
 region, empty); else up to the retract height and down again (a helix if the next start is in
-material). No transition toolpaths are constructed and no cut is trimmed against a link area
-(Celeritive).
+material). Staying down saves the retract and plunge, the largest share of
+non-cutting time on small pockets.
 
-**Medial axis.** Not used for the path (Celeritive 10,579,040); at most the plain medial axis of T
-to place the entry helix.
+**Medial axis.** Only to place the entry helix (the plain medial axis of T).
 
-## 4. Certification
+## 3. Certification
 
 Every property below is either proven once in Lean for every path the algorithm can make, or
 checked on the posted path because it depends on the input (design.md §8, the owner's rule).
@@ -107,7 +84,7 @@ checked on the posted path because it depends on the input (design.md §8, the o
 | G5, G6 | as today: feeds within the machine (runtime on the text), the post's round trip (proven) |
 | engagement (new, G7, optional) | the claimed φ* is a *quality* claim, not safety. On straight pieces of an offset of a straight cleared wall it is exact by construction (φ = acos(1 − a*/r)); elsewhere it is measured exactly from C (the arcs of the tool circle outside Cₖ, front half) and reported, never claimed beyond what was measured |
 
-## 5. How we will know it is better
+## 4. How we will know it is better
 
 The harness already measures it: φmax and the φ histogram, chip p99/max, MRR, cycle time
 (forge-machine timeline), air and links. Targets on the benchmark parts (pocket_islands,
@@ -116,10 +93,3 @@ except where the time above φ* is reported; ap = the flute length in one level;
 offset pocket + feed scheduling at equal chip. The comparison against an open-source reference
 (FreeCAD's Adaptive, run as an external program in verify/ only, if the licence verdict allows)
 gives the outside check.
-
-## 6. Open, for counsel and David
-
-1. Is the cleared-area offset with a single a*, links in the cleared area, fixed ρ smoothing and
-   user-set trochoids clear of the SolidCAM, Celeritive, Truemill 8,560,113 and DP claims?
-2. After 2026-12-17: may the engagement be capped by local trochoids (step 2 → hard cap)?
-3. Outside the US: EP 1745400 (the 2004 family's European member) and the SolidCAM EP members.

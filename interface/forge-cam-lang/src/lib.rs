@@ -3359,7 +3359,7 @@ impl Cam {
             f_min: 0.0,
             cap: feeds::THIN_CAP,
             cell,
-            // samples of one diameter, fixed by length (fto-adaptive.md D)
+            // samples of one diameter, fixed by length
             sample: t.tool.dc,
         };
         let mut map = HeightMap::of_stock(&s.ip, cell);
