@@ -748,6 +748,35 @@ impl Prism {
     }
 }
 
+impl Prism {
+    /// For a vertical plane face (u horizontal, v along ±z) whose trim is not its parameter box
+    /// (an L-shaped wall: `of` gives it no prism), the wall over that box: a prism holding the
+    /// face, so a clearance from it is a clearance from the face (Prism.lean `clearFace_subset`, `wall_hull_mem`);
+    /// nothing else it finds is about the face.
+    pub fn hull_wall(f: &Face) -> Option<Prism> {
+        let Surf::Plane { o, u, v } = f.surf else {
+            return None;
+        };
+        if !(u[2] == 0.0 && v[0] == 0.0 && v[1] == 0.0 && (v[2] == 1.0 || v[2] == -1.0)) {
+            return None;
+        }
+        if !(f.p.lo.is_finite() && f.p.hi.is_finite() && f.q.lo.is_finite() && f.q.hi.is_finite()) {
+            return None;
+        }
+        // the box's corners in space, outward: the section's ends exactly as `of` makes a
+        // wall's (o + p u, the trim's points within the box), the heights rounded outward
+        let a = [o[0] + f.p.lo * u[0], o[1] + f.p.lo * u[1]];
+        let b = [o[0] + f.p.hi * u[0], o[1] + f.p.hi * u[1]];
+        let qz = crate::ival::Ival::pt(o[2]).add(f.q.scale(v[2]));
+        Some(Prism::Wall {
+            sec: Sec::Seg { a, b },
+            z0: qz.lo,
+            z1: qz.hi,
+            gap: 0.0,
+        })
+    }
+}
+
 /// Whether a planar face's trim is exactly its parameter box (four lines along the axes, or none).
 fn rectangular(f: &Face) -> bool {
     match &f.trim {
