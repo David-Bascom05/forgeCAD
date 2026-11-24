@@ -169,3 +169,17 @@ open ForgeLang ForgeLang.Counter
 #print axioms Builtins.extend_conservative
 #print axioms Builtins.weld_conservative
 #print axioms Builtins.weld_not_keywords
+#print axioms Families.lookup_kept
+#print axioms Families.eval_ext_ok
+#print axioms Families.stmt_ext_ok
+#print axioms Families.stmt_new_refused
+#print axioms Families.run_ext_accepted
+#print axioms Families.eval_ext_avoid
+#print axioms Families.run_ext_avoid
+#print axioms Families.cam_conservative
+#print axioms Families.turn_conservative
+#print axioms Families.families_not_keywords
+#print axioms LL1.Documents.milling_doc_accepted
+#print axioms LL1.Documents.turning_doc_accepted
+#print axioms LL1.Documents.assembly_header_accepted
+#print axioms LL1.Documents.header_glued_refused
