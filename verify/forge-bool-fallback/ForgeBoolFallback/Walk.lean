@@ -124,4 +124,51 @@ theorem walk_ne_nil (next : Fin n → Fin n) (fuel : Nat) (used : Fin n → Bool
     (hs : used s = false) : (walk next (fuel + 1) used s).1 ≠ [] := by
   simp [walk, hs]
 
+
+/-!
+## n-ary's `EmptyCycle` on a region with no first half (nary.rs, after `holes_only`/`split_face`)
+
+`regions.into_iter().map(|loops| loops.first().and_then(|l| l.first()).ok_or(EmptyCycle))`. A
+region from `split_face` starts with a cycle of its walk (`walk_ne_nil`). A region from `holes_only`:
+region 0 is the face's own boundary walks then its holes, the others one disk each (a cycle,
+indexed at 0 there, so non-empty). A boundary walk (`Pieces::walks`) is a loop's coedges each
+spread into its edge's pieces, and `edge_split` pushes one piece per kept split and one more for
+the edge's end, so at least one. So given the tool passes `forge_topo::check` (no `FaceNoLoops`,
+no `LoopEmpty`), region 0's first walk is non-empty: **`first_half_of_boundary`**.
+-/
+
+/-- `edge_split`'s pieces: one per kept split, then the last to the edge's end. -/
+def pieces {α : Type} (splits : List α) (last : α) : List α :=
+  splits ++ [last]
+
+theorem pieces_ne_nil {α : Type} (splits : List α) (last : α) : pieces splits last ≠ [] := by
+  simp [pieces]
+
+/-- A loop's walk: each coedge spread into its edge's pieces. -/
+def loopWalk {κ π : Type} (spread : κ → List π) (coedges : List κ) : List π :=
+  coedges.flatMap spread
+
+theorem loopWalk_ne_nil {κ π : Type} (spread : κ → List π) (hs : ∀ c, spread c ≠ [])
+    (coedges : List κ) (hc : coedges ≠ []) : loopWalk spread coedges ≠ [] := by
+  cases coedges with
+  | nil => exact absurd rfl hc
+  | cons c cs =>
+    unfold loopWalk
+    simp only [List.flatMap_cons]
+    intro h
+    exact hs c (List.append_eq_nil_iff.mp h).1
+
+/-- `holes_only`'s region 0: the face's boundary walks, then its holes. Given the face has a loop
+and its first loop a coedge (forge-topo `check`: no `FaceNoLoops`, no `LoopEmpty`) and every edge
+at least one piece, the region's first walk has a first half. -/
+theorem first_half_of_boundary {κ π : Type} (spread : κ → List π) (hs : ∀ c, spread c ≠ [])
+    (loops : List (List κ)) (l0 : List κ) (rest : List (List κ)) (hl : loops = l0 :: rest)
+    (h0 : l0 ≠ []) (holes : List (List π)) :
+    ∃ w h, (loops.map (loopWalk spread) ++ holes).head? = some w ∧ w.head? = some h := by
+  subst hl
+  have hw := loopWalk_ne_nil spread hs l0 h0
+  cases hwe : loopWalk spread l0 with
+  | nil => exact absurd hwe hw
+  | cons h t => exact ⟨h :: t, h, by simp [hwe], rfl⟩
+
 end ForgeBoolFallback.Walk
