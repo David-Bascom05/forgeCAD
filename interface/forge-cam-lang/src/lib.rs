@@ -211,6 +211,178 @@ pub struct ProgramOut {
     pub round_trip: bool,
 }
 
+/// Each built-in's arguments: keywords, and `#0`, `#1`.. for positionals. `named_of` refuses any
+/// other (a typed error naming the nearest); CAM-UI's schema is checked against it, and
+/// research/forge-lang/lean/COVERAGE.md lists it (lang_coverage). A reader of a new keyword adds
+/// it here in the same change.
+pub const ARGS: &[(&str, &[&str])] = &[
+    ("part", &["#0", "group"]),
+    ("machine", &["#0"]),
+    ("tool", &["#0", "t", "stickout", "holder"]),
+    (
+        "setup",
+        &[
+            "#0",
+            "machine",
+            "stock",
+            "origin",
+            "wcs",
+            "at",
+            "tol",
+            "clearance",
+            "clear",
+            "retract",
+            "fixture",
+            "from",
+        ],
+    ),
+    ("facing", &["#0", "tool", "to", "step", "leave_axial"]),
+    (
+        "clear",
+        &[
+            "#0",
+            "tool",
+            "from",
+            "to",
+            "step",
+            "stepover",
+            "leave",
+            "leave_axial",
+            "ramp",
+        ],
+    ),
+    (
+        "contour",
+        &[
+            "#0",
+            "tool",
+            "side",
+            "from",
+            "to",
+            "step",
+            "leave",
+            "leave_axial",
+            "direction",
+            "finish",
+            "finish_step",
+            "spring",
+        ],
+    ),
+    (
+        "pocket",
+        &[
+            "#0",
+            "#1",
+            "tool",
+            "from",
+            "to",
+            "step",
+            "stepover",
+            "leave",
+            "leave_axial",
+            "ramp",
+        ],
+    ),
+    ("drill", &["#0", "#1", "plan"]),
+    ("engrave", &["#0", "#1", "tool", "depth", "step", "from"]),
+    ("slot", &["#0", "#1", "tool", "depth", "step", "from", "ramp"]),
+    ("thread_mill", &["#0", "#1", "tool", "length"]),
+    ("edge_break", &["#0", "tool", "at", "size"]),
+    (
+        "soft_jaw",
+        &[
+            "#0",
+            "blank",
+            "from",
+            "grip",
+            "fit",
+            "tool",
+            "relief",
+            "min_contact",
+        ],
+    ),
+    (
+        "program",
+        &[
+            "#0",
+            "post",
+            "number",
+            "ops",
+            "decimals",
+            "feed_decimals",
+            "coolant",
+            // read by CAM-UI's export (cam/ui-3 export.rs)
+            "file",
+            "ext",
+            "out",
+            "comment",
+            "tools",
+        ],
+    ),
+    ("box", &["margin", "below", "min", "max"]),
+    ("cylinder", &["d", "margin", "below"]),
+    ("tube", &["d", "id", "margin", "below"]),
+    ("solid", &["#0"]),
+    ("vise", &["#0", "across", "clamp", "parallel", "clearance"]),
+];
+
+/// The arguments `fname` takes (None: not a built-in with a list).
+pub fn args_of(fname: &str) -> Option<&'static [&'static str]> {
+    ARGS.iter().find(|(n, _)| *n == fname).map(|(_, a)| *a)
+}
+
+/// Every argument given is one `fname` takes, or the refusal: `UnknownArg`, with the nearest
+/// (by edit distance, within a third of the name) as the fix, else the list.
+fn check_args(fname: &str, m: &BTreeMap<String, V>) -> Result<(), String> {
+    let Some(takes) = args_of(fname) else {
+        return Ok(());
+    };
+    for k in m.keys() {
+        if takes.contains(&k.as_str()) {
+            continue;
+        }
+        if let Some(n) = k.strip_prefix('#') {
+            let most = takes.iter().filter(|t| t.starts_with('#')).count();
+            return Err(format!(
+                "UnknownArg: `{fname}` takes {most} positional argument{} (argument {} is one too many)",
+                if most == 1 { "" } else { "s" },
+                n.parse::<usize>().unwrap_or(0) + 1
+            ));
+        }
+        let named: Vec<&str> = takes.iter().copied().filter(|t| !t.starts_with('#')).collect();
+        let near = named
+            .iter()
+            .map(|t| (edit_distance(k, t), *t))
+            .min()
+            .filter(|(d, t)| *d <= k.len().max(t.len()).div_ceil(3));
+        return Err(match near {
+            Some((_, t)) => {
+                format!("UnknownArg: `{k}` is not an argument of `{fname}` (did you mean `{t}`?)")
+            }
+            None => format!(
+                "UnknownArg: `{k}` is not an argument of `{fname}` (it takes: {})",
+                named.join(", ")
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Levenshtein distance (bytes; the names are ASCII).
+fn edit_distance(a: &str, b: &str) -> usize {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for i in 1..=a.len() {
+        let mut cur = vec![i; b.len() + 1];
+        for j in 1..=b.len() {
+            let sub = prev[j - 1] + usize::from(a[i - 1] != b[j - 1]);
+            cur[j] = sub.min(prev[j] + 1).min(cur[j - 1] + 1);
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
 /// A program's own post options (`program(.., decimals:, feed_decimals:, coolant:)`).
 #[derive(Clone, Copy, Debug, Default)]
 struct PostOpts {
@@ -634,7 +806,7 @@ impl Cam {
                     return Err("a call of something that is not a built-in".into());
                 };
                 if fname == "box" {
-                    let named = self.named(args, env)?;
+                    let named = self.named_of("box", args, env)?;
                     if let Some(m) = named.get("margin").and_then(tuple3) {
                         // `below:`: stock under the part too (it rests on that much)
                         let below = match named.get("below") {
@@ -653,7 +825,7 @@ impl Cam {
                     return Err("box(margin: (x, y, z)) or box(min: (..), max: (..))".into());
                 }
                 if fname == "cylinder" || fname == "tube" {
-                    let a = self.named(args, env)?;
+                    let a = self.named_of(fname, args, env)?;
                     let len = |k: &str| -> Result<Option<f64>, String> {
                         match a.get(k) {
                             None => Ok(None),
@@ -694,14 +866,14 @@ impl Cam {
                     }));
                 }
                 if fname == "solid" {
-                    let a = self.named(args, env)?;
+                    let a = self.named_of("solid", args, env)?;
                     return match a.get("#0") {
                         Some(V::Str(f)) => Ok(V::Stock(StockSpec::Solid(f.clone()))),
                         _ => Err("solid(\"STOCK.fg\"): the stock as its own part file".into()),
                     };
                 }
                 if fname == "vise" {
-                    let a = self.named(args, env)?;
+                    let a = self.named_of("vise", args, env)?;
                     let name = match a.get("#0") {
                         Some(V::Str(s)) => s.clone(),
                         _ => {
@@ -739,6 +911,19 @@ impl Cam {
             }
             _ => return Err("an expression a machining document does not take".into()),
         })
+    }
+
+    /// A built-in's arguments by name (`#0`, `#1`.. for positionals), each one it takes
+    /// (`ARGS`), or the typed refusal naming the nearest.
+    fn named_of(
+        &self,
+        fname: &str,
+        args: &[Arg],
+        env: &BTreeMap<String, V>,
+    ) -> Result<BTreeMap<String, V>, String> {
+        let m = self.named(args, env)?;
+        check_args(fname, &m)?;
+        Ok(m)
     }
 
     fn named(&self, args: &[Arg], env: &BTreeMap<String, V>) -> Result<BTreeMap<String, V>, String> {
@@ -869,7 +1054,7 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
                             }
                         }
                     }
-                    let a = cam.named(args, &local)?;
+                    let a = cam.named_of(fname, args, &local)?;
                     // the kernel's clock: std's Instant panics in a browser
                     let t0 = std::env::var("FORGE_CAM_TIME")
                         .is_ok()
@@ -2625,16 +2810,6 @@ impl Cam {
             posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
-        for k in ["direction", "finish", "finish_step", "spring"] {
-            if a.contains_key(k) && kind != "contour" {
-                return Err(format!("{kind} does not take `{k}:` (contour does)"));
-            }
-        }
-        if a.contains_key("leave_axial") && !matches!(kind, "facing" | "clear" | "contour" | "pocket") {
-            return Err(format!(
-                "{kind} does not take `leave_axial:` (facing, clear, contour and pocket do)"
-            ));
-        }
         let paths: Result<Vec<OpPath>, String> = match kind {
             "drill" => self.plan_holes(su, a, &mut out, &mut voids),
             _ => {

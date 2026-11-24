@@ -91,6 +91,10 @@ plus or minus a length along the setup's up (`to: f.plate.end + 0.5`). In a setu
 (`from:`), the same reference is read in the turned frame. A reference that is not horizontal, or
 in any other argument, is refused.
 
+Every built-in takes the arguments listed for it in forge-cam-lang's `ARGS` (the table above);
+any other name is refused (`UnknownArg`), with the nearest as the fix: `stepovr` is "did you mean
+`stepover`?".
+
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.
 
