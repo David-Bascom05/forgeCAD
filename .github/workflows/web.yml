@@ -130,9 +130,10 @@ jobs:
         with:
           workspaces: interface/forge-render -> target
           save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
-      # the browser build stays warning-free (it broke unseen before: a native-only dependency)
+      # the browser build stays warning-free (it broke unseen before: a native-only dependency),
+      # and calls none of std's that panic or fail in a page (web/clippy/clippy.toml)
       # on push the same build without the lint gate (-D warnings): the cache is the same
-      - run: cargo clippy --lib --locked --target wasm32-unknown-unknown -- ${{ github.event_name != 'push' && '-D warnings' || '' }}
+      - run: CLIPPY_CONF_DIR="$PWD/web/clippy" cargo clippy --lib --locked --target wasm32-unknown-unknown -- ${{ github.event_name != 'push' && '-D warnings' || '' }}
         if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
 
   browser:
@@ -189,6 +190,14 @@ jobs:
         if: matrix.test == 'e2e'
         working-directory: interface/forge-render
         run: node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+      # an idle page draws nothing (a pick's answer is waited for without drawing), and the
+      # paths that reached std's browser panics (Versions, Agent) are clicked through
+      - name: idle and no panics
+        if: matrix.test == 'e2e'
+        working-directory: interface/forge-render
+        run: |
+          node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/nopanic.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)
         if: matrix.test != 'e2e'
         working-directory: interface/forge-render
