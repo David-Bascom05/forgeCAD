@@ -507,11 +507,21 @@ pub fn adaptive(
         // material left (an island's lee, out of reach of passes that way), the reverse, then
         // the two across it, each with its own entries
         let all_cands = cands.clone();
+        // regions (analysis): the cleared parked centres on a grid at r, connected; a start in
+        // the tool's own region is taken before any other
+        let region_on = std::env::var_os("FORGE_REGION").is_some();
+        let (rcg, ro) = (f.r, [lo[0] - 2.0 * f.r, lo[1] - 2.0 * f.r]);
+        let rnx = ((hi[0] - lo[0] + 4.0 * f.r) / rcg).floor() as usize + 1;
+        let rny = ((hi[1] - lo[1] + 4.0 * f.r) / rcg).floor() as usize + 1;
+        let mut rfree = vec![false; rnx * rny];
+        let mut rdirty: Option<[f64; 4]> = Some([f64::NEG_INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::INFINITY]);
+        let mut rseen = 0usize;
         let mut dir_k = 0usize;
         // crumb passes taken back (see CRUMB_STEPS) until a level would be left incomplete
         let mut crumbs_now = std::env::var_os("FORGE_ADAPTIVE_NOCRUMB").is_none();
         // the rounds of sweeps a level has had (each all four directions)
         let mut rounds = 0usize;
+        let order_near = std::env::var_os("FORGE_ORDER_NEAR").is_some();
         let strips_on = std::env::var_os("FORGE_ADAPTIVE_STRIPS").is_some();
         let max_rounds: usize = std::env::var("FORGE_ADAPTIVE_ROUNDS").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
         sweep_dir = {
@@ -595,6 +605,83 @@ pub fn adaptive(
                 .unwrap_or([0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1])]);
             let mut best: Option<([f64; 2], f64, f64)> = None;
             let mut order: Vec<([f64; 2], f64, f64)> = Vec::new();
+            let mut rcomp: Vec<bool> = Vec::new();
+            if region_on && let Some(c) = at.filter(|c| c[2] == z) {
+                // the cut since the last look widens the box to recheck
+                for m in &mv[rseen..] {
+                    if let PMove::Line { to, .. } | PMove::Arc { to, .. } = m {
+                        let b = rdirty.get_or_insert([f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY]);
+                        {
+                            b[0] = b[0].min(to[0]);
+                            b[1] = b[1].min(to[1]);
+                            b[2] = b[2].max(to[0]);
+                            b[3] = b[3].max(to[1]);
+                        }
+                    }
+                }
+                rseen = mv.len();
+                if let Some(b) = rdirty.take() {
+                    let full = b[0] == f64::NEG_INFINITY;
+                    for j in 0..rny {
+                        for i in 0..rnx {
+                            let k = j * rnx + i;
+                            if rfree[k] {
+                                continue;
+                            }
+                            let q = [ro[0] + i as f64 * rcg, ro[1] + j as f64 * rcg];
+                            if !full && (q[0] < b[0] - 2.0 * f.r || q[0] > b[2] + 2.0 * f.r || q[1] < b[1] - 2.0 * f.r || q[1] > b[3] + 2.0 * f.r) {
+                                continue;
+                            }
+                            rfree[k] = f.ok(q[0], q[1]) && !f.disk_has_material(q[0], q[1], z);
+                        }
+                    }
+                }
+                // the tool's region: from the free cells round it, 8-connected
+                rcomp = vec![false; rnx * rny];
+                let ci = ((c[0] - ro[0]) / rcg).round() as i64;
+                let cj = ((c[1] - ro[1]) / rcg).round() as i64;
+                let mut stack: Vec<usize> = Vec::new();
+                for dj in -1..=1 {
+                    for di in -1..=1 {
+                        let (i, j) = (ci + di, cj + dj);
+                        if i >= 0 && j >= 0 && (i as usize) < rnx && (j as usize) < rny {
+                            let k = j as usize * rnx + i as usize;
+                            if rfree[k] && !rcomp[k] {
+                                rcomp[k] = true;
+                                stack.push(k);
+                            }
+                        }
+                    }
+                }
+                while let Some(k) = stack.pop() {
+                    let (i, j) = ((k % rnx) as i64, (k / rnx) as i64);
+                    for dj in -1..=1 {
+                        for di in -1..=1 {
+                            let (a, b) = (i + di, j + dj);
+                            if a >= 0 && b >= 0 && (a as usize) < rnx && (b as usize) < rny {
+                                let kk = b as usize * rnx + a as usize;
+                                if rfree[kk] && !rcomp[kk] {
+                                    rcomp[kk] = true;
+                                    stack.push(kk);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let in_region = |p: [f64; 2]| -> bool {
+                if rcomp.is_empty() {
+                    return true;
+                }
+                let i = ((p[0] - ro[0]) / rcg).round() as i64;
+                let j = ((p[1] - ro[1]) / rcg).round() as i64;
+                (-1..=1).any(|dj| {
+                    (-1..=1).any(|di| {
+                        let (a, b) = (i + di, j + dj);
+                        a >= 0 && b >= 0 && (a as usize) < rnx && (b as usize) < rny && rcomp[b as usize * rnx + a as usize]
+                    })
+                })
+            };
             if entered || open_try {
                 for &p in &cands {
                     if f.disk_has_material(p[0], p[1], z) {
@@ -633,7 +720,10 @@ pub fn adaptive(
                     // across the sweep from one side to the other: the
                     // lowest band of r/2 across the sweep first, the nearest within it
                     let across = (sweep_dir[0] * p[1] - sweep_dir[1] * p[0]) / (0.5 * f.r);
-                    let d = across.floor() * 1e9 + (p[0] - here[0]).powi(2) + (p[1] - here[1]).powi(2);
+                    let d = if in_region(p) { 0.0 } else { 1e15 }
+                        + if order_near { 0.0 } else { across.floor() * 1e9 }
+                        + (p[0] - here[0]).powi(2)
+                        + (p[1] - here[1]).powi(2);
                     if best.is_none_or(|(_, bd, _)| d < bd) {
                         best = Some((p, d, sign));
                     }
