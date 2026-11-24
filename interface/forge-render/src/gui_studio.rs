@@ -116,6 +116,25 @@ impl Gui {
         let mut status = None;
         let lib = st.library();
 
+        // the brush: what's clicked in the view while painting takes its appearance
+        if st.painting
+            && let Some(brush) = st.brush.clone()
+            && !v.nav.selected.is_empty()
+        {
+            for (pl, _) in std::mem::take(&mut v.nav.selected) {
+                if let Some(p) = v.scene.placements.get(pl as usize) {
+                    let k = p.part as usize;
+                    if st.looks.len() <= k {
+                        st.looks.resize(k + 1, None);
+                    }
+                    st.looks[k] = Some(brush.clone());
+                    st.said = format!("{}: {brush}", st.names.get(k).map_or("part", String::as_str));
+                }
+            }
+            st.version += 1;
+            v.dirty = true;
+        }
+
         // the light
         let env_key = (st.light, st.hdri.clone());
         if host.env_key.as_ref() != Some(&env_key) {
@@ -152,29 +171,73 @@ impl Gui {
                 ^ material_name
                     .as_deref()
                     .map_or(0, |n| n.len() as u64 * 0x9E37_79B9),
-            st.version,
+            // the looks themselves, wherever they were changed from
+            st.version ^ {
+                use std::hash::{Hash, Hasher};
+                let mut h = std::collections::hash_map::DefaultHasher::new();
+                st.looks.hash(&mut h);
+                h.finish()
+            },
         );
         if host.scene_key != Some(key) {
-            // an assembly's part by the file of an occurrence of it; one part by the document
+            // an assembly's part by the file of an occurrence of it, its folder its group, its
+            // occurrences counted, its own material; one part by the document
             let mut names: Vec<Option<String>> = vec![None; parts.len()];
+            let mut groups: Vec<String> = vec![String::new(); parts.len()];
+            let mut counts: Vec<usize> = vec![0; parts.len()];
+            let mut own: Vec<Option<String>> = vec![None; parts.len()];
             if let Some((occ, _)) = &self.fg_asm {
                 for o in occ {
                     let Some(pl) = o.placement else { continue };
                     let Some(p) = v.scene.placements.get(pl) else {
                         continue;
                     };
-                    let stem = std::path::Path::new(&o.file)
+                    let k = p.part as usize;
+                    if k >= parts.len() {
+                        continue;
+                    }
+                    let path = std::path::Path::new(&o.file);
+                    let stem = path
                         .file_stem()
                         .map_or_else(|| o.file.clone(), |s| s.to_string_lossy().into_owned());
-                    names.get_mut(p.part as usize).map(|n| n.get_or_insert(stem));
+                    if names[k].is_none() {
+                        names[k] = Some(stem);
+                        groups[k] = path
+                            .parent()
+                            .and_then(|d| d.file_name())
+                            .map(|d| d.to_string_lossy().into_owned())
+                            .unwrap_or_default();
+                        own[k] = o.material.clone();
+                    }
+                    counts[k] += 1;
                 }
             }
+            // one folder for all: no groups
+            if groups.iter().all(|g| *g == groups[0]) {
+                groups.iter_mut().for_each(String::clear);
+            }
+            st.groups = groups;
+            st.counts = counts;
+            if own.iter().all(Option::is_none) {
+                own = vec![material_name.clone(); parts.len()];
+            }
+            let mats_of: Vec<Option<forge_material::Material>> = own
+                .iter()
+                .map(|n| {
+                    n.as_deref().and_then(|n| {
+                        forge_material::Libraries::cached(None)
+                            .find(n)
+                            .map(|m| m.1.clone())
+                    })
+                })
+                .collect();
+            st.own = own;
             st.names = names
                 .into_iter()
                 .enumerate()
                 .map(|(k, n)| {
                     n.unwrap_or_else(|| match (parts.len(), &name) {
-                        (1, n) if !n.is_empty() => n.clone(),
+                        (1, n) if !n.is_empty() => n.strip_suffix(".fg").unwrap_or(n).to_string(),
                         _ => format!("Part {}", k + 1),
                     })
                 })
@@ -198,7 +261,11 @@ impl Gui {
                 } else {
                     Some(tint_bytes(pl.tint))
                 };
-                let b = lib.resolve(look.as_deref(), material.as_ref(), colour);
+                // the part's own material, else the document's
+                let mine = mats_of.get(pl.part as usize).cloned().flatten();
+                let material = mine.as_ref().or(material.as_ref());
+                let colour = if material.is_some() { None } else { colour };
+                let b = lib.resolve(look.as_deref(), material, colour);
                 let m = mats.iter().position(|x| *x == b).unwrap_or_else(|| {
                     mats.push(b);
                     mats.len() - 1

@@ -24,3 +24,19 @@ zinc), check what a part is, then set the light, camera and output.
   own material's look); Ctrl/Shift multi-select → Apply / Reset; a row's chip opens the palette.
 - **Overrides**: only what changed, with Reset.
 - Lighting, Camera, Output fold to one-line summaries.
+
+## Built (after-*.png, same files and size)
+- `shell/studio_model.rs`: the brush (a chip, the name, Paint / Stop), the palette (search; metal and
+  paint open, "Show N more" for the rest; metals' swatches as their F0 under a studio's average
+  light, so they tell apart), the parts' tree (grouped by the part files' folders, collapsed,
+  filterable, `show_rows`; chip, name, count per row; a row's chip opens the palette for it; a
+  swatch dragged onto a row gives it that look; Ctrl/Shift multi-select → Apply / Reset / Clear),
+  Overrides (only those, `show_rows`, × each, Reset all). Lighting, Camera, Output fold to a line.
+- `gui_studio.rs`: a click in the view while painting gives the clicked part the brush's look (the
+  view's own pick, spent); each part's default is its own material (`Occ::material`, from the
+  assembly's part documents); the picture is made again whenever the looks change, however.
+- Frame time (debug build, the tab alone, every group open): 250 parts 0.48 ms, 2,500 parts
+  1.03 ms (`many_parts_keep_the_frame_flat`).
+- Tests: shell::studio_model::tests (tree, filter, multi-select, palette search, frame time);
+  tests/studio_model.rs (a click in the view paints, many parts one look, the filter, the rack's
+  parts keep their own materials).

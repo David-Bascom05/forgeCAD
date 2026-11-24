@@ -47,6 +47,23 @@ pub struct StudioUi {
     pub looks: Vec<Option<String>>,
     /// The parts' names, as the GUI found them.
     pub names: Vec<String>,
+    /// Each part's group (its file's folder; empty: none), its occurrences, its own material.
+    pub groups: Vec<String>,
+    pub counts: Vec<usize>,
+    pub own: Vec<Option<String>>,
+    /// The appearance brush, and whether a click in the view applies it.
+    pub brush: Option<String>,
+    pub painting: bool,
+    /// The palette's search, the parts' filter, the parts chosen (and the last clicked).
+    pub find: String,
+    pub filter: String,
+    pub selected: Vec<usize>,
+    pub anchor: Option<usize>,
+    /// The groups open in the tree; the palette's other families shown.
+    pub open: std::collections::BTreeSet<String>,
+    pub more: bool,
+    /// What the brush last did, for the view's line.
+    pub said: String,
     pub light: usize,
     pub hdri: String,
     pub turn_deg: f32,
@@ -77,6 +94,18 @@ impl Default for StudioUi {
         StudioUi {
             looks: Vec::new(),
             names: Vec::new(),
+            groups: Vec::new(),
+            counts: Vec::new(),
+            own: Vec::new(),
+            brush: None,
+            painting: false,
+            find: String::new(),
+            filter: String::new(),
+            selected: Vec::new(),
+            anchor: None,
+            open: Default::default(),
+            more: false,
+            said: String::new(),
             // the bundled HDRI
             light: 1,
             hdri: String::new(),
@@ -210,8 +239,21 @@ fn signed(v: f32) -> String {
     }
 }
 
+/// A section folded to its one-line summary, open on a click.
+fn fold(ui: &mut Ui, s: &Shell, id: &str, summary: &str, body: impl FnOnce(&mut Ui)) {
+    ui.add_space(2.0);
+    egui::CollapsingHeader::new(
+        RichText::new(summary)
+            .font(super::theme::semi(13.0))
+            .color(s.theme.ink),
+    )
+    .id_salt(id)
+    .default_open(false)
+    .show(ui, body);
+}
+
 /// A heading in the browser.
-fn head(ui: &mut Ui, s: &Shell, text: &str) {
+pub(super) fn head(ui: &mut Ui, s: &Shell, text: &str) {
     ui.add_space(8.0);
     ui.label(
         RichText::new(text)
@@ -230,122 +272,107 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
     egui::ScrollArea::vertical()
         .id_salt("env-render-browser")
         .show(&mut child, |ui| {
-            head(ui, s, "Appearances");
             if st.looks.len() < st.names.len() {
                 st.looks.resize(st.names.len(), None);
             }
-            for (k, name) in st.names.iter().enumerate() {
-                let shown = st.looks[k].clone().unwrap_or_else(|| "Material's own".into());
-                egui::ComboBox::from_id_salt(("studio-look", k))
-                    .selected_text(&shown)
-                    .width(ui.available_width() - 4.0)
-                    .show_ui(ui, |ui| {
-                        if ui
-                            .selectable_label(st.looks[k].is_none(), "Material's own")
-                            .clicked()
-                        {
-                            st.looks[k] = None;
-                        }
-                        let mut family = "";
-                        for a in lib.all() {
-                            if a.family != family {
-                                family = &a.family;
-                                ui.label(RichText::new(family).small().weak());
-                            }
-                            let on = st.looks[k].as_deref() == Some(a.name.as_str());
-                            if ui
-                                .selectable_label(on, &a.name)
-                                .on_hover_text(&a.source)
-                                .clicked()
-                            {
-                                st.looks[k] = Some(a.name.clone());
-                            }
-                        }
-                    })
-                    .response
-                    .on_hover_text(name);
-                ui.label(RichText::new(name).small().weak());
-            }
+            super::studio_model::ui(ui, s, &mut st, &lib);
+            ui.add_space(6.0);
 
-            head(ui, s, "Lighting");
             let lights = lights();
-            egui::ComboBox::from_id_salt("studio-light")
-                .selected_text(&lights[st.light.min(lights.len() - 1)])
-                .show_ui(ui, |ui| {
-                    for (k, l) in lights.iter().enumerate() {
-                        ui.selectable_value(&mut st.light, k, l);
+            let light_name = lights[st.light.min(lights.len() - 1)].clone();
+            fold(
+                ui,
+                s,
+                "studio-fold-light",
+                &format!("Lighting · {light_name}"),
+                |ui| {
+                    egui::ComboBox::from_id_salt("studio-light")
+                        .selected_text(&lights[st.light.min(lights.len() - 1)])
+                        .show_ui(ui, |ui| {
+                            for (k, l) in lights.iter().enumerate() {
+                                ui.selectable_value(&mut st.light, k, l);
+                            }
+                        })
+                        .response
+                        .on_hover_text(
+                            "Poly Haven HDRIs, CC0; all but the bundled one come from tools/fetch-hdri.sh",
+                        );
+                    if st.light == lights.len() - 1 {
+                        ui.horizontal(|ui| {
+                            ui.label("File");
+                            ui.text_edit_singleline(&mut st.hdri)
+                                .on_hover_text("a Radiance .hdr, equirectangular");
+                        });
                     }
-                })
-                .response
-                .on_hover_text(
-                    "Poly Haven HDRIs, CC0; all but the bundled one come from tools/fetch-hdri.sh",
+                    row(ui, format!("Turn {:.0}°", st.turn_deg), |ui| {
+                        ui.add(egui::Slider::new(&mut st.turn_deg, -180.0..=180.0).show_value(false));
+                    });
+                    row(ui, format!("Strength {:.2}×", st.strength), |ui| {
+                        ui.add(
+                            egui::Slider::new(&mut st.strength, 0.05..=8.0)
+                                .logarithmic(true)
+                                .show_value(false),
+                        );
+                    });
+                    row(ui, format!("Exposure {} EV", signed(st.exposure)), |ui| {
+                        ui.add(egui::Slider::new(&mut st.exposure, -4.0..=4.0).show_value(false));
+                    });
+                },
+            );
+
+            let lens = if st.view_focal_mm > 0.0 {
+                format!("{:.0} mm", st.view_focal_mm)
+            } else {
+                "parallel".into()
+            };
+            fold(ui, s, "studio-fold-camera", &format!("Camera · {lens}"), |ui| {
+                ui.label(
+                    RichText::new(if st.view_focal_mm > 0.0 {
+                        format!("Lens {:.0} mm (the view's)", st.view_focal_mm)
+                    } else {
+                        "Parallel view: no lens (Camera › Perspective)".into()
+                    })
+                    .color(s.theme.ink2),
                 );
-            if st.light == lights.len() - 1 {
+                row(ui, format!("Aperture f/{:.1}", st.f_number), |ui| {
+                    ui.add_enabled(
+                        st.depth_of_field,
+                        egui::Slider::new(&mut st.f_number, 1.0..=22.0)
+                            .logarithmic(true)
+                            .show_value(false),
+                    );
+                });
+                if !st.depth_of_field {
+                    ui.label(
+                        RichText::new("Depth of field is off: Camera › Depth of Field")
+                            .small()
+                            .color(s.theme.ink2),
+                    );
+                }
+            });
+
+            let out = format!("Output · {} × {}, {} samples", st.size.0, st.size.1, st.spp);
+            fold(ui, s, "studio-fold-output", &out, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Size");
+                    ui.add(egui::DragValue::new(&mut st.size.0).range(16..=8192));
+                    ui.label("×");
+                    ui.add(egui::DragValue::new(&mut st.size.1).range(16..=8192));
+                });
+                row(ui, format!("Samples {}", st.spp), |ui| {
+                    ui.add(
+                        egui::Slider::new(&mut st.spp, 16..=8192)
+                            .logarithmic(true)
+                            .show_value(false),
+                    );
+                });
+                row(ui, format!("Turntable {} frames", st.frames), |ui| {
+                    ui.add(egui::Slider::new(&mut st.frames, 4..=360).show_value(false));
+                });
                 ui.horizontal(|ui| {
                     ui.label("File");
-                    ui.text_edit_singleline(&mut st.hdri)
-                        .on_hover_text("a Radiance .hdr, equirectangular");
+                    ui.text_edit_singleline(&mut st.out);
                 });
-            }
-            row(ui, format!("Turn {:.0}°", st.turn_deg), |ui| {
-                ui.add(egui::Slider::new(&mut st.turn_deg, -180.0..=180.0).show_value(false));
-            });
-            row(ui, format!("Strength {:.2}×", st.strength), |ui| {
-                ui.add(
-                    egui::Slider::new(&mut st.strength, 0.05..=8.0)
-                        .logarithmic(true)
-                        .show_value(false),
-                );
-            });
-            row(ui, format!("Exposure {} EV", signed(st.exposure)), |ui| {
-                ui.add(egui::Slider::new(&mut st.exposure, -4.0..=4.0).show_value(false));
-            });
-
-            head(ui, s, "Camera");
-            ui.label(
-                RichText::new(if st.view_focal_mm > 0.0 {
-                    format!("Lens {:.0} mm (the view's)", st.view_focal_mm)
-                } else {
-                    "Parallel view: no lens (Camera › Perspective)".into()
-                })
-                .color(s.theme.ink2),
-            );
-            row(ui, format!("Aperture f/{:.1}", st.f_number), |ui| {
-                ui.add_enabled(
-                    st.depth_of_field,
-                    egui::Slider::new(&mut st.f_number, 1.0..=22.0)
-                        .logarithmic(true)
-                        .show_value(false),
-                );
-            });
-            if !st.depth_of_field {
-                ui.label(
-                    RichText::new("Depth of field is off: Camera › Depth of Field")
-                        .small()
-                        .color(s.theme.ink2),
-                );
-            }
-
-            head(ui, s, "Output");
-            ui.horizontal(|ui| {
-                ui.label("Size");
-                ui.add(egui::DragValue::new(&mut st.size.0).range(16..=8192));
-                ui.label("×");
-                ui.add(egui::DragValue::new(&mut st.size.1).range(16..=8192));
-            });
-            row(ui, format!("Samples {}", st.spp), |ui| {
-                ui.add(
-                    egui::Slider::new(&mut st.spp, 16..=8192)
-                        .logarithmic(true)
-                        .show_value(false),
-                );
-            });
-            row(ui, format!("Turntable {} frames", st.frames), |ui| {
-                ui.add(egui::Slider::new(&mut st.frames, 4..=360).show_value(false));
-            });
-            ui.horizontal(|ui| {
-                ui.label("File");
-                ui.text_edit_singleline(&mut st.out);
             });
             if !st.queue.is_empty() {
                 ui.add_space(6.0);
@@ -398,5 +425,19 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
     let r = Rect::from_min_size(at, g.size()).expand2(egui::vec2(8.0, 4.0));
     p.rect_filled(r, 4.0, egui::Color32::from_black_alpha(140));
     p.galley(at, g, egui::Color32::WHITE);
+    // the brush at work: what it applies, how to stop, what it did last
+    if st.painting
+        && let Some(b) = &st.brush
+    {
+        let mut text = format!("Painting {b} · click parts · Esc to stop");
+        if !st.said.is_empty() {
+            text = format!("{text}   ({})", st.said);
+        }
+        let g = p.layout_no_wrap(text, super::theme::sans(12.0), egui::Color32::WHITE);
+        let at = view.center_top() + egui::vec2(-g.size().x / 2.0, 12.0);
+        let r = Rect::from_min_size(at, g.size()).expand2(egui::vec2(10.0, 5.0));
+        p.rect_filled(r, 4.0, egui::Color32::from_black_alpha(160));
+        p.galley(at, g, egui::Color32::WHITE);
+    }
     false
 }

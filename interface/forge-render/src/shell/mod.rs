@@ -60,6 +60,7 @@ pub mod sheet;
 mod sheetui;
 pub mod sketching;
 pub mod studio_env;
+pub mod studio_model;
 pub mod theme;
 pub mod thermo;
 pub mod thermo_material;
