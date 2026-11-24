@@ -17,6 +17,8 @@
 //! l = 12.9                           # cutting edge length (optional)
 //! eps = 80                           # point angle (optional)
 //! clearance = 0                      # (optional)
+//! [[insert.preset]]                  # the maker's cutting data (optional), cited `preset.<name>`
+//! name = "P PM 4325"; group = "P"; vc = 300; fz = 0.15; ap = 1.5   # fz: feed, mm/rev
 //!
 //! [[turn_holder]]
 //! id = "maker-PCLNR2525M12"
@@ -28,7 +30,7 @@
 //! # bars: dmm = 20; min_bore = 25
 //! ```
 use crate::toml::{self, Table, num, tables, text};
-use crate::{Cite, LibError, cite};
+use crate::{Cite, LibError, Preset, cite, preset_paths, read_presets};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Insert {
@@ -44,6 +46,8 @@ pub struct Insert {
     pub l: Option<f64>,
     pub eps: Option<f64>,
     pub clearance: Option<f64>,
+    /// The maker's cutting data, `[[insert.preset]]`: vc m/min, `fz` the feed in mm/rev, ap mm.
+    pub presets: Vec<Preset>,
     pub source: String,
     pub taken: String,
     pub note: String,
@@ -142,8 +146,11 @@ impl Insert {
             &["l", "eps", "clearance", "grade", "chipbreaker"],
             &mut required,
         );
+        let presets = read_presets(t, &rec)?;
+        required.extend(preset_paths(&presets));
         let (real, cites) = cite::read(t, &rec, &required, &["id", "maker", "cutting"])?;
         Ok(Insert {
+            presets,
             ic: pos(&rec, "ic", t)?,
             s: pos(&rec, "s", t)?,
             re: num(t, "re")

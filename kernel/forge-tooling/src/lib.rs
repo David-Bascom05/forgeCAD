@@ -178,6 +178,36 @@ const TOOL_EXTRA: &[&str] = &[
     "preset", "id", "type", "max_rpm",
 ];
 
+/// A record's `[[<kind>.preset]]` list (tools and turning inserts).
+pub(crate) fn read_presets(t: &Table, rec: &str) -> Result<Vec<Preset>, LibError> {
+    let mut presets = Vec::new();
+    for p in tables(t, "preset") {
+        presets.push(Preset {
+            name: text(p, "name").unwrap_or("").to_string(),
+            group: text(p, "group")
+                .ok_or_else(|| LibError::Missing {
+                    record: format!("{rec} preset"),
+                    field: "group",
+                    fix: "give `group = \"N\"` (ISO P M K N S H)".into(),
+                })?
+                .to_string(),
+            vc: need(p, rec, "vc")?,
+            fz: need(p, rec, "fz")?,
+            ap: num(p, "ap"),
+            ae: num(p, "ae"),
+        });
+    }
+    Ok(presets)
+}
+
+/// The cite paths a record's presets need: `preset.<name>` (or `preset.<group>`).
+pub(crate) fn preset_paths(presets: &[Preset]) -> Vec<String> {
+    presets
+        .iter()
+        .map(|p| format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name }))
+        .collect()
+}
+
 fn need(t: &Table, rec: &str, k: &'static str) -> Result<f64, LibError> {
     num(t, k).ok_or_else(|| LibError::Missing {
         record: rec.to_string(),
@@ -241,23 +271,7 @@ impl Tool {
             Kind::Tap | Kind::ThreadMill => positive(&rec, "tp", need(t, &rec, "tp")?)?,
             _ => num(t, "tp").unwrap_or(0.0),
         };
-        let mut presets = Vec::new();
-        for p in tables(t, "preset") {
-            presets.push(Preset {
-                name: text(p, "name").unwrap_or("").to_string(),
-                group: text(p, "group")
-                    .ok_or_else(|| LibError::Missing {
-                        record: format!("{rec} preset"),
-                        field: "group",
-                        fix: "give `group = \"N\"` (ISO P M K N S H)".into(),
-                    })?
-                    .to_string(),
-                vc: need(p, &rec, "vc")?,
-                fz: need(p, &rec, "fz")?,
-                ap: num(p, "ap"),
-                ae: num(p, "ae"),
-            });
-        }
+        let presets = read_presets(t, &rec)?;
         let mut required: Vec<String> = ["dc", "lcf", "dcon", "oal"]
             .iter()
             .map(|s| s.to_string())
@@ -272,12 +286,7 @@ impl Tool {
         if num(t, "nof").is_some() {
             required.push("nof".into());
         }
-        for p in &presets {
-            required.push(format!(
-                "preset.{}",
-                if p.name.is_empty() { &p.group } else { &p.name }
-            ));
-        }
+        required.extend(preset_paths(&presets));
         let (real, cites) = cite::read(t, &rec, &required, TOOL_EXTRA)?;
         let s = |k: &str| text(t, k).unwrap_or("").to_string();
         Ok(Tool {
