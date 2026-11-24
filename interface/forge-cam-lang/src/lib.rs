@@ -25,6 +25,7 @@
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod holes;
+pub mod sim;
 
 use forge_agent::json::Json;
 use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolUse};
@@ -178,15 +179,15 @@ pub struct OpOut {
     target: Option<Vec<Face>>,
     /// Declared removals (Δ): what each is and where.
     pub removals: Vec<String>,
+    /// The paths as the posted text means them (read back from the program, in the part's
+    /// frame), one per path once a program posts the op: what the checks' `move_index` counts.
+    pub posted: Vec<OpPath>,
     /// The stock this op starts from (G2, G3 are checked against it).
     stock_before: Option<forge_cam::stock::InProcess>,
     /// What the op provably clears: (region, or the whole box; its final floor).
     voids: Vec<(Option<Region>, f64)>,
     /// The lowest tool tip of its posted paths, as the text reads back (∞ until posted).
     pub deepest: f64,
-    /// Its paths as the posted text reads back (what was certified; `Cam::check` checks them
-    /// again on demand).
-    pub posted: Vec<OpPath>,
 }
 
 /// `Cam::check`'s answer for one op: clear only if it was posted and every check passed.
@@ -1027,12 +1028,8 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
                     env.insert(name.clone(), v);
                 }
                 StmtKind::Param { owner, name, value } => {
-                    let o = owner
-                        .iter()
-                        .map(|s| format!("{s:?}"))
-                        .collect::<Vec<_>>()
-                        .join(".");
-                    let o = o.trim_matches('"').to_string();
+                    // the owner's id as text (`a.b`, `a[0]`): a statement's id is its name
+                    let o = forge_lang::error::path_text(owner);
                     params.entry(o).or_default().insert(name.clone(), value.clone());
                 }
                 StmtKind::Assign { name, value } => {
@@ -1046,12 +1043,11 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
                     };
                     // the statement's own params, by their short names
                     let mut local = env.clone();
-                    for (owner, ps) in &params {
-                        if owner.ends_with(name.as_str()) {
-                            for (k, e) in ps {
-                                let v = cam.eval(e, &env)?;
-                                local.insert(k.clone(), v);
-                            }
+                    // (its id exactly: `param xop1.d` is not `op1`'s)
+                    if let Some(ps) = params.get(name.as_str()) {
+                        for (k, e) in ps {
+                            let v = cam.eval(e, &env)?;
+                            local.insert(k.clone(), v);
                         }
                     }
                     let a = cam.named_of(fname, args, &local)?;
@@ -2804,10 +2800,10 @@ impl Cam {
             leave: get_num(a, "leave", Some(0.0))?.max(get_num(a, "leave_axial", Some(0.0))?),
             target: None,
             removals: vec![],
+            posted: vec![],
             stock_before: Some(s.ip.clone()),
             voids: vec![],
             deepest: f64::INFINITY,
-            posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
         let paths: Result<Vec<OpPath>, String> = match kind {
@@ -4405,7 +4401,6 @@ impl Cam {
             }
             let mut sum =
                 self.certify_posted(oi, &posted, FULL_STOCK.load(std::sync::atomic::Ordering::Relaxed));
-            self.ops[oi].posted.push(posted.clone());
             // G5: every position the posted path reaches, as the machine's joints see it
             if let Some(c) = self.axis_limits(oi, &posted) {
                 sum.clear = false;
@@ -4436,6 +4431,10 @@ impl Cam {
                 .filter_map(|c| Some(ends.get(c.move_index)?[2].min(ends.get(c.move_index + 1)?[2])))
                 .fold(f64::INFINITY, f64::min);
             let op = &mut self.ops[oi];
+            if op.posted.len() <= pi {
+                op.posted.resize(pi + 1, posted.clone());
+            }
+            op.posted[pi] = posted.clone();
             op.deepest = op.deepest.min(low);
             op.moves += posted.moves.len();
             op.pairs += sum.pairs;

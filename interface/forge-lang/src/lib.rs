@@ -53,6 +53,7 @@ pub mod thermo_kept;
 pub mod tightbox;
 pub mod undo;
 pub mod units;
+pub mod urdf;
 pub mod uses;
 pub mod validity;
 pub mod values;
@@ -187,6 +188,8 @@ pub struct Options {
     /// of part marker); what follows is evaluated (its rows, its errors) but not built, and the
     /// part is the one as it stood there.
     pub until: Option<String>,
+    /// An assembly: its kinematic structure for an export (`AsmOut::kin`, `urdf.rs`).
+    pub kin: bool,
 }
 
 impl Default for Options {
@@ -210,6 +213,7 @@ impl Default for Options {
             comp_anchors: false,
             fit_sizes: false,
             until: None,
+            kin: false,
         }
     }
 }
@@ -567,8 +571,9 @@ fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
         let mass = |b: &forge_topo::Body| forge_topo::mass::mass(b);
         let each_mass =
             || -> Option<Vec<_>> { each.then(|| solids.iter().map(|x| mass(&x.2).ok()).collect()) };
-        // under a budget (spent on this thread) one after another, as before
-        let (w, e, o) = if forge_geom::budget::left() == u64::MAX && forge_math::par::threads() > 1 {
+        // under a budget (spent on this thread) one after another, as before (`limited`, not
+        // `left() == u64::MAX`: what is spent with no limit set counts down from there too)
+        let (w, e, o) = if !forge_geom::budget::limited() && forge_math::par::threads() > 1 {
             // the whole's mass, its box, each owed mass and the solids' masses as items of one
             // adaptive map: threads join only where the work pays for them (a small part's
             // measure stays on this thread), answers in item order
