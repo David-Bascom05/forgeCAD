@@ -19,6 +19,15 @@ FACTS = os.path.join(ROOT, "research/cam/machines/haas/machinetoolindex-2026-11-
 OUT = os.path.join(ROOT, "kernel/forge-machine/data/machines/haas.toml")
 PARTS = os.path.join(ROOT, "kernel/forge-machine/parts/haas")
 TAKEN = "2026-11-23"
+# Records whose own bodies can meet within published travel (tests/collide.rs pins those contacts):
+# they cite `zones` unknown (train 4b, d6d9c62d).
+ZONES_UNPUBLISHED = {"haas-umc-750", "haas-st-10", "haas-st-20", "haas-st-30", "haas-st-10y", "haas-st-20y",
+                     "haas-st-30y", "haas-ds-30y", "haas-umc-500", "haas-umc-750ss", "haas-umc-1000", "haas-st-15",
+                     "haas-st-25", "haas-st-35", "haas-st-40", "haas-tl-1", "haas-tl-2"}
+ZONES_BASIS = ("the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke "
+               "or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as "
+               "possible, not checked")
+LAYOUT = os.path.join(ROOT, "research/cam/machines/haas/layout-drawings-2026-11-24.json")
 
 # Secondary sources (COORDINATOR decision 2026-11-23: haascnc.com is behind a bot challenge; use
 # reputable secondary sources, tag every value, record conflicts).
@@ -119,10 +128,10 @@ class Rec:
         val = "; ".join(f"{self.key(k)}: {self.f(k)}" for k in keys)
         self.cites.append(dict(path=path, status="published", source=self.url, taken=TAKEN, value=val, note=note))
 
-    def cite(self, path, status, basis="", source="", value="", note=""):
+    def cite(self, path, status, basis="", source="", value="", note="", taken=TAKEN):
         c = dict(path=path, status=status)
         if source:
-            c.update(source=source, taken=TAKEN)
+            c.update(source=source, taken=taken)
         if value:
             c["value"] = value
         if basis:
@@ -237,9 +246,9 @@ def fg_head(title, ax, ay, nose_z, nose_r, nose_h, box_lo, box_hi):
     return "\n".join(s) + "\n"
 
 
-def body(r, name, link, prims, part, ignore=(), status="estimate", basis="", source="", value=""):
+def body(r, name, link, prims, part, ignore=(), status="estimate", basis="", source="", value="", taken=TAKEN):
     r.bodies.append((name, link, prims, list(ignore), part))
-    r.cite(f"body.{name}", status, basis=basis, source=source, value=value)
+    r.cite(f"body.{name}", status, basis=basis, source=source, value=value, taken=taken)
 
 
 def shrink_box(lo, hi, d=1.0):
@@ -449,6 +458,70 @@ def umc(r):
          fg_head(f"{r.name} head (unpublished sizes, conservative)", ax, ay, nmax + 1, nr - 1, nh - 1,
                  [hb_lo[0] + 1, hb_lo[1] + 1, hb_lo[2]], [hb_hi[0] - 1, hb_hi[1] - 1, hb_hi[2] - 1]),
          status="unknown", basis="no head dimensions published; the VMC head stand-in (errs large)")
+
+
+def frame_bodies(r, kind):
+    """The structure the sim draws around the work zone (base, column, saddle), for the machines whose
+    Haas Machine Layout Drawing we have (research/cam/machines/haas/layout-drawings-2026-11-24.json,
+    restated from dealer-hosted Haas MLDs). Envelopes, not maker CAD: the drawings give the floor
+    plan and heights, never the castings; every size below is an estimate from those heights, the
+    travels and the head, chosen so that no moving body reaches another anywhere in travel."""
+    lay = json.load(open(LAYOUT))["machines"].get(r.name)
+    if not lay:
+        return
+    v = lay["values"]
+    src = lambda k: v[k]["url"]
+
+    def lbody(*a, **k):  # the layout drawings were read 2026-11-24
+        return body(*a, taken="2026-11-24", **k)
+    tx, ty = mm(r.f("X-Axis Travel")), mm(r.f("Y-Axis Travel"))
+    ax, ay = tx / 2, ty / 2
+    head_back = ay + 420  # the head housing's back face (see vmc/umc)
+    if kind == "vmc":
+        floor = -v["table_h_floor"]["v"]  # table top above the floor, published (2016 drawing)
+        base_top = floor + v["base_top_h"]["v"]
+        top = floor + v["top_of_enclosure_window_h"]["v"]
+        tl, tw = [float(x.replace(",", "")) for x in re.findall(r"[\d.,]+", re.search(r"\((.*)\)", r.f("Table Size")).group(1))[:2]]
+        # saddle (Y): under the table, from the base top to the table's underside (-90)
+        s_lo, s_hi = [-(tl / 2 - 60), -(tw / 2 + 20), base_top], [tl / 2 - 60, tw / 2 + 20, -91.0]
+        lbody(r, "saddle", "Y", [("box", s_lo, s_hi)],
+             fg_box(f"{r.name} saddle (envelope: unpublished casting)", *shrink_box(s_lo, s_hi)),
+             ignore=["table", "base"], status="estimate", source=src("base_top_h"), value=v["base_top_h"]["stated"],
+             basis=(f"the saddle is not dimensioned on the layout drawing: a box under the table from the base top "
+                    f"({v['base_top_h']['stated'].split(' (')[0]} above the floor; floor = table top - {v['table_h_floor']['stated'].split(' Table')[0]}) "
+                    f"to the table underside, {s_hi[0]-s_lo[0]:g} x {s_hi[1]-s_lo[1]:g} mm (inside the table outline in X, 20 mm past it in Y)"))
+        # base (fixed): from the floor to the base top, under the saddle's whole Y travel
+        b_lo, b_hi = [-(tl / 2), -(tw / 2 + 60), floor], [tl / 2, head_back + 600, base_top - 1]
+        lbody(r, "base", "base", [("box", b_lo, b_hi)],
+             fg_box(f"{r.name} base (envelope: floor to the published base-top height)", *shrink_box(b_lo, b_hi)),
+             ignore=["saddle", "column"], status="estimate", source=src("base_top_h"), value=v["base_top_h"]["stated"],
+             basis=(f"published: the base top {v['base_top_h']['v']:g} mm and the table top {v['table_h_floor']['v']:g} mm above the floor; "
+                    f"its plan size is not dimensioned: the table length in X, from the table's front edge to behind the column in Y"))
+        # column (fixed): behind the head, from the base top to the enclosure window height
+        c_lo, c_hi = [ax - 300, head_back, base_top], [ax + 300, head_back + 600, top]
+        lbody(r, "column", "base", [("box", c_lo, c_hi)],
+             fg_box(f"{r.name} column (envelope: unpublished casting)", *shrink_box(c_lo, c_hi)),
+             ignore=["head", "base"], status="estimate", source=src("top_of_enclosure_window_h"),
+             value=v["top_of_enclosure_window_h"]["stated"],
+             basis=("the column is not dimensioned: 600 x 600 mm behind the head housing (whose back face it carries), from the "
+                    f"base top to the enclosure window height ({v['top_of_enclosure_window_h']['v']:g} mm above the floor), over the "
+                    "spindle's mid-travel X. Its front face is behind the table's farthest +Y travel"))
+    else:  # umc: X, Y, Z on the head side; the column carries them and moves in X
+        top_h = v["overall_h"]["v"]
+        b_lo, b_hi = [-(ax + 400), -500, -900], [ax + 400, head_back + 600, -551]
+        lbody(r, "base", "base", [("box", b_lo, b_hi)],
+             fg_box(f"{r.name} base (envelope: unpublished casting)", *shrink_box(b_lo, b_hi)),
+             ignore=["support-l", "support-r", "column"], status="unknown",
+             basis=("the platter's height above the floor is unpublished (the layout drawing gives the overall height "
+                    f"{v['overall_h']['stated']} but no platter or base height): a 350 mm slab under the trunnion supports, "
+                    "under the whole column X travel (stand-in)"))
+        c_lo, c_hi = [ax - 400, head_back, -550], [ax + 400, head_back + 500, 1500]
+        lbody(r, "column", "X", [("box", c_lo, c_hi)],
+             fg_box(f"{r.name} column (envelope: unpublished casting)", *shrink_box(c_lo, c_hi)),
+             ignore=["head", "base"], status="estimate", source=src("overall_h"), value=v["overall_h"]["stated"],
+             basis=("the column is not dimensioned; Haas UMCs carry Y and Z on a column moving in X (record kinematics): "
+                    "an 800 x 500 mm box behind the head housing, from the base top to 1500 mm above the platter, under the "
+                    f"published overall height ({v['overall_h']['v']:g} mm above the floor)"))
 
 
 def lathe_common(r, kind, control_note):
@@ -736,8 +809,10 @@ def main():
             "published 40-taper side-mount value: errs small). Diameter: this page, full magazine"))
         if kind == "vmc":
             vmc(r, VMC_NOTES.get(name, ""))
+            frame_bodies(r, "vmc")
         elif kind == "umc":
             umc(r)
+            frame_bodies(r, "umc")
         elif kind == "lathe":
             lathe(r)
         elif kind == "millturn":
@@ -751,6 +826,8 @@ def main():
             text += prim_toml(r, bname, link, prims, ignore, part)
             with open(os.path.join(PARTS, name, f"{bname}.fg"), "w") as fh:
                 fh.write(part)
+        if name in ZONES_UNPUBLISHED:
+            r.cite("zones", "unknown", basis=ZONES_BASIS)
         for c in r.cites:
             text.append("[[machine.cite]]")
             for k in ("path", "status", "source", "taken", "value", "basis", "note"):

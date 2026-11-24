@@ -1,0 +1,13 @@
+# haas-umc-750 column (envelope: unpublished casting)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -18
+shared y0 = 675
+shared z0 = -549
+shared lx = 798
+shared ly = 498
+shared lz = 2048
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)
