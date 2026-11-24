@@ -1,0 +1,165 @@
+evals	file:line:col	true	false	minority%	source
+3911014	classify.rs:1234:12	578887	3332127	14.801	if di.abs() < 1e-300 {
+656106	boolean.rs:5368:8	0	656106	0.000	if sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv) {
+603074	boolean.rs:289:8	489286	113788	18.868	if d <= edge.tol {
+450632	boolean.rs:2739:20	0	450632	0.000	if edge.tol > tol::LINEAR {
+440190	boolean.rs:3057:28	361141	79049	17.958	if let Some(((s, tol), h)) = on
+361141	boolean.rs:3058:28	187112	174029	48.189	&& other.grow(tol::LINEAR).contains(h.point)
+338924	boolean.rs:2877:36	3149	335775	0.929	if a.dir.get().cross(b.dir.get()).length() <= 1e-6)
+262579	boolean.rs:5095:12	136339	126240	48.077	if di.abs() < 1e-300 {
+244534	nary.rs:1514:16	58916	185618	24.093	if vx.point.distance(c.point) <= vx.tol.max(c.tol) {
+180672	unify.rs:298:21	36296	144376	20.089	if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
+180672	unify.rs:298:8	0	180672	0.000	if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
+151248	boolean.rs:3521:16	29615	121633	19.580	if f != 0.5 && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) <= 4.0 * tol::LINEAR {
+144376	unify.rs:298:37	125909	18467	12.791	if ka.0 == 0 || ka.0 != kb.0 || (ka.1 - kb.1).abs() > 1e-3 {
+122771	boolean.rs:3611:12	8	122763	0.007	if t1 - t0 <= 1e-12 {
+99275	boolean.rs:4728:20	196	99079	0.197	if w[1] - w[0] <= 1e-12 * (1.0 + edge.range.width()) {
+98840	shape.rs:234:8	36910	61930	37.343	if sweep.abs() >= dmath::TAU - 1e-12 {
+79282	boolean.rs:2911:32	77886	1396	1.761	if curve.eval(t).distance(vx.point) <= vx.tol {
+78374	boolean.rs:3638:31	63559	14815	18.903	let near = |j: usize| j != i && cuts[j].point.distance(cuts[i].point) <= cuts[i].tol.max(cuts[j].tol
+64131	boolean.rs:2257:16	84	64047	0.131	&& d > bodies[sd].vertex(v).tol
+50858	boolean.rs:6557:16	0	50858	0.000	if lean.abs() <= 1e-9 {
+49928	boolean.rs:5019:16	36616	13312	26.662	if t.curve.eval(s).distance(vx.point) <= vx.tol {
+46700	boolean.rs:4695:32	40737	5963	12.769	if let Some((s2, tol)) = on_edge(db, e2, h.point) {
+32380	nary.rs:3576:19	32320	60	0.185	while step > tol::LINEAR {
+30736	shape.rs:131:20	16924	13812	44.938	if sweep.abs() < dmath::TAU - 1e-12 {
+29615	boolean.rs:3521:28	18	29597	0.061	if f != 0.5 && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) <= 4.0 * tol::LINEAR {
+28830	boolean.rs:2715:32	16812	12018	41.686	if let Some((s, tol)) = on_edge(body, e, h.point) {
+21408	boolean.rs:3337:12	2927	18481	13.672	if gap <= 1.2 * cuts[i].tol.max(cuts[j].tol) || gap > 0.3 {
+20102	classify.rs:1104:45	28	20074	0.139	if side.abs() <= tol::LINEAR || along.abs() <= 10.0 * tol::LINEAR {
+20102	classify.rs:1104:16	0	20102	0.000	if side.abs() <= tol::LINEAR || along.abs() <= 10.0 * tol::LINEAR {
+18963	nary.rs:1073:18	2947	16016	15.541	.map(|b| shapes.is_none() || !outside(&b.grow(tol::LINEAR)))
+18481	boolean.rs:3337:57	17556	925	5.005	if gap <= 1.2 * cuts[i].tol.max(cuts[j].tol) || gap > 0.3 {
+17498	classify.rs:730:20	9884	7614	43.514	&& self.body.face(f).surface.distance(p) <= tol::LINEAR
+16812	boolean.rs:2718:32	7970	8842	47.407	if other.grow(tol::LINEAR).contains(h.point)
+16542	classify.rs:1213:8	1171	15371	7.079	if disc <= 1e-12 * (bb * bb + (4.0 * aa * cc).abs()) || aa == 0.0 {
+15770	boolean.rs:6177:62	15770	0	0.000	if k.frame.z().cross(z).length() <= 1e-12 && (k.radius - c.radius).abs() <= tol::LINEAR =>
+15770	boolean.rs:6177:20	15770	0	0.000	if k.frame.z().cross(z).length() <= 1e-12 && (k.radius - c.radius).abs() <= tol::LINEAR =>
+15643	boolean.rs:6991:11	15643	0	0.000	while step >= 2.0 * tol::LINEAR {
+15520	boolean.rs:4276:16	0	15520	0.000	if k.frame.z().dot(n).abs() < 1.0 - 1e-12 {
+15520	boolean.rs:4265:12	151	15369	0.973	if disc.abs() <= 1e-6 * r * r {
+15371	classify.rs:1213:61	0	15371	0.000	if disc <= 1e-12 * (bb * bb + (4.0 * aa * cc).abs()) || aa == 0.0 {
+15264	boolean.rs:6173:31	15264	0	0.000	Curve::Line(l) if l.dir.cross(z).length() <= 1e-12 => {
+12865	boolean.rs:5864:31	9367	3498	27.190	.find(|k| c + k >= lo - 1e-9 && c + k <= hi + 1e-9)
+12416	boolean.rs:4321:20	0	12416	0.000	if t > range.hi + 1e-12 {
+10089	classify.rs:1192:8	0	10089	0.000	if k.abs() >= 1.0 - 1e-9 {
+10089	classify.rs:1189:8	0	10089	0.000	if k.abs() > 1.0 + 1e-9 {
+10089	classify.rs:1185:8	0	10089	0.000	if r <= 1e-12 * (a + b) {
+8609	boolean.rs:4759:24	0	8609	0.000	&& edge.curve.eval(w[0]).distance(edge.curve.eval(w[1])) <= 2.0 * tol::LINEAR
+7086	ssi.rs:121:40	7036	50	0.706	if tilt <= tol::ANGULAR || tilt > NEAR {
+7086	ssi.rs:121:16	0	7086	0.000	if tilt <= tol::ANGULAR || tilt > NEAR {
+6556	boolean.rs:5075:20	4	6552	0.061	if let Some((s, tol)) = on_edge(bodies[to], e2, c.point) {
+5126	boolean.rs:3504:28	5080	46	0.897	&& curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) > 4.0 * tol::LINEAR
+4318	boolean.rs:3077:24	3896	422	9.773	if !body.edge_box(e).grow(RIM).contains(p)
+4192	nary.rs:879:20	161	4031	3.841	if outside(&overlap(&index[i].bbox, &index[j].bbox).grow(tol::LINEAR)) {
+4129	nary.rs:2038:14	3586	543	13.151	(!any_intersect && other > side && l < -1e-3).then_some(true)
+3909	nary.rs:3461:24	2572	1337	34.203	if o.curve.eval(t).distance(mid) <= tol::LINEAR {
+3587	boolean.rs:3207:20	2269	1318	36.744	if w[1] - w[0] <= 1e-12 * (1.0 + edge.range.width()) {
+3586	nary.rs:2038:32	1081	2505	30.145	(!any_intersect && other > side && l < -1e-3).then_some(true)
+3382	nary.rs:2894:12	3378	4	0.118	if f0.abs().max(f1.abs()).max(f2.abs()) <= 1e-12 {
+3310	nary.rs:1240:32	3225	85	2.568	if let Some((_, tol)) = on_edge(body, e, hit.point) {
+2972	boolean.rs:3193:24	2438	534	17.968	if let Some((s, tol)) = on_edge(body, e, p) {
+2951	classify.rs:1089:24	23	2928	0.779	if at.abs() <= tol::LINEAR && (l.origin - frame.origin).dot(radial) > 0.0 {
+2951	classify.rs:1087:20	2951	0	0.000	if den.abs() <= 1e-12 {
+2485	classify.rs:103:28	0	2485	0.000	if ruling.is_some_and(|r| (r - off).length() >= 1e-9) {
+2421	classify.rs:114:28	0	2421	0.000	|| (ci.radius - cy.radius).abs() >= 1e-9
+2421	classify.rs:113:28	0	2421	0.000	|| off.length() >= 1e-9
+2421	classify.rs:112:24	0	2421	0.000	if ci.frame.z().get().cross(axis).length() >= 1e-12
+2162	boolean.rs:4289:16	24	2138	1.110	if d <= 1e-3 * r || (d - (r1 + r2)).abs() <= 1e-3 * r || (d - (r1 - r2).abs()).abs() <= 1e-3 * r {
+2162	boolean.rs:4282:59	0	2162	0.000	if k1.frame.z().dot(n).abs() < 1.0 - 1e-12 || k2.frame.z().dot(n).abs() < 1.0 - 1e-12 {
+2162	boolean.rs:4282:16	0	2162	0.000	if k1.frame.z().dot(n).abs() < 1.0 - 1e-12 || k2.frame.z().dot(n).abs() < 1.0 - 1e-12 {
+2138	boolean.rs:4289:70	0	2138	0.000	if d <= 1e-3 * r || (d - (r1 + r2)).abs() <= 1e-3 * r || (d - (r1 - r2).abs()).abs() <= 1e-3 * r {
+2138	boolean.rs:4289:33	0	2138	0.000	if d <= 1e-3 * r || (d - (r1 + r2)).abs() <= 1e-3 * r || (d - (r1 - r2).abs()).abs() <= 1e-3 * r {
+2039	classify.rs:582:24	1823	216	10.593	&& t > e.range.lo + 1e-9 * (1.0 + e.range.width())
+1865	boolean.rs:1939:16	1836	29	1.555	if other.curve.eval(t).distance(mid) <= tol::LINEAR {
+1828	ssi.rs:335:8	1053	775	42.396	if a.cross(d.frame.z()).length() > tol::ANGULAR {
+1822	unify.rs:851:17	1822	0	0.000	(a.radius - b.radius).abs() <= tol::LINEAR
+1817	boolean.rs:4408:68	52	1765	2.862	matches!((normal(f), normal(g)), (Some(x), Some(y)) if x.cross(y).length() <= 1e-6)
+1676	ssi.rs:321:8	416	1260	24.821	if a.cross(d.frame.z()).length() > tol::ANGULAR {
+1260	ssi.rs:326:5	558	702	44.286	off.length() <= tol::LINEAR && (c.radius - d.radius).abs() <= tol::LINEAR
+1130	nary.rs:1693:16	0	1130	0.000	if d > tools[sd].vertex(v).tol {
+1053	ssi.rs:387:8	30	1023	2.849	if gap > tol::LINEAR {
+1023	ssi.rs:414:8	824	199	19.453	if (r - d.radius).abs() > tol::LINEAR || (w.dot(n) / len).abs() > tol::LINEAR {
+1023	ssi.rs:390:8	1023	0	0.000	if gap < -tol::LINEAR {
+906	boolean.rs:3270:20	18	888	1.987	&& (0..2).all(|k| index[k].face_box(faces[k]).grow(tol::LINEAR).contains(p))
+896	boolean.rs:2513:20	12	884	1.339	if s.abs() <= tol::ANGULAR || s * sign < 0.0 {
+884	boolean.rs:2513:47	220	664	24.887	if s.abs() <= tol::ANGULAR || s * sign < 0.0 {
+775	ssi.rs:346:8	10	765	1.290	if dist <= tol::LINEAR {
+765	ssi.rs:353:8	55	710	7.190	if dist > r1 + r2 + tol::LINEAR || dist < (r1 - r2).abs() - tol::LINEAR {
+710	ssi.rs:353:40	228	482	32.113	if dist > r1 + r2 + tol::LINEAR || dist < (r1 - r2).abs() - tol::LINEAR {
+636	boolean.rs:3079:29	157	479	24.686	x.on == CutOn::Edge(side, e) && x.point.distance(p) <= x.tol.max(tol::LINEAR)
+597	classify.rs:86:18	597	0	0.000	(ci.frame.z().get().cross(n).length() < 1e-12
+495	nary.rs:1316:24	391	104	21.010	if sg.curve.eval(t).distance(p) <= tol::LINEAR
+482	ssi.rs:363:8	0	482	0.000	if h2 <= (2.0 * tol::LINEAR * r1).max(0.0) {
+422	boolean.rs:3101:28	0	422	0.000	if let Some((s, q, tol)) = at
+422	boolean.rs:3088:28	420	2	0.474	if edge.curve.eval(edge.curve.closest(p, edge.range)).distance(p) > RIM {
+408	unify.rs:915:16	0	408	0.000	|| x1.curve.eval(t_mid).distance(x2.curve.eval(x2.range.mid())) > tol::LINEAR)
+295	classify.rs:839:24	247	48	16.271	.find(|&y| y >= w.lo - 1e-12 && y <= w.hi + 1e-12)
+219	nary.rs:3073:12	0	219	0.000	if area.abs() <= 1e-12 {
+201	boolean.rs:2985:24	26	175	12.935	if !body.edge_box(e).grow(1e-3).contains(h.point) || on_edge(body, e, h.point).is_some() {
+199	ssi.rs:414:46	158	41	20.603	if (r - d.radius).abs() > tol::LINEAR || (w.dot(n) / len).abs() > tol::LINEAR {
+175	boolean.rs:2985:74	173	2	1.143	if !body.edge_box(e).grow(1e-3).contains(h.point) || on_edge(body, e, h.point).is_some() {
+157	boolean.rs:4679:32	61	96	38.854	&& !hits.iter().any(|h| h.point.distance(p) <= tol::LINEAR)
+106	classify.rs:593:32	2	104	1.887	&& box_distance(b, p) <= tol::LINEAR
+61	boolean.rs:4682:36	0	61	0.000	&& let Some((s2, tol)) = on_edge(db, e2, p)
+57	boolean.rs:2952:25	41	16	28.070	g * inward >= 0.0 || g.abs() <= 1e-7
+52	classify.rs:588:24	36	16	30.769	&& d > 1e-3 * tol::LINEAR
+50	ssi.rs:130:28	0	50	0.000	let touching = (at(lo).abs() - c.radius).abs() <= tol::LINEAR
+44	shape.rs:493:20	14	30	31.818	if c.frame.z().cross(frame.z()).length() > 1e-12 || off > 1e-6 {
+32	boolean.rs:4984:16	16	16	50.000	if !out.is_empty() && deep <= tol::LINEAR && !rung.chords {
+30	shape.rs:493:69	15	15	50.000	if c.frame.z().cross(frame.z()).length() > 1e-12 || off > 1e-6 {
+25	boolean.rs:3359:24	20	5	20.000	&& let Some((s, tol)) = onto(&cuts[from], cuts[to].point)
+24	boolean.rs:4290:44	24	0	0.000	return if d <= 1e-3 * r && (r1 - r2).abs() > 1e-3 * r {
+24	boolean.rs:4290:27	24	0	0.000	return if d <= 1e-3 * r && (r1 - r2).abs() > 1e-3 * r {
+23	classify.rs:1089:51	2	21	8.696	if at.abs() <= tol::LINEAR && (l.origin - frame.origin).dot(radial) > 0.0 {
+16	boolean.rs:4984:58	8	8	50.000	if !out.is_empty() && deep <= tol::LINEAR && !rung.chords {
+16	boolean.rs:4984:35	16	0	0.000	if !out.is_empty() && deep <= tol::LINEAR && !rung.chords {
+10	ssi.rs:347:19	0	10	0.000	return if (r1 - r2).abs() <= tol::LINEAR {
+10	boolean.rs:4903:12	10	0	0.000	if x > 1e-3 {
+9	ssi.rs:106:16	0	9	0.000	if c <= tol::ANGULAR {
+8	boolean.rs:4952:16	0	8	0.000	|| g((h.t + w).min(range.hi)).abs() <= 2.0 * tol::LINEAR)
+8	boolean.rs:4951:13	0	8	0.000	&& (g((h.t - w).max(range.lo)).abs() <= 2.0 * tol::LINEAR
+5	boolean.rs:3350:20	5	0	0.000	if let Some((s, tol)) = onto(&cuts[i], mid) {
+4	nary.rs:2903:12	0	4	0.000	if q.distance(p) > tol::LINEAR {
+4	nary.rs:2899:12	0	4	0.000	if det.abs() <= 1e-3 * g0.length() * g1.length() * g2.length() {
+2	nary.rs:2095:16	0	2	0.000	if l.abs() > 1e-9 * inward.length() {
+2	boolean.rs:2994:24	0	2	0.000	if smooth && p.distance(h.point) <= 1e-3 && curve.eval(t).distance(p) <= tol::LINEAR {
+2	boolean.rs:2991:80	0	2	0.000	matches!((normal(f), normal(g)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-3)
+0	ssi.rs:455:8	0	0	-	if h2 <= 2.0 * tol::LINEAR * r1 {
+0	ssi.rs:448:40	0	0	-	if dist > r1 + r2 + tol::LINEAR || dist < (r1 - r2).abs() - tol::LINEAR {
+0	ssi.rs:448:8	0	0	-	if dist > r1 + r2 + tol::LINEAR || dist < (r1 - r2).abs() - tol::LINEAR {
+0	ssi.rs:442:19	0	0	-	return if (r1 - r2).abs() <= tol::LINEAR {
+0	ssi.rs:441:8	0	0	-	if dist <= tol::LINEAR {
+0	shape.rs:613:9	0	0	-	r.is_finite() && segment_in(segs, (*origin, *perp), at(0.0), at(r), m + 1e-9 * (1.0 + r))
+0	shape.rs:607:12	0	0	-	if normal.cross(frame.z().get()).length() > 1e-12 {
+0	nary.rs:752:50	0	0	-	Curve::Circle(ci) if ci.frame.z().cross(fr.z()).length() <= 1e-12 => {
+0	classify.rs:1014:20	0	0	-	if l.dir.cross(w).dot(n).abs() <= tol::LINEAR {
+0	classify.rs:147:68	0	0	-	if ci.frame.origin.distance(centre) >= 1e-9 || (ci.radius - sp.radius).abs() >= 1e-9 {
+0	classify.rs:147:24	0	0	-	if ci.frame.origin.distance(centre) >= 1e-9 || (ci.radius - sp.radius).abs() >= 1e-9 {
+0	boolean.rs:7145:61	0	0	-	if r.1 <= tol::LINEAR && r.2 > edge.range.lo && r.2 < edge.range.hi {
+0	boolean.rs:7145:38	0	0	-	if r.1 <= tol::LINEAR && r.2 > edge.range.lo && r.2 < edge.range.hi {
+0	boolean.rs:7145:16	0	0	-	if r.1 <= tol::LINEAR && r.2 > edge.range.lo && r.2 < edge.range.hi {
+0	boolean.rs:6890:46	0	0	-	(lean.abs() > 1e-9).then_some(if lean < 0.0 { Class::In } else { Class::Out })
+0	boolean.rs:6514:20	0	0	-	&& 2.0 * c > tol::LINEAR
+0	boolean.rs:5372:23	0	0	-	let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
+0	boolean.rs:5363:12	0	0	-	&& sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv)
+0	boolean.rs:4927:12	0	0	-	if sin(t) <= 1e-5 {
+0	boolean.rs:4549:36	0	0	-	Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {
+0	boolean.rs:4533:68	0	0	-	Curve::Ellipse(e) if matches!(s, Surface::Plane(_)) || n.dot(e.frame.z()).abs() > 1.0 - 1e-6 => {
+0	boolean.rs:4524:67	0	0	-	Curve::Circle(k) if matches!(s, Surface::Plane(_)) || n.dot(k.frame.z()).abs() > 1.0 - 1e-6 => {
+0	boolean.rs:4469:80	0	0	-	|| !matches!((normal(f), normal(h)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-6)
+0	boolean.rs:4469:24	0	0	-	|| !matches!((normal(f), normal(h)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-6)
+0	boolean.rs:4437:24	0	0	-	|| ((q.x * q.x + q.y * q.y).sqrt() - c.radius).abs() > 2.0 * tol::LINEAR
+0	boolean.rs:4436:20	0	0	-	if q.z.abs() > 2.0 * tol::LINEAR
+0	boolean.rs:4430:20	0	0	-	if (p - l.origin).cross(l.dir.get()).length_sq() > 4.0 * tol::LINEAR * tol::LINEAR =>
+0	boolean.rs:3160:28	0	0	-	&& !cuts[first..].iter().any(|x| x.point.distance(h.point) <= 1e-2)
+0	boolean.rs:3159:28	0	0	-	if let Some((s, tol)) = on_edge(body, e, h.point)
+0	boolean.rs:3132:45	0	0	-	if sd == sides[k] && !seam() && at.iter().all(|p| p.distance(cuts[i].point) > 10.0 * tol::LINEAR)
+0	boolean.rs:3132:34	0	0	-	if sd == sides[k] && !seam() && at.iter().all(|p| p.distance(cuts[i].point) > 10.0 * tol::LINEAR)
+0	boolean.rs:3132:16	0	0	-	if sd == sides[k] && !seam() && at.iter().all(|p| p.distance(cuts[i].point) > 10.0 * tol::LINEAR)
+0	boolean.rs:3102:28	0	0	-	&& index[1 - k].face_box(faces[1 - k]).grow(tol::LINEAR).contains(q)
+0	boolean.rs:2994:65	0	0	-	if smooth && p.distance(h.point) <= 1e-3 && curve.eval(t).distance(p) <= tol::LINEAR {
+0	boolean.rs:2994:34	0	0	-	if smooth && p.distance(h.point) <= 1e-3 && curve.eval(t).distance(p) <= tol::LINEAR {
+0	boolean.rs:1858:29	0	0	-	b != p && o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR
+0	boolean.rs:353:12	0	0	-	if det <= 1e-12 * aa * bb {
+0	boolean.rs:347:12	0	0	-	if r.length() <= 0.1 * edge.tol.min(tol::LINEAR) {
