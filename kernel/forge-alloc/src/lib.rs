@@ -79,6 +79,9 @@ pub struct Heap {
     /// The last region's end sentinel (a used block of size 0), and where the region stops.
     end: usize,
     top: usize,
+    /// A quick look only: a block off the lists as they stand, or none, with the cached blocks
+    /// kept and nothing searched (`alloc_block`). The threaded build's first look in each heap.
+    thrift: bool,
 }
 
 impl Default for Heap {
@@ -97,6 +100,7 @@ impl Heap {
             wild: 0,
             end: 0,
             top: 0,
+            thrift: false,
         }
     }
 
@@ -234,7 +238,7 @@ impl Heap {
     ) -> usize {
         let need = block(payload);
         let p = self.fit(need, false);
-        if p != 0 {
+        if p != 0 || self.thrift {
             return p;
         }
         // before growing: the cached blocks merged back, and a look through the nearest list
@@ -520,12 +524,33 @@ mod global {
             f: impl Fn(&mut Heap, &mut dyn FnMut(usize) -> Option<(usize, usize)>) -> *mut u8,
         ) -> *mut u8 {
             let k = self.pick();
-            let p = f(self.shards[k].heap(), &mut |_| None);
+            // first a quick look in every heap (the thread's own first): a block off its lists
+            // as they stand. Merging a heap's cached blocks back (to find room before memory
+            // grows) empties its caches, so it is left until no heap has room as it stands:
+            // done on every miss of the thread's own heap, it cost a threaded CAM rerun most
+            // of its time in the allocator
+            let quick = |s: &Shard| {
+                let h = s.heap();
+                h.thrift = true;
+                let p = f(h, &mut |_| None);
+                h.thrift = false;
+                p
+            };
+            let p = quick(&self.shards[k]);
             self.shards[k].give();
             if !p.is_null() {
                 return p;
             }
             for j in (1..HEAPS).map(|i| (k + i) % HEAPS) {
+                let s = &self.shards[j];
+                s.take();
+                let p = quick(s);
+                s.give();
+                if !p.is_null() {
+                    return p;
+                }
+            }
+            for j in (0..HEAPS).map(|i| (k + i) % HEAPS) {
                 let s = &self.shards[j];
                 s.take();
                 let p = f(s.heap(), &mut |_| None);
@@ -847,5 +872,38 @@ mod tests {
         }
         // fragmentation costs a little over the rounds, not a round's worth
         assert!(tops[39] < tops[0] + tops[0] / 8, "{tops:?}");
+    }
+
+    #[test]
+    fn a_quick_look_neither_flushes_nor_grows() {
+        // small blocks freed into the caches, the rest of their 64 KiB block the wild one: a
+        // large block fits only once those are merged back
+        let mut a = Arena::new(16 << 20, false);
+        let ap = &raw mut a;
+        let grown = core::cell::Cell::new(0);
+        let mut grow = |n: usize| {
+            grown.set(grown.get() + 1);
+            unsafe { (*ap).grow(n) }
+        };
+        let mut h = Heap::new();
+        let small: Vec<usize> = (0..40)
+            .map(|_| unsafe { h.alloc(512, 8, &mut grow) } as usize)
+            .collect();
+        for &p in &small {
+            unsafe { h.dealloc(p as *mut u8, 512, 8) };
+        }
+        let (cached, grows) = (h.cached, grown.get());
+        assert!(cached > 0);
+        h.thrift = true;
+        let p = unsafe { h.alloc(40_000, 8, &mut grow) };
+        assert!(p.is_null(), "found without merging");
+        assert_eq!((h.cached, grown.get()), (cached, grows), "a quick look changed the heap");
+        check(&h, unsafe { &*ap });
+        // the full look merges and finds it, still without growing
+        h.thrift = false;
+        let p = unsafe { h.alloc(40_000, 8, &mut grow) } as usize;
+        assert!(p != 0 && grown.get() == grows);
+        fill(p, 40_000, 7);
+        check(&h, unsafe { &*ap });
     }
 }
