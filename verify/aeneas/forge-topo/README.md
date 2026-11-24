@@ -17,7 +17,7 @@ shipped code for each test moved here.
 | edge uses (`check_edges`) | `topo_edges::edges` | `forge_topo.edges_refines` | L4 |
 | loops (`check_loops`) | `topo_edges::loops` | `forge_topo.loops_refines` | L4 |
 | shell Euler counts (`check_shell_euler`) | `topo_euler::shell_euler` | `forge_topo.shell_euler_refines` | L4 |
-| fans (`check_fans`) | `topo_fans::fans` | `forge_topo.fans_refines` | L4 |
+| fans (`check_fans`) | `topo_fans::fans` | `forge_topo.fans_refines_base` | L4 |
 
 `strays_refines`: for any `Topo` instance whose counts and edge ends are the model body's, and
 any `Sink` that appends the problem it is handed, the translated `strays` returns (no panic, no
@@ -76,9 +76,18 @@ corner table, taken as given). The leaving coedges of each vertex are built by a
 (`CountInv`, `vpre`, `PlaceInv`: the coedges of vertex `w` are `items[vpre w .. vpre (w+1)]`, in
 the model's order); each fan walk keeps its seen coedges in a reused buffer whose first `sl`
 entries are the model's `seen` (`walk_spec`; the model's fuel is past every use, `walk_fuel`).
-Hypotheses: `CornersOK` (the corner table's entries pair distinct coedges of the face with a use
-that closes the corner, as body.rs `corners` builds them), `nf_lt` (face ids below `u32::MAX`),
-`FansSmall` (the vertex count plus one and the number of edge uses fit `usize`).
+`fans_refines` takes the table's contract `CornersOK` (the entries pair distinct coedges of the
+face with a use that closes the corner) as a hypothesis; `fans_refines_base` discharges it. The
+corner table is now translated code (`topo_fans::corners`, the walk of `Body::corners`): it pairs
+each coedge of face `f` leaving `v` with the arriving use the geometry picks. Only the geometry is
+a view method (`FanTopo::corner_frame`, whether the face has a frame at `v`; `closing`, the index
+of the arriving use that closes a corner, or none), and only its answering is assumed (`FanBase`:
+`frame_ok`, `closing_ok`), not what it answers. `corners_spec` proves every table it returns is a
+`CornerList` (`CornersOK`'s entry contract), whatever the geometry answers; `cornersOf` is the table
+the view computes, so `fans_refines_base` appends exactly `Body.checkFans (cornersOf ..)`.
+Hypotheses: `FanBase` (the topology read as the model's, `nf_lt`: face ids below `u32::MAX`, and
+geometry that answers), sound links, `FansSmall` (the vertex count plus one and the number of edge
+uses fit `usize`).
 
 `lean/ForgeTopo/Axioms.lean` fails the build if a theorem uses more than `propext`,
 `Classical.choice` and `Quot.sound`.

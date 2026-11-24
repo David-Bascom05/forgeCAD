@@ -2317,4 +2317,88 @@ theorem fans_refines {S : Type} (FS : topo_fans.FanSink S) (P : S → List Probl
 
 end sort
 
+/-! ## The corner table the view computes
+
+`CornersOK` is no longer assumed: the table is whatever the translated `corners` returns (the
+geometry, through `corner_frame` and `closing`, picks which arriving use closes each corner), and
+`corners_spec` proves every such table meets the contract. -/
+
+section discharge
+variable {T : Type} (FI : topo_fans.FanTopo T) (t : T) (b : Body)
+
+theorem spec_ok_of {α : Type} {m : Result α} {p : α → Prop} (h : m ⦃ x => p x ⦄) :
+    ∃ r, m = .ok r ∧ p r :=
+  Result.cases (motive := fun m => (m ⦃ x => p x ⦄) → ∃ r, m = .ok r ∧ p r) m
+    (fun r h => ⟨r, rfl, (WP.spec_ok r).1 h⟩)
+    (fun _ _ h => ((WP.spec_vis _ _).1 h).elim)
+    (fun h => (WP.spec_div.1 h).elim) h
+
+theorem ok_inj {α : Type} {x y : α} (h : (Result.ok x : Result α) = .ok y) : x = y := by
+  have := (WP.spec_ok (p := fun z => z = y) x).1 (h ▸ (WP.spec_ok y).2 rfl)
+  exact this
+
+/-- The corner table of the view: face `f`'s corners at `v` as the translated `corners` computes
+them, none off the faces. -/
+noncomputable def cornersOf (f v : Nat) : List (Nat × Nat) :=
+  if h : f < b.faces.size ∧ f < 2^UScalarTy.Usize.numBits ∧ v < 2^UScalarTy.Usize.numBits then
+    Classical.epsilon fun L => ∃ r, topo_fans.corners FI t (UScalar.ofNatCore f h.2.1)
+      (UScalar.ofNatCore v h.2.2) = .ok r ∧ r.val.map (fun p => (p.1.val, p.2.val)) = L
+  else []
+
+theorem cornersOf_eq (f v : Usize) (hf : f.val < b.faces.size) (r : alloc.vec.Vec (Usize × Usize))
+    (hr : topo_fans.corners FI t f v = .ok r) :
+    cornersOf FI t b f.val v.val = r.val.map (fun p => (p.1.val, p.2.val)) := by
+  have h : f.val < b.faces.size ∧ f.val < 2^UScalarTy.Usize.numBits ∧ v.val < 2^UScalarTy.Usize.numBits :=
+    ⟨hf, f.hBounds, v.hBounds⟩
+  have hf' : UScalar.ofNatCore f.val h.2.1 = f := UScalar.eq_of_val_eq (UScalar.ofNatCore_val_eq _)
+  have hv' : UScalar.ofNatCore v.val h.2.2 = v := UScalar.eq_of_val_eq (UScalar.ofNatCore_val_eq _)
+  unfold cornersOf
+  rw [dif_pos h]
+  obtain ⟨r', hr', hL⟩ := Classical.epsilon_spec (p := fun L => ∃ r, topo_fans.corners FI t
+    (UScalar.ofNatCore f.val h.2.1) (UScalar.ofNatCore v.val h.2.2) = .ok r ∧
+      r.val.map (fun p => (p.1.val, p.2.val)) = L) ⟨_, r, by rw [hf', hv', hr], rfl⟩
+  rw [← hL]
+  rw [hf', hv', hr] at hr'
+  rw [ok_inj hr']
+
+variable {FI t b}
+
+/-- The view's table meets the contract. -/
+theorem cornersOf_ok (R : FanBase FI t b) (H : Sound b) (W : b.WF) : CornersOK b (cornersOf FI t b) := by
+  intro f v
+  by_cases h : f < b.faces.size ∧ f < 2^UScalarTy.Usize.numBits ∧ v < 2^UScalarTy.Usize.numBits
+  · let f' : Usize := UScalar.ofNatCore f h.2.1
+    let v' : Usize := UScalar.ofNatCore v h.2.2
+    have hfv : f'.val = f := UScalar.ofNatCore_val_eq _
+    have hvv : v'.val = v := UScalar.ofNatCore_val_eq _
+    obtain ⟨r, hr, hC⟩ := spec_ok_of (corners_spec FI t R H W f' v' (by rw [hfv]; exact h.1))
+    have := cornersOf_eq FI t b f' v' (by rw [hfv]; exact h.1) r hr
+    rw [hfv, hvv] at this
+    rw [this]; rw [hfv] at hC; exact hC
+  · unfold cornersOf; rw [dif_neg h]; simp
+
+/-- A `FanBase` view reads its own corner table. -/
+theorem FanBase.reads (R : FanBase FI t b) (H : Sound b) (W : b.WF) : FanReads FI t b (cornersOf FI t b) where
+  base := R.base
+  fwd := R.fwd
+  nf_lt := R.nf_lt
+  corners f v hf := by
+    obtain ⟨r, hr, -⟩ := spec_ok_of (corners_spec FI t R H W f v hf)
+    rw [hr, WP.spec_ok]
+    exact (cornersOf_eq FI t b f v hf r hr).symm
+
+/-- **The shipped `check_fans` refines the model, its corner contract proved.** For a body whose
+links are sound, any `FanTopo` view that reads it (`FanBase`: the topology, and geometry that
+answers), sizes that fit `usize` and any sink that appends what it is handed, the translated Rust
+`fans` terminates without panic or overflow and appends exactly `Model.checkFans` of the corner
+table the view computes (`cornersOf`), which meets `CornersOK` (`cornersOf_ok`). -/
+theorem fans_refines_base {S : Type} (FS : topo_fans.FanSink S) (P : S → List Problem) (hS : AppendsF FS P)
+    (R : FanBase FI t b) (hL : b.checkLinks = []) (hsm : FansSmall b) (out : S) :
+    topo_fans.fans FI FS t out ⦃ r => P r = P out ++ b.checkFans (cornersOf FI t b) ⦄ := by
+  have H := sound_of b hL
+  have W := b.links_ok hL
+  exact fans_refines FI t FS P hS (R.reads H W) hL (cornersOf_ok R H W) hsm out
+
+end discharge
+
 end forge_topo

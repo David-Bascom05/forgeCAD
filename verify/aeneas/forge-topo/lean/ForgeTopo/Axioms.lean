@@ -27,3 +27,6 @@ import ForgeTopo.Fans
 
 /-- info: 'forge_topo.fans_refines' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms forge_topo.fans_refines
+
+/-- info: 'forge_topo.fans_refines_base' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms forge_topo.fans_refines_base

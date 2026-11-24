@@ -63,7 +63,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | T.edges | `topo_edges::edges`, `loops` refine `checkEdges`, `checkLoops` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.edges_refines`, `loops_refines` |
 | T.ovf | the five forge-topo functions above, translated overflow-checked: no `usize`/`u32` overflow (Checked.lean) | SPINE | proven | verify/aeneas/forge-topo/lean (`usize_add_wspec`, `usize_sub_wspec`, the `_refines` theorems) |
 | T.euler | `topo_euler::shell_euler` refines `checkShellEuler` (L4; stamped distinct count = eraseDups) | SPINE | proven (overflow-checked; hyp `EulerSmall`: a shell's listed faces, loops, coedges fit i64) | `forge_topo.shell_euler_refines` |
-| T.fans | `topo_fans::fans` refines `checkFans` (L4; corner table as an opaque view method) | SPINE | proven (overflow-checked; hyps `CornersOK` (the opaque corner table's contract), `nf_lt`, `FansSmall`) | `forge_topo.fans_refines` |
+| T.fans | `topo_fans::fans` refines `checkFans` (L4; corner table translated, `topo_fans::corners`; only the geometry, `corner_frame`/`closing`, is a view method) | SPINE | proven (overflow-checked; `CornersOK` discharged by `corners_spec`/`cornersOf_ok`; hyps `FanBase` (topology read, `nf_lt`, geometry answers), `FansSmall`) | `forge_topo.fans_refines_base` |
 | T.all | `check_known`'s combinatorial part composed (`Model.check`) | SPINE | open | — |
 | T.valid | `Valid` (topology) ∧ geometry ⇒ `WellFormed` of the exact counterpart | SPINE | open | — |
 
