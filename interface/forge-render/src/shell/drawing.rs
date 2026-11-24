@@ -317,6 +317,8 @@ pub struct DrawingEnv {
     lines_for: Option<(usize, usize)>,
     made_n: usize,
     pub message: String,
+    /// A command's words for the status line, said once (an event over the status's state).
+    pub said: Option<String>,
     pub busy: bool,
     pointer: Option<Point2>,
     /// The file as it was before each edit, and after each undone one.
@@ -390,6 +392,7 @@ impl DrawingEnv {
             lines_for: None,
             made_n: 0,
             message: String::new(),
+            said: None,
             busy: false,
             pointer: None,
             undo: vec![],
@@ -917,10 +920,13 @@ impl DrawingEnv {
                     self.src = s;
                 }
                 self.regen();
+                // a click is answered even when the views were already up to date
+                self.said = Some(format!("Views updated from {}", name_of(&self.path)));
                 return;
             }
             DwgCmd::Fit => {
                 self.fitted = false;
+                self.said = Some("The sheet fitted to the view".into());
                 return;
             }
             DwgCmd::NewSheet => {
@@ -1719,8 +1725,11 @@ impl Shell {
         self.drawing_mode_bar(&ctx, canvas);
         self.resize_edges(ui, s);
         self.menus(&ctx);
+        if let Some(w) = self.drawing.as_mut().and_then(|d| d.said.take()) {
+            self.status = w;
+        }
         if let Some(env) = &self.drawing {
-            self.status = match (&env.tool, env.busy) {
+            let state = match (&env.tool, env.busy) {
                 _ if !env.message.is_empty() => env.message.clone(),
                 (Some(tool), _) => tool.prompt(env.step()).to_string(),
                 (None, true) => match env.progress {
@@ -1743,6 +1752,8 @@ impl Shell {
                     }
                 }
             };
+            // the drawing's state, under a command's words (UX-LEAD: a reply isn't swallowed)
+            self.state_status(&ctx, state);
         }
     }
 
