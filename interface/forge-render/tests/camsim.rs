@@ -256,9 +256,12 @@ fn cutters_from_the_tools_profiles() {
 #[test]
 fn a_refused_ops_check_is_a_marker_on_its_move() {
     let dir = machined();
-    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2)), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbore = pocket(op1, tool: t1, from: 12, to: -0.5, stepover: 2.5, step: 3)\nprog = program(op1)\n";
+    // the pocket goes 0.5 below the part with no stock under it: its plunges meet the support
+    // (a refusal by a check on a move; a through drill there is refused before any move, the
+    // stock under the part too thin for its break-through)
     let sim = Sim::open(src, &dir);
-    let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
+    let b = sim.cam.ops.iter().position(|o| o.name == "bore").unwrap();
     assert_eq!(sim.cam.ops[b].status, "refused");
     let m: Vec<_> = sim.markers.iter().filter(|m| m.op == Some(b)).collect();
     assert!(!m.is_empty());
@@ -476,9 +479,12 @@ fn rapids_and_holders_against_the_stock_as_cut() {
     );
     assert!(issues.is_empty(), "{:?}", issues.first());
     let dir = machined();
-    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbore = pocket(op1, tool: t1, from: 12, to: -0.5, stepover: 2.5, step: 3)\nprog = program(op1)\n";
+    // the pocket goes 0.5 below the part with no stock under it: its plunges meet the support
+    // (a refusal by a check on a move; a through drill there is refused before any move, the
+    // stock under the part too thin for its break-through)
     let sim = Sim::open(src, &dir);
-    let b = sim.cam.ops.iter().position(|o| o.name == "bolts").unwrap();
+    let b = sim.cam.ops.iter().position(|o| o.name == "bore").unwrap();
     assert_eq!(sim.cam.ops[b].status, "refused");
     let issues = sim.stock_issues();
     assert!(
