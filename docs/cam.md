@@ -92,6 +92,12 @@ every `tool(..)` takes these args; an op's value wins over its tool's (kernel/fo
 | `max_deflection:` | mm | the tool's tip deflection limit: the feed (only) is lowered to meet it. δ = F/(3E)[(L³ − b³)/I_shank + b³/I_flute] (stepped cantilever, derived), F = 2 Mc/D the mean tangential force at the tip, L the stick-out, b the flute length, E and the flutes' equivalent diameter from the substrate's cited `[[substrate]]` record; the holder and spindle taken rigid (their compliance not checked). Reported as `derived.deflection_mm` |
 | `min_feed:`, `max_feed:` | mm/min | the feed range (engagement feed stays in it) |
 
+Thread milling: the width is the thread's own engagement on its arc in the bore (concave arc,
+feeds-speeds.md §2.3): cos φ = (r_b² − r_c² − r_t²)/(2 r_c r_t), r_b the bore, r_c = r_m − r_t the
+centre path, held as the straight cut of the same angle (source `default`, said in the note); the
+chip is held at the edge, and the centre is fed r_c/r_m of the edge's feed (plunge, ramp and
+lead-in alike). A user `ae:`/`max_angle:` or programmed `fz:`/`feed:` is used as given.
+
 Engagement feed (clear, pocket, contour, slot, facing; not when the user programmed `fz:`/`feed:`):
 TOOLPATH-QUALITY's measurement on the in-process stock gives each FIXED-LENGTH sample (one tool
 diameter) its engaged angle, ap and ae; the feed holds the resolved chip through radial thinning,

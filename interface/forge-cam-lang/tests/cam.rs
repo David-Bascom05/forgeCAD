@@ -1358,3 +1358,35 @@ fn engagement_feed_holds_max_power_per_sample() {
         capped.warnings
     );
 }
+
+/// A thread mill's feeds follow its arc in the bore (feeds-speeds.md §2.3): the engagement from
+/// cos φ = (r_b² − r_c² − r_t²)/(2 r_c r_t), and the centre fed r_c/r_m of the edge's feed.
+#[test]
+fn thread_mill_feeds_follow_the_arc() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("block_m6_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let o = cam.ops.iter().find(|o| o.name == "thr").unwrap();
+    let r = o.resolved.as_ref().unwrap();
+    let dt = cam.tool_uses()[o.tool.unwrap()].tool.dc;
+    // M6: major radius 3; the bore is the 5.0 tap drill
+    let (rb, rm, rt) = (2.5, 3.0, 0.5 * dt);
+    let rc = rm - rt;
+    let c = (rb * rb - rc * rc - rt * rt) / (2.0 * rc * rt);
+    assert_eq!(r.ae.source, Source::Default);
+    assert!(
+        (r.ae.v - 0.5 * dt * (1.0 - c)).abs() < 1e-12,
+        "{} {}",
+        r.ae.v,
+        0.5 * dt * (1.0 - c)
+    );
+    assert!(r.ae.note.contains("arc in the bore"), "{}", r.ae.note);
+    assert!((r.feed.v - r.feeds.vf * rc / rm).abs() < 1e-9 * r.feeds.vf);
+    assert!(r.feed.note.contains("centre"));
+}

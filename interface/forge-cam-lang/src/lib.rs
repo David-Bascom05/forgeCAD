@@ -2820,7 +2820,51 @@ impl Cam {
                     "contour" => (0.5 * d, step),
                     _ => (0.1 * d, step),
                 };
-                let rs = self.resolve_for(su, ti, &ask, nominal);
+                // a thread mill cuts on a circle inside the bore: its engagement and the edge's
+                // speed are the arc's (feeds-speeds.md §2.3, concave: material outside the bore
+                // r_b, centre path r_c = r_m − r_t): cos φ = (r_b² − r_c² − r_t²)/(2 r_c r_t);
+                // the edge at r_m moves r_m/r_c faster than the centre, so the centre is fed r_c/r_m
+                let mut arc = None;
+                let mut nominal = nominal;
+                let mut arc_phi = None;
+                if kind == "thread_mill"
+                    && let Some(V::Holes(pi, hn)) = a.get("#1")
+                    && let Some(h) = self.parts[*pi].holes.iter().find(|x| &x.name == hn)
+                    && let Some((major, _)) = h.thread
+                {
+                    let (rb, rm, rt) = (0.5 * h.d, 0.5 * major, 0.5 * d);
+                    let rc = rm - rt;
+                    if rc > 0.0 && rt > 0.0 {
+                        // as the straight cut of the same angle: ae = D (1 − cos φ)/2
+                        let c = (rb * rb - rc * rc - rt * rt) / (2.0 * rc * rt);
+                        let c = c.clamp(-1.0, 1.0);
+                        nominal.0 = 0.5 * d * (1.0 - c);
+                        arc_phi = Some(forge_math::dmath::acos_clamped(c).to_degrees());
+                        arc = Some((rc, rm));
+                    }
+                }
+                let mut rs = self.resolve_for(su, ti, &ask, nominal);
+                if let (Some(phi), Some(r)) = (arc_phi, rs.as_mut())
+                    && r.ae.source == resolve::Source::Default
+                {
+                    r.ae.note = format!(
+                        "the thread's engagement on its arc in the bore: φ = {phi:.1}° (feeds-speeds.md §2.3)"
+                    );
+                }
+                if let (Some((rc, rm)), Some(r)) = (arc, rs.as_mut())
+                    && r.held_chip
+                {
+                    let k = rc / rm;
+                    r.feed.v *= k;
+                    r.feed.note = format!(
+                        "at the tool's centre on r {rc:.3}: the edge at the major radius {rm:.3} moves {:.3}x faster (feeds-speeds.md §2.3); {}",
+                        rm / rc,
+                        r.feed.note
+                    );
+                    r.plunge.v *= k;
+                    r.ramp.v *= k;
+                    r.lead_in.v *= k;
+                }
                 let (vf, vp) = match &rs {
                     Some(r) => (r.feed.v, r.plunge.v),
                     None => {
