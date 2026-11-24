@@ -4385,10 +4385,20 @@ impl Cam {
                         moves.push(*mv);
                         continue;
                     }
+                    // the move's own feed, where it was set above the chip rule's (a link through
+                    // cleared air, adaptive's: nothing to cut, so no chip to hold); any contact at
+                    // all keeps the chip rule (forge_cam::engage::schedule's rule, TOOLPATH-QUALITY)
+                    let own = match *mv {
+                        PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
+                        _ => 0.0,
+                    };
                     // every fixed-length sample is its own move: no joins of any kind (the post
                     // does not repeat an F word equal to the one before)
                     for i in start..k {
-                        let (end, f) = (samples[i].end, feed[i].0);
+                        let (end, mut f) = (samples[i].end, feed[i].0);
+                        if samples[i].engage.is_none() && own > f {
+                            f = own.min(sc.f_max.max(sc.f_min));
+                        }
                         moves.push(match *mv {
                             PMove::Line { phase, .. } => PMove::Line { to: end, f, phase },
                             PMove::Arc { c, cw, .. } => PMove::Arc { to: end, c, cw, f },
@@ -4776,6 +4786,8 @@ impl Cam {
             tool: Some(ti),
             paths: vec![],
             feeds: None,
+            resolved: None,
+            drilled: Vec::new(),
             checks: vec![],
             pairs: 0,
             cells: 0,
