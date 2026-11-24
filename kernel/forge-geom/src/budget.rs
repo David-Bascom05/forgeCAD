@@ -13,11 +13,11 @@ thread_local! {
 /// `Limits::max_evals`, measured in research/step/README.md).
 pub const FILE: u64 = 1 << 25;
 
-/// From now on, `most` evaluations: only through `scoped`, whose drop ends it.
-fn begin(most: u64) {
-    LEFT.set(most);
-    LIMITED.set(true);
-}
+/// What one top-level operation that is not a file's read may spend (a boolean, a body's check),
+/// where its caller sets no other: eight files' solids' worth, so no op that finished before it was
+/// set refuses (the Haas corpus, research/kernel-stress), and one whose NURBS work would never end
+/// stops in under a few minutes (UMC-400's bore ran unbounded in `subdivide_pieces`).
+pub const OP: u64 = 1 << 28;
 
 /// No limit again.
 fn end() {
@@ -32,18 +32,33 @@ pub fn limited() -> bool {
 }
 
 /// `most` evaluations while this lives, no limit again when it goes, unwinding too: a read that
-/// panics leaves no limit behind for what runs next on its thread.
-pub struct Budget(());
+/// panics leaves no limit behind for what runs next on its thread. Nested in another, it shares
+/// it: the inner may spend no more than the outer has left, and what it spends is the outer's.
+pub struct Budget {
+    /// The outer budget's left when this began, or none.
+    outer: Option<u64>,
+    /// This one's left when it began.
+    start: u64,
+}
 
 #[must_use = "the budget ends when this is dropped"]
 pub fn scoped(most: u64) -> Budget {
-    begin(most);
-    Budget(())
+    let outer = LIMITED.get().then(|| LEFT.get());
+    let start = outer.map_or(most, |o| o.min(most));
+    LEFT.set(start);
+    LIMITED.set(true);
+    Budget { outer, start }
 }
 
 impl Drop for Budget {
     fn drop(&mut self) {
-        end();
+        match self.outer {
+            Some(o) => {
+                let spent = self.start - LEFT.get().min(self.start);
+                LEFT.set(o.saturating_sub(spent));
+            }
+            None => end(),
+        }
     }
 }
 
@@ -80,6 +95,30 @@ mod tests {
         assert!(r.is_err());
         assert_eq!(super::left(), u64::MAX);
         assert!(!super::limited());
+    }
+
+    #[test]
+    fn a_budget_inside_another_shares_it() {
+        let outer = super::scoped(100);
+        super::spend_many(30);
+        {
+            // asks more than is left: gets what is left
+            let _inner = super::scoped(1000);
+            assert_eq!(super::left(), 70);
+            super::spend_many(20);
+        }
+        assert!(super::limited());
+        assert_eq!(super::left(), 50);
+        {
+            let _inner = super::scoped(10);
+            assert_eq!(super::left(), 10);
+            super::spend_many(10);
+            assert!(super::over());
+        }
+        assert_eq!(super::left(), 40);
+        drop(outer);
+        assert!(!super::limited());
+        assert_eq!(super::left(), u64::MAX);
     }
 
     #[test]

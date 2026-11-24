@@ -572,6 +572,17 @@ pub fn nary_with(
     threads: usize,
     root: Name,
 ) -> R<Body> {
+    crate::boolean::budgeted(|| nary_with_unbudgeted(tools, ops, shapes, batch, threads, root))
+}
+
+fn nary_with_unbudgeted(
+    tools: &[&Body],
+    ops: &[Op],
+    shapes: Option<&[Shape]>,
+    batch: Option<&dyn Batch>,
+    threads: usize,
+    root: Name,
+) -> R<Body> {
     #[cfg(debug_assertions)]
     crate::size::debug_check(tools);
     #[cfg(debug_assertions)]

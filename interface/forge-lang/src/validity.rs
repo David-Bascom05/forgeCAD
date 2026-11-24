@@ -73,6 +73,7 @@ fn kind(p: &Problem) -> &'static str {
         Problem::ShellFaces { .. } => "ShellFaces",
         Problem::ShellDisconnected { .. } => "ShellDisconnected",
         Problem::StrayVertex { .. } => "StrayVertex",
+        Problem::TooLong => "TooLong",
     }
 }
 
@@ -118,7 +119,7 @@ fn invalid(ev: &mut Eval, solid: Option<usize>, body: &Body, p: &Problem) -> Inv
                 at.push(face(ev, f));
             }
         }
-        Problem::Euler { .. } | Problem::BackLink { .. } => {}
+        Problem::Euler { .. } | Problem::BackLink { .. } | Problem::TooLong => {}
     }
     Invalid {
         body: owner,

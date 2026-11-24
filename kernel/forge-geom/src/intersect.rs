@@ -836,6 +836,10 @@ fn subdivide_pieces(
     let (mut budget, coarse) = (100_000usize, range.width() / 4096.0);
     let mut leaves: Vec<(f64, f64)> = Vec::new();
     while let Some((a, b, lip)) = stack.pop() {
+        // past the operation's work budget the caller refuses whatever comes back: stop at once
+        if crate::budget::over() {
+            break;
+        }
         let m = 0.5 * (a + b);
         let p = c.eval(m);
         let reach = lip * 0.5 * (b - a) + tol::LINEAR;
