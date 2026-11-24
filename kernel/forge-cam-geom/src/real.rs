@@ -793,24 +793,28 @@ impl Ctx {
     /// The node evaluated in big-float intervals at `p` bits.
     pub fn eval(&self, a: R, p: u64) -> BigIval {
         let order = self.closure(a);
-        let mut slot: Vec<Option<BigIval>> = vec![None; a as usize + 1];
+        self.eval_in(&order, p)
+    }
+
+    /// The last node of `order` (a closure, increasing) evaluated at `p` bits. Each value is
+    /// kept at its place in `order` (an operand found by binary search there: it is in the
+    /// closure), not at its node number, so the work is the subgraph's, not every node's below.
+    fn eval_in(&self, order: &[u32], p: u64) -> BigIval {
+        let mut slot: Vec<Option<BigIval>> = vec![None; order.len()];
+        let at = |x: &u32| order.binary_search(x).expect("an operand is in the closure");
         let mut k = 0;
         while k < order.len() {
             let i = order[k] as usize;
             let v = match &self.nodes[i].op {
                 Op::Lit(d) => BigIval::pt(d),
-                Op::Add(x, y) => badd(
-                    slot[*x as usize].as_ref().unwrap(),
-                    slot[*y as usize].as_ref().unwrap(),
-                    p,
-                ),
+                Op::Add(x, y) => badd(slot[at(x)].as_ref().unwrap(), slot[at(y)].as_ref().unwrap(), p),
                 Op::Sub(x, y) => {
-                    let ny = bneg(slot[*y as usize].as_ref().unwrap());
-                    badd(slot[*x as usize].as_ref().unwrap(), &ny, p)
+                    let ny = bneg(slot[at(y)].as_ref().unwrap());
+                    badd(slot[at(x)].as_ref().unwrap(), &ny, p)
                 }
                 Op::Mul(x, y) => {
                     if x == y {
-                        let s = slot[*x as usize].as_ref().unwrap();
+                        let s = slot[at(x)].as_ref().unwrap();
                         let m = bmul(s, s, p);
                         // a square is never negative
                         let lo = match (&m.lo, s.contains_zero()) {
@@ -820,30 +824,21 @@ impl Ctx {
                         };
                         BigIval { lo, hi: m.hi }
                     } else {
-                        bmul(
-                            slot[*x as usize].as_ref().unwrap(),
-                            slot[*y as usize].as_ref().unwrap(),
-                            p,
-                        )
+                        bmul(slot[at(x)].as_ref().unwrap(), slot[at(y)].as_ref().unwrap(), p)
                     }
                 }
-                Op::Div(x, y) => bdiv(
-                    slot[*x as usize].as_ref().unwrap(),
-                    slot[*y as usize].as_ref().unwrap(),
-                    p,
-                ),
-                Op::Sqrt(x) => bsqrt(slot[*x as usize].as_ref().unwrap(), p),
-                Op::Neg(x) => bneg(slot[*x as usize].as_ref().unwrap()),
+                Op::Div(x, y) => bdiv(slot[at(x)].as_ref().unwrap(), slot[at(y)].as_ref().unwrap(), p),
+                Op::Sqrt(x) => bsqrt(slot[at(x)].as_ref().unwrap(), p),
+                Op::Neg(x) => bneg(slot[at(x)].as_ref().unwrap()),
             };
-            slot[i] = Some(v);
+            slot[k] = Some(v);
             k += 1;
         }
-        slot[a as usize].take().unwrap()
+        slot[order.len() - 1].take().unwrap()
     }
 
-    /// The number of distinct square-root nodes `a` depends on.
-    fn radicals(&self, a: R) -> u32 {
-        let order = self.closure(a);
+    /// The number of distinct square-root nodes in a closure.
+    fn radicals(&self, order: &[u32]) -> u32 {
         let mut k = 0;
         let mut c = 0u32;
         while k < order.len() {
@@ -875,7 +870,9 @@ impl Ctx {
         }
         self.exact_evals += 1;
         // the separation bound, in bits: (D-1) lu + ll
-        let k = self.radicals(a);
+        // the closure once, for the bound and every precision tried
+        let order = self.closure(a);
+        let k = self.radicals(&order);
         let node = &self.nodes[a as usize];
         let d = if k >= 60 {
             f64::INFINITY
@@ -894,7 +891,7 @@ impl Ctx {
             if dbg {
                 eprintln!("sign: node {a} radicals {k} bound {need} bits, p {p}");
             }
-            let v = self.eval(a, p);
+            let v = self.eval_in(&order, p);
             if let Some(lo) = &v.lo
                 && !lo.is_zero()
                 && !lo.neg
@@ -944,9 +941,10 @@ impl Ctx {
             let m = Dy::from_f64(ia.hi).add(&Dy::from_f64(ib.lo)).half();
             return m;
         }
+        let (oa, ob) = (self.closure(a), self.closure(b));
         let mut p = 128u64;
         loop {
-            let (va, vb) = (self.eval(a, p), self.eval(b, p));
+            let (va, vb) = (self.eval_in(&oa, p), self.eval_in(&ob, p));
             if let (Some(ah), Some(bl)) = (&va.hi, &vb.lo)
                 && ah.cmp(bl) == Ordering::Less
             {
@@ -963,9 +961,10 @@ impl Ctx {
         if iv.lo == iv.hi {
             return iv.lo;
         }
+        let order = self.closure(a);
         let mut p = 96u64;
         loop {
-            let v = self.eval(a, p);
+            let v = self.eval_in(&order, p);
             if let (Some(l), Some(h)) = (&v.lo, &v.hi) {
                 // both ends round to the same nearest f64: that is the answer
                 let (a1, b1) = (nearest(l), nearest(h));
