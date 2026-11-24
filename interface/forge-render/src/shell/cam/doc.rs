@@ -83,7 +83,7 @@ pub fn unquote(t: &str) -> String {
 
 /// The op built-ins this workspace knows: forge-cam-lang's (milling), then forge-turn-lang's
 /// (turning).
-pub const OP_FUNCS: [&str; 18] = [
+pub const OP_FUNCS: [&str; 24] = [
     "facing",
     "clear",
     "adaptive",
@@ -94,6 +94,12 @@ pub const OP_FUNCS: [&str; 18] = [
     "thread_mill",
     "edge_break",
     "bore",
+    "zlevel",
+    "parallel",
+    "waterline",
+    "pencil",
+    "scallop",
+    "rest",
     "turn_face",
     "turn_rough",
     "turn_finish",

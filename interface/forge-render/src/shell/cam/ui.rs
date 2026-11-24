@@ -129,6 +129,10 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
         let (big2, small2) = two_d.split_at(3.min(two_d.len()));
         out.push(("2D", big2.to_vec(), small2.to_vec()));
         out.push(("Drilling", of("Drilling"), vec![]));
+        // 3D surfacing: rough and parallel big, the rest small
+        let three = of("3D");
+        let (big3, small3) = three.split_at(2.min(three.len()));
+        out.push(("3D", big3.to_vec(), small3.to_vec()));
     }
     out.extend(vec![
         (
@@ -1408,6 +1412,7 @@ fn op_dialog(
                     Kind::Deg => arg_field_tip(ui, t, f.label, &mut val, &hint, &tip, "\u{b0}", &key, places),
                     Kind::Z => arg_field(ui, t, f.label, &mut val, &hint, "mm z", &key, places),
                     Kind::Count => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
+                    Kind::Text => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
                     Kind::Choice(words) => {
                         let mut items: Vec<(String, String)> = vec![];
                         if !f.required {
