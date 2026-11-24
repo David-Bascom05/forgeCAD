@@ -10,7 +10,7 @@
 //! The ISO 1832 / 5608 / 6261 code checks of inserts and turning holders live in forge-turn
 //! (`decode_insert`, `decode_holder`, `decode_bar`), which depends on this crate.
 use crate::toml::{Table, Val};
-use crate::turning::{Insert, TurnHolder};
+use crate::turning::{Blade, GrooveInsert, Insert, ToolBlock, TurnHolder};
 use crate::{Collet, ColletNut, Holder, LibError, Library, PullStud, Tool};
 
 /// One library record of any kind.
@@ -23,6 +23,9 @@ pub enum Record {
     PullStud(PullStud),
     Insert(Insert),
     TurnHolder(TurnHolder),
+    GrooveInsert(GrooveInsert),
+    Blade(Blade),
+    ToolBlock(ToolBlock),
 }
 
 impl Record {
@@ -35,6 +38,9 @@ impl Record {
             Record::PullStud(x) => &x.id,
             Record::Insert(x) => &x.id,
             Record::TurnHolder(x) => &x.id,
+            Record::GrooveInsert(x) => &x.id,
+            Record::Blade(x) => &x.id,
+            Record::ToolBlock(x) => &x.id,
         }
     }
 }
@@ -56,7 +62,7 @@ pub enum DeriveError {
 }
 
 /// The TOML keys `derive` knows, as `kind`.
-pub const KINDS: [&str; 7] = [
+pub const KINDS: [&str; 10] = [
     "tool",
     "holder",
     "collet",
@@ -64,6 +70,9 @@ pub const KINDS: [&str; 7] = [
     "pull_stud",
     "insert",
     "turn_holder",
+    "groove_insert",
+    "blade",
+    "tool_block",
 ];
 
 /// Fields a record may carry beyond those it cites (bookkeeping, not values).
@@ -179,6 +188,9 @@ pub fn derive(
         "collet_nut" => ColletNut::from_table(&t).map(Record::ColletNut),
         "pull_stud" => PullStud::from_table(&t).map(Record::PullStud),
         "insert" => Insert::from_table(&t).map(Record::Insert),
+        "groove_insert" => GrooveInsert::from_table(&t).map(Record::GrooveInsert),
+        "blade" => Blade::from_table(&t).map(Record::Blade),
+        "tool_block" => ToolBlock::from_table(&t).map(Record::ToolBlock),
         _ => TurnHolder::from_table(&t).map(Record::TurnHolder),
     };
     rec.map_err(DeriveError::Bad)
