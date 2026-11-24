@@ -73,6 +73,20 @@ fn make_jog_check_save_and_close() {
     h.step();
     assert!(h.gui.shell.machine.is_some(), "the workspace did not open");
     shot(&mut h, "01-library");
+    // the library's search narrows the list; the Manage tab carries the builder's commands
+    h.gui.shell.machine.as_mut().unwrap().filter = "trunnion".into();
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(h.gui.shell.place("machine:pick:generic-trunnion-bc").is_some());
+    assert!(h.gui.shell.place("machine:pick:generic-vmc3").is_none());
+    shot(&mut h, "01b-search");
+    h.gui.shell.machine.as_mut().unwrap().filter.clear();
+    h.step();
+    assert!(
+        h.gui.shell.place("tool:Check Travel").is_some(),
+        "the builder's ribbon group"
+    );
     {
         let m = h.gui.shell.machine.as_ref().unwrap();
         assert_eq!(m.project.as_deref(), Some(dir.as_path()));

@@ -387,16 +387,34 @@ fn fit_sizes(src: &str, opts: &Options, run: &mut Run, mut cache: Cache) -> Cach
                 bad = mid;
             }
         }
-        // three figures, rounded down so it still builds
-        let p = 10f64.powi(2 - lo.abs().log10().floor() as i32);
-        let shown = (lo * p).floor() / p;
-        let value = if shown > 0.0 && shown < lo {
-            let (ok, c) = builds(shown, cache);
-            cache = c;
-            if ok { shown } else { lo }
+        // The value offered is the one the reply shows (`forge_agent::short`, so a fix sent back
+        // unchanged is this very number) and is built here first: three figures rounded down,
+        // else the reply's last decimal rounded down, else the search's own. Near the limit the
+        // kernel's yes is not monotone in the size (a smaller one can be refused), and the reply
+        // rounds to nearest, so neither a rounding nor `lo` shown rounded is taken unbuilt.
+        let down = |p: f64| (lo * p).floor() / p;
+        let figures = 10f64.powi(2 - lo.abs().log10().floor() as i32);
+        let decimals = 10f64.powi(if lo.abs() >= 1000.0 {
+            1
+        } else if lo.abs() >= 1.0 {
+            3
         } else {
-            lo
-        };
+            4
+        });
+        let shown_as_is = |v: f64| forge_agent::short(v).parse::<f64>() == Ok(v);
+        let mut value = None;
+        for v in [down(figures), down(decimals), lo] {
+            if !(v > 0.0 && v <= lo && shown_as_is(v)) {
+                continue;
+            }
+            let (ok, c) = if v == lo { (true, cache) } else { builds(v, cache) };
+            cache = c;
+            if ok {
+                value = Some(v);
+                break;
+            }
+        }
+        let Some(value) = value else { continue };
         if let Error::Build { fit, .. } = &mut run.errors[k] {
             *fit = Some(Box::new((key, error::Literal { value, dim })));
         }
