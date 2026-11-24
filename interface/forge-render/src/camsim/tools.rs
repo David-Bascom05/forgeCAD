@@ -25,6 +25,51 @@ pub struct Piece {
     /// Per vertex, a factor on the colour: the flutes' valleys dark, their lands light, so a
     /// fluted cutter reads as one at a glance (empty: 1 everywhere).
     pub shade: Vec<f32>,
+    /// Part of the cutter body (the checker's `Part::Cutter`): tinted alone when a check says
+    /// the cutter hit; the shank, holder and nut when it says those did.
+    pub cutter: bool,
+}
+
+/// Which of a tool's pieces a failed check now names, to tint them alone.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hit {
+    None,
+    /// The cutter body.
+    Cutter,
+    /// The shank, holder or nut.
+    Holder,
+    /// Not said (a machine's contact, a refused op): the whole tool.
+    Whole,
+}
+
+impl Hit {
+    /// From a marker's tool part ("cutter", "shank/holder", or "" when not said).
+    pub fn of(part: &str) -> Hit {
+        match part {
+            "cutter" => Hit::Cutter,
+            "" => Hit::Whole,
+            _ => Hit::Holder,
+        }
+    }
+
+    /// Two at once (two checks failing now): the whole tool if they differ.
+    pub fn and(self, o: Hit) -> Hit {
+        match (self, o) {
+            (Hit::None, x) | (x, Hit::None) => x,
+            (a, b) if a == b => a,
+            _ => Hit::Whole,
+        }
+    }
+
+    /// Whether a piece (of the cutter body or not) is tinted.
+    pub fn tints(self, cutter: bool) -> bool {
+        match self {
+            Hit::None => false,
+            Hit::Whole => true,
+            Hit::Cutter => cutter,
+            Hit::Holder => !cutter,
+        }
+    }
 }
 
 /// A tool as drawn.
@@ -138,6 +183,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                 colour: look::HOLDER,
                 spins: false,
                 shade: vec![],
+                cutter: false,
             });
             continue;
         }
@@ -180,6 +226,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                 colour: cutting_colour(tu),
                 spins: true,
                 shade,
+                cutter: true,
             });
             // the cutter body above its flutes (to its top): plain
             let rest: Vec<[f64; 2]> = std::iter::once([lcf, 0.0])
@@ -191,6 +238,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                     colour: shank_colour(tu),
                     spins: true,
                     shade: vec![],
+                    cutter: true,
                 });
             }
         } else {
@@ -203,6 +251,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
                 },
                 spins: true,
                 shade: vec![],
+                cutter: b.part == Part::Cutter,
             });
         }
     }
@@ -262,6 +311,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
             colour: look::HOLDER,
             spins: false,
             shade: vec![],
+            cutter: false,
         });
         note = note.map(|(a, t)| {
             let rest: Vec<&str> = t.lines().skip(1).collect();
@@ -295,6 +345,7 @@ pub fn build(tu: &ToolUse, helix: Option<f64>) -> ToolLook {
             colour: look::NUT,
             spins: true,
             shade: vec![],
+            cutter: false,
         });
         note = note.map(|(a, t)| {
             let mut lines: Vec<String> = t.lines().map(str::to_string).collect();
@@ -388,13 +439,17 @@ pub fn helices() -> std::collections::HashMap<String, f64> {
 }
 
 /// Draws a tool with its tip at `p`, turned `spin` radians about its axis; red where it is in a
-/// failed check now.
-pub fn draw(t: &ToolLook, p: [f64; 3], spin: f64, fail: bool, out: &mut Vec<WorldVert>) {
+/// failed check now: the cutter alone, the shank and holder alone, or (not said) the whole.
+pub fn draw(t: &ToolLook, p: [f64; 3], spin: f64, fail: Hit, out: &mut Vec<WorldVert>) {
     let (s, c) = forge_math::dmath::sin_cos(spin);
     out.reserve(t.tris * 3);
     for pc in &t.pieces {
         let (s, c) = if pc.spins { (s, c) } else { (0.0, 1.0) };
-        let base = if fail { look::FAIL } else { pc.colour };
+        let base = if fail.tints(pc.cutter) {
+            look::FAIL
+        } else {
+            pc.colour
+        };
         let tr = &pc.tris;
         for tri in &tr.tri {
             for &k in tri {

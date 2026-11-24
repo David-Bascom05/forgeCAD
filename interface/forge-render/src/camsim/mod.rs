@@ -34,6 +34,9 @@ pub struct Marker {
     /// Its row under its kind's heading (UX: the heading says what, the row when, where and how
     /// much): "move 0 · 0.35 mm into the stock".
     pub row: String,
+    /// The part of the tool the check names ("cutter", "shank/holder"); empty where none is
+    /// said (leftover, a refused op, the machine's contacts).
+    pub part: String,
     /// A leftover region's box (xmin ymin xmax ymax, z0 z1).
     pub region: Option<([f64; 4], f64, f64)>,
     /// Material left by the plan, not missed: a leftover region wholly under the part's bottom
@@ -264,6 +267,7 @@ impl Sim {
                         g.mv
                     ),
                     row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
+                    part: "cutter".into(),
                     region: None,
                     planned: false,
                 });
@@ -284,6 +288,7 @@ impl Sim {
                         g.mv
                     ),
                     row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
+                    part: "shank/holder".into(),
                     region: None,
                     planned: false,
                 });
@@ -460,6 +465,7 @@ impl Sim {
                     t,
                     text: format!("{}: {}", op.name, check_sentence(c)),
                     row,
+                    part: c.tool_part.to_string(),
                     region: None,
                     planned: false,
                 });
@@ -482,6 +488,7 @@ impl Sim {
                         op.refusal.as_deref().unwrap_or("no reason given")
                     ),
                     row: tidy(op.refusal.as_deref().unwrap_or("no reason given")),
+                    part: String::new(),
                     region: None,
                     planned: false,
                 });
@@ -524,6 +531,7 @@ impl Sim {
                         "z {:.2} to {:.2} mm \u{b7} {w:.1} \u{d7} {d:.1} mm \u{b7} {}",
                         l.z0, l.z1, l.why
                     ),
+                    part: String::new(),
                     region: Some((*b, l.z0, l.z1)),
                     planned,
                 });

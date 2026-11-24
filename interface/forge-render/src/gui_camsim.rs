@@ -346,24 +346,28 @@ pub fn geometry(
             draw::solid_box(*lo, *hi, draw::look::FIXTURE, &mut solid);
         }
     }
-    // the tool at the time shown, red while a failed check's move plays
+    // the tool at the time shown, red where a failed check's move now names it
     if st.tool
         && let Some((tool, p, i)) = st.tool_now()
         && let Some(tu) = st.sim.cam.sim_tools().get(tool)
     {
         let g = st.sim.tl.segs[i];
+        // which part of it: the cutter alone, the shank and holder alone, or the whole
         let fail = st
             .sim
             .markers
             .iter()
-            .any(|m| m.severe() && m.op == Some(g.op as usize) && (m.t - st.t).abs() <= g.dt.max(1e-6));
+            .filter(|m| m.severe() && m.op == Some(g.op as usize) && (m.t - st.t).abs() <= g.dt.max(1e-6))
+            .fold(crate::camsim::tools::Hit::None, |h, m| {
+                h.and(crate::camsim::tools::Hit::of(&m.part))
+            });
         match st.sim.looks.get(tool) {
             Some(lk) => {
                 crate::camsim::tools::draw(lk, p, st.spin, fail, &mut solid);
                 crate::camsim::tools::edges(lk, p, st.spin, &eye, world);
                 crate::camsim::tools::ghost(lk, p, world);
             }
-            None => draw::tool(&tu.shape, p, fail, &mut solid),
+            None => draw::tool(&tu.shape, p, fail != crate::camsim::tools::Hit::None, &mut solid),
         }
     }
     // the machine about the part, when its run plays; a body in a collision now, red

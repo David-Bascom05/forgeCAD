@@ -300,6 +300,7 @@ impl MachineView {
                     c.line, c.b, c.a, self.run.def.name
                 ),
                 row: format!("line {} \u{b7} {} {word} {}", c.line, c.b, c.a),
+                part: String::new(),
                 region: None,
                 planned: false,
             });
@@ -357,6 +358,7 @@ impl MachineView {
                 t,
                 row: text.clone(),
                 text,
+                part: String::new(),
                 region: None,
                 planned: false,
             });

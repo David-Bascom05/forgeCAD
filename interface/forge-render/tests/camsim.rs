@@ -625,7 +625,7 @@ fn tools_are_drawn_from_their_records() {
         let t2 = std::time::Instant::now();
         for k in 0..20 {
             out.clear();
-            tools::draw(big, [1.0, 2.0, 3.0], k as f64 * 0.3, false, &mut out);
+            tools::draw(big, [1.0, 2.0, 3.0], k as f64 * 0.3, tools::Hit::None, &mut out);
         }
         let draw_ms = t2.elapsed().as_secs_f64() * 1e3 / 20.0;
         eprintln!(
@@ -800,6 +800,13 @@ fn the_checks_line_is_in_words() {
     seen.sort();
     seen.dedup();
     assert_eq!(seen.len(), rows.len(), "no two rows alike: {rows:?}");
+    // the checker says the cutter hit: the cutter alone is tinted, its holder stays itself
+    use forge_render::camsim::tools::Hit;
+    assert_eq!(m.part, "cutter");
+    let h = Hit::of(&m.part);
+    assert!(h.tints(true) && !h.tints(false));
+    assert_eq!(h.and(Hit::of("shank/holder")), Hit::Whole);
+    assert_eq!(Hit::None.and(h), h);
     assert!(!line.contains("G3") && !line.contains("pairs"), "{line}");
     // the run's warnings in people's words, the syntax on hover
     use forge_render::gui_camsim_panel::note_words;
