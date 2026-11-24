@@ -20,6 +20,7 @@ NO_MESHES=1 THREADS=$THREADED sh web/build.sh "$out"
 node web/tests/e2e.cjs "$out"
 node web/tests/idle.cjs "$out"
 node web/tests/nopanic.cjs "$out"
+node web/tests/shade.cjs "$out"
 if [ -n "$PARITY_EXAMPLES" ]; then
   node web/tests/parity.cjs "$out" --examples "$PARITY_EXAMPLES"
 else

@@ -5,6 +5,11 @@ headless (Chromium, SwiftShader WebGPU). Each entry: symptom, repro, root cause,
 Tools: `tools/ui-hunt/drive.cjs` (a long-lived headless app taking clicks, keys and shots over
 HTTP, for exploring by hand).
 
+## Gates
+
+- a4dcf98 (forge-git, kernel): callgrind exact band vs main f04c533 on this VM: worst strict
+  line +0.0002% (gearbox app), strict total +0.0000%; bits identical.
+
 ## 1. An idle page draws every frame for good; frame read-back never answers
 
 - Symptom: once a part is open, the page draws ~60 frames a second with nothing changing
@@ -71,6 +76,26 @@ modules (agent/claude.rs, codex.rs, mcp.rs, speech) which a page never starts: a
 with a note. Limits: clippy lints only forge-render (its workspace's one member); kernel crates
 reached from the page are covered by the twiggy check above, not by the lint.
 
+## 6. Parts past ~45 mm drawn as a black silhouette (ambient occlusion)
+
+- Symptom: in the page, a box 50 mm or more across draws as a flat black hexagon (no shading, no
+  edges); 40 mm and smaller draw shaded. View > Ambient Shadows off brings the shading back.
+- Repro: `?open=c.fg&offscreen=1280x800` with an 80 x 80 x 40 box.
+- Root cause: `render.wgsl` `ao_fs` kept each pixel's view distance in mm in the green channel of
+  the `Rg16Float` occlusion target; half floats end at 65504. A parallel view stands
+  `PARALLEL_BACK` = 1000 radii off (camera.rs), so a part of radius ~35 mm or more was past it:
+  the distance stored as inf, `abs(inf - inf)` made every smoothing weight NaN, the smoothed
+  occlusion came out 0, and the multiply pass blacked out faces and edges. Native (lavapipe)
+  happened to clamp the conversion; SwiftShader (and IEEE conversion on GPUs generally) gives
+  inf, so this is not only a SwiftShader quirk.
+- Found by bisecting the AO passes with debug shader outputs: forcing `ao_fs` to 1 still black,
+  blur passthrough fine, blur weights 0, the stored distance ~76 000 for the 40 mm box.
+- Fix: the distance kept in units of the near plane's (`p.z / near`, i.e. `1 / depth`: bounded,
+  scale-free; the passes compare it only relatively, 1%), `ao_apply_fs` compares the same.
+  Where it worked before, the frame is the same (max difference 1 level in the page, 4 natively).
+- Test: `interface/forge-render/web/tests/shade.cjs` (30, 80 and 400 mm boxes: old build "the
+  80 mm box drawn dark: mean 0.0, 1400 of 1400 black"; new: all shaded).
+
 ## Open (reported, not fixed here)
 
 - 6. Agent tab in a page defaults to "Claude Code" and offers the microphone, both desktop only
@@ -80,5 +105,3 @@ reached from the page are covered by the twiggy check above, not by the lint.
   a project path` to the console only; the status says "History is on: every save is kept" and the
   history is gone on reload. Needs a decision: server allows `.git` writes, or the page says
   versions aren't kept on that backend.
-- 8. Rendering: an 80 mm box at the origin renders as a black silhouette (no shading, no edges)
-  in the page on SwiftShader, while a 30 mm box renders shaded. Under investigation.
