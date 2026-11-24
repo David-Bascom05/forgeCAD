@@ -1707,10 +1707,40 @@ fz = 0.1016
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 15.24
+vc = 60.96
 fz = 0.0254
 [[tool.preset]]
 name = "K general"
+group = "K"
+vc = 60.96
+fz = 0.0508
+[[tool.preset]]
+name = "N general Cast Aluminum Alloy"
+group = "N"
+vc = 79.248
+fz = 0.1016
+[[tool.preset]]
+name = "P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+group = "P"
+vc = 60.96
+fz = 0.0254
+[[tool.preset]]
+name = "P general Alloy Steels 4140, 4130"
+group = "P"
+vc = 30.48
+fz = 0.0254
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+group = "P"
+vc = 19.812
+fz = 0.0254
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+group = "P"
+vc = 15.24
+fz = 0.0254
+[[tool.preset]]
+name = "K general Cast Iron"
 group = "K"
 vc = 60.96
 fz = 0.0508
@@ -1774,15 +1804,15 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.004-0.009"
-basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
-value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.001-0.003"
-basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.001-0.003"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
@@ -1790,7 +1820,55 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.002-0.003"
-basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; of the maker's materials in K, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Cast Aluminum Alloy"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.004-0.009"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.001-0.003"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Alloy Steels 4140, 4130"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Alloy Steels 4140, 4130; Drilling Speed 100-165 SFM; Feed IPR 0.001-0.003"
+basis = "the maker's material 'Alloy Steels 4140, 4130' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 26-30 HRC; Drilling Speed 65-90 SFM; Feed IPR 0.001-0.003"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 26-30 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.001-0.003"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast Iron"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.002-0.003"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
@@ -1819,10 +1897,40 @@ fz = 0.127
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 15.24
+vc = 60.96
 fz = 0.0508
 [[tool.preset]]
 name = "K general"
+group = "K"
+vc = 60.96
+fz = 0.0762
+[[tool.preset]]
+name = "N general Cast Aluminum Alloy"
+group = "N"
+vc = 79.248
+fz = 0.127
+[[tool.preset]]
+name = "P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+group = "P"
+vc = 60.96
+fz = 0.0508
+[[tool.preset]]
+name = "P general Alloy Steels 4140, 4130"
+group = "P"
+vc = 30.48
+fz = 0.0508
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+group = "P"
+vc = 19.812
+fz = 0.0508
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+group = "P"
+vc = 15.24
+fz = 0.0508
+[[tool.preset]]
+name = "K general Cast Iron"
 group = "K"
 vc = 60.96
 fz = 0.0762
@@ -1886,15 +1994,15 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.005-0.010"
-basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
-value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.002-0.004"
-basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.002-0.004"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
@@ -1902,7 +2010,55 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.003-0.005"
-basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; of the maker's materials in K, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Cast Aluminum Alloy"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.005-0.010"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.002-0.004"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Alloy Steels 4140, 4130"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Alloy Steels 4140, 4130; Drilling Speed 100-165 SFM; Feed IPR 0.002-0.004"
+basis = "the maker's material 'Alloy Steels 4140, 4130' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 26-30 HRC; Drilling Speed 65-90 SFM; Feed IPR 0.002-0.004"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 26-30 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.002-0.004"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast Iron"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.003-0.005"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
@@ -1931,10 +2087,40 @@ fz = 0.127
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 15.24
+vc = 60.96
 fz = 0.0508
 [[tool.preset]]
 name = "K general"
+group = "K"
+vc = 60.96
+fz = 0.127
+[[tool.preset]]
+name = "N general Cast Aluminum Alloy"
+group = "N"
+vc = 79.248
+fz = 0.127
+[[tool.preset]]
+name = "P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+group = "P"
+vc = 60.96
+fz = 0.0508
+[[tool.preset]]
+name = "P general Alloy Steels 4140, 4130"
+group = "P"
+vc = 30.48
+fz = 0.0508
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+group = "P"
+vc = 19.812
+fz = 0.0508
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+group = "P"
+vc = 15.24
+fz = 0.0508
+[[tool.preset]]
+name = "K general Cast Iron"
 group = "K"
 vc = 60.96
 fz = 0.127
@@ -1998,15 +2184,15 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.005-0.011"
-basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
-value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.002-0.005"
-basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
@@ -2014,7 +2200,55 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.005-0.007"
-basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; of the maker's materials in K, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Cast Aluminum Alloy"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.005-0.011"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Alloy Steels 4140, 4130"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Alloy Steels 4140, 4130; Drilling Speed 100-165 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Alloy Steels 4140, 4130' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 26-30 HRC; Drilling Speed 65-90 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 26-30 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast Iron"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.005-0.007"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
@@ -2043,10 +2277,40 @@ fz = 0.127
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 15.24
+vc = 60.96
 fz = 0.0508
 [[tool.preset]]
 name = "K general"
+group = "K"
+vc = 60.96
+fz = 0.127
+[[tool.preset]]
+name = "N general Cast Aluminum Alloy"
+group = "N"
+vc = 79.248
+fz = 0.127
+[[tool.preset]]
+name = "P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+group = "P"
+vc = 60.96
+fz = 0.0508
+[[tool.preset]]
+name = "P general Alloy Steels 4140, 4130"
+group = "P"
+vc = 30.48
+fz = 0.0508
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+group = "P"
+vc = 19.812
+fz = 0.0508
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+group = "P"
+vc = 15.24
+fz = 0.0508
+[[tool.preset]]
+name = "K general Cast Iron"
 group = "K"
 vc = 60.96
 fz = 0.127
@@ -2110,15 +2374,15 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.005-0.011"
-basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
-value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.002-0.005"
-basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
@@ -2126,7 +2390,55 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.005-0.007"
-basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; of the maker's materials in K, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Cast Aluminum Alloy"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.005-0.011"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Alloy Steels 4140, 4130"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Alloy Steels 4140, 4130; Drilling Speed 100-165 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Alloy Steels 4140, 4130' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 26-30 HRC; Drilling Speed 65-90 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 26-30 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.002-0.005"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast Iron"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.005-0.007"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
@@ -2155,10 +2467,40 @@ fz = 0.1778
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 15.24
+vc = 60.96
 fz = 0.0762
 [[tool.preset]]
 name = "K general"
+group = "K"
+vc = 60.96
+fz = 0.127
+[[tool.preset]]
+name = "N general Cast Aluminum Alloy"
+group = "N"
+vc = 79.248
+fz = 0.1778
+[[tool.preset]]
+name = "P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+group = "P"
+vc = 60.96
+fz = 0.0762
+[[tool.preset]]
+name = "P general Alloy Steels 4140, 4130"
+group = "P"
+vc = 30.48
+fz = 0.0762
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+group = "P"
+vc = 19.812
+fz = 0.0762
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+group = "P"
+vc = 15.24
+fz = 0.0762
+[[tool.preset]]
+name = "K general Cast Iron"
 group = "K"
 vc = 60.96
 fz = 0.127
@@ -2222,15 +2564,15 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.007-0.012"
-basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
-value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.003-0.006"
-basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.003-0.006"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
@@ -2238,7 +2580,55 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.005-0.008"
-basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; of the maker's materials in K, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Cast Aluminum Alloy"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.007-0.012"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.003-0.006"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Alloy Steels 4140, 4130"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Alloy Steels 4140, 4130; Drilling Speed 100-165 SFM; Feed IPR 0.003-0.006"
+basis = "the maker's material 'Alloy Steels 4140, 4130' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 26-30 HRC; Drilling Speed 65-90 SFM; Feed IPR 0.003-0.006"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 26-30 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.003-0.006"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast Iron"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.005-0.008"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
@@ -2267,10 +2657,40 @@ fz = 0.2286
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 15.24
+vc = 60.96
 fz = 0.1016
 [[tool.preset]]
 name = "K general"
+group = "K"
+vc = 60.96
+fz = 0.1778
+[[tool.preset]]
+name = "N general Cast Aluminum Alloy"
+group = "N"
+vc = 79.248
+fz = 0.2286
+[[tool.preset]]
+name = "P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+group = "P"
+vc = 60.96
+fz = 0.1016
+[[tool.preset]]
+name = "P general Alloy Steels 4140, 4130"
+group = "P"
+vc = 30.48
+fz = 0.1016
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+group = "P"
+vc = 19.812
+fz = 0.1016
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+group = "P"
+vc = 15.24
+fz = 0.1016
+[[tool.preset]]
+name = "K general Cast Iron"
 group = "K"
 vc = 60.96
 fz = 0.1778
@@ -2334,15 +2754,15 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.009-0.014"
-basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
-value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.004-0.007"
-basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
@@ -2350,7 +2770,55 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.007-0.010"
-basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; of the maker's materials in K, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Cast Aluminum Alloy"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.009-0.014"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Alloy Steels 4140, 4130"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Alloy Steels 4140, 4130; Drilling Speed 100-165 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Alloy Steels 4140, 4130' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 26-30 HRC; Drilling Speed 65-90 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 26-30 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast Iron"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.007-0.010"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
@@ -2379,10 +2847,40 @@ fz = 0.2286
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 15.24
+vc = 60.96
 fz = 0.1016
 [[tool.preset]]
 name = "K general"
+group = "K"
+vc = 60.96
+fz = 0.1778
+[[tool.preset]]
+name = "N general Cast Aluminum Alloy"
+group = "N"
+vc = 79.248
+fz = 0.2286
+[[tool.preset]]
+name = "P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+group = "P"
+vc = 60.96
+fz = 0.1016
+[[tool.preset]]
+name = "P general Alloy Steels 4140, 4130"
+group = "P"
+vc = 30.48
+fz = 0.1016
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+group = "P"
+vc = 19.812
+fz = 0.1016
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+group = "P"
+vc = 15.24
+fz = 0.1016
+[[tool.preset]]
+name = "K general Cast Iron"
 group = "K"
 vc = 60.96
 fz = 0.1778
@@ -2446,15 +2944,15 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.009-0.014"
-basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
-value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.004-0.007"
-basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
@@ -2462,7 +2960,55 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.007-0.010"
-basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; of the maker's materials in K, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Cast Aluminum Alloy"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.009-0.014"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Alloy Steels 4140, 4130"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Alloy Steels 4140, 4130; Drilling Speed 100-165 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Alloy Steels 4140, 4130' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 26-30 HRC; Drilling Speed 65-90 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 26-30 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.004-0.007"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast Iron"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.007-0.010"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
@@ -2491,10 +3037,40 @@ fz = 0.254
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 15.24
+vc = 60.96
 fz = 0.127
 [[tool.preset]]
 name = "K general"
+group = "K"
+vc = 60.96
+fz = 0.2032
+[[tool.preset]]
+name = "N general Cast Aluminum Alloy"
+group = "N"
+vc = 79.248
+fz = 0.254
+[[tool.preset]]
+name = "P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+group = "P"
+vc = 60.96
+fz = 0.127
+[[tool.preset]]
+name = "P general Alloy Steels 4140, 4130"
+group = "P"
+vc = 30.48
+fz = 0.127
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+group = "P"
+vc = 19.812
+fz = 0.127
+[[tool.preset]]
+name = "P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+group = "P"
+vc = 15.24
+fz = 0.127
+[[tool.preset]]
+name = "K general Cast Iron"
 group = "K"
 vc = 60.96
 fz = 0.2032
@@ -2558,15 +3134,15 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.010-0.016"
-basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
-value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.005-0.008"
-basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.005-0.008"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; the group's representative by FEEDS-SPEEDS' preference list; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
@@ -2574,7 +3150,55 @@ status = "estimate"
 source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
 taken = "2026-11-23"
 value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.008-0.012"
-basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; of the maker's materials in K, the one with the lowest vc; vc is the low end of the printed range; fz is the low end of the printed range"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Cast Aluminum Alloy"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Aluminum Alloy; Drilling Speed 260-525 SFM; Feed IPR 0.010-0.016"
+basis = "the maker's material 'Cast Aluminum Alloy' mapped to ISO 513 group N by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Carbon Steels, Mild Steels 1010, 1050, 12L14"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Carbon Steels, Mild Steels 1010, 1050, 12L14; Drilling Speed 200-260 SFM; Feed IPR 0.005-0.008"
+basis = "the maker's material 'Carbon Steels, Mild Steels 1010, 1050, 12L14' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Alloy Steels 4140, 4130"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Alloy Steels 4140, 4130; Drilling Speed 100-165 SFM; Feed IPR 0.005-0.008"
+basis = "the maker's material 'Alloy Steels 4140, 4130' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 26-30 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 26-30 HRC; Drilling Speed 65-90 SFM; Feed IPR 0.005-0.008"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 26-30 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Special Alloy Steels, Hardened Steels 30-34 HRC"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Special Alloy Steels, Hardened Steels 30-34 HRC; Drilling Speed 50-75 SFM; Feed IPR 0.005-0.008"
+basis = "the maker's material 'Special Alloy Steels, Hardened Steels 30-34 HRC' mapped to ISO 513 group P by its name; vc is the low end of the printed range; fz is the low end of the printed range"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast Iron"
+status = "estimate"
+source = "https://res.cloudinary.com/osg-usa-inc/image/upload/v1784310470/Literature/09%20-%20Catalog%20Pages/8002024CA/Tech_pg._List_s_-_5190.pdf"
+taken = "2026-11-23"
+value = "Cast Iron; Drilling Speed 200-325 SFM; Feed IPR 0.008-0.012"
+basis = "the maker's material 'Cast Iron' mapped to ISO 513 group K by its name; vc is the low end of the printed range; fz is the low end of the printed range"
 note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
