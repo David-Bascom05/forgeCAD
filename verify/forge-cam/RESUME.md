@@ -150,6 +150,14 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
     2e-16, on the unaccounted ends), now Undecided; refused either way. Digest re-pinned
     (native = wasm32-wasip1: 0x18f7a4235d47008e).
 
+- The torus about a vertical axis (shadow.rs `Kind::Torus`, CAM-CORE 2026-11-24): the same
+  bound as the cone. `torus_radius` (= `cone_radius` with the radius big + r cos φ) gives the
+  face point's distance from the axis, `axis_gap` the horizontal gap, `cone_factor` the
+  |c x + s y| enclosure. Its cos φ and sin φ over a cell of q are the rational map's interval
+  enclosures (L5). A posted arc whose centre is ε off the axis (rounded words) is covered by the
+  path's own distance range from the axis (`arc_far`, `arc_near`), which already holds every
+  instant within r ± ε.
+
 ## Still to do when asked
 
 1. Done: `dist_region` and the point-in-trim test (Trim.lean).

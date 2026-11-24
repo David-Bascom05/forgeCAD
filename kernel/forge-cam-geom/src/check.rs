@@ -118,7 +118,7 @@ fn mul3<T: Num>(a: [T; 3], k: T) -> [T; 3] {
 }
 
 /// (c(t), s(t)): the rational unit circle.
-fn circ<T: Num>(t: T) -> (T, T) {
+pub(crate) fn circ<T: Num>(t: T) -> (T, T) {
     let t2 = t.sqr();
     let den = T::c(1.0).add(t2);
     let c = T::c(1.0).sub(t2).div(den);
