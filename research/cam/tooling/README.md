@@ -51,9 +51,24 @@ by the test, not failed.
   Shars, Tormach TTS), everything behind the nose up to the gauge line is taken at the flange
   diameter: errs large, never small. Flange diameters: CAT40 63.5 and BT40 62.99 from Maritool
   drawings; HSK63A 63 (estimate); BT30 and TTS stand-ins (unknown, believed large).
-- Cutting presets: at most one per ISO 513 group, the vendor's slotting row first; the vendors
-  name materials, not groups, so the group is an estimate by the material's name, cited so;
-  a range of fz keeps its smallest value.
+- Cutting presets (FEEDS-SPEEDS' spec): one per (ISO 513 group, class), named "<group> <class>",
+  class from the maker's column header (slot | rough | finish; Lakeshore's general milling,
+  drilling, chamfering and unlabeled rows are `general`; Harvey's "Max" chip-load ceiling is
+  not an operation and is left out). vc, fz, ap and ae are the printed inch values converted
+  exactly (SFM x 0.3048, IPT/IPR x 25.4, a depth as a multiple or percent of the diameter x dc);
+  a printed range keeps its low end, as an estimate. Drills carry fz in mm/rev; a tap with vc
+  only feeds its pitch per rev. The vendors name materials, not groups: the group is taken by
+  name (copper alloys N; titanium, nickel and cobalt alloys S; H only for a steel or cast iron
+  whose stated hardness starts at 45 HRC). "<group> <class>" is the group's representative, by
+  FEEDS-SPEEDS' preference list (N wrought 6061/7075, then wrought/"Aluminums", then any aluminium; P 1018/1010/low carbon, then medium
+  carbon, then 4140/alloy steel at most 30 HRC; M 304/316/austenitic/"soft"; K grey or "soft"/
+  "medium" cast iron; S Ti-6Al-4V/titanium, then nickel; H the lowest stated hardness from 45
+  HRC); with none of them in the source, the group's lowest-vc row, cited so. Every row is also
+  kept as "<group> <class> <maker's material>", for an exact material match. A diameter on the
+  boundary of two diameter columns (Lakeshore) keeps the lower feed. "Up to" depths are the
+  source's upper limit, noted.
+  Helical's finishing column is a programmed feed at the stated RDOC: the preset sets ae to it
+  and notes "programmed at ae".
 - Inconsistencies found in the sources are kept in the raw facts (e.g. Rego-Fix ER20 nut thread
   M25x1.5 in the catalogue vs M24x1.5 on the pocket sheet; Tormach BT30 "Gage length is 60mm
   (1.97 inches)"; Lakeshore ".0003.0010" chip load); the generator never resolves them silently.

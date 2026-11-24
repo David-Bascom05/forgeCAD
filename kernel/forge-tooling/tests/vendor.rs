@@ -177,3 +177,84 @@ fn builtin_files_are_named_by_vendor() {
     }
     assert_eq!(l, Library::builtin());
 }
+
+/// FEEDS-SPEEDS' preset spec: per (ISO group, class) a representative named "<group> <class>",
+/// and every maker row as "<group> <class> <maker's material>"; each cited once; the numbers
+/// are the maker's printed inch values converted exactly.
+#[test]
+fn presets_follow_the_spec() {
+    let l = Library::builtin();
+    let mut n = 0;
+    for t in l.tools.iter().filter(|t| t.real) {
+        let mut names = std::collections::BTreeSet::new();
+        for p in &t.presets {
+            n += 1;
+            let mut it = p.name.splitn(3, ' ');
+            let (g, class) = (it.next().unwrap(), it.next().unwrap_or(""));
+            assert_eq!(g, p.group, "{}", t.id);
+            assert!("PMKNSHO".contains(g) && g.len() == 1, "{}: {g}", t.id);
+            assert!(
+                ["slot", "rough", "finish", "general"].contains(&class),
+                "{}: {class}",
+                t.id
+            );
+            assert!(names.insert(p.name.clone()), "{}: {} twice", t.id, p.name);
+            assert!(p.vc > 0.0 && p.fz > 0.0, "{}: {}", t.id, p.name);
+            let c = t
+                .cites
+                .iter()
+                .find(|c| c.path == format!("preset.{}", p.name))
+                .unwrap_or_else(|| panic!("{}: {} uncited", t.id, p.name));
+            assert!(!c.value.is_empty() && !c.source.is_empty(), "{}", t.id);
+            // a material-named row restates its material; the representative names one too
+            if let Some(mat) = it.next() {
+                assert!(c.value.starts_with(mat), "{}: {}", t.id, c.value);
+            }
+        }
+        // every (group, class) that has rows has its representative
+        for p in &t.presets {
+            let rep: String = p.name.splitn(3, ' ').take(2).collect::<Vec<_>>().join(" ");
+            assert!(names.contains(&rep), "{}: no {rep}", t.id);
+        }
+    }
+    assert!(n >= 2000, "{n}");
+    // Harvey 792208 (1/8", uncoated): N's representative is wrought aluminium (FEEDS-SPEEDS'
+    // list), 1000 SFM and .00183 IPT slotting at 1x D radial, .5x D axial
+    let t = l.tool("harvey-792208").unwrap();
+    let p = t.presets.iter().find(|p| p.name == "N slot").unwrap();
+    // exact to the 6 dp the file is written in
+    assert!((p.vc - 304.8).abs() < 1e-9 && (p.fz - 0.00183 * 25.4).abs() < 1e-9);
+    assert_eq!((p.ap, p.ae), (Some(0.5 * 3.175), Some(3.175)));
+    let c = t.cites.iter().find(|c| c.path == "preset.N slot").unwrap();
+    assert_eq!(c.status, CiteStatus::Estimate);
+    assert!(c.value.starts_with("ALUMINUM ALLOYS: Wrought"), "{}", c.value);
+    assert!(
+        c.value.contains("1000 SFM") && c.value.contains(".00183 IPT"),
+        "{}",
+        c.value
+    );
+    // every Harvey row is kept too: the High Coppers slotting row at 225 SFM
+    let cu = t
+        .presets
+        .iter()
+        .find(|p| p.name == "N slot COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)")
+        .unwrap();
+    assert!((cu.vc - 225.0 * 0.3048).abs() < 1e-9);
+    // Helical's finishing column is a programmed feed at its stated RDOC
+    let h = l.tools.iter().filter(|t| t.vendor == "Helical Solutions");
+    let fin: Vec<_> = h
+        .flat_map(|t| {
+            t.cites
+                .iter()
+                .filter(|c| c.path.split(' ').nth(1) == Some("finish"))
+        })
+        .collect();
+    assert!(!fin.is_empty() && fin.iter().all(|c| c.note.contains("programmed at ae")));
+    // "Up to" depths are the source's upper limit, and the cite says so
+    assert!(
+        l.tools
+            .iter()
+            .flat_map(|t| &t.cites)
+            .any(|c| c.note.contains("upper limit"))
+    );
+}
