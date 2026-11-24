@@ -169,23 +169,33 @@ impl WorkholdingUi {
     /// the record's sizes, what it does not give as ghosts); other kinds as forge-workholding
     /// places their bodies.
     pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
-        let r = self.cur.as_ref()?;
-        match r.kind.name() {
-            "vise" | "self_centring" => Some(crate::library_mesh::vise(r)),
-            "chuck" => Some(crate::library_mesh::chuck(r)),
-            _ => {
-                let mut p = crate::library_mesh::Preview::default();
-                for t in self.preview()? {
-                    p.parts.push((t, crate::library_mesh::Look::ToolSteel));
-                }
-                Some(p)
-            }
-        }
+        preview_of(self.cur.as_ref()?)
     }
 
     /// The record placed as the check places it, as triangles.
     pub fn preview(&self) -> Option<Vec<crate::machine_mesh::Tris>> {
-        let r = self.cur.as_ref()?;
+        bodies_of(self.cur.as_ref()?)
+    }
+}
+
+/// A record's preview (the view's, and its thumbnail's).
+pub fn preview_of(r: &Record) -> Option<crate::library_mesh::Preview> {
+    match r.kind.name() {
+        "vise" | "self_centring" => Some(crate::library_mesh::vise(r)),
+        "chuck" => Some(crate::library_mesh::chuck(r)),
+        _ => {
+            let mut p = crate::library_mesh::Preview::default();
+            for t in bodies_of(r)? {
+                p.parts.push((t, crate::library_mesh::Look::ToolSteel));
+            }
+            Some(p)
+        }
+    }
+}
+
+/// A record placed as the check places it, as triangles.
+pub fn bodies_of(r: &Record) -> Option<Vec<crate::machine_mesh::Tris>> {
+    {
         let bodies = forge_workholding_builder::preview(r).ok()?;
         Some(
             bodies
@@ -300,16 +310,32 @@ pub fn library(
                         for e in inner {
                             let on = st.cur.as_ref().is_some_and(|c| c.name == e.def.name)
                                 && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level);
-                            let mut txt = e.def.name.clone();
-                            if e.def.standin {
+                            let r0 = &e.def;
+                            let mut txt = super::lib_form::product_name(&r0.vendor, &r0.product)
+                                .unwrap_or_else(|| r0.name.clone());
+                            if r0.standin {
                                 txt.push_str("  · stand-in");
                             }
-                            let r = ui
-                                .horizontal(|ui| {
-                                    super::lib_form::thumb(ui, t, &thumb(&e.def), 26.0);
-                                    ui.selectable_label(on, RichText::new(txt).font(sans(12.0)))
-                                })
-                                .inner;
+                            // the secondary line: its size people pick it by, and its id
+                            let size = ["jaw_width", "grip_max", "max_opening", "body_d"]
+                                .iter()
+                                .find_map(|k| r0.vals.get(*k).map(|v| (k, *v)))
+                                .map(|(k, v)| {
+                                    format!(
+                                        "{} {}",
+                                        super::lib_form::workholding_label(k),
+                                        super::lib_form::len_text(v)
+                                    )
+                                });
+                            let sub = size
+                                .into_iter()
+                                .chain(std::iter::once(r0.name.clone()))
+                                .collect::<Vec<_>>()
+                                .join(" · ");
+                            let key =
+                                super::lib_form::row_key(&["workholding", &r0.name, &e.file, e.level.name()]);
+                            let r =
+                                super::lib_form::record_row(ui, t, key, on, &txt, &sub, || preview_of(r0));
                             places.push((format!("workholding:pick:{}", e.def.name), r.rect));
                             if r.clicked() {
                                 chosen = Some((*e).clone());
@@ -548,34 +574,4 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
     {
         st.set_word(&k, &v);
     }
-}
-
-/// A record's thumbnail: its placed bodies seen from the front.
-fn thumb(r: &Record) -> Vec<Vec<[f64; 2]>> {
-    use super::lib_form::{cyl_pts, rect_xz};
-    let Ok(bodies) = forge_workholding_builder::preview(r) else {
-        return Vec::new();
-    };
-    bodies
-        .iter()
-        .flat_map(|(_, prims)| prims.iter())
-        .map(|p| match p {
-            forge_workholding::Prim::Block { o, axes, size } => {
-                let mut pts = Vec::new();
-                for i in 0..8 {
-                    let mut q = *o;
-                    for (k, ax) in axes.iter().enumerate() {
-                        if i >> k & 1 == 1 {
-                            for d in 0..3 {
-                                q[d] += ax[d] * size[k];
-                            }
-                        }
-                    }
-                    pts.push(q);
-                }
-                rect_xz(&pts)
-            }
-            forge_workholding::Prim::Cyl { base, axis, r, h } => rect_xz(&cyl_pts(*base, *axis, *r, *h)),
-        })
-        .collect()
 }

@@ -370,8 +370,28 @@ impl BrakeUi {
     /// segments, with its section and dimensions for the inset; a press's bed, ram and
     /// housings; what the record does not give as ghosts.
     pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
+        preview_of(self.cur.as_ref()?)
+    }
+}
+
+/// A record's thumbnail: a press as its preview; a punch or die a short length of its section
+/// (its full length would be a sliver at 48 px).
+pub fn thumb_preview_of(r: &Rec) -> Option<crate::library_mesh::Preview> {
+    if r.kind == "press" {
+        return preview_of(r);
+    }
+    let secs = forge_brake_builder::preview(r).ok()?;
+    let h = match get(&r.table, "height") {
+        Some(Item::Num(x)) if *x > 0.0 => *x,
+        _ => 100.0,
+    };
+    Some(crate::library_mesh::brake_tool(&secs, &[(h * 1.2, 1)]))
+}
+
+/// A record's preview (the view's): a press as a press, a punch or die along its segments.
+pub fn preview_of(r: &Rec) -> Option<crate::library_mesh::Preview> {
+    {
         use crate::library_mesh as lm;
-        let r = self.cur.as_ref()?;
         if r.kind == "press" {
             return Some(lm::press(&r.table));
         }
@@ -442,7 +462,9 @@ impl BrakeUi {
             }
         }
     }
+}
 
+impl BrakeUi {
     /// When the record's working geometry is not all known: its section drawn from the values
     /// it holds and the template's stand-ins for the rest (to be shown as a ghost), and the
     /// values stood in.
@@ -548,10 +570,6 @@ pub fn library(
     places.push(("brake:search".into(), r.rect));
     let want = st.filter.trim().to_lowercase();
     let mut chosen = None;
-    // the thumbnails, worked out once per record
-    let all: Vec<Rec> = st.entries.iter().map(|e| e.def.clone()).collect();
-    let thumbs: std::collections::HashMap<String, Vec<Vec<[f64; 2]>>> =
-        all.iter().map(|r| (r.id.clone(), st.thumb(r))).collect();
     egui::ScrollArea::vertical()
         .id_salt(("brake:list", st.word))
         .max_height((ui.available_height() - 220.0).max(80.0))
@@ -606,20 +624,59 @@ pub fn library(
                         for e in inner {
                             let on = st.cur.as_ref().is_some_and(|c| c.id == e.def.id)
                                 && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level);
-                            let mut txt = e.def.id.clone();
+                            let w = |k: &str| match get(&e.def.table, k) {
+                                Some(Item::Str(s)) => s.clone(),
+                                _ => String::new(),
+                            };
+                            let n = |k: &str| match get(&e.def.table, k) {
+                                Some(Item::Num(x)) => Some(*x),
+                                _ => None,
+                            };
+                            let model = if w("model").is_empty() {
+                                w("name")
+                            } else {
+                                w("model")
+                            };
+                            let mut txt = super::lib_form::product_name(&w("maker"), &model)
+                                .unwrap_or_else(|| e.def.id.clone());
                             if !matches!(e.def.table.get("real"), Some(Item::Bool(true))) {
                                 txt.push_str("  · stand-in");
                             }
                             if !e.hides.is_empty() {
-                                txt.push_str("  (hides)");
+                                txt.push_str("  (hides another)");
                             }
-                            let polys = thumbs.get(&e.def.id).cloned().unwrap_or_default();
-                            let r = ui
-                                .horizontal(|ui| {
-                                    super::lib_form::thumb(ui, t, &polys, 26.0);
-                                    ui.selectable_label(on, RichText::new(txt).font(sans(12.0)))
-                                })
-                                .inner;
+                            // the secondary line: what it is picked by
+                            let lt = super::lib_form::len_text;
+                            let mut sub: Vec<String> = match &*e.def.kind {
+                                "press" => [
+                                    n("force").map(|f| format!("{} kN", forge_units::trim(f))),
+                                    n("bed_length").map(lt),
+                                ]
+                                .into_iter()
+                                .flatten()
+                                .collect(),
+                                "die" => [
+                                    n("v").map(|v| format!("V {}", lt(v))),
+                                    n("angle").map(|a| format!("{}°", forge_units::trim(a))),
+                                ]
+                                .into_iter()
+                                .flatten()
+                                .collect(),
+                                _ => [
+                                    n("height").map(lt),
+                                    n("tip_angle").map(|a| format!("{}°", forge_units::trim(a))),
+                                ]
+                                .into_iter()
+                                .flatten()
+                                .collect(),
+                            };
+                            sub.push(e.def.id.clone());
+                            let key =
+                                super::lib_form::row_key(&[st.word, &e.def.id, &e.file, e.level.name()]);
+                            let r =
+                                super::lib_form::record_row(ui, t, key, on, &txt, &sub.join(" · "), || {
+                                    thumb_preview_of(&e.def)
+                                });
                             places.push((format!("brake:pick:{}", e.def.id), r.rect));
                             if r.clicked() {
                                 chosen = Some((*e).clone());

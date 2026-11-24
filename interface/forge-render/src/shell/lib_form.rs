@@ -553,6 +553,101 @@ pub fn level_head(ui: &mut Ui, t: &Theme, level: &str, n: usize) {
     );
 }
 
+/// A length in the document's units, trimmed ("10 mm", "0.394 in").
+pub fn len_text(mm: f64) -> String {
+    let doc = doc_units();
+    match forge_units::lookup(doc) {
+        Some((_, top, bottom)) if doc != "mm" => {
+            value_text(((mm / (top / bottom)) * 1000.0).round() / 1000.0, doc)
+        }
+        _ => value_text((mm * 100.0).round() / 100.0, "mm"),
+    }
+}
+
+/// A record's preview as a thumbnail (its solid parts at their appearances; the floor and the
+/// ghosts left out), 96 px for a 48 px row.
+pub fn thumb_of(p: &crate::library_mesh::Preview) -> Option<crate::thumb::Image> {
+    let parts: Vec<(Vec<[f32; 3]>, &Vec<[u32; 3]>, [f32; 3])> = p
+        .parts
+        .iter()
+        .filter(|(_, l)| *l != crate::library_mesh::Look::Floor)
+        .map(|(t, l)| {
+            let c = l.tint();
+            (
+                t.pos.iter().map(|q| q.map(|x| x as f32)).collect(),
+                &t.tri,
+                [c[0], c[1], c[2]],
+            )
+        })
+        .collect();
+    let meshes: Vec<crate::thumb::Mesh> = parts
+        .iter()
+        .map(|(pos, tri, colour)| crate::thumb::Mesh {
+            pos,
+            tri,
+            colour: *colour,
+        })
+        .collect();
+    crate::thumb::render(&meshes, 96, 0.82)
+}
+
+/// A thumbnail key for a listed record: changes when the library is saved (a record edited).
+pub fn row_key(parts: &[&str]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    parts.hash(&mut h);
+    forge_library::generation().hash(&mut h);
+    h.finish()
+}
+
+/// A library row (docs/ux/STANDARD.md §8): a 48 px thumbnail of the record's real geometry
+/// (drawn once per `key`, which must change with the record), its name and a secondary line,
+/// the whole row one target.
+pub fn record_row(
+    ui: &mut Ui,
+    t: &Theme,
+    key: u64,
+    on: bool,
+    name: &str,
+    sub: &str,
+    preview: impl FnOnce() -> Option<crate::library_mesh::Preview>,
+) -> egui::Response {
+    let h = 54.0;
+    let w = ui.available_width().max(120.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, h), Sense::click());
+    let fill = if on {
+        t.accent.gamma_multiply(0.22)
+    } else if resp.hovered() {
+        t.hover
+    } else {
+        egui::Color32::TRANSPARENT
+    };
+    ui.painter().rect_filled(rect, CornerRadius::same(4), fill);
+    let mut child = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(rect.shrink2(vec2(4.0, 3.0)))
+            .layout(egui::Layout::left_to_right(egui::Align::Center)),
+    );
+    super::ux::thumbnail(&mut child, t, key, 48.0, || preview().and_then(|p| thumb_of(&p)));
+    child.add_space(6.0);
+    child.vertical(|ui| {
+        ui.add_space(6.0);
+        ui.add(
+            egui::Label::new(RichText::new(name).font(sans(12.0)).color(t.ink))
+                .truncate()
+                .selectable(false),
+        );
+        if !sub.is_empty() {
+            ui.add(
+                egui::Label::new(RichText::new(sub).font(sans(10.5)).color(t.ink2))
+                    .truncate()
+                    .selectable(false),
+            );
+        }
+    });
+    resp.on_hover_text(name)
+}
+
 /// The document's length unit word ("mm", "in"), for a table's column heading.
 pub fn doc_units() -> &'static str {
     DOC_UNITS.with(|c| c.get())
