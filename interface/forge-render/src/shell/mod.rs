@@ -26,6 +26,7 @@ mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
 mod empty;
+pub mod capture;
 pub mod env;
 pub mod studio_env;
 pub mod fg;
@@ -185,6 +186,8 @@ pub enum Action {
     EnterEnv(env::EnvId),
     ExitEnv,
     Env(env::EnvId, u16),
+    /// Photo, Record and their settings (`capture.rs`), on every environment's ribbon.
+    Capture(capture::Capture),
     /// The Manufacture workspace's command.
     Cam(cam::Ask),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
@@ -390,6 +393,8 @@ pub struct Shell {
     pub env: Option<env::EnvId>,
     /// The Render Studio's choices (`studio_env.rs`): appearances, light, camera, output.
     pub studio: studio_env::StudioUi,
+    /// Photo and Record's settings and progress (`capture.rs`).
+    pub capture: capture::CaptureUi,
     /// This frame, the environment draws the view itself: the view's own chrome (its toolbar,
     /// the cube's words, the navigation bar) stands down.
     pub view_owned: bool,
@@ -432,6 +437,7 @@ pub struct Shell {
 
 impl Default for Shell {
     fn default() -> Shell {
+        capture::install();
         Shell {
             theme: theme::DARK,
             tab: 0,
@@ -469,6 +475,7 @@ impl Default for Shell {
             sheet: sheet::SheetUi::new(),
             env: None,
             studio: Default::default(),
+            capture: Default::default(),
             view_owned: false,
             style_set: None,
             inspect: Default::default(),
@@ -826,6 +833,7 @@ impl Shell {
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
+        capture::panels(self, &ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
         self.settings_window(&ctx);

@@ -132,6 +132,8 @@ pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 pub struct Gui {
     /// A photo of the view on its way back from the GPU (`gui_record.rs`).
     photo: Option<gui_record::PhotoJob>,
+    /// A recording under way (`gui_record.rs`).
+    recording: Option<gui_record::RecordJob>,
     /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
     studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
@@ -296,6 +298,7 @@ impl Gui {
         warm_shell.out.clear();
         Gui {
             photo: None,
+            recording: None,
             studio: None,
             vers: Default::default(),
             env_asked: None,
@@ -950,6 +953,10 @@ impl Gui {
                     self.shell.env_command(id, c);
                     continue;
                 }
+                Action::Capture(c) => {
+                    crate::shell::capture::command_of(&mut self.shell, c);
+                    continue;
+                }
                 a => a,
             };
             if let Action::PartColours(on) = a {
@@ -1562,6 +1569,7 @@ impl Gui {
             times.view_drawn = true;
         }
         let studio_busy = self.studio_frame();
+        self.capture_tick();
         times.view = now_ms() - t1;
 
         let t2 = now_ms();
@@ -1629,7 +1637,7 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || studio_busy || self.photo.is_some() || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        let again_in = if animating || studio_busy || self.capture_busy() || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {
