@@ -32,6 +32,11 @@
 //! The tests `single_capped_target` and `passes_peel_one_way` assert rule 1 and the peel; keep
 //! them passing.
 //!
+//! Links at depth (fto-adaptive.md §10): straight where the cleared area holds it, else back along
+//! the last pass as it was cut, then straight. The retrace lemma: the pass's own posted moves
+//! reversed, at its depth, with the same tool, sweep a subset of the swath that pass cut, so they
+//! meet no material; only the last straight leg is tested. `links_never_cut` replays it.
+//!
 //! Certification: the path is posted and certified like every other (G1–G3 on the posted
 //! path). What the op claims cleared (its voids, for the in-process stock and G4) is not taken
 //! from the simulation: a cell is claimed only when every point of it lies within the flat of
@@ -374,6 +379,8 @@ pub fn adaptive(
     // the direction the last pass went along the sweep (+1 with it, −1 against it)
     let mut last_sign = 1.0f64;
     let mut rings_log: Vec<RingRun> = Vec::new();
+    // the last pass at this level as cut: its start and its moves
+    let mut last_pass: ([f64; 3], Vec<PMove>) = ([0.0; 3], Vec::new());
     // the way back over the last pass, for a link by retract (one-way passes)
     let mut back: Vec<[f64; 2]> = Vec::new();
     let mut mv: Vec<PMove> = Vec::new();
@@ -631,7 +638,27 @@ pub fn adaptive(
             }
             let cur = at.unwrap_or([p[0], p[1], h.clear]);
             let target = [p[0], p[1], z];
+            let retrace = if cur[2] == z && !f.link_clear([cur[0], cur[1]], p, z) {
+                retrace_link(
+                    cur,
+                    p,
+                    &last_pass,
+                    z,
+                    &|a, b| f.link_clear(a, b, z),
+                    3.0,
+                    4.0 * f.r,
+                )
+            } else {
+                None
+            };
             if cur[2] == z && f.link_clear([cur[0], cur[1]], p, z) {
+                mv.push(PMove::Line {
+                    to: target,
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            } else if let Some(back_moves) = retrace {
+                mv.extend(back_moves);
                 mv.push(PMove::Line {
                     to: target,
                     f: feed.0,
@@ -787,7 +814,10 @@ pub fn adaptive(
             let keep = pass.len().saturating_sub(air_run);
             let mut pts = vec![target];
             pts.extend_from_slice(&pass[..keep]);
+            let k0 = mv.len();
             fit_arcs(&pts, f.r, feed.0, &mut mv);
+            // the pass as cut (its posted moves from its start), for a link back along it
+            last_pass = (target, mv[k0..].to_vec());
             at = Some(if keep > 0 { pass[keep - 1] } else { target });
             // the way back over this pass: its points from the end to its start, simplified to
             // within r/2 of it (inside the swath it cut)
@@ -1064,6 +1094,76 @@ pub fn adaptive(
         voids,
         rings: rings_log,
     })
+}
+
+/// A link at depth back along the last pass as it was cut (fto-adaptive.md §10 (A)), then
+/// straight to b. The retrace is the pass's own posted moves reversed (a line back along itself,
+/// an arc back about the same centre), at the pass's depth, with the same tool: the tool sweeps
+/// exactly a subset of the swath that pass cut, so it meets no material and removes none (the
+/// lemma; G1-G3 check the posted path again). Only the last leg, from a point of the pass to b,
+/// is tested (`clear`, as every link at depth is). Walking back from the pass's end (where the
+/// tool is, `cur`), the first point from which b is in straight reach; the whole link within
+/// `k` times the straight distance plus `d`; else None (a retract). Geometric only.
+#[allow(clippy::too_many_arguments)]
+fn retrace_link(
+    cur: [f64; 3],
+    b: [f64; 2],
+    last: &([f64; 3], Vec<PMove>),
+    z: f64,
+    clear: &dyn Fn([f64; 2], [f64; 2]) -> bool,
+    k: f64,
+    d: f64,
+) -> Option<Vec<PMove>> {
+    let (start, moves) = last;
+    if moves.is_empty() || start[2] != z {
+        return None;
+    }
+    // the pass's points: start, then each move's end
+    let mut pts = vec![*start];
+    for m in moves {
+        match *m {
+            PMove::Line { to, .. } | PMove::Arc { to, .. } => pts.push(to),
+            _ => return None,
+        }
+    }
+    // the tool must be at the pass's end, at its depth
+    let end = *pts.last().unwrap();
+    if end != cur || pts.iter().any(|p| p[2] != z) {
+        return None;
+    }
+    let dist = |p: [f64; 3], q: [f64; 2]| ((q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2)).sqrt();
+    let cap = k * dist(cur, b) + d;
+    let mut out = Vec::new();
+    let mut len = 0.0;
+    // walk back: move i goes pts[i] -> pts[i+1]; reversed it goes pts[i+1] -> pts[i]
+    for i in (0..moves.len()).rev() {
+        let (from, to) = (pts[i + 1], pts[i]);
+        let back = match moves[i] {
+            PMove::Line { f, .. } => {
+                len += ((to[0] - from[0]).powi(2) + (to[1] - from[1]).powi(2)).sqrt();
+                PMove::Line {
+                    to,
+                    f,
+                    phase: Phase::Link,
+                }
+            }
+            PMove::Arc { c, cw, f, .. } => {
+                let r = ((from[0] - c[0]).powi(2) + (from[1] - c[1]).powi(2)).sqrt();
+                // the arc's length bounded by a half turn's (fitted arcs are under 170°)
+                len += std::f64::consts::PI * r;
+                PMove::Arc { to, c, cw: !cw, f }
+            }
+            _ => return None,
+        };
+        if len + dist(to, b) > cap {
+            return None;
+        }
+        out.push(back);
+        if clear([to[0], to[1]], b) {
+            return Some(out);
+        }
+    }
+    None
 }
 
 /// A polyline simplified (Douglas–Peucker): every dropped point within `tol` of the kept chord.
@@ -1674,6 +1774,91 @@ mod tests {
                     }
                 }
             }
+        }
+    }
+
+    /// fto-adaptive.md §10 (1): links never cut. Replay the path on a fresh model: every link
+    /// move at depth (straight, or back along a pass as it was cut) removes nothing but the
+    /// model's own rounding (a sliver of cells along a swath's edge, under 0.01 mm³ per mm).
+    #[test]
+    fn links_never_cut() {
+        let t = tool("flat-6");
+        let rg = Region {
+            loops: vec![
+                rect(-7.0, -7.0, 47.0, 37.0),
+                rect(15.0, 11.0, 25.0, 19.0).reversed(),
+            ],
+        };
+        let ip = InProcess::new([0.0, 0.0, -9.0], [40.0, 30.0, 0.0]);
+        for two_way in [false, true] {
+            let prm = Adaptive {
+                phi_max: 40.0,
+                step: 0.0,
+                leave: 0.0,
+                wall_pass: true,
+                sweep: 0.0,
+                two_way,
+            };
+            let out = adaptive(
+                &rg,
+                Cut {
+                    tool: &t,
+                    tidx: 0,
+                    h: Heights {
+                        clear: 20.0,
+                        retract: 3.0,
+                    },
+                    feed: (1000.0, 300.0),
+                },
+                Span {
+                    top: 0.0,
+                    bottom: -8.0,
+                    step: 8.0,
+                },
+                &ip,
+                &prm,
+            )
+            .unwrap();
+            let prof = Profile::of(&t.tool).unwrap();
+            let mut m = HeightMap::of_stock(&ip, 0.05);
+            let mut at = out.path.start;
+            let mut links = 0;
+            for mv in &out.path.moves {
+                let to = match *mv {
+                    PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+                    PMove::Cycle { .. } => continue,
+                };
+                // (a retraced arc carries no phase: those are covered by the lemma alone)
+                let link = matches!(
+                    mv,
+                    PMove::Line {
+                        phase: Phase::Link,
+                        ..
+                    }
+                );
+                let pts = travelled(&OpPath {
+                    tool: 0,
+                    start: at,
+                    moves: vec![*mv],
+                    rpm: 0.0,
+                    coolant: forge_post::Coolant::Flood,
+                });
+                let mut got = 0.0;
+                for w in pts.windows(2) {
+                    got += m.sweep(w[0].0, w[1].0, &prof);
+                }
+                let level = to[2] == at[2] && to[2] == -8.0;
+                if link && level {
+                    links += 1;
+                    let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                    assert!(
+                        got <= 0.01 * l.max(1.0),
+                        "two-way {two_way}: a link {at:?} -> {to:?} removes {got} mm³"
+                    );
+                }
+                at = to;
+            }
+            assert!(links > 0, "two-way {two_way}: no links at depth");
         }
     }
 
