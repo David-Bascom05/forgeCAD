@@ -129,4 +129,25 @@ theorem lineOkQ_iff (L : QTravel) (o a b : Fin 3 → ℚ) :
 #guard lineOkQ ⟨fun _ => -100, fun _ => 100⟩ (fun _ => 0) ![0, 0, 5] ![50, -20, 5]
 #guard !lineOkQ ⟨fun _ => -100, fun _ => 100⟩ (fun _ => 0) ![0, 0, 5] ![50, -20, 101/1]
 
+
+/-! ### G5, runtime: the posted feeds and spindle speeds
+
+The control reads a feed word as an integer q at k decimals, the feed q / 10^k mm/min, and a
+spindle word as a whole number of rpm. forge-cam-lang's `runtime_limits` passes a feed when
+q ≤ lo, lo a lower end of an enclosure of fmax · 10^k (outward-rounded), and a speed n when
+rmin ≤ n ≤ rmax. -/
+
+/-- **G5, runtime** (the spec): every feed at most the machine's limit, every speed in range. -/
+def G5rt (fmax rmin rmax : ℝ) (k : ℕ) (feeds speeds : List ℤ) : Prop :=
+  (∀ q ∈ feeds, (q : ℝ) / 10 ^ k ≤ fmax) ∧ ∀ n ∈ speeds, rmin ≤ (n : ℝ) ∧ (n : ℝ) ≤ rmax
+
+/-- **The runtime check is sound**: a lower end of fmax · 10^k bounding every posted feed word,
+and every speed in range, give G5rt. -/
+theorem G5rt_of_check {fmax rmin rmax lo : ℝ} {k : ℕ} {feeds speeds : List ℤ}
+    (hlo : lo ≤ fmax * 10 ^ k) (hf : ∀ q ∈ feeds, (q : ℝ) ≤ lo)
+    (hs : ∀ n ∈ speeds, rmin ≤ (n : ℝ) ∧ (n : ℝ) ≤ rmax) : G5rt fmax rmin rmax k feeds speeds := by
+  refine ⟨fun q hq => ?_, hs⟩
+  rw [div_le_iff₀ (by positivity)]
+  exact (hf q hq).trans hlo
+
 end ForgeCam

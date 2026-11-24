@@ -29,9 +29,9 @@ fn segs(h: &mut u64, ss: &[Seg]) {
     }
 }
 
-// re-pinned 2026-11-23: the posted texts changed (haas: no G187 P2; the haas-hsm dialect added),
-// research/cam/machines/haas-dialect-audit.md #7; the same value on wasm32-wasip1
-const PINNED: u64 = 0x29f7e9373bc38273;
+// re-pinned 2026-11-23 on the train-3 merge: main's digest plus the posted-text change of
+// post/haas-audit (haas: no G187 P2; the haas-hsm dialect added); the same value on wasm32-wasip1
+const PINNED: u64 = 0xd2129cced024f3a0;
 
 #[test]
 fn the_same_bits_everywhere() {
