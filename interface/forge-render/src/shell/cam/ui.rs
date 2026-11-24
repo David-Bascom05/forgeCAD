@@ -3642,7 +3642,7 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
     let mut close = false;
     let mut apply = false;
     // a panel across the bottom of the view, above the simulation's timeline (UX-LEAD)
-    let ph = (v.height() * 0.38).clamp(220.0, 380.0);
+    let ph = text_panel_h(v.height());
     let panel = Rect::from_min_max(pos2(v.left() + 8.0, v.bottom() - ph), pos2(v.right() - 8.0, v.bottom() - 4.0));
     let width = panel.width() - 16.0;
     let win = egui::Window::new("cam-text")
@@ -3890,6 +3890,12 @@ fn dialog_host<'a>(dock: Option<Rect>, id: &str, t: &Theme, win: egui::Window<'a
         ),
         None => Host::Float(Box::new(win)),
     }
+}
+
+/// The Document Text panel's height in a view (above the timeline) `free_h` tall: the view is
+/// re-framed into what it leaves (`Gui::cam_reframe`).
+pub fn text_panel_h(free_h: f32) -> f32 {
+    (free_h * 0.38).clamp(220.0, 380.0)
 }
 
 /// A column tab's rect as `dialog_host` takes it (it keeps a sheet's footer height free at the

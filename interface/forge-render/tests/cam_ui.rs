@@ -743,6 +743,12 @@ fn document_text_is_a_bottom_panel() {
     let v = h.gui.shell.view_rect;
     let e = h.placed("cam:text:edit").expect("the text");
     assert!(e.min.y > v.center().y - 40.0 && e.width() > v.width() * 0.6, "{e:?} in {v:?}");
+    // the view framed again into what the panel leaves
+    for _ in 0..3 {
+        h.step();
+    }
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.view_cover >= forge_render::shell::cam::text_panel_h(v.height() * 0.5), "cover {}", w.view_cover);
     shot(&mut h, "cam-text-panel");
     // typed: the whole text replaced
     let typed = text(&h).replace("stickout: 32", "stickout: 34");

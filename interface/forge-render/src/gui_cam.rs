@@ -224,13 +224,17 @@ impl Gui {
         let vr = self.shell.view_rect;
         let free = self.shell.camsim_free(vr);
         let Some(w) = &mut self.shell.cam else { return };
-        if (w.view_w - vr.width()).abs() < 1.0 {
+        // what covers the view's bottom: the timeline, and the Document Text panel above it
+        let text = if w.text_open { crate::shell::cam::text_panel_h(free.height()) + 4.0 } else { 0.0 };
+        let cover = vr.bottom() - free.bottom() + text;
+        if (w.view_w - vr.width()).abs() < 1.0 && (w.view_cover - cover).abs() < 1.0 {
             return;
         }
         let first = w.view_w == 0.0;
         // the width is taken only with a view to frame (a view made later is framed then)
         let Some(v) = &mut self.view else { return };
         w.view_w = vr.width();
+        w.view_cover = cover;
         // moved since this workspace last framed it (by the user, or another framing): keep
         // that view and pan it so the subject's centre is the new view's (docs/ux/STANDARD.md
         // §2); else frame it whole. The first width seen with a view is framed whole: the view
@@ -253,7 +257,7 @@ impl Gui {
             height: vr.height(),
             // the simulation's panel is in the properties column (outside `vr`) whenever there is
             // one, docked or not yet: only its timeline covers the view
-            covered: [0.0, 0.0, 0.0, vr.bottom() - free.bottom()],
+            covered: [0.0, 0.0, 0.0, cover],
         };
         // from the direction the view is seen from now, the subject at the standard's 70 %
         let (yaw, pitch) = (v.nav.camera.yaw.to_degrees(), v.nav.camera.pitch.to_degrees());
