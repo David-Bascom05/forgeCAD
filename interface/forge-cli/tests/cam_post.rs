@@ -63,10 +63,15 @@ fn a_certified_program_is_written_where_its_statement_says_and_equals_the_apps()
 fn an_uncertified_program_is_refused_unless_allowed_and_then_stamped() {
     let d = scratch("flange", &["flange_cam.fg", "flange.fg"]);
     let doc = d.join("flange_cam.fg");
+    // the setup not placed: its positions on the machine are unchecked (G5)
+    let src = std::fs::read_to_string(&doc).unwrap().replace(", at: (0, 0, -250)", "");
+    assert!(!src.contains("at: ("));
+    std::fs::write(&doc, src).unwrap();
     let o = post(&doc, &[]);
     assert!(!o.status.success());
     let err = String::from_utf8_lossy(&o.stderr);
     assert!(err.contains("refused: program `prog` is certified except G5"), "{err}");
+    assert!(err.contains("fix: add `at: (x, y, z)` to the setup"), "{err}");
     assert!(!d.join("prog.nc").exists(), "nothing written when refused");
     let o = post(&doc, &["--allow-uncertified"]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));

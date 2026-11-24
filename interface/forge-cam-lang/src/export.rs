@@ -64,9 +64,16 @@ impl ExportError {
             }
             ExportError::NoPrograms => "the document has no program(..): nothing to post".into(),
             ExportError::Refused { program, why } => format!("program `{program}` is not posted: {why}"),
-            ExportError::NotCertified { program, certified } => format!(
-                "program `{program}` is certified {certified}; export it anyway with --allow-uncertified (its header says so)"
-            ),
+            ExportError::NotCertified { program, certified } => {
+                let fix = if certified.contains("no `at:`") {
+                    " (fix: add `at: (x, y, z)` to the setup, the WCS origin in machine coordinates, the work offset G54 holds)"
+                } else {
+                    ""
+                };
+                format!(
+                    "program `{program}` is certified {certified}{fix}; export it anyway with --allow-uncertified (its header says so)"
+                )
+            }
         }
     }
 }

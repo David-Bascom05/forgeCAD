@@ -55,14 +55,14 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `part(FILE, group:)` | a part file beside the document; `group` (default `N`) picks the cutting data |
 | `machine(NAME)` | from the library (`generic-vmc3`, `generic-router`, or the project's) |
 | `tool(ID, t:, stickout:, holder:)` | a library tool, its T number, stick-out (tip to holder nose), holder |
-| `setup(PART, machine:, stock:, origin:, wcs:, at:, tol:, clearance:, clear:, retract:, fixture:, from:)` | `stock: box(margin: (x, y, z), below: b)` (b mm of stock under the part, default 0) or `box(min:, max:)`; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top; `from: SETUP`: the part turned over about x, starting from the stock that setup provably left (turned) |
+| `setup(PART, machine:, stock:, origin:, wcs:, at:, tol:, clearance:, clear:, retract:, fixture:, from:)` | `stock: box(margin: (x, y, z), below: b)` (b mm of stock under the part, default 0) or `box(min:, max:)`, a bar `cylinder(d:, margin: (radial, above), below:)` or a tube `tube(d:, id:, margin:, below:)` along z about the part's centre (no `d:`: the part's farthest reach plus the radial margin), or the stock as its own part file `solid("blank.fg")` (a prism along z, in the part's frame); a shaped stock must hold the part, shown band by band between its flat faces (exact booleans), or the setup is refused; `origin: "top-center"`, `"top-corner"` or `(x, y, z)` in the part's frame; heights above the stock top; `from: SETUP`: the part turned over about x, starting from the stock that setup provably left (turned) |
 | `vise(NAME, across:, clamp:, parallel:, clearance:)` | a library vise (`generic-vise-150`, `generic-vise-100`) closed on the stock along `across` (`"x"` or `"y"`), gripping `clamp` mm of it, on parallels `parallel` wide (default 6); `clearance` default 1 |
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
-| `facing(SETUP, tool:, to:, step:)` | zig-zag over the stock down to `to` |
-| `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
-| `contour(SETUP, tool:, side:, from:, to:, step:, leave:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
-| `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, ramp:)` | a hole feature's circle, to its depth |
-| `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
+| `facing(SETUP, tool:, to:, step:, leave_axial:)` | zig-zag over the stock down to `to` |
+| `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, leave_axial:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
+| `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
+| `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, leave_axial:, ramp:)` | a hole feature's circle, to its depth |
+| `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, leave_axial:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
 | `slot(SETUP, PART.SKETCH, tool:, depth:, step:, from:, ramp:)` | an end mill (flat or bull) along the sketch's lines, arcs and circles (not construction), on a plane facing +z, in levels down to `depth`: the groove the tool's width, modelled in the part (G1 against the part). `ramp: DEG` enters along each curve's first line, back and forth at that angle from the level above; else a plunge. The stock records each curve's band of the tool's radius as cleared (above the corner radius for a bull). examples/machined/slot_plate_cam.fg |
 | `engrave(SETUP, PART.SKETCH, tool:, depth:, step:, from:)` | the tool's tip along the sketch's lines, arcs and circles (not construction), on a plane facing +z, in levels down to `depth` below it. The groove must be in the model (G1 is checked against the part, never a blanket tolerance); the stock records each line's and circle's band of the tip's radius as cleared (a V tool clears more, so G4 may list the rest of the groove) |
 | `thread_mill(SETUP, PART.HOLE, tool:, length:)` | a hole's recorded thread (`thread:`, or `screw:` with `fit: "tap"`), the model not carrying it: declares a cosmetic thread Δ per place (the ring from the bore to the major diameter over `length`, default the depth less two pitches), listed in the op's `removals`, and is certified against P ∖ Δ (never a blanket tolerance). Down the bore, in to the radius, up a helix of the pitch (G3: right hand), out |
@@ -74,6 +74,22 @@ about the pass's start, where that disk lies in the tool centres' region (decide
 the pass is plunged. A helix is posted as G2/G3 with Z and checked as its arc swept over each
 piece's heights (a superset), in closed form against prism faces; next to any other face it is
 refused as undecided.
+
+`leave:` is the radial stock to leave (on walls: each pass's offset grows by it) and
+`leave_axial:` the axial stock (on floors: the op's lowest level, `to:` or a hole's depth, is
+raised by it), both default 0, either may be negative; `facing`, `clear`, `contour` and `pocket`
+take `leave_axial:`, the others refuse it. G4 grows the part by the larger of the two.
+
+A contour's `direction:` is `"climb"` (the part on the tool's right, with the spindle M03) or
+`"conventional"` (default climb, as pockets and clearing are). `finish: n` (default 1) cuts n radial passes at each level,
+`finish_step:` apart (default a tenth of the tool's diameter), the last at the contour's own offset;
+`spring: n` (default 0) repeats the last pass n times. Only `contour` takes these four.
+
+Heights (`from:`, `to:`) are numbers in the part's frame, or the model's own: a horizontal face or
+plane of the part named as in the part's text (`f.plate.end`, `f.boss.end`, `f.plate.start`),
+plus or minus a length along the setup's up (`to: f.plate.end + 0.5`). In a setup turned over
+(`from:`), the same reference is read in the turned frame. A reference that is not horizontal, or
+in any other argument, is refused.
 
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.

@@ -7,7 +7,7 @@
 //! and down at the plunge feed. Rapids run at the clearance height, above the stock.
 use forge_cam_geom::check::{self, Face, Move, Verdict};
 use forge_cam_geom::offset::offset;
-use forge_cam_geom::region::{Region, Seg};
+use forge_cam_geom::region::{Loop, Region, Seg};
 use forge_cam_geom::tool::{Part, Shape};
 use forge_math::dmath;
 use forge_tooling::Tool;
@@ -598,39 +598,102 @@ pub enum OpError {
     NeedTool { what: String },
 }
 
+/// A contour's passes: its cut direction, its radial finishing passes and spring passes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Passes {
+    /// Climb (the part on the tool's right, with the spindle clockwise, M03), else
+    /// conventional.
+    pub climb: bool,
+    /// Radial passes (at least 1): the last at the contour's own offset, each earlier one
+    /// `finish_step` further from the part.
+    pub finish: usize,
+    pub finish_step: f64,
+    /// The last pass again, this many times.
+    pub spring: usize,
+}
+
+impl Default for Passes {
+    fn default() -> Passes {
+        Passes {
+            climb: true,
+            finish: 1,
+            finish_step: 0.0,
+            spring: 0,
+        }
+    }
+}
+
 /// Contour: the region's boundary, offset by the tool radius plus `leave` (outside for the
-/// part's outline: `outside` true), at each level.
+/// part's outline: `outside` true), climb, each loop through all its levels in turn.
 pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Result<OpPath, OpError> {
+    contour_passes(rg, c, sp, leave, outside, Passes::default())
+}
+
+/// `contour` with its passes: the radial passes from the farthest in to the contour's own,
+/// then the spring passes, each loop of each through all its levels; every loop in the
+/// direction asked.
+pub fn contour_passes(
+    rg: &Region,
+    c: Cut,
+    sp: Span,
+    leave: f64,
+    outside: bool,
+    ps: Passes,
+) -> Result<OpPath, OpError> {
     let Cut { tool, tidx, h, feed } = c;
     let Span { top, bottom, step } = sp;
-    let r = 0.5 * tool.tool.dc + leave;
-    let d = if outside { -r } else { r };
-    let (loops, _) = offset(rg, d).map_err(|e| OpError::Region(format!("{e:?}")))?;
-    let loops: Vec<_> = loops
-        .into_iter()
-        .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
-        .collect();
-    if loops.is_empty() {
-        return Err(OpError::ToolTooBig {
-            tool_d: tool.tool.dc,
-            why: "the tool does not fit the contour".into(),
-        });
+    let n = ps.finish.max(1);
+    // the loops of each radial pass, the contour's own last
+    let mut passes: Vec<Vec<Vec<Seg>>> = Vec::with_capacity(n);
+    for k in 0..n {
+        let r = 0.5 * tool.tool.dc + leave + (n - 1 - k) as f64 * ps.finish_step;
+        let d = if outside { -r } else { r };
+        let (loops, _) = offset(rg, d).map_err(|e| OpError::Region(format!("{e:?}")))?;
+        // an offset loop has its region on the left: inside, the region is where the tool goes
+        // (the part on the right: climb); outside, it is the part grown (conventional), so
+        // climb runs the outside loops backwards and conventional the inside ones
+        let loops: Vec<Vec<Seg>> = loops
+            .into_iter()
+            .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
+            .map(|l| {
+                if ps.climb == outside {
+                    Loop { segs: l.segs }.reversed().segs
+                } else {
+                    l.segs
+                }
+            })
+            .collect();
+        if loops.is_empty() {
+            return Err(OpError::ToolTooBig {
+                tool_d: tool.tool.dc,
+                why: "the tool does not fit the contour".into(),
+            });
+        }
+        passes.push(loops);
+    }
+    for _ in 0..ps.spring {
+        passes.push(passes[n - 1].clone());
     }
     let mut mv = Vec::new();
-    let first = loops[0].segs[0].start();
+    let first = passes[0][0][0].start();
     let start = [first.x, first.y, h.clear];
-    for z in levels(top, bottom, step) {
-        for l in &loops {
-            let s = l.segs[0].start();
+    // each loop through all its levels: down at its start from the retract height, then from
+    // each level straight down at the start to the next (the column the plunge from the retract
+    // height would pass through), and up once at the end
+    for loops in &passes {
+        for l in loops {
+            let s = l[0].start();
             mv.push(PMove::Rapid {
                 to: [s.x, s.y, h.retract],
             });
-            mv.push(PMove::Line {
-                to: [s.x, s.y, z],
-                f: feed.1,
-                phase: Phase::Plunge,
-            });
-            push_loop(&mut mv, &l.segs, z, feed.0);
+            for z in levels(top, bottom, step) {
+                mv.push(PMove::Line {
+                    to: [s.x, s.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                push_loop(&mut mv, l, z, feed.0);
+            }
             mv.push(PMove::Line {
                 to: [s.x, s.y, h.retract],
                 f: feed.0,
