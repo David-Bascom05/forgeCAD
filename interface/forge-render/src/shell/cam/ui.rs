@@ -642,7 +642,7 @@ fn details(
                 ui,
                 t,
                 "Tolerance",
-                &s.arg("tol").unwrap_or("0.002 (default)").to_string(),
+                s.arg("tol").unwrap_or("0.002 (default)"),
                 width,
                 t.ink,
             );
