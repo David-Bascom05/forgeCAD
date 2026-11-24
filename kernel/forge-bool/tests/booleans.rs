@@ -1097,3 +1097,62 @@ fn an_imprint_growing_a_vertex_past_its_edge_is_refused() {
         }
     }
 }
+
+/// A notch cut across a plate's wall, its walls ending within two tolerances of the plate's face,
+/// then a wall unioned against that face, its own face within two tolerances of it: the union
+/// came out an open shell (four edges used once), a wrong Ok. Two ops of a hill-climbed fifty
+/// (`drift_adv edge`, research/booleans/drift.md §6), by their original indices.
+#[test]
+fn a_wall_unioned_flush_on_a_notched_face_stays_closed() {
+    let plate = extrude(
+        &Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 100.0, 100.0, 10)],
+        },
+        10.0,
+        1,
+    )
+    .unwrap();
+    let mut body = plate;
+    let ops: [(usize, [f64; 6]); 2] = [
+        (
+            2,
+            [
+                0.8234008506443795,
+                0.943091713370833,
+                0.9816978534888866,
+                -0.9265032466161587,
+                -0.3739713735018809,
+                0.8838505963032673,
+            ],
+        ),
+        (
+            41,
+            [
+                0.6199122167988423,
+                0.8434506663474743,
+                -0.6076188493258957,
+                -0.9263658549015378,
+                -0.323243568577226,
+                -0.2806420579990162,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = edge_wall(i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            // the wall stands 1.2e-5 off the plate, past the tolerance: the union holds both
+            if op == Op::Union {
+                let (got, want) = (volume(&r), volume(&body) + volume(&tool));
+                assert!(
+                    (got - want).abs() <= 1e-9 * want,
+                    "op {i}: volume {got} want {want}"
+                );
+            }
+            body = r;
+        }
+    }
+}

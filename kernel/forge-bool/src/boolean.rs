@@ -1653,7 +1653,7 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
                 && split_faces.binary_search(&f).is_err()
                 && !imprints.iter().any(|im| im.side == 1 && im.into == f)
                 && !coplanar.iter().any(|&(fa, _)| fa == f)
-                && let Some(p) = face_point(body, f)
+                && let Some(p) = face_point_in(body, f)
             {
                 let kept = match (op, index[1].classify(p)) {
                     (Op::Intersect, Where::Inside) | (Op::Union | Op::Subtract, Where::Outside) => Some(true),
@@ -5853,7 +5853,7 @@ fn local_split(c: LocalSplit) -> Option<Local> {
     if hit(loops[0]) {
         return None;
     }
-    let class = match c.index[1].classify(face_point(body, c.f)?) {
+    let class = match c.index[1].classify(face_point_in(body, c.f)?) {
         Where::Inside => Class::In,
         Where::Outside => Class::Out,
         Where::On => return None,
@@ -5885,6 +5885,11 @@ fn local_split(c: LocalSplit) -> Option<Local> {
 
 /// A point on face `f` a little inside its boundary, beside the middle of its first edge.
 pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
+    face_point_by(body, f, 1.0)
+}
+
+/// `face_point`, its step in from the edge scaled by `scale`.
+fn face_point_by(body: &Body, f: FaceId, scale: f64) -> Option<Point3> {
     let face = body.face(f);
     let c = body.lp(*face.loops.first()?).coedges().next()?;
     let co = body.coedge(c);
@@ -5898,8 +5903,34 @@ pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
         .eval(edge.range.lo)
         .distance(d.p)
         .max(d.p.distance(edge.curve.eval(edge.range.hi)));
-    let q = d.p + inward * (0.01 * len.max(1e-3)).min(0.05);
+    let q = d.p + inward * (scale * (0.01 * len.max(1e-3)).min(0.05));
     Some(face.surface.eval(face.surface.project(q)))
+}
+
+/// `face_point`, if it lies within the face's box: on a face narrower than the step in from its
+/// edge (a sliver a boolean cut within tolerance of a wall) the step overshoots, and the point,
+/// off the face, may lie on the other side of a body the face does not reach (a wall unioned
+/// flush beside the sliver read the sliver as inside it, and dropped it: an open shell, a wrong
+/// Ok; research/booleans/drift.md §6). Off it, shorter steps are tried; None leaves the face to be
+/// decided in pieces.
+fn face_point_in(body: &Body, f: FaceId) -> Option<Point3> {
+    let p = face_point(body, f)?;
+    // (the box worked out with nothing kept: no cache of the body's grows for it)
+    let within = body.face_box_unkept(f).grow(tol::LINEAR);
+    if within.contains(p) {
+        return Some(p);
+    }
+    nearer_face_point(body, f, &within)
+}
+
+/// `face_point_in` where the usual step overshot its face: steps a 32nd and a 1024th as long.
+#[cold]
+#[inline(never)]
+fn nearer_face_point(body: &Body, f: FaceId, within: &Box3) -> Option<Point3> {
+    [1.0 / 32.0, 1.0 / 1024.0]
+        .into_iter()
+        .filter_map(|s| face_point_by(body, f, s))
+        .find(|&p| within.contains(p))
 }
 
 /// The pieces chained into one closed loop (in walking order) and its outline in the face's

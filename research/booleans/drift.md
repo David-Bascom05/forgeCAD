@@ -30,8 +30,8 @@ touches this). The tool is `verify/forge-exact/fuzz/examples/drift_adv.rs`.
     in debug builds.
   - The strict bound (the vertex's own tolerance alone) does not.
   - Making it hold costs a distance per settled vertex. That is a decision for David (§5).
-- **A different wrong Ok turned up: an open shell after two ops** (§6). It is topology, not
-  tolerance, and is still open.
+- **A different wrong Ok turned up: an open shell after two ops** (§6). It was a sliver face
+  decided by a point off it. Fixed.
 - **Re-snapping does not stop the ratchet (§7).**
   - At merge, it never meets the drifting vertices: they were never merged, and their tolerance
     never grew.
@@ -196,7 +196,25 @@ Edge family, `OBJ=under`, shrunk to two ops (by original index):
   -0.323243568577226, -0.2806420579990162].
 
 The union returns Ok with four edges used once and Euler 3: an open shell. This is the same on
-main and with the fix. It is topology, not tolerance bookkeeping. Open; not traced here.
+main and with the fix of §4, and it is not about tolerances:
+- Op 2 leaves a sliver face: the notch's end wall, 1.96e-5 wide.
+- Op 41 finds no cuts, so each of A's faces near the wall is kept or dropped by one point
+  (`face_point`). That point is a step of up to 0.05 mm in from the face's first edge.
+- On the sliver the step overshoots to y = −0.036, inside the wall. The sliver is read as inside
+  the wall and dropped.
+
+Fix (proof/open-shell): `face_point_in` keeps the point only if it lies in the face's box, grown
+by LINEAR; otherwise the face is decided in pieces like any other. Test:
+`a_wall_unioned_flush_on_a_notched_face_stays_closed` (2 ops; the volume is checked too).
+
+A diagonal sliver, whose box is wide while the face is not, could still put the point off the
+face inside its box. That case is UNKNOWN: no search here made one.
+
+With this fixed, the edge search found a sequence where the vertex growth of §4 reaches past the
+middle of a 3e-5 edge, so the edge is shorter than the balls at its ends (`check`:
+VertexTolerance). `imprint_tols` now refuses that (`Unsupported(TolerancesMeet)`). Test:
+`an_imprint_growing_a_vertex_past_its_edge_is_refused` (5 ops). On main the same ops give an
+open shell and EdgeOffFace.
 
 ## 7. Re-snap at merge
 
@@ -251,7 +269,7 @@ answer is to record the distance (§4), or to refuse.
 
 ## 8. Open
 
-- The open shell of §6.
+- A diagonal sliver (§6).
 - The strict vertex bound (§5): ruled composed for now; David may reopen it.
 - The n-ary boolean (`nary.rs`) imprints by the same `imprint` but builds its own result. Its
   pieces don't yet take `imprint_tols`' growth: the gate's nary1 lines are diagnostic, and no
