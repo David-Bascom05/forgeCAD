@@ -168,11 +168,7 @@ fn count_fans<T: FanTopo>(
 /// each face in them, unless every face's corners are empty or they do not close each leaving
 /// coedge with a distinct use, of its edge, arriving there.
 fn n_fans<T: FanTopo>(t: &T, items: &[usize], lo: usize, hi: usize, seen: &mut Vec<usize>) -> usize {
-    let mut closes = Closes {
-        cf: Vec::new(),
-        cl: Vec::new(),
-        cs: Vec::new(),
-    };
+    let mut closes = Closes { cf: Vec::new(), cl: Vec::new(), cs: Vec::new() };
     let (count, sl) = count_fans(t, items, lo, hi, &closes, false, seen);
     if count < 2 {
         return count;
