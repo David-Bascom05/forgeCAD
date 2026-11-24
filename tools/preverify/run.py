@@ -23,6 +23,8 @@ import argparse, json, os, shutil, subprocess, sys, tempfile, time
 ap = argparse.ArgumentParser()
 ap.add_argument("--base", default="origin/main")
 ap.add_argument("--only")
+# (a train's gate: run whatever the selector says; a memo hit stands for an identical build)
+ap.add_argument("--always-gate", action="store_true")
 a = ap.parse_args()
 root = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True,
                       check=True).stdout.strip()
@@ -131,7 +133,7 @@ def gate_counts(rev, out):
         subprocess.run(["git", "worktree", "remove", "--force", wt])
 
 
-if sel["gate"] and (not only or "gate" in only):
+if (sel["gate"] or a.always_gate) and (not only or "gate" in only):
     t = time.time()
     mo, bo = os.path.join(log_dir, "gate-main.txt"), os.path.join(log_dir, "gate-branch.txt")
     _, main_out = gate_counts(base, mo)
