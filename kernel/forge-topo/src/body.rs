@@ -850,9 +850,12 @@ impl Body {
         self.shells[shell.index()].faces.push(id);
         // the new face is the last: so are its chunk and block
         if let Some(h) = self.hulls.get_mut() {
-            h.chunks.resize_with(id.index() / RUN + 1, Cached::default);
-            h.blocks
-                .resize_with(id.index() / (RUN * RUN) + 1, Cached::default);
+            while h.chunks.len() < id.index() / RUN + 1 {
+                h.chunks.push(Cached::default());
+            }
+            while h.blocks.len() < id.index() / (RUN * RUN) + 1 {
+                h.blocks.push(Cached::default());
+            }
             h.chunks[id.index() / RUN].clear();
             h.blocks[id.index() / (RUN * RUN)].clear();
         }
