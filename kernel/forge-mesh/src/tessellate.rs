@@ -883,8 +883,10 @@ pub fn tessellate_tolerant(body: &Body, q: &Quality) -> Result<TriMesh, TessErro
     if body.dead > 0 {
         return tessellate_tolerant(&body.compact(), q);
     }
-    // a file's body is drawn within a file's budget, the import's own where one is live
-    let _b = (!forge_geom::budget::limited()).then(|| forge_geom::budget::scoped(forge_geom::budget::FILE));
+    // a file's body is drawn within an op's budget, a top-level op as a boolean is: a file's alone
+    // (FILE) refused 102 of the Haas corpus's solids that mesh in seconds (research/kernel-stress).
+    // Inside an import the import's own budget, which is less, is the one that holds.
+    let _b = forge_geom::budget::scoped(forge_geom::budget::OP);
     tessellate_with(body, q, true)
 }
 

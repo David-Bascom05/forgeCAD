@@ -163,8 +163,19 @@ struct Meshed {
     volume: f64,
 }
 
+/// What the last `mesh` spent of its budget (written on the solid's line as `mesh_evals`); the op
+/// runs on the watchdog's thread, so not a thread-local.
+static MESH_EVALS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 fn mesh(b: &Body) -> Result<Meshed, String> {
-    let m = tessellate_tolerant(b, &Quality::default()).map_err(|e| format!("{e:?}"))?;
+    // what the mesh spends of its budget, as for a boolean: an outer budget it cannot run out of
+    let outer = forge_geom::budget::scoped(u64::MAX >> 1);
+    let before = forge_geom::budget::left();
+    let r = tessellate_tolerant(b, &Quality::default());
+    let evals = before - forge_geom::budget::left();
+    drop(outer);
+    MESH_EVALS.store(evals, std::sync::atomic::Ordering::Relaxed);
+    let m = r.map_err(|e| format!("{e:?}"))?;
     Ok(Meshed {
         tris: m.triangles.len(),
         open: m.open_edges().len(),
@@ -221,13 +232,13 @@ fn bore(at: Point3, z: UnitVec3, r: f64, len: f64) -> Option<Body> {
     forge_ops::extrude(&p, len, 7000).ok()
 }
 
-/// What a boolean's answer is: its status word, its volume, and what is wrong with it.
 thread_local! {
     /// The error bounds `mass` gave the answers judged since the last oracle: what their volumes
     /// may be off by, honestly said (a file's tolerant edges widen it), which an oracle allows.
     static BOUND: std::cell::Cell<f64> = const { std::cell::Cell::new(0.0) };
 }
 
+/// What a boolean's answer is: its status word, its volume, and what is wrong with it.
 fn judge(r: Result<Body, String>) -> (String, f64, String) {
     match r {
         Err(e) => {
@@ -579,7 +590,9 @@ fn main() {
             Res::Panic(m) => (f64::NAN, f64::NAN, format!("panic: {m}"), f64::NAN),
             Res::Skipped => (f64::NAN, f64::NAN, "skipped".into(), f64::NAN),
         };
+        MESH_EVALS.store(0, std::sync::atomic::Ordering::Relaxed);
         let (r, tms) = cx.run(&format!("s{i}:mesh"), || mesh(b));
+        let mesh_evals = MESH_EVALS.load(std::sync::atomic::Ordering::Relaxed);
         let (watertight, manifold, mvol, tris, mrr) = match r {
             Res::Done(Ok(m)) => (
                 m.open == 0 && m.tris >= 4 && m.volume > 0.0,
@@ -594,7 +607,7 @@ fn main() {
         };
         let bx = b.faces_box();
         emit(format!(
-            "{{\"ev\":\"solid\",\"s\":{i},\"ent\":{},\"name\":\"{}\",\"faces\":{nf},\"edges\":{ne},\"verts\":{nv},\"shells\":{},\"problems\":{},\"why\":\"{}\",\"vol\":{},\"area\":{},\"merr\":\"{}\",\"watertight\":{watertight},\"manifold\":{manifold},\"mesh_vol\":{},\"tris\":{tris},\"mesh_err\":\"{}\",\"unverified\":\"{}\",\"check_ms\":{cms:.1},\"mass_ms\":{mms:.1},\"mesh_ms\":{tms:.1},\"diag\":{}}}",
+            "{{\"ev\":\"solid\",\"s\":{i},\"ent\":{},\"name\":\"{}\",\"faces\":{nf},\"edges\":{ne},\"verts\":{nv},\"shells\":{},\"problems\":{},\"why\":\"{}\",\"vol\":{},\"area\":{},\"merr\":\"{}\",\"watertight\":{watertight},\"manifold\":{manifold},\"mesh_vol\":{},\"tris\":{tris},\"mesh_err\":\"{}\",\"unverified\":\"{}\",\"check_ms\":{cms:.1},\"mass_ms\":{mms:.1},\"mesh_ms\":{tms:.1},\"mesh_evals\":{},\"diag\":{}}}",
             s.entity,
             esc(&s.name),
             b.shells.len(),
@@ -606,6 +619,7 @@ fn main() {
             num(mvol),
             esc(&mrr),
             esc(b.unverified.as_deref().unwrap_or("")),
+            mesh_evals,
             num(bx.diagonal())
         ));
         if nprob == 0 && vol.is_finite() && vol > 0.0 && watertight {
