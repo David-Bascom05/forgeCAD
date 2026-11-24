@@ -129,8 +129,33 @@ fn a_tapped_hole_is_certified_against_its_declared_thread() {
     assert_eq!(o.status, "built", "{:?}", o.refusal);
     assert!(o.plan.iter().any(|p| p.starts_with("tap ")), "{:?}", o.plan);
     assert!(
-        o.removals.iter().any(|r| r.starts_with("cosmetic_thread M6x1 of `m6`")),
+        o.removals
+            .iter()
+            .any(|r| r.starts_with("cosmetic_thread M6x1 of `m6`")),
         "{:?}",
         o.removals
+    );
+}
+
+#[test]
+fn the_manifold_taps_are_certified_against_their_threads() {
+    // the manifold's top face (z 26) trims its pocket's corner arcs end first and its boss's
+    // foot anticlockwise: its trim is chained and its loops' senses set by nesting, so the
+    // thread's disk comes out of it (the face kept whole, the tap gouged it by 0.5)
+    let src = "machining\nf = part(\"manifold.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 2.5, 0), below: 4.5), origin: \"top-corner\", tol: 0.01, at: (-60, -40, -260))\ntap = drill(op1, f.taps, plan: \"auto\")\nprog = program(op1, post: \"fanuc\", number: 1)\n";
+    let cam = forge_cam_lang::run(src, &dir());
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let o = cam.ops.iter().find(|o| o.name == "tap").unwrap();
+    assert_eq!(o.removals.len(), 4, "{:?}", o.removals);
+    // (the stock is left above the holes here, so the tap's shank may meet it: only the part
+    // is this test's subject)
+    assert!(
+        !o.checks.iter().any(|c| c.rule == "gouge" && c.verdict != "pass"),
+        "{:?}",
+        o.checks
+            .iter()
+            .filter(|c| c.rule == "gouge")
+            .take(3)
+            .collect::<Vec<_>>()
     );
 }

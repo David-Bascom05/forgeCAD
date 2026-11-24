@@ -4008,10 +4008,12 @@ fn tool_radius_split(
 /// ends at its loop's start.
 fn trim_region(segs: &[forge_cam_geom::check::TSeg]) -> Option<Region> {
     use forge_cam_geom::check::TSeg;
-    let mut loops = vec![];
-    let mut cur: Vec<Seg> = vec![];
-    for t in segs {
-        let s = match *t {
+    // a trim's pieces need not be stored in order or each in its loop's sense (a pocket's
+    // corner arcs come end first): each loop is chained from its first piece's sense, a piece
+    // whose end meets the chain's end taken reversed; the ends meet exactly
+    let mut rest: Vec<Seg> = segs
+        .iter()
+        .map(|t| match *t {
             TSeg::Line { a, b } => Seg::Line {
                 a: p2(a[0], a[1]),
                 b: p2(b[0], b[1]),
@@ -4022,18 +4024,88 @@ fn trim_region(segs: &[forge_cam_geom::check::TSeg]) -> Option<Region> {
                 c: p2(c[0], c[1]),
                 ccw,
             },
-        };
-        cur.push(s);
-        if cur[0].start() == s.end() {
-            loops.push(Loop {
-                segs: std::mem::take(&mut cur),
-            });
+        })
+        .collect();
+    rest.reverse();
+    let mut loops = vec![];
+    while let Some(first) = rest.pop() {
+        let mut cur = vec![first];
+        while cur[0].start() != cur.last()?.end() {
+            let end = cur.last()?.end();
+            let k = rest.iter().rposition(|s| s.start() == end || s.end() == end)?;
+            let s = rest.remove(k);
+            cur.push(if s.start() == end { s } else { s.reversed() });
         }
+        loops.push(Loop { segs: cur });
     }
-    if !cur.is_empty() || loops.is_empty() {
+    if loops.is_empty() {
         return None;
     }
+    // nor in a region's senses (a boss's foot, a hole in a top face, may run anticlockwise):
+    // each loop anticlockwise at an even depth of nesting, clockwise at an odd one. Found in
+    // f64 (a polyline of each arc); a wrong sense is refused by the exact validation downstream
+    let polys: Vec<Vec<[f64; 2]>> = loops.iter().map(loop_polyline).collect();
+    let area = |q: &[[f64; 2]]| -> f64 {
+        let mut a = 0.0;
+        for k in 0..q.len() {
+            let (p, r) = (q[k], q[(k + 1) % q.len()]);
+            a += p[0] * r[1] - r[0] * p[1];
+        }
+        0.5 * a
+    };
+    let inside = |pt: [f64; 2], q: &[[f64; 2]]| -> bool {
+        let mut odd = false;
+        for k in 0..q.len() {
+            let (a, b) = (q[k], q[(k + 1) % q.len()]);
+            if (a[1] > pt[1]) != (b[1] > pt[1])
+                && pt[0] < a[0] + (pt[1] - a[1]) * (b[0] - a[0]) / (b[1] - a[1])
+            {
+                odd = !odd;
+            }
+        }
+        odd
+    };
+    for k in 0..loops.len() {
+        let depth = (0..loops.len())
+            .filter(|&m| m != k && inside(polys[k][0], &polys[m]))
+            .count();
+        let ccw = area(&polys[k]) > 0.0;
+        if ccw != (depth % 2 == 0) {
+            loops[k] = loops[k].reversed();
+        }
+    }
     Some(Region { loops })
+}
+
+/// A loop as points: each line's start, each arc sampled at 16 points (for f64 tests only).
+fn loop_polyline(l: &Loop) -> Vec<[f64; 2]> {
+    let mut q = vec![];
+    for sg in &l.segs {
+        match *sg {
+            Seg::Line { a, .. } => q.push([a.x, a.y]),
+            Seg::Arc { a, b, c, ccw } => {
+                let r = len2(a.x - c.x, a.y - c.y);
+                let t0 = forge_math::dmath::atan2(a.y - c.y, a.x - c.x);
+                let t1 = forge_math::dmath::atan2(b.y - c.y, b.x - c.x);
+                let tau = std::f64::consts::TAU;
+                let mut sweep = if ccw { t1 - t0 } else { t0 - t1 };
+                sweep = sweep.rem_euclid(tau);
+                if a == b {
+                    sweep = tau;
+                }
+                for k in 0..16 {
+                    let t = if ccw {
+                        t0 + sweep * k as f64 / 16.0
+                    } else {
+                        t0 - sweep * k as f64 / 16.0
+                    };
+                    let (sn, cs) = forge_math::dmath::sin_cos(t);
+                    q.push([c.x + r * cs, c.y + r * sn]);
+                }
+            }
+        }
+    }
+    q
 }
 
 /// The points within w of the segment p0 p1: a stadium (two lines, two half circles in quarter
