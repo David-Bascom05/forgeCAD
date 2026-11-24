@@ -78,6 +78,9 @@ pub enum Unhandled {
     ToolVerticesMeet { at: Point3 },
     /// Every point the n-ary pass could judge a region by lies on another tool's edge.
     ProbeOnToolEdge { face: FaceRef },
+    /// An edge's end, its tolerance grown to hold a face imprinted on it, reaches past the
+    /// edge's middle: the edge is shorter than the balls at its ends.
+    TolerancesMeet { at: Point3 },
 }
 
 impl std::fmt::Display for Unhandled {
@@ -103,6 +106,11 @@ impl std::fmt::Display for Unhandled {
             Unhandled::ProbeOnToolEdge { face } => {
                 write!(f, "every point of a region of {face} lies on another tool's edge")
             }
+            Unhandled::TolerancesMeet { at } => write!(
+                f,
+                "an edge at ({:.3}, {:.3}, {:.3}) is shorter than its ends' tolerances",
+                at.x, at.y, at.z
+            ),
         }
     }
 }
@@ -2105,7 +2113,8 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
             &mut pieces,
             &alias,
             &mut grown,
-        )
+            &uses,
+        )?
     };
     (scratch.cuts, scratch.segs) = (cuts, segs);
     Ok(Plan {
@@ -2319,6 +2328,7 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
 /// booleans with faces on one surface, or an edge lying on the other body's face, imprint.
 #[cold]
 #[inline(never)]
+#[allow(clippy::too_many_arguments)]
 fn imprint_tols(
     bodies: &[&Body; 2],
     imprints: &[Imprint],
@@ -2327,8 +2337,10 @@ fn imprint_tols(
     pieces: &mut [Piece],
     alias: &[(VKey, VKey)],
     grown: &mut Vec<(VKey, f64)>,
-) -> Vec<(EdgeId, f64)> {
+    uses: &[u8],
+) -> R<Vec<(EdgeId, f64)>> {
     let mut grown_edges = Vec::new();
+    let first_grown = grown.len();
     for im in imprints {
         let surface = &bodies[im.into_side as usize].face(im.into).surface;
         // (most imprints are of faces on one surface)
@@ -2371,7 +2383,23 @@ fn imprint_tols(
             }
         }
     }
-    grown_edges
+    // a vertex grown past the middle of a kept edge ending on it: the edge is shorter than the
+    // balls at its ends, which `check` refuses (VertexTolerance); refused here, not handed out
+    for &(k, t) in &grown[first_grown..] {
+        for (p, pc) in pieces.iter().enumerate() {
+            if uses[p] == 0 || (pc.start != k && pc.end != k) || t <= 1.1 * pc.tol.max(tol::LINEAR) {
+                continue;
+            }
+            let at = |x: f64| pc.curve.eval(pc.range.lo + pc.range.width() * x);
+            let length: f64 = (0..16)
+                .map(|i| at(i as f64 / 16.0).distance(at((i + 1) as f64 / 16.0)))
+                .sum();
+            if 2.0 * t >= length {
+                return Err(BoolError::unhandled(Unhandled::TolerancesMeet { at: at(0.5) }));
+            }
+        }
+    }
+    Ok(grown_edges)
 }
 
 /// A margin over a distance for its rounding: a few units in the last place of coordinates up

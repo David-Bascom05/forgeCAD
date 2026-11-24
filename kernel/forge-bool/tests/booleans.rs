@@ -970,3 +970,130 @@ fn an_imprinted_edges_end_vertex_holds_its_new_face() {
         body = r;
     }
 }
+
+/// `drift_adv edge`'s op `i` from its parameters `q` (each in [-1, 1]): a cut (even ops) or a wall
+/// (odd ops) whose faces end within two tolerances of a 100 x 100 x 10 plate's y = 0 wall.
+fn edge_wall(i: usize, q: [f64; 6]) -> (Body, Op) {
+    const L: f64 = 1e-5;
+    let id = 100 + i as u64;
+    let op = if i.is_multiple_of(2) {
+        Op::Subtract
+    } else {
+        Op::Union
+    };
+    let (x0, x1) = (50.0 + 45.0 * q[0], 50.0 + 45.0 * q[0] + 5.0 + 40.0 * (q[1] + 1.0));
+    let (e0, e1) = (2.0 * L * q[2], 2.0 * L * q[3]);
+    let z0 = -1.0 + 6.0 * (q[4] + 1.0);
+    let f = Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z0));
+    let pts = if op == Op::Subtract {
+        [(x0, e0 - 3.0), (x1, e1 - 3.0), (x1, e1), (x0, e0)]
+    } else {
+        [(x0, -3.0), (x1, -3.0), (x1, e1), (x0, e0)]
+    };
+    let segs = (0..4)
+        .map(|k| {
+            let (a, b) = (pts[k], pts[(k + 1) % 4]);
+            (
+                Segment::Line {
+                    a: Point2::new(a.0, a.1),
+                    b: Point2::new(b.0, b.1),
+                },
+                id * 10 + k as u64,
+            )
+        })
+        .collect();
+    let body = extrude(
+        &Profile {
+            plane: f,
+            loops: vec![ProfileLoop::new(segs)],
+        },
+        4.0 + 2.0 * (q[5] + 1.0),
+        id,
+    )
+    .unwrap();
+    (body, op)
+}
+
+/// Walls and notches within two tolerances of a plate's wall: an imprint grows an edge's end
+/// vertex to 1.65e-5, past the middle of a kept edge 3e-5 long, so the edge is shorter than the
+/// balls at its ends (`check`: VertexTolerance). Such a boolean is refused (TolerancesMeet), not
+/// handed out; on main the same ops give an open shell and an edge off its face. Five ops of a
+/// hill-climbed fifty (`drift_adv edge`), by their original indices.
+#[test]
+fn an_imprint_growing_a_vertex_past_its_edge_is_refused() {
+    let mut body = extrude(
+        &Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 100.0, 100.0, 10)],
+        },
+        10.0,
+        1,
+    )
+    .unwrap();
+    let ops: [(usize, [f64; 6]); 5] = [
+        (
+            4,
+            [
+                0.24043599453866538,
+                1.0,
+                1.0,
+                0.46278583338977464,
+                0.13888022155812785,
+                -0.25231714000559846,
+            ],
+        ),
+        (
+            5,
+            [
+                -0.34260200510255745,
+                -0.5008453451283781,
+                0.5439194898173249,
+                0.8864538098387861,
+                -0.3742697749892536,
+                1.0,
+            ],
+        ),
+        (
+            6,
+            [
+                -0.6052129218507916,
+                -0.14151901731041128,
+                -0.03859426551685785,
+                -0.328741331270186,
+                0.06324335293438621,
+                -0.7961567910602003,
+            ],
+        ),
+        (
+            12,
+            [
+                0.1285076930502913,
+                1.0,
+                -0.48202232932225164,
+                0.16922547450692205,
+                -0.27066331050627457,
+                0.36967690966676126,
+            ],
+        ),
+        (
+            15,
+            [
+                -0.11662935493797899,
+                -0.3211166218619659,
+                -1.0,
+                -0.6168664278629803,
+                0.1091801553503916,
+                0.343770057423318,
+            ],
+        ),
+    ];
+    for (i, q) in ops {
+        let (tool, op) = edge_wall(i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            body = r;
+        }
+    }
+}
