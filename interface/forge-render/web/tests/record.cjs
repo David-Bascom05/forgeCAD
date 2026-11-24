@@ -1,7 +1,8 @@
 // Photo and Record in the browser (gui_record.rs, research/render/record.md): a photo downloads as
 // a PNG at the size asked; a turntable records through WebCodecs' H.264 encoder into the app's own
 // MP4 muxer (record/mp4.rs) and downloads, at odd sides grown to even ones; ffprobe, where there is
-// one, reads it back as H.264 with every frame. A browser without avc1 gets a PNG zip instead.
+// one, reads it back as H.264 with every frame; then the bend simulation's timeline the same way.
+// A browser without avc1 gets a PNG zip instead.
 //   node web/tests/record.cjs OUT   (OUT: web/build.sh's output, served as static files)
 // RECORD_OUT=DIR keeps what was downloaded.
 const assert = require("node:assert/strict");
@@ -11,6 +12,18 @@ const http = require("node:http");
 const os = require("node:os");
 const path = require("node:path");
 const t = require("./lib.cjs");
+
+const CHANNEL = `shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+shared h = 30
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (100, 200))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+right = flange(base.edge(plan.outline[1]), height: h)
+left = flange(base.edge(plan.outline[3]), height: h)
+`;
 
 function serveStatic(root) {
   const types = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm" };
@@ -89,6 +102,27 @@ async function download(p, words) {
       if (e.code !== "ENOENT") throw e;
     }
     console.log(`ok - record: ${rec.said}; ffprobe: ${probe}; ${mp4}`);
+
+    // an environment's timeline: the bend simulation of a channel, 2 bends of 4 s, at 10 fps
+    await p.evaluate((text) => {
+      window.forgecad.fc.fs_write("/project/rec/channel.fg", new TextEncoder().encode(text));
+      window.forgecad.fc.app_open("/project/rec/channel.fg");
+      window.forgecad.fc.app_env("bendsim");
+    }, CHANNEL);
+    await t.until(p, (s) => s.env === "bendsim" && s.done >= s.seq, "in Bend Simulation");
+    const bend = await download(p, "record 640x360 fps=10");
+    assert.match(bend.name, /^channel-bendsim-\d{8}-\d{6}\.mp4$/, bend.said);
+    assert.match(bend.said, /\(80 frames, WebCodecs H\.264\)$/);
+    const bendMp4 = path.join(keep, "bendsim.mp4");
+    fs.writeFileSync(bendMp4, bend.bytes);
+    try {
+      probe = execFileSync("ffprobe", ["-v", "error", "-count_frames", "-select_streams", "v:0",
+        "-show_entries", "stream=codec_name,width,height,nb_read_frames", "-of", "csv=p=0", bendMp4]).toString().trim();
+      assert.equal(probe, "h264,640,360,80");
+    } catch (e) {
+      if (e.code !== "ENOENT") throw e;
+    }
+    console.log(`ok - the bend simulation recorded: ${bend.said}; ffprobe: ${probe}; ${bendMp4}`);
     t.check(p);
   } finally {
     await b.close();
