@@ -799,6 +799,82 @@ impl<'s> Geo<'s> {
         ))))
     }
 
+    /// The curve where two faces meet, from `p0` to `p1`, for an edge whose own curve cannot be
+    /// read (an SP-curve in a blend's parameters). Where the surfaces cross, the two traced;
+    /// where they touch (a blend's edge, along its contact), refining between them fails, so a
+    /// straight line in one surface's parameters that keeps to the other (a blend's edges are
+    /// its parameter lines). None when neither holds.
+    pub(crate) fn traced(a: &Surface, b: &Surface, p0: Point3, p1: Point3) -> Option<Curve> {
+        if p0.distance(p1) <= tol::LINEAR {
+            return None;
+        }
+        Self::crossing(a, b, p0, p1)
+            .or_else(|| Self::param_line(a, b, p0, p1))
+            .or_else(|| Self::param_line(b, a, p0, p1))
+    }
+
+    fn crossing(a: &Surface, b: &Surface, p0: Point3, p1: Point3) -> Option<Curve> {
+        let mut pts = vec![p0];
+        for k in 1..4 {
+            pts.push(refine(a, b, p0 + (p1 - p0) * (k as f64 / 4.0))?);
+        }
+        pts.push(p1);
+        let pts = densify(a, b, pts, false);
+        let m = pts.len();
+        let mut tans = Vec::with_capacity(m);
+        for i in 0..m {
+            let chord = pts[(i + 1).min(m - 1)] - pts[i.saturating_sub(1)];
+            tans.push(direction(a, b, pts[i])?);
+            if tans[i].dot(chord) < 0.0 {
+                tans[i] = -tans[i];
+            }
+        }
+        let mut sag: f64 = 0.0;
+        for i in 0..m - 1 {
+            if pts[i].distance(pts[i + 1]) <= 1e-12 || tans[i].dot(tans[i + 1]) < -0.5 {
+                return None;
+            }
+            let l = pts[i].distance(pts[i + 1]);
+            let turn = dmath::acos_clamped(tans[i].dot(tans[i + 1]).clamp(-1.0, 1.0));
+            sag = sag.max(l * turn / 4.0);
+        }
+        Some(Curve::Intersection(Arc::new(IntCurve::new(
+            a.clone(),
+            b.clone(),
+            pts,
+            tans,
+            false,
+            sag,
+        ))))
+    }
+
+    /// The straight line in `s`'s parameters between the ends' feet, if every sample of it lies on
+    /// `other` and the line meets the ends.
+    fn param_line(s: &Surface, other: &Surface, p0: Point3, p1: Point3) -> Option<Curve> {
+        use forge_geom::SurfaceGeom;
+        let d = s.domain();
+        let uv0 = s.project(p0);
+        let uv1 = crate::heal::unwrap(s.project(p1), uv0, d.u, d.v);
+        let flat = Spline::from_nurbs(
+            1,
+            &[0.0, 0.0, 1.0, 1.0],
+            &[Point3::new(uv0.x, uv0.y, 0.0), Point3::new(uv1.x, uv1.y, 0.0)],
+            None,
+        )?;
+        let c = OnSurface::curve(Param::Map(s.clone(), [[1.0, 0.0], [0.0, 1.0]]), flat)?;
+        let tol = (1e-4 * p0.distance(p1)).max(1e-3);
+        if c.eval(0.0).distance(p0) > tol || c.eval(1.0).distance(p1) > tol {
+            return None;
+        }
+        for k in 1..16 {
+            let q = c.eval(f64::from(k) / 16.0);
+            if other.eval(other.project(q)).distance(q) > tol {
+                return None;
+            }
+        }
+        Some(c)
+    }
+
     /// A blend's spine. An intersection of offsets is made a C1 cubic through its chart, put
     /// on both surfaces and filled in to within SPINE_TOL: the exact curve finds each point by
     /// searching both offsets, and a blend asks for its spine at every point it is asked for.
@@ -1158,4 +1234,54 @@ pub(crate) enum Param {
     Swept { c: Curve, cs: f64, d: Vec3, k: f64 },
     /// The profile C(cs u) turned by v about the axis through p along a.
     Spun { c: Curve, cs: f64, p: Point3, a: Vec3 },
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cylinder() -> Surface {
+        Surface::Cylinder(Cylinder {
+            frame: Frame::WORLD,
+            radius: 5.0,
+        })
+    }
+
+    fn plane(o: Point3, z: Vec3) -> Surface {
+        let x = if z.cross(Vec3::Z).length() > 0.5 {
+            Vec3::Z
+        } else {
+            Vec3::X
+        };
+        Surface::Plane(Plane {
+            frame: Frame::from_zx(o, z.normalize().unwrap(), x).unwrap(),
+        })
+    }
+
+    #[test]
+    fn an_edge_where_two_surfaces_cross_is_traced_between_its_ends() {
+        let (a, b) = (cylinder(), plane(Point3::new(0.0, 0.0, 3.0), Vec3::Z));
+        let c = Geo::traced(&a, &b, Point3::new(5.0, 0.0, 3.0), Point3::new(0.0, 5.0, 3.0)).expect("traced");
+        let d = c.domain();
+        let m = c.eval(0.5 * (d.lo + d.hi));
+        assert!(
+            ((m.x * m.x + m.y * m.y).sqrt() - 5.0).abs() < 1e-3 && (m.z - 3.0).abs() < 1e-6,
+            "{m:?}"
+        );
+        assert!(m.x > 1.0 && m.y > 1.0, "the quarter between them: {m:?}");
+    }
+
+    #[test]
+    fn an_edge_where_two_surfaces_touch_is_a_parameter_line() {
+        // the plane x = 5 touches the cylinder along x = 5, y = 0
+        let (a, b) = (cylinder(), plane(Point3::new(5.0, 0.0, 0.0), Vec3::X));
+        let (p0, p1) = (Point3::new(5.0, 0.0, 0.0), Point3::new(5.0, 0.0, 10.0));
+        let c = Geo::traced(&a, &b, p0, p1).expect("traced");
+        let d = c.domain();
+        assert!(c.eval(d.lo).distance(p0) < 1e-6 && c.eval(d.hi).distance(p1) < 1e-6);
+        assert!(c.eval(0.5 * (d.lo + d.hi)).distance(Point3::new(5.0, 0.0, 5.0)) < 1e-6);
+        // apart, nothing
+        let off = plane(Point3::new(6.0, 0.0, 0.0), Vec3::X);
+        assert!(Geo::traced(&a, &off, p0, p1).is_none());
+    }
 }

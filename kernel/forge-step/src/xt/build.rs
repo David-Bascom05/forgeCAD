@@ -291,11 +291,30 @@ impl Build<'_, '_> {
                 }
                 match (got, first_err) {
                     (Some(g), _) => g,
+                    // no fin's curve reads: where its two faces meet, between its vertices
+                    (None, Some(e))
+                        if e.why.contains("which are not read") && start != 0 && end != 0 && start != end =>
+                    {
+                        match self.traced_edge(&ed, start, end) {
+                            Some(k) => (k, false, 0),
+                            None => return Err(e),
+                        }
+                    }
                     (None, Some(e)) => return Err(e),
                     (None, None) => return refuse(idx, 16, "no curve, on the edge or its fins"),
                 }
             }
-            c => (self.g.curve(c)?, against_curve(s, c), c),
+            c => match self.g.curve(c) {
+                Ok(k) => (k, against_curve(s, c), c),
+                // its parameters not read: where its two faces meet, between its vertices
+                Err(r) if r.why.contains("which are not read") && start != 0 && end != 0 && start != end => {
+                    match self.traced_edge(&ed, start, end) {
+                        Some(k) => (k, false, c),
+                        None => return Err(r),
+                    }
+                }
+                Err(r) => return Err(r),
+            },
         };
         let name = self.salt.with(u64::from(idx));
         if start == 0 && end == 0 {
@@ -405,6 +424,26 @@ impl Build<'_, '_> {
         self.stats.edges += 1;
         self.edges.insert(idx, e.clone());
         Ok(e)
+    }
+
+    /// An edge's two faces' surfaces traced from its start vertex to its end.
+    fn traced_edge(&mut self, ed: &Node, start: u32, end: u32) -> Option<forge_geom::Curve> {
+        let s = self.g.s;
+        let mut surfs = Vec::new();
+        let first = ed.p("fin");
+        let mut at = first;
+        for _ in 0..8 {
+            let f = s.of(at, 17)?;
+            let face = s.of(s.of(f.p("loop"), 15)?.p("face"), 14)?;
+            surfs.push(self.g.surface(face.p("surface")).ok()?.0);
+            at = f.p("other");
+            if at == first || at == 0 {
+                break;
+            }
+        }
+        let [a, b] = &surfs[..] else { return None };
+        let (va, vb) = (self.vertex(start).ok()?, self.vertex(end).ok()?);
+        super::geom::Geo::traced(a, b, self.p.verts[va].0, self.p.verts[vb].0)
     }
 
     /// A face, its normal out of the region when `out`.
