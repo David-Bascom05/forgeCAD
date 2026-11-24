@@ -300,7 +300,7 @@ fn the_flanges_posted_program_on_its_machine() {
     };
     let m = &mv.run;
     assert_eq!(m.def.name, "generic-vmc3");
-    assert!(!m.wcs_given, "the flange gives no `at:`: placed");
+    assert!(m.wcs_given, "the flange gives its `at:` (CAM-CORE 8cae054a)");
     assert!(m.tl.segments.len() > 300);
     assert!(m.tl.violations.is_empty(), "{:?}", m.tl.violations);
     // every feed's tip, in the document's frame, ends on the posted path (rapids also go home)
@@ -487,4 +487,48 @@ fn rapids_and_holders_against_the_stock_as_cut() {
             .any(|m| m.rule == "rapid_into_stock" && m.op == Some(b)),
         "{issues:?}"
     );
+}
+
+/// The flange's own quality measurement (forge-cam-quality's MoveQ, per feed move of the planned
+/// paths) lands on the posted program's lines and arcs: every op it measured is coloured, move
+/// for move, none left grey by a count that differs.
+#[test]
+fn the_flanges_measured_chip_load_colours_its_moves() {
+    use forge_cam::ops::PMove;
+    use forge_render::camsim::draw::Values;
+    let sim = flange();
+    let q = forge_cam_quality::measure_cam(&sim.cam, String::new(), &forge_cam_quality::Config::default());
+    let per = |i: usize| {
+        let o = q.ops.iter().find(|o| o.name == sim.cam.ops[i].name)?;
+        Some(
+            o.moves_q
+                .iter()
+                .map(|m| (m.path, m.load as f32, 1.0))
+                .collect::<Vec<_>>(),
+        )
+    };
+    let v = Values::of_feeds(&sim.cam, &sim.tl, "chip load", "", Values::chip_bands(), &per);
+    let mut measured = 0;
+    for (i, op) in sim.cam.ops.iter().enumerate() {
+        let Some(vals) = per(i).filter(|v| !v.is_empty()) else {
+            continue;
+        };
+        measured += 1;
+        let feeds = sim.tl.segs.iter().zip(&v.per_piece).filter(|(g, _)| {
+            g.op as usize == i
+                && matches!(
+                    sim.cam.sim_paths(i)[g.path as usize].moves[g.mv as usize],
+                    PMove::Line { .. } | PMove::Arc { .. }
+                )
+        });
+        let (n, grey) = feeds.fold((0, 0), |(n, g), (_, x)| (n + 1, g + x.is_none() as usize));
+        assert_eq!(
+            grey,
+            0,
+            "{}: {grey} of {n} feed pieces grey ({} values)",
+            op.name,
+            vals.len()
+        );
+    }
+    assert!(measured > 0, "the flange's ops measured per move");
 }

@@ -86,7 +86,8 @@ pub struct MachineRun {
     pub program: String,
     pub dialect: String,
     pub text: String,
-    /// The part's frame on the machine is the document's moved by `shift`: the stock (or the
+    /// The part's frame on the machine is the document's moved by `shift`: where the setup's
+    /// `at:` (the WCS origin in machine coordinates) puts it; with none, the stock (or the
     /// workholding under it) centred on the part mount's datum, its bottom on it.
     pub shift: [f64; 3],
     /// The work offset used (per control letter), and whether it was the setup's own (`at:`)
@@ -200,8 +201,7 @@ impl Cam {
                 lo[2] = lo[2].min(a[2]);
             }
         }
-        let shift = [-0.5 * (lo[0] + hi[0]), -0.5 * (lo[1] + hi[1]), -lo[2]];
-        let mv = |p: [f64; 3]| [p[0] + shift[0], p[1] + shift[1], p[2] + shift[2]];
+        let mut shift = [-0.5 * (lo[0] + hi[0]), -0.5 * (lo[1] + hi[1]), -lo[2]];
         let mut setup = sim::Setup::new(&def, control.clone()).map_err(|e| e.to_string())?;
         setup.tools = tools.clone();
         setup.h = h.clone();
@@ -215,6 +215,27 @@ impl Cam {
                         w[k] = a[i];
                     }
                 }
+                // the part is where the offset puts it, not where a placement would: the WCS
+                // origin is the first tool's tip at the offset's joint values, its length (H)
+                // added on the length joint, as the control does
+                let t0 = tools.first().ok_or("no tools")?;
+                let mut q: Vec<f64> = def.joints.iter().map(|j| j.home).collect();
+                for (k, wk) in w
+                    .iter()
+                    .enumerate()
+                    .filter(|(k, _)| "XYZ".contains(control.letters[*k]))
+                {
+                    let j = setup.joint_of[k];
+                    q[j] = *wk;
+                    if def.length_joint.as_deref() == Some(def.joints[j].name.as_str()) {
+                        q[j] += t0.tip.iter().map(|v| v * v).sum::<f64>().sqrt();
+                    }
+                }
+                let o = setup
+                    .tip_in_part(&q, t0.t)
+                    .ok_or("the tool's tip is not in the part's frame")?
+                    .0;
+                shift = [o[0] - s.origin[0], o[1] - s.origin[1], o[2] - s.origin[2]];
                 (w, true)
             }
             None => {
@@ -242,7 +263,11 @@ impl Cam {
                         m[r][c] = p[r] - base[r];
                     }
                 }
-                let want = mv(s.origin);
+                let want = [
+                    s.origin[0] + shift[0],
+                    s.origin[1] + shift[1],
+                    s.origin[2] + shift[2],
+                ];
                 let x = solve3(m, [want[0] - base[0], want[1] - base[1], want[2] - base[2]])
                     .ok_or("the machine's X, Y and Z do not span space")?;
                 let mut w = vec![0.0; control.letters.len()];
@@ -257,6 +282,7 @@ impl Cam {
             }
         };
         setup.wcs = vec![(54, wcs.clone())];
+        let mv = |p: [f64; 3]| [p[0] + shift[0], p[1] + shift[1], p[2] + shift[2]];
         let tl = sim::simulate(&text, &setup).map_err(|e| e.to_string())?;
         // the workholding only: the stock changes as it is cut, and its box would call every
         // rapid over a cleared region a hit; the tool against the in-process stock is the

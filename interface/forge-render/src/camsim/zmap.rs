@@ -326,6 +326,8 @@ impl ZMap {
                 any
             }
             Some(ar) => {
+                // the circle of the start's radius: a posted arc's end radius differs from it by
+                // the control's rounding only (`ArcOf::dr`, microns), below the grid's cell
                 let (s0, s1) = (ar.a0 + ar.sweep * u0, ar.a0 + ar.sweep * u1);
                 let (lo_a, sw) = if s1 >= s0 { (s0, s1 - s0) } else { (s1, s0 - s1) };
                 let rr = ar.r + r;

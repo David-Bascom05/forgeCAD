@@ -21,6 +21,9 @@ pub struct SimJob {
     /// The text being simulated now.
     pub running: Option<String>,
     pub focus: Option<crate::shell::cam::Focus>,
+    /// What the toolpath's colours were made from (the colour-by choice, the simulated text,
+    /// whether the run's quality was measured).
+    pub colour: Option<String>,
 }
 
 /// Where the playback is, for the workspace's browser to highlight (op by name, as the
