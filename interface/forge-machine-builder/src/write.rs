@@ -109,6 +109,7 @@ pub fn status_name(s: CiteStatus) -> &'static str {
         CiteStatus::Estimate => "estimate",
         CiteStatus::Unknown => "unknown",
         CiteStatus::Conflict => "conflict",
+        CiteStatus::User => "user",
     }
 }
 
@@ -127,6 +128,12 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
         writeln!(o.s, "coolants = {}", strings(&m.coolants)?).unwrap();
     }
     o.num("clearance", m.clearance);
+    if let Some(v) = m.peck_clear {
+        o.num("peck_clear", v);
+    }
+    if let Some(v) = m.chip_lift {
+        o.num("chip_lift", v);
+    }
     if m.real {
         o.line("real = true");
     }
@@ -151,12 +158,19 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
         if j.ty == JointType::Rotary {
             o.vec("pivot", &j.pivot);
         }
-        o.vec("range", &j.range);
+        // a field cited unknown is not written (the cite says so)
+        if let Some(r) = &j.range {
+            o.vec("range", r);
+        }
         if j.home != 0.0 {
             o.num("home", j.home);
         }
-        o.num("rapid", j.rapid);
-        o.num("max_feed", j.max_feed);
+        if let Some(v) = j.rapid {
+            o.num("rapid", v);
+        }
+        if let Some(v) = j.max_feed {
+            o.num("max_feed", v);
+        }
         if let Some(a) = j.accel {
             o.num("accel", a);
         }
@@ -184,12 +198,16 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
         o.text("kind", spindle_kind_name(s.kind))?;
         o.vec("axis", &s.axis);
         o.vec("nose", &s.nose);
-        o.vec("rpm", &s.rpm);
+        if let Some(r) = &s.rpm {
+            o.vec("rpm", r);
+        }
         if !s.power.is_empty() {
             o.vec("curve_rpm", &s.power.iter().map(|p| p[0]).collect::<Vec<_>>());
             o.vec("curve_kw", &s.power.iter().map(|p| p[1]).collect::<Vec<_>>());
         }
-        o.vec("max", &s.max);
+        if let Some(x) = &s.max {
+            o.vec("max", x);
+        }
         if !s.interface.is_empty() {
             o.text("interface", &s.interface)?;
         }
@@ -199,28 +217,93 @@ pub fn machine(m: &MachineDef) -> Result<String, String> {
     }
     for t in &m.turrets {
         o.line("");
+        if t.manual {
+            // a manual tool post: the operator's swap, a holder datum
+            o.line("[[machine.toolpost]]");
+            o.text("name", &t.name)?;
+            o.text("link", &t.link)?;
+            if let Some(v) = t.index_s {
+                o.num("change_s", v);
+            }
+            o.vec("center", &t.center);
+            continue;
+        }
         o.line("[[machine.turret]]");
         o.text("name", &t.name)?;
         o.text("link", &t.link)?;
-        o.num("stations", t.stations as f64);
-        o.num("index_s", t.index_s);
+        if let Some(n) = t.stations {
+            o.num("stations", n as f64);
+        }
+        if let Some(v) = t.index_s {
+            o.num("index_s", v);
+        }
         o.vec("center", &t.center);
         o.vec("index_axis", &t.index_axis);
         if let Some(l) = &t.live {
             o.text("live", l)?;
         }
     }
+    // (joint, value) pairs as the reader takes them: position_joints and position
+    let position = |o: &mut Out, ps: &[(String, f64)]| -> Result<(), String> {
+        if !ps.is_empty() {
+            let js: Vec<String> = ps.iter().map(|(j, _)| j.clone()).collect();
+            writeln!(o.s, "position_joints = {}", strings(&js)?).unwrap();
+            o.vec("position", &ps.iter().map(|(_, v)| *v).collect::<Vec<_>>());
+        }
+        Ok(())
+    };
     if let Some(Changer {
+        manual,
         pockets,
         change_s,
         max_tool_kg,
+        position: ps,
     }) = &m.changer
     {
         o.line("");
         o.line("[[machine.changer]]");
-        o.num("pockets", *pockets as f64);
-        o.num("change_s", *change_s);
-        o.num("max_tool_kg", *max_tool_kg);
+        if *manual {
+            o.text("kind", "manual")?;
+        }
+        if let Some(n) = pockets {
+            o.num("pockets", *n as f64);
+        }
+        if let Some(v) = change_s {
+            o.num("change_s", *v);
+        }
+        if let Some(v) = max_tool_kg {
+            o.num("max_tool_kg", *v);
+        }
+        position(&mut o, ps)?;
+    }
+    if let Some(p) = &m.pallets {
+        o.line("");
+        o.line("[[machine.pallets]]");
+        o.num("count", p.count as f64);
+        if let Some(v) = p.change_s {
+            o.num("change_s", v);
+        }
+        if let Some(v) = p.max_kg {
+            o.num("max_kg", v);
+        }
+        if let Some(v) = &p.size {
+            o.vec("size", v);
+        }
+        if let Some(v) = &p.max_work {
+            o.vec("max_work", v);
+        }
+        position(&mut o, &p.position)?;
+    }
+    for z in &m.zones {
+        o.line("");
+        o.line("[[machine.zone]]");
+        o.text("name", &z.name)?;
+        writeln!(o.s, "joints = {}", strings(&z.joints)?).unwrap();
+        o.vec("min", &z.min);
+        o.vec("max", &z.max);
+        if !z.note.is_empty() {
+            o.text("note", &z.note)?;
+        }
     }
     for mt in &m.mounts {
         o.line("");

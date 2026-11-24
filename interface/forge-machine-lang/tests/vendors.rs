@@ -60,7 +60,9 @@ fn vendor_machines_parse_build_and_stay_clear() {
             for j in 0..m.joints.len() {
                 for end in 0..2 {
                     let mut q = home.clone();
-                    q[j] = m.joints[j].range[end];
+                    // travel not stated (cited unknown): no end to check
+                    let Some(r) = m.joints[j].range else { continue };
+                    q[j] = r[end];
                     let c = collide::check_pose(&m, &q);
                     assert!(
                         c.is_empty(),

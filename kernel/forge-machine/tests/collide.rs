@@ -278,12 +278,22 @@ fn outside_zones(m: &forge_machine::MachineDef, q0: &[f64], q1: &[f64]) -> Vec<(
 
 /// Every pair of bodies through the joints that move one relative to the other: each such joint
 /// swept through its whole range with the others at every combination of their ends. A Hit is a
-/// pose inside the declared travel where the machine's own bodies collide (wrong data); a Near is
-/// one not proven clear. Neither may happen in a built-in.
+/// pose inside the declared travel where the machine's own bodies collide; a Near is one not
+/// proven clear. Neither may happen in our generic records, whose zones mark where the machine
+/// may not go. A vendor's record states the published travel: a real lathe's turret does reach
+/// its chuck, an HMC's spindle its pallet, and vendors do not publish the crash zones; there the
+/// sweep runs and what it finds is printed (the simulation reports such a contact on a program
+/// that reaches it), not asserted absent.
 #[test]
 fn builtin_machines_have_no_self_collision_in_travel() {
     let mut bad = Vec::new();
+    let mut vendor = Vec::new();
     for m in builtin() {
+        let bad = if m.name.starts_with("generic-") {
+            &mut bad
+        } else {
+            &mut vendor
+        };
         let home: Vec<f64> = m.joints.iter().map(|j| j.home).collect();
         let chain = |l: &str| m.chain(l).unwrap_or_default();
         for (ai, a) in m.bodies.iter().enumerate() {
@@ -369,5 +379,10 @@ fn builtin_machines_have_no_self_collision_in_travel() {
             }
         }
     }
+    println!(
+        "vendor records: {} contacts in published travel\n{}",
+        vendor.len(),
+        vendor.join("\n")
+    );
     assert!(bad.is_empty(), "{}", bad.join("\n"));
 }

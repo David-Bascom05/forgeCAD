@@ -74,9 +74,11 @@ fn template_clone_list_check_and_simulate() {
     let o = run(&e, &["check", "my-trunnion"]);
     assert!(o.out.contains("(user, "), "{}", o.out);
     assert!(o.out.contains("provenance: 37 user"), "{}", o.out);
-    // the generic trunnion's head reaches its cradle at the ends of travel: reported with joints
-    assert!(o.out.contains("cradle / head (via X Y Z B): HIT at"), "{}", o.out);
-    assert_eq!(o.code, 1);
+    // the generic trunnion's Z travel stops above its cradle (cam/machine-train4: Z [-240, 0],
+    // proven clear by collide's box check): the pair is swept, its lines clear, and no HIT
+    assert!(o.out.contains("cradle / head (via X Y Z B): "), "{}", o.out);
+    assert!(!o.out.contains("HIT"), "{}", o.out);
+    assert_eq!(o.code, 0, "{}", o.out);
 
     // shadowing: a user machine named like a built-in hides it, and list says so
     let o = run(&e, &["new", "generic-vmc3", "--from", "generic-vmc3"]);
@@ -124,7 +126,7 @@ fn template_clone_list_check_and_simulate() {
     // the user's own value changes the verdict: X travel cut to ±10 mm overtravels the slot
     let mut m2 = m.clone();
     let x = m2.joint_index("X").unwrap();
-    m2.joints[x].range = [-10.0, 10.0];
+    m2.joints[x].range = Some([-10.0, 10.0]);
     m2.cites.retain(|c| c.path != "joint.X.range");
     std::fs::write(&f, write::file(header, &[m2]).unwrap()).unwrap();
     let o = forge_machine_lang::run_setup(&root.join("proj/slot.toml")).unwrap();

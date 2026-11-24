@@ -32,7 +32,7 @@ fn write_is_byte_stable() {
 fn awkward_numbers_and_strings() {
     let mut m = forge_machine::library::builtin_named("generic-vmc3").unwrap();
     m.clearance = 0.1 + 0.2;
-    m.joints[0].range = [-1e-7, 123456789.125];
+    m.joints[0].range = Some([-1e-7, 123456789.125]);
     m.note = "a \"quoted\" note\\with\tescapes\nand a # hash".into();
     let t = write::machine(&m).unwrap();
     assert_eq!(MachineDef::parse_all(&t).unwrap(), vec![m.clone()]);
