@@ -79,6 +79,13 @@ by the test, not failed.
   range's low end. Korloy and Ingersoll print vc per grade only: matched to an insert by the
   grades its catalogue row marks (read from the rendered page), f and ap from the insert's own
   row, cited as estimates. A vc with no feed is held back. Turning records are now `real`.
+- Shop-part tools (raw/real-tools/<maker>.json, found one by one in the makers' catalogues):
+  Tungaloy TungCut blade CGP32-3D with SGM3-020 / DGM3-020 (GC F section: the feed is only a
+  bar chart, so the inserts carry no preset; reach = half the printed CUTDIA, an estimate),
+  Sumitomo WDX 260D4S32 and Tungaloy TDX260F25-4 26 mm 4xD indexable drills (sig 180, a flat
+  bottom, estimate; Sumitomo's flute length is its neck length LUX, estimate), Guhring 5518
+  (carbide) and 1131 (HSCO) drills at 5.5, 6 and 18.5 mm, and the Tungaloy MTEC0807C171.5ISO
+  thread mill (pitch 1.5). Feeds tabulated per diameter column take the first (smaller) column.
 - Inconsistencies found in the sources are kept in the raw facts (e.g. Rego-Fix ER20 nut thread
   M25x1.5 in the catalogue vs M24x1.5 on the pocket sheet; Tormach BT30 "Gage length is 60mm
   (1.97 inches)"; Lakeshore ".0003.0010" chip load); the generator never resolves them silently.

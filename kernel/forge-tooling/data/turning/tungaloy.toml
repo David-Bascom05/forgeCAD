@@ -4216,3 +4216,162 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=56"
 taken = "2026-11-24"
 value = "DC**0702..."
+
+[[blade]]
+id = "tungaloy-CGP32-3D"
+code = "CGP32-3D"
+h = 32
+t_blade = 2.4
+l1 = 150
+cdx = 50
+max_bar = 100
+seat = "3"
+insert = "SGM3-020, DGM3-020"
+hand = "N"
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+note = "TungCut CGP external deep grooving and parting blade CGP32-3D (General Catalogue 2023-2024, F Parting-Grooving); clamps in tool block CTBF; self-clamping (elastic upper jaw); wrench CRW33 (optional), clamping screw -"
+[[blade.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "CGP32-3D"
+[[blade.cite]]
+path = "h"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "H 32"
+[[blade.cite]]
+path = "t_blade"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "B 2.4"
+[[blade.cite]]
+path = "l1"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "LF 150"
+[[blade.cite]]
+path = "max_bar"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "CUTDIA 100"
+[[blade.cite]]
+path = "seat"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "Seat size 3"
+[[blade.cite]]
+path = "insert"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "Reference pages: Inserts F236 - F245 (seat size 3); 'When depth is deeper than (insert length - 1.5mm), 1 corner type is recommended.'"
+[[blade.cite]]
+path = "cdx"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "CUTDIA 100"
+basis = "no reach is printed: half the printed max cut-off diameter CUTDIA"
+[[blade.cite]]
+path = "hand"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "Fig. 2"
+basis = "the catalogue figure shows a double-ended neutral blade; no R/L is printed"
+
+[[groove_insert]]
+id = "tungaloy-SGM3-020"
+code = "SGM3-020"
+width = 3
+re = 0.2
+head = 20
+seat = "3"
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+note = "TungCut SGM external deep grooving and parting insert, 1 corner, SGM3-020 (neutral); grades AH7025, AH725, AH8005, GH130, AH6235, KS05F; no preset: the maker prints vc but its feed only as a bar chart (F236)"
+[[groove_insert.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "SGM3-020"
+[[groove_insert.cite]]
+path = "width"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "CW±0.05 3"
+[[groove_insert.cite]]
+path = "re"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "RE 0.2"
+[[groove_insert.cite]]
+path = "head"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "INSL 20"
+[[groove_insert.cite]]
+path = "seat"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "Seat size 3"
+
+[[groove_insert]]
+id = "tungaloy-DGM3-020"
+code = "DGM3-020"
+width = 3
+re = 0.2
+head = 20
+seat = "3"
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+note = "TungCut DGM external grooving and parting insert, 2 corners, DGM3-020 (neutral); grades T9225, AH7025, AH725, AH8005, AH905, GH130, AH6235, NS9530, KS05F; no preset: the maker prints vc but its feed only as a bar chart (F236)"
+[[groove_insert.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "DGM3-020"
+[[groove_insert.cite]]
+path = "width"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "CW±0.05 3"
+[[groove_insert.cite]]
+path = "re"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "RE 0.2"
+[[groove_insert.cite]]
+path = "head"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "INSL 20"
+[[groove_insert.cite]]
+path = "seat"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "Seat size 3"

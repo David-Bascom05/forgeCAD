@@ -367,3 +367,32 @@ fn insert_presets_from_grade_tables() {
     }
     assert!(n >= 500, "{n}");
 }
+
+/// The real tools found for the shop parts (raw/real-tools): CAM-TURN's parting blade and 26 mm
+/// U-drill, CAM-CORE's 18.5 / 6 / 5.5 mm drills and 1.5-pitch thread mill.
+#[test]
+fn shop_part_tools() {
+    let l = Library::builtin();
+    let b = l.blades.iter().find(|b| b.id == "tungaloy-CGP32-3D").unwrap();
+    assert_eq!((b.h, b.t_blade, b.l1, b.max_bar), (32.0, 2.4, 150.0, Some(100.0)));
+    let gi = l
+        .groove_inserts
+        .iter()
+        .find(|g| g.id == "tungaloy-SGM3-020")
+        .unwrap();
+    assert_eq!((gi.width, gi.re, gi.head), (3.0, 0.2, Some(20.0)));
+    let u = l.tool("sumitomo-WDX260D4S32").unwrap();
+    assert_eq!((u.dc, u.dcon, u.angle), (26.0, 32.0, 180.0));
+    u.shape(u.lcf + 2.0, None).unwrap();
+    for (id, d) in [
+        ("guhring-9055180185000", 18.5),
+        ("guhring-9055180060000", 6.0),
+        ("guhring-9055180055000", 5.5),
+    ] {
+        let t = l.tool(id).unwrap();
+        assert_eq!((t.dc, t.angle), (d, 130.0), "{id}");
+        assert!(t.real && !t.presets.is_empty(), "{id}");
+    }
+    let tm = l.tool("tungaloy-MTEC0807C171.5ISO").unwrap();
+    assert_eq!((tm.dc, tm.tp, tm.nof), (7.0, 1.5, 3));
+}

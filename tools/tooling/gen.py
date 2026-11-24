@@ -704,6 +704,127 @@ def turning(vendor, r, out, skips):
         out.rec("turn_holder", {"id": rid, "code": hc, "kind": kind, "hand": hand, **g, **base}, cites)
 
 
+# Single tools found for the shop parts (raw/real-tools/<vendor>.json): parting blades and
+# inserts, indexable drills, solid drills, thread mills, each value cited to the catalogue page.
+REAL_TOOLS = os.path.join(RAW, "real-tools")
+
+
+def shop_presets(r, kind):
+    """One preset per printed ISO group: the first material the maker prints (its table's lead
+    row; of bracketing diameter columns, the first, the smaller tool's); vc the printed
+    optimum (Sumitomo min-optimum-max) else the range's low end; the feed as printed."""
+    out, seen = [], set()
+    for c in r.get("cutting") or []:
+        g = c.get("iso_group")
+        fx = c.get("f") or c.get("fz")
+        if not g or g in seen or not fx:
+            continue
+        def start(x):
+            v = x.get("v")
+            if isinstance(v, list) and len(v) == 3 and "optimum" in str(c.get("material_stated", "")).lower() + str(r.get("notes", "")).lower():
+                return v[1], None
+            if isinstance(v, list) and len(v) == 3 and re.search(r"\d+-\d+-\d+", str(x.get("stated", ""))):
+                return v[1], "the printed optimum (min-optimum-max)"
+            if isinstance(v, list):
+                return min(v), "the low end of the printed range"
+            return v, None
+        vc, vh = start(c["vc"])
+        fz, fh = start(fx)
+        seen.add(g)
+        name = f"{g} general"
+        basis = [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "low end" in h]
+        notes = ["of the maker's materials for this group, the first printed"]
+        notes += [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "optimum" in h]
+        if kind == "drill":
+            notes.append("fz is the feed per revolution, mm/rev")
+        if re.search(r"column", str(c.get("material_stated", ""))):
+            basis.append("the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed")
+        if re.search(r"\b(SFM|IPR)\b", str(c["vc"].get("stated", "")) + str(fx.get("stated", ""))):
+            notes.append("metric values are exact conversions (SFM x 0.3048, IPR x 25.4)")
+        cite = dict(path=f"preset.{name}", status="estimate" if basis else "published", source=c.get("url") or r["url"],
+                    taken=r.get("taken", TAKEN),
+                    value=f"{c.get('material_stated', '')}; vc {c['vc'].get('stated', '')}; {fx.get('stated', '')}",
+                    basis="; ".join(basis), note="; ".join(notes))
+        out.append(dict(name=name, group=g, vc=vc, fz=fz, cite=cite))
+    return out
+
+
+def shop(vendor, r, outs, skips):
+    vals, url, tk = r["values"], r["url"], r.get("taken", TAKEN)
+    V = lambda k: (vals.get(k) or {}).get("v")
+    S = lambda k: (vals.get(k) or {}).get("stated", "")
+    P = lambda path, k: dict(path=path, status="published", source=url, taken=tk, value=S(k))
+    E = lambda path, k, basis: dict(path=path, status="estimate", source=url, taken=tk, value=S(k), basis=basis)
+    base = dict(maker=VENDORS[vendor], real=True, source=url, taken=tk, note=r.get("name", "")[:140])
+    rid = f"{vendor}-{r['id']}".replace(" ", "")
+    k = r["kind"]
+    if k == "parting_blade":
+        f = dict(code=r["id"], h=V("h"), t_blade=V("b"), l1=V("lf"), cdx=V("cutdia") / 2, max_bar=V("cutdia"),
+                 seat=str(V("seat_size")), insert=", ".join(V("compatible_inserts") or []), hand="N")
+        cites = [dict(path="code", status="published", source=url, taken=tk, value=r["id"]),
+                 P("h", "h"), P("t_blade", "b"), P("l1", "lf"), P("max_bar", "cutdia"), P("seat", "seat_size"),
+                 P("insert", "compatible_inserts"),
+                 E("cdx", "cutdia", "no reach is printed: half the printed max cut-off diameter CUTDIA"),
+                 dict(path="hand", status="estimate", source=url, taken=tk, value=S("fig"),
+                      basis="the catalogue figure shows a double-ended neutral blade; no R/L is printed")]
+        base["note"] = (base["note"] + f"; clamps in tool block {V('tool_block')}; {V('clamp')}").strip("; ")
+        outs["turning"].rec("blade", {"id": rid, **f, **base}, cites)
+    elif k == "grooving_insert":
+        f = dict(code=r["id"], width=V("cw"), re=V("re"), head=V("insl"), seat=str(V("seat_size")))
+        cites = [dict(path="code", status="published", source=url, taken=tk, value=r["id"]),
+                 P("width", "cw"), P("re", "re"), P("head", "insl"), P("seat", "seat_size")]
+        base["note"] = (base["note"] + "; grades " + ", ".join(V("grades_available") or [])
+                        + "; no preset: the maker prints vc but its feed only as a bar chart (F236)").strip("; ")
+        outs["turning"].rec("groove_insert", {"id": rid, **f, **base}, cites)
+    elif k in ("indexable_drill", "drill", "thread_mill"):
+        ty = "thread_mill" if k == "thread_mill" else "drill"
+        dcon = V("dcon") if V("dcon") is not None else V("dconms")
+        dk = "dcon" if V("dcon") is not None else "dconms"
+        f = dict(type=ty, dc=V("dc"), dcon=dcon, oal=V("oal") or V("lf"))
+        cites = [P("dc", "dc"), P("dcon", dk), P("oal", "oal" if V("oal") is not None else "lf")]
+        if k == "indexable_drill":
+            if V("lcf") is not None:
+                f["lcf"] = V("lcf"); cites.append(P("lcf", "lcf"))
+            else:
+                f["lcf"] = V("lux"); cites.append(E("lcf", "lux", "no flute length or drilling depth is printed: the neck length LUX, the length clear of the body"))
+            f["sig"] = 180
+            cites.append(dict(path="sig", status="estimate", source=url, taken=tk, value=f"insert {V('insert')}",
+                              basis="an indexable drill cuts a flat bottom: 180 (CAM-TURN's drill model: tip height r/tan(sig/2) = 0)"))
+            base["note"] = (base["note"] + f"; insert {V('insert')}").strip("; ")
+        elif k == "drill":
+            f["lcf"], f["sig"] = V("lcf"), V("sig")
+            cites += [P("lcf", "lcf"), P("sig", "sig")]
+            if isinstance(V("flutes"), (int, float)):
+                f["nof"] = V("flutes"); cites.append(P("nof", "flutes"))
+        else:
+            f["lcf"], f["tp"], f["nof"] = V("apmx"), V("pitch"), V("flutes")
+            cites += [P("lcf", "apmx"), P("tp", "pitch"), P("nof", "flutes")]
+        mat = V("material")
+        if isinstance(mat, str):
+            f["material"] = "carbide" if "carbide" in mat.lower() else ("hss" if "hs" in mat.lower() else mat)
+            cites.append(P("material", "material"))
+        presets = shop_presets(r, ty)
+        head = dict(id=rid, **f, vendor=VENDORS[vendor], product_id=r["id"], real=True, source=url, taken=tk,
+                    note=base["note"])
+        out = outs["tools"]
+        out.lines.append("[[tool]]")
+        for kk, v in head.items():
+            if v is not None and v != "":
+                out.lines.append(f"{kk} = {tv(v)}")
+        for pr in presets:
+            out.lines.append("[[tool.preset]]")
+            for kk in ("name", "group", "vc", "fz"):
+                out.lines.append(f"{kk} = {tv(pr[kk]) if isinstance(pr[kk], str) else repr(round(float(pr[kk]), 6))}")
+        for c in cites + [p["cite"] for p in presets]:
+            out.lines.append("[[tool.cite]]")
+            for kk in ("path", "status", "source", "taken", "value", "basis", "note"):
+                if c.get(kk):
+                    out.lines.append(f"{kk} = {tv(c[kk])}")
+        out.lines.append("")
+    else:
+        skips[f"shop kind {k}"] += 1
+
+
 def main():
     report = {}
     for vendor in VENDORS:
@@ -735,6 +856,10 @@ def main():
             for k, o in outs.items():
                 if len(o.lines) > n0[k]:
                     counts[k] += 1
+        rp = os.path.join(REAL_TOOLS, f"{vendor}.json")
+        for r in (json.load(open(rp))["records"] if os.path.exists(rp) else []):
+            shop(vendor, r, outs, skips)
+            counts["shop tools"] += 1
         for k, o in outs.items():
             path = os.path.join(DATA, k, f"{vendor}.toml")
             if o.lines:

@@ -327,6 +327,8 @@ impl Tool {
                 angle: self.angle,
                 d: self.dc,
             },
+            // an indexable drill (sig = 180) cuts a flat bottom: its envelope is a flat end
+            Kind::Drill if self.angle >= 180.0 => Cutter::Flat { d: self.dc },
             Kind::Drill => Cutter::Drill {
                 d: self.dc,
                 angle: self.angle,
