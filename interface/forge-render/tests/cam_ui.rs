@@ -445,3 +445,52 @@ fn the_op_dialog_answers_enter_and_escape() {
     assert!(text(&h).contains("leave: 0.3"), "Enter is OK: {}", text(&h));
     assert!(h.gui.shell.cam.as_ref().unwrap().op_dlg.is_none());
 }
+
+/// Probing (PROBING's built-ins): a probe among the tools, Probe WCS and Inspect in the ribbon's
+/// Probing group, their dialogs' fields, and the measurement in the op's details.
+#[test]
+fn probing_ops_have_a_ribbon_group_dialogs_and_details() {
+    let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+    let dir = std::env::temp_dir().join(format!("fg-cam-ui-{}-probe", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(ex.join("flange.fg"), dir.join("flange.fg")).unwrap();
+    let src = std::fs::read_to_string(ex.join("flange_cam.fg"))
+        .unwrap()
+        .replace(
+            "op1  = setup(",
+            "p    = probe(\"renishaw-omp40-2\", t: 20, ball: 6, length: 50, stem: 3, body: [(20, 0, 69)])\nop1  = setup(",
+        )
+        .replace(
+            "prog = program(op1, post: \"fanuc\", number: 1001)",
+            "z0 = probe_wcs(op1, tool: p, kind: \"surface\", at: (25, 25, 20), wcs: 54)\nprog = program(op1, post: \"linuxcnc\", number: 1001)",
+        );
+    let file = dir.join("flange_cam.fg");
+    std::fs::write(&file, &src).unwrap();
+    let mut h = match Headless::new((1500.0, 1000.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return;
+        }
+    };
+    h.step();
+    h.gui.open(file.to_str().unwrap());
+    settle(&mut h);
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert_eq!(w.status("z0"), "built", "{:?}", w.run.as_ref().unwrap().errors);
+    let probe = w.run.as_ref().unwrap().op("z0").and_then(|o| o.probe.clone()).expect("a measurement");
+    assert_eq!(probe.measures, "z");
+    assert!(h.placed("tool:Probe WCS").is_some() && h.placed("tool:Inspect").is_some(), "the Probing group");
+    assert!(h.placed("cam:tool:p").is_some(), "the probe among the tools");
+    assert!(h.click("cam:row:z0"));
+    h.step();
+    shot(&mut h, "cam-probe-details");
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("z0".into()));
+    h.step();
+    let tabs = forge_render::shell::cam::schema::tabs(forge_render::shell::cam::schema::spec("probe_wcs").unwrap());
+    let k = tabs.iter().position(|t| *t == forge_render::shell::cam::schema::Tab::Geometry).unwrap();
+    assert!(h.click(&format!("cam:op:tab:{k}")));
+    h.step();
+    assert!(h.placed("cam:op:arg:kind").is_some() && h.placed("cam:op:arg:wcs").is_some());
+    shot(&mut h, "cam-probe-dialog");
+}

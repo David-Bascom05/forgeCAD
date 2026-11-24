@@ -83,7 +83,7 @@ pub fn unquote(t: &str) -> String {
 
 /// The op built-ins this workspace knows: forge-cam-lang's (milling), then forge-turn-lang's
 /// (turning).
-pub const OP_FUNCS: [&str; 17] = [
+pub const OP_FUNCS: [&str; 19] = [
     "facing",
     "clear",
     "contour",
@@ -93,6 +93,8 @@ pub const OP_FUNCS: [&str; 17] = [
     "thread_mill",
     "edge_break",
     "bore",
+    "probe_wcs",
+    "inspect",
     "turn_face",
     "turn_rough",
     "turn_finish",
@@ -107,7 +109,7 @@ fn role_of(func: &str) -> Role {
     match func {
         "part" => Role::Part,
         "machine" => Role::Machine,
-        "tool" | "lathe_tool" => Role::Tool,
+        "tool" | "lathe_tool" | "probe" => Role::Tool,
         "setup" | "lathe_setup" => Role::Setup,
         "vise" | "soft_jaw" | "chuck" => Role::Fixture,
         "program" | "lathe_program" => Role::Program,

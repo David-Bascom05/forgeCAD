@@ -44,6 +44,8 @@ pub enum Kind {
     Z,
     /// A count (passes).
     Count,
+    /// A number in this unit (m/min, rpm, mm/min, kW, N·m).
+    Num(&'static str),
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -92,7 +94,7 @@ pub struct OpSpec {
     pub fields: &'static [Field],
 }
 
-use Kind::{Choice, Count, Deg, Hole, Len, Sketch, Z};
+use Kind::{Choice, Count, Deg, Hole, Len, Num, Sketch, Z};
 use Tab::{Geometry, Heights, Linking, Passes};
 
 const TOOL: Field = req("tool", "Tool", Tab::Tool, Kind::Tool);
@@ -251,6 +253,46 @@ pub const OPS: &[OpSpec] = &[
             f("hand", "Hand", Passes, Choice(&["right", "left"]), "right"),
             f("starts", "Starts", Passes, Count, "1"),
             f("lead", "Lead in", Linking, Choice(&["line", "arc"]), "line"),
+        ],
+    },
+    OpSpec {
+        func: "probe_wcs",
+        label: "Probe WCS",
+        group: "Probing",
+        icon: "cam_check",
+        what: "Probes a surface, bore, boss, web, pocket or corner to find the work offset",
+        fields: &[
+            req("tool", "Probe", Tab::Tool, Kind::Tool),
+            req("kind", "Feature", Geometry, Choice(&["surface", "bore", "boss", "web", "pocket", "corner"])),
+            req("at", "At (x, y, z)", Geometry, Len),
+            f("size", "Size (Ø or width)", Geometry, Len, "needed for bore, boss, web, pocket"),
+            f("axis", "Axis (web, pocket)", Geometry, Choice(&["x", "y"]), "x"),
+            f("side", "Free side (corner)", Geometry, Num(""), "(1, 1)"),
+            f("wcs", "Work offset", Geometry, Count, "none (54–59)"),
+            f("approach", "Approach", Linking, Len, "5 (more than entry + the setup's clearance)"),
+            f("over", "Overtravel", Linking, Len, "1"),
+            f("entry", "Contact window", Linking, Len, "2 × the setup's clearance, at least 0.5"),
+            f("feed", "Probing feed", Linking, Num("mm/min"), "100"),
+            f("link_feed", "Link feed", Linking, Num("mm/min"), "1000"),
+        ],
+    },
+    OpSpec {
+        func: "inspect",
+        label: "Inspect",
+        group: "Probing",
+        icon: "cam_check",
+        what: "Probes one point along a normal and checks it against its nominal ± tolerance",
+        fields: &[
+            req("tool", "Probe", Tab::Tool, Kind::Tool),
+            req("at", "At (x, y, z)", Geometry, Len),
+            req("normal", "Normal (out of the material)", Geometry, Num("")),
+            f("nominal", "Nominal", Passes, Len, "0"),
+            req("tol", "Tolerance ±", Passes, Len),
+            f("approach", "Approach", Linking, Len, "5 (more than entry + the setup's clearance)"),
+            f("over", "Overtravel", Linking, Len, "1"),
+            f("entry", "Contact window", Linking, Len, "2 × the setup's clearance, at least 0.5"),
+            f("feed", "Probing feed", Linking, Num("mm/min"), "100"),
+            f("link_feed", "Link feed", Linking, Num("mm/min"), "1000"),
         ],
     },
     OpSpec {

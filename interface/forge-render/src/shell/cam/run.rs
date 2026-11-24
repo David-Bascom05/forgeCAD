@@ -76,6 +76,8 @@ pub struct OpRes {
     pub hex: Option<f64>,
     pub vc: Option<f64>,
     pub power_kw: Option<f64>,
+    /// A probing op's measurement: what it measures, its points, the work offset (PROBING).
+    pub probe: Option<forge_cam_lang::probing::ProbeOut>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -259,6 +261,7 @@ pub fn run(text: &str, dir: &Path) -> Run {
                 hex: f.and_then(|f| n(f, "hex")),
                 vc: f.and_then(|f| n(f, "vc")),
                 power_kw: f.and_then(|f| n(f, "power_kw")),
+                probe: o.probe.clone(),
             }
         })
         .collect();

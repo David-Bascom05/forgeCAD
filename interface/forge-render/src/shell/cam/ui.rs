@@ -129,6 +129,7 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
         let (big2, small2) = two_d.split_at(3.min(two_d.len()));
         out.push(("2D", big2.to_vec(), small2.to_vec()));
         out.push(("Drilling", of("Drilling"), vec![]));
+        out.push(("Probing", of("Probing"), vec![]));
     }
     out.extend(vec![
         (
@@ -849,6 +850,26 @@ fn details(
             fact(ui, t, "Status", word, width, c);
             if let Some(o) = run.and_then(|r| r.op(id)) {
                 fact(ui, t, "Assurance", o.assurance.words(), width, t.ink2);
+                // a probing op: what it measures, where, and what it does with it
+                if let Some(p) = &o.probe {
+                    fact(ui, t, "Measures", p.measures, width, t.ink);
+                    fact(ui, t, "Touch points", &p.points.len().to_string(), width, t.ink);
+                    if let Some(k) = p.wcs {
+                        fact_tip(
+                            ui,
+                            t,
+                            "Work offset",
+                            &format!("G{k} · {}", if p.sets_wcs { "written" } else { "not written" }),
+                            "The posted program probes (G38.2) and reports; writing the offset from the result needs the control's own probing cycle or variables.",
+                            width,
+                            if p.sets_wcs { t.ink } else { t.warn },
+                        );
+                    }
+                    if let (Some(n), Some(tol)) = (p.nominal, p.tol) {
+                        fact(ui, t, "Nominal ± tolerance", &format!("{} ± {} mm", num(n), num(tol)), width, t.ink);
+                    }
+                    fact(ui, t, "Overtravel · contact window", &format!("{} · {} mm", num(p.over), num(p.entry)), width, t.ink2);
+                }
             }
             if st == "stale" || st == "error" {
                 ui.horizontal(|ui| {
@@ -942,7 +963,9 @@ fn details(
             if o.pairs > 0 {
                 fact(ui, t, "Certified pairs", &o.pairs.to_string(), width, t.ink);
             }
-            if let Some(q) = run.and_then(|r| r.quality(id)) {
+            // a probing op cuts nothing: no toolpath quality to read
+            let probing = run.and_then(|r| r.op(id)).is_some_and(|o| o.probe.is_some());
+            if let Some(q) = run.and_then(|r| r.quality(id)).filter(|_| !probing) {
                 quality_facts(ui, t, q, width);
             }
             for r in &o.removals {
@@ -1303,6 +1326,7 @@ fn op_dialog(
                     Kind::Deg => arg_field(ui, t, f.label, &mut val, &hint, "deg", &key, places),
                     Kind::Z => arg_field(ui, t, f.label, &mut val, &hint, "mm z", &key, places),
                     Kind::Count => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
+                    Kind::Num(unit) => arg_field(ui, t, f.label, &mut val, &hint, unit, &key, places),
                     Kind::Choice(words) => {
                         let mut items: Vec<(String, String)> = vec![];
                         if !f.required {
@@ -3039,6 +3063,9 @@ fn tool_glyph(p: &egui::Painter, r: Rect, k: forge_tooling::Kind, ink: Color32) 
 fn tool_words(w: &CamWs, s: &super::doc::Stmt) -> String {
     let id = s.pos(0).map(super::doc::unquote).unwrap_or_default();
     let t = s.arg("t").unwrap_or("?");
+    if s.func == "probe" {
+        return format!("T{t} · Probe Ø{} ({id})", s.arg("ball").unwrap_or("?"));
+    }
     match w.lib.tools.iter().find(|x| x.id == id) {
         Some(x) => format!("T{t} · {} Ø{}", kind_words(x.kind), num(x.dc)),
         None => format!("T{t} · {id}"),
