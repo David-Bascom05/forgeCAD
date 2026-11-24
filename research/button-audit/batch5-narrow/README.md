@@ -16,6 +16,7 @@ Also in this batch:
 
 - `theme::MIN_TEXT = 11`: the sans, medium, semi and mono helpers clamp to it. The assembly glyph's 9 px count badge is the one deliberate exception.
 - `Window::show_sizing` caps a dialog at the area minus 8 px and keeps it inside the window, so no dialog can leave a narrow app.
-- Test `tests/narrow_reach.rs` runs at 480 px on every tab. It checks that every ribbon command (131 on the plate) has its own on-screen button. If its group is folded, it opens the group's menu and checks the command's row is on screen. It fails with the list of commands that are lost.
+- The ribbon's missing tools (Hole, Thread, Direct, Section…) at 480 px (3ad70935). egui's first, invisible frame of a new menu lays it out at x = 5. The » menu and the folded group menus recorded their rows from that frame, so a click aimed there missed and closed the menu. As a result, the tabs behind » were never reached, and all of Modify read "not placed". Those rows are no longer recorded during a sizing pass. On the start and plate documents at 480 px, "not placed" fell from 54 rows to 0, and "nothing visible" from 30 to 4 (all side-panel items).
+- Test `tests/narrow_reach.rs` runs at 480 px on every tab. It checks that every ribbon command (75 with no document, 97 on a part; tabs behind » are reached by clicking ») has its own on-screen button. If its group is folded, it opens the group's menu and checks the command's row is on screen. It fails with the list of commands that are lost.
 
 Still open in this area: (c) the Insert Hardware rows should read "tap drill 4.2 mm" through `ux::show`, with the standard on hover. Only the column headers carry units so far.
