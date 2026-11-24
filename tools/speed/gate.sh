@@ -135,7 +135,7 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
     cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$1/"
     mkdir "$1/parts"
     cp interface/forge-lang/parts/bench/*.fg "$1/parts/"
-    cc -O2 -shared -fPIC -o "$1/fixedrandom.so" "$dir/fixedrandom.c"
+    cc -O2 -fno-builtin -ffreestanding -shared -fPIC -o "$1/fixedrandom.so" "$dir/fixedrandom.c"
   }
   gatedir=$(mktemp -d /tmp/forge-gate.XXXXXX)
   trap 'rm -rf "$gatedir"' EXIT
