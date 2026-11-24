@@ -5,6 +5,7 @@ pub mod engage;
 pub mod bore;
 pub mod fit;
 pub mod fixture;
+pub mod hop;
 pub mod leads;
 pub mod life;
 pub mod lower;

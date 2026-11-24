@@ -3334,6 +3334,50 @@ impl Cam {
         .map_err(|e| format!("{e:?}"))
     }
 
+    /// Retracts between cuts replaced by hops (forge_cam::hop) for clear, contour and adaptive:
+    /// one up-over-down move at the link feed (the machine's limit, held FEED_MARGIN under it),
+    /// over the material the stock holds at that point. The map starts from the in-process stock
+    /// (the voids earlier ops of the setup proved); when an earlier op of the setup did not build,
+    /// from the uncut stock.
+    fn hop_links(&mut self, su: usize, kind: &str, out: &OpOut, paths: Vec<OpPath>) -> Vec<OpPath> {
+        use forge_cam::engage::{HeightMap, Profile};
+        if std::env::var_os("FORGE_HOP").is_none() || !matches!(kind, "clear" | "adaptive" | "contour") {
+            return paths;
+        }
+        let Some(ti) = out.tool else {
+            return paths;
+        };
+        let t = &self.tools[ti];
+        let Some(prof) = Profile::of(&t.tool) else {
+            return paths;
+        };
+        let s = &self.setups[su];
+        let Some(feed) = self
+            .lib
+            .machine(&s.machine)
+            .ok()
+            .filter(|m| m.max_feed > 0.0)
+            .map(|m| 0.999 * m.max_feed)
+        else {
+            return paths;
+        };
+        let cell = (t.tool.dc / 30.0).clamp(0.05, 0.25);
+        let trusted = !self.ops.iter().any(|o| o.setup == su && o.status != "built");
+        let mut map = if trusted {
+            HeightMap::of_stock(&s.ip, cell)
+        } else {
+            HeightMap::new(s.ip.min, s.ip.max, cell)
+        };
+        paths
+            .into_iter()
+            .map(|mut p| {
+                let (moves, _) = forge_cam::hop::hops(&p.moves, p.start, &mut map, &prof, feed);
+                p.moves = moves;
+                p
+            })
+            .collect()
+    }
+
     /// The milling ops' feeds set from the engagement each piece meets (forge_cam::engage): the
     /// chip held at the cutting data's feed per tooth, the in-process stock as the ops so far
     /// left it the model. The paths' geometry is unchanged; they are posted and certified after.
@@ -3958,6 +4002,7 @@ impl Cam {
                 return Ok(V::Op(self.ops.len() - 1));
             }
         };
+        let paths = self.hop_links(su, kind, &out, paths);
         let paths = self.feeds_from_engagement(su, kind, &out, paths);
         out.paths = paths;
         out.voids = voids.clone();
