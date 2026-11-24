@@ -822,11 +822,18 @@ mod tests {
     #[test]
     fn a_refusal_comes_back_with_its_check_and_fix() {
         let (text, dir) = flange();
-        // a tool too short for the bore: its shank goes into the stock
+        // a tool whose stick-out is under its flute length: the tool is refused as read (forge-
+        // tooling's check), and so is every op on it
         let t = text.replace(
             "t1   = tool(\"flat-10\", t: 1, stickout: 32",
             "t1   = tool(\"flat-10\", t: 1, stickout: 12",
         );
+        assert_ne!(t, text);
+        let r = run(&t, &dir);
+        assert_eq!(r.certification, "refused");
+        assert!(r.json.contains("flat-10") && r.json.contains("stickout"), "{}", &r.json[..r.json.len().min(400)]);
+        // an op refused by its check: facing below the part's top (18) cuts into the part
+        let t = text.replace("skim = facing(op1, tool: t1, to: 18", "skim = facing(op1, tool: t1, to: 15");
         assert_ne!(t, text);
         let r = run(&t, &dir);
         let bad: Vec<&OpRes> = r.ops.iter().filter(|o| o.status == "refused").collect();
@@ -838,5 +845,6 @@ mod tests {
         assert!(bad.iter().any(|o| o.refusal.is_some()));
         assert_eq!(r.certification, "refused");
     }
+
 }
 
