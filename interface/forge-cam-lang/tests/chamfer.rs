@@ -1,5 +1,5 @@
 //! Chamfer / deburr (Fusion's 2D Chamfer): `edge_break` with any chamfer mill or spot drill of 30°
-//! to 150° (the chamfer at half the tool's angle from the wall), `width:` (or `size:`) and
+//! to 150° (the chamfer at half the tool's angle from the wall), `size:` (the chamfer's width) and
 //! `tip_offset:`; Δ declared and certified as for the 90° tool.
 mod common;
 use common::dir;
@@ -31,7 +31,7 @@ fn brk(cam: &forge_cam_lang::Cam) -> &forge_cam_lang::OpOut {
 #[test]
 fn chamfer_with_other_tools_widths_and_tip_offsets() {
     // the 90° tool: width as size, a deeper tip
-    let cam = forge_cam_lang::run(&src("chamfer-10-90", ", width: 0.3, tip_offset: 0.5"), &dir());
+    let cam = forge_cam_lang::run(&src("chamfer-10-90", ", size: 0.3, tip_offset: 0.5"), &dir());
     let b = brk(&cam);
     assert!(
         b.removals[0].starts_with("edge_break 0.3 x 45°"),
@@ -50,26 +50,14 @@ fn chamfer_with_other_tools_widths_and_tip_offsets() {
     let top = 8.0;
     assert!((zmin - (top - 0.8)).abs() < 1e-9, "{zmin}");
     // a spot drill of 90°
-    let cam = forge_cam_lang::run(&src("spot-10-90", ", width: 0.3"), &dir());
+    let cam = forge_cam_lang::run(&src("spot-10-90", ", size: 0.3"), &dir());
     brk(&cam);
     // a 60° chamfer mill: a 30° chamfer, deeper than wide
-    let cam = forge_cam_lang::run_with_library(&src("shop-chamfer-12-60", ", width: 0.3"), &dir(), lib());
+    let cam = forge_cam_lang::run_with_library(&src("shop-chamfer-12-60", ", size: 0.3"), &dir(), lib());
     let b = brk(&cam);
     assert!(
         b.removals[0].starts_with("edge_break 0.3 x 30°"),
         "{}",
         b.removals[0]
-    );
-    // both names refused
-    let cam = forge_cam_lang::run(&src("chamfer-10-90", ", width: 0.3, size: 0.3"), &dir());
-    let b = cam.ops.iter().find(|o| o.name == "brk").unwrap();
-    assert!(
-        cam.errors
-            .iter()
-            .chain(b.refusal.iter())
-            .any(|e| e.contains("not both")),
-        "{:?} {:?}",
-        cam.errors,
-        b.refusal
     );
 }

@@ -330,7 +330,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "#0", "#1", "tool", "length", "passes", "spring", "hand", "starts", "lead",
         ],
     ),
-    ("edge_break", &["#0", "tool", "at", "size", "width", "tip_offset"]),
+    ("edge_break", &["#0", "tool", "at", "size", "tip_offset"]),
     (
         "bore",
         &[
@@ -2665,11 +2665,7 @@ impl Cam {
         }
         let ztop = part.bbox.1[2];
         let z = get_num(a, "at", Some(ztop))?;
-        let s = match (a.get("size"), a.get("width")) {
-            (Some(_), Some(_)) => return Err("edge_break: give `size:` or `width:`, not both".into()),
-            (None, Some(_)) => get_num(a, "width", None)?,
-            _ => get_num(a, "size", None)?,
-        };
+        let s = get_num(a, "size", None)?;
         let (r0, rt) = (0.5 * t.tool.tip_d, 0.5 * t.tool.dc);
         // the chamfer's angle from the wall: half the tool's; its depth s_v for a width s
         let beta = 0.5 * t.tool.angle;
