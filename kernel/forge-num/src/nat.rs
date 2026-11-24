@@ -322,27 +322,27 @@ impl Nat {
         if self.is_zero() || o.is_zero() {
             return Nat::zero();
         }
-        let (n, m) = (self.limbs.len(), o.limbs.len());
+        let (a, b) = (self.limbs.as_slice(), o.limbs.as_slice());
+        let (n, m) = (a.len(), b.len());
         let mut v = Limbs::zeroed(n + m);
-        let mut i = 0;
-        while i < n {
-            let a = self.limbs[i] as u64;
-            let mut carry = 0u64;
-            let mut j = 0;
-            while j < m {
-                let t = a * (o.limbs[j] as u64) + (v[i + j] as u64) + carry;
-                v[i + j] = t as u32;
-                carry = t >> 32;
-                j += 1;
+        {
+            let out = v.as_mut_slice();
+            let mut i = 0;
+            while i < n {
+                let ai = a[i] as u64;
+                // row i adds a[i]·b at out[i..]: out[i + m] is still zero, so the carry lands there
+                let row = &mut out[i..i + m + 1];
+                let mut carry = 0u64;
+                let mut j = 0;
+                while j < m {
+                    let t = ai * (b[j] as u64) + (row[j] as u64) + carry;
+                    row[j] = t as u32;
+                    carry = t >> 32;
+                    j += 1;
+                }
+                row[m] = carry as u32;
+                i += 1;
             }
-            let mut k = i + m;
-            while carry > 0 {
-                let t = (v[k] as u64) + carry;
-                v[k] = t as u32;
-                carry = t >> 32;
-                k += 1;
-            }
-            i += 1;
         }
         trim(&mut v);
         Nat { limbs: v }
@@ -477,13 +477,15 @@ impl Nat {
         // normalise so the divisor's top limb has its top bit set
         let s = d.limbs[d.limbs.len() - 1].leading_zeros() as u64;
         let dn = d.shl(s);
-        let mut un = self.shl(s).limbs;
-        un.push(0);
+        let mut unl = self.shl(s).limbs;
+        unl.push(0);
+        let un = unl.as_mut_slice();
         let n = dn.limbs.len();
         let m = un.len() - n - 1;
         let mut q = Limbs::zeroed(m + 1);
-        let dtop = dn.limbs[n - 1] as u64;
-        let dnext = dn.limbs[n - 2] as u64;
+        let dv = dn.limbs.as_slice();
+        let dtop = dv[n - 1] as u64;
+        let dnext = dv[n - 2] as u64;
         let b = 1u64 << 32;
         let mut j = m + 1;
         while j > 0 {
@@ -498,33 +500,32 @@ impl Nat {
                     break;
                 }
             }
-            // multiply and subtract
-            let mut borrow = 0i64;
+            // multiply and subtract (t below wraps: its top bit is the borrow, its low half the limb)
+            let mut borrow = 0u64;
             let mut carry = 0u64;
-            let mut i = 0;
-            while i < n {
-                let p = qhat * dn.limbs[i] as u64 + carry;
-                carry = p >> 32;
-                let t = un[i + j] as i64 - borrow - (p & 0xffff_ffff) as i64;
-                if t < 0 {
-                    un[i + j] = (t + (1i64 << 32)) as u32;
-                    borrow = 1;
-                } else {
-                    un[i + j] = t as u32;
-                    borrow = 0;
+            {
+                let w = &mut un[j..j + n];
+                let mut i = 0;
+                while i < n {
+                    let p = qhat * dv[i] as u64 + carry;
+                    carry = p >> 32;
+                    let t = (w[i] as u64).wrapping_sub(p & 0xffff_ffff).wrapping_sub(borrow);
+                    w[i] = t as u32;
+                    borrow = t >> 63;
+                    i += 1;
                 }
-                i += 1;
             }
-            let t = un[j + n] as i64 - borrow - carry as i64;
+            let t = un[j + n] as i64 - borrow as i64 - carry as i64;
             if t < 0 {
                 un[j + n] = (t + (1i64 << 32)) as u32;
                 // add back
                 qhat -= 1;
                 let mut c = 0u64;
+                let w = &mut un[j..j + n];
                 let mut i = 0;
                 while i < n {
-                    let s2 = un[i + j] as u64 + dn.limbs[i] as u64 + c;
-                    un[i + j] = s2 as u32;
+                    let s2 = w[i] as u64 + dv[i] as u64 + c;
+                    w[i] = s2 as u32;
                     c = s2 >> 32;
                     i += 1;
                 }
@@ -535,9 +536,9 @@ impl Nat {
             q[j] = qhat as u32;
         }
         trim(&mut q);
-        un.truncate(n);
-        trim(&mut un);
-        let r = Nat { limbs: un }.shr(s);
+        unl.truncate(n);
+        trim(&mut unl);
+        let r = Nat { limbs: unl }.shr(s);
         (Nat { limbs: q }, r)
     }
 
