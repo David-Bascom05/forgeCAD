@@ -31,3 +31,7 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.boundsFaces_of_writes
 #print axioms ForgeBoolProof.FlatSites.TolOn.near_segment
 #print axioms ForgeBoolProof.FlatSites.TolOn.edge_within_of_ends
+#print axioms ForgeBoolProof.kept_sense
+#print axioms ForgeBoolProof.regionSense_of_alone
+#print axioms ForgeBoolProof.oriented_result
+#print axioms ForgeBoolProof.oriented_result_of_writes
