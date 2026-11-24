@@ -795,9 +795,18 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
             format!("Not certified: {refused} op{} refused", plural(refused)),
         )
     } else {
-        (t.success, format!("Certified ({})", cam.certification()))
+        (t.success, String::new())
     };
-    ui.colored_label(c, s);
+    if s.is_empty() {
+        // certified: the workspace's words (a rule left unchecked named, its meaning on hover)
+        let (words, hover) = crate::shell::cam::certified_words(cam.certification());
+        let r = ui.colored_label(if hover.is_some() { t.ink2 } else { c }, words);
+        if let Some(h) = hover {
+            r.on_hover_text(h);
+        }
+    } else {
+        ui.colored_label(c, s);
+    }
     // the posted code on the machine: its own result, beside the toolpath's certificate
     if let Some(mv) = st.sim.machine() {
         let n = mv.markers.len();

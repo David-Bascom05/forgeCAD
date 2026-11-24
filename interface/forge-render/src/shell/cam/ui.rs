@@ -3950,6 +3950,15 @@ pub(crate) fn cert_of(ok: bool, certification: &str) -> Cert {
     }
 }
 
+/// A certified run's words as the simulation's header says them ("Certified", or "Certified ·
+/// leftover not checked" with the hover's explanation), the same as the Setups chip.
+pub fn certified_words(certification: &str) -> (String, Option<String>) {
+    match cert_of(true, certification) {
+        Cert::Unchecked(g) => (format!("Certified \u{b7} {}", unchecked_chip(g)), Some(unchecked_words(g))),
+        _ => ("Certified".to_string(), None),
+    }
+}
+
 /// The header chip's words for an unchecked rule: what it means, never the rule's code (UX-LEAD).
 fn unchecked_chip(g: &str) -> &'static str {
     match g {
@@ -3998,6 +4007,16 @@ mod tests {
         assert_eq!(unchecked_chip("G4 and G5"), "2 checks partial");
         assert!(unchecked_words("G4").starts_with("G4: "));
         assert!(unchecked_words("G5").starts_with("G5: machine travel is checked"));
+    }
+
+    /// The simulation's header says a certified run as the chip does: no raw certification
+    /// string ("full except G4 (leftover not computed)"), the code on the hover's first line.
+    #[test]
+    fn the_simulations_header_reads_as_the_chip() {
+        assert_eq!(super::certified_words("full"), ("Certified".to_string(), None));
+        let (w, h) = super::certified_words("full except G4 (leftover not computed)");
+        assert_eq!(w, "Certified \u{b7} leftover not checked");
+        assert!(h.is_some_and(|h| h.starts_with("G4:")));
     }
 
     /// mold_core_cam end to end: its five ops and its program certify, G4 is not computed: the
