@@ -1959,7 +1959,7 @@ fn nary_body(
     // imprinted edges' and their ends' tolerances grown to hold the faces they now bound
     // (`imprint_tols`; the result is built fresh, so the pieces carry the edges' tolerances)
     let mut imprint_grown: Vec<(VKey, f64)> = Vec::new();
-    if !imprints.is_empty() {
+    if !imprints.iter().all(|im| im.exact) {
         let first = grown.len();
         let of_edge = &pieces.of_edge;
         let pieces_of = |sd: Side, e: EdgeId| {

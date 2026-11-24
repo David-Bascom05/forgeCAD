@@ -2102,7 +2102,8 @@ fn plan_once_in(a: &Body, b: &Body, op: Op, scratch: &mut Scratch, rung: Rung, t
         survivors.sort_unstable();
         survivors.dedup();
     }
-    let grown_edges = if imprints.is_empty() {
+    // (only imprints not of faces on one surface have anything to grow)
+    let grown_edges = if imprints.iter().all(|im| im.exact) {
         Vec::new()
     } else {
         let first = grown.len();
@@ -2340,16 +2341,19 @@ pub(crate) fn imprint_tols(
 ) -> Vec<(EdgeId, f64)> {
     let mut grown_edges = Vec::new();
     for im in imprints {
+        // (most imprints are of faces on one surface)
+        if im.exact {
+            continue;
+        }
         let surface = &bodies[im.into_side as usize].face(im.into).surface;
-        // (most imprints are of faces on one surface; an edge found lying on the other body's face
-        // may be one of its own faces' on that very surface too)
+        // (an edge found lying on the other body's face may be one of its own faces' on that very
+        // surface too)
         let body = bodies[im.side];
         let edge = body.edge(im.edge);
-        if im.exact
-            || edge
-                .coedges
-                .iter()
-                .any(|&c| same_surface(&body.face(body.coedge_face(c)).surface, surface))
+        if edge
+            .coedges
+            .iter()
+            .any(|&c| same_surface(&body.face(body.coedge_face(c)).surface, surface))
         {
             continue;
         }
@@ -2451,8 +2455,6 @@ fn same_plane_rounded(a: &forge_geom::Plane, b: &forge_geom::Plane) -> bool {
 /// The imprints a pair of faces on surfaces `a` and `b` just made: `exact` where the surfaces are
 /// one (`same_surface`). Asked only of pairs that made some (most pairs on one surface imprint
 /// nothing new).
-#[cold]
-#[inline(never)]
 pub(crate) fn mark_exact(made: &mut [Imprint], a: &Surface, b: &Surface) {
     let exact = same_surface(a, b);
     for im in made {
