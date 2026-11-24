@@ -377,3 +377,108 @@ fn linuxcnc_exit_and_refusals() {
             .contains("compensation")
     );
 }
+
+// ---------------------------------------------------------------------------------------------
+// CAM-2D-FINISH's samples (2026-11-24): an 80 x 80 square about 0, flat-6 (r 3), climb, z -2,
+// in its three modes. 1 is forge-cam's tool-centre path in 840D words; 2 and 3 are targets.
+
+/// The 840D sample with a tool-change preamble (T, M6, D1 on the first Z move): the tool centre's
+/// moves.
+fn sample(body: &str, r: f64) -> Result<Vec<Move>, (usize, String)> {
+    let m = builtin_named("generic-vmc3").unwrap();
+    let c = control(&m);
+    let pre = "T=\"E10\"\nM6\n";
+    // the first move names Z after M6: it carries the D
+    let body = body.replacen("Z5\n", "Z5 D1\n", 1);
+    let text = format!("{pre}{body}");
+    let (bs, _) = gcode::run(&text, &c).map_err(|e| (e.line, e.what))?;
+    let ix = [c.idx('X').unwrap(), c.idx('Y').unwrap()];
+    let out = comp::apply(&bs, ix, 4, None, c.comp.unwrap(), &|t| (t == 1).then_some(r))?;
+    Ok(out
+        .iter()
+        .filter_map(|b| {
+            let p = |to: &Vec<Option<i64>>| (to[ix[0]].unwrap() as f64 / U, to[ix[1]].unwrap() as f64 / U);
+            match &b.ev {
+                Ev::Feed { to, .. } => Some(('L', p(to).0, p(to).1, None)),
+                Ev::Rapid(to) => Some(('R', p(to).0, p(to).1, None)),
+                Ev::Arc {
+                    to,
+                    centre: Centre::Abs([a, cc]),
+                    cw,
+                    ..
+                } => Some((
+                    if *cw { 'W' } else { 'C' },
+                    p(to).0,
+                    p(to).1,
+                    Some((*a as f64 / U, *cc as f64 / U)),
+                )),
+                _ => None,
+            }
+        })
+        .collect())
+}
+
+const CONTOUR: &str = "G3 X-43 Y-40 I0 J3\nG1 Y40\nG2 X-40 Y43 I3 J0\nG1 X40\nG2 X43 Y40 I0 J-3\nG1 Y-40\nG2 X40 Y-43 I-3 J0\nG1 X-40\nG2 X-43 Y-40 I0 J3\nG3 X-46 Y-37 I-3 J0\n";
+
+#[test]
+fn sample_wear_mode_is_the_centre_path_offset_by_the_wear() {
+    let computer = format!("G17 G90 G94 G710\nG0 X-46 Y-43 Z5\nG1 Z-2 F300\nG1 F800\n{CONTOUR}G0 Z5\n");
+    let wear = format!(
+        "G17 G90 G94 G710\nG0 X-52 Y-43 Z5\nG1 Z-2 F300\nNORM G450\nG41 G1 X-46 Y-43 F800\n{CONTOUR}G40 G1 X-52 Y-37\nG0 Z5\n"
+    );
+    let c = sample(&computer, 3.0).unwrap();
+    // wear 0: the contour's moves are program 1's (between the approach and the exit)
+    let w0 = sample(&wear, 0.0).unwrap();
+    let core = |v: &[Move]| -> Vec<Move> {
+        // from the lead-in arc's end through the lead-out arc
+        let i = v.iter().position(|m| (m.1, m.2) == (-43.0, -40.0)).unwrap();
+        let j = v.iter().position(|m| (m.1, m.2) == (-46.0, -37.0)).unwrap();
+        v[i..=j].to_vec()
+    };
+    assert_eq!(core(&c), core(&w0));
+    // wear +0.02: the wall lines 0.02 further out (the tool is on the left: outside)
+    let w = sample(&wear, 0.02).unwrap();
+    assert!(w.iter().any(|m| *m == ('L', -43.02, 40.0, None)), "{w:?}");
+    assert!(w.iter().any(|m| *m == ('L', 40.0, 43.02, None)), "{w:?}");
+    // the corner arcs keep their centres (G2 about the part corners), radius 3.02
+    assert!(
+        w.iter().any(|m| *m == ('W', -40.0, 43.02, Some((-40.0, 40.0)))),
+        "{w:?}"
+    );
+}
+
+#[test]
+fn sample_control_mode_needs_lead_arcs_larger_than_the_tool() {
+    // as sent: lead arcs R3 about (-43, 0), concave to the tool's side: with D = 3 the tool
+    // centre's radius is 3 - 3 = 0 (the arc curves toward the tool, not away): refused
+    let sent = "G17 G90 G94 G710\nG0 X-49 Y-3 Z5\nG1 Z-2 F300\nNORM G450\nG41 G1 X-43 Y-3 F800\nG3 X-40 Y0 I0 J3\nG1 Y40\nX40\nY-40\nX-40\nY0\nG3 X-43 Y3 I-3 J0\nG40 G1 X-49 Y3\nG0 Z5\n";
+    let e = sample(sent, 3.0).unwrap_err();
+    assert!(e.1.contains("radius"), "{e:?}");
+    // with R6 lead arcs about (-46, 0): the tool centre runs R3 about (-46, 0), the ±43 square
+    // with R3 corner circles (G450), and the lead-out R3 about (-46, 0)
+    let fixed = "G17 G90 G94 G710\nG0 X-52 Y-6 Z5\nG1 Z-2 F300\nNORM G450\nG41 G1 X-46 Y-6 F800\nG3 X-40 Y0 I0 J6\nG1 Y40\nX40\nY-40\nX-40\nY0\nG3 X-46 Y6 I-6 J0\nG40 G1 X-52 Y6\nG0 Z5\n";
+    let p = sample(fixed, 3.0).unwrap();
+    let i = p
+        .iter()
+        .position(|m| *m == ('L', -46.0, -3.0, None))
+        .expect("the approach");
+    assert_eq!(
+        p[i..].to_vec(),
+        vec![
+            ('L', -46.0, -3.0, None),
+            ('C', -43.0, 0.0, Some((-46.0, 0.0))),
+            ('L', -43.0, 40.0, None),
+            ('W', -40.0, 43.0, Some((-40.0, 40.0))),
+            ('L', 40.0, 43.0, None),
+            ('W', 43.0, 40.0, Some((40.0, 40.0))),
+            ('L', 43.0, -40.0, None),
+            ('W', 40.0, -43.0, Some((40.0, -40.0))),
+            ('L', -40.0, -43.0, None),
+            ('W', -43.0, -40.0, Some((-40.0, -40.0))),
+            ('L', -43.0, 0.0, None),
+            ('C', -46.0, 3.0, Some((-46.0, 0.0))),
+            ('L', -52.0, 6.0, None),
+            ('R', -52.0, 6.0, None),
+        ]
+    );
+}
