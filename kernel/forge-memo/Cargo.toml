@@ -1,0 +1,10 @@
+[package]
+name = "forge-memo"
+description = "Results of pure calls kept across runs, keyed by their arguments' full Debug text (the CAM languages' memos)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true

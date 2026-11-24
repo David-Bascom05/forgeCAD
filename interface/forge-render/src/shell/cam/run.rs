@@ -186,7 +186,38 @@ pub fn measure(r: &Run) -> Option<forge_cam_quality::JobQ> {
 
 /// A milling run's toolpath quality.
 pub fn measure_cam(cam: &forge_cam_lang::Cam) -> forge_cam_quality::JobQ {
-    forge_cam_quality::measure_cam(cam, String::new(), &forge_cam_quality::Config::default())
+    measure_cam_unless(cam, &|| false).expect("never stopped")
+}
+
+/// The last measure made, by the full `Debug` text of all it read (`forge_cam_quality::CamView`:
+/// the measure reads nothing else of the run) and its config: a rerun, which leaves all of it as
+/// it was, takes the measure again instead of making it (seconds of a core for a large job). One
+/// kept: a measure holds its setups' height maps.
+static LAST_QUALITY: std::sync::Mutex<Option<(String, forge_cam_quality::JobQ)>> =
+    std::sync::Mutex::new(None);
+
+/// `measure_cam`, given up (None) once `stop` says so (a later run has started). A measure
+/// given up is not kept.
+pub fn measure_cam_unless(
+    cam: &forge_cam_lang::Cam,
+    stop: &dyn Fn() -> bool,
+) -> Option<forge_cam_quality::JobQ> {
+    let cfg = forge_cam_quality::Config::default();
+    let view = forge_cam_quality::CamView::of(cam);
+    let key = format!("quality/1 {:?}", (&view, &cfg));
+    // (NaN's text does not tell NaNs apart: such a key is never kept)
+    let keep = !key.contains("NaN");
+    if keep
+        && let Some((k, q)) = LAST_QUALITY.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
+        && *k == key
+    {
+        return Some(q.clone());
+    }
+    let q = forge_cam_quality::measure_view(&view, String::new(), &cfg, stop)?;
+    if keep {
+        *LAST_QUALITY.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, q.clone()));
+    }
+    Some(q)
 }
 
 /// `run` without the quality (`measure`): the app shows the paths first and measures after.
@@ -624,7 +655,12 @@ impl Run {
 
     /// A setup's cycle time (as `cycle`).
     pub fn setup_cycle(&self, setup: &str) -> Option<(f64, f64)> {
-        self.cycle(self.ops.iter().filter(|o| o.setup == setup).map(|o| o.name.as_str()))
+        self.cycle(
+            self.ops
+                .iter()
+                .filter(|o| o.setup == setup)
+                .map(|o| o.name.as_str()),
+        )
     }
 
     /// An op's quality, if measured.
@@ -844,9 +880,16 @@ mod tests {
         assert_ne!(t, text);
         let r = run(&t, &dir);
         assert_eq!(r.certification, "refused");
-        assert!(r.json.contains("flat-10") && r.json.contains("stickout"), "{}", &r.json[..r.json.len().min(400)]);
+        assert!(
+            r.json.contains("flat-10") && r.json.contains("stickout"),
+            "{}",
+            &r.json[..r.json.len().min(400)]
+        );
         // an op refused by its check: facing below the part's top (18) cuts into the part
-        let t = text.replace("skim = facing(op1, tool: t1, to: 18", "skim = facing(op1, tool: t1, to: 15");
+        let t = text.replace(
+            "skim = facing(op1, tool: t1, to: 18",
+            "skim = facing(op1, tool: t1, to: 15",
+        );
         assert_ne!(t, text);
         let r = run(&t, &dir);
         let bad: Vec<&OpRes> = r.ops.iter().filter(|o| o.status == "refused").collect();
@@ -858,6 +901,35 @@ mod tests {
         assert!(bad.iter().any(|o| o.refusal.is_some()));
         assert_eq!(r.certification, "refused");
     }
-
 }
 
+#[cfg(test)]
+mod quality_memo_tests {
+    /// The kept measure is the fresh one: runs of two documents asked in turn (A, A, B, A)
+    /// each get what measuring that run anew gives, and a measure given up is not kept.
+    #[test]
+    fn the_kept_measure_is_the_fresh_one() {
+        let ex = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let run = |f: &str| forge_cam_lang::run(&std::fs::read_to_string(ex.join(f)).unwrap(), &ex);
+        let (a, b) = (run("flange_cam.fg"), run("plate_mark_cam.fg"));
+        let fresh = |c: &forge_cam_lang::Cam| {
+            format!(
+                "{:?}",
+                forge_cam_quality::measure_cam_unless(
+                    c,
+                    String::new(),
+                    &forge_cam_quality::Config::default(),
+                    &|| false
+                )
+            )
+        };
+        let (fa, fb) = (fresh(&a), fresh(&b));
+        assert_ne!(fa, fb);
+        for (c, f) in [(&a, &fa), (&a, &fa), (&b, &fb), (&a, &fa)] {
+            assert_eq!(&format!("{:?}", super::measure_cam_unless(c, &|| false)), f);
+        }
+        // given up at once: nothing, and nothing kept (b is then measured in full)
+        assert!(super::measure_cam_unless(&b, &|| true).is_none());
+        assert_eq!(format!("{:?}", super::measure_cam_unless(&b, &|| false)), fb);
+    }
+}

@@ -21,8 +21,8 @@ pub fn narrow(screen_w: f32) -> bool {
     screen_w > 0.0 && screen_w < 1280.0
 }
 pub mod run;
-pub mod toollib;
 pub mod schema;
+pub mod toollib;
 pub mod turnview;
 mod ui;
 pub use ui::{CYCLE_TIP, certified_words, check_lines, cycle_words, text_panel_h};
@@ -250,6 +250,8 @@ pub struct CamWs {
     pub job: Arc<Mutex<Option<run::Run>>>,
     /// A run's quality measured after the run was shown (the text it is for, and it).
     pub quality_job: Arc<Mutex<Option<(String, forge_cam_quality::JobQ)>>>,
+    /// Runs started: a run's quality measure gives up once a later run has started.
+    pub runs: Arc<std::sync::atomic::AtomicU64>,
     /// An adaptive op's comparison: the same setup, tool and heights as `clear` at its defaults
     /// (forge-cam-quality's alternative_clear), measured off the UI thread: (op, the run's text
     /// it is for, its bound and estimate, or None when it does not build). `alt_job` is the
@@ -346,6 +348,7 @@ impl CamWs {
             running: None,
             job: Arc::new(Mutex::new(None)),
             quality_job: Arc::new(Mutex::new(None)),
+            runs: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             alt: None,
             alt_job: Arc::new(Mutex::new(None)),
             alt_asked: None,
@@ -1266,7 +1269,9 @@ impl CamWs {
         let file = dir.join("tools.toml");
         let mut text = forge_dirs::fs::read_to_string(&file).unwrap_or_default();
         if text.is_empty() {
-            text.push_str("# The project's own tools (the Manufacture workspace's tool library writes here).\n");
+            text.push_str(
+                "# The project's own tools (the Manufacture workspace's tool library writes here).\n",
+            );
         }
         text.push('\n');
         text.push_str(toml);
@@ -1356,7 +1361,9 @@ fn call_args(inner: &str) -> Vec<(Option<String>, String)> {
         }
         // `key: value` when the text before the first colon is a name
         match piece.split_once(':') {
-            Some((k, v)) if k.trim().chars().all(|c| c.is_alphanumeric() || c == '_') && !k.trim().is_empty() => {
+            Some((k, v))
+                if k.trim().chars().all(|c| c.is_alphanumeric() || c == '_') && !k.trim().is_empty() =>
+            {
                 out.push((Some(k.trim().to_string()), v.trim().to_string()))
             }
             _ => out.push((None, piece.to_string())),
@@ -1385,7 +1392,9 @@ pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
         let Some(k) = &x.key else { continue };
         if k == "stock" {
             let t = x.text.trim();
-            let Some((head, inner)) = t.split_once('(') else { continue };
+            let Some((head, inner)) = t.split_once('(') else {
+                continue;
+            };
             let inner = inner.strip_suffix(')').unwrap_or(inner);
             let kws = call_args(inner);
             let kind = match head.trim() {
@@ -1442,7 +1451,12 @@ mod tests {
                 lathe: false,
             };
             let kw = CamWs::setup_kw(&d);
-            assert_eq!(kw.iter().find(|k| k.0 == "stock").unwrap().1, stock, "{:?}", d.args);
+            assert_eq!(
+                kw.iter().find(|k| k.0 == "stock").unwrap().1,
+                stock,
+                "{:?}",
+                d.args
+            );
         }
     }
 

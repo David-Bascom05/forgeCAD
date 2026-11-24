@@ -36,7 +36,12 @@ fn wall_measures_as_it_opens_and_cancel_stops_it() {
     // opened: measured, no button pressed
     h.gui.shell.inspect_command(InspectCmd::Wall);
     assert!(
-        h.until(|g| g.shell.inspect.measure.as_ref().is_some_and(|m| m.wall_at.is_some())),
+        h.until(|g| g
+            .shell
+            .inspect
+            .measure
+            .as_ref()
+            .is_some_and(|m| m.wall_at.is_some())),
         "no wall reading"
     );
     match &panel(&h).wall_at {
@@ -51,17 +56,31 @@ fn wall_measures_as_it_opens_and_cancel_stops_it() {
     h.gui.shell.inspect.measure.as_mut().unwrap().wall_stop = true;
     h.step();
     let m = panel(&h);
-    assert!(m.wall_held && !m.busy, "Cancel: held {} busy {}", m.wall_held, m.busy);
+    assert!(
+        m.wall_held && !m.busy,
+        "Cancel: held {} busy {}",
+        m.wall_held,
+        m.busy
+    );
     for _ in 0..20 {
         h.step();
         std::thread::sleep(std::time::Duration::from_millis(20));
     }
-    assert!(panel(&h).wall_at.is_none(), "a stopped search answered: {:?}", panel(&h).wall_at);
+    assert!(
+        panel(&h).wall_at.is_none(),
+        "a stopped search answered: {:?}",
+        panel(&h).wall_at
+    );
 
     // Measure thinnest wall: worked out again
     h.gui.shell.inspect.measure.as_mut().unwrap().wall_go = true;
     assert!(
-        h.until(|g| g.shell.inspect.measure.as_ref().is_some_and(|m| m.wall_at.is_some())),
+        h.until(|g| g
+            .shell
+            .inspect
+            .measure
+            .as_ref()
+            .is_some_and(|m| m.wall_at.is_some())),
         "no reading after Measure thinnest wall"
     );
     assert!(!panel(&h).wall_held);
