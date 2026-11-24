@@ -118,6 +118,153 @@ fn eval(e: &Expr, env: &BTreeMap<String, V>) -> Result<V, String> {
     })
 }
 
+/// Each built-in's arguments: its keywords, and its positionals as `#0`, `#1`, ..; a call giving
+/// any other is refused (`UnknownArg`, with the nearest listed).
+pub const ARGS: &[(&str, &[&str])] = &[
+    ("part", &["#0", "sheet"]),
+    ("press", &["#0"]),
+    ("tooling", &["#0"]),
+    (
+        "station",
+        &["punch", "die", "y", "length", "punch_length", "die_length"],
+    ),
+    ("bend", &["#0", "at", "rotate"]),
+    ("setup_sheet", &[]),
+    ("program", &["format"]),
+];
+
+fn edit_distance(a: &str, b: &str) -> usize {
+    let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.iter().enumerate() {
+        let mut prev = row[0];
+        row[0] = i + 1;
+        for (j, cb) in b.iter().enumerate() {
+            let cur = row[j + 1];
+            row[j + 1] = (prev + usize::from(ca != cb)).min(row[j] + 1).min(cur + 1);
+            prev = cur;
+        }
+    }
+    row[b.len()]
+}
+
+/// The arguments a call gives against its built-in's list: `UnknownArg` for one not listed.
+fn check_args(f: &str, pos: usize, named: &[String]) -> Result<(), String> {
+    let allowed = ARGS.iter().find(|a| a.0 == f).map_or(&[][..], |a| a.1);
+    let given = (0..pos).map(|k| format!("#{k}")).chain(named.iter().cloned());
+    for g in given {
+        if !allowed.contains(&g.as_str()) {
+            let near = allowed
+                .iter()
+                .filter(|a| !a.starts_with('#'))
+                .min_by_key(|a| edit_distance(a, &g))
+                .map_or(String::new(), |a| format!("; nearest `{a}`"));
+            let what = if g.starts_with('#') {
+                format!("a positional argument {g}")
+            } else {
+                format!("`{g}:`")
+            };
+            return Err(format!(
+                "UnknownArg: {f} takes no {what} (it takes {}){near}",
+                allowed.join(", ")
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// The statements read so far, and the names they bind.
+struct Reader {
+    doc: Doc,
+    env: BTreeMap<String, V>,
+}
+
+impl Reader {
+    /// One statement's call of a built-in (a closed namespace: the head is looked up among the
+    /// built-ins only; its arguments are read among the bindings only).
+    fn call(&mut self, name: &str, f: &str, pos: Vec<V>, named: BTreeMap<String, V>) -> Result<(), String> {
+        let keys: Vec<String> = named.keys().cloned().collect();
+        let text = |v: Option<&V>, what: &str| match v {
+            Some(V::Str(s)) => Ok(s.clone()),
+            _ => Err(format!("{f}: {what} takes a string")),
+        };
+        let num = |v: Option<&V>, what: &str| match v {
+            Some(V::Num(x)) if x.is_finite() => Ok(*x),
+            _ => Err(format!("{f}: {what} takes a number (mm)")),
+        };
+        if NAMES.contains(&f) {
+            check_args(f, pos.len(), &keys)?;
+        }
+        match f {
+            "part" => {
+                let p = text(pos.first(), "the part's file")?;
+                let sheet = named.get("sheet").map(|v| text(Some(v), "sheet")).transpose()?;
+                self.doc.part = Some((p, sheet));
+            }
+            "press" => self.doc.press = Some(text(pos.first(), "the press's library id")?),
+            "tooling" => self.doc.tooling = Some(text(pos.first(), "a stand-in set's id")?),
+            "station" => {
+                let length = named.get("length").map(|v| num(Some(v), "length")).transpose()?;
+                let need = || "station: length (or punch_length and die_length)".to_string();
+                let pl = match named.get("punch_length") {
+                    Some(v) => num(Some(v), "punch_length")?,
+                    None => length.ok_or_else(need)?,
+                };
+                let dl = match named.get("die_length") {
+                    Some(v) => num(Some(v), "die_length")?,
+                    None => length.ok_or_else(need)?,
+                };
+                self.doc.stations.push(StationStmt {
+                    id: name.into(),
+                    ask: StationAsk {
+                        punch: text(named.get("punch"), "punch")?,
+                        die: text(named.get("die"), "die")?,
+                        y: named
+                            .get("y")
+                            .map(|v| num(Some(v), "y"))
+                            .transpose()?
+                            .unwrap_or(0.0),
+                        punch_length: pl,
+                        die_length: dl,
+                    },
+                });
+                self.env.insert(name.into(), V::Station(name.into()));
+            }
+            "bend" => {
+                let bend = match pos.first() {
+                    Some(V::Str(s)) => s.clone(),
+                    _ => return Err("bend: the bend's name (a string)".into()),
+                };
+                let station = match named.get("at") {
+                    None => None,
+                    Some(V::Station(s)) => Some(s.clone()),
+                    Some(_) => return Err("bend: at: takes a station".into()),
+                };
+                let rotate = match named.get("rotate") {
+                    None => None,
+                    Some(V::Bool(b)) => Some(*b),
+                    Some(_) => return Err("bend: rotate: takes true or false".into()),
+                };
+                self.doc.bends.push(BendStmt {
+                    id: name.into(),
+                    bend,
+                    station,
+                    rotate,
+                });
+            }
+            "setup_sheet" => self.doc.setup_sheet = true,
+            "program" => self.doc.program = Some(text(named.get("format"), "format")?),
+            other => {
+                return Err(format!(
+                    "`{other}` is not a bending document's built-in ({})",
+                    NAMES.join(", ")
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Reads a bending document's statements (no file is read, nothing simulated).
 pub fn read(src: &str) -> Result<Doc, Vec<(String, String)>> {
     let prog = syntax::parse(src).map_err(|e| vec![("document".to_string(), format!("{e:?}"))])?;
@@ -127,21 +274,25 @@ pub fn read(src: &str) -> Result<Doc, Vec<(String, String)>> {
             "not a bending document: its first statement must be `bending`".into(),
         )]);
     }
-    let mut doc = Doc::default();
+    let mut r = Reader {
+        doc: Doc::default(),
+        env: BTreeMap::new(),
+    };
     let mut errors = Vec::new();
-    let mut env: BTreeMap<String, V> = BTreeMap::new();
     for st in prog.iter().skip(1) {
-        let r: Result<(), (String, String)> = (|| match &st.kind {
-            StmtKind::Shared { name, value } => {
-                let v = eval(value, &env).map_err(|e| (name.clone(), e))?;
-                env.insert(name.clone(), v);
-                Ok(())
-            }
-            StmtKind::Assign { name, value } => {
+        let res: Result<(), (String, String)> = match &st.kind {
+            StmtKind::Shared { name, value } => match eval(value, &r.env) {
+                Ok(v) => {
+                    r.env.insert(name.clone(), v);
+                    Ok(())
+                }
+                Err(e) => Err((name.clone(), e)),
+            },
+            StmtKind::Assign { name, value } => (|| {
                 let fail = |e: String| (name.clone(), e);
                 let ExprKind::Call(f, args) = &value.kind else {
-                    let v = eval(value, &env).map_err(fail)?;
-                    env.insert(name.clone(), v);
+                    let v = eval(value, &r.env).map_err(fail)?;
+                    r.env.insert(name.clone(), v);
                     return Ok(());
                 };
                 let ExprKind::Name(fname) = &f.kind else {
@@ -150,7 +301,7 @@ pub fn read(src: &str) -> Result<Doc, Vec<(String, String)>> {
                 let mut pos = Vec::new();
                 let mut named: BTreeMap<String, V> = BTreeMap::new();
                 for a in args {
-                    let v = eval(&a.value, &env).map_err(fail)?;
+                    let v = eval(&a.value, &r.env).map_err(fail)?;
                     match &a.name {
                         Some((k, _)) => {
                             named.insert(k.clone(), v);
@@ -158,124 +309,19 @@ pub fn read(src: &str) -> Result<Doc, Vec<(String, String)>> {
                         None => pos.push(v),
                     }
                 }
-                let text = |v: Option<&V>, what: &str| match v {
-                    Some(V::Str(s)) => Ok(s.clone()),
-                    _ => Err(fail(format!("{fname}: {what} takes a string"))),
-                };
-                let num = |v: Option<&V>, what: &str| match v {
-                    Some(V::Num(x)) if x.is_finite() => Ok(*x),
-                    _ => Err(fail(format!("{fname}: {what} takes a number (mm)"))),
-                };
-                let known = |allowed: &[&str]| -> Result<(), (String, String)> {
-                    match named.keys().find(|k| !allowed.contains(&k.as_str())) {
-                        Some(k) => Err(fail(format!(
-                            "{fname} takes no `{k}:` (it takes {})",
-                            allowed.join(", ")
-                        ))),
-                        None => Ok(()),
-                    }
-                };
-                match fname.as_str() {
-                    "part" => {
-                        known(&["sheet"])?;
-                        let p = text(pos.first(), "the part's file")?;
-                        let sheet = named.get("sheet").map(|v| text(Some(v), "sheet")).transpose()?;
-                        doc.part = Some((p, sheet));
-                    }
-                    "press" => {
-                        known(&[])?;
-                        doc.press = Some(text(pos.first(), "the press's library id")?);
-                    }
-                    "tooling" => {
-                        known(&[])?;
-                        doc.tooling = Some(text(pos.first(), "a stand-in set's id")?);
-                    }
-                    "station" => {
-                        known(&["punch", "die", "y", "length", "punch_length", "die_length"])?;
-                        let length = named.get("length").map(|v| num(Some(v), "length")).transpose()?;
-                        let pl = match named.get("punch_length") {
-                            Some(v) => num(Some(v), "punch_length")?,
-                            None => length.ok_or_else(|| {
-                                fail("station: length (or punch_length and die_length)".into())
-                            })?,
-                        };
-                        let dl = match named.get("die_length") {
-                            Some(v) => num(Some(v), "die_length")?,
-                            None => length.ok_or_else(|| {
-                                fail("station: length (or punch_length and die_length)".into())
-                            })?,
-                        };
-                        doc.stations.push(StationStmt {
-                            id: name.clone(),
-                            ask: StationAsk {
-                                punch: text(named.get("punch"), "punch")?,
-                                die: text(named.get("die"), "die")?,
-                                y: named
-                                    .get("y")
-                                    .map(|v| num(Some(v), "y"))
-                                    .transpose()?
-                                    .unwrap_or(0.0),
-                                punch_length: pl,
-                                die_length: dl,
-                            },
-                        });
-                        env.insert(name.clone(), V::Station(name.clone()));
-                    }
-                    "bend" => {
-                        known(&["at", "rotate"])?;
-                        let bend = match pos.first() {
-                            Some(V::Str(s)) => s.clone(),
-                            _ => return Err(fail("bend: the bend's name (a string)".into())),
-                        };
-                        if pos.len() > 1 {
-                            return Err(fail(
-                                "bend: one bend per step (two in one stroke are not simulated)".into(),
-                            ));
-                        }
-                        let station = match named.get("at") {
-                            None => None,
-                            Some(V::Station(s)) => Some(s.clone()),
-                            Some(_) => return Err(fail("bend: at: takes a station".into())),
-                        };
-                        let rotate = match named.get("rotate") {
-                            None => None,
-                            Some(V::Bool(b)) => Some(*b),
-                            Some(_) => return Err(fail("bend: rotate: takes true or false".into())),
-                        };
-                        doc.bends.push(BendStmt {
-                            id: name.clone(),
-                            bend,
-                            station,
-                            rotate,
-                        });
-                    }
-                    "setup_sheet" => {
-                        known(&[])?;
-                        doc.setup_sheet = true;
-                    }
-                    "program" => {
-                        known(&["format"])?;
-                        doc.program = Some(text(named.get("format"), "format")?);
-                    }
-                    other => {
-                        return Err(fail(format!(
-                            "`{other}` is not a bending document's built-in ({})",
-                            NAMES.join(", ")
-                        )));
-                    }
-                }
-                Ok(())
-            }
+                r.call(name, fname, pos, named).map_err(fail)
+            })(),
             StmtKind::Expr(_) => Ok(()),
             _ => Err((
                 "document".into(),
                 "a statement this document does not take".into(),
             )),
-        })();
-        if let Err(e) = r {
+        };
+        if let Err(e) = res {
             errors.push(e);
         }
     }
+    let doc = r.doc;
     if doc.part.is_none() {
         errors.push(("document".into(), "no part(\"FILE.fg\")".into()));
     }

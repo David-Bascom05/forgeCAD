@@ -119,3 +119,18 @@ fn refusals_are_typed() {
     assert!(read("bending\npart = part(\"a.fg\")\nb = bend(\"x\", \"y\")\n").is_err());
     assert!(!is_bending("plate = extrude(plan, 3)\n"));
 }
+
+#[test]
+fn arguments_are_checked_against_the_list() {
+    let e = read("bending\npart = part(\"a.fg\")\nb = bend(\"x\", rotat: true)\n").unwrap_err();
+    assert!(
+        e[0].1.starts_with("UnknownArg") && e[0].1.contains("nearest `rotate`"),
+        "{e:?}"
+    );
+    let e = read("bending\npart = part(\"a.fg\")\nb = bend(\"x\", \"y\")\n").unwrap_err();
+    assert!(e[0].1.contains("positional argument #1"), "{e:?}");
+    // every built-in has its list
+    for n in forge_bend_lang::NAMES {
+        assert!(forge_bend_lang::ARGS.iter().any(|a| a.0 == *n), "{n}");
+    }
+}
