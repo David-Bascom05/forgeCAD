@@ -116,6 +116,9 @@ fn refusals_are_typed() {
     // the simulation still answers
     assert!(b.sim.is_some());
     assert!(read("bending\nx = drill(3)\n").is_err());
+    // a step with no name would be silently nothing: refused, typed
+    let e = read("bending\npart = part(\"a.fg\")\nbend(\"left\")\n").unwrap_err();
+    assert!(e.iter().any(|(_, m)| m.starts_with("Unnamed")), "{e:?}");
     assert!(read("bending\npart = part(\"a.fg\")\nb = bend(\"x\", \"y\")\n").is_err());
     assert!(!is_bending("plate = extrude(plan, 3)\n"));
 }
