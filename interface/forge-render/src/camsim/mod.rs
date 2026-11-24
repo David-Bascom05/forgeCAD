@@ -31,8 +31,21 @@ pub struct Marker {
     /// When on the timeline.
     pub t: f64,
     pub text: String,
+    /// Its row under its kind's heading (UX: the heading says what, the row when, where and how
+    /// much): "move 0 · 0.35 mm into the stock".
+    pub row: String,
+    /// The part of the tool the check names ("cutter", "shank/holder"); empty where none is
+    /// said (leftover, a refused op, the machine's contacts).
+    pub part: String,
+    /// The tool whose move it is, in words, in an op of several tools (else empty): said once
+    /// in its kind's heading when the kind's places share it, else on each row.
+    pub tool: String,
     /// A leftover region's box (xmin ymin xmax ymax, z0 z1).
     pub region: Option<([f64; 4], f64, f64)>,
+    /// Material left by the plan, not missed: a leftover region wholly under the part's bottom
+    /// in its setup (the stock left below the part for a later setup or a part-off). Shown
+    /// neutral, never as an issue.
+    pub planned: bool,
 }
 
 impl Marker {
@@ -256,7 +269,11 @@ impl Sim {
                         "{name}: a rapid goes {d:.3} mm into the stock as cut (move {})",
                         g.mv
                     ),
+                    row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
+                    tool: String::new(),
+                    part: "cutter".into(),
                     region: None,
+                    planned: false,
                 });
             }
             z.cut(g, 0.0, 1.0, c);
@@ -274,7 +291,11 @@ impl Sim {
                         "{name}: the shank or holder goes {d:.3} mm into the stock as cut (move {})",
                         g.mv
                     ),
+                    row: format!("move {} \u{b7} {d:.2} mm into the stock as cut", g.mv),
+                    tool: String::new(),
+                    part: "shank/holder".into(),
                     region: None,
+                    planned: false,
                 });
             }
         }
@@ -423,19 +444,36 @@ impl Sim {
                         }
                     }
                 }
-                let t = best
-                    .map(|b| b.1)
+                // the check's own path where it names one with that move, else the nearest
+                let t = (c.move_index < paths.get(c.path).map_or(0, |p| p.moves.len()))
+                    .then(|| self.tl.locate(oi, c.path, c.move_index, 0.5))
+                    .flatten()
+                    .or(best.map(|b| b.1))
                     .or_else(|| self.tl.nearest(oi, c.at))
                     .unwrap_or(self.tl.ops[oi].t0);
+                // an op of several tools (a spot drill, then the drill): whose move it is
+                let tool = match self.tl.pos(t) {
+                    Some((_, seg)) if self.tl.ops[oi].tools.len() > 1 => self
+                        .cam
+                        .sim_tools()
+                        .get(self.tl.segs[seg].tool as usize)
+                        .map(tools::tool_words)
+                        .unwrap_or_default(),
+                    _ => String::new(),
+                };
                 out.push(Marker {
                     op: Some(oi),
                     setup: op.setup,
-                    rule: c.rule.to_string(),
+                    rule: check_kind(c),
                     verdict: c.verdict.to_string(),
                     at: c.at,
                     t,
                     text: format!("{}: {}", op.name, check_sentence(c)),
+                    row: check_row(c),
+                    tool,
+                    part: c.tool_part.to_string(),
                     region: None,
+                    planned: false,
                 });
             }
             if op.status == "refused" && out.len() == had {
@@ -455,7 +493,11 @@ impl Sim {
                         op.name,
                         op.refusal.as_deref().unwrap_or("no reason given")
                     ),
+                    row: tidy(op.refusal.as_deref().unwrap_or("no reason given")),
+                    tool: String::new(),
+                    part: String::new(),
                     region: None,
+                    planned: false,
                 });
             }
         }
@@ -468,7 +510,19 @@ impl Sim {
                 .filter(|o| o.setup == l.setup)
                 .map(|o| o.t1)
                 .fold(0.0, f64::max);
+            // the part's bottom in this setup: material wholly under it is left by the plan
+            let bottom = self
+                .setups
+                .get(l.setup)
+                .map_or(f64::NEG_INFINITY, |s| s.part_box.0[2]);
+            let planned = l.z1 <= bottom + 1e-6;
             for b in &l.boxes {
+                let (w, d) = (b[2] - b[0], b[3] - b[1]);
+                let place = if planned {
+                    "Under the part"
+                } else {
+                    "Left on the part"
+                };
                 out.push(Marker {
                     op: None,
                     setup: l.setup,
@@ -477,10 +531,17 @@ impl Sim {
                     at: [0.5 * (b[0] + b[2]), 0.5 * (b[1] + b[3]), l.z1],
                     t,
                     text: format!(
-                        "leftover ({}) z {:.3}..{:.3}, x {:.2}..{:.2} y {:.2}..{:.2}",
-                        l.why, l.z0, l.z1, b[0], b[2], b[1], b[3]
+                        "{place}, z {:.2} to {:.2} mm, {w:.1} \u{d7} {d:.1} mm ({})",
+                        l.z0, l.z1, l.why
                     ),
+                    row: format!(
+                        "z {:.2} to {:.2} mm \u{b7} {w:.1} \u{d7} {d:.1} mm \u{b7} {}",
+                        l.z0, l.z1, l.why
+                    ),
+                    tool: String::new(),
+                    part: String::new(),
                     region: Some((*b, l.z0, l.z1)),
+                    planned,
                 });
             }
         }
@@ -578,6 +639,48 @@ pub fn check_sentence(c: &forge_cam::ops::CheckOut) -> String {
             mm(c.limit)
         )
     }
+}
+
+/// A failed check's kind, by what happened: a rapid that goes into the stock, the part or the
+/// workholding is a crash, not a near miss, and is a kind of its own ("rapid_into_stock", ..);
+/// otherwise the checker's rule.
+pub fn check_kind(c: &forge_cam::ops::CheckOut) -> String {
+    if c.rule == "rapid_clear" && c.value < -0.005 {
+        return format!("rapid_into_{}", what_word(&c.other));
+    }
+    c.rule.to_string()
+}
+
+/// What a check's `other` names, in a word: stock, part or workholding (else as given).
+fn what_word(other: &str) -> String {
+    let o = other.to_ascii_lowercase();
+    if o.starts_with("stock") {
+        "stock".into()
+    } else if o.starts_with("part") || o.is_empty() {
+        "part".into()
+    } else if ["fixture", "vise", "clamp", "workholding"]
+        .iter()
+        .any(|w| o.contains(w))
+    {
+        "workholding".into()
+    } else {
+        other.to_string()
+    }
+}
+
+/// A failed check's row under its kind: when (the move), where and how much, not what (the
+/// heading says that): "move 0 · 0.35 mm into the stock".
+pub fn check_row(c: &forge_cam::ops::CheckOut) -> String {
+    let what = format!("the {}", what_word(&c.other));
+    let mm = |v: f64| format!("{:.2} mm", v.abs());
+    let how = if c.value < -0.005 {
+        format!("{} into {what}", mm(c.value))
+    } else if c.value < 0.005 {
+        format!("touches {what}, needs {} clear", mm(c.limit))
+    } else {
+        format!("{} from {what}, needs {}", mm(c.value), mm(c.limit))
+    };
+    format!("move {} \u{b7} {how}", c.move_index)
 }
 
 /// A run's message tidied for a person: a parser's `NotPrism { face: 38 }` said in words and
