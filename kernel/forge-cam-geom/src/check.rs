@@ -118,7 +118,7 @@ fn mul3<T: Num>(a: [T; 3], k: T) -> [T; 3] {
 }
 
 /// (c(t), s(t)): the rational unit circle.
-fn circ<T: Num>(t: T) -> (T, T) {
+pub(crate) fn circ<T: Num>(t: T) -> (T, T) {
     let t2 = t.sqr();
     let den = T::c(1.0).add(t2);
     let c = T::c(1.0).sub(t2).div(den);
@@ -572,17 +572,35 @@ struct Cell {
 /// The interval signed distance over a cell: ρ² and z of the face point relative to the tool
 /// tip by the mean-value form (second order at a tangency) intersected with the natural
 /// extension, then the body's (ρ, z) signed distance.
-fn cell_sd(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> Ival {
-    cell_eval(body, f, mv, c, pg).0
+/// `pl` is `mv.planar()`, computed once per (body, face, move) by the caller.
+fn cell_sd(body: &Body, f: &Face, mv: &Move, pl: Option<Planar>, c: &Cell, pg: f64) -> Ival {
+    cell_eval(body, f, mv, pl, c, pg, false).0
 }
 
 /// The signed distance over the cell, and each parameter's smear (how much of the enclosure's
-/// width it accounts for: |∂(ρ², z)| times its width), which picks what to split.
-fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> (Ival, [f64; 3]) {
-    if let Some(pl) = mv.planar()
+/// width it accounts for: |∂(ρ², z)| times its width), which picks what to split. With `smear`
+/// false the smear is not computed (all zeros): the signed distance is the same either way (it
+/// never depends on the smear), and only a cell that is split needs its smear.
+#[allow(clippy::too_many_arguments)]
+fn cell_eval(
+    body: &Body,
+    f: &Face,
+    mv: &Move,
+    pl: Option<Planar>,
+    c: &Cell,
+    pg: f64,
+    smear: bool,
+) -> (Ival, [f64; 3]) {
+    if let Some(pl) = pl
         && !matches!(pl, Planar::Vertical { .. } | Planar::Helix { .. })
     {
-        return cell_eval_planar(body, f, &pl, c, pg);
+        let sd = cell_eval_planar(body, f, &pl, c, pg);
+        let sm = if smear && !(c.p.width() == 0.0 && c.q.width() == 0.0) {
+            planar_smear(body, f, &pl, c, pg)
+        } else {
+            [0.0; 3]
+        };
+        return (sd, sm);
     }
     let x = [c.p, c.q, c.s];
     // at the centre
@@ -614,6 +632,10 @@ fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> (Ival, [f64
         lo: r2b.lo.max(0.0),
         hi: r2b.hi,
     };
+    let sd = body.sd_rz(r2b.sqrt(), zb);
+    if !smear {
+        return (sd, [0.0; 3]);
+    }
     // ρ's width per unit of ρ²'s near ρ: 1 / (2ρ), at least 1 / (2 ρmax); z counts as is
     let inv = if r2c.lo > 1e-12 { 0.5 / r2c.lo.sqrt() } else { 1.0 };
     // how much the signed distance moves with ρ and with z at the centre (a heuristic for the
@@ -636,7 +658,7 @@ fn cell_eval(body: &Body, f: &Face, mv: &Move, c: &Cell, pg: f64) -> (Ival, [f64
         sm[k] = (0.05 + nr) * gr * w + (0.05 + nz) * gz * w;
         k += 1;
     }
-    (body.sd_rz(r2b.sqrt(), zb), sm)
+    (sd, sm)
 }
 
 /// A move at one height, in the xy plane: its 2D path and the tip's z.
@@ -834,7 +856,7 @@ impl Move {
 /// instant of a planar move shares the face point's z offset; so the minimum over s is sd at
 /// (ρ_min, z), ρ_min the horizontal distance from the face point to the path. That is closed
 /// form: the motion needs no cells.
-fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell, pg: f64) -> (Ival, [f64; 3]) {
+fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell, pg: f64) -> Ival {
     let x = [c.p, c.q, Ival::pt(0.0)];
     let (pc, qc) = (Ival::pt(c.p.mid()), Ival::pt(c.q.mid()));
     let yc = f.surf.eval(pc, qc);
@@ -951,12 +973,13 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell, pg: f64) -> (I
     } else {
         rho
     };
-    let sd = body.sd_rz(rho, zb);
-    if point {
-        return (sd, [0.0; 3]);
-    }
-    // the split: how much the signed distance changes across the cell along each parameter,
-    // at the centre, plus a little of the image's width (a heuristic only)
+    body.sd_rz(rho, zb)
+}
+
+/// The split for `cell_eval_planar`'s cell (a heuristic only: soundness never rests on it): how
+/// much the signed distance changes across the cell along each parameter, at the centre, plus a
+/// little of the image's width. Each of the five point values is evaluated once.
+fn planar_smear(body: &Body, f: &Face, pl: &Planar, c: &Cell, pg: f64) -> [f64; 3] {
     let at = |p: f64, q: f64| {
         cell_eval_planar(
             body,
@@ -969,21 +992,21 @@ fn cell_eval_planar(body: &Body, f: &Face, pl: &Planar, c: &Cell, pg: f64) -> (I
             },
             pg,
         )
-        .0
         .mid()
     };
     let (pm, qm) = (c.p.mid(), c.q.mid());
+    let (pc, qc) = (Ival::pt(pm), Ival::pt(qm));
     let (hp, hq) = (0.5 * c.p.width(), 0.5 * c.q.width());
-    let dp = (at(pm + hp, qm) - at(pm - hp, qm)).abs()
-        + (at(pm + hp, qm) + at(pm - hp, qm) - 2.0 * at(pm, qm)).abs();
-    let dq = (at(pm, qm + hq) - at(pm, qm - hq)).abs()
-        + (at(pm, qm + hq) + at(pm, qm - hq) - 2.0 * at(pm, qm)).abs();
-    let sm = [
+    let m = at(pm, qm);
+    let (pp, pn) = (at(pm + hp, qm), at(pm - hp, qm));
+    let (qp, qn) = (at(pm, qm + hq), at(pm, qm - hq));
+    let dp = (pp - pn).abs() + (pp + pn - 2.0 * m).abs();
+    let dq = (qp - qn).abs() + (qp + qn - 2.0 * m).abs();
+    [
         dp + 1e-4 * diam(&f.surf.eval(c.p, qc)),
         dq + 1e-4 * diam(&f.surf.eval(pc, c.q)),
         0.0,
-    ];
-    (sd, sm)
+    ]
 }
 
 fn nonneg(x: Ival) -> Ival {
@@ -996,12 +1019,14 @@ fn nonneg(x: Ival) -> Ival {
 /// A binary min-heap of cells by their lower bound: the least bound is searched first, so a
 /// violation is met early and a pass is proven where the bound is tightest last.
 struct Heap {
-    v: Vec<(f64, Cell)>,
+    v: Vec<(f64, Cell, Ival)>,
 }
 
 impl Heap {
-    fn push(&mut self, k: f64, c: Cell) {
-        self.v.push((k, c));
+    /// `sd` is the cell's signed distance bound, `k` its low end (the key).
+    fn push(&mut self, sd: Ival, c: Cell) {
+        let k = sd.lo;
+        self.v.push((k, c, sd));
         let mut i = self.v.len() - 1;
         while i > 0 {
             let p = (i - 1) / 2;
@@ -1012,7 +1037,7 @@ impl Heap {
             i = p;
         }
     }
-    fn pop(&mut self) -> Option<(f64, Cell)> {
+    fn pop(&mut self) -> Option<(f64, Cell, Ival)> {
         if self.v.is_empty() {
             return None;
         }
@@ -1064,6 +1089,20 @@ pub fn certify_shared(
     budget: usize,
     shared: &mut Option<(Ival, f64)>,
 ) -> (Verdict, usize) {
+    // a line move of a capsule-shaped body (a ball end mill's cutter) against a sphere, a
+    // cylinder that is not a prism, or a plane that is not a prism on a move that is not
+    // planar: closed form (contact.rs), which proves Clear or passes on. Those pairs are 3D
+    // finishing's; the 2.5D ops' pairs (prisms, planar moves on planes) keep their paths
+    let fast = match f.surf {
+        Surf::Sphere { .. } => true,
+        Surf::Cyl { .. } => f.prism.is_none(),
+        Surf::Plane { .. } => f.prism.is_none() && mv.planar().is_none(),
+        Surf::Torus { .. } | Surf::Cone { .. } => f.prism.is_none(),
+    };
+    // (an early Clear leaves `shared` as it was: the next body's call recomputes what it needs)
+    if fast && let Some(v) = crate::contact::clear(body, f, mv, limit) {
+        return (v, 0);
+    }
     // a planar move against a face that is a prism along z: closed form (slab.rs)
     if let (Some(pl), Some(pr)) = (mv.planar(), f.prism.as_ref()) {
         let (v, n) = crate::slab::certify_shared(body, f, pr, &pl, limit, res, budget, shared, mv.path_gap());
@@ -1085,6 +1124,28 @@ pub fn certify_shared(
         }
         return (v, n);
     }
+    // a vertical wall that is not a prism (its trim not its box: an L-shaped side wall) against
+    // a planar move: the wall over its box holds it, so the closed form's Clear there is the
+    // face's (a superset's clearance). Anything else proves nothing about the face: the face
+    // goes on as if this were not tried, its cells counted
+    if f.prism.is_none()
+        && let Some(pl) = mv.planar()
+        && let Some(hull) = crate::slab::Prism::hull_wall(f)
+    {
+        let (v, n) =
+            crate::slab::certify_shared(body, f, &hull, &pl, limit, res, budget, &mut None, mv.path_gap());
+        if let Verdict::Clear { .. } = v {
+            return (v, n);
+        }
+        let (v, m) = certify_rest(body, f, mv, limit, res, budget);
+        return (v, n + m);
+    }
+    certify_rest(body, f, mv, limit, res, budget)
+}
+
+/// `certify_shared` past the prism forms: ramps against prisms, the symmetric closed forms, then
+/// the branch and bound.
+fn certify_rest(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
     // a ramp (a line that moves in z and in xy) against a prism face: the closed form for its xy
     // segment swept over every height it passes (a superset of the move). Only `Clear` proves
     // anything about the move itself (certified_clear, the tip's heights in that range); any
@@ -1125,7 +1186,10 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
     let lim_clear = limit + f.mu;
     let lim_hit = limit - f.mu;
     let pg = mv.path_gap();
-    let s0 = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
+    // the move's planar form, once: every cell of this search asks for it
+    let pl = mv.planar();
+    let line_or_arc = matches!(pl, Some(Planar::Line { .. } | Planar::Arc { .. }));
+    let s0 = if line_or_arc {
         Ival::pt(0.5)
     } else {
         Ival::new(0.0, 1.0)
@@ -1136,11 +1200,12 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
         s: s0,
     };
     let mut heap = Heap { v: Vec::new() };
-    heap.push(cell_sd(body, f, mv, &root, pg).lo, root);
+    heap.push(cell_sd(body, f, mv, pl, &root, pg), root);
     let mut lower = f64::INFINITY;
     let mut spent = 0usize;
     let mut undecided = false;
-    while let Some((key, c)) = heap.pop() {
+    let show_cells = std::env::var("FORGE_CAM_CELLS").is_ok();
+    while let Some((key, c, sd0)) = heap.pop() {
         if key >= lim_clear {
             // the least bound left clears: so does every other cell
             if key < lower {
@@ -1162,8 +1227,11 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
         if holds < 0 {
             continue;
         }
-        let (mut sd, smear) = cell_eval(body, f, mv, &c, pg);
-        if std::env::var("FORGE_CAM_CELLS").is_ok() {
+        // the bound was computed when the cell was pushed (`cell_sd`, the same function of the
+        // same cell); its smear is computed only if the cell is split
+        let mut sd = sd0;
+        if show_cells {
+            let smear = cell_eval(body, f, mv, pl, &c, pg, true).1;
             eprintln!("cell p {:?} q {:?} sd {:?} smear {:?}", c.p, c.q, sd, smear);
         }
         if holds == 0 && sd.lo < lim_clear {
@@ -1176,6 +1244,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     body,
                     f,
                     mv,
+                    pl,
                     &Cell {
                         p: Ival::pt(pm),
                         q: Ival::pt(qm),
@@ -1184,7 +1253,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     pg,
                 );
                 let img = f.surf.eval(c.p, c.q);
-                let mvd = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
+                let mvd = if line_or_arc {
                     0.0
                 } else {
                     diam(&mv.enclose(c.s))
@@ -1208,6 +1277,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                 body,
                 f,
                 mv,
+                pl,
                 &Cell {
                     p: Ival::pt(pm),
                     q: Ival::pt(qm),
@@ -1217,7 +1287,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
             );
             if w.hi < lim_hit {
                 let y = f.surf.eval(Ival::pt(pm), Ival::pt(qm));
-                let sm = if matches!(mv.planar(), Some(Planar::Line { .. } | Planar::Arc { .. })) {
+                let sm = if line_or_arc {
                     mv.nearest_s([y[0].mid(), y[1].mid()])
                 } else {
                     sm
@@ -1245,9 +1315,10 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
             }
             continue;
         }
+        let smear = cell_eval(body, f, mv, pl, &c, pg, true).1;
         let (a, b) = split_by(&c, &smear);
-        heap.push(cell_sd(body, f, mv, &a, pg).lo, a);
-        heap.push(cell_sd(body, f, mv, &b, pg).lo, b);
+        heap.push(cell_sd(body, f, mv, pl, &a, pg), a);
+        heap.push(cell_sd(body, f, mv, pl, &b, pg), b);
     }
     if undecided {
         return (Verdict::Undecided { lower, cells: spent }, spent);
@@ -1317,8 +1388,8 @@ fn best_split(body: &Body, f: &Face, mv: &Move, c: &Cell) -> (Cell, Cell) {
                     (Cell { s: x, ..*c }, Cell { s: y, ..*c })
                 }
             };
-            let la = cell_sd(body, f, mv, &a, mv.path_gap()).lo;
-            let lb = cell_sd(body, f, mv, &b, mv.path_gap()).lo;
+            let la = cell_sd(body, f, mv, mv.planar(), &a, mv.path_gap()).lo;
+            let lb = cell_sd(body, f, mv, mv.planar(), &b, mv.path_gap()).lo;
             let m = if la < lb { la } else { lb };
             let better = match &best {
                 None => true,

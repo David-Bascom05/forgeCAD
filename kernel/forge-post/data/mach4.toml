@@ -6,11 +6,15 @@ name = "mach4"
 extension = "tap"
 decimals = 4
 feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
 point = "always"
 program_open = []
 program_close = ["M30", "%"]
 line_numbers = false
-safe_start = ["G90 G17 G40 G49 G80", "G21 G94", "G91.1"]
+safe_start = ["G90 G17 G40 G49 G80", "{units} G94", "G91.1"]
 tool_change = ["T{t} M06"]
 length_comp = "G43 H{h}"
 spindle_cw = "S{rpm} M03"
@@ -227,3 +231,31 @@ source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20
 taken = "2026-11-23"
 where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G02/G03 p15-16; G90.1/G91.1 p52"
 note = "G91.1 carries no motion"
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; Ch.1 Format p9-10; G20/G21 p35; G94 p54"
+note = "G21 (the safe start's)"
+
+[[dialect.cite]]
+key = "units_inch"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-24"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G20/G21 p35"
+note = "Programming units are selected using G20 for inch and G21 for millimeter"
+
+[[dialect.cite]]
+key = "inch_decimals"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-24"
+where = "Mach4 CNC Controller Mill Programming Guide, Version 1.1, Build 3775; G83 Parameter 5115 p61"
+note = "IS-B: Inch Input 0.0001 inch"
+
+[[dialect.cite]]
+key = "inch_feed_decimals"
+source = "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf"
+taken = "2026-11-23"
+where = "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA), Version 1.1, Build 3775 (c) 2014; G94/G95 p54"
+note = "feeds: the number format reads decimals (inch feed increment not stated): 2 written"

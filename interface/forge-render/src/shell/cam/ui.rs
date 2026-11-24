@@ -129,6 +129,10 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
         let (big2, small2) = two_d.split_at(3.min(two_d.len()));
         out.push(("2D", big2.to_vec(), small2.to_vec()));
         out.push(("Drilling", of("Drilling"), vec![]));
+        // 3D surfacing: rough and parallel big, the rest small
+        let three = of("3D");
+        let (big3, small3) = three.split_at(2.min(three.len()));
+        out.push(("3D", big3.to_vec(), small3.to_vec()));
     }
     out.extend(vec![
         (
@@ -198,7 +202,19 @@ pub fn num(x: f64) -> String {
     if s == "-0" { "0".into() } else { s.into() }
 }
 
-/// A time as m:ss.
+/// What a cycle time's two numbers are (shown on hover wherever they are).
+pub const CYCLE_TIP: &str = "\u{2265}: the least time the posted program can take on this machine, from its feeds, rapid rates and tool changes (a guaranteed lower bound).\nest.: an estimate with stated assumptions, not a prediction: a jerk-limited motion planner with 1000 mm/s\u{b2} acceleration (the machine record's where it gives one), 20,000 mm/s\u{b3} jerk and corners blended within 0.02 mm. A real machine can differ by tens of per cent.";
+
+/// A cycle time: the lower bound and the estimate, together.
+pub fn cycle_words((lo, est): (f64, f64)) -> String {
+    format!("\u{2265} {} \u{b7} est. {}", time(lo), time(est))
+}
+
+/// As `cycle_words`, short (m:ss), for the browser's rows.
+fn cycle_short((lo, est): (f64, f64)) -> String {
+    format!("\u{2265} {} \u{b7} est. {}", short_time(lo), short_time(est))
+}
+
 /// A choice's words for a person (the Forge word on hover): `passes: "one_way"` reads "One
 /// direction".
 fn choice_words(arg: &str, word: &str) -> String {
@@ -229,8 +245,11 @@ fn default_value(words: &str, tool_d: Option<f64>) -> Option<f64> {
     Some(k.trim().parse::<f64>().ok()? * d)
 }
 
+/// A time as m:ss.
 fn short_time(s: f64) -> String {
-    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0).floor() as u32)
+    // whole seconds, rounded as `time` rounds them
+    let s = s.round();
+    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0) as u32)
 }
 
 /// A work offset's word: G54 for the first.
@@ -286,18 +305,20 @@ impl Shell {
                 );
                 let cert = match &w.run {
                     _ if w.running.is_some() => ("generating…".to_string(), t.accent),
-                    Some(run) if run.certification == "full" => ("certified".into(), t.success),
-                    // not a failure: travel (G5) is checked by span only until a setup is placed
-                    Some(run) if run.certification == "except G5" => ("certified · G5 unchecked".into(), t.ink2),
-                    Some(_) => ("refused".into(), t.error),
+                    Some(run) => match cert_of(run.ok, &run.certification) {
+                        Cert::Certified => ("certified".into(), t.success),
+                        // not a failure: a rule this run does not decide (G4's leftover not
+                        // computed; G5's travel by span only until a setup is placed)
+                        Cert::Unchecked(g) => (format!("certified · {g} unchecked"), t.ink2),
+                        Cert::Refused => ("refused".into(), t.error),
+                    },
                     None => ("not generated".into(), t.ink2),
                 };
-                if w.run.as_ref().is_some_and(|r| r.certification == "except G5") {
-                    ui.interact(r, ui.scope_id().with("cam-cert"), Sense::hover()).on_hover_text(
-                        "Every op is certified. Machine travel (G5) is checked against each axis's span only: \
-                         a setup is not placed on the machine (`at:`, the work offset in machine coordinates). \
-                         Place it in the setup dialog to check the positions too.",
-                    );
+                if let Some(run) = &w.run
+                    && let Cert::Unchecked(g) = cert_of(run.ok, &run.certification)
+                {
+                    ui.interact(r, ui.scope_id().with("cam-cert"), Sense::hover())
+                        .on_hover_text(unchecked_words(g));
                 }
                 ui.painter().text(
                     pos2(r.left() + 32.0, r.center().y),
@@ -360,7 +381,9 @@ impl Shell {
                         Some(_) if lathe => format!("{su}  ·  lathe"),
                         Some(s) => {
                             let tsum: f64 = w.run.as_ref().map_or(0.0, |r| r.ops.iter().filter(|o| o.setup == su).map(|o| o.time_s).sum());
-                            if tsum > 0.0 {
+                            if let Some(c) = w.run.as_ref().and_then(|r| r.setup_cycle(&su)) {
+                                format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), cycle_short(c))
+                            } else if tsum > 0.0 {
                                 format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), short_time(tsum))
                             } else {
                                 format!("{su}  ·  {}", wcs_word(s.offset))
@@ -764,23 +787,26 @@ fn details(
             if let Some(r) = run {
                 let ops: Vec<&super::run::OpRes> = r.ops.iter().filter(|o| o.setup == id).collect();
                 let total: f64 = ops.iter().map(|o| o.time_s).sum();
-                heading(ui, t, &format!("Cycle time {}", time(total)), width);
-                for o in &ops {
-                    fact(
+                if let Some(c) = r.setup_cycle(id) {
+                    heading(ui, t, "Cycle time", width);
+                    fact_tip(ui, t, "On the machine", &cycle_words(c), CYCLE_TIP, width, t.ink);
+                    for o in &ops {
+                        if let Some(oc) = r.cycle([o.name.as_str()]) {
+                            fact_tip(ui, t, &format!("  {} · {}", o.name, o.kind), &cycle_words(oc), CYCLE_TIP, width, t.ink2);
+                        }
+                    }
+                } else {
+                    heading(ui, t, &format!("Feed time {}", time(total)), width);
+                    for o in &ops {
+                        fact(ui, t, &format!("  {} · {}", o.name, o.kind), &time(o.time_s), width, t.ink2);
+                    }
+                    note(
                         ui,
-                        t,
-                        &format!("  {} · {}", o.name, o.kind),
-                        &time(o.time_s),
+                        "Feeds and rapids at their programmed rates, tool changes not counted: not a cycle time (that comes from the machine's timeline once the program is timed).",
                         width,
                         t.ink2,
                     );
                 }
-                note(
-                    ui,
-                    "Feeds and rapids at their programmed rates, tool changes not counted; the machine-timeline time comes with the quality measure.",
-                    width,
-                    t.ink2,
-                );
             }
             fact(
                 ui,
@@ -964,7 +990,10 @@ fn details(
                     width,
                     t.ink,
                 );
-                fact(ui, t, "Time", &time(o.time_s), width, t.ink);
+                match run.and_then(|r| r.cycle([o.name.as_str()])) {
+                    Some(c) => fact_tip(ui, t, "Cycle time", &cycle_words(c), CYCLE_TIP, width, t.ink),
+                    None => fact(ui, t, "Feed time", &time(o.time_s), width, t.ink),
+                }
             }
             if let Some(l) = o.least {
                 let tol = run.and_then(|r| r.setup(&o.setup)).map_or(0.0, |s| s.tol);
@@ -1037,8 +1066,8 @@ fn pct(x: f64) -> String {
 fn quality_facts(ui: &mut Ui, t: &Theme, q: &forge_cam_quality::OpQ, width: f32) {
     heading(ui, t, "Toolpath quality", width);
     let cut_air = q.t_cut + q.t_air;
-    if q.t_stop > 0.0 {
-        fact(ui, t, "Cycle (machine timeline)", &time(q.t_stop), width, t.ink);
+    if q.t_min > 0.0 {
+        fact_tip(ui, t, "Cycle time", &cycle_words((q.t_min, q.t_scurve.max(q.t_min))), CYCLE_TIP, width, t.ink);
     }
     if cut_air > 0.0 {
         let air = q.t_air / cut_air;
@@ -1391,6 +1420,7 @@ fn op_dialog(
                     Kind::Deg => arg_field_tip(ui, t, f.label, &mut val, &hint, &tip, "\u{b0}", &key, places),
                     Kind::Z => arg_field(ui, t, f.label, &mut val, &hint, "mm z", &key, places),
                     Kind::Count => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
+                    Kind::Text => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
                     Kind::Choice(words) => {
                         let mut items: Vec<(String, String)> = vec![];
                         if !f.required {
@@ -3507,14 +3537,13 @@ fn quality_window(
                     let words = match &p.error {
                         Some(e) => format!("not timed: {e}"),
                         None => format!(
-                            "{} with stops ({} at least) · {} tool changes{}",
-                            time(p.t_stop),
-                            time(p.t_min),
+                            "{} · {} tool changes{}",
+                            cycle_words((p.t_min, p.t_scurve.max(p.t_min))),
                             p.tool_changes,
                             if p.accel_missing { " · the machine gives no accelerations" } else { "" }
                         ),
                     };
-                    fact(ui, t, &format!("{} on {}", p.name, p.machine), &words, width, if p.error.is_some() { t.warn } else { t.ink });
+                    fact_tip(ui, t, &format!("{} on {}", p.name, p.machine), &words, CYCLE_TIP, width, if p.error.is_some() { t.warn } else { t.ink });
                 }
             }
             note(
@@ -3565,15 +3594,12 @@ fn checks_window(
                 note(ui, "Generate first.", width, t.ink2);
                 return;
             };
-            let (word, c) = match run.certification.as_str() {
-                "full" => ("Every op certified, every program released", t.success),
-                "except G5" => (
-                    "Every op certified; machine travel (G5) checked by span only: a setup is not placed (at:)",
-                    t.ink2,
-                ),
-                _ => ("Refused: an op or program below", t.error),
+            let (word, c) = match cert_of(run.ok, &run.certification) {
+                Cert::Certified => ("Every op certified, every program released".to_string(), t.success),
+                Cert::Unchecked(g) => (unchecked_words(g), t.ink2),
+                Cert::Refused => ("Refused: an op or program below".to_string(), t.error),
             };
-            note(ui, word, width, c);
+            note(ui, &word, width, c);
             note(ui, "Rules: gouge, holder_collision, rapid_clear, fixture_collision, axis_limit (G5), leftover (G4), on the posted path.", width, t.ink2);
             let mut k = 0;
             for o in &run.ops {
@@ -3676,8 +3702,11 @@ pub fn status_line(w: &CamWs) -> String {
         .run
         .as_ref()
         .map_or(0.0, |r| r.ops.iter().map(|o| o.time_s).sum());
-    let machining = if time > 0.0 {
-        format!(" · {} machining", self::time(time))
+    let cycle = w.run.as_ref().and_then(|r| r.cycle(r.ops.iter().map(|o| o.name.as_str())));
+    let machining = if let Some(c) = cycle {
+        format!(" · {} machining", cycle_words(c))
+    } else if time > 0.0 {
+        format!(" · {} feed time", self::time(time))
     } else {
         String::new()
     };
@@ -3886,9 +3915,78 @@ fn docked_foot(
         .inner
 }
 
+/// A run's certification as the Setups header and the Checks panel read it: refused only when
+/// the run is not ok (an op, a program or a statement refused); otherwise certified, naming a
+/// rule the run leaves undecided (forge-cam-lang's `Cam::certification`: "full", "except G5",
+/// "full except G4 (leftover not computed)", "except G4 and G5 (..)").
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Cert {
+    Certified,
+    Unchecked(&'static str),
+    Refused,
+}
+
+pub(crate) fn cert_of(ok: bool, certification: &str) -> Cert {
+    if !ok || certification == "refused" {
+        return Cert::Refused;
+    }
+    match certification {
+        "full" => Cert::Certified,
+        "except G5" => Cert::Unchecked("G5"),
+        c if c.starts_with("full except G4") => Cert::Unchecked("G4"),
+        c if c.starts_with("except G4 and G5") => Cert::Unchecked("G4 and G5"),
+        // words this build does not know: not called a refusal, not called full
+        _ => Cert::Unchecked("a rule"),
+    }
+}
+
+/// What an unchecked rule means, for the hover and the Checks panel.
+fn unchecked_words(g: &str) -> String {
+    let g4 = "the leftover (G4: the stock left against the part) is not computed in this run";
+    let g5 = "machine travel (G5) is checked against each axis's span only: a setup is not placed on \
+              the machine (`at:`, the work offset in machine coordinates); place it in the setup \
+              dialog to check the positions too";
+    match g {
+        "G4" => format!("Every op certified, every program released; {g4}."),
+        "G5" => format!("Every op certified; {g5}."),
+        "G4 and G5" => format!("Every op certified; {g4}, and {g5}."),
+        _ => "Every op certified; a rule is not decided in this run.".into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{choice_words, default_value};
+    use super::{Cert, cert_of, choice_words, default_value};
+
+    /// A run whose ops and programs all certify reads certified, naming what it leaves
+    /// unchecked (mold_core_cam: "full except G4 (leftover not computed)" read "refused"); only a
+    /// run that is not ok reads refused.
+    #[test]
+    fn a_certified_run_with_a_rule_unchecked_is_not_refused() {
+        assert_eq!(cert_of(true, "full"), Cert::Certified);
+        assert_eq!(cert_of(true, "full except G4 (leftover not computed)"), Cert::Unchecked("G4"));
+        assert_eq!(cert_of(true, "except G5"), Cert::Unchecked("G5"));
+        assert_eq!(
+            cert_of(true, "except G4 and G5 (leftover not computed; no `at:`)"),
+            Cert::Unchecked("G4 and G5")
+        );
+        assert_eq!(cert_of(false, "refused"), Cert::Refused);
+        assert_eq!(cert_of(false, "full"), Cert::Refused);
+        assert_eq!(cert_of(true, "refused"), Cert::Refused);
+    }
+
+    /// mold_core_cam end to end: its five ops and its program certify, G4 is not computed: the
+    /// header reads "certified · G4 unchecked".
+    #[test]
+    fn mold_core_reads_certified_with_g4_unchecked() {
+        let dir =
+            std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+        let text = std::fs::read_to_string(dir.join("mold_core_cam.fg")).expect("the example");
+        let r = crate::shell::cam::run::run(&text, &dir);
+        assert!(r.ok, "{:?}", r.errors);
+        assert!(r.ops.iter().all(|o| o.status == "built"));
+        assert_eq!(cert_of(r.ok, &r.certification), Cert::Unchecked("G4"), "{}", r.certification);
+    }
 
     #[test]
     fn defaults_read_as_their_values() {

@@ -596,6 +596,29 @@ fn a_narrow_window_tabs_the_sheet_and_the_simulation() {
     }
 }
 
+/// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
+/// estimate counts the tool change the bound counts (the flange changes T1 for T12).
+#[test]
+fn cycle_time_is_the_bound_and_the_estimate_together() {
+    let Some((h, _)) = open("cycle") else { return };
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let r = w.run.as_ref().unwrap();
+    let q = r.quality.as_ref().expect("measured");
+    let p = q.progs.first().expect("a timed program");
+    assert!(p.error.is_none(), "{:?}", p.error);
+    assert!(p.tool_changes > 0, "the flange changes tools");
+    assert!(p.t_min > 0.0 && p.t_scurve >= p.t_min, "t_min {} t_scurve {}", p.t_min, p.t_scurve);
+    let (lo, est) = r.cycle(r.ops.iter().map(|o| o.name.as_str())).expect("timed");
+    assert!(est >= lo);
+    for o in &q.ops {
+        assert!(o.t_scurve + 1e-9 >= o.t_min, "{}: t_min {} t_scurve {}", o.name, o.t_min, o.t_scurve);
+    }
+    let line = forge_render::shell::cam::status_line(w);
+    assert!(line.contains('\u{2265}') && line.contains("est."), "{line}");
+    let words = forge_render::shell::cam::cycle_words((lo, est));
+    assert!(words.starts_with('\u{2265}') && words.contains(" est. "), "{words}");
+}
+
 /// Adaptive is opt-in: a small button after the 2D group's three big ones (never Clear's place),
 /// and the fields its form writes generate.
 #[test]
@@ -633,4 +656,51 @@ fn suppressing_an_op_generates_again() {
         assert!(["built", "refused"].contains(&w.status(op)), "{op}: {}", w.status(op));
     }
     assert_eq!(w.status("prof"), "built");
+}
+
+/// The mould's 3D ops (zlevel, parallel, waterline, pencil, rest) are ops of the workspace: in
+/// the browser with their rows, in the ribbon's 3D group, each form's fields ones the language
+/// takes.
+#[test]
+fn a_mould_lists_its_3d_ops() {
+    let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+    let dir = std::env::temp_dir().join(format!("fg-cam-ui-{}-mould", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for f in ["mold_core.fg", "mold_core_cam.fg"] {
+        std::fs::copy(ex.join(f), dir.join(f)).unwrap();
+    }
+    let text = std::fs::read_to_string(dir.join("mold_core_cam.fg")).unwrap();
+    let w = forge_render::shell::cam::CamWs::open(dir.join("mold_core_cam.fg").to_str().unwrap(), &text);
+    let ops: Vec<(String, String)> = w
+        .stmts
+        .iter()
+        .filter(|s| s.is_op())
+        .map(|s| (s.name.clone(), s.func.clone()))
+        .collect();
+    for (name, func) in [("rough", "zlevel"), ("fin", "parallel"), ("walls", "waterline"), ("corner", "pencil"), ("left", "rest")] {
+        assert!(ops.contains(&(name.into(), func.into())), "{name} ({func}) not an op: {ops:?}");
+        let spec = forge_render::shell::cam::schema::spec(func).unwrap_or_else(|| panic!("no form for {func}"));
+        assert_eq!(spec.group, "3D");
+    }
+    let Some((mut h, _)) = headless_open(&dir.join("mold_core_cam.fg")) else { return };
+    for (name, _) in &ops {
+        assert!(h.placed(&format!("cam:row:{name}")).is_some(), "{name} row");
+    }
+    for tool in ["3D Rough", "Parallel"] {
+        assert!(h.placed(&format!("tool:{tool}")).is_some(), "{tool} in the ribbon");
+    }
+}
+
+fn headless_open(file: &std::path::Path) -> Option<(Headless, std::path::PathBuf)> {
+    let mut h = match Headless::new((1500.0, 1000.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return None;
+        }
+    };
+    h.step();
+    h.gui.open(file.to_str().unwrap());
+    settle(&mut h);
+    Some((h, file.to_path_buf()))
 }

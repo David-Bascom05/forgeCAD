@@ -25,6 +25,7 @@ pub mod toollib;
 pub mod schema;
 pub mod turnview;
 mod ui;
+pub use ui::{CYCLE_TIP, cycle_words};
 pub use ui::{groups, status_line};
 
 use doc::{Edit, Role, Stmt};

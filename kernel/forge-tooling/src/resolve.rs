@@ -15,7 +15,9 @@
 //! The formulas are feeds.rs's (chip thinning, mean chip, Kienzle power, torque). Power and
 //! torque limits lower the feed only, never ap or ae (the path, and so the certified
 //! geometry, stays what was planned).
-use crate::feeds::{self, Cut, Group, THIN_CAP};
+use crate::feeds::{
+    self, Beam, Cut, DrillRow, Generic, Group, Quantiles, Stock, Substrate, THIN_CAP, TapRow,
+};
 use crate::{Cite, Preset};
 use std::f64::consts::PI;
 
@@ -79,6 +81,9 @@ pub struct Ask {
     pub ap: Option<f64>,
     pub ae: Option<f64>,
     pub max_angle: Option<f64>,
+    /// Tool tilt from the surface normal toward the feed, degrees (a ball's contact moves out
+    /// to a larger diameter): feeds::contact.
+    pub tilt: Option<f64>,
     /// Entry feeds, mm/min.
     pub plunge: Option<f64>,
     pub ramp: Option<f64>,
@@ -86,6 +91,8 @@ pub struct Ask {
     /// Limits: kW, N·m at the spindle; the feed range engagement feed stays in, mm/min.
     pub max_power: Option<f64>,
     pub max_torque: Option<f64>,
+    /// The largest tool deflection allowed, mm (lowers the feed only).
+    pub max_deflection: Option<f64>,
     pub min_feed: Option<f64>,
     pub max_feed: Option<f64>,
 }
@@ -102,11 +109,13 @@ impl Ask {
             ap: self.ap.or(base.ap),
             ae: self.ae.or(base.ae),
             max_angle: self.max_angle.or(base.max_angle),
+            tilt: self.tilt.or(base.tilt),
             plunge: self.plunge.or(base.plunge),
             ramp: self.ramp.or(base.ramp),
             lead_in: self.lead_in.or(base.lead_in),
             max_power: self.max_power.or(base.max_power),
             max_torque: self.max_torque.or(base.max_torque),
+            max_deflection: self.max_deflection.or(base.max_deflection),
             min_feed: self.min_feed.or(base.min_feed),
             max_feed: self.max_feed.or(base.max_feed),
         }
@@ -119,9 +128,66 @@ pub struct ToolData<'a> {
     pub d: f64,
     pub flutes: u32,
     pub ball: bool,
-    pub carbide: bool,
+    /// Corner radius, mm: 0 flat, d/2 ball (`ball` implies it), between for a bull nose.
+    pub re: f64,
+    /// Its substrate (picks the group's carbide or HSS speed; others have no generic speed)
+    /// and coating as the record states it (no generic factor is applied for a coating: the
+    /// maker's preset carries it).
+    pub substrate: Substrate,
+    pub coating: &'a str,
+    /// The tool as a cantilever out of its holder, where its substrate's modulus is known.
+    pub beam: Option<Beam>,
+    /// The op's class and its chip factor against the slot chip, with its source (rough applies
+    /// only below ae = D/2); None: slot or general, or the preset already is the class's.
+    pub class: Option<(&'a str, f64, &'a str)>,
     /// The tool's cutting data for the part's group, and its cite.
     pub preset: Option<(&'a Preset, Option<&'a Cite>)>,
+    /// The tool's generic class (`Library::generic`) for the op's class and for a slot, where
+    /// no preset or user value sets the speed or chip (carbide only: the makers' rows are): its
+    /// 10th percentile.
+    pub generic: Option<GenericUse<'a>>,
+}
+
+/// A tool's generic classes: the op's (speed) and the slot's (the chip the op's feed is set
+/// from; the op's class rides on it as a factor, see `ToolData::class`).
+#[derive(Clone, Copy, Debug)]
+pub struct GenericUse<'a> {
+    pub op: &'a Generic,
+    pub slot: &'a Generic,
+}
+
+impl GenericUse<'_> {
+    /// The op class's chip against the slot's, from the makers' rows of the same tool class:
+    /// P10 over P10. None where the op's record is not its own class's (a slot, or a class
+    /// opened up to any op).
+    pub fn class_factor(&self) -> Option<f64> {
+        let rest = |g: &Generic| {
+            (
+                g.family.clone(),
+                g.tier.clone(),
+                g.flutes,
+                g.coating.clone(),
+                g.helix.clone(),
+            )
+        };
+        (self.op.op != "*"
+            && self.op.op != "slot"
+            && self.slot.op == "slot"
+            && rest(self.op) == rest(self.slot))
+        .then(|| self.op.chip.default_value() / self.slot.chip.default_value())
+    }
+}
+
+/// The makers' spread for the class a generic value came from: what the user may push up to.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Spread {
+    pub class: String,
+    pub n: usize,
+    pub makers: Vec<String>,
+    /// m/min.
+    pub vc: Quantiles,
+    /// mm at this diameter.
+    pub chip: Quantiles,
 }
 
 /// The machine, as the resolver needs it.
@@ -169,6 +235,9 @@ pub struct Check {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Resolved {
+    /// The makers' spread for the generic class the speed or chip came from (None: a preset or
+    /// the user set them, or no class has data).
+    pub spread: Option<Spread>,
     pub vc: Val,
     pub rpm: Val,
     /// The chip held (peak, mm), the programmed feed per tooth, and the feed.
@@ -185,13 +254,37 @@ pub struct Resolved {
     pub max_feed: Val,
     /// The derived numbers at the resolved values (hex, hm, power, torque, ...).
     pub feeds: feeds::Feeds,
+    /// The feed holds a chip (the user's `chip`, the tool's or the material's), so engagement
+    /// feed may move it along the path to hold that chip; false when the user programmed `fz`
+    /// or `feed` (used as given, never moved).
+    pub held_chip: bool,
+    /// The slot chip before the class factor (NaN: the chip was the user's fz/feed), and the
+    /// class applied, for engagement feed (rough only where a sample's ae < D/2).
+    pub slot_chip: f64,
+    pub class: Option<(String, f64)>,
     /// Material removal rate, cm³/min.
     pub mrr: f64,
+    /// The user's own power and torque limits (kW, N·m), as asked: engagement feed holds them
+    /// per sample.
+    pub max_power_ask: Option<f64>,
+    pub max_deflection_ask: Option<f64>,
+    /// Tool tip deflection, mm (NaN: not computed): feeds::tip_deflection.
+    pub deflection: f64,
+    pub max_torque_ask: Option<f64>,
+    /// Power and torque at the upper ends of the material's cited kc1.1/mc ranges (the nominal
+    /// values where it cites none).
+    pub power_hi: f64,
+    pub torque_hi: f64,
     /// Spindle power and torque available at the resolved rpm, when the curve covers it.
     pub power_avail: Option<f64>,
     pub torque_avail: Option<f64>,
     pub checks: Vec<Check>,
 }
+
+/// How far under the machine's maximum feed a clamped feed is held, mm/min: the runtime limit
+/// check (forge-cam-lang `runtime_limits`) compares the posted F against the limit's
+/// outward-rounded lower end, so an F exactly at the limit is refused.
+pub const FEED_MARGIN: f64 = 1.0;
 
 /// Spindle power at `rpm` from a piecewise-linear (rpm, kW) curve; None outside it (no
 /// extrapolation: what the curve does not cover is not known).
@@ -229,7 +322,122 @@ pub fn milling(
     spindle: &Spindle,
     nominal: (f64, f64),
 ) -> Option<Resolved> {
+    milling_on(ask, tool, group, None, spindle, nominal)
+}
+
+/// The cut at one engagement sample (TOOL-LIFE, engagement feed): the chip (hex, hm), speed,
+/// power and torque of the tool at `rpm` and `fz` cutting width `ae` at depth `ap` (a ball's or
+/// bull's contact at that depth, tilted `tilt` degrees), with the Kienzle data of `group` (pass
+/// `Stock::apply(group, vc)` for a stock material's own). The same formulas the resolver checks
+/// with (`feeds::at_contact`), so a sample and the op agree.
+pub fn at_sample(
+    group: &Group,
+    tool: &ToolData,
+    rpm: f64,
+    fz: f64,
+    ae: f64,
+    ap: f64,
+    tilt: f64,
+) -> feeds::Feeds {
     let d = tool.d;
+    let re = if tool.ball { 0.5 * d } else { tool.re };
+    let ct = feeds::contact(d, re, ap, tilt);
+    let d_radial = if re >= 0.5 * d { ct.d_eff } else { d };
+    let cut = Cut {
+        d,
+        flutes: tool.flutes,
+        ball: tool.ball,
+        carbide: tool.substrate == Substrate::Carbide,
+        ap,
+        ae,
+    };
+    feeds::at_contact(group, &cut, fz, rpm, ct, d_radial)
+}
+
+/// The cut over an arbitrary engaged arc [θlo, θhi] (radians, measured from the normal to the
+/// feed direction, as forge-cam's Engage spans: a pocket wall, an island, a part-cleared floor),
+/// at depth `ap`: the peak chip hex = fz sin κ max cos θ over the span, the mean chip
+/// hm = fz sin κ (sin θhi − sin θlo)/(θhi − θlo), the width across the travel
+/// r (sin θhi − sin θlo), and from them Kienzle's power Pc = ap · width · vf · kc(hm) / 6e7 and
+/// torque. For a span that starts at the cutter's edge it is `at_sample` exactly.
+#[allow(clippy::too_many_arguments)]
+pub fn at_arc(
+    group: &Group,
+    tool: &ToolData,
+    rpm: f64,
+    fz: f64,
+    th_lo: f64,
+    th_hi: f64,
+    ap: f64,
+    tilt: f64,
+) -> feeds::Feeds {
+    let d = tool.d;
+    let re = if tool.ball { 0.5 * d } else { tool.re };
+    let ct = feeds::contact(d, re, ap, tilt);
+    let d_radial = if re >= 0.5 * d { ct.d_eff } else { d };
+    let r = 0.5 * d_radial;
+    let (lo, hi) = (th_lo.min(th_hi), th_lo.max(th_hi));
+    let (slo, shi) = (forge_math::dmath::sin(lo), forge_math::dmath::sin(hi));
+    let cos_max = if lo <= 0.0 && hi >= 0.0 {
+        1.0
+    } else {
+        forge_math::dmath::cos(lo).max(forge_math::dmath::cos(hi))
+    };
+    let span = hi - lo;
+    let mean_cos = if span > 1e-12 { (shi - slo) / span } else { cos_max };
+    let hex = fz * ct.sin_kappa * cos_max;
+    let hm = fz * ct.sin_kappa * mean_cos;
+    let width = r * (shi - slo);
+    let vf = fz * rpm * tool.flutes.max(1) as f64;
+    let kc = group.kc1_1 * forge_math::dmath::powf(hm.max(1e-4), -group.mc);
+    let power = ap * width * vf * kc / 6.0e7;
+    let torque = if rpm > 0.0 {
+        power * 30.0e3 / (PI * rpm)
+    } else {
+        0.0
+    };
+    feeds::Feeds {
+        rpm,
+        vc: rpm * PI * ct.d_eff / 1000.0,
+        fz,
+        hex,
+        hm,
+        phi: span,
+        vf,
+        power,
+        torque,
+        d_eff: ct.d_eff,
+        rpm_limited: false,
+    }
+}
+
+/// A maker's preset states the feed per tooth it programs at its own width and depth (Harvey,
+/// Helical and Lakeshore print IPT per op at a stated RDOC and ADOC), so its chip is that feed
+/// thinned at that engagement: hex = fz · k(ae/D) · sin κ(ap). A preset with no width is read as
+/// a slot's (k = 1). Returns (chip, k).
+pub fn preset_chip(p: &Preset, d: f64, re: f64) -> (f64, f64) {
+    let ct = feeds::contact(d, re, p.ap.unwrap_or(d), 0.0);
+    let d_radial = if re >= 0.5 * d { ct.d_eff } else { d };
+    let kr = p.ae.map_or(1.0, |ae| {
+        feeds::thinning((ae / d_radial.max(1e-9)).clamp(0.0, 1.0))
+    });
+    let k = if p.ap.is_some() { kr * ct.sin_kappa } else { kr };
+    let k = if k > 0.0 { k } else { 1.0 };
+    (p.fz * k, k)
+}
+
+/// As `milling`, for a specific stock material: its record's kc1.1 and mc at the cut's actual
+/// speed (and their measured spread) take the group's place for power and torque.
+pub fn milling_on(
+    ask: &Ask,
+    tool: &ToolData,
+    group: Option<&Group>,
+    stock: Option<&Stock>,
+    spindle: &Spindle,
+    nominal: (f64, f64),
+) -> Option<Resolved> {
+    let d = tool.d;
+    let carbide = tool.substrate == Substrate::Carbide;
     let z = tool.flutes.max(1) as f64;
     let mut checks = Vec::new();
     let cite_note = |c: Option<&Cite>, fallback: &str| match c {
@@ -258,7 +466,12 @@ pub fn milling(
         Some(v) => Val::new(v, "mm", Source::User, ""),
         None => Val::new(nominal.1, "mm", Source::Default, "the op's nominal depth"),
     };
-    let d_eff = feeds::effective_diameter(d, tool.ball, ap.v);
+    // where the edge cuts: D_eff and the axial thinning sin κ (flat, bull, ball, tilted ball)
+    let re = if tool.ball { 0.5 * d } else { tool.re };
+    let ct = feeds::contact(d, re, ap.v, ask.tilt.unwrap_or(0.0));
+    let d_eff = ct.d_eff;
+    // the width is cut at D_eff on a ball (Sandvik's side-milling form), at D otherwise
+    let d_radial = if re >= 0.5 * d { d_eff } else { d };
 
     // speed
     let preset = tool.preset;
@@ -282,14 +495,44 @@ pub fn milling(
                 Source::Library,
                 cite_note(c, "the tool's preset (uncited)"),
             )
+        } else if let (Some(gu), Substrate::Carbide) = (tool.generic, tool.substrate) {
+            let x = gu.op;
+            Val::new(
+                x.vc.default_value(),
+                "m/min",
+                Source::Material,
+                format!(
+                    "10th percentile of {} maker rows ({}) for class {}; makers {:.0}–{:.0}, P25 {:.0}, median {:.0} m/min (data/generic.toml)",
+                    x.n,
+                    x.makers.join(", "),
+                    x.class(),
+                    x.vc.min,
+                    x.vc.max,
+                    x.vc.p25,
+                    x.vc.median
+                ),
+            )
         } else {
             let g = group?;
-            let v = if tool.carbide { g.vc_carbide } else { g.vc_hss };
+            // the group's generic speeds are per substrate; a coating moves no generic number
+            let v = match tool.substrate {
+                Substrate::Carbide => g.vc_carbide,
+                Substrate::Hss => g.vc_hss,
+                Substrate::Other | Substrate::Unknown => return None,
+            };
+            if !v.is_finite() {
+                return None;
+            }
+            let coat = if tool.coating.is_empty() {
+                String::new()
+            } else {
+                format!("; coating {} (no generic factor)", tool.coating)
+            };
             Val::new(
                 v,
                 "m/min",
                 Source::Material,
-                format!("group {}: {}", g.group, g.source),
+                format!("group {} {}: {}{coat}", g.group, tool.substrate.name(), g.source),
             )
         };
         (1000.0 * vc.v / (PI * d_eff.max(1e-6)), vc)
@@ -338,8 +581,9 @@ pub fn milling(
     };
 
     // chip and feed
-    let r = (ae.v / d).clamp(0.0, 1.0);
-    let k = feeds::thinning(r);
+    let r = (ae.v / d_radial.max(1e-9)).clamp(0.0, 1.0);
+    let k = feeds::thinning(r) * ct.sin_kappa;
+    let mut slot_chip = f64::NAN;
     let (chip, fz) = if let Some(f) = ask.feed {
         let fz = f / (n * z);
         (
@@ -355,25 +599,70 @@ pub fn milling(
         let chip = if let Some(h) = ask.chip {
             Val::new(h, "mm", Source::User, "")
         } else if let Some((p, c)) = preset {
+            let (h, kp) = preset_chip(p, d, re);
             Val::new(
-                p.fz,
+                h,
                 "mm",
                 Source::Library,
                 format!(
-                    "{}; the tool's {} chip, thinned for this width",
+                    "{}; the tool's {} feed {:.4} mm/tooth{}, thinned for this width",
                     cite_note(c, "the tool's preset (uncited)"),
-                    if p.name.is_empty() { "preset" } else { &p.name }
+                    if p.name.is_empty() { "preset" } else { &p.name },
+                    p.fz,
+                    if kp < 1.0 {
+                        format!(" at its own width (chip {h:.4} mm)")
+                    } else {
+                        String::new()
+                    }
                 ),
             )
-        } else if let Some(g) = group {
-            Val::new(
-                g.fz_at(d),
-                "mm",
-                Source::Material,
-                format!("group {}: {}", g.group, g.source),
-            )
         } else {
-            Val::new(0.0, "mm", Source::Default, "no chip data")
+            // no chip from any layer: nothing to set the feed from
+            let g = group?;
+            match (tool.generic, tool.substrate) {
+                (Some(gu), Substrate::Carbide) => {
+                    let x = gu.slot;
+                    Val::new(
+                        g.fz_at(d) * x.chip.default_value(),
+                        "mm",
+                        Source::Material,
+                        format!(
+                            "10th percentile of {} maker slot-equivalent chips ({}) for class {}: {:.2}× group {}'s slot chip {:.4} mm at D {d}; makers {:.2}–{:.2}×, P25 {:.2}×, median {:.2}×",
+                            x.n,
+                            x.makers.join(", "),
+                            x.class(),
+                            x.chip.default_value(),
+                            g.group,
+                            g.fz_at(d),
+                            x.chip.min,
+                            x.chip.max,
+                            x.chip.p25,
+                            x.chip.median
+                        ),
+                    )
+                }
+                _ => Val::new(
+                    g.fz_at(d),
+                    "mm",
+                    Source::Material,
+                    format!("group {}: {}", g.group, g.source),
+                ),
+            }
+        };
+        // the op's class against the slot chip (cutting.toml [[op_class]]). A user's chip is
+        // used as given.
+        slot_chip = chip.v;
+        let chip = match tool.class {
+            // a rough chip only where the engagement is measured under 90° (engagement feed, per
+            // sample): the op's static feed also runs entries and moves nobody measured, which
+            // may cut full width, so it keeps the slot chip
+            Some((name, f, src)) if chip.source != Source::User && name != "rough" => Val::new(
+                chip.v * f,
+                "mm",
+                chip.source,
+                format!("{}; ×{f} for a {name} cut ({src})", chip.note),
+            ),
+            _ => chip,
         };
         let fz = if k > 0.0 {
             (chip.v / k).min(THIN_CAP * chip.v)
@@ -395,6 +684,13 @@ pub fn milling(
     };
     let mut fz = fz;
     let mut vf = Val::new(fz.v * n * z, "mm/min", fz.source, fz.note.clone());
+    // from here the cutting force: the stock material's own data at the actual speed where its
+    // record has some, else the group's
+    let kz: Option<Group> = group.map(|g| match stock {
+        Some(st) => st.apply(g, vc_val.v),
+        None => g.clone(),
+    });
+    let group = kz.as_ref();
 
     // the user's power and torque limits lower the feed (only the feed). P ∝ fz^(1 − mc)
     // at fixed n, ap, ae (kc = kc1.1 hm^(−mc), hm ∝ fz), so the largest fz under a cap is exact.
@@ -403,14 +699,26 @@ pub fn milling(
             d,
             flutes: tool.flutes,
             ball: tool.ball,
-            carbide: tool.carbide,
+            carbide,
             ap: ap.v,
             ae: ae.v,
         };
-        for (cap, what) in [(ask.max_power, "max power"), (ask.max_torque, "max torque")] {
+        for (cap, what) in [
+            (ask.max_power, "max power"),
+            (ask.max_torque, "max torque"),
+            (ask.max_deflection, "max deflection"),
+        ] {
             let Some(cap) = cap else { continue };
-            let f = feeds::at(g, &cut, fz.v, n, d_eff);
-            let now = if what == "max power" { f.power } else { f.torque };
+            let f = feeds::at_contact(g, &cut, fz.v, n, ct, d_radial);
+            let now = match what {
+                "max power" => f.power,
+                "max torque" => f.torque,
+                // the mean tangential force F = 2 Mc/D bends the tool: δ ∝ F ∝ the torque
+                _ => match tool.beam {
+                    Some(b) => feeds::tip_deflection(2000.0 * f.torque / d, &b),
+                    None => continue,
+                },
+            };
             if now > cap && now > 0.0 && g.mc < 1.0 {
                 let s = forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
                 let why = format!("lowered to hold {what} {cap} (was {now:.3})");
@@ -444,18 +752,22 @@ pub fn milling(
         fz = Val::new(fz.v * lim / vf.v.max(1e-12), "mm", Source::Limited, why.clone());
         vf = Val::new(lim, "mm/min", Source::Limited, why);
     }
-    if spindle.max_feed > 0.0 && vf.v > spindle.max_feed {
+    if spindle.max_feed > 0.0 && vf.v > spindle.max_feed - FEED_MARGIN {
+        let to = (spindle.max_feed - FEED_MARGIN).max(0.5 * spindle.max_feed);
         let why = format!(
-            "asked {:.1} mm/min; the machine feeds at most {:.1}",
+            "asked {:.1} mm/min; the machine feeds at most {:.1} (held {FEED_MARGIN} under it: a posted F at the limit is refused)",
             vf.v, spindle.max_feed
         );
-        fz = Val::new(
-            fz.v * spindle.max_feed / vf.v,
-            "mm",
-            Source::MachineClamped,
-            why.clone(),
-        );
-        vf = Val::new(spindle.max_feed, "mm/min", Source::MachineClamped, why);
+        checks.push(Check {
+            what: "feed",
+            verdict: Verdict::Warn,
+            value: vf.v,
+            limit: spindle.max_feed,
+            unit: "mm/min",
+            why: format!("clamped: {why}"),
+        });
+        fz = Val::new(fz.v * to / vf.v, "mm", Source::MachineClamped, why.clone());
+        vf = Val::new(to, "mm/min", Source::MachineClamped, why);
     }
 
     let entry = |v: Option<f64>, frac: f64, what: &str| match v {
@@ -476,26 +788,27 @@ pub fn milling(
 
     // derived numbers and checks
     let derived = match group {
-        Some(g) => feeds::at(
+        Some(g) => feeds::at_contact(
             g,
             &Cut {
                 d,
                 flutes: tool.flutes,
                 ball: tool.ball,
-                carbide: tool.carbide,
+                carbide,
                 ap: ap.v,
                 ae: ae.v,
             },
             fz.v,
             n,
-            d_eff,
+            ct,
+            d_radial,
         ),
         None => feeds::Feeds {
             rpm: n,
             vc: vc_val.v,
             fz: fz.v,
             hex: fz.v * k,
-            hm: fz.v * feeds::mean_chip_factor(r, feeds::engagement_angle(r)),
+            hm: fz.v * ct.sin_kappa * feeds::mean_chip_factor(r, feeds::engagement_angle(r)),
             phi: feeds::engagement_angle(r),
             vf: vf.v,
             power: f64::NAN,
@@ -505,12 +818,68 @@ pub fn milling(
         },
     };
     let mrr = ap.v * ae.v * vf.v / 1000.0;
+    // tool deflection under the mean tangential force F = 2 Mc / D at the tip (peaks are higher:
+    // the mean is what Kienzle gives); the holder and spindle taken rigid
+    let deflection = match (tool.beam, derived.torque.is_finite()) {
+        (Some(b), true) => feeds::tip_deflection(2000.0 * derived.torque / d, &b),
+        _ => f64::NAN,
+    };
+    checks.push(Check {
+        what: "deflection",
+        verdict: match (deflection.is_finite(), ask.max_deflection) {
+            (true, Some(lim)) if deflection > lim * (1.0 + 1e-9) => Verdict::Fail,
+            (true, Some(_)) => Verdict::Pass,
+            _ => Verdict::NotChecked,
+        },
+        value: deflection,
+        limit: ask.max_deflection.unwrap_or(f64::NAN),
+        unit: "mm",
+        why: if !deflection.is_finite() {
+            if tool.beam.is_none() {
+                "no modulus for the tool's substrate (or no stick-out): not computed".into()
+            } else {
+                "no cutting-force data for the material: not computed".into()
+            }
+        } else if ask.max_deflection.is_none() {
+            "the tool alone under the mean force at its tip (holder and spindle compliance not included); no `max_deflection:` given".into()
+        } else {
+            "the tool alone under the mean force at its tip; holder and spindle compliance not included (not checked)".into()
+        },
+    });
     let power_avail = power_at(spindle.power, n);
     let torque_avail = power_avail.map(|p| torque_of(p, n));
     let kc_note = group.map(|g| format!("kc1.1 {} mc {} (group {}: {})", g.kc1_1, g.mc, g.group, g.source));
-    for (what, have, avail, unit) in [
-        ("power", derived.power, power_avail, "kW"),
-        ("torque", derived.torque, torque_avail, "N·m"),
+    // the same cut at the upper ends of the cited kc1.1/mc ranges
+    let (power_hi, torque_hi) = match group {
+        Some(g) if g.kc1_1_range.is_some() || g.mc_range.is_some() => {
+            let (kc_hi, mc_hi) = g.upper();
+            let hi = Group {
+                kc1_1: kc_hi,
+                mc: mc_hi,
+                ..g.clone()
+            };
+            let f = feeds::at_contact(
+                &hi,
+                &Cut {
+                    d,
+                    flutes: tool.flutes,
+                    ball: tool.ball,
+                    carbide,
+                    ap: ap.v,
+                    ae: ae.v,
+                },
+                fz.v,
+                n,
+                ct,
+                d_radial,
+            );
+            (f.power, f.torque)
+        }
+        _ => (derived.power, derived.torque),
+    };
+    for (what, have, hi, avail, unit) in [
+        ("power", derived.power, power_hi, power_avail, "kW"),
+        ("torque", derived.torque, torque_hi, torque_avail, "N·m"),
     ] {
         let check = match (group, avail) {
             (None, _) => Check {
@@ -520,6 +889,15 @@ pub fn milling(
                 limit: avail.unwrap_or(f64::NAN),
                 unit,
                 why: "no cutting-force data (kc1.1, mc) for the part's material".into(),
+            },
+            // a group with no Kienzle data (plastics): not checked, never a pass
+            (Some(_), _) if !have.is_finite() => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: f64::NAN,
+                limit: avail.unwrap_or(f64::NAN),
+                unit,
+                why: "no cutting-force data (kc1.1, mc) published for this material group".into(),
             },
             (Some(_), None) => Check {
                 what,
@@ -532,6 +910,19 @@ pub fn milling(
                 } else {
                     format!("{n:.0} rpm is outside the machine's power curve")
                 },
+            },
+            (Some(_), Some(lim)) if have <= lim && hi > lim => Check {
+                what,
+                verdict: Verdict::Warn,
+                value: hi,
+                limit: lim,
+                unit,
+                why: format!(
+                    "{:.0}% of the spindle's at {n:.0} rpm with the data's nominal kc, {:.0}% at the upper ends of its measured range; {}",
+                    100.0 * have / lim,
+                    100.0 * hi / lim,
+                    kc_note.clone().unwrap_or_default()
+                ),
             },
             (Some(_), Some(lim)) => Check {
                 what,
@@ -573,15 +964,16 @@ pub fn milling(
     });
     // the chip vs the tool's own data: more than its preset's chip is over the maker's number
     if let Some((p, _)) = preset {
+        let (h, _) = preset_chip(p, d, re);
         checks.push(Check {
             what: "chip",
-            verdict: if derived.hex > p.fz * (1.0 + 1e-9) {
+            verdict: if derived.hex > h * (1.0 + 1e-9) {
                 Verdict::Warn
             } else {
                 Verdict::Pass
             },
             value: derived.hex,
-            limit: p.fz,
+            limit: h,
             unit: "mm",
             why: format!(
                 "peak chip vs the tool's {} chip",
@@ -599,7 +991,27 @@ pub fn milling(
         });
     }
 
+    let spread = match (tool.generic, tool.substrate, group) {
+        (Some(gu), Substrate::Carbide, Some(g))
+            if vc_val.source == Source::Material || chip.source == Source::Material =>
+        {
+            let s = g.fz_at(d);
+            Some(Spread {
+                class: if gu.op.key() == gu.slot.key() {
+                    gu.op.class()
+                } else {
+                    format!("speed: {}; chip: {}", gu.op.class(), gu.slot.class())
+                },
+                n: gu.op.n,
+                makers: gu.op.makers.clone(),
+                vc: gu.op.vc,
+                chip: gu.slot.chip.map(|r| r * s),
+            })
+        }
+        _ => None,
+    };
     Some(Resolved {
+        spread,
         vc: vc_val,
         rpm,
         chip,
@@ -613,11 +1025,1059 @@ pub fn milling(
         min_feed,
         max_feed,
         feeds: derived,
+        held_chip: ask.feed.is_none() && ask.fz.is_none(),
+        slot_chip,
+        class: tool.class.map(|(n, f, _)| (n.to_string(), f)),
+        deflection,
+        max_power_ask: ask.max_power,
+        max_deflection_ask: ask.max_deflection,
+        max_torque_ask: ask.max_torque,
         mrr,
+        power_hi,
+        torque_hi,
         power_avail,
         torque_avail,
         checks,
     })
+}
+
+/// The user's turning values (all optional).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct TurnAsk {
+    /// Constant surface speed, m/min (G96); or a fixed spindle speed, rpm (G97; wins).
+    pub vc: Option<f64>,
+    pub rpm: Option<f64>,
+    /// The CSS top speed (G50), rpm.
+    pub max_rpm: Option<f64>,
+    /// Feed per revolution, mm/rev; depth of cut, mm.
+    pub f: Option<f64>,
+    pub ap: Option<f64>,
+    pub max_power: Option<f64>,
+}
+
+/// The turning tool's own cutting data (the library layer) and its entering angle.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TurnData {
+    /// m/min, mm/rev, mm; None where the tool states none.
+    pub vc: Option<f64>,
+    pub f: Option<f64>,
+    pub ap: Option<f64>,
+    /// Where the tool's data comes from (its cite or record source).
+    pub source: String,
+    /// The entering angle κr, degrees (the holder's `kr`); None: not known.
+    pub kr: Option<f64>,
+    /// The layer these values are: `Library` (the insert's own maker preset) or `Material`
+    /// (the generic turning class, `from_generic`).
+    pub layer: Source,
+    /// The makers' spread of the generic class (None for a preset).
+    pub spread: Option<TurnSpread>,
+}
+
+/// The makers' spread for a generic turning class.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TurnSpread {
+    pub class: String,
+    pub n: usize,
+    pub makers: Vec<String>,
+    /// m/min, mm/rev, mm.
+    pub vc: Quantiles,
+    pub f: Quantiles,
+    pub ap: Quantiles,
+}
+
+impl TurnData {
+    /// The library layer from an insert's picked preset (`Insert::preset_for`): vc, f (the
+    /// preset's `fz`, mm/rev) and ap, with the cite and how the preset was chosen.
+    pub fn from_pick(p: &crate::turning::InsertPick, kr: Option<f64>) -> TurnData {
+        let cite = p.cite.map_or("uncited".to_string(), |c| {
+            format!(
+                "{}: {} ({})",
+                format!("{:?}", c.status).to_lowercase(),
+                c.value,
+                c.source
+            )
+        });
+        let f_from = if std::ptr::eq(p.f_row, p.preset) {
+            String::new()
+        } else {
+            format!("; the feed from its {} preset", p.f_row.name)
+        };
+        TurnData {
+            vc: Some(p.preset.vc),
+            f: Some(p.f),
+            ap: p.preset.ap,
+            source: format!("the insert's {} preset, {}; {cite}{f_from}", p.preset.name, p.why),
+            kr,
+            layer: Source::Library,
+            spread: None,
+        }
+    }
+    /// The generic turning default for a tool with no maker data for the group: the class's
+    /// 10th percentile speed, feed and depth (coordinator's rule: too fast breaks tools, too
+    /// slow only costs time), with the class's spread.
+    pub fn from_generic(g: &feeds::TurnGeneric, kr: Option<f64>) -> TurnData {
+        TurnData {
+            vc: Some(g.vc.default_value()),
+            f: Some(g.f.default_value()),
+            ap: Some(g.ap.default_value()),
+            source: format!(
+                "10th percentile of {} maker insert rows ({}) for class {}; vc {:.0}–{:.0} (median {:.0}) m/min, f {:.2}–{:.2} (median {:.2}) mm/rev (data/generic.toml)",
+                g.n,
+                g.makers.join(", "),
+                g.class(),
+                g.vc.min,
+                g.vc.max,
+                g.vc.median,
+                g.f.min,
+                g.f.max,
+                g.f.median
+            ),
+            kr,
+            layer: Source::Material,
+            spread: Some(TurnSpread {
+                class: g.class(),
+                n: g.n,
+                makers: g.makers.clone(),
+                vc: g.vc,
+                f: g.f,
+                ap: g.ap,
+            }),
+        }
+    }
+}
+
+/// The cut at one diameter of the op's range.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct TurnPoint {
+    /// Diameter, mm.
+    pub d: f64,
+    pub rpm: f64,
+    /// The surface speed actually cut at, m/min (under vc where the top speed clamps).
+    pub vc: f64,
+    /// mm/min.
+    pub feed: f64,
+    /// kW, N·m (NaN: no kc data).
+    pub power: f64,
+    pub torque: f64,
+    /// Spindle power available at that rpm (None: outside the curve or no curve).
+    pub power_avail: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TurnResolved {
+    /// The makers' spread where the values are the generic turning class's.
+    pub spread: Option<TurnSpread>,
+    /// G96 surface speed, or the speed of a fixed rpm at the largest diameter.
+    pub vc: Val,
+    /// G97 spindle speed, when fixed.
+    pub rpm: Option<Val>,
+    /// The CSS top speed (G50).
+    pub max_rpm: Val,
+    pub f: Val,
+    pub ap: Val,
+    pub kr: Val,
+    /// The chip, mm: hm = f sin κr (Sandvik, "Turning formulas": hex = fn sin κr).
+    pub hm: f64,
+    /// Below this diameter CSS is clamped at `max_rpm` (the surface speed falls), mm.
+    pub d_clamp: f64,
+    /// The cut at the op's largest diameter, at d_clamp when inside the range, and at its least.
+    pub at: Vec<TurnPoint>,
+    pub checks: Vec<Check>,
+}
+
+/// Resolve a turning op's speed, feed and depth over the diameters it cuts, [d_min, d_max] mm.
+/// Layers: library (the tool's own vc, f, ap) → user; the material gives only kc1.1/mc (the
+/// milling group's speeds are not turning data and are not used). CSS: n(d) = 1000 vc/(π d),
+/// clamped to the top speed; Pc = vc ap f kc/60e3 kW with kc = kc1.1 hm^(−mc), hm = f sin κr
+/// (Sandvik Coromant, "Turning formulas and definitions"); Mc = Pc 30e3/(π n). None when no
+/// speed, feed or depth is known.
+pub fn turning(
+    ask: &TurnAsk,
+    tool: &TurnData,
+    group: Option<&Group>,
+    spindle: &Spindle,
+    d_range: [f64; 2],
+) -> Option<TurnResolved> {
+    let lib =
+        |v: Option<f64>, unit: &'static str| v.map(|x| Val::new(x, unit, tool.layer, tool.source.clone()));
+    let user = |v: Option<f64>, unit: &'static str| v.map(|x| Val::new(x, unit, Source::User, ""));
+    let f = user(ask.f, "mm/rev").or_else(|| lib(tool.f, "mm/rev"))?;
+    let ap = user(ask.ap, "mm").or_else(|| lib(tool.ap, "mm"))?;
+    let (d_min, d_max) = (d_range[0].max(0.0), d_range[1].max(d_range[0]).max(1e-6));
+    let mut checks = Vec::new();
+    // the top speed: the user's, held to the machine's; else the machine's own
+    let max_rpm = match ask.max_rpm {
+        Some(m) if m > spindle.rpm[1] => {
+            let why = format!(
+                "asked a top speed of {m:.0} rpm; the spindle's is {:.0}",
+                spindle.rpm[1]
+            );
+            checks.push(Check {
+                what: "rpm",
+                verdict: Verdict::Warn,
+                value: m,
+                limit: spindle.rpm[1],
+                unit: "rpm",
+                why: format!("clamped: {why}"),
+            });
+            Val::new(spindle.rpm[1], "rpm", Source::MachineClamped, why)
+        }
+        Some(m) => Val::new(m, "rpm", Source::User, "G50"),
+        None => Val::new(
+            spindle.rpm[1],
+            "rpm",
+            Source::MachineClamped,
+            "the spindle's top speed (G50)",
+        ),
+    };
+    let rpm_fixed = ask.rpm.map(|n| {
+        let c = n.clamp(spindle.rpm[0], max_rpm.v);
+        if c != n {
+            let why = format!(
+                "asked {n:.0} rpm; the spindle runs {:.0}–{:.0}",
+                spindle.rpm[0], max_rpm.v
+            );
+            checks.push(Check {
+                what: "rpm",
+                verdict: Verdict::Warn,
+                value: n,
+                limit: if n > c { max_rpm.v } else { spindle.rpm[0] },
+                unit: "rpm",
+                why: format!("clamped: {why}"),
+            });
+            Val::new(c, "rpm", Source::MachineClamped, why)
+        } else {
+            Val::new(n, "rpm", Source::User, "G97")
+        }
+    });
+    let vc = match &rpm_fixed {
+        Some(n) => Val::new(
+            PI * d_max * n.v / 1000.0,
+            "m/min",
+            n.source,
+            "at the largest diameter",
+        ),
+        None => user(ask.vc, "m/min").or_else(|| lib(tool.vc, "m/min"))?,
+    };
+    let kr = match tool.kr {
+        Some(k) => Val::new(k, "deg", Source::Library, "the holder's entering angle"),
+        None => Val::new(
+            90.0,
+            "deg",
+            Source::Default,
+            "not known: 90° (sin κr = 1, the largest chip, the most power)",
+        ),
+    };
+    let hm = f.v * forge_math::dmath::sin(kr.v.to_radians());
+    let d_clamp = if rpm_fixed.is_none() {
+        1000.0 * vc.v / (PI * max_rpm.v)
+    } else {
+        0.0
+    };
+    let mut ds = vec![d_max];
+    if d_clamp > d_min && d_clamp < d_max {
+        ds.push(d_clamp);
+    }
+    if d_min < d_max {
+        ds.push(d_min);
+    }
+    let kc = group.map(|g| g.kc1_1 * forge_math::dmath::powf(hm.max(1e-4), -g.mc));
+    let at: Vec<TurnPoint> = ds
+        .iter()
+        .map(|&d| {
+            let n = match &rpm_fixed {
+                Some(n) => n.v,
+                None => {
+                    let n0 = 1000.0 * vc.v / (PI * d.max(1e-6));
+                    // CSS under the top speed; at the large end the spindle's least speed holds
+                    n0.min(max_rpm.v).max(spindle.rpm[0])
+                }
+            };
+            let vcd = PI * d * n / 1000.0;
+            let power = kc.map_or(f64::NAN, |kc| vcd * ap.v * f.v * kc / 60.0e3);
+            TurnPoint {
+                d,
+                rpm: n,
+                vc: vcd,
+                feed: f.v * n,
+                power,
+                torque: if power.is_finite() {
+                    torque_of(power, n)
+                } else {
+                    f64::NAN
+                },
+                power_avail: power_at(spindle.power, n),
+            }
+        })
+        .collect();
+    if rpm_fixed.is_none() && 1000.0 * vc.v / (PI * d_max) < spindle.rpm[0] {
+        checks.push(Check {
+            what: "rpm",
+            verdict: Verdict::Warn,
+            value: 1000.0 * vc.v / (PI * d_max),
+            limit: spindle.rpm[0],
+            unit: "rpm",
+            why: format!(
+                "at Ø{d_max:.1} CSS asks under the spindle's least speed: the surface speed there is over vc"
+            ),
+        });
+    }
+    // power and torque: the worst point against what the curve gives at its rpm
+    for (what, unit) in [("power", "kW"), ("torque", "N·m")] {
+        let worst = at
+            .iter()
+            .map(|p| {
+                let (have, lim) = if what == "power" {
+                    (p.power, p.power_avail)
+                } else {
+                    (p.torque, p.power_avail.map(|a| torque_of(a, p.rpm)))
+                };
+                (have, lim, p)
+            })
+            .max_by(|a, b| {
+                let r = |x: &(f64, Option<f64>, &TurnPoint)| x.1.map_or(f64::NEG_INFINITY, |l| x.0 / l);
+                r(a).total_cmp(&r(b))
+            });
+        let check = match (group, worst) {
+            (None, _) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: f64::NAN,
+                limit: f64::NAN,
+                unit,
+                why: "no cutting-force data (kc1.1, mc) for the part's material".into(),
+            },
+            (Some(_), Some((have, _, _))) if !have.is_finite() => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: f64::NAN,
+                limit: f64::NAN,
+                unit,
+                why: "no cutting-force data (kc1.1, mc) published for this material group".into(),
+            },
+            (Some(_), Some((have, Some(lim), p))) if at.iter().all(|q| q.power_avail.is_some()) => Check {
+                what,
+                verdict: if have > lim { Verdict::Fail } else { Verdict::Pass },
+                value: have,
+                limit: lim,
+                unit,
+                why: format!("worst at Ø{:.1}, {:.0} rpm", p.d, p.rpm),
+            },
+            (Some(_), _) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: at
+                    .iter()
+                    .map(|p| if what == "power" { p.power } else { p.torque })
+                    .fold(f64::NAN, f64::max),
+                limit: f64::NAN,
+                unit,
+                why: if spindle.power.is_empty() {
+                    "the machine has no spindle power curve".into()
+                } else {
+                    "an rpm the op runs at is outside the machine's power curve".into()
+                },
+            },
+        };
+        checks.push(check);
+    }
+    if let Some(cap) = ask.max_power {
+        let top = at.iter().map(|p| p.power).fold(f64::NAN, f64::max);
+        checks.push(Check {
+            what: "power",
+            verdict: if top > cap {
+                Verdict::Fail
+            } else if top.is_finite() {
+                Verdict::Pass
+            } else {
+                Verdict::NotChecked
+            },
+            value: top,
+            limit: cap,
+            unit: "kW",
+            why: "the user's max_power".into(),
+        });
+    }
+    let top_feed = at.iter().map(|p| p.feed).fold(0.0, f64::max);
+    checks.push(if spindle.max_feed > 0.0 {
+        Check {
+            what: "feed",
+            verdict: if top_feed > spindle.max_feed {
+                Verdict::Fail
+            } else {
+                Verdict::Pass
+            },
+            value: top_feed,
+            limit: spindle.max_feed,
+            unit: "mm/min",
+            why: "f × the highest rpm the op runs at".into(),
+        }
+    } else {
+        Check {
+            what: "feed",
+            verdict: Verdict::NotChecked,
+            value: top_feed,
+            limit: f64::NAN,
+            unit: "mm/min",
+            why: "the machine's maximum feed is not known".into(),
+        }
+    });
+    Some(TurnResolved {
+        spread: tool.spread.clone(),
+        vc,
+        rpm: rpm_fixed,
+        max_rpm,
+        f,
+        ap,
+        kr,
+        hm,
+        d_clamp,
+        at,
+        checks,
+    })
+}
+
+/// The peck default and its source: PMPA Craftsman Cribsheet #116, "Twist drills for success"
+/// (D. Wynn, 2023-06-01, https://www.pmpa.org/cribsheet-twist-drills-for-success/): pull-outs
+/// once the hole is deeper than 3 to 4 diameters; pecks of 3.5 D, then 2 D, then about 1 D
+/// (1–1.5 D). A canned peck cycle (G83) takes one Q, so every peck is held at PMPA's 1 D (its
+/// first two pecks are deeper: this errs slow), from a depth of 3 D (the low end of 3–4 D).
+pub const PECK_RULE: &str = "PMPA Cribsheet #116 (pmpa.org, 2023): peck past 3-4 D, 3.5 D / 2 D / 1 D; held at 1 D for every peck (one G83 Q; errs slow), from 3 D";
+
+/// The user's drilling values (all optional).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct DrillAsk {
+    /// m/min, or rpm (wins).
+    pub vc: Option<f64>,
+    pub rpm: Option<f64>,
+    /// Feed per revolution, mm/rev; or the penetration rate, mm/min.
+    pub f: Option<f64>,
+    pub feed: Option<f64>,
+    /// Peck depth, mm (0: no pecking).
+    pub peck: Option<f64>,
+    pub max_power: Option<f64>,
+    pub max_torque: Option<f64>,
+}
+
+/// The drill, as the drilling model needs it.
+#[derive(Clone, Copy, Debug)]
+pub struct DrillTool<'a> {
+    pub d: f64,
+    pub flutes: u32,
+    /// Point angle, degrees (κr = half of it); 0: not known.
+    pub point: f64,
+    pub substrate: Substrate,
+    /// The maker's data for the group: its `fz` is the maker's feed per REVOLUTION (drill
+    /// tables state IPR or mm/rev), its vc the speed.
+    pub preset: Option<(&'a Preset, Option<&'a Cite>)>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct DrillResolved {
+    pub vc: Val,
+    pub rpm: Val,
+    /// mm/rev and mm/min.
+    pub f: Val,
+    pub feed: Val,
+    pub peck: Val,
+    /// The chip per edge, mm: (fn/z) sin κr.
+    pub h: f64,
+    /// Material removal rate, cm³/min: Dc fn vc / 4.
+    pub mrr: f64,
+    /// kW, N·m (NaN: no kc data); at the upper ends of a cited range.
+    pub power: f64,
+    pub torque: f64,
+    pub power_hi: f64,
+    pub power_avail: Option<f64>,
+    pub checks: Vec<Check>,
+}
+
+/// Resolve a drilling op (spot, drill, peck), a model of its own (not the milling feed's
+/// fraction). Layers: material (the group's `[[drill]]` row for the substrate: vc, and fn by
+/// diameter) → library (the drill's preset: vc and fn) → user. Then machine clamps (rpm, feed)
+/// and the user's limits, reported. Sandvik Coromant, "Drilling formulas and definitions":
+/// n = 1000 vc/(π Dc), vf = fn n, Q = Dc fn vc/4 cm³/min, Pc = fn vc Dc kc/240e3 kW,
+/// Mc = Pc 30e3/(π n) N·m, kc at the chip fz sin κr (fz = fn/z; the page prints the exponent as
+/// "^mc", read here as Kienzle's −mc, as its milling page has it). Peck: the user's, else
+/// `PECK_RULE` (PMPA's schedule, held at its 1 D).
+/// None when no speed or feed is known from any layer.
+#[allow(clippy::too_many_arguments)]
+pub fn drilling(
+    ask: &DrillAsk,
+    tool: &DrillTool,
+    group: Option<&Group>,
+    stock: Option<&Stock>,
+    row: Option<&DrillRow>,
+    spindle: &Spindle,
+    depth: f64,
+) -> Option<DrillResolved> {
+    let d = tool.d.max(1e-6);
+    let mut checks = Vec::new();
+    let note_of = |c: Option<&Cite>, f: &str| match c {
+        Some(c) if !c.source.is_empty() => {
+            format!("{}: {}", format!("{:?}", c.status).to_lowercase(), c.source)
+        }
+        _ => f.to_string(),
+    };
+    let row_note = |r: &DrillRow, what: &str| {
+        let c = r.cites.iter().find(|c| c.path == what);
+        format!(
+            "group {} {} drilling data; {}",
+            r.group,
+            r.substrate,
+            note_of(c, "uncited")
+        )
+    };
+    // speed
+    let (n_asked, mut vc) = if let Some(n) = ask.rpm {
+        (
+            n,
+            Val::new(PI * d * n / 1000.0, "m/min", Source::User, "from the user's rpm"),
+        )
+    } else {
+        let vc = if let Some(v) = ask.vc {
+            Val::new(v, "m/min", Source::User, "")
+        } else if let Some((p, c)) = tool.preset {
+            Val::new(
+                p.vc,
+                "m/min",
+                Source::Library,
+                note_of(c, "the drill's preset (uncited)"),
+            )
+        } else {
+            let r = row?;
+            Val::new(r.vc, "m/min", Source::Material, row_note(r, "vc"))
+        };
+        (1000.0 * vc.v / (PI * d), vc)
+    };
+    let n = n_asked.clamp(spindle.rpm[0], spindle.rpm[1]);
+    let rpm = if n != n_asked {
+        let why = format!(
+            "asked {n_asked:.0} rpm; the machine runs {:.0}–{:.0}",
+            spindle.rpm[0], spindle.rpm[1]
+        );
+        checks.push(Check {
+            what: "rpm",
+            verdict: Verdict::Warn,
+            value: n_asked,
+            limit: if n_asked > n {
+                spindle.rpm[1]
+            } else {
+                spindle.rpm[0]
+            },
+            unit: "rpm",
+            why: format!("clamped: {why}"),
+        });
+        vc = Val::new(PI * d * n / 1000.0, "m/min", Source::MachineClamped, why.clone());
+        Val::new(n, "rpm", Source::MachineClamped, why)
+    } else {
+        Val::new(
+            n,
+            "rpm",
+            if ask.rpm.is_some() {
+                Source::User
+            } else {
+                vc.source
+            },
+            "",
+        )
+    };
+    // feed per revolution
+    let mut f = if let Some(v) = ask.feed {
+        Val::new(v / n, "mm/rev", Source::User, "from the user's feed")
+    } else if let Some(v) = ask.f {
+        Val::new(v, "mm/rev", Source::User, "")
+    } else if let Some((p, c)) = tool.preset {
+        Val::new(
+            p.fz,
+            "mm/rev",
+            Source::Library,
+            note_of(c, "the drill's preset (uncited)"),
+        )
+    } else {
+        let r = row?;
+        let (fv, how) = r.f_at(d);
+        Val::new(
+            fv,
+            "mm/rev",
+            Source::Material,
+            format!("{} ({how})", row_note(r, "f_rows")),
+        )
+    };
+    let mut feed = Val::new(f.v * n, "mm/min", f.source, f.note.clone());
+    // kc at the actual speed (a stock record's rows where it has them)
+    let kz: Option<Group> = group.map(|g| match stock {
+        Some(st) => st.apply(g, vc.v),
+        None => g.clone(),
+    });
+    let z = tool.flutes.max(1) as f64;
+    let sk = if tool.point > 0.0 {
+        forge_math::dmath::sin((0.5 * tool.point).to_radians())
+    } else {
+        1.0
+    };
+    let pw = |kc1: f64, mc: f64, fv: f64| {
+        let h = (fv / z * sk).max(1e-4);
+        let kc = kc1 * forge_math::dmath::powf(h, -mc);
+        fv * vc.v * d * kc / 240.0e3
+    };
+    // the user's power/torque limits lower the feed only: P ∝ fn^(1 − mc)
+    if let Some(g) = kz.as_ref() {
+        for (cap, what) in [(ask.max_power, "max power"), (ask.max_torque, "max torque")] {
+            let Some(cap) = cap else { continue };
+            let p = pw(g.kc1_1, g.mc, f.v);
+            let now = if what == "max power" { p } else { torque_of(p, n) };
+            if now > cap && g.mc < 1.0 {
+                let s = forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
+                let why = format!("lowered to hold {what} {cap} (was {now:.3})");
+                f = Val::new(f.v * s, "mm/rev", Source::Limited, why.clone());
+                feed = Val::new(feed.v * s, "mm/min", Source::Limited, why);
+            }
+        }
+    }
+    if spindle.max_feed > 0.0 && feed.v > spindle.max_feed - FEED_MARGIN {
+        let to = (spindle.max_feed - FEED_MARGIN).max(0.5 * spindle.max_feed);
+        let why = format!(
+            "asked {:.1} mm/min; the machine feeds at most {:.1}",
+            feed.v, spindle.max_feed
+        );
+        checks.push(Check {
+            what: "feed",
+            verdict: Verdict::Warn,
+            value: feed.v,
+            limit: spindle.max_feed,
+            unit: "mm/min",
+            why: format!("clamped: {why}"),
+        });
+        f = Val::new(to / n, "mm/rev", Source::MachineClamped, why.clone());
+        feed = Val::new(to, "mm/min", Source::MachineClamped, why);
+    }
+    let peck = match ask.peck {
+        Some(p) => Val::new(p, "mm", Source::User, ""),
+        None if depth > 3.0 * d => Val::new(d, "mm", Source::Default, PECK_RULE),
+        None => Val::new(0.0, "mm", Source::Default, PECK_RULE),
+    };
+    let (power, power_hi) = match kz.as_ref() {
+        Some(g) => {
+            let (kh, mh) = g.upper();
+            (pw(g.kc1_1, g.mc, f.v), pw(kh, mh, f.v))
+        }
+        None => (f64::NAN, f64::NAN),
+    };
+    let torque = if power.is_finite() {
+        torque_of(power, n)
+    } else {
+        f64::NAN
+    };
+    let power_avail = power_at(spindle.power, n);
+    for (what, have, hi, avail, unit) in [
+        ("power", power, power_hi, power_avail, "kW"),
+        (
+            "torque",
+            torque,
+            torque_of(power_hi, n),
+            power_avail.map(|a| torque_of(a, n)),
+            "N·m",
+        ),
+    ] {
+        checks.push(match (have.is_finite(), avail) {
+            (false, _) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: f64::NAN,
+                limit: avail.unwrap_or(f64::NAN),
+                unit,
+                why: "no cutting-force data (kc1.1, mc) for the part's material".into(),
+            },
+            (true, None) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: have,
+                limit: f64::NAN,
+                unit,
+                why: "no spindle power at this rpm (no curve, or outside it)".into(),
+            },
+            (true, Some(lim)) => Check {
+                what,
+                verdict: if have > lim {
+                    Verdict::Fail
+                } else if hi > lim {
+                    Verdict::Warn
+                } else {
+                    Verdict::Pass
+                },
+                value: if have > lim || hi <= lim { have } else { hi },
+                limit: lim,
+                unit,
+                why: format!(
+                    "{:.0}% of the spindle's at {n:.0} rpm ({:.0}% at the data's upper ends)",
+                    100.0 * have / lim,
+                    100.0 * hi / lim
+                ),
+            },
+        });
+    }
+    Some(DrillResolved {
+        h: f.v / z * sk,
+        mrr: d * f.v * vc.v / 4.0,
+        vc,
+        rpm,
+        f,
+        feed,
+        peck,
+        power,
+        torque,
+        power_hi,
+        power_avail,
+        checks,
+    })
+}
+
+/// The user's reaming values (all optional).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ReamAsk {
+    pub vc: Option<f64>,
+    pub rpm: Option<f64>,
+    /// mm/rev, or mm/min.
+    pub f: Option<f64>,
+    pub feed: Option<f64>,
+    /// The stock the reamer takes off the diameter, mm.
+    pub allowance: Option<f64>,
+    pub max_power: Option<f64>,
+    pub max_torque: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReamResolved {
+    pub vc: Val,
+    pub rpm: Val,
+    pub f: Val,
+    pub feed: Val,
+    /// On the diameter, mm (NaN: no allowance data; the pre-drill is then not set).
+    pub allowance: Val,
+    /// The hole the reamer is given: d − allowance, mm.
+    pub predrill: Val,
+    /// The reamer's lead chamfer κr, degrees.
+    pub kr: Val,
+    /// The chip per edge, mm: (fn/z) sin κr.
+    pub h: f64,
+    /// cm³/min: π/4 (D² − d²) vf / 1000.
+    pub mrr: f64,
+    pub power: f64,
+    pub torque: f64,
+    pub power_avail: Option<f64>,
+    pub checks: Vec<Check>,
+}
+
+/// Resolve a reaming op. Speed and feed per revolution in layers as drilling's: material (the
+/// group's `[[ream]]` row for the reamer's substrate) → library (the reamer's preset) → user;
+/// machine clamps. The allowance: the user's, else the `[[ream_allowance]]` table for the
+/// substrate by diameter; it sets the pre-drill d − allowance. The cut is the annulus from the
+/// pre-drill to D: Q = π/4 (D² − d²) vf, Pc = Q kc / 60e3 kW (kc in N/mm², Q in cm³/min: the
+/// energy per volume times the volume rate), Mc = Pc 30e3/(π n); kc = kc1.1 h^(−mc) at the
+/// chip per edge h = (fn/z) sin κr, κr the reamer's lead chamfer (the tool's `angle` where
+/// given as the included angle, else 45°: stated as a default). The user's power/torque limits
+/// lower the feed only (P ∝ fn^(1 − mc)).
+pub fn reaming(
+    ask: &ReamAsk,
+    tool: &DrillTool,
+    group: Option<&Group>,
+    stock: Option<&Stock>,
+    row: Option<&DrillRow>,
+    allowance: Option<&feeds::ReamAllowance>,
+    spindle: &Spindle,
+) -> Option<ReamResolved> {
+    let base = drilling(
+        &DrillAsk {
+            vc: ask.vc,
+            rpm: ask.rpm,
+            f: ask.f,
+            feed: ask.feed,
+            peck: Some(0.0),
+            max_power: None,
+            max_torque: None,
+        },
+        &DrillTool { point: 0.0, ..*tool },
+        group,
+        stock,
+        row,
+        spindle,
+        0.0,
+    )?;
+    let d = tool.d.max(1e-6);
+    let n = base.rpm.v;
+    let relabel = |v: Val| Val {
+        note: v
+            .note
+            .replace("drilling data", "reaming data")
+            .replace("the drill's preset", "the reamer's preset"),
+        ..v
+    };
+    let (vc_v, rpm_v) = (relabel(base.vc), relabel(base.rpm));
+    let (mut f, mut feed) = (relabel(base.f), relabel(base.feed));
+    let mut checks: Vec<Check> = base
+        .checks
+        .into_iter()
+        .filter(|c| c.what != "power" && c.what != "torque")
+        .collect();
+    let allow = match (ask.allowance, allowance) {
+        (Some(a), _) => Val::new(a, "mm", Source::User, ""),
+        (None, Some(t)) => match t.at(d) {
+            Some(a) => Val::new(
+                a,
+                "mm",
+                Source::Material,
+                format!(
+                    "ream allowance for D {d} ({}); {}",
+                    t.substrate,
+                    t.cites
+                        .iter()
+                        .find(|c| c.path == "allowance")
+                        .map_or("uncited".to_string(), |c| c.source.clone())
+                ),
+            ),
+            None => Val::new(
+                f64::NAN,
+                "mm",
+                Source::Default,
+                format!("D {d} is over the allowance table"),
+            ),
+        },
+        (None, None) => Val::new(
+            f64::NAN,
+            "mm",
+            Source::Default,
+            "no allowance data for the reamer's substrate",
+        ),
+    };
+    if !allow.v.is_finite() {
+        checks.push(Check {
+            what: "allowance",
+            verdict: Verdict::NotChecked,
+            value: f64::NAN,
+            limit: f64::NAN,
+            unit: "mm",
+            why: format!(
+                "{}: give `allowance:` (the stock on the diameter) to set the pre-drill",
+                allow.note
+            ),
+        });
+    }
+    let predrill = Val::new(d - allow.v, "mm", allow.source, "D − allowance");
+    let kr = if tool.point > 0.0 {
+        Val::new(
+            0.5 * tool.point,
+            "deg",
+            Source::Library,
+            "half the reamer's chamfer included angle",
+        )
+    } else {
+        Val::new(
+            45.0,
+            "deg",
+            Source::Default,
+            "the reamer's lead chamfer is not stated: 45° (machine reamers' usual lead)",
+        )
+    };
+    let sk = forge_math::dmath::sin(kr.v.to_radians());
+    let z = tool.flutes.max(1) as f64;
+    let kz: Option<Group> = group.map(|g| match stock {
+        Some(st) => st.apply(g, vc_v.v),
+        None => g.clone(),
+    });
+    let area = if allow.v.is_finite() {
+        0.25 * PI * (d * d - (d - allow.v).max(0.0).powi(2))
+    } else {
+        f64::NAN
+    };
+    let pw = |kc1: f64, mc: f64, fv: f64| {
+        let h = (fv / z * sk).max(1e-4);
+        let kc = kc1 * forge_math::dmath::powf(h, -mc);
+        area * fv * n / 1000.0 * kc / 60.0e3
+    };
+    if let Some(g) = kz.as_ref().filter(|_| area.is_finite()) {
+        for (cap, what) in [(ask.max_power, "max power"), (ask.max_torque, "max torque")] {
+            let Some(cap) = cap else { continue };
+            let p = pw(g.kc1_1, g.mc, f.v);
+            let now = if what == "max power" { p } else { torque_of(p, n) };
+            if now > cap && g.mc < 1.0 {
+                let s = forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
+                let why = format!("lowered to hold {what} {cap} (was {now:.3})");
+                f = Val::new(f.v * s, "mm/rev", Source::Limited, why.clone());
+                feed = Val::new(feed.v * s, "mm/min", Source::Limited, why);
+            }
+        }
+    }
+    let power = match kz.as_ref() {
+        Some(g) if area.is_finite() => pw(g.kc1_1, g.mc, f.v),
+        _ => f64::NAN,
+    };
+    let torque = if power.is_finite() {
+        torque_of(power, n)
+    } else {
+        f64::NAN
+    };
+    let power_avail = power_at(spindle.power, n);
+    for (what, have, avail, unit) in [
+        ("power", power, power_avail, "kW"),
+        ("torque", torque, power_avail.map(|a| torque_of(a, n)), "N·m"),
+    ] {
+        checks.push(match (have.is_finite(), avail) {
+            (false, _) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: f64::NAN,
+                limit: avail.unwrap_or(f64::NAN),
+                unit,
+                why: "no cutting-force data for the material, or no allowance".into(),
+            },
+            (true, None) => Check {
+                what,
+                verdict: Verdict::NotChecked,
+                value: have,
+                limit: f64::NAN,
+                unit,
+                why: "no spindle power at this rpm (no curve, or outside it)".into(),
+            },
+            (true, Some(lim)) => Check {
+                what,
+                verdict: if have > lim { Verdict::Fail } else { Verdict::Pass },
+                value: have,
+                limit: lim,
+                unit,
+                why: format!("{:.0}% of the spindle's at {n:.0} rpm", 100.0 * have / lim),
+            },
+        });
+    }
+    Some(ReamResolved {
+        h: f.v / z * sk,
+        mrr: area * feed.v / 1000.0,
+        vc: vc_v,
+        rpm: rpm_v,
+        f,
+        feed,
+        allowance: allow,
+        predrill,
+        kr,
+        power,
+        torque,
+        power_avail,
+        checks,
+    })
+}
+
+/// A tap's speed: the user's `vc`|`rpm` over the tap's preset over the group's `[[tap]]` row
+/// for its substrate; clamped to the machine (reported). The feed is not a parameter: a tap
+/// feeds its pitch per revolution (vf = p n), so it follows the speed exactly. None without a
+/// speed from any layer.
+pub fn tapping(
+    vc_ask: Option<f64>,
+    rpm_ask: Option<f64>,
+    d: f64,
+    pitch: f64,
+    preset: Option<(&Preset, Option<&Cite>)>,
+    row: Option<&TapRow>,
+    spindle: &Spindle,
+) -> Option<(Val, Val, Val, Vec<Check>)> {
+    let d = d.max(1e-6);
+    let mut checks = Vec::new();
+    let note_of = |c: Option<&Cite>, f: &str| match c {
+        Some(c) if !c.source.is_empty() => {
+            format!("{}: {}", format!("{:?}", c.status).to_lowercase(), c.source)
+        }
+        _ => f.to_string(),
+    };
+    let (n0, mut vc) = match rpm_ask {
+        Some(n) => (
+            n,
+            Val::new(PI * d * n / 1000.0, "m/min", Source::User, "from the user's rpm"),
+        ),
+        None => {
+            let vc = if let Some(v) = vc_ask {
+                Val::new(v, "m/min", Source::User, "")
+            } else if let Some((p, c)) = preset {
+                Val::new(
+                    p.vc,
+                    "m/min",
+                    Source::Library,
+                    note_of(c, "the tap's preset (uncited)"),
+                )
+            } else {
+                let r = row?;
+                let c = r.cites.iter().find(|c| c.path == "vc");
+                Val::new(
+                    r.vc,
+                    "m/min",
+                    Source::Material,
+                    format!(
+                        "group {} {} tapping data; {}",
+                        r.group,
+                        r.substrate,
+                        note_of(c, "uncited")
+                    ),
+                )
+            };
+            (1000.0 * vc.v / (PI * d), vc)
+        }
+    };
+    let n = n0.clamp(spindle.rpm[0], spindle.rpm[1]);
+    let rpm = if n != n0 {
+        let why = format!(
+            "asked {n0:.0} rpm; the machine runs {:.0}–{:.0}",
+            spindle.rpm[0], spindle.rpm[1]
+        );
+        checks.push(Check {
+            what: "rpm",
+            verdict: Verdict::Warn,
+            value: n0,
+            limit: if n0 > n { spindle.rpm[1] } else { spindle.rpm[0] },
+            unit: "rpm",
+            why: format!("clamped: {why}"),
+        });
+        vc = Val::new(PI * d * n / 1000.0, "m/min", Source::MachineClamped, why.clone());
+        Val::new(n, "rpm", Source::MachineClamped, why)
+    } else {
+        Val::new(
+            n,
+            "rpm",
+            if rpm_ask.is_some() {
+                Source::User
+            } else {
+                vc.source
+            },
+            "",
+        )
+    };
+    let feed = Val::new(
+        pitch * n,
+        "mm/min",
+        rpm.source,
+        format!("the pitch {pitch} mm × the speed"),
+    );
+    checks.push(if spindle.max_feed > 0.0 {
+        Check {
+            what: "feed",
+            verdict: if feed.v > spindle.max_feed {
+                Verdict::Fail
+            } else {
+                Verdict::Pass
+            },
+            value: feed.v,
+            limit: spindle.max_feed,
+            unit: "mm/min",
+            why: String::new(),
+        }
+    } else {
+        Check {
+            what: "feed",
+            verdict: Verdict::NotChecked,
+            value: feed.v,
+            limit: f64::NAN,
+            unit: "mm/min",
+            why: "the machine's maximum feed is not known".into(),
+        }
+    });
+    Some((vc, rpm, feed, checks))
 }
 
 #[cfg(test)]
@@ -637,6 +2097,7 @@ mod tests {
             mc: 0.25,
             source: "test group".into(),
             note: String::new(),
+            ..Group::default()
         }
     }
     fn preset() -> Preset {
@@ -673,8 +2134,13 @@ mod tests {
             d: 12.7,
             flutes: 3,
             ball: false,
-            carbide: true,
+            re: 0.0,
+            substrate: Substrate::Carbide,
+            coating: "",
+            beam: None,
+            class: None,
             preset: p,
+            generic: None,
         }
     }
 
@@ -845,7 +2311,15 @@ mod tests {
             ..Ask::default()
         };
         let r = milling(&ask, &tool(None), Some(&g), &spindle(), (1.0, 1.0)).unwrap();
-        assert_eq!((r.feed.v, r.feed.source), (10_000.0, Source::MachineClamped));
+        assert_eq!(
+            (r.feed.v, r.feed.source),
+            (10_000.0 - FEED_MARGIN, Source::MachineClamped)
+        );
+        assert!(
+            r.checks
+                .iter()
+                .any(|k| k.what == "feed" && k.verdict == Verdict::Warn)
+        );
         assert!(r.feed.note.contains("15000.0"));
     }
 
@@ -855,5 +2329,651 @@ mod tests {
         assert_eq!(power_at(&CURVE, 10_000.0), Some(7.5));
         assert_eq!(power_at(&CURVE, 10_001.0), None);
         assert_eq!(power_at(&[], 1000.0), None);
+    }
+
+    fn turn_tool() -> TurnData {
+        TurnData {
+            vc: Some(200.0),
+            f: Some(0.3),
+            ap: Some(3.0),
+            source: "test insert".into(),
+            kr: Some(90.0),
+            layer: Source::Library,
+            spread: None,
+        }
+    }
+
+    /// Sandvik's turning power Pc = vc ap fn kc / 60e3 at kc = kc1.1 hm^(−mc), hm = fn sin κr:
+    /// vc 200, ap 3, fn 0.3, κr 90°, kc1.1 1700, mc 0.25: kc = 1700·0.3^−0.25 = 2297.0,
+    /// Pc = 200·3·0.3·2297.0/60e3 = 6.891 kW. CSS clamps at 3000 rpm below Ø21.22.
+    #[test]
+    fn turning_css_and_power() {
+        let mut g = group();
+        g.kc1_1 = 1700.0;
+        const C: [[f64; 2]; 2] = [[0.0, 15.0], [6000.0, 15.0]];
+        let sp = Spindle {
+            rpm: [50.0, 6000.0],
+            max_feed: 5000.0,
+            power: &C,
+        };
+        let ask = TurnAsk {
+            max_rpm: Some(3000.0),
+            ..TurnAsk::default()
+        };
+        let r = turning(&ask, &turn_tool(), Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert_eq!((r.vc.v, r.vc.source), (200.0, Source::Library));
+        assert_eq!((r.max_rpm.v, r.max_rpm.source), (3000.0, Source::User));
+        assert!((r.d_clamp - 21.2207).abs() < 1e-4, "{}", r.d_clamp);
+        assert_eq!(r.at.len(), 3);
+        let big = r.at[0];
+        assert!((big.rpm - 1000.0 * 200.0 / (PI * 80.0)).abs() < 1e-9);
+        assert!((big.power - 6.891).abs() < 5e-4, "{}", big.power);
+        // under d_clamp the speed holds at the top speed and the surface speed falls
+        let small = r.at[2];
+        assert_eq!((small.d, small.rpm), (10.0, 3000.0));
+        assert!((small.vc - PI * 10.0 * 3.0).abs() < 1e-9);
+        assert!(small.power < big.power);
+        // torque is largest at the largest diameter (the lowest rpm)
+        assert!(big.torque > r.at[1].torque);
+        assert!(
+            r.checks.iter().all(|c| c.verdict == Verdict::Pass),
+            "{:?}",
+            r.checks
+        );
+        // no top speed given: the machine's, labelled
+        let r = turning(&TurnAsk::default(), &turn_tool(), Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert_eq!((r.max_rpm.v, r.max_rpm.source), (6000.0, Source::MachineClamped));
+        // a top speed over the machine's is clamped and reported
+        let ask = TurnAsk {
+            max_rpm: Some(9000.0),
+            ..TurnAsk::default()
+        };
+        let r = turning(&ask, &turn_tool(), Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert_eq!(r.max_rpm.v, 6000.0);
+        assert!(
+            r.checks
+                .iter()
+                .any(|c| c.what == "rpm" && c.verdict == Verdict::Warn)
+        );
+        // an entering angle of 45° thins the chip: hm = f sin 45°
+        let mut t = turn_tool();
+        t.kr = Some(45.0);
+        let r = turning(&TurnAsk::default(), &t, Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert!((r.hm - 0.3 * std::f64::consts::FRAC_1_SQRT_2).abs() < 1e-12);
+        // a weak spindle: refused at the worst point; no data: not checked
+        const W: [[f64; 2]; 2] = [[0.0, 2.0], [6000.0, 2.0]];
+        let weak = Spindle { power: &W, ..sp };
+        let r = turning(&TurnAsk::default(), &turn_tool(), Some(&g), &weak, [10.0, 80.0]).unwrap();
+        assert_eq!(
+            r.checks.iter().find(|c| c.what == "power").unwrap().verdict,
+            Verdict::Fail
+        );
+        let r = turning(&TurnAsk::default(), &turn_tool(), None, &weak, [10.0, 80.0]).unwrap();
+        assert_eq!(
+            r.checks.iter().find(|c| c.what == "power").unwrap().verdict,
+            Verdict::NotChecked
+        );
+        // user G97 rpm wins over CSS
+        let ask = TurnAsk {
+            rpm: Some(1000.0),
+            ..TurnAsk::default()
+        };
+        let r = turning(&ask, &turn_tool(), Some(&g), &sp, [10.0, 80.0]).unwrap();
+        assert!(r.at.iter().all(|p| p.rpm == 1000.0));
+        assert!((r.vc.v - PI * 80.0).abs() < 1e-9);
+    }
+
+    /// With a cited range, the power is also checked at its upper ends: within the spindle at
+    /// the nominal kc but over it at the upper ends warns (never a silent pass).
+    #[test]
+    fn power_at_the_upper_ends_warns() {
+        let mut g = group();
+        g.kc1_1_range = Some([350.0, 1400.0]);
+        g.mc_range = Some([0.2, 0.3]);
+        let ask = Ask {
+            rpm: Some(5000.0),
+            fz: Some(0.05),
+            ae: Some(12.7),
+            ap: Some(12.7),
+            ..Ask::default()
+        };
+        let r = milling(&ask, &tool(None), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        // hm = 2 fz/π; P ∝ kc1.1 hm^(−mc)
+        let hm = 2.0 * 0.05 / PI;
+        let ratio = 1400.0 * forge_math::dmath::powf(hm, -0.3) / (700.0 * forge_math::dmath::powf(hm, -0.25));
+        assert!((r.power_hi / r.feeds.power - ratio).abs() < 1e-9);
+        let lim = r.power_avail.unwrap();
+        assert!(
+            r.feeds.power < lim && r.power_hi > lim,
+            "{} {} {lim}",
+            r.feeds.power,
+            r.power_hi
+        );
+        let p = r.checks.iter().find(|c| c.what == "power").unwrap();
+        assert_eq!(p.verdict, Verdict::Warn);
+    }
+
+    /// A ball at shallow depth: speed set at D_eff, and the chip held counting both the axial
+    /// (sin κ = D_eff/D) and the radial thinning (ae against D_eff); a tilt moves D_eff out.
+    #[test]
+    fn ball_and_tilt_through_the_resolver() {
+        let g = group();
+        let ball = ToolData {
+            ball: true,
+            ..tool(None)
+        };
+        let wide = Spindle {
+            rpm: [100.0, 60_000.0],
+            ..spindle()
+        };
+        let ask = Ask {
+            vc: Some(300.0),
+            chip: Some(0.05),
+            ap: Some(1.0),
+            ae: Some(2.0),
+            ..Ask::default()
+        };
+        // narrower, the combined thinning would pass THIN_CAP: the chip is then held under target
+        let thin = milling(&Ask { ae: Some(0.5), ..ask }, &ball, Some(&g), &wide, (0.0, 0.0)).unwrap();
+        assert!((thin.fz.v - THIN_CAP * 0.05).abs() < 1e-12 && thin.feeds.hex < 0.05);
+        let r = milling(&ask, &ball, Some(&g), &wide, (0.0, 0.0)).unwrap();
+        let ct = feeds::contact(12.7, 6.35, 1.0, 0.0);
+        assert!((r.feeds.d_eff - ct.d_eff).abs() < 1e-12);
+        assert!((r.rpm.v - 1000.0 * 300.0 / (PI * ct.d_eff)).abs() < 1e-9);
+        assert!((r.feeds.hex - 0.05).abs() < 1e-12, "{}", r.feeds.hex);
+        let k = feeds::thinning(2.0 / ct.d_eff) * ct.sin_kappa;
+        assert!((r.fz.v - 0.05 / k).abs() < 1e-12);
+        let tilted = milling(
+            &Ask {
+                tilt: Some(20.0),
+                ..ask
+            },
+            &ball,
+            Some(&g),
+            &wide,
+            (0.0, 0.0),
+        )
+        .unwrap();
+        assert!(tilted.feeds.d_eff > r.feeds.d_eff && tilted.rpm.v < r.rpm.v);
+        assert!((tilted.feeds.hex - 0.05).abs() < 1e-12);
+    }
+
+    /// Drilling as its own model, Sandvik's page's example cut (Dc 20, vc 200, fn 0.20) with a
+    /// 140° two-flute drill, kc1.1 1700, mc 0.25, worked by hand: n = 3183.1, vf = 636.6 mm/min,
+    /// Q = 200 cm³/min, h = 0.1 sin 70° = 0.09397, kc = 3070.5, Pc = 10.235 kW, Mc = 30.70 N·m.
+    #[test]
+    fn drilling_sandvik_example() {
+        let mut g = group();
+        g.kc1_1 = 1700.0;
+        let drill = DrillTool {
+            d: 20.0,
+            flutes: 2,
+            point: 140.0,
+            substrate: Substrate::Carbide,
+            preset: None,
+        };
+        const C: [[f64; 2]; 2] = [[0.0, 15.0], [12_000.0, 15.0]];
+        let sp = Spindle {
+            rpm: [100.0, 12_000.0],
+            max_feed: 10_000.0,
+            power: &C,
+        };
+        let ask = DrillAsk {
+            vc: Some(200.0),
+            f: Some(0.2),
+            ..DrillAsk::default()
+        };
+        let r = drilling(&ask, &drill, Some(&g), None, None, &sp, 70.0).unwrap();
+        assert!((r.rpm.v - 3183.1).abs() < 0.05);
+        assert!((r.feed.v - 636.62).abs() < 0.01);
+        assert!((r.mrr - 200.0).abs() < 1e-9);
+        assert!((r.h - 0.093_969).abs() < 1e-6);
+        assert!((r.power - 10.235).abs() < 5e-4, "{}", r.power);
+        assert!((r.torque - 30.70).abs() < 5e-3, "{}", r.torque);
+        // past 3 D deep: pecks of one diameter, labelled as forgeCAD's rule
+        assert_eq!((r.peck.v, r.peck.source), (20.0, Source::Default));
+        // no data at all: nothing resolved; a group row gives speed and feed by diameter
+        assert!(drilling(&DrillAsk::default(), &drill, Some(&g), None, None, &sp, 10.0).is_none());
+        let row = DrillRow {
+            group: "N".into(),
+            substrate: "carbide".into(),
+            vc: 309.37,
+            d_rows: vec![6.35, 9.525],
+            f_rows: vec![0.4064, 0.508],
+            ..DrillRow::default()
+        };
+        let small = DrillTool { d: 6.6, ..drill };
+        let fast = Spindle {
+            rpm: [100.0, 20_000.0],
+            ..sp
+        };
+        let r = drilling(
+            &DrillAsk::default(),
+            &small,
+            Some(&g),
+            None,
+            Some(&row),
+            &fast,
+            10.0,
+        )
+        .unwrap();
+        assert_eq!((r.vc.v, r.vc.source), (309.37, Source::Material));
+        let want = 0.4064 + (0.508 - 0.4064) * (6.6 - 6.35) / (9.525 - 6.35);
+        assert!((r.f.v - want).abs() < 1e-12 && r.f.source == Source::Material);
+        assert_eq!(r.peck.v, 0.0);
+        // outside the rows: the lesser extension
+        let (f3, how) = row.f_at(3.0);
+        assert!(f3 <= 0.4064 * 3.0 / 6.35 + 1e-15 && how.contains("under"));
+    }
+
+    /// Tapping: speed from the row at the tap's diameter, feed = pitch × rpm exactly.
+    #[test]
+    fn tapping_speed_and_pitch_feed() {
+        let row = TapRow {
+            group: "N".into(),
+            substrate: "hss".into(),
+            vc: 21.336,
+            ..TapRow::default()
+        };
+        let (vc, rpm, feed, _) = tapping(None, None, 8.0, 1.25, None, Some(&row), &spindle()).unwrap();
+        assert_eq!((vc.v, vc.source), (21.336, Source::Material));
+        assert!((rpm.v - 1000.0 * 21.336 / (PI * 8.0)).abs() < 1e-9);
+        assert!((feed.v - 1.25 * rpm.v).abs() < 1e-12);
+        let (_, rpm, _, _) = tapping(None, Some(400.0), 8.0, 1.25, None, Some(&row), &spindle()).unwrap();
+        assert_eq!((rpm.v, rpm.source), (400.0, Source::User));
+        assert!(tapping(None, None, 8.0, 1.25, None, None, &spindle()).is_none());
+    }
+
+    /// max_deflection lowers the feed so the tip deflection is the limit, exactly.
+    #[test]
+    fn deflection_reported_and_capped() {
+        let g = group();
+        let beam = Beam {
+            stickout: 60.0,
+            lcf: 30.0,
+            de: 8.0,
+            dcon: 12.7,
+            e_mpa: 550_000.0,
+        };
+        let t = ToolData {
+            beam: Some(beam),
+            ..tool(None)
+        };
+        let ask = Ask {
+            rpm: Some(8000.0),
+            chip: Some(0.08),
+            ae: Some(6.0),
+            ap: Some(20.0),
+            ..Ask::default()
+        };
+        let r = milling(&ask, &t, Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        let want = feeds::tip_deflection(2000.0 * r.feeds.torque / 12.7, &beam);
+        assert!((r.deflection - want).abs() < 1e-15 && r.deflection > 0.0);
+        let c = r.checks.iter().find(|c| c.what == "deflection").unwrap();
+        assert_eq!(c.verdict, Verdict::NotChecked);
+        let lim = 0.5 * r.deflection;
+        let r2 = milling(
+            &Ask {
+                max_deflection: Some(lim),
+                ..ask
+            },
+            &t,
+            Some(&g),
+            &spindle(),
+            (0.0, 0.0),
+        )
+        .unwrap();
+        assert!(
+            (r2.deflection - lim).abs() < 1e-9 * lim,
+            "{} {lim}",
+            r2.deflection
+        );
+        assert_eq!(r2.feed.source, Source::Limited);
+        assert_eq!(
+            r2.checks.iter().find(|c| c.what == "deflection").unwrap().verdict,
+            Verdict::Pass
+        );
+        // no modulus: not computed
+        let r3 = milling(&ask, &tool(None), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert!(r3.deflection.is_nan());
+    }
+
+    /// Op classes: a finish holds 0.75× the slot chip; a rough class is carried (engagement feed
+    /// applies it per sample under 90°) while the static chip stays the slot chip; a user's chip
+    /// is never scaled.
+    #[test]
+    fn op_class_chip_factors() {
+        let g = group();
+        let base = Ask {
+            rpm: Some(8000.0),
+            ae: Some(3.0),
+            ap: Some(5.0),
+            ..Ask::default()
+        };
+        let plain = milling(&base, &tool(None), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        let with = |c: (&'static str, f64)| ToolData {
+            class: Some((c.0, c.1, "test")),
+            ..tool(None)
+        };
+        // rough: the static chip stays the slot chip; the class is carried for engagement feed
+        let rough = milling(&base, &with(("rough", 1.466)), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert_eq!(rough.chip.v, plain.chip.v);
+        assert_eq!(rough.class, Some(("rough".to_string(), 1.466)));
+        assert!((rough.slot_chip - plain.chip.v).abs() < 1e-15);
+        let fin = milling(&base, &with(("finish", 0.75)), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert!((fin.chip.v - 0.75 * plain.chip.v).abs() < 1e-12);
+        let full = Ask {
+            ae: Some(12.7),
+            ..base
+        };
+        let r = milling(&full, &with(("rough", 1.466)), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        let p = milling(&full, &tool(None), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert_eq!(r.chip.v, p.chip.v);
+        let user = Ask {
+            chip: Some(0.05),
+            ..base
+        };
+        let u = milling(&user, &with(("rough", 1.466)), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert_eq!(u.chip.v, 0.05);
+    }
+
+    /// A preset's feed is the maker's programmed feed at its own width: Harvey 792208's N finish
+    /// row, .00229 IPT at 10% D radial (ae 0.3175 of 3.175): its chip is fz · 2√(0.1 − 0.01)
+    /// = 0.6 fz, and run at that same width it programs the maker's feed back.
+    #[test]
+    fn preset_feed_is_programmed_at_its_width() {
+        let p = Preset {
+            name: "N finish".into(),
+            group: "N".into(),
+            vc: 304.8,
+            fz: 0.058166,
+            ap: Some(1.5875),
+            ae: Some(0.3175),
+        };
+        let (h, k) = preset_chip(&p, 3.175, 0.0);
+        assert!(
+            (k - 0.6).abs() < 1e-12 && (h - 0.6 * 0.058166).abs() < 1e-12,
+            "{h} {k}"
+        );
+        let g = group();
+        let t = ToolData {
+            d: 3.175,
+            flutes: 2,
+            ball: false,
+            re: 0.0,
+            substrate: Substrate::Carbide,
+            coating: "",
+            beam: None,
+            class: None,
+            preset: Some((&p, None)),
+            generic: None,
+        };
+        let at = |ae: f64| {
+            milling(
+                &Ask {
+                    ae: Some(ae),
+                    ap: Some(1.5875),
+                    ..Ask::default()
+                },
+                &t,
+                Some(&g),
+                &spindle(),
+                (0.0, 0.0),
+            )
+            .unwrap()
+        };
+        let r = at(0.3175);
+        assert!((r.fz.v - 0.058166).abs() < 1e-12 && (r.chip.v - h).abs() < 1e-12);
+        // in a slot the same chip is programmed unthinned: 0.6 of the finishing feed
+        assert!((at(3.175).fz.v - h).abs() < 1e-12);
+    }
+
+    /// With no preset, a carbide tool takes its class's 10th percentile (speed, and the slot
+    /// chip relative to the group's), carries the class's spread, and its class factor is the
+    /// class's own op/slot chip ratio.
+    #[test]
+    fn generic_class_tenth_percentile() {
+        let q = |a: [f64; 5]| Quantiles {
+            min: a[0],
+            p10: a[1],
+            p25: a[2],
+            median: a[3],
+            max: a[4],
+        };
+        let mk = |op: &str, vc: [f64; 5], chip: [f64; 5]| Generic {
+            group: "N".into(),
+            family: "*".into(),
+            op: op.into(),
+            tier: "*".into(),
+            flutes: 3,
+            coating: "*".into(),
+            helix: "*".into(),
+            n: 40,
+            makers: vec!["a".into(), "b".into()],
+            vc: q(vc),
+            chip: q(chip),
+            cites: Vec::new(),
+        };
+        let slot = mk(
+            "slot",
+            [100.0, 150.0, 170.0, 200.0, 600.0],
+            [0.4, 0.8, 0.9, 1.0, 1.3],
+        );
+        let rough = mk(
+            "rough",
+            [100.0, 160.0, 180.0, 210.0, 640.0],
+            [0.5, 1.0, 1.05, 1.1, 1.4],
+        );
+        let gu = GenericUse {
+            op: &rough,
+            slot: &slot,
+        };
+        assert!((gu.class_factor().unwrap() - 1.25).abs() < 1e-12);
+        assert_eq!(
+            GenericUse {
+                op: &slot,
+                slot: &slot
+            }
+            .class_factor(),
+            None
+        );
+        let g = group();
+        let t = ToolData {
+            d: 10.0,
+            flutes: 3,
+            ball: false,
+            re: 0.0,
+            substrate: Substrate::Carbide,
+            coating: "",
+            beam: None,
+            class: None,
+            preset: None,
+            generic: Some(gu),
+        };
+        let r = milling(
+            &Ask {
+                ae: Some(10.0),
+                ap: Some(5.0),
+                ..Ask::default()
+            },
+            &t,
+            Some(&g),
+            &spindle(),
+            (0.0, 0.0),
+        )
+        .unwrap();
+        assert_eq!((r.vc.v, r.vc.source), (160.0, Source::Material));
+        assert!(r.vc.note.contains("10th percentile of 40"), "{}", r.vc.note);
+        assert!((r.chip.v - 0.8 * g.fz_at(10.0)).abs() < 1e-12);
+        let sp = r.spread.unwrap();
+        assert_eq!(sp.vc, rough.vc);
+        assert!((sp.chip.max - 1.3 * g.fz_at(10.0)).abs() < 1e-12);
+        // HSS: the makers' rows are carbide, so the group's HSS column, no spread
+        let h = milling(
+            &Ask::default(),
+            &ToolData {
+                substrate: Substrate::Hss,
+                ..t
+            },
+            Some(&g),
+            &spindle(),
+            (10.0, 5.0),
+        )
+        .unwrap();
+        assert!(h.spread.is_none() && h.vc.v == g.vc_hss);
+    }
+
+    /// A sample at the op's own width and depth gives the op's own derived cut back; a
+    /// narrower sample thins the chip and lowers the power.
+    #[test]
+    fn at_sample_agrees_with_the_op() {
+        let g = group();
+        let t = ToolData {
+            d: 10.0,
+            flutes: 3,
+            ball: false,
+            re: 0.0,
+            substrate: Substrate::Carbide,
+            coating: "",
+            beam: None,
+            class: None,
+            preset: None,
+            generic: None,
+        };
+        let r = milling(
+            &Ask {
+                ae: Some(4.0),
+                ap: Some(6.0),
+                ..Ask::default()
+            },
+            &t,
+            Some(&g),
+            &spindle(),
+            (0.0, 0.0),
+        )
+        .unwrap();
+        let s = at_sample(&g, &t, r.rpm.v, r.fz.v, 4.0, 6.0, 0.0);
+        assert!((s.hex - r.feeds.hex).abs() < 1e-12 && (s.power - r.feeds.power).abs() < 1e-9);
+        let thin = at_sample(&g, &t, r.rpm.v, r.fz.v, 1.0, 6.0, 0.0);
+        assert!(thin.hex < s.hex && thin.power < s.power);
+    }
+
+    /// Reaming: speed and feed from the group's row, the allowance from the table by diameter
+    /// band, the pre-drill D − allowance, and the power of the annulus by hand:
+    /// D 10, allowance 0.2 (pre-drill 9.8), z 6, κr 45°, vc 20 → n = 636.6 rpm, f 0.3 mm/rev →
+    /// vf 191.0 mm/min; area π/4 (100 − 96.04) = 3.1102 mm²; Q = 0.5940 cm³/min;
+    /// h = 0.05 · sin 45° = 0.035355; kc = 700 · h^(−0.25) = 1614.4; Pc = Q kc / 60e3 = 0.01598 kW.
+    #[test]
+    fn reaming_from_the_allowance_annulus() {
+        let mut g = group();
+        g.kc1_1 = 700.0;
+        g.mc = 0.25;
+        let row = DrillRow {
+            group: "N".into(),
+            substrate: "carbide".into(),
+            vc: 20.0,
+            d_rows: vec![5.0, 20.0],
+            f_rows: vec![0.3, 0.3],
+            real: false,
+            cites: Vec::new(),
+        };
+        let table = feeds::ReamAllowance {
+            substrate: "carbide".into(),
+            d_to: vec![5.0, 20.0],
+            allowance: vec![0.1, 0.2],
+            real: false,
+            cites: Vec::new(),
+        };
+        let tool = DrillTool {
+            d: 10.0,
+            flutes: 6,
+            point: 0.0,
+            substrate: Substrate::Carbide,
+            preset: None,
+        };
+        let r = reaming(
+            &ReamAsk::default(),
+            &tool,
+            Some(&g),
+            None,
+            Some(&row),
+            Some(&table),
+            &spindle(),
+        )
+        .unwrap();
+        assert!((r.rpm.v - 636.6198).abs() < 1e-3 && (r.f.v - 0.3).abs() < 1e-12);
+        assert_eq!((r.allowance.v, r.predrill.v), (0.2, 9.8));
+        assert!((r.mrr - 0.59397).abs() < 1e-4, "{}", r.mrr);
+        assert!((r.power - 0.015981).abs() < 2e-6, "{}", r.power);
+        assert_eq!(r.kr.source, Source::Default);
+        assert!(r.f.note.contains("reaming data"), "{}", r.f.note);
+        // the user's allowance wins; none at all is reported, not guessed
+        let u = reaming(
+            &ReamAsk {
+                allowance: Some(0.3),
+                ..ReamAsk::default()
+            },
+            &tool,
+            Some(&g),
+            None,
+            Some(&row),
+            Some(&table),
+            &spindle(),
+        )
+        .unwrap();
+        assert_eq!((u.allowance.source, u.predrill.v), (Source::User, 9.7));
+        let none = reaming(
+            &ReamAsk::default(),
+            &tool,
+            Some(&g),
+            None,
+            Some(&row),
+            None,
+            &spindle(),
+        )
+        .unwrap();
+        assert!(none.allowance.v.is_nan());
+        assert!(
+            none.checks
+                .iter()
+                .any(|c| c.what == "allowance" && c.verdict == Verdict::NotChecked)
+        );
+    }
+
+    /// An arc from the cutter's edge is `at_sample`'s cut (side cut ae = 3 of D 10: θ from
+    /// asin(1 − 2·0.3) to 90°); a full slot is θ −90°..90° (hex = fz, hm = 2fz/π); a span inside
+    /// the arc (an island) has the same peak chip where it contains the normal and less width.
+    #[test]
+    fn at_arc_matches_at_sample_from_the_edge() {
+        let g = group();
+        let t = ToolData {
+            d: 10.0,
+            flutes: 3,
+            ball: false,
+            re: 0.0,
+            substrate: Substrate::Carbide,
+            coating: "",
+            beam: None,
+            class: None,
+            preset: None,
+            generic: None,
+        };
+        let half = 0.5 * PI;
+        let lo = forge_math::dmath::asin(1.0 - 2.0 * 0.3);
+        let a = at_arc(&g, &t, 5000.0, 0.05, lo, half, 6.0, 0.0);
+        let s = at_sample(&g, &t, 5000.0, 0.05, 3.0, 6.0, 0.0);
+        for (x, y) in [
+            (a.hex, s.hex),
+            (a.hm, s.hm),
+            (a.power, s.power),
+            (a.torque, s.torque),
+            (a.phi, s.phi),
+        ] {
+            assert!((x - y).abs() < 1e-9 * y.abs().max(1.0), "{x} {y}");
+        }
+        let slot = at_arc(&g, &t, 5000.0, 0.05, -half, half, 6.0, 0.0);
+        assert!((slot.hex - 0.05).abs() < 1e-12 && (slot.hm - 0.1 / PI).abs() < 1e-12);
+        let island = at_arc(&g, &t, 5000.0, 0.05, -0.2, 0.3, 6.0, 0.0);
+        assert!(island.hex == 0.05 && island.power < slot.power);
     }
 }
