@@ -393,3 +393,76 @@ fn ok_is_held_while_the_live_solve_reports_an_error() {
     assert_eq!(src(&h), before, "OK wrote a link in error");
     assert!(matches!(&asm(&h).tool, Some(AsmTool::Link(_))));
 }
+
+/// Esc backs out of the dialog up over the view, as its Cancel or ×: an assembly tool's, and
+/// Place from Content Center. Before: Esc closed none of them (the shell took the key for its own
+/// levels, which had no dialog among them), so each stayed up under the next one opened.
+#[test]
+fn escape_closes_the_dialog_up() {
+    use forge_render::shell::FgCmd;
+    let f = fixtures("escape", TWO);
+    let Some(mut h) = open(&f) else { return };
+    for c in [
+        FgCmd::Place,
+        FgCmd::Joint,
+        FgCmd::Constrain,
+        FgCmd::FreeMove,
+        FgCmd::FreeRotate,
+    ] {
+        let fg = h.gui.shell.fg.as_mut().unwrap();
+        forge_render::shell::asmtools::command(fg, c);
+        h.step();
+        assert!(asm(&h).tool.is_some(), "{c:?}: no dialog");
+        h.key(egui::Key::Escape);
+        h.step();
+        assert!(asm(&h).tool.is_none(), "{c:?}: Esc left its dialog up");
+    }
+    h.gui.shell.content.open = true;
+    h.step();
+    h.key(egui::Key::Escape);
+    h.step();
+    assert!(!h.gui.shell.content.open, "Esc left Place from Content Center up");
+}
+
+/// Place lists the .fg files of the assembly's folder and of the folders beside it, and reads
+/// each to see which is an assembly: as the loaders read, so a fifo or a link to a device there is
+/// no assembly, and the dialog opens. Before: it read each with `read_to_string`, and opening a
+/// fifo named `x.fg` beside the assembly's folder waited forever (the app hung on Place); a link
+/// to /dev/zero read till the memory ran out.
+#[cfg(unix)]
+#[test]
+fn place_lists_beside_files_without_reading_a_fifo_or_a_device() {
+    let d = scratch("place-kinds");
+    let (asm, other) = (d.join("asm"), d.join("other"));
+    std::fs::create_dir_all(&asm).unwrap();
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(asm.join("top.fg"), "assembly\n").unwrap();
+    std::fs::write(other.join("sub.fg"), "assembly\n").unwrap();
+    std::fs::write(other.join("bar.fg"), link(10.0)).unwrap();
+    let fifo = other.join("pipe.fg");
+    let _ = std::fs::remove_file(&fifo);
+    assert!(
+        std::process::Command::new("mkfifo")
+            .arg(&fifo)
+            .status()
+            .unwrap()
+            .success(),
+        "mkfifo"
+    );
+    let _ = std::fs::remove_file(other.join("zero.fg"));
+    std::os::unix::fs::symlink("/dev/zero", other.join("zero.fg")).unwrap();
+    let (tx, rx) = std::sync::mpsc::channel();
+    let at = asm.clone();
+    std::thread::spawn(move || {
+        let _ = tx.send(forge_render::shell::asmtools::place_list(&at, "top.fg"));
+    });
+    let got = rx
+        .recv_timeout(std::time::Duration::from_secs(20))
+        .expect("Place's list never came: it waited on the fifo, or read /dev/zero");
+    let row = |n: &str| got.iter().find(|r| r.0 == n).map(|r| r.1);
+    assert_eq!(row("../other/sub.fg"), Some(true), "{got:?}");
+    assert_eq!(row("../other/bar.fg"), Some(false), "{got:?}");
+    assert_eq!(row("../other/pipe.fg"), Some(false), "{got:?}");
+    assert_eq!(row("../other/zero.fg"), Some(false), "{got:?}");
+    let _ = std::fs::remove_dir_all(&d);
+}

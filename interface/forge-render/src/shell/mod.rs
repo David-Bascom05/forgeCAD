@@ -1240,6 +1240,7 @@ impl Shell {
 
     /// Esc backs out one level, wherever one is: never two, and never none.
     fn escape_one_level(&mut self, ctx: &egui::Context) {
+        fgasm::escape_clear(ctx);
         if !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             return;
         }
@@ -1258,6 +1259,13 @@ impl Shell {
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {
             p.tool = None;
             self.status.clear();
+        // the dialogs up over the view, each as its Cancel or × (Esc closed none of them)
+        } else if self.content.open {
+            self.content.open = false;
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.occ_edit.is_some()) {
+            p.occ_edit = None;
+        } else if let Some(t) = self.fg.as_ref().and_then(|p| p.asm.as_ref()?.tool.as_ref()) {
+            fgasm::escape_to(ctx, t.head());
         } else if let Some(p) = self
             .fg
             .as_mut()
