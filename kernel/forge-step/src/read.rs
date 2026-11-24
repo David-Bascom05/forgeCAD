@@ -133,8 +133,10 @@ fn number(f: &File, v: &Value) -> Option<f64> {
     }
 }
 
+/// Positive and finite: a size read from the file, after its unit (a finite number times the unit
+/// can overflow to infinity).
 fn positive(x: f64) -> bool {
-    x > 0.0
+    x > 0.0 && x.is_finite()
 }
 
 fn enum_of<'x>(f: &File<'x>, v: &Value) -> Option<&'x str> {
@@ -554,16 +556,16 @@ impl<'a> Reader<'a> {
                 if !(positive(major) && positive(minor)) {
                     return refuse(id, "ELLIPSE", "a semi-axis not positive");
                 }
-                Ok(Curve::Ellipse(Ellipse { frame, major, minor }))
+                Ok(Curve::Ellipse(Ellipse::new(frame, major, minor)))
             }
             "PARABOLA" => {
                 let a = self.args_of(id, "PARABOLA")?;
                 let frame = self.placement(self.reference(id, "PARABOLA", a.get(1))?)?;
                 let focal = self.real(id, "PARABOLA", a.get(2))? * m;
-                if focal == 0.0 {
-                    return refuse(id, "PARABOLA", "no focal length");
+                if focal == 0.0 || !focal.is_finite() {
+                    return refuse(id, "PARABOLA", "no finite focal length");
                 }
-                Ok(Curve::Parabola(Parabola { frame, focal }))
+                Ok(Curve::Parabola(Parabola::new(frame, focal)))
             }
             "HYPERBOLA" => {
                 let a = self.args_of(id, "HYPERBOLA")?;

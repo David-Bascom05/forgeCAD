@@ -46,7 +46,7 @@ fn a_bore_is_helices_down_the_hole() {
         .chain(cam.ops.iter().filter_map(|o| o.refusal.clone()))
         .collect();
     assert!(msgs.iter().any(|m| m.contains("a core of")), "{msgs:?}");
-    for (extra, msg) in [(", pitch: 1, ramp: 3", "not both"), (", ramp: 50", "ramp:")] {
+    for (extra, msg) in [(", pitch: 1, ramp: 3", "not both"), (", ramp: 50", "`ramp`")] {
         let cam = run(extra);
         let msgs: Vec<String> = cam
             .errors

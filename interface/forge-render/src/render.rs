@@ -1161,7 +1161,9 @@ impl Renderer {
             msaa,
             &over,
         );
-        let seen_not_kept = depth_state(false, wgpu::CompareFunction::LessEqual);
+        // the depth is reversed (cleared to 0, nearer greater): a ghost is drawn where it is
+        // nearer than what is opaque, or where nothing is (GreaterEqual), never only behind it
+        let seen_not_kept = depth_state(false, wgpu::CompareFunction::GreaterEqual);
         let face_ghost = pipeline(
             ("face_colour_vs", "exact_mark_fs"),
             &colour_buffers,

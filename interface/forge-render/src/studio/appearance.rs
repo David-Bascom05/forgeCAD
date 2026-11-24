@@ -452,6 +452,8 @@ mod tests {
         assert_eq!(apps.for_material(brass).unwrap().name, "Brass");
         let al = forge_material::find("6061-T6").unwrap();
         assert_eq!(apps.for_material(al).unwrap().name, "Aluminium, machined");
+        let inconel = forge_material::find("Inconel 718").unwrap();
+        assert_eq!(apps.for_material(inconel).unwrap().name, "Nickel alloy");
         // a plastic part takes its own colour
         let abs = forge_material::find("ABS").unwrap();
         let b = apps.resolve(None, Some(abs), Some([255, 0, 0]));

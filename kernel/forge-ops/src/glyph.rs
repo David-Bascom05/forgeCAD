@@ -69,11 +69,14 @@ pub fn flat(s: &GlyphSeg) -> Flat {
             ) else {
                 return Flat::Line { a: p0, b: p2 };
             };
+            // (a focal length that underflows or overflows makes no parabola: the segment is
+            // taken as its chord, as a near-straight one is above; H.curveOK.conic)
+            let focal = uy * uy / (4.0 * wl);
+            if !(focal.is_finite() && focal != 0.0) {
+                return Flat::Line { a: p0, b: p2 };
+            }
             Flat::Parabola {
-                curve: Parabola {
-                    frame,
-                    focal: uy * uy / (4.0 * wl),
-                },
+                curve: Parabola::new(frame, focal),
                 range: Interval::new(-uy * tv, uy * (1.0 - tv)),
             }
         }
@@ -126,10 +129,10 @@ impl Level {
         Some(match (self.place, *f) {
             (Place::Flat(_), Flat::Line { .. }) => line()?,
             (Place::Flat(fr), Flat::Parabola { curve, range }) => (
-                Curve::Parabola(Parabola {
-                    frame: Level::lifted(&fr, self.at).compose(&curve.frame),
-                    focal: curve.focal,
-                }),
+                Curve::Parabola(Parabola::new(
+                    Level::lifted(&fr, self.at).compose(&curve.frame),
+                    curve.focal,
+                )),
                 range,
                 true,
             ),
@@ -345,6 +348,15 @@ pub fn glyph(
 mod tests {
     use super::*;
     use forge_topo::check;
+
+    /// A quadratic whose tangent is so short across its axis that the focal length underflows to
+    /// zero (`uy` = 1e-170, past every near-straight test above) is taken as its chord, not made a
+    /// parabola of no focal length (H.curveOK.conic; `Parabola::new` asserts it non-zero).
+    #[test]
+    fn a_focal_length_that_underflows_is_taken_as_the_chord() {
+        let (p0, c, p2) = (p(0.0, 0.0), p(0.0, 5e-171), p(1.0, 1e-170));
+        assert_eq!(flat(&GlyphSeg::Quad(p0, c, p2)), Flat::Line { a: p0, b: p2 });
+    }
 
     fn p(x: f64, y: f64) -> Point2 {
         Point2::new(x, y)

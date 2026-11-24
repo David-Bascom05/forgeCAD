@@ -7,6 +7,7 @@
 [[generic]]
 group = "K"
 family = "*"
+hardness = "*"
 op = "*"
 tier = "*"
 flutes = 0
@@ -31,8 +32,36 @@ taken = "2026-11-24"
 basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 349 rows of class K any op; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
 
 [[generic]]
+group = "K"
+family = "*"
+hardness = "soft"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 217
+makers = ["helical", "lakeshore"]
+vc = [50.2900, 60.9600, 60.9600, 76.2000, 124.9700]
+chip = [0.3892, 0.5390, 0.6579, 0.9547, 1.7794]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 217 rows of class K any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 217 rows of class K any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
 group = "M"
 family = "*"
+hardness = "*"
 op = "*"
 tier = "*"
 flutes = 0
@@ -59,6 +88,7 @@ basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each ro
 [[generic]]
 group = "M"
 family = "*"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 0
@@ -85,6 +115,88 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "M"
 family = "*"
+hardness = "*"
+op = "finish"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 84
+makers = ["harvey", "helical"]
+vc = [44.2000, 44.2000, 54.8600, 68.5800, 91.4400]
+chip = [0.5077, 0.5359, 0.5923, 0.7310, 1.7588]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 84 rows of class M finish, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 84 rows of class M finish, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "*"
+op = "finish"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 84
+makers = ["harvey", "helical"]
+vc = [44.2000, 44.2000, 54.8600, 68.5800, 91.4400]
+chip = [0.5077, 0.5359, 0.5923, 0.7310, 1.7588]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 84 rows of class M finish, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 84 rows of class M finish, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "*"
+op = "finish"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 84
+makers = ["harvey", "helical"]
+vc = [44.2000, 44.2000, 54.8600, 68.5800, 91.4400]
+chip = [0.5077, 0.5359, 0.5923, 0.7310, 1.7588]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 84 rows of class M finish, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 84 rows of class M finish, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 0
@@ -111,6 +223,88 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "M"
 family = "*"
+hardness = "*"
+op = "rough"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 109
+makers = ["harvey", "helical"]
+vc = [44.2000, 54.8600, 60.9600, 67.0600, 91.4400]
+chip = [0.9555, 1.1268, 1.3176, 1.6769, 3.7661]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 109 rows of class M rough, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 109 rows of class M rough, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "*"
+op = "rough"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 109
+makers = ["harvey", "helical"]
+vc = [44.2000, 54.8600, 60.9600, 67.0600, 91.4400]
+chip = [0.9555, 1.1268, 1.3176, 1.6769, 3.7661]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 109 rows of class M rough, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 109 rows of class M rough, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "*"
+op = "rough"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 109
+makers = ["harvey", "helical"]
+vc = [44.2000, 54.8600, 60.9600, 67.0600, 91.4400]
+chip = [0.9555, 1.1268, 1.3176, 1.6769, 3.7661]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 109 rows of class M rough, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 109 rows of class M rough, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 0
@@ -135,8 +329,441 @@ taken = "2026-11-24"
 basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 90 rows of class M slot; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
 
 [[generic]]
+group = "M"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 90
+makers = ["harvey", "helical"]
+vc = [44.2000, 44.2000, 60.9600, 67.0600, 91.4400]
+chip = [0.6086, 0.7118, 0.7608, 0.9583, 2.0190]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 90 rows of class M slot, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 90 rows of class M slot, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 90
+makers = ["harvey", "helical"]
+vc = [44.2000, 44.2000, 60.9600, 67.0600, 91.4400]
+chip = [0.6086, 0.7118, 0.7608, 0.9583, 2.0190]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 90 rows of class M slot, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 90 rows of class M slot, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 90
+makers = ["harvey", "helical"]
+vc = [44.2000, 44.2000, 60.9600, 67.0600, 91.4400]
+chip = [0.6086, 0.7118, 0.7608, 0.9583, 2.0190]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 90 rows of class M slot, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 90 rows of class M slot, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 236
+makers = ["harvey", "helical", "lakeshore"]
+vc = [45.7200, 60.9600, 67.0600, 76.2000, 91.4400]
+chip = [0.6205, 0.7562, 0.9617, 1.1468, 3.7661]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' cutting speeds (the middle of each printed range) over 236 rows of class M any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 236 rows of class M any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 29
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 80.7700, 80.7700, 91.4400]
+chip = [0.6205, 0.6487, 0.6961, 0.8876, 1.7588]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 29 rows of class M finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 29 rows of class M finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 29
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 80.7700, 80.7700, 91.4400]
+chip = [0.6205, 0.6487, 0.6961, 0.8876, 1.7588]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 29 rows of class M finish, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 29 rows of class M finish, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 29
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 80.7700, 80.7700, 91.4400]
+chip = [0.6205, 0.6487, 0.6961, 0.8876, 1.7588]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 29 rows of class M finish, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 29 rows of class M finish, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 29
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 80.7700, 80.7700, 91.4400]
+chip = [0.6205, 0.6487, 0.6961, 0.8876, 1.7588]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 29 rows of class M finish, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 29 rows of class M finish, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 54
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 67.0600, 67.0600, 91.4400]
+chip = [1.2017, 1.5279, 1.7140, 1.8435, 3.7661]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 54 rows of class M rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 54 rows of class M rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 54
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 67.0600, 67.0600, 91.4400]
+chip = [1.2017, 1.5279, 1.7140, 1.8435, 3.7661]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 54 rows of class M rough, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 54 rows of class M rough, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 54
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 67.0600, 67.0600, 91.4400]
+chip = [1.2017, 1.5279, 1.7140, 1.8435, 3.7661]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 54 rows of class M rough, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 54 rows of class M rough, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 54
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 67.0600, 67.0600, 91.4400]
+chip = [1.2017, 1.5279, 1.7140, 1.8435, 3.7661]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 54 rows of class M rough, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 54 rows of class M rough, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 35
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 67.0600, 80.7700, 91.4400]
+chip = [0.8340, 1.0651, 1.0780, 1.1001, 2.0190]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 35 rows of class M slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 35 rows of class M slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 35
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 67.0600, 80.7700, 91.4400]
+chip = [0.8340, 1.0651, 1.0780, 1.1001, 2.0190]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 35 rows of class M slot, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 35 rows of class M slot, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 35
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 67.0600, 80.7700, 91.4400]
+chip = [0.8340, 1.0651, 1.0780, 1.1001, 2.0190]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 35 rows of class M slot, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 35 rows of class M slot, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "M"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 35
+makers = ["harvey", "helical"]
+vc = [67.0600, 67.0600, 67.0600, 80.7700, 91.4400]
+chip = [0.8340, 1.0651, 1.0780, 1.1001, 2.0190]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 35 rows of class M slot, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 35 rows of class M slot, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
 group = "N"
 family = "*"
+hardness = "*"
 op = "*"
 tier = "*"
 flutes = 0
@@ -163,6 +790,7 @@ basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "*"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 0
@@ -189,6 +817,169 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "*"
+hardness = "*"
+op = "finish"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 43
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 234.7000, 426.7200, 640.0800]
+chip = [0.2156, 0.2156, 0.2427, 0.3397, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 43 rows of class N finish, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 43 rows of class N finish, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "finish"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 43
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 234.7000, 426.7200, 640.0800]
+chip = [0.2156, 0.2156, 0.2427, 0.3397, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 43 rows of class N finish, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 43 rows of class N finish, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "finish"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 93
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.1819, 0.2158, 0.2972, 0.6429, 0.9236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 93 rows of class N finish, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 93 rows of class N finish, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "finish"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 93
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.1819, 0.2158, 0.2972, 0.6429, 0.9236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 93 rows of class N finish, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 93 rows of class N finish, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "finish"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 43
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 234.7000, 426.7200, 640.0800]
+chip = [0.2156, 0.2156, 0.2427, 0.3397, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 43 rows of class N finish, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 43 rows of class N finish, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "finish"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 93
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.1819, 0.2158, 0.2972, 0.6429, 0.9236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 93 rows of class N finish, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 93 rows of class N finish, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 0
@@ -215,6 +1006,169 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "*"
+hardness = "*"
+op = "rough"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 83
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.7526, 0.8329, 0.9226, 1.1654, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 83 rows of class N rough, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 83 rows of class N rough, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "rough"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 83
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.7526, 0.8329, 0.9226, 1.1654, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 83 rows of class N rough, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 83 rows of class N rough, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "rough"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 303
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 167.6400, 640.0800]
+chip = [0.6434, 0.7372, 1.0000, 1.1423, 1.6429]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 303 rows of class N rough, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 303 rows of class N rough, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "rough"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 303
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 167.6400, 640.0800]
+chip = [0.6434, 0.7372, 1.0000, 1.1423, 1.6429]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 303 rows of class N rough, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 303 rows of class N rough, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "rough"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 83
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.7526, 0.8329, 0.9226, 1.1654, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 83 rows of class N rough, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 83 rows of class N rough, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "rough"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 303
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 167.6400, 640.0800]
+chip = [0.6434, 0.7372, 1.0000, 1.1423, 1.6429]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 303 rows of class N rough, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 303 rows of class N rough, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 0
@@ -240,7 +1194,764 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 
 [[generic]]
 group = "N"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 53
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 228.6000, 243.8400, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.6598, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 53 rows of class N slot, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 53 rows of class N slot, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 53
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 228.6000, 243.8400, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.6598, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 53 rows of class N slot, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 53 rows of class N slot, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 143
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 228.6000, 640.0800]
+chip = [0.4173, 0.4546, 0.8563, 0.8577, 1.2318]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 143 rows of class N slot, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 143 rows of class N slot, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 143
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 228.6000, 640.0800]
+chip = [0.4173, 0.4546, 0.8563, 0.8577, 1.2318]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 143 rows of class N slot, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 143 rows of class N slot, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 53
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 228.6000, 243.8400, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.6598, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 53 rows of class N slot, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 53 rows of class N slot, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 143
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 228.6000, 640.0800]
+chip = [0.4173, 0.4546, 0.8563, 0.8577, 1.2318]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 143 rows of class N slot, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 143 rows of class N slot, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 1013
+makers = ["harvey", "helical", "lakeshore"]
+vc = [68.5800, 68.5800, 152.4000, 205.7400, 640.0800]
+chip = [0.1819, 0.4221, 0.5964, 0.8329, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' cutting speeds (the middle of each printed range) over 1013 rows of class N any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 1013 rows of class N any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 136
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 152.4000, 234.7000, 640.0800]
+chip = [0.1819, 0.2156, 0.2831, 0.6426, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 136 rows of class N finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 136 rows of class N finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 43
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 234.7000, 426.7200, 640.0800]
+chip = [0.2156, 0.2156, 0.2427, 0.3397, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 43 rows of class N finish, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 43 rows of class N finish, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 43
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 234.7000, 426.7200, 640.0800]
+chip = [0.2156, 0.2156, 0.2427, 0.3397, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 43 rows of class N finish, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 43 rows of class N finish, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 93
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.1819, 0.2158, 0.2972, 0.6429, 0.9236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 93 rows of class N finish, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 93 rows of class N finish, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 93
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.1819, 0.2158, 0.2972, 0.6429, 0.9236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 93 rows of class N finish, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 93 rows of class N finish, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 43
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 234.7000, 426.7200, 640.0800]
+chip = [0.2156, 0.2156, 0.2427, 0.3397, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 43 rows of class N finish, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 43 rows of class N finish, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 93
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.1819, 0.2158, 0.2972, 0.6429, 0.9236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 93 rows of class N finish, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 93 rows of class N finish, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 386
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 228.6000, 640.0800]
+chip = [0.6434, 0.7526, 0.9396, 1.1423, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 386 rows of class N rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 386 rows of class N rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 83
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.7526, 0.8329, 0.9226, 1.1654, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 83 rows of class N rough, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 83 rows of class N rough, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 83
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.7526, 0.8329, 0.9226, 1.1654, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 83 rows of class N rough, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 83 rows of class N rough, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 303
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 167.6400, 640.0800]
+chip = [0.6434, 0.7372, 1.0000, 1.1423, 1.6429]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 303 rows of class N rough, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 303 rows of class N rough, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 303
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 167.6400, 640.0800]
+chip = [0.6434, 0.7372, 1.0000, 1.1423, 1.6429]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 303 rows of class N rough, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 303 rows of class N rough, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 83
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.7526, 0.8329, 0.9226, 1.1654, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 83 rows of class N rough, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 83 rows of class N rough, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 303
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 167.6400, 640.0800]
+chip = [0.6434, 0.7372, 1.0000, 1.1423, 1.6429]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 303 rows of class N rough, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 303 rows of class N rough, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 196
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 234.7000, 640.0800]
+chip = [0.4124, 0.4482, 0.6598, 0.8577, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 196 rows of class N slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 196 rows of class N slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 53
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 228.6000, 243.8400, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.6598, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 53 rows of class N slot, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 53 rows of class N slot, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 53
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 228.6000, 243.8400, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.6598, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 53 rows of class N slot, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 53 rows of class N slot, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 143
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 228.6000, 640.0800]
+chip = [0.4173, 0.4546, 0.8563, 0.8577, 1.2318]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 143 rows of class N slot, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 143 rows of class N slot, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 143
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 228.6000, 640.0800]
+chip = [0.4173, 0.4546, 0.8563, 0.8577, 1.2318]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 143 rows of class N slot, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 143 rows of class N slot, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 53
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 228.6000, 243.8400, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.6598, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 53 rows of class N slot, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 53 rows of class N slot, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 143
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 228.6000, 640.0800]
+chip = [0.4173, 0.4546, 0.8563, 0.8577, 1.2318]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 143 rows of class N slot, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 143 rows of class N slot, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
 family = "aluminium"
+hardness = "*"
 op = "*"
 tier = "*"
 flutes = 0
@@ -267,6 +1978,7 @@ basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 0
@@ -293,6 +2005,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 2
@@ -319,6 +2032,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 2
@@ -345,6 +2059,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 3
@@ -371,6 +2086,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 3
@@ -397,6 +2113,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "finish"
 tier = "material-specific"
 flutes = 2
@@ -423,6 +2140,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "finish"
 tier = "material-specific"
 flutes = 3
@@ -449,6 +2167,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 0
@@ -475,6 +2194,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 2
@@ -501,6 +2221,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 2
@@ -527,6 +2248,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 3
@@ -553,6 +2275,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 3
@@ -579,6 +2302,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "rough"
 tier = "material-specific"
 flutes = 2
@@ -605,6 +2329,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "rough"
 tier = "material-specific"
 flutes = 3
@@ -631,6 +2356,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 0
@@ -657,6 +2383,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 2
@@ -683,6 +2410,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 2
@@ -709,6 +2437,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 3
@@ -735,6 +2464,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 3
@@ -761,6 +2491,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "slot"
 tier = "material-specific"
 flutes = 2
@@ -787,6 +2518,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "aluminium"
+hardness = "*"
 op = "slot"
 tier = "material-specific"
 flutes = 3
@@ -812,7 +2544,602 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 
 [[generic]]
 group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 354
+makers = ["harvey", "helical", "lakeshore"]
+vc = [152.4000, 205.7400, 228.6000, 304.8000, 640.0800]
+chip = [0.1819, 0.4104, 0.5410, 0.8031, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' cutting speeds (the middle of each printed range) over 354 rows of class N aluminium any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 354 rows of class N aluminium any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 58
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 426.7200, 426.7200, 640.0800]
+chip = [0.1819, 0.2156, 0.2427, 0.3255, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 58 rows of class N aluminium finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 58 rows of class N aluminium finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 24
+makers = ["harvey", "helical"]
+vc = [228.6000, 426.7200, 426.7200, 426.7200, 640.0800]
+chip = [0.2156, 0.2156, 0.2627, 0.3255, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 24 rows of class N aluminium finish, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 24 rows of class N aluminium finish, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 24
+makers = ["harvey", "helical"]
+vc = [228.6000, 426.7200, 426.7200, 426.7200, 640.0800]
+chip = [0.2156, 0.2156, 0.2627, 0.3255, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 24 rows of class N aluminium finish, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 24 rows of class N aluminium finish, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 34
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.1819, 0.2068, 0.2291, 0.3538, 0.9236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 34 rows of class N aluminium finish, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 34 rows of class N aluminium finish, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 34
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.1819, 0.2068, 0.2291, 0.3538, 0.9236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 34 rows of class N aluminium finish, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 34 rows of class N aluminium finish, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "finish"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 24
+makers = ["harvey", "helical"]
+vc = [228.6000, 426.7200, 426.7200, 426.7200, 640.0800]
+chip = [0.2156, 0.2156, 0.2627, 0.3255, 0.9412]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 24 rows of class N aluminium finish, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 24 rows of class N aluminium finish, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "finish"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 34
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.1819, 0.2068, 0.2291, 0.3538, 0.9236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 34 rows of class N aluminium finish, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 34 rows of class N aluminium finish, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 108
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 228.6000, 304.8000, 640.0800]
+chip = [0.7372, 0.8043, 0.8907, 1.2500, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 108 rows of class N aluminium rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 108 rows of class N aluminium rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 32
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.8329, 0.8485, 0.8907, 1.3333, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 32 rows of class N aluminium rough, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 32 rows of class N aluminium rough, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 32
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.8329, 0.8485, 0.8907, 1.3333, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 32 rows of class N aluminium rough, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 32 rows of class N aluminium rough, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 76
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 228.6000, 304.8000, 640.0800]
+chip = [0.7372, 0.8043, 0.8472, 1.2500, 1.6429]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 76 rows of class N aluminium rough, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 76 rows of class N aluminium rough, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 76
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 228.6000, 304.8000, 640.0800]
+chip = [0.7372, 0.8043, 0.8472, 1.2500, 1.6429]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 76 rows of class N aluminium rough, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 76 rows of class N aluminium rough, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "rough"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 32
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.8329, 0.8485, 0.8907, 1.3333, 1.6745]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 32 rows of class N aluminium rough, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 32 rows of class N aluminium rough, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "rough"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 76
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 228.6000, 304.8000, 640.0800]
+chip = [0.7372, 0.8043, 0.8472, 1.2500, 1.6429]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 76 rows of class N aluminium rough, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 76 rows of class N aluminium rough, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 70
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.7143, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 70 rows of class N aluminium slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 70 rows of class N aluminium slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 26
+makers = ["harvey", "helical"]
+vc = [228.6000, 304.8000, 426.7200, 426.7200, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.6491, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 26 rows of class N aluminium slot, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 26 rows of class N aluminium slot, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 26
+makers = ["harvey", "helical"]
+vc = [228.6000, 304.8000, 426.7200, 426.7200, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.6491, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 26 rows of class N aluminium slot, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 26 rows of class N aluminium slot, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 44
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.4173, 0.4330, 0.6646, 1.0711, 1.2318]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 44 rows of class N aluminium slot, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 44 rows of class N aluminium slot, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 44
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.4173, 0.4330, 0.6646, 1.0711, 1.2318]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 44 rows of class N aluminium slot, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 44 rows of class N aluminium slot, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "slot"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 26
+makers = ["harvey", "helical"]
+vc = [228.6000, 304.8000, 426.7200, 426.7200, 640.0800]
+chip = [0.4124, 0.4173, 0.4546, 0.6491, 1.2535]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 26 rows of class N aluminium slot, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 26 rows of class N aluminium slot, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "aluminium"
+hardness = "soft"
+op = "slot"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 44
+makers = ["harvey", "helical"]
+vc = [228.6000, 228.6000, 304.8000, 426.7200, 640.0800]
+chip = [0.4173, 0.4330, 0.6646, 1.0711, 1.2318]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 44 rows of class N aluminium slot, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 44 rows of class N aluminium slot, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
 family = "copper"
+hardness = "*"
 op = "*"
 tier = "*"
 flutes = 0
@@ -839,6 +3166,7 @@ basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 0
@@ -865,6 +3193,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 2
@@ -891,6 +3220,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 2
@@ -917,6 +3247,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 3
@@ -943,6 +3274,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 3
@@ -969,6 +3301,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "finish"
 tier = "material-specific"
 flutes = 2
@@ -995,6 +3328,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "finish"
 tier = "material-specific"
 flutes = 3
@@ -1021,6 +3355,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 0
@@ -1047,6 +3382,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 2
@@ -1073,6 +3409,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 2
@@ -1099,6 +3436,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 3
@@ -1125,6 +3463,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 3
@@ -1151,6 +3490,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "rough"
 tier = "material-specific"
 flutes = 2
@@ -1177,6 +3517,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "rough"
 tier = "material-specific"
 flutes = 3
@@ -1203,6 +3544,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 0
@@ -1229,6 +3571,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 2
@@ -1255,6 +3598,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 2
@@ -1281,6 +3625,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 3
@@ -1307,6 +3652,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 3
@@ -1333,6 +3679,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "slot"
 tier = "material-specific"
 flutes = 2
@@ -1359,6 +3706,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "N"
 family = "copper"
+hardness = "*"
 op = "slot"
 tier = "material-specific"
 flutes = 3
@@ -1383,8 +3731,603 @@ taken = "2026-11-24"
 basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 77 rows of class N copper slot, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
 
 [[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 555
+makers = ["harvey", "helical", "lakeshore"]
+vc = [68.5800, 68.5800, 99.0600, 152.4000, 234.7000]
+chip = [0.1886, 0.4221, 0.5891, 0.7526, 1.3397]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' cutting speeds (the middle of each printed range) over 555 rows of class N copper any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 555 rows of class N copper any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 64
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 152.4000, 234.7000]
+chip = [0.1886, 0.2158, 0.3397, 0.6426, 0.7541]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 64 rows of class N copper finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 64 rows of class N copper finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 17
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 152.4000, 234.7000, 234.7000]
+chip = [0.2156, 0.2156, 0.2427, 0.3397, 0.7541]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 17 rows of class N copper finish, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 17 rows of class N copper finish, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 17
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 152.4000, 234.7000, 234.7000]
+chip = [0.2156, 0.2156, 0.2427, 0.3397, 0.7541]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 17 rows of class N copper finish, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 17 rows of class N copper finish, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 47
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 152.4000, 234.7000]
+chip = [0.1886, 0.2158, 0.6426, 0.6429, 0.7391]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 47 rows of class N copper finish, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 47 rows of class N copper finish, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 47
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 152.4000, 234.7000]
+chip = [0.1886, 0.2158, 0.6426, 0.6429, 0.7391]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 47 rows of class N copper finish, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 47 rows of class N copper finish, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "finish"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 17
+makers = ["harvey", "helical"]
+vc = [68.5800, 152.4000, 152.4000, 234.7000, 234.7000]
+chip = [0.2156, 0.2156, 0.2427, 0.3397, 0.7541]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 17 rows of class N copper finish, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 17 rows of class N copper finish, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "finish"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 47
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 152.4000, 234.7000]
+chip = [0.1886, 0.2158, 0.6426, 0.6429, 0.7391]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 47 rows of class N copper finish, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 47 rows of class N copper finish, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 214
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 68.5800, 152.4000, 234.7000]
+chip = [0.6434, 0.6786, 0.9226, 1.0550, 1.3397]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 214 rows of class N copper rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 214 rows of class N copper rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 41
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 152.4000, 234.7000]
+chip = [0.7526, 0.7526, 0.8889, 1.1645, 1.3397]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 41 rows of class N copper rough, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 41 rows of class N copper rough, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 41
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 152.4000, 234.7000]
+chip = [0.7526, 0.7526, 0.8889, 1.1645, 1.3397]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 41 rows of class N copper rough, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 41 rows of class N copper rough, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 173
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 68.5800, 152.4000, 234.7000]
+chip = [0.6434, 0.6434, 1.0000, 1.0000, 1.3137]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 173 rows of class N copper rough, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 173 rows of class N copper rough, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 173
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 68.5800, 152.4000, 234.7000]
+chip = [0.6434, 0.6434, 1.0000, 1.0000, 1.3137]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 173 rows of class N copper rough, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 173 rows of class N copper rough, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "rough"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 41
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 152.4000, 234.7000]
+chip = [0.7526, 0.7526, 0.8889, 1.1645, 1.3397]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 41 rows of class N copper rough, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 41 rows of class N copper rough, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "rough"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 173
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 68.5800, 152.4000, 234.7000]
+chip = [0.6434, 0.6434, 1.0000, 1.0000, 1.3137]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 173 rows of class N copper rough, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 173 rows of class N copper rough, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 100
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 68.5800, 152.4000, 234.7000]
+chip = [0.4328, 0.4536, 0.8563, 0.8572, 1.0001]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 100 rows of class N copper slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 100 rows of class N copper slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 2
+coating = "*"
+helix = "*"
+n = 23
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 167.6400, 234.7000]
+chip = [0.4328, 0.4328, 0.4546, 1.0000, 1.0001]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 23 rows of class N copper slot, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 23 rows of class N copper slot, soft, 2 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 23
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 167.6400, 234.7000]
+chip = [0.4328, 0.4328, 0.4546, 1.0000, 1.0001]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 23 rows of class N copper slot, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 23 rows of class N copper slot, soft, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 3
+coating = "*"
+helix = "*"
+n = 77
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 68.5800, 152.4000, 234.7000]
+chip = [0.4482, 0.4870, 0.8563, 0.8572, 0.9861]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 77 rows of class N copper slot, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 77 rows of class N copper slot, soft, 3 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 77
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 68.5800, 152.4000, 234.7000]
+chip = [0.4482, 0.4870, 0.8563, 0.8572, 0.9861]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 77 rows of class N copper slot, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 77 rows of class N copper slot, soft, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "slot"
+tier = "material-specific"
+flutes = 2
+coating = "uncoated"
+helix = "*"
+n = 23
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 152.4000, 167.6400, 234.7000]
+chip = [0.4328, 0.4328, 0.4546, 1.0000, 1.0001]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 23 rows of class N copper slot, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 23 rows of class N copper slot, soft, material-specific, 2 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "N"
+family = "copper"
+hardness = "soft"
+op = "slot"
+tier = "material-specific"
+flutes = 3
+coating = "uncoated"
+helix = "*"
+n = 77
+makers = ["harvey", "helical"]
+vc = [68.5800, 68.5800, 68.5800, 152.4000, 234.7000]
+chip = [0.4482, 0.4870, 0.8563, 0.8572, 0.9861]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 77 rows of class N copper slot, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 77 rows of class N copper slot, soft, material-specific, 3 flutes, uncoated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
 group = "P"
 family = "*"
+hardness = "*"
 op = "*"
 tier = "*"
 flutes = 0
@@ -1411,6 +4354,7 @@ basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each ro
 [[generic]]
 group = "P"
 family = "*"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 0
@@ -1437,6 +4381,88 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "P"
 family = "*"
+hardness = "*"
+op = "finish"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 157
+makers = ["harvey", "helical"]
+vc = [44.2000, 45.7200, 54.8600, 79.2500, 138.6800]
+chip = [0.4615, 0.5031, 0.5702, 0.6781, 1.5988]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 157 rows of class P finish, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 157 rows of class P finish, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "*"
+op = "finish"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 157
+makers = ["harvey", "helical"]
+vc = [44.2000, 45.7200, 54.8600, 79.2500, 138.6800]
+chip = [0.4615, 0.5031, 0.5702, 0.6781, 1.5988]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 157 rows of class P finish, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 157 rows of class P finish, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "*"
+op = "finish"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 157
+makers = ["harvey", "helical"]
+vc = [44.2000, 45.7200, 54.8600, 79.2500, 138.6800]
+chip = [0.4615, 0.5031, 0.5702, 0.6781, 1.5988]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 157 rows of class P finish, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 157 rows of class P finish, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 0
@@ -1463,6 +4489,88 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "P"
 family = "*"
+hardness = "*"
+op = "rough"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 207
+makers = ["harvey", "helical"]
+vc = [44.2000, 45.7200, 54.8600, 76.2000, 138.6800]
+chip = [0.9870, 1.0575, 1.3077, 1.5899, 3.4236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 207 rows of class P rough, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 207 rows of class P rough, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "*"
+op = "rough"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 207
+makers = ["harvey", "helical"]
+vc = [44.2000, 45.7200, 54.8600, 76.2000, 138.6800]
+chip = [0.9870, 1.0575, 1.3077, 1.5899, 3.4236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 207 rows of class P rough, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 207 rows of class P rough, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "*"
+op = "rough"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 207
+makers = ["harvey", "helical"]
+vc = [44.2000, 45.7200, 54.8600, 76.2000, 138.6800]
+chip = [0.9870, 1.0575, 1.3077, 1.5899, 3.4236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 207 rows of class P rough, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 207 rows of class P rough, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 0
@@ -1487,8 +4595,468 @@ taken = "2026-11-24"
 basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 169 rows of class P slot; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
 
 [[generic]]
+group = "P"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 169
+makers = ["harvey", "helical"]
+vc = [44.2000, 45.7200, 54.8600, 79.2500, 138.6800]
+chip = [0.5556, 0.6667, 0.7647, 0.9231, 1.8353]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 169 rows of class P slot, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 169 rows of class P slot, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 169
+makers = ["harvey", "helical"]
+vc = [44.2000, 45.7200, 54.8600, 79.2500, 138.6800]
+chip = [0.5556, 0.6667, 0.7647, 0.9231, 1.8353]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 169 rows of class P slot, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 169 rows of class P slot, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "*"
+op = "slot"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 169
+makers = ["harvey", "helical"]
+vc = [44.2000, 45.7200, 54.8600, 79.2500, 138.6800]
+chip = [0.5556, 0.6667, 0.7647, 0.9231, 1.8353]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 169 rows of class P slot, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 169 rows of class P slot, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "21-36HRC"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 191
+makers = ["helical", "lakeshore"]
+vc = [42.6700, 53.3400, 53.3400, 76.2000, 121.9200]
+chip = [0.4872, 0.5702, 0.7692, 1.0000, 2.2222]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 191 rows of class P any op, 21-36HRC; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 191 rows of class P any op, 21-36HRC; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 479
+makers = ["harvey", "helical", "lakeshore"]
+vc = [50.2900, 54.8600, 76.2000, 88.3900, 138.6800]
+chip = [0.5385, 0.8824, 1.1615, 1.5556, 3.4236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' cutting speeds (the middle of each printed range) over 479 rows of class P any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 479 rows of class P any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 80
+makers = ["harvey", "helical"]
+vc = [54.8600, 76.2000, 77.7200, 103.6300, 138.6800]
+chip = [0.5385, 0.5897, 0.6372, 0.8233, 1.5988]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 80 rows of class P finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 80 rows of class P finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 80
+makers = ["harvey", "helical"]
+vc = [54.8600, 76.2000, 77.7200, 103.6300, 138.6800]
+chip = [0.5385, 0.5897, 0.6372, 0.8233, 1.5988]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 80 rows of class P finish, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 80 rows of class P finish, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 80
+makers = ["harvey", "helical"]
+vc = [54.8600, 76.2000, 77.7200, 103.6300, 138.6800]
+chip = [0.5385, 0.5897, 0.6372, 0.8233, 1.5988]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 80 rows of class P finish, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 80 rows of class P finish, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 80
+makers = ["harvey", "helical"]
+vc = [54.8600, 76.2000, 77.7200, 103.6300, 138.6800]
+chip = [0.5385, 0.5897, 0.6372, 0.8233, 1.5988]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 80 rows of class P finish, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 80 rows of class P finish, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 130
+makers = ["harvey", "helical"]
+vc = [54.8600, 54.8600, 76.2000, 77.7200, 138.6800]
+chip = [1.2807, 1.4838, 1.6834, 1.9079, 3.4236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 130 rows of class P rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 130 rows of class P rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 130
+makers = ["harvey", "helical"]
+vc = [54.8600, 54.8600, 76.2000, 77.7200, 138.6800]
+chip = [1.2807, 1.4838, 1.6834, 1.9079, 3.4236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 130 rows of class P rough, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 130 rows of class P rough, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 130
+makers = ["harvey", "helical"]
+vc = [54.8600, 54.8600, 76.2000, 77.7200, 138.6800]
+chip = [1.2807, 1.4838, 1.6834, 1.9079, 3.4236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 130 rows of class P rough, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 130 rows of class P rough, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 130
+makers = ["harvey", "helical"]
+vc = [54.8600, 54.8600, 76.2000, 77.7200, 138.6800]
+chip = [1.2807, 1.4838, 1.6834, 1.9079, 3.4236]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 130 rows of class P rough, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 130 rows of class P rough, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 92
+makers = ["harvey", "helical"]
+vc = [54.8600, 54.8600, 76.2000, 88.3900, 138.6800]
+chip = [0.8824, 0.9231, 1.0000, 1.2309, 1.8353]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 92 rows of class P slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 92 rows of class P slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 4
+coating = "*"
+helix = "*"
+n = 92
+makers = ["harvey", "helical"]
+vc = [54.8600, 54.8600, 76.2000, 88.3900, 138.6800]
+chip = [0.8824, 0.9231, 1.0000, 1.2309, 1.8353]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 92 rows of class P slot, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 92 rows of class P slot, soft, 4 flutes; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 92
+makers = ["harvey", "helical"]
+vc = [54.8600, 54.8600, 76.2000, 88.3900, 138.6800]
+chip = [0.8824, 0.9231, 1.0000, 1.2309, 1.8353]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 92 rows of class P slot, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 92 rows of class P slot, soft, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "P"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "material-specific"
+flutes = 4
+coating = "coated"
+helix = "*"
+n = 92
+makers = ["harvey", "helical"]
+vc = [54.8600, 54.8600, 76.2000, 88.3900, 138.6800]
+chip = [0.8824, 0.9231, 1.0000, 1.2309, 1.8353]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 92 rows of class P slot, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 92 rows of class P slot, soft, material-specific, 4 flutes, coated; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
 group = "S"
 family = "*"
+hardness = "*"
 op = "*"
 tier = "*"
 flutes = 0
@@ -1515,6 +5083,7 @@ basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each ro
 [[generic]]
 group = "S"
 family = "*"
+hardness = "*"
 op = "finish"
 tier = "*"
 flutes = 0
@@ -1541,6 +5110,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "S"
 family = "*"
+hardness = "*"
 op = "rough"
 tier = "*"
 flutes = 0
@@ -1567,6 +5137,7 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 [[generic]]
 group = "S"
 family = "*"
+hardness = "*"
 op = "slot"
 tier = "*"
 flutes = 0
@@ -1592,7 +5163,116 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 
 [[generic]]
 group = "S"
+family = "*"
+hardness = "soft"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 328
+makers = ["harvey", "helical", "lakeshore"]
+vc = [24.3800, 35.0500, 45.7200, 53.3400, 91.4400]
+chip = [0.6431, 0.9579, 1.1596, 1.5125, 6.6003]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' cutting speeds (the middle of each printed range) over 328 rows of class S any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 3 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 328 rows of class S any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "S"
+family = "*"
+hardness = "soft"
+op = "finish"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 40
+makers = ["harvey", "helical"]
+vc = [24.3800, 24.3800, 24.3800, 83.8200, 91.4400]
+chip = [0.6431, 0.7034, 0.9477, 1.1870, 3.7133]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 40 rows of class S finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 40 rows of class S finish, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "S"
+family = "*"
+hardness = "soft"
+op = "rough"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 65
+makers = ["harvey", "helical"]
+vc = [24.3800, 24.3800, 68.5800, 68.5800, 91.4400]
+chip = [1.1934, 1.5390, 3.1466, 3.9764, 6.6003]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 65 rows of class S rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 65 rows of class S rough, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "S"
+family = "*"
+hardness = "soft"
+op = "slot"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 46
+makers = ["harvey", "helical"]
+vc = [24.3800, 24.3800, 68.5800, 68.5800, 91.4400]
+chip = [0.7506, 0.9075, 1.7515, 2.3736, 4.9541]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 46 rows of class S slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 46 rows of class S slot, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "S"
 family = "nickel"
+hardness = "*"
 op = "*"
 tier = "*"
 flutes = 0
@@ -1618,7 +5298,35 @@ basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each ro
 
 [[generic]]
 group = "S"
+family = "nickel"
+hardness = "soft"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 92
+makers = ["helical", "lakeshore"]
+vc = [24.3800, 24.3800, 24.3800, 38.1000, 60.9600]
+chip = [0.6431, 0.8624, 0.9318, 1.1648, 1.7471]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 92 rows of class S nickel any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 92 rows of class S nickel any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "S"
 family = "titanium"
+hardness = "*"
 op = "*"
 tier = "*"
 flutes = 0
@@ -1641,6 +5349,33 @@ status = "estimate"
 source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
 taken = "2026-11-24"
 basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 283 rows of class S titanium any op; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+
+[[generic]]
+group = "S"
+family = "titanium"
+hardness = "soft"
+op = "*"
+tier = "*"
+flutes = 0
+coating = "*"
+helix = "*"
+n = 184
+makers = ["helical", "lakeshore"]
+vc = [35.0500, 41.1500, 45.7200, 53.3400, 91.4400]
+chip = [0.9343, 0.9706, 1.1596, 1.4478, 4.2222]
+real = true
+[[generic.cite]]
+path = "vc"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' cutting speeds (the middle of each printed range) over 184 rows of class S titanium any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
+[[generic.cite]]
+path = "chip"
+status = "estimate"
+source = "research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)"
+taken = "2026-11-24"
+basis = "min, 10th and 25th percentiles, median, max of 2 makers' chips (each row's fz thinned at its own ae and ap, over the group's slot chip at its diameter) over 184 rows of class S titanium any op, soft; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)"
 
 [[turn_generic]]
 group = "K"

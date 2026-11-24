@@ -723,7 +723,7 @@ impl Session {
                     ("i3", m.principal[2]),
                 ]
             }
-            ["wall"] => match measure::wall(body, &mesh) {
+            ["wall"] => match forge_wall::wall(body, &mesh) {
                 Some((t, p)) => vec![("wall", t), ("x", p.x), ("y", p.y), ("z", p.z)],
                 None => return Err("no wall found".into()),
             },

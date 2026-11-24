@@ -46,7 +46,7 @@ axiom alloc.sync.Arc (T : Type _) : Type
 axiom forge_geom.intcurve.IntCurve : Type
 
 /-- [forge_geom::curve::ProcCurve]
-    Source: 'kernel/forge-geom/src/curve.rs', lines 171:0-171:20
+    Source: 'kernel/forge-geom/src/curve.rs', lines 203:0-203:20
     Name pattern: [forge_geom::curve::ProcCurve]
     Visibility: public -/
 @[rust_type "forge_geom::curve::ProcCurve"]

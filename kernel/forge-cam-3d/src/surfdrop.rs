@@ -31,39 +31,55 @@ impl<'s, 'a> SurfDrop<'s, 'a> {
 
     /// Every face near the move proven at least `-limit` (≥ 0) below the grown column over it.
     fn clear(&self, a: [f64; 3], b: [f64; 3], limit: f64) -> bool {
-        let lo = [a[0].min(b[0]), a[1].min(b[1])];
-        let hi = [a[0].max(b[0]), a[1].max(b[1])];
-        self.clear_moves(&[Move::Line { a, b }], lo, hi, limit)
-    }
-
-    /// `clear` for the checker's moves over the xy box [lo, hi] (the moves' own).
-    fn clear_moves(&self, mvs: &[Move], lo: [f64; 2], hi: [f64; 2], limit: f64) -> bool {
         let r = self.chk.r;
-        let idx = self.grid.near(lo[0] - r, lo[1] - r, hi[0] + r, hi[1] + r);
-        for mv in mvs {
-            let mut i = 0;
-            while i < idx.len() {
-                let f = &self.sf.faces[idx[i] as usize];
-                // the closed form for a ball cutter (contact.rs: sphere, cylinder, plane, torus,
-                // cone; lines only), then the column's gap on a small budget: undecided is "not
-                // proven", and the strategy splits the piece
-                if forge_cam_geom::contact::clear(&self.sf.cutter, f, mv, self.sf.leave + limit).is_some() {
-                    i += 1;
-                    continue;
-                }
-                match gap_move(&self.chk, f, mv, limit, self.sf.res, GAP_BUDGET).0 {
-                    Gap::Clear { .. } => {}
-                    Gap::Over { .. } => return false,
-                    // undecided by the column: not proven. The generator splits the piece (short
-                    // pieces resolve by the closed forms), which is far cheaper than a branch and
-                    // bound here; the path's certification is the checker's, after
-                    Gap::Unknown => return false,
-                }
-                i += 1;
+        let idx = self.grid.near(
+            a[0].min(b[0]) - r,
+            a[1].min(b[1]) - r,
+            a[0].max(b[0]) + r,
+            a[1].max(b[1]) + r,
+        );
+        let mv = Move::Line { a, b };
+        // the answer is "every face near is proven clear", the same in any order of the faces:
+        // the face that refused this thread's last move first (the pieces of a split chord
+        // and the next chords mostly fail on the same face), so a refusal costs one face
+        let first = LAST_REFUSED.with(|c| c.get());
+        if idx.contains(&first) && !self.face_clear(first as usize, &mv, limit) {
+            return false;
+        }
+        let mut i = 0;
+        while i < idx.len() {
+            if idx[i] != first && !self.face_clear(idx[i] as usize, &mv, limit) {
+                LAST_REFUSED.with(|c| c.set(idx[i]));
+                return false;
             }
+            i += 1;
         }
         true
     }
+
+    /// Face `fi` proven at least `-limit` below the grown column over the move.
+    fn face_clear(&self, fi: usize, mv: &Move, limit: f64) -> bool {
+        let f = &self.sf.faces[fi];
+        // the closed form for a ball cutter (contact.rs: sphere, cylinder, plane, torus,
+        // cone), then the column's gap on a small budget: undecided is "not proven", and
+        // the strategy splits the piece
+        if forge_cam_geom::contact::clear(&self.sf.cutter, f, mv, self.sf.leave + limit).is_some() {
+            return true;
+        }
+        match gap_move(&self.chk, f, mv, limit, self.sf.res, GAP_BUDGET).0 {
+            Gap::Clear { .. } => true,
+            Gap::Over { .. } => false,
+            // undecided by the column: not proven. The generator splits the piece (short
+            // pieces resolve by the closed forms), which is far cheaper than a branch and
+            // bound here; the path's certification is the checker's, after
+            Gap::Unknown => false,
+        }
+    }
+}
+
+std::thread_local! {
+    /// The face index that refused this thread's last segment test (a hint only: see `clear`).
+    static LAST_REFUSED: std::cell::Cell<u32> = const { std::cell::Cell::new(u32::MAX) };
 }
 
 impl DropCutter for SurfDrop<'_, '_> {
@@ -93,7 +109,8 @@ impl DropCutter for SurfDrop<'_, '_> {
     fn arc3_below(&self, a: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool, slack: f64) -> bool {
         let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
         let slack = slack.max(0.0);
-        if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite()) && slack.is_finite() && slack > 0.0) {
+        if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite()) && slack.is_finite() && slack > 0.0)
+        {
             return false;
         }
         let tau = std::f64::consts::TAU;
@@ -134,10 +151,15 @@ impl DropCutter for SurfDrop<'_, '_> {
         let w = r + grown.r;
         let idx = self.grid.near(c[0] - w, c[1] - w, c[0] + w, c[1] + w);
         for k in 0..n {
-            let mv = Move::Line { a: at(k), b: at(k + 1) };
+            let mv = Move::Line {
+                a: at(k),
+                b: at(k + 1),
+            };
             for &i in &idx {
                 let f = &self.sf.faces[i as usize];
-                if forge_cam_geom::contact::clear(&self.sf.cutter, f, &mv, self.sf.leave - slack + sag).is_some() {
+                if forge_cam_geom::contact::clear(&self.sf.cutter, f, &mv, self.sf.leave - slack + sag)
+                    .is_some()
+                {
                     continue;
                 }
                 match gap_move(&grown, f, &mv, -slack, self.sf.res, GAP_BUDGET).0 {
