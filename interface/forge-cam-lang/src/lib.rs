@@ -2144,6 +2144,11 @@ impl Cam {
             posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
+        for k in ["direction", "finish", "finish_step", "spring"] {
+            if a.contains_key(k) && kind != "contour" {
+                return Err(format!("{kind} does not take `{k}:` (contour does)"));
+            }
+        }
         if a.contains_key("leave_axial") && !matches!(kind, "facing" | "clear" | "contour" | "pocket") {
             return Err(format!(
                 "{kind} does not take `leave_axial:` (facing, clear, contour and pocket do)"
@@ -2267,6 +2272,7 @@ impl Cam {
                         let bottom = get_num(a, "to", Some(part.bbox.0[2]))? + ax;
                         let side = get_str(a, "side", Some("outside"))?;
                         let leave = get_num(a, "leave", Some(0.0))?;
+                        let passes = contour_passes(a, d)?;
                         let zmid = 0.5 * (top + bottom);
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                             .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
@@ -2292,7 +2298,7 @@ impl Cam {
                                     voids.push((Some(forge_cam_geom::boolean::region_of(&band)), bottom));
                                 }
                             }
-                            ops::contour(
+                            ops::contour_passes(
                                 &rg,
                                 ops::Cut {
                                     tool: t,
@@ -2303,11 +2309,12 @@ impl Cam {
                                 ops::Span { top, bottom, step },
                                 leave,
                                 true,
+                                passes,
                             )
                             .map(|p| vec![p])
                             .map_err(|e| format!("{e:?}"))
                         } else {
-                            ops::contour(
+                            ops::contour_passes(
                                 &rg,
                                 ops::Cut {
                                     tool: t,
@@ -2318,6 +2325,7 @@ impl Cam {
                                 ops::Span { top, bottom, step },
                                 leave,
                                 false,
+                                passes,
                             )
                             .map(|p| vec![p])
                             .map_err(|e| format!("{e:?}"))
@@ -2975,6 +2983,36 @@ fn pockets_of(sec: &Region) -> Result<Vec<Region>, String> {
 }
 
 /// The section's outer loops alone (outside work), or its islands as pocket boundaries.
+/// A contour's passes from its arguments: `direction: "climb" | "conventional"` (default: as
+/// built, an outside contour conventional and an inside one climb), `finish: n` radial passes
+/// (default 1) `finish_step:` apart (default a tenth of the tool's diameter), `spring: n` the
+/// last pass again (default 0).
+fn contour_passes(a: &BTreeMap<String, V>, d: f64) -> Result<ops::Passes, String> {
+    let count = |k: &str, default: f64, least: f64| -> Result<usize, String> {
+        let x = get_num(a, k, Some(default))?;
+        if x.fract() != 0.0 || x < least || x > 100.0 {
+            return Err(format!("{k}: a whole number from {least} to 100"));
+        }
+        Ok(x as usize)
+    };
+    let climb = match a.get("direction") {
+        None => None,
+        Some(V::Str(s)) if s == "climb" => Some(true),
+        Some(V::Str(s)) if s == "conventional" => Some(false),
+        Some(_) => return Err("direction: \"climb\" or \"conventional\"".into()),
+    };
+    let finish_step = get_num(a, "finish_step", Some(0.1 * d))?;
+    if !(finish_step > 0.0 && finish_step.is_finite()) {
+        return Err("finish_step: a length over 0".into());
+    }
+    Ok(ops::Passes {
+        climb,
+        finish: count("finish", 1.0, 1.0)?,
+        finish_step,
+        spring: count("spring", 0.0, 0.0)?,
+    })
+}
+
 fn outer_or_inner(sec: &Region, outer: bool) -> Result<Region, String> {
     let mut cx = forge_cam_geom::real::Ctx::new();
     let ex = forge_cam_geom::region::validate(&mut cx, sec).map_err(|e| format!("{e:?}"))?;

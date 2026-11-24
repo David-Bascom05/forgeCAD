@@ -60,7 +60,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:, leave_axial:)` | zig-zag over the stock down to `to` |
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, leave_axial:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
-| `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
+| `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, leave_axial:, ramp:)` | a hole feature's circle, to its depth |
 | `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, leave_axial:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
 | `slot(SETUP, PART.SKETCH, tool:, depth:, step:, from:, ramp:)` | an end mill (flat or bull) along the sketch's lines, arcs and circles (not construction), on a plane facing +z, in levels down to `depth`: the groove the tool's width, modelled in the part (G1 against the part). `ramp: DEG` enters along each curve's first line, back and forth at that angle from the level above; else a plunge. The stock records each curve's band of the tool's radius as cleared (above the corner radius for a bull). examples/machined/slot_plate_cam.fg |
@@ -79,6 +79,12 @@ refused as undecided.
 `leave_axial:` the axial stock (on floors: the op's lowest level, `to:` or a hole's depth, is
 raised by it), both default 0, either may be negative; `facing`, `clear`, `contour` and `pocket`
 take `leave_axial:`, the others refuse it. G4 grows the part by the larger of the two.
+
+A contour's `direction:` is `"climb"` (the part on the tool's right, with the spindle M03) or
+`"conventional"`; by default, as built: the loops run counter-clockwise, so an outside contour is
+conventional and an inside one climb. `finish: n` (default 1) cuts n radial passes at each level,
+`finish_step:` apart (default a tenth of the tool's diameter), the last at the contour's own offset;
+`spring: n` (default 0) repeats the last pass n times. Only `contour` takes these four.
 
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.

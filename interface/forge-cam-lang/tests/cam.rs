@@ -1086,3 +1086,55 @@ fn axial_stock_to_leave_raises_the_floors() {
         cam.errors
     );
 }
+
+/// A contour's direction and passes (Fusion parity): with M03 an outside contour as built runs
+/// counter-clockwise round the part (conventional: G3 at its corners); `direction: "climb"`
+/// reverses it (G2). `finish: n` radial passes `finish_step` apart, the last at the contour's own
+/// offset, and `spring: n` repeats the last: each a loop at every level, all certified.
+#[test]
+fn a_contour_takes_its_direction_and_passes() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let run = |extra: &str| {
+        let body = format!(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4)\nprof = contour(op1, tool: t1, side: \"outside\", from: 12, to: -0.5, step: 4{extra})\nprog = program(op1, post: \"fanuc\", number: 1)\n"
+        );
+        let cam = forge_cam_lang::run(&doc(&body), &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        let o = cam.ops.iter().find(|o| o.name == "prof").unwrap();
+        assert_eq!(o.status, "built", "{:?}", o.refusal);
+        let (txt, _) = cam.program_text().unwrap();
+        let prof: String = txt.split("(prof contour)").nth(1).unwrap().to_string();
+        let plunges = o.paths[0]
+            .moves
+            .iter()
+            .filter(|m| {
+                matches!(
+                    m,
+                    forge_cam::ops::PMove::Line {
+                        phase: forge_cam::ops::Phase::Plunge,
+                        ..
+                    }
+                )
+            })
+            .count();
+        (prof.contains("G3 "), prof.contains("G2 "), plunges)
+    };
+    let (g3, g2, n0) = run("");
+    assert!(g3 && !g2, "as built: conventional outside");
+    let (g3, g2, n1) = run(", direction: \"climb\"");
+    assert!(g2 && !g3, "climb outside: clockwise round the part");
+    assert_eq!(n1, n0);
+    let (_, _, n2) = run(", direction: \"conventional\", finish: 2, finish_step: 0.5, spring: 1");
+    assert_eq!(n2, 3 * n0, "two radial passes and a spring pass at each level");
+    let cam = forge_cam_lang::run(
+        &doc("top = clear(op1, tool: t1, from: 18, to: 12, spring: 1)\n"),
+        &dir,
+    );
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("clear does not take `spring:`")),
+        "{:?}",
+        cam.errors
+    );
+}

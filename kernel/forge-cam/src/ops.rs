@@ -7,7 +7,7 @@
 //! and down at the plunge feed. Rapids run at the clearance height, above the stock.
 use forge_cam_geom::check::{self, Face, Move, Verdict};
 use forge_cam_geom::offset::offset;
-use forge_cam_geom::region::{Region, Seg};
+use forge_cam_geom::region::{Loop, Region, Seg};
 use forge_cam_geom::tool::{Part, Shape};
 use forge_math::dmath;
 use forge_tooling::Tool;
@@ -595,44 +595,104 @@ pub enum OpError {
     NeedTool { what: String },
 }
 
+/// A contour's passes: its cut direction, its radial finishing passes and spring passes.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Passes {
+    /// Climb (`Some(true)`: the part on the tool's right, M03) or conventional (`Some(false)`);
+    /// `None`: as the offset gives the loops (counter-clockwise: an outside contour
+    /// conventional, an inside one climb).
+    pub climb: Option<bool>,
+    /// Radial passes at each level (at least 1): the last at the contour's own offset, each
+    /// earlier one `finish_step` further from the part.
+    pub finish: usize,
+    pub finish_step: f64,
+    /// The last pass again, this many times, at each level.
+    pub spring: usize,
+}
+
+impl Default for Passes {
+    fn default() -> Passes {
+        Passes {
+            climb: None,
+            finish: 1,
+            finish_step: 0.0,
+            spring: 0,
+        }
+    }
+}
+
 /// Contour: the region's boundary, offset by the tool radius plus `leave` (outside for the
 /// part's outline: `outside` true), at each level.
 pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Result<OpPath, OpError> {
+    contour_passes(rg, c, sp, leave, outside, Passes::default())
+}
+
+/// `contour` with its passes: at each level, the radial passes from the farthest in to the
+/// contour's own, then the spring passes; each loop in the direction asked.
+pub fn contour_passes(
+    rg: &Region,
+    c: Cut,
+    sp: Span,
+    leave: f64,
+    outside: bool,
+    ps: Passes,
+) -> Result<OpPath, OpError> {
     let Cut { tool, tidx, h, feed } = c;
     let Span { top, bottom, step } = sp;
-    let r = 0.5 * tool.tool.dc + leave;
-    let d = if outside { -r } else { r };
-    let (loops, _) = offset(rg, d).map_err(|e| OpError::Region(format!("{e:?}")))?;
-    let loops: Vec<_> = loops
-        .into_iter()
-        .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
-        .collect();
-    if loops.is_empty() {
-        return Err(OpError::ToolTooBig {
-            tool_d: tool.tool.dc,
-            why: "the tool does not fit the contour".into(),
-        });
+    let n = ps.finish.max(1);
+    // the loops of each radial pass, the contour's own last
+    let mut passes: Vec<Vec<Loop>> = Vec::with_capacity(n);
+    for k in 0..n {
+        let r = 0.5 * tool.tool.dc + leave + (n - 1 - k) as f64 * ps.finish_step;
+        let d = if outside { -r } else { r };
+        let (loops, _) = offset(rg, d).map_err(|e| OpError::Region(format!("{e:?}")))?;
+        let loops: Vec<Loop> = loops
+            .into_iter()
+            .filter(|l| !(l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b)))
+            .map(|l| {
+                // counter-clockwise from the offset: the part is on the tool's left outside
+                // (conventional with M03), on its right inside (climb)
+                let flip = match ps.climb {
+                    None => false,
+                    Some(climb) => climb == outside,
+                };
+                let l = Loop { segs: l.segs };
+                if flip { l.reversed() } else { l }
+            })
+            .collect();
+        if loops.is_empty() {
+            return Err(OpError::ToolTooBig {
+                tool_d: tool.tool.dc,
+                why: "the tool does not fit the contour".into(),
+            });
+        }
+        passes.push(loops);
+    }
+    for _ in 0..ps.spring {
+        passes.push(passes[n - 1].clone());
     }
     let mut mv = Vec::new();
-    let first = loops[0].segs[0].start();
+    let first = passes[0][0].segs[0].start();
     let start = [first.x, first.y, h.clear];
     for z in levels(top, bottom, step) {
-        for l in &loops {
-            let s = l.segs[0].start();
-            mv.push(PMove::Rapid {
-                to: [s.x, s.y, h.retract],
-            });
-            mv.push(PMove::Line {
-                to: [s.x, s.y, z],
-                f: feed.1,
-                phase: Phase::Plunge,
-            });
-            push_loop(&mut mv, &l.segs, z, feed.0);
-            mv.push(PMove::Line {
-                to: [s.x, s.y, h.retract],
-                f: feed.0,
-                phase: Phase::Link,
-            });
+        for loops in &passes {
+            for l in loops {
+                let s = l.segs[0].start();
+                mv.push(PMove::Rapid {
+                    to: [s.x, s.y, h.retract],
+                });
+                mv.push(PMove::Line {
+                    to: [s.x, s.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                push_loop(&mut mv, &l.segs, z, feed.0);
+                mv.push(PMove::Line {
+                    to: [s.x, s.y, h.retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
         }
     }
     mv.push(PMove::Rapid {
