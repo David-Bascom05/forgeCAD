@@ -36,6 +36,8 @@ impl Kind {
             Phase::Plunge => Kind::Plunge,
             Phase::Link => Kind::Link,
             Phase::Rapid => Kind::Rapid,
+            // a probe's search shows as a link until CAM-SIM gives it its own look
+            Phase::Probe | Phase::Touch => Kind::Link,
         }
     }
 }
@@ -182,6 +184,15 @@ pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64
             PMove::Line { to, f, phase } => {
                 put(segs, i, Kind::of(phase), at, to, None, f, &mut t);
                 at = to;
+            }
+            // a probe move: its search to the nominal contact, and its back-off when it has one
+            PMove::Probe { to, f, back, .. } => {
+                put(segs, i, Kind::Link, at, to, None, f, &mut t);
+                if back {
+                    put(segs, i, Kind::Link, to, at, None, f, &mut t);
+                } else {
+                    at = to;
+                }
             }
             PMove::Arc { to, c, cw, f } => {
                 let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();

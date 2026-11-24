@@ -193,6 +193,8 @@ fn pieces(from: [f64; 3], m: &PMove, l: f64) -> Vec<[f64; 3]> {
                 .collect()
         }
         PMove::Cycle { .. } => vec![],
+        // a probe cuts nothing
+        PMove::Probe { .. } => vec![],
     }
 }
 
@@ -352,10 +354,17 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
                         q.removed += m.sweep(top, [holes[0], holes[1], z], &prof);
                         continue;
                     }
+                    // a probe cuts nothing: no quality measure
+                    PMove::Probe { to, back, .. } => {
+                        if !back {
+                            at = to;
+                        }
+                        continue;
+                    }
                 };
                 let to = match *mv {
                     PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-                    PMove::Cycle { .. } => unreachable!(),
+                    PMove::Cycle { .. } | PMove::Probe { .. } => unreachable!(),
                 };
                 let dxy = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
                 let dz = to[2] - at[2];

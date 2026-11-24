@@ -389,9 +389,12 @@ impl Sim {
 
     /// The certified checks that did not pass, and G4's leftover regions, as markers.
     fn markers_of(&self) -> Vec<Marker> {
-        let mut out = vec![];
+        let mut out: Vec<Marker> = vec![];
         for (oi, op) in self.cam.ops.iter().enumerate() {
             let paths = self.cam.sim_paths(oi);
+            // an op refused before it had moves (planning said no): one marker at its place on
+            // the timeline, over its setup's stock, saying why, so it is never silently absent
+            let had = out.len();
             for c in &op.checks {
                 if c.verdict == "pass" {
                     continue;
@@ -429,6 +432,26 @@ impl Sim {
                     } else {
                         format!(" on {}", c.other)
                     },
+                    region: None,
+                });
+            }
+            if op.status == "refused" && out.len() == had {
+                let at = self.setups.get(op.setup).map_or([0.0; 3], |su| {
+                    let (a, b) = (su.stock.min, su.stock.max);
+                    [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1]), b[2]]
+                });
+                out.push(Marker {
+                    op: Some(oi),
+                    setup: op.setup,
+                    rule: "refused".into(),
+                    verdict: "fail".into(),
+                    at,
+                    t: self.tl.ops.get(oi).map_or(0.0, |sp| sp.t0),
+                    text: format!(
+                        "{} refused: {}",
+                        op.name,
+                        op.refusal.as_deref().unwrap_or("no reason given")
+                    ),
                     region: None,
                 });
             }

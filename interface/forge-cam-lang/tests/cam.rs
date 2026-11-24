@@ -908,6 +908,8 @@ fn cycle_time_counts_arcs() {
                         at = to;
                     }
                     forge_cam::ops::PMove::Cycle { .. } => {}
+                    // (no probing op in this document)
+                    forge_cam::ops::PMove::Probe { .. } => panic!("a probe move in a cutting op"),
                 }
             }
         }

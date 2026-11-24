@@ -133,6 +133,50 @@ the top and the outline down to just above the jaws; `soft_jaw(.., from: op1)` m
 op1 left; `opj` cuts the jaws' pocket; op2 holds the part turned over in them and cuts the rest.
 Edit the part and every step follows: the jaws are recomputed from the new outline.
 
+## Probing
+
+A touch probe is a tool that cuts nothing, and probing ops measure with it.
+
+```text
+p   = probe("renishaw-omp40-2", t: 20, ball: 6, length: 50, stem: 3, body: [(20, 0, 69)])
+z0  = probe_wcs(op1, tool: p, kind: "surface", at: (25, 25, 20), wcs: 54)
+w   = probe_wcs(op1, tool: p, kind: "web", at: (0, 0, 10), size: 86, axis: "x")
+c   = probe_wcs(op1, tool: p, kind: "corner", at: (43, 43, 10), side: (1, 1))
+b   = probe_wcs(op1, tool: p, kind: "bore", at: (0, 0, 8), size: 20)
+chk = inspect(op1, tool: p, at: (43, 0, 10), normal: (1, 0, 0), nominal: 43, tol: 0.05)
+```
+
+- `probe(DEVICE, t:, ball:, length:, stem:, body:)`: the stylus ball's diameter, the stylus
+  length (mounting face to ball centre), the stem's diameter, and the probe body's rings
+  `(r, from, to)` above the mounting face (its envelope, needed to check it). The device's
+  record (kernel/forge-probe) fills these once that library is on this base.
+- `probe_wcs(SETUP, tool:, kind:, at:, ...)`: `surface` (`at` is where the ball's tip meets the
+  surface), `bore`, `boss` (diameter `size:`), `web`, `pocket` (width `size:` across `axis:`),
+  `corner` (`side:` the corner's free side). For the features, `at` is the centre (or corner) at
+  the height the ball's centre probes at. `wcs:` names the work offset the measurement is for.
+- `inspect(SETUP, tool:, at:, normal:, nominal:, tol:)`: one point along its outward normal.
+- Each takes `approach:` (start this far off the surface, default 5), `over:` (how far past the
+  nominal contact the search may go, default 1), `entry:` (the contact window starts this far
+  before the contact, default twice the setup's clearance, at least 0.5), `feed:` (the search,
+  default 100 mm/min) and `link_feed:` (the moves between, default 1000 mm/min).
+
+The approach must exceed `entry` by more than the clearance, so every probe move has a
+checked approach before its window. The window's soundness assumes the control stops within
+`over` of the first trigger: that is the probe's overtravel specification, so `over` must not
+exceed it (the device records give it as `overtravel`). Inside the window the ball is exempt
+against every face, not only the probed one (verify/forge-cam RESUME, H.probe): a second face
+there would give a wrong measurement, not a crash.
+
+Each probe move is certified as its whole search: from its start to `over` past the nominal
+contact, as if the probe never triggered. Every body of the probe keeps the setup's clearance
+from the part and the stock on every move. The one exception is the ball inside the contact
+window, from `entry` before the contact to `over` past it. A probe is never spun. It posts as
+the dialect's cited probe move: G38.2 on linuxcnc and grbl, then a move straight back to where
+the search started. A control with no openly published probe move refuses the program. The
+reply's op carries `probe`: the kind, what it measures, its points (each surface point and the
+direction of travel), the work offset, `sets_wcs` (false: a G38.2 post leaves the result in
+the control's variables and writes no offset), and the inspection's nominal and tolerance.
+
 ## Libraries
 
 Built in: generic tools, conservative holders, generic machines, generic vises and soft-jaw blanks

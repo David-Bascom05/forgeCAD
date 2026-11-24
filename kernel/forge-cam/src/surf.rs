@@ -1211,6 +1211,12 @@ impl ZMap {
                 }
                 PMove::Arc { to, .. } => at = to,
                 PMove::Cycle { holes, clear, .. } => at = [holes[0], holes[1], clear],
+                // a probe cuts nothing
+                PMove::Probe { to, back, .. } => {
+                    if !back {
+                        at = to
+                    }
+                }
             }
         }
     }

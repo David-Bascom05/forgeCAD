@@ -711,3 +711,57 @@ mod tests {
         assert!(one.note.contains("calibrated from your 1 log"));
     }
 }
+
+/// Which physical tool is mounted as each tool number of a job: per-project UI/CLI state, kept
+/// beside the document at `.forgecad/cam-mounts.toml` (never in the .fg, never in
+/// `cam/tool-instances/`). `t = label` pairs under `[mounts]`; the keys are written `T1`, `T2`, ...
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Mounts {
+    pub by_t: std::collections::BTreeMap<u32, String>,
+}
+
+/// The mounts file, relative to the project folder.
+pub const MOUNTS_FILE: &str = ".forgecad/cam-mounts.toml";
+
+impl Mounts {
+    pub fn read(src: &str) -> Result<Mounts, String> {
+        let t = crate::toml::parse(src).map_err(|e| format!("{MOUNTS_FILE}: line {}: {}", e.line, e.what))?;
+        let mut m = Mounts::default();
+        if let Some(crate::toml::Val::Table(tab)) = t.get("mounts") {
+            for (k, v) in tab {
+                let n: u32 = k
+                    .trim_start_matches(['T', 't'])
+                    .parse()
+                    .map_err(|_| format!("{MOUNTS_FILE}: `{k}` is not a tool number (T1, T2, ..)"))?;
+                let crate::toml::Val::Str(l) = v else {
+                    return Err(format!("{MOUNTS_FILE}: `{k}` must name an instance label"));
+                };
+                m.by_t.insert(n, l.clone());
+            }
+        }
+        Ok(m)
+    }
+
+    pub fn write(&self) -> String {
+        let mut o = String::from("# Physical tools mounted per tool number (forgecad tool log / the CAM workspace).\n[mounts]\n");
+        for (t, l) in &self.by_t {
+            o += &format!("T{t} = {}\n", q(l));
+        }
+        o
+    }
+}
+
+#[cfg(test)]
+mod mounts_tests {
+    use super::*;
+
+    #[test]
+    fn mounts_round_trip() {
+        let mut m = Mounts::default();
+        m.by_t.insert(3, "EM6-a".into());
+        m.by_t.insert(12, "drill \"b\"".into());
+        assert_eq!(Mounts::read(&m.write()).unwrap(), m);
+        assert!(Mounts::read("[mounts]\nX = \"a\"\n").is_err());
+        assert_eq!(Mounts::read("").unwrap(), Mounts::default());
+    }
+}
