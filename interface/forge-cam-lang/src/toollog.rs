@@ -397,13 +397,17 @@ pub fn run(env: &Env, store: &mut dyn Store, argv: &[String]) -> Out {
             let mut m = load_mounts(env)?;
             for w in &a.words[1..] {
                 if cmd == "mount" {
-                    let (t, l) = w.split_once('=').ok_or(format!("mount {w}: give T<number>=LABEL"))?;
+                    let (t, l) = w
+                        .split_once('=')
+                        .ok_or(format!("mount {w}: give T<number>=LABEL"))?;
                     let n: u32 = t
                         .trim_start_matches(['T', 't'])
                         .parse()
                         .map_err(|_| format!("mount {w}: `{t}` is not a tool number"))?;
                     if !all.iter().any(|i| i.label == l) {
-                        return Err(format!("no tool instance `{l}` (add it: forgecad tool log add {l} --tool ID)"));
+                        return Err(format!(
+                            "no tool instance `{l}` (add it: forgecad tool log add {l} --tool ID)"
+                        ));
                     }
                     m.by_t.insert(n, l.to_string());
                 } else {
@@ -416,7 +420,17 @@ pub fn run(env: &Env, store: &mut dyn Store, argv: &[String]) -> Out {
             }
             save_mounts(env, &m)?;
             let list: Vec<String> = m.by_t.iter().map(|(t, l)| format!("T{t}={l}")).collect();
-            Ok((format!("mounted: {}\n", if list.is_empty() { "none".into() } else { list.join(" ") }), false))
+            Ok((
+                format!(
+                    "mounted: {}\n",
+                    if list.is_empty() {
+                        "none".into()
+                    } else {
+                        list.join(" ")
+                    }
+                ),
+                false,
+            ))
         })(),
         "run" => {
             if !a.opts.contains_key("--use") && load_mounts(env).map(|m| m.by_t.is_empty()).unwrap_or(true) {
