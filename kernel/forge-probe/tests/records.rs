@@ -9,7 +9,7 @@ kind = "work-probe"
 sensing = "contact"
 transmission = "optical"
 repeat = 0.002
-feed = [100, 3000]
+max_feed = 3000
 overtravel = [10, 5]
 stylus = [6, 50]
 [[probe.cyl]]
@@ -53,7 +53,7 @@ fn refusals_name_the_field() {
     for (from, to, want) in [
         ("kind = \"work-probe\"", "kind = \"wand\"", "kind"),
         ("sensing = \"contact\"", "sensing = \"laser\"", "sensing"),
-        ("feed = [100, 3000]", "feed = [3000, 100]", "feed"),
+        ("max_feed = 3000", "feed = [3000, 100]", "feed"),
         ("stylus = [6, 50]", "stylus = [6, 2]", "stylus"),
         ("r = 20", "r = -1", "`r`"),
         ("repeat = 0.002", "repeat = 0.002\ndisc_d = 12", "disc_d"),
@@ -76,4 +76,24 @@ fn the_builtin_records_read_and_write_back() {
     for d in &ds {
         assert!(d.real, "{}: built-in records are real products", d.id);
     }
+}
+
+#[test]
+fn the_renishaw_sheets_values() {
+    let ds = builtin();
+    let f = |id: &str| forge_probe::find(&ds, id).unwrap().clone();
+    let p = f("renishaw-omp40-2");
+    assert_eq!(
+        (p.repeat, p.overtravel, p.max_feed),
+        (Some(0.001), Some([12.5, 6.0]), None)
+    );
+    assert!(p.not_checked().contains(&"max_feed".to_string()));
+    let t = f("renishaw-ts27r");
+    assert_eq!(
+        (t.kind, t.disc_d, t.trigger),
+        (DeviceKind::ToolSetter, Some(12.7), None)
+    );
+    assert!(t.bodies.is_empty());
+    let e = forge_probe::find(&ds, "renishaw-omp40").unwrap_err().to_string();
+    assert!(e.contains("renishaw-omp40-2"), "{e}");
 }

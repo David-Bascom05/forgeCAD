@@ -1,1 +1,321 @@
-# Probing devices (forge-probe): filled from the makers' own published pages only.
+# Probing devices (forge-probe): spindle work probes and tool setters, restated from the makers'
+# own openly published data sheets (renishaw.com resource centre, no sign-up), read 2026-11-24.
+# Every value is cited ([[probe.cite]]); a value a sheet does not state is left out and cited
+# unknown, so every check that needs it reports "not checked". Verify with the maker before
+# relying on a clearance.
+
+[[probe]]
+id = "renishaw-omp40-2"
+kind = "work-probe"
+vendor = "Renishaw"
+product = "OMP40-2"
+note = "Sense directions ±X, ±Y, +Z; operating range up to 5 m."
+real = true
+sensing = "contact"
+transmission = "optical"
+repeat = 0.001
+overtravel = [12.5, 6]
+mass = 0.25
+[[probe.cyl]]
+base = [0, 0, 0]
+axis = [0, 0, 1]
+r = 20
+h = 69
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp40-2--144696 (Renishaw data sheet OMP40-2 optical machine probe, H-4071-8200-08-A, issued 10.2025)"
+taken = "2026-11-24"
+value = "transmission type: 360° infrared optical"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp40-2--144696 (Renishaw data sheet OMP40-2 optical machine probe, H-4071-8200-08-A, issued 10.2025)"
+taken = "2026-11-24"
+value = "unidirectional repeatability 1.00 µm 2σ, tested at 480 mm/min with a 50 mm stylus"
+[[probe.cite]]
+path = "overtravel"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp40-2--144696 (Renishaw data sheet OMP40-2 optical machine probe, H-4071-8200-08-A, issued 10.2025)"
+taken = "2026-11-24"
+value = "stylus overtravel ±12.5° in the XY plane, 6 mm in +Z (50 mm stylus: ±12 mm XY; 100 mm stylus: ±22 mm XY)"
+[[probe.cite]]
+path = "mass"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp40-2--144696 (Renishaw data sheet OMP40-2 optical machine probe, H-4071-8200-08-A, issued 10.2025)"
+taken = "2026-11-24"
+value = "weight without shank, including batteries, 250 g"
+[[probe.cite]]
+path = "body"
+status = "estimate"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp40-2--144696 (Renishaw data sheet OMP40-2 optical machine probe, H-4071-8200-08-A, issued 10.2025)"
+taken = "2026-11-24"
+value = "drawing: Ø40 mm body; axial lengths 50 mm and 19 mm"
+basis = "the dimension drawing's axial lengths cannot be tied to the body's ends from the text; the envelope is a Ø40 mm cylinder 69 mm long from the stylus mounting face toward the shank, the most the stated lengths add to (errs large)"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the data sheet gives only its test velocity (480 mm/min with a 50 mm stylus) and says higher is possible; no maximum is stated"
+[[probe.cite]]
+path = "stylus"
+status = "unknown"
+basis = "styli are bought separately (the sheet recommends ceramic styli 50 to 150 mm long, M4 thread) and no ball size is stated: the setup gives the stylus"
+
+[[probe]]
+id = "renishaw-rmp40"
+kind = "work-probe"
+vendor = "Renishaw"
+product = "RMP40"
+note = "Sense directions ±X, ±Y, +Z; operating range up to 15 m."
+real = true
+sensing = "contact"
+transmission = "radio"
+repeat = 0.001
+overtravel = [12.5, 6]
+mass = 0.25
+[[probe.cyl]]
+base = [0, 0, 0]
+axis = [0, 0, 1]
+r = 20
+h = 69
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp40-radio-machine-probe--131714 (Renishaw data sheet RMP40 radio machine probe, H-5480-8200-03-B, issued 07.2023)"
+taken = "2026-11-24"
+value = "transmission type: frequency hopping spread spectrum (FHSS) radio"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp40-radio-machine-probe--131714 (Renishaw data sheet RMP40 radio machine probe, H-5480-8200-03-B, issued 07.2023)"
+taken = "2026-11-24"
+value = "unidirectional repeatability 1.00 µm 2σ, tested at 480 mm/min with a 50 mm stylus"
+[[probe.cite]]
+path = "overtravel"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp40-radio-machine-probe--131714 (Renishaw data sheet RMP40 radio machine probe, H-5480-8200-03-B, issued 07.2023)"
+taken = "2026-11-24"
+value = "drawing: XY overtravel 12.5°; overtravel table: 50 mm stylus ±12 mm XY, +Z 6 mm"
+[[probe.cite]]
+path = "mass"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp40-radio-machine-probe--131714 (Renishaw data sheet RMP40 radio machine probe, H-5480-8200-03-B, issued 07.2023)"
+taken = "2026-11-24"
+value = "weight without shank, including batteries, 250 g"
+[[probe.cite]]
+path = "body"
+status = "estimate"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp40-radio-machine-probe--131714 (Renishaw data sheet RMP40 radio machine probe, H-5480-8200-03-B, issued 07.2023)"
+taken = "2026-11-24"
+value = "drawing: Ø40 mm body; axial lengths 50 mm and 19 mm"
+basis = "the dimension drawing's axial lengths cannot be tied to the body's ends from the text; the envelope is a Ø40 mm cylinder 69 mm long from the stylus mounting face toward the shank, the most the stated lengths add to (errs large)"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the data sheet gives only its test velocity (480 mm/min with a 50 mm stylus) and says higher is possible; no maximum is stated"
+[[probe.cite]]
+path = "stylus"
+status = "unknown"
+basis = "styli are bought separately (the sheet recommends ceramic styli 50 to 150 mm long, M4 thread) and no ball size is stated: the setup gives the stylus"
+
+[[probe]]
+id = "renishaw-omp60"
+kind = "work-probe"
+vendor = "Renishaw"
+product = "OMP60"
+note = "Sense directions ±X, ±Y, +Z; operating range up to 6 m."
+real = true
+sensing = "contact"
+transmission = "optical"
+repeat = 0.001
+overtravel = [18, 11]
+mass = 0.885
+[[probe.cyl]]
+base = [0, 0, 0]
+axis = [0, 0, 1]
+r = 31.5
+h = 95
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp60-optical-machine-probe--53351 (Renishaw data sheet OMP60 optical machine probe, H-2000-2131-04, issued 10.13)"
+taken = "2026-11-24"
+value = "transmission type: 360° infrared optical"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp60-optical-machine-probe--53351 (Renishaw data sheet OMP60 optical machine probe, H-2000-2131-04, issued 10.13)"
+taken = "2026-11-24"
+value = "unidirectional repeatability 1.00 µm 2σ, tested at 480 mm/min with a 50 mm stylus"
+[[probe.cite]]
+path = "overtravel"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp60-optical-machine-probe--53351 (Renishaw data sheet OMP60 optical machine probe, H-2000-2131-04, issued 10.13)"
+taken = "2026-11-24"
+value = "drawing: XY overtravel 18°; overtravel table: 50 mm stylus ±21 mm XY, +Z 11 mm; 100 mm stylus ±37 mm XY, +Z 11 mm"
+[[probe.cite]]
+path = "mass"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp60-optical-machine-probe--53351 (Renishaw data sheet OMP60 optical machine probe, H-2000-2131-04, issued 10.13)"
+taken = "2026-11-24"
+value = "weight without shank, including batteries, 885 g"
+[[probe.cite]]
+path = "body"
+status = "estimate"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-omp60-optical-machine-probe--53351 (Renishaw data sheet OMP60 optical machine probe, H-2000-2131-04, issued 10.13)"
+taken = "2026-11-24"
+value = "drawing: Ø63 mm body; axial lengths 50 mm, 19 mm and 76 mm"
+basis = "the dimension drawing's axial lengths cannot be tied to the body's ends from the text; the envelope is a Ø63 mm cylinder 95 mm long from the stylus mounting face toward the shank, the most the stated lengths add to (errs large)"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the data sheet gives only its test velocity (480 mm/min with a 50 mm stylus) and says higher is possible; no maximum is stated"
+[[probe.cite]]
+path = "stylus"
+status = "unknown"
+basis = "styli are bought separately (the sheet recommends ceramic styli 50 to 150 mm long, M4 thread) and no ball size is stated: the setup gives the stylus"
+
+[[probe]]
+id = "renishaw-rmp60"
+kind = "work-probe"
+vendor = "Renishaw"
+product = "RMP60"
+note = "Sense directions ±X, ±Y, +Z; operating range up to 15 m."
+real = true
+sensing = "contact"
+transmission = "radio"
+repeat = 0.001
+overtravel = [18, 11]
+mass = 0.876
+[[probe.cyl]]
+base = [0, 0, 0]
+axis = [0, 0, 1]
+r = 31.5
+h = 95
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp60-radio-machine-probe--65215 (Renishaw data sheet RMP60 radio machine probe, H-5472-8200-01, issued 01.2015)"
+taken = "2026-11-24"
+value = "transmission type: frequency hopping spread spectrum (FHSS) radio"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp60-radio-machine-probe--65215 (Renishaw data sheet RMP60 radio machine probe, H-5472-8200-01, issued 01.2015)"
+taken = "2026-11-24"
+value = "unidirectional repeatability 1.00 µm 2σ, tested at 480 mm/min with a 50 mm stylus"
+[[probe.cite]]
+path = "overtravel"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp60-radio-machine-probe--65215 (Renishaw data sheet RMP60 radio machine probe, H-5472-8200-01, issued 01.2015)"
+taken = "2026-11-24"
+value = "drawing: XY overtravel 18°; overtravel table: 50 mm stylus ±21 mm XY, +Z 11 mm; 100 mm stylus ±37 mm XY, +Z 11 mm"
+[[probe.cite]]
+path = "mass"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp60-radio-machine-probe--65215 (Renishaw data sheet RMP60 radio machine probe, H-5472-8200-01, issued 01.2015)"
+taken = "2026-11-24"
+value = "weight without shank, including batteries, 876 g"
+[[probe.cite]]
+path = "body"
+status = "estimate"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-rmp60-radio-machine-probe--65215 (Renishaw data sheet RMP60 radio machine probe, H-5472-8200-01, issued 01.2015)"
+taken = "2026-11-24"
+value = "drawing: Ø63 mm body; axial lengths 50 mm, 19 mm and 76 mm"
+basis = "the dimension drawing's axial lengths cannot be tied to the body's ends from the text; the envelope is a Ø63 mm cylinder 95 mm long from the stylus mounting face toward the shank, the most the stated lengths add to (errs large)"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the data sheet gives only its test velocity (480 mm/min with a 50 mm stylus) and says higher is possible; no maximum is stated"
+[[probe.cite]]
+path = "stylus"
+status = "unknown"
+basis = "styli are bought separately (the sheet recommends ceramic styli 50 to 150 mm long, M4 thread) and no ball size is stated: the setup gives the stylus"
+
+[[probe]]
+id = "renishaw-ts27r"
+kind = "tool-setter"
+vendor = "Renishaw"
+product = "TS27R"
+note = "Sense directions ±X, ±Y, +Z. Disc stylus (tungsten carbide) or square tip stylus 19.05 × 19.05 mm. The drawing's heights (60.75 mm, 82.75 mm) and widths could not be tied to features from the text: the trigger point and the envelope are left unknown; measure the device."
+real = true
+sensing = "contact"
+transmission = "wired"
+repeat = 0.001
+disc_d = 12.7
+mass = 1.055
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-ts27r-tool-setting-probe--113192 (Renishaw data sheet TS27R tool setting probe, H-2000-2171-07, issued 11.2019)"
+taken = "2026-11-24"
+value = "hard-wired transmission; 10 m cable, 25 m maximum probe to interface"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-ts27r-tool-setting-probe--113192 (Renishaw data sheet TS27R tool setting probe, H-2000-2171-07, issued 11.2019)"
+taken = "2026-11-24"
+value = "unidirectional repeatability 1.00 µm 2σ, tested at 480 mm/min with a 35 mm stylus"
+[[probe.cite]]
+path = "disc_d"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-ts27r-tool-setting-probe--113192 (Renishaw data sheet TS27R tool setting probe, H-2000-2171-07, issued 11.2019)"
+taken = "2026-11-24"
+value = "drawing: disc stylus Ø12.7 mm"
+[[probe.cite]]
+path = "mass"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-ts27r-tool-setting-probe--113192 (Renishaw data sheet TS27R tool setting probe, H-2000-2171-07, issued 11.2019)"
+taken = "2026-11-24"
+value = "weight with disc stylus 1055 g"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the data sheet gives only its test velocity (480 mm/min with a 35 mm stylus) and says higher is possible; no maximum is stated"
+[[probe.cite]]
+path = "trigger"
+status = "unknown"
+basis = "the drawing's heights cannot be tied to the stylus top from the text; the machine record's setter `at` gives the trigger point as installed"
+[[probe.cite]]
+path = "body"
+status = "unknown"
+basis = "the drawing's dimensions cannot be tied to the body's extents from the text; the machine record's [[machine.body]] gives the installed envelope"
+
+[[probe]]
+id = "renishaw-ots"
+kind = "tool-setter"
+vendor = "Renishaw"
+product = "OTS"
+note = "Sense directions ±X, ±Y, +Z; operating range up to 5 m. Disc stylus (tungsten carbide) or square tip stylus; the disc's diameter is not stated. Base Ø62.5 mm; height A 67.8 mm (½AA battery) or 92.5 mm (AA), not tied to the stylus top from the text. Weight with disc stylus 870 g (½AA) or 950 g (AA), so no single mass is recorded."
+real = true
+sensing = "contact"
+transmission = "optical"
+repeat = 0.001
+[[probe.cite]]
+path = "transmission"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-ots--144695 (Renishaw data sheet OTS optical tool setter, H-5514-8200-05-A, issued 10.2025)"
+taken = "2026-11-24"
+value = "infrared optical transmission (modulated)"
+[[probe.cite]]
+path = "repeat"
+status = "published"
+source = "https://www.renishaw.com/resourcecentre/en/download/data-sheet-ots--144695 (Renishaw data sheet OTS optical tool setter, H-5514-8200-05-A, issued 10.2025)"
+taken = "2026-11-24"
+value = "unidirectional repeatability 1.00 µm 2σ, tested at 480 mm/min with a 35 mm stylus"
+[[probe.cite]]
+path = "max_feed"
+status = "unknown"
+basis = "the data sheet gives only its test velocity (480 mm/min with a 35 mm stylus) and says higher is possible; no maximum is stated"
+[[probe.cite]]
+path = "disc_d"
+status = "unknown"
+basis = "the data sheet does not state the disc stylus diameter"
+[[probe.cite]]
+path = "trigger"
+status = "unknown"
+basis = "the height A (67.8 or 92.5 mm by battery) cannot be tied to the stylus top from the text; the machine record's setter `at` gives the trigger point as installed"
+[[probe.cite]]
+path = "body"
+status = "unknown"
+basis = "the drawing's dimensions cannot be tied to the body's extents from the text; the machine record's [[machine.body]] gives the installed envelope"

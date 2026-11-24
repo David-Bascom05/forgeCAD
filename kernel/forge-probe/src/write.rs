@@ -76,8 +76,8 @@ fn record(o: &mut String, d: &Device) {
     if let Some(x) = d.repeat {
         kv("repeat", n(x));
     }
-    if let Some(x) = d.feed {
-        kv("feed", arr(&x));
+    if let Some(x) = d.max_feed {
+        kv("max_feed", n(x));
     }
     if let Some(x) = d.overtravel {
         kv("overtravel", arr(&x));
@@ -128,7 +128,12 @@ fn record(o: &mut String, d: &Device) {
         }
     }
     for c in &d.cites {
-        let _ = writeln!(o, "[[probe.cite]]\npath = {}\nstatus = {}", q(&c.path), q(status(c.status)));
+        let _ = writeln!(
+            o,
+            "[[probe.cite]]\npath = {}\nstatus = {}",
+            q(&c.path),
+            q(status(c.status))
+        );
         for (k, v) in [
             ("source", &c.source),
             ("taken", &c.taken),

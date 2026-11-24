@@ -7,9 +7,10 @@
 //! "not checked", never a pass. The file format is forge-tooling's TOML subset.
 //!
 //! Frames (mm, degrees, mm/min, kg):
-//! - a work probe: origin at the stylus ball's centre, +z along the spindle axis toward the
-//!   spindle; `stylus = [ball diameter, length]` where length runs from the ball centre to the
-//!   probe body's lower face (z = length);
+//! - a work probe: origin at the centre of the stylus mounting face (the body's lower end), +z
+//!   along the spindle axis toward the spindle; the stylus hangs below it. `stylus = [ball
+//!   diameter, length from the mounting face to the ball centre]` only where the maker ships a
+//!   stated stylus (styli are usually the user's choice: then the setup gives it);
 //! - a tool setter: origin at the centre of its mounting face on the table, +z up (away from the
 //!   table); `trigger` is the point a tool is brought to (a contact disc's top centre, a laser's
 //!   beam crossing).
@@ -112,13 +113,13 @@ pub struct Device {
     pub transmission: Option<Transmission>,
     /// Unidirectional trigger repeatability, 2σ, mm. None: cited unknown.
     pub repeat: Option<f64>,
-    /// The probing (measuring) feed range the maker states, mm/min. None: cited unknown (the
-    /// feed is then not checked).
-    pub feed: Option<[f64; 2]>,
+    /// The highest probing (measuring) feed the maker states, mm/min. None: cited unknown (the
+    /// feed is then not checked). A data sheet's test velocity is not a maximum.
+    pub max_feed: Option<f64>,
     /// Stylus overtravel: ± degrees in XY and mm in +Z (work probes). None: cited unknown (the
     /// overtravel past the nominal surface is then not checked).
     pub overtravel: Option<[f64; 2]>,
-    /// Work probe: [ball diameter, length from the ball centre to the body's lower face].
+    /// Work probe: [ball diameter, length from the mounting face to the ball centre].
     pub stylus: Option<[f64; 2]>,
     /// Tool setter: the point a tool is brought to, device frame.
     pub trigger: Option<[f64; 3]>,
@@ -138,7 +139,7 @@ pub struct Device {
 impl Device {
     /// The paths a real record cites (each present, or omitted and cited unknown).
     pub fn cite_paths(kind: DeviceKind, sensing: Sensing) -> Vec<String> {
-        let mut p = vec!["transmission", "repeat", "feed", "body"];
+        let mut p = vec!["transmission", "repeat", "max_feed", "body"];
         match (kind, sensing) {
             (DeviceKind::WorkProbe, _) => p.extend(["stylus", "overtravel"]),
             (DeviceKind::ToolSetter, Sensing::Contact) => p.extend(["trigger", "disc_d"]),
@@ -219,7 +220,7 @@ const KEYS: [&str; 20] = [
     "sensing",
     "transmission",
     "repeat",
-    "feed",
+    "max_feed",
     "overtravel",
     "stylus",
     "trigger",
@@ -248,7 +249,13 @@ pub fn read(t: &Table) -> Result<Device, LibError> {
     let kind = match text(t, "kind") {
         Some("work-probe") => DeviceKind::WorkProbe,
         Some("tool-setter") => DeviceKind::ToolSetter,
-        Some(k) => return Err(bad(&rec, "kind", format!("`{k}` is not work-probe | tool-setter"))),
+        Some(k) => {
+            return Err(bad(
+                &rec,
+                "kind",
+                format!("`{k}` is not work-probe | tool-setter"),
+            ));
+        }
         None => return Err(missing(&rec, "kind", "work-probe | tool-setter")),
     };
     let sensing = match text(t, "sensing") {
@@ -264,26 +271,35 @@ pub fn read(t: &Table) -> Result<Device, LibError> {
         Some("optical") => Some(Transmission::Optical),
         Some("radio") => Some(Transmission::Radio),
         Some("wired") => Some(Transmission::Wired),
-        Some(k) => return Err(bad(&rec, "transmission", format!("`{k}` is not optical | radio | wired"))),
+        Some(k) => {
+            return Err(bad(
+                &rec,
+                "transmission",
+                format!("`{k}` is not optical | radio | wired"),
+            ));
+        }
         None => None,
     };
     let s = |k: &str| text(t, k).unwrap_or("").to_string();
     let required = Device::cite_paths(kind, sensing);
     let (real, cites) = cite::read(t, &rec, &required, &ALLOWED)?;
     let repeat = positive(t, "repeat", &rec)?;
-    let feed = pair(t, "feed", &rec)?;
-    if let Some([lo, hi]) = feed
-        && !(0.0 < lo && lo <= hi)
-    {
-        return Err(bad(&rec, "feed", "needs 0 < min <= max (mm/min)"));
-    }
+    let max_feed = positive(t, "max_feed", &rec)?;
     let overtravel = pair(t, "overtravel", &rec)?;
     if overtravel.is_some_and(|[a, z]| a <= 0.0 || z <= 0.0) {
-        return Err(bad(&rec, "overtravel", "needs [± degrees in XY, mm in +Z], both positive"));
+        return Err(bad(
+            &rec,
+            "overtravel",
+            "needs [± degrees in XY, mm in +Z], both positive",
+        ));
     }
     let stylus = pair(t, "stylus", &rec)?;
     if stylus.is_some_and(|[d, l]| d <= 0.0 || l <= d / 2.0) {
-        return Err(bad(&rec, "stylus", "needs [ball diameter, length past the ball's radius] > 0"));
+        return Err(bad(
+            &rec,
+            "stylus",
+            "needs [ball diameter, length past the ball's radius] > 0",
+        ));
     }
     let trigger = vec3(t, "trigger", &rec)?;
     let disc_d = positive(t, "disc_d", &rec)?;
@@ -314,11 +330,19 @@ pub fn read(t: &Table) -> Result<Device, LibError> {
     for o in tables(t, "offer") {
         let st = text(o, "status").unwrap_or("");
         if st != "standard" && st != "option" {
-            return Err(bad(&rec, "offer", format!("status `{st}` is not standard | option")));
+            return Err(bad(
+                &rec,
+                "offer",
+                format!("status `{st}` is not standard | option"),
+            ));
         }
         let machines = texts(o, "machines").unwrap_or_default();
         if machines.is_empty() {
-            return Err(missing(&rec, "offer", "offer: machines = [\"<machine name>\", ...]"));
+            return Err(missing(
+                &rec,
+                "offer",
+                "offer: machines = [\"<machine name>\", ...]",
+            ));
         }
         let os = |k: &str| text(o, k).unwrap_or("").to_string();
         if os("source").is_empty() || os("taken").is_empty() {
@@ -342,7 +366,7 @@ pub fn read(t: &Table) -> Result<Device, LibError> {
         sensing,
         transmission,
         repeat,
-        feed,
+        max_feed,
         overtravel,
         stylus,
         trigger,
@@ -363,7 +387,7 @@ fn check_present(d: &Device, required: &[String], rec: &str) -> Result<(), LibEr
     let present = |p: &str| match p {
         "transmission" => d.transmission.is_some(),
         "repeat" => d.repeat.is_some(),
-        "feed" => d.feed.is_some(),
+        "max_feed" => d.max_feed.is_some(),
         "body" => !d.bodies.is_empty(),
         "stylus" => d.stylus.is_some(),
         "overtravel" => d.overtravel.is_some(),
