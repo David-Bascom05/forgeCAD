@@ -378,6 +378,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-num",
  "forge-par",
 ]
 
@@ -419,6 +420,10 @@ dependencies = [
  "forge-sketch",
  "forge-topo",
 ]
+
+[[package]]
+name = "forge-num"
+version = "0.1.0"
 
 [[package]]
 name = "forge-ops"

@@ -1,0 +1,12 @@
+[package]
+name = "forge-num"
+description = "ForgeCAD's shared numeric core, written for Aeneas: exact naturals and integers (an i128 fast path), exact dyadics, the exact-real sign, outward intervals"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true
