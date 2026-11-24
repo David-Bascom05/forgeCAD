@@ -121,3 +121,14 @@ fn an_overtravel_that_brings_the_stem_to_the_wall_fails() {
     let f = failing(op(&cam, "i"));
     assert!(f.iter().any(|c| c.starts_with("probe_clear fail touch")), "{f:?}");
 }
+
+#[test]
+fn a_probe_feed_past_the_machines_feed_limit_fails_g5() {
+    let cam = run("z0 = probe_wcs(op1, tool: p, kind: \"surface\", at: (25, 25, 20), feed: 1000000)\nprog = program(op1, post: \"linuxcnc\", number: 10)\n");
+    let o = op(&cam, "z0");
+    assert!(
+        o.checks.iter().any(|c| c.verdict != "pass" && c.other.contains("feed limit")),
+        "{:?}",
+        o.checks
+    );
+}

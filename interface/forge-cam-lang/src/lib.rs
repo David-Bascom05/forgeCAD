@@ -4542,7 +4542,7 @@ impl Cam {
                         i,
                     ));
                 }
-                forge_post::Motion::Feed(_, q) | forge_post::Motion::Arc { f: q, .. }
+                forge_post::Motion::Feed(_, q) | forge_post::Motion::Arc { f: q, .. } | forge_post::Motion::Probe(_, q)
                     if q.unsigned_abs() >= 1 << 53 || over(q) =>
                 {
                     let v = q as f64 / fs;
