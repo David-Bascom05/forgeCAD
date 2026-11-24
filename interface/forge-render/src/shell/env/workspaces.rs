@@ -64,6 +64,10 @@ impl Environment for Manufacture {
         s.cam_side(ui, r);
         true
     }
+
+    fn status(&self, s: &Shell) -> Option<String> {
+        s.cam.as_ref().map(super::super::cam::status_line)
+    }
 }
 
 pub(super) struct MachineBuilder;

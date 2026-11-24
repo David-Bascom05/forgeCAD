@@ -748,9 +748,11 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
+        // an environment's docked properties take the right of the window
+        let props_w = self.env_properties_width();
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width()), snap(bottom)),
+            pos2(snap(s.width() - props_w), snap(bottom)),
         );
 
         p.rect_filled(
@@ -777,6 +779,10 @@ impl Shell {
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
         self.side(ui, side);
+        if props_w > 0.0 {
+            let r = Rect::from_min_max(pos2(s.width() - props_w, top), pos2(s.width(), bottom));
+            self.env_properties(ui, r);
+        }
         self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
         if !self.view_owned {
@@ -1141,10 +1147,14 @@ impl Shell {
         let st = Rect::from_min_size(pos2(0.0, bottom + DOCS_H), vec2(s.width(), STATUS_H));
         p.rect_filled(st, 0.0, t.bar);
         let x = self.voice_status(ui, 6.0, st);
+        // an environment owns the status bar too
+        let env_line = self.env_status();
         let said = p.text(
             pos2(x + 4.0, st.center().y),
             Align2::LEFT_CENTER,
-            if self.status.is_empty() && self.unshown {
+            if let Some(l) = &env_line {
+                l
+            } else if self.status.is_empty() && self.unshown {
                 "This part built but some of it can't be drawn: fix or delete what the tree marks"
             } else {
                 &self.status

@@ -82,6 +82,11 @@ pub(super) fn sheet_part(s: &Shell) -> Result<&super::super::fg::FgPanel, String
 struct Thermoform;
 
 impl Environment for Thermoform {
+    /// It works on the part: the part's tree stays.
+    fn keeps_tree(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> EnvId {
         EnvId::Thermoform
     }
@@ -112,6 +117,11 @@ impl Environment for Thermoform {
 pub(super) struct FlatPattern;
 
 impl Environment for FlatPattern {
+    /// It works on the part: the part's tree stays.
+    fn keeps_tree(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> EnvId {
         EnvId::FlatPattern
     }
@@ -159,6 +169,11 @@ impl Environment for FlatPattern {
 struct RenderStudio;
 
 impl Environment for RenderStudio {
+    /// It works on the part: the part's tree stays.
+    fn keeps_tree(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> EnvId {
         EnvId::RenderStudio
     }
