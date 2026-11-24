@@ -659,7 +659,7 @@ pub fn adaptive(
         let mut entries = 0usize;
         macro_rules! next_sweep {
             () => {{
-                let left_far = left_area(&f, 4.0 * f.r) > 10.0 * f.r * f.r;
+                let left_far = left_area(&f, 4.0 * f.r) > 4.0 * f.map.h * f.map.h;
                 // with crumbs taken back, any material more than a radius from the walls (beyond
                 // the cleanup rings' reach) sends the level round again with every pass kept
                 let left_near = crumbs_now && dir_k >= 3 && left_area(&f, f.r) > f.r * f.r;
