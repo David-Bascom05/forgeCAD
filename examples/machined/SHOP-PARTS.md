@@ -74,7 +74,7 @@ stock that `rough` did not remove.
 | grv | certified | |
 | bored | certified | Guhring 18.5 drill (tools/turn-presets); refused NeedTool without it |
 | thr | certified | Tungaloy 1.5-pitch thread mill (tools/turn-presets); refused on pitch without it |
-| dwl | refused | a rapid 0.088 into stock that `rough` would have removed. The plan drills 6 directly: no ream for 6H7, because the hole records no fit |
+| dwl | refused | the dowels are now 6 H7 in the part (66c073d8): the plan is a 5.8 drill then a 6 mm reamer (6d91b24f). The 5.8 drill is on CAM-HAAS's tools/libraries; no 6 H7 reamer record exists yet (NeedTool). Before that: a rapid 0.088 into the stock `rough` leaves |
 | tap | refused | the same rapid into the same unremoved stock |
 | brk | certified | |
 | face2, rel | certified | |
