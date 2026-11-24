@@ -72,43 +72,40 @@ impl Drop for Watch {
 pub type Libraries = BTreeMap<PathBuf, Option<u128>>;
 
 thread_local! {
-    static LIBRARIES: RefCell<Vec<Libraries>> = const { RefCell::new(Vec::new()) };
+    // the open record (None: none open); an enclosing one waits in its LibWatch. Nothing here
+    // allocates until a library file is recorded (an empty BTreeMap holds no heap), so a run
+    // that uses no library leaves the heap as it was
+    static LIBRARIES: RefCell<Option<Libraries>> = const { RefCell::new(None) };
 }
 
-/// Records the libraries used on this thread until `done`.
-pub struct LibWatch(usize);
+/// Records the libraries used on this thread until `done`; an enclosing record waits in it.
+pub struct LibWatch(Option<Option<Libraries>>);
 
 pub fn libraries() -> LibWatch {
-    LIBRARIES.with(|w| {
-        let mut w = w.borrow_mut();
-        w.push(Libraries::new());
-        LibWatch(w.len())
-    })
+    LibWatch(Some(LIBRARIES.with(|w| w.replace(Some(Libraries::new())))))
 }
 
 impl LibWatch {
     /// What was used; an enclosing record gets it too.
-    pub fn done(self) -> Libraries {
-        let d = LIBRARIES.with(|w| {
-            let mut w = w.borrow_mut();
-            w.truncate(self.0);
-            w.pop().unwrap_or_default()
-        });
-        libraries_used(&d);
-        std::mem::forget(self);
-        d
+    pub fn done(mut self) -> Libraries {
+        let outer = self.0.take().unwrap_or_default();
+        let mine = LIBRARIES.with(|w| w.replace(outer)).unwrap_or_default();
+        libraries_used(&mine);
+        mine
     }
 }
 
 impl Drop for LibWatch {
     fn drop(&mut self) {
-        LIBRARIES.with(|w| w.borrow_mut().truncate(self.0 - 1));
+        if let Some(outer) = self.0.take() {
+            LIBRARIES.with(|w| w.replace(outer));
+        }
     }
 }
 
 /// Whether a library record is open on this thread.
 pub fn recording_libraries() -> bool {
-    LIBRARIES.with(|w| !w.borrow().is_empty())
+    LIBRARIES.with(|w| w.borrow().is_some())
 }
 
 /// Library files a loader read (`forge_material::Libraries::sources`,
@@ -119,7 +116,7 @@ pub fn libraries_used<'a>(files: impl IntoIterator<Item = (&'a PathBuf, &'a Opti
         return;
     }
     LIBRARIES.with(|w| {
-        if let Some(top) = w.borrow_mut().last_mut() {
+        if let Some(top) = w.borrow_mut().as_mut() {
             for (p, h) in files {
                 top.insert(p.clone(), *h);
             }
