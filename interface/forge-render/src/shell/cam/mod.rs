@@ -25,7 +25,7 @@ pub mod toollib;
 pub mod schema;
 pub mod turnview;
 mod ui;
-pub use ui::{CYCLE_TIP, certified_words, check_lines, cycle_words};
+pub use ui::{CYCLE_TIP, certified_words, check_lines, cycle_words, text_panel_h};
 pub use ui::{groups, status_line};
 
 use doc::{Edit, Role, Stmt};
@@ -309,6 +309,8 @@ pub struct CamWs {
     /// The view's width last frame (re-framed when the column comes or goes), and the camera
     /// this workspace last framed (the user's own moves are left alone).
     pub view_w: f32,
+    /// The view's bottom the panels cover (the timeline, Document Text) when last framed.
+    pub view_cover: f32,
     pub framed: Option<crate::camera::Camera>,
     pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
@@ -375,6 +377,7 @@ impl CamWs {
             sheet_hidden: false,
             sim_tab: false,
             view_w: 0.0,
+            view_cover: 0.0,
             framed: None,
             prog_field: None,
         };

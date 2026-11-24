@@ -1303,7 +1303,9 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
         for (name, words, c) in &st.op_checks {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(name).size(12.0).color(t.ink));
+                // right-aligned, as wide as the Program tab's time column (78 px at least)
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.set_min_width(78.0);
                     ui.label(egui::RichText::new(words).size(12.0).color(*c));
                 });
             });
