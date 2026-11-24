@@ -14,6 +14,10 @@ path = "src/bin/fg.rs"
 # the imprint's run-time mode (forge-bool's `imprint_column`, off in shipped builds): only then has a
 # kept stage a switch to be keyed with (tests/kept_switches.rs)
 imprint_column = ["forge-model/imprint_column"]
+# the tangent-node mend switched off (forge-geom's `node-mend-off`): the mutation job only
+# (.github/workflows/node-mutation.yml, tests/round_node.rs), run with FORGECAD_CACHE=off (the
+# result cache's key does not see it)
+node-mend-off = ["forge-geom/node-mend-off"]
 
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }

@@ -31,7 +31,11 @@ fn the_manifolds_refusals_read_for_a_person() {
         thr.refusal.as_deref(),
         Some("Thread mill `threadmill-m6-m12-1` cuts a 1 mm pitch; the thread needs 1.5 mm.")
     );
-    let dwl = op("dwl");
+    // a missing tool names it (a library without reamers: the built-in one may have the 6 mm one)
+    let mut lib = forge_tooling::Library::builtin();
+    lib.tools.retain(|t| t.kind != forge_tooling::Kind::Reamer);
+    let bare = forge_cam_lang::run_with_library(&src, &dir(), lib);
+    let dwl = bare.ops.iter().find(|o| o.name == "dwl").unwrap();
     assert_eq!(dwl.code.as_deref(), Some("NeedTool"));
     assert_eq!(
         dwl.refusal.as_deref(),

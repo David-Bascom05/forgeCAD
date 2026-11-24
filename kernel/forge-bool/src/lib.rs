@@ -33,6 +33,8 @@ pub mod decisions;
 pub mod edge_screen;
 pub mod imprint;
 pub mod nary;
+#[cfg(any(test, feature = "decisions"))]
+pub mod rim_cert;
 pub mod shape;
 // (debug builds only: release compiles none of it, so its code and layout are as before)
 #[cfg(debug_assertions)]

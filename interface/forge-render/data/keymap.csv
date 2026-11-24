@@ -1,4 +1,5 @@
-id,name,group,default,kind
+id,name,group,default,kind,web
+# web: the default in the browser where it differs (the browser keeps the native one for itself)
 undo,Undo,Edit,Ctrl+Z,
 redo,Redo,Edit,Ctrl+Shift+Z,
 redo_alt,Redo (second key),Edit,Ctrl+Y,
@@ -16,6 +17,8 @@ explode,Explode or bring together,View,E,
 lines,"Next visual style",View,L,
 ao,Ambient occlusion,View,O,
 markup,Markup for the agent,View,K,
+photo,Photo of the view,View,Ctrl+Shift+P,
+record,Record or stop recording,View,Ctrl+Shift+R,,Ctrl+Alt+R
 escape,Back out one level,Fixed,Escape,fixed
 ok,OK in a dialog,Fixed,Enter,fixed
 sketch_undo,Undo a sketch step (in a sketch),In context,Ctrl+Z,context

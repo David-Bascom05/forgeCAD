@@ -2,6 +2,7 @@
 // storage.js. Served by `forgecad web DIR`, the project is DIR on that machine; served as static
 // files, it is kept in this browser (OPFS, else IndexedDB), with import and export.
 //   ?open=PATH       the project file to open first
+//   ?env=NAME        the environment to open it in (thermoform, bendsim, render, ...: shell/env)
 //   ?project=NAME    the browser-kept project (default "default")
 //   ?token=T         `forgecad web`'s token, when it was started with one (kept for the tab)
 //   ?storage=memory  nothing kept (tests)
@@ -137,18 +138,126 @@ let mirror = null;
 const problems = [];
 // the app's own settings and state (`/home`): kept in this browser, whatever serves the files
 const home = store ? new Mirror(await localBackend("_app"), "/home", fc, (e) => console.error(`forge-app: ${e}`)) : null;
+// a file the app made (a photo, a recording, File > Export STL / 3MF / OBJ), to the downloads
+window.forge_download = (name, bytes) => download(name, new Blob([bytes.slice()]));
+
+// MP4 recording (gui_record.rs, record/web.rs): WebCodecs' H.264 encoder, its frames handed back
+// to the app, which writes the MP4 itself (record/mp4.rs). No B-frames, AVCC NAL units, the avcC
+// record from decoderConfig.description. window.forge_avc1: whether this browser has one at all.
+const avcCodec = (w, h, fps) => {
+  // H.264 constrained baseline at the least level the size and rate fit (Table A-1: MaxFS, MaxMBPS)
+  const mbs = Math.ceil(w / 16) * Math.ceil(h / 16);
+  const levels = [[0x1f, 3600, 108000], [0x20, 5120, 216000], [0x28, 8192, 245760], [0x2a, 8704, 522240],
+    [0x32, 22080, 589824], [0x33, 36864, 983040], [0x34, 36864, 2073600]];
+  const l = levels.find(([, fs, mbps]) => mbs <= fs && mbs * fps <= mbps) ?? levels[levels.length - 1];
+  return `avc1.42E0${l[0].toString(16).padStart(2, "0")}`;
+};
+window.forge_avc1 = false;
+if (typeof VideoEncoder === "function") {
+  VideoEncoder.isConfigSupported({ codec: avcCodec(1280, 720, 30), width: 1280, height: 720, avc: { format: "avc" } })
+    .then((s) => (window.forge_avc1 = !!s.supported), () => {});
+}
+const videos = new Map();
+let videoNext = 1;
+window.forge_video_open = (w, h, fps) => {
+  if (!window.forge_avc1) return 0;
+  const v = { chunks: [], avcc: null, state: 0, error: "", fps };
+  try {
+    v.enc = new VideoEncoder({
+      output: (chunk, meta) => {
+        const data = new Uint8Array(chunk.byteLength);
+        chunk.copyTo(data);
+        v.chunks.push([chunk.type === "key", data]);
+        const d = meta?.decoderConfig?.description;
+        if (d) v.avcc = d instanceof ArrayBuffer ? new Uint8Array(d.slice(0))
+          : new Uint8Array(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength));
+      },
+      error: (e) => { v.state = -1; v.error = String(e); },
+    });
+    v.enc.configure({ codec: avcCodec(w, h, fps), width: w, height: h, framerate: fps,
+      bitrate: Math.round(w * h * fps * 0.15), latencyMode: "quality", avc: { format: "avc" } });
+  } catch (e) {
+    return 0;
+  }
+  videos.set(videoNext, v);
+  return videoNext++;
+};
+window.forge_video_frame = (id, rgba, w, h, k) => {
+  const v = videos.get(id);
+  if (!v || v.state < 0) return;
+  try {
+    const f = new VideoFrame(rgba.slice(), { format: "RGBA", codedWidth: w, codedHeight: h,
+      timestamp: Math.round((k * 1e6) / v.fps), duration: Math.round(1e6 / v.fps) });
+    v.enc.encode(f, { keyFrame: k % v.fps === 0 });
+    f.close();
+  } catch (e) { v.state = -1; v.error = String(e); }
+};
+// frames still being encoded: the app waits rather than queue the whole video in memory
+window.forge_video_backlog = (id) => videos.get(id)?.enc.encodeQueueSize ?? 0;
+window.forge_video_finish = (id) => {
+  const v = videos.get(id);
+  if (v && v.state === 0) v.enc.flush().then(() => { if (v.state === 0) v.state = 1; }, (e) => { v.state = -1; v.error = String(e); });
+};
+// 0 encoding, 1 done, -1 failed
+window.forge_video_state = (id) => videos.get(id)?.state ?? -1;
+window.forge_video_error = (id) => videos.get(id)?.error ?? "no such video";
+// what was made: [u32 avcC length][avcC][u32 frames]([u8 key][u32 length][AVCC bytes])..., little-endian
+window.forge_video_take = (id) => {
+  const v = videos.get(id);
+  videos.delete(id);
+  if (!v) return new Uint8Array();
+  try { v.enc.close(); } catch {}
+  const avcc = v.avcc ?? new Uint8Array();
+  const n = 8 + avcc.length + v.chunks.reduce((a, [, d]) => a + 5 + d.length, 0);
+  const out = new Uint8Array(n), dv = new DataView(out.buffer);
+  let at = 0;
+  dv.setUint32(at, avcc.length, true); out.set(avcc, at + 4); at += 4 + avcc.length;
+  dv.setUint32(at, v.chunks.length, true); at += 4;
+  for (const [key, d] of v.chunks) { out[at] = key ? 1 : 0; dv.setUint32(at + 1, d.length, true); out.set(d, at + 5); at += 5 + d.length; }
+  return out;
+};
+window.forge_video_cancel = (id) => { const v = videos.get(id); videos.delete(id); try { v?.enc.close(); } catch {} };
+
 window.forge_fs_changed = (path, bytes) => {
   if (mirror?.owns(path)) mirror.changed(path, bytes);
   else if (home?.owns(path)) home.changed(path, bytes);
 };
 if (store) {
-  mirror = new Mirror(store, MOUNT, fc, (e) => {
+  mirror = new Mirror(store, MOUNT, fc, (e, path) => {
     problems.push(String(e));
     console.error(`forge-app: ${e}`);
+    // the app says so too: never a "saved" or "History is on" over a write that was lost
+    if (path) fc.app_store_failed(path, e.message ?? String(e));
     if (e.name === "StaleBase") alert(`${e.message}\nYour edit is kept in this tab; reload to see the other.`);
   });
 }
 window.forge_pick = openDialog;
+// Files the app exports (NC programs, a setup sheet): the browser's save picker where it has one
+// (and the page may use it: a save needs the user's click, so it falls back when refused), else a
+// download; several go in one zip. window.forge_exported says what was saved last.
+window.forge_export = async (json) => {
+  const { name, files } = JSON.parse(json);
+  const enc = new TextEncoder();
+  const one = files.length === 1;
+  const fname = one ? files[0].path : name;
+  const blob = one
+    ? new Blob([enc.encode(files[0].text)], { type: "text/plain" })
+    : zip(files.map((f) => ({ path: f.path, bytes: enc.encode(f.text) })));
+  if (window.showSaveFilePicker && !window.FORGE_DOWNLOAD_ONLY) {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: fname });
+      const w = await h.createWritable();
+      await w.write(blob);
+      await w.close();
+      window.forge_exported = h.name;
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+  }
+  download(fname, blob);
+  window.forge_exported = fname;
+};
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
   if (n) fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
@@ -158,7 +267,10 @@ const asked = q.get("open");
 // (hundreds of them took a round trip each before it showed)
 await Promise.all([home?.load(), asked && mirror?.loadOne(cleanPath(asked))]);
 // ?noapp: the files and the kernel only, no canvas (the parity test)
-if (!q.has("noapp")) fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
+if (!q.has("noapp")) {
+  fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
+  if (q.get("env")) fc.app_env(q.get("env"));
+}
 say("started");
 const loaded = (async () => {
   await mirror?.load();

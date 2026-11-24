@@ -861,14 +861,16 @@ fn lineage(body: Work<'_>, prev: Option<(Work<'_>, &Lineage)>, i: usize) -> Line
             }
             let o = prev.and_then(|(pb, po)| {
                 po.get(&face.name).cloned().or_else(|| {
-                    // (the surfaces first: most differ, and a face's box is worked out only then)
+                    // (the surfaces first: most differ, and a face's box is worked out only then;
+                    // the slots read straight, the live ones in order, as `face_ids` gives them)
                     for ps in pb.0 {
                         let p = &ps.body;
-                        for g in p.face_ids() {
-                            if p.face(g).surface == face.surface
-                                && pb.face_box(p, g).overlaps(&body.face_box(b, f))
+                        for (g, pf) in p.faces.iter().enumerate() {
+                            if pf.alive
+                                && pf.surface == face.surface
+                                && pb.face_box(p, FaceId(g as u32)).overlaps(&body.face_box(b, f))
                             {
-                                return po.get(&p.face(g).name).cloned();
+                                return po.get(&pf.name).cloned();
                             }
                         }
                     }

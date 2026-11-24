@@ -1,0 +1,10 @@
+{
+ "source": "Seco Tools",
+ "blocked": [
+  {
+   "url": "https://www.secotools.com/article/catalogs",
+   "why": "HTTP 200 but page body is \"Loading...\" (JavaScript-rendered); no catalogue PDF links in static HTML"
+  }
+ ],
+ "records": []
+}

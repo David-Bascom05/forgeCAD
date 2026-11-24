@@ -1,0 +1,198 @@
+{
+ "dialect": "mach3",
+ "control": "Artsoft Mach3 Mill (Newfangled Solutions)",
+ "sources": [
+  {
+   "id": "S1",
+   "url": "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf",
+   "title": "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference')",
+   "edition": "Rev 1.84-A2 (PDF dated 2006-04)",
+   "taken": "2026-11-23"
+  }
+ ],
+ "items": {
+  "program_open": {
+   "value": "No start code required. A line whose first character is % is treated as a comment and ignored, so a leading % is harmless. O words are subroutine labels (O + up to 5 digits), not a program-name line.",
+   "source": "S1",
+   "where": "10.5.5 Comments and Messages p10-12; 10.5.2 Subroutine labels p10-10",
+   "note": ""
+  },
+  "program_close": {
+   "value": "M30 (end and rewind) or M2 (end, next line stays at M2). Reset effects at end depend on Configure>Logic options.",
+   "source": "S1",
+   "where": "10.8.1 p10-32/10-33",
+   "note": ""
+  },
+  "comment": {
+   "value": "Parentheses (...) on one line, not nested; also // makes the rest of the line a comment; a line beginning with % is a comment. (MSG,...) shows an operator message.",
+   "source": "S1",
+   "where": "10.5.5 p10-12",
+   "note": "Semicolon comments are not mentioned."
+  },
+  "line_numbers": {
+   "value": "Optional N + unsigned integer 0..99999, at most 5 digits; may repeat or be out of order; must come after an optional '/' block delete and before words.",
+   "source": "S1",
+   "where": "10.5 p10-10; 10.5.1 p10-10",
+   "note": ""
+  },
+  "block_end": {
+   "value": "End of line = carriage return, line feed or both. Max 256 characters per line. Spaces/tabs ignored outside comments; case-insensitive outside comments.",
+   "source": "S1",
+   "where": "10.5 Format of a Line p10-10",
+   "note": ""
+  },
+  "safe_start": {
+   "value": "Codes all exist: G90 (10.7.25), G94 units/min (10.7.28), G17 (10.7.8), G21 mm (10.7.9; G71 is a synonym, G20/G21 preferred), G40 (10.7.13), G49 (10.7.14), G80 (10.7.23). The manual prescribes no particular safe-start line. Two G words of the same modal group may not share a line.",
+   "source": "S1",
+   "where": "10.7.x p10-20..10-31; 10.5.6 p10-12",
+   "note": ""
+  },
+  "tool_change": {
+   "value": "T word selects tool (10.10.3); M6 triggers the change.",
+   "source": "S1",
+   "where": "10.8.3 p10-33; 10.10.3 p10-35",
+   "note": ""
+  },
+  "tool_change_behaviour": {
+   "value": "Unless Configure>Logic is set to ignore tool changes, M6 runs macro M6Start, then waits for Cycle Start (manual change pause), then runs macro M6End and continues. ATC behaviour must be written by the user in the VB macros. If tool changes are set to be ignored, M6 does nothing.",
+   "source": "S1",
+   "where": "10.8.3 p10-33; 10.1.14 p10-6",
+   "note": ""
+  },
+  "tool_length_comp": {
+   "value": "G43 H<n> (H = tool table index; omitted H acts as zero); G44 for negative table values; G49 cancels. Not applied automatically by T/M6 in the text.",
+   "source": "S1",
+   "where": "10.7.14 p10-23",
+   "note": ""
+  },
+  "spindle": {
+   "value": "S<rpm>; M3 CW, M4 CCW, M5 stop.",
+   "source": "S1",
+   "where": "10.8.2 p10-33; 10.10.2 p10-35",
+   "note": ""
+  },
+  "work_offset": {
+   "value": "G54..G59 = offsets 1..6; G59 P<n> selects any of 254 offsets (G59 P5 = G58). Error if cutter comp is on.",
+   "source": "S1",
+   "where": "10.7.18 p10-24",
+   "note": ""
+  },
+  "arc_format": {
+   "value": "G2/G3 with R (positive <=180 deg, negative >180 deg) or I/J(/K) centre. IJ mode is a configuration (Configure>State) and can be switched in code: G91.1 incremental (offset from start; manual recommends), G90.1 absolute. Centre-format radius mismatch tolerance 0.002 mm.",
+   "source": "S1",
+   "where": "10.7.3.1/10.7.3.2 p10-17; 10.7.26 p10-30",
+   "note": "Emit G91.1 explicitly; the default is a user setting."
+  },
+  "rapid_linear": {
+   "value": "G0 rapid, G1 feed.",
+   "source": "S1",
+   "where": "10.7.1/10.7.2 p10-16",
+   "note": ""
+  },
+  "feed": {
+   "value": "F in current length units per minute in G94 (or per rev in G95, depending on Feed Mode toggle); units follow G20/G21.",
+   "source": "S1",
+   "where": "10.10.1 p10-35; 10.1.10 p10-6",
+   "note": ""
+  },
+  "decimal_point": {
+   "value": "Decimal point optional: integers and decimals are just numbers, so X10 = 10 units (no implied-decimal scaling described).",
+   "source": "S1",
+   "where": "10.5.3.1 Number p10-10/10-11",
+   "note": ""
+  },
+  "max_digits": {
+   "value": "No digit-count limit other than the 256-char line; about 17 significant figures retained.",
+   "source": "S1",
+   "where": "10.5.3.1 p10-11",
+   "note": ""
+  },
+  "retract_home": {
+   "value": "G28 axes~ : rapid via programmed intermediate point to the home position held in parameters 5161-5166 (no axis words = straight home). G53 G0 Z~ (G53 non-modal, needs G0 or G1 active, error with cutter comp) moves in machine coordinates.",
+   "source": "S1",
+   "where": "10.7.10 p10-20; 10.7.17 p10-23/10-24",
+   "note": ""
+  },
+  "coolant": {
+   "value": "Chapter 10 text: M7 = flood, M8 = mist, M9 = all off. CONTRADICTORY: section 5.3.6.1 says M7 can turn flood on and M9 mist (typo) and the Ports&Pins outputs are user-assigned. No through-spindle code.",
+   "source": "S1",
+   "where": "10.8.4 p10-33; 5.3.6.1",
+   "note": "Reversed from industry usage (M7 mist/M8 flood); treat mapping as machine-configured; verify on the machine."
+  },
+  "dwell": {
+   "value": "G4 P~ ; unit of P is seconds OR milliseconds per the Config>Logic setting (example: seconds mode, G4 P0.5 = half a second). Negative P is an error.",
+   "source": "S1",
+   "where": "10.7.4 p10-18; 10.1.9 p10-6",
+   "note": "Unit is not knowable from the program; post must be told the machine's setting."
+  },
+  "drill_G81": {
+   "value": "G81 X~ Y~ Z~ R~ L~ (L = repeats); feed to Z, rapid out.",
+   "source": "S1",
+   "where": "10.7.24.2 p10-26",
+   "note": ""
+  },
+  "dwell_drill_G82": {
+   "value": "G82 X~ Y~ Z~ R~ L~ P~ ; P dwell at bottom stated in seconds.",
+   "source": "S1",
+   "where": "10.7.24.3 p10-27",
+   "note": ""
+  },
+  "peck_G83": {
+   "value": "G83 X~ Y~ Z~ R~ L~ Q~ ; Q = incremental peck (>0); rapid back out to clear Z each peck.",
+   "source": "S1",
+   "where": "10.7.24.4 p10-27/10-28",
+   "note": ""
+  },
+  "chipbreak_G73": {
+   "value": "G73 X~ Y~ Z~ R~ L~ Q~ ; Q delta (>0); pullback distance set in the 'G73 Pullback' DRO on the Settings screen.",
+   "source": "S1",
+   "where": "10.7.22 p10-25",
+   "note": ""
+  },
+  "rigid_tap_G84": {
+   "value": "G84 X~ Y~ Z~ R~ L~ ; spindle must already turn CW; feed in, spindle reverses, feed out. F is the ordinary feed rate (units/min), programmer must match speed and feed to the pitch (example F150 with 2 threads/mm needs S300).",
+   "source": "S1",
+   "where": "10.7.24.5 p10-28",
+   "note": ""
+  },
+  "bore_G85": {
+   "value": "G85 X~ Y~ Z~ R~ L~ ; feed in, feed out.",
+   "source": "S1",
+   "where": "10.7.24.6 p10-28",
+   "note": ""
+  },
+  "return_level": {
+   "value": "G98 = back to the Z held before the cycle (or R if that is lower); G99 = back to R.",
+   "source": "S1",
+   "where": "10.7.29 p10-32",
+   "note": ""
+  },
+  "cycle_cancel": {
+   "value": "G80 cancels modal motion; axis words with G80 active are an error unless a group-0 code uses them.",
+   "source": "S1",
+   "where": "10.7.23 p10-25",
+   "note": ""
+  },
+  "peck_depth_word": {
+   "value": "Q",
+   "source": "S1",
+   "where": "10.7.22, 10.7.24.4",
+   "note": ""
+  },
+  "cycle_dwell_units": {
+   "value": "Seconds per the G82 text ('P number of seconds'); G4 itself follows the Config>Logic setting.",
+   "source": "S1",
+   "where": "10.7.24.3 p10-27; 10.7.4 p10-18",
+   "note": "Possible conflict if Config>Logic is set to ms; unverified which governs cycles."
+  },
+  "native_language": {
+   "value": "No separate native language; RS274/NIST-style G-code is the only language (G-code with VB macros for M-codes).",
+   "source": "S1",
+   "where": "Chapter 10 intro / 10.4 p10-7",
+   "note": "Restated from the chapter scope; no mode selection exists."
+  }
+ },
+ "notes": "Arc IJ mode and dwell units are machine configuration, not program-fixed; post must emit G91.1 and must be told the dwell unit. Coolant M7/M8 mapping in the manual is reversed from common usage.",
+ "unknown": [],
+ "filled": "30/30"
+}

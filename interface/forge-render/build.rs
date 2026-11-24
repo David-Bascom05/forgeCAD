@@ -1,4 +1,7 @@
 // The build cache's "kernel version": a hash of the sources that decide a part's mesh, ours too.
+// It runs on the build machine, whatever the target: std's files are there (the browser build's
+// clippy config disallows them for the page's code, web/clippy/clippy.toml).
+#![allow(clippy::disallowed_methods)]
 use std::path::Path;
 
 fn walk(dir: &Path, files: &mut Vec<std::path::PathBuf>) {

@@ -24,7 +24,7 @@ pub fn bench_dir() -> Result<PathBuf, String> {
         let base = std::env::var_os("FORGE_RENDER_CACHE")
             .map(PathBuf::from)
             .or_else(forge_dirs::cache)
-            .unwrap_or_else(std::env::temp_dir);
+            .unwrap_or_else(forge_dirs::temp_dir);
         let dir = base.join("forgecad").join("bench");
         forge_dirs::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         for n in BENCH {

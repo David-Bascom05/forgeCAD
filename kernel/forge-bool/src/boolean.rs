@@ -2241,9 +2241,11 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         }
     }
     for &(k, t) in grown {
-        if let VKey::Old(0, v) = k {
-            let x = &mut a.vertices[v.index()];
-            x.tol = x.tol.max(t);
+        if let VKey::Old(0, v) = k
+            && t > a.vertex(v).tol
+        {
+            a.grow_vertex_tol(v, t);
+            crate::classify::grow_query_reach(a, v, t);
         }
     }
     // B kept where no new edge joins it to A: a lump apart (a union of disjoint solids) or a
@@ -4883,7 +4885,25 @@ fn on_to_its_vertex(index: &Index, face: FaceId, body: &Body, e: EdgeId, w: [f64
     let hi = w[1] == edge.range.hi && !ts.contains(&w[1]);
     off(lo, edge.start)
         .or_else(|| off(hi, edge.end))
+        .or_else(|| off_near_ends(index, face, &edge.curve, w))
         .unwrap_or(Where::On)
+}
+
+/// A straight stretch On at its samples whose ends are on the boundary too (an end on another edge,
+/// or at a crossing) may still leave the edge it began beside: two lines at an angle part linearly,
+/// so it is farthest from that edge near an end. Decided by a point 4·LINEAR in from each end, off
+/// the boundary there (B2, research/kernel-audit/tilt-wrong-ok.md: a wall's edge crossing another
+/// face's edge at 2.4e-10 rad, 1.2·LINEAR from it at its far end).
+fn off_near_ends(index: &Index, face: FaceId, curve: &Curve, w: [f64; 2]) -> Option<Where> {
+    let len = curve.eval(w[0]).distance(curve.eval(w[1]));
+    if len <= 16.0 * tol::LINEAR {
+        return None;
+    }
+    let f = 4.0 * tol::LINEAR / len;
+    [1.0 - f, f].into_iter().find_map(|g| {
+        let o = index.point_in_face(face, curve.eval(w[0] + (w[1] - w[0]) * g));
+        (o != Where::On).then_some(o)
+    })
 }
 
 pub(crate) fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
@@ -6111,6 +6131,7 @@ fn split_face_in(
         if areas[c] > 0.0 || skip[c] {
             continue;
         }
+        let mut on_outline = false;
         let probe = match &polys[c] {
             // a point just off the hole's longest segment, on its material side (the left);
             // a short first segment put the probe a hair from the outline, on either side
@@ -6122,51 +6143,61 @@ fn split_face_in(
                     })
                     .unwrap_or(0);
                 let (p0, p1) = (poly[k], poly[(k + 1) % poly.len()]);
-                // (no further across than a thousandth of the hole's own width: u and v scale apart
-                // on a curved face, and a long segment's step in v may be a wide one in u)
-                let across = (p1 - p0).perp();
-                let width = if matches!(face.surface, Surface::Plane(_)) {
-                    1.0
+                // a hole drawn exactly: a point of its outline itself, its longest segment's middle
+                // (its pieces meet others only at their ends, so no other outline passes it; the
+                // outlines that share its pieces, across them, are set aside below). A step off it,
+                // however short, can cross a strip narrower than itself into the region beyond
+                // (fuzz_keep 210: a strip 1.6e-3 wide on a cylinder 75 across)
+                if exact.contains(&c) {
+                    on_outline = true;
+                    p0.lerp(p1, 0.5)
                 } else {
-                    let at = |p: Point2| (p - p0).dot(across);
-                    let (lo, hi) = poly
-                        .iter()
-                        .fold((0.0f64, 0.0f64), |r, &p| (r.0.min(at(p)), r.1.max(at(p))));
-                    (hi - lo) / across.length_sq().max(f64::MIN_POSITIVE)
-                };
-                let chord = p0.lerp(p1, 0.5) + across * (1e-3 * width.min(1.0));
-                // the chord's middle may lie up to its sag off the hole's curve, and a curved
-                // outline may be drawn either side of a point nearer it than its own chords' sag:
-                // with such an outline that near (concentric or near-tangent loops), a point a
-                // step in off one of the hole's drawn points (each on its curve) where it runs
-                // smoothly, outside its outline and clearest of the others
-                let curved = !exact.contains(&c)
-                    && cyc
-                        .iter()
-                        .any(|&i| !matches!(pieces[half[i].0].curve, Curve::Line(_)));
-                let own = if curved { 0.06 * (p1 - p0).length() } else { 0.0 };
-                let mut best = (off_chords(chord, cyc, own), chord);
-                let n = poly.len();
-                let step = (n / 12).max(1);
-                for i in (step / 2..n).step_by(step) {
-                    if best.0 >= 1.0 {
-                        break;
-                    }
-                    let (a, b) = (poly[i] - poly[(i + n - 1) % n], poly[(i + 1) % n] - poly[i]);
-                    if a.dot(b) <= 0.9 * a.length() * b.length() {
-                        continue;
-                    }
-                    let q = poly[i] + (a + b).perp() * 0.5e-3;
-                    let s = off_chords(q, cyc, 0.0);
-                    let outside = |&du: &f64| {
-                        sv.iter()
-                            .all(|&dv| !inside_poly(Point2::new(q.x + du, q.y + dv), poly))
+                    // (no further across than a thousandth of the hole's own width: u and v scale apart
+                    // on a curved face, and a long segment's step in v may be a wide one in u)
+                    let across = (p1 - p0).perp();
+                    let width = if matches!(face.surface, Surface::Plane(_)) {
+                        1.0
+                    } else {
+                        let at = |p: Point2| (p - p0).dot(across);
+                        let (lo, hi) = poly
+                            .iter()
+                            .fold((0.0f64, 0.0f64), |r, &p| (r.0.min(at(p)), r.1.max(at(p))));
+                        (hi - lo) / across.length_sq().max(f64::MIN_POSITIVE)
                     };
-                    if s > best.0 && su.iter().all(outside) {
-                        best = (s, q);
+                    let chord = p0.lerp(p1, 0.5) + across * (1e-3 * width.min(1.0));
+                    // the chord's middle may lie up to its sag off the hole's curve, and a curved
+                    // outline may be drawn either side of a point nearer it than its own chords' sag:
+                    // with such an outline that near (concentric or near-tangent loops), a point a
+                    // step in off one of the hole's drawn points (each on its curve) where it runs
+                    // smoothly, outside its outline and clearest of the others
+                    let curved = !exact.contains(&c)
+                        && cyc
+                            .iter()
+                            .any(|&i| !matches!(pieces[half[i].0].curve, Curve::Line(_)));
+                    let own = if curved { 0.06 * (p1 - p0).length() } else { 0.0 };
+                    let mut best = (off_chords(chord, cyc, own), chord);
+                    let n = poly.len();
+                    let step = (n / 12).max(1);
+                    for i in (step / 2..n).step_by(step) {
+                        if best.0 >= 1.0 {
+                            break;
+                        }
+                        let (a, b) = (poly[i] - poly[(i + n - 1) % n], poly[(i + 1) % n] - poly[i]);
+                        if a.dot(b) <= 0.9 * a.length() * b.length() {
+                            continue;
+                        }
+                        let q = poly[i] + (a + b).perp() * 0.5e-3;
+                        let s = off_chords(q, cyc, 0.0);
+                        let outside = |&du: &f64| {
+                            sv.iter()
+                                .all(|&dv| !inside_poly(Point2::new(q.x + du, q.y + dv), poly))
+                        };
+                        if s > best.0 && su.iter().all(outside) {
+                            best = (s, q);
+                        }
                     }
+                    best.1
                 }
-                best.1
             }
             // an untouched hole touches no new edge, so it lies wholly on one side of every outline
             None => {
@@ -6198,6 +6229,14 @@ fn split_face_in(
             let (Some(poly), Some(b)) = (&polys[o], &boxes[o]) else {
                 return true;
             };
+            // (an outline across the hole's own pieces bounds what the hole bounds)
+            if on_outline
+                && cycles[o]
+                    .iter()
+                    .any(|&j| cyc.iter().any(|&i| half[i].0 == half[j].0))
+            {
+                return false;
+            }
             su.iter().any(|&du| {
                 sv.iter().any(|&dv| {
                     let q = Point2::new(probe.x + du, probe.y + dv);

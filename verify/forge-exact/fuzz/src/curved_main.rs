@@ -1,5 +1,5 @@
 //! `cargo run -p forge-exact-fuzz --release --bin exact-curved [-- SOURCE..] [--seeds N]
-//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME] [--shard K/N] [--shrink] [--oracle]`
+//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME|FAMILY] [--shard K/N] [--shrink] [--oracle]`
 //!
 //! The kernel's booleans of solids bounded by planes, cylinders, cones and spheres against the
 //! exact curved reference: totals per source and path, every disagreement, and with --shrink one
@@ -109,7 +109,10 @@ fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
         }
     }
     if on("families") {
-        for (f, g) in forge_model::adversarial::families() {
+        for (f, g) in forge_model::adversarial::families()
+            .into_iter()
+            .chain(forge_exact_fuzz::apexfam::families())
+        {
             for s in 0..seeds {
                 if let Ok(p) = forge_exact_fuzz::guarded(|| Ok(g(s))) {
                     let p = forge_exact_fuzz::curved::curved_part(&forge_model::adversarial::canonical(&p));
@@ -191,7 +194,10 @@ fn main() {
     }
     let mut cs = cases(&sources, seeds, lang);
     if !only.is_empty() {
-        cs.retain(|c| only.contains(&c.name));
+        cs.retain(|c| {
+            only.iter()
+                .any(|o| c.name == *o || c.name.starts_with(&format!("{o}/")))
+        });
     }
     if let Some((k, n)) = shard {
         let mut i = 0;

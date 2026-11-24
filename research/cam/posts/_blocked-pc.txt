@@ -1,0 +1,5 @@
+# group pc - hosts that refused or documents that were gated (2026-11-23)
+tormach.com (direct curl of /supported-g-codes-reference, /g-code-formatting-reference, /machine-codes, /media/asset/.../um10372_pcnc440_manual_0224a_web.pdf): HTTP 503 to curl. Pages were read through the WebFetch tool instead; PCNC 440 operator manual PDF not retrieved.
+www.centroidcnc.com (curl, any path incl. /centroid_diy/downloads/operator_manuals/centroid-cnc12-mill-operator-manual.pdf and v4.20 PDF): HTTP 406 Not Acceptable to curl's default user agent (not retried with a spoofed UA). Latest (v5.40+) mill manual via WebFetch: refused, file > 10 MB limit. Used CNC12 v4.12 mill manual (2018) fetched via WebFetch instead.
+www.syntecclub.com /Document.aspx and /Download.aspx (Syntec Technology): document listing requires member login (login.aspx?ReturnURL=...). No openly downloadable Syntec mill programming manual found from Syntec itself; only third-party uploads (scribd, issuu, manualmachine.com) which are not sources. syntec dialect left fully UNKNOWN.
+confluence.syntecclub.com: HTTP 504 (timeout).

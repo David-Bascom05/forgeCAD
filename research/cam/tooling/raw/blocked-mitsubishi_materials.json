@@ -1,0 +1,10 @@
+{
+ "source": "Mitsubishi Materials",
+ "blocked": [
+  {
+   "url": "https://www.mitsubishicarbide.com/en/",
+   "why": "HTTP 403"
+  }
+ ],
+ "records": []
+}

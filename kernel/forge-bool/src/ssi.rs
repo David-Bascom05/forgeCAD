@@ -22,11 +22,18 @@ pub fn closed_form(a: &Surface, b: &Surface) -> SurfaceSurface {
         (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t),
         _ => SurfaceSurface::NotAnalytic,
     };
+    // (matches, not an `or_else` chain of closures: Aeneas, research/aeneas/STYLE.md)
     let r = match closed {
-        SurfaceSurface::NotAnalytic => forge_geom::screw::meet_coaxial(a, b)
-            .or_else(|| forge_geom::ruled::meet_ruled(a, b))
-            .or_else(|| forge_geom::spline::meet::meet_spline(a, b))
-            .unwrap_or(SurfaceSurface::NotAnalytic),
+        SurfaceSurface::NotAnalytic => match forge_geom::screw::meet_coaxial(a, b) {
+            Some(r) => r,
+            None => match forge_geom::ruled::meet_ruled(a, b) {
+                Some(r) => r,
+                None => match forge_geom::spline::meet::meet_spline(a, b) {
+                    Some(r) => r,
+                    None => SurfaceSurface::NotAnalytic,
+                },
+            },
+        },
         r => r,
     };
     // a spindle's equations hold its other sheet too
@@ -44,10 +51,20 @@ pub(crate) fn closed_or_flush(a: &Surface, b: &Surface, region: &Box3) -> Surfac
         // a plane all but tangent to a cylinder crosses it in a long thin ellipse
         (Surface::Plane(_), Surface::Cylinder(_), SurfaceSurface::Curves(cs))
         | (Surface::Cylinder(_), Surface::Plane(_), SurfaceSurface::Curves(cs)) => {
-            matches!(cs[..], [(Curve::Ellipse(_), _)])
+            // (the length and an index, not a slice pattern: Aeneas reads no slice metadata)
+            cs.len() == 1 && matches!(cs[0].0, Curve::Ellipse(_))
         }
         (Surface::Plane(p), Surface::Plane(q), SurfaceSurface::Curves(_)) => {
             p.normal_vec().dot(q.normal_vec()).abs() > 0.5
+        }
+        // two planes `plane_plane` takes as parallel (within ANGULAR) it decides at q's frame
+        // origin, which holds only within LINEAR/ANGULAR = 1e6 of it: unless the normals are
+        // parallel to the bit, `nearly_flush` decides them again over `region`, where the boolean
+        // looks (research/kernel-audit/tilt-wrong-ok.md, B1)
+        (Surface::Plane(p), Surface::Plane(q), SurfaceSurface::Empty)
+        | (Surface::Plane(p), Surface::Plane(q), SurfaceSurface::Coincident) => {
+            let u = p.normal_vec().cross(q.normal_vec());
+            u.x != 0.0 || u.y != 0.0 || u.z != 0.0
         }
         _ => false,
     };
@@ -74,26 +91,72 @@ fn spread_apart(p: &Plane, q: &Plane, d: f64, region: &Box3) -> bool {
     w(g.x, region.x) + w(g.y, region.y) + w(g.z, region.z) > 6.0 * tol::LINEAR
 }
 
+/// Two planes within ANGULAR of parallel, but not parallel to the bit, over `region`. Their gap
+/// p.sd - flip q.sd is affine: Coincident if it is within LINEAR at every corner, Empty if it has
+/// one sign over the box (they do not meet there), and else the line where they cross, from
+/// `region`'s centre (well conditioned: the offsets there are small) and held to p, so it stays
+/// on both planes across the region (the gap changes by |n1 x n2| per unit along it). The same
+/// answer either way round. None (`plane_plane`'s answer stands) if the direction will not
+/// normalize.
+// (index loops, not iterator adaptors and closures: Aeneas, research/aeneas/STYLE.md)
+#[cold]
+#[inline(never)]
+fn parallel_in(p: &Plane, q: &Plane, region: &Box3) -> Option<SurfaceSurface> {
+    let (n, m) = (p.normal_vec(), q.normal_vec());
+    let flip = if n.dot(m) < 0.0 { -1.0 } else { 1.0 };
+    let ks = corners(region);
+    let (mut within, mut pos, mut neg) = (true, false, false);
+    let mut i = 0;
+    while i < 8 {
+        let g = p.signed_distance(ks[i]) - flip * q.signed_distance(ks[i]);
+        within = within && g.abs() <= tol::LINEAR;
+        pos = pos || g >= 0.0;
+        neg = neg || g <= 0.0;
+        i += 1;
+    }
+    if within {
+        return Some(SurfaceSurface::Coincident);
+    }
+    if !(pos && neg) {
+        return Some(SurfaceSurface::Empty);
+    }
+    let u = n.cross(m);
+    let c = region.center();
+    let (n1, n2) = (n.get(), m.get());
+    let t = (n2.cross(u) * -p.signed_distance(c) + u.cross(n1) * -q.signed_distance(c)) / u.length_sq();
+    let x = c + t;
+    let x = x - n1 * p.signed_distance(x);
+    let d = u.normalize()?.get();
+    let dir = (d - n1 * n1.dot(d)).normalize()?;
+    Some(SurfaceSurface::Curves(vec![(
+        Curve::Line(Line::new(x, dir)),
+        Contact::Crossing,
+    )]))
+}
+
+/// The eight corners of `region`, in the order the flush rules visit them.
+#[inline]
+fn corners(region: &Box3) -> [Point3; 8] {
+    [
+        Point3::new(region.x.lo, region.y.lo, region.z.lo),
+        Point3::new(region.x.hi, region.y.lo, region.z.lo),
+        Point3::new(region.x.lo, region.y.hi, region.z.lo),
+        Point3::new(region.x.hi, region.y.hi, region.z.lo),
+        Point3::new(region.x.lo, region.y.lo, region.z.hi),
+        Point3::new(region.x.hi, region.y.lo, region.z.hi),
+        Point3::new(region.x.lo, region.y.hi, region.z.hi),
+        Point3::new(region.x.hi, region.y.hi, region.z.hi),
+    ]
+}
+
 /// Surfaces too nearly flush for an angle test to see, as a model rounded to 9 digits has them: a
 /// plane on a plane, or tangent to a cylinder along its length, to within LINEAR all over `region`.
 /// Left to the closed forms, the plane crossing the other in a line or a cylinder in two hairs
 /// apart gives edges the tolerance cannot tell apart.
+// (index loops, not iterator adaptors and closures: Aeneas, research/aeneas/STYLE.md)
 #[cold]
 fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurface> {
     const NEAR: f64 = 1e-4;
-    let corners = |region: &Box3| {
-        [
-            (region.x.lo, region.y.lo, region.z.lo),
-            (region.x.hi, region.y.lo, region.z.lo),
-            (region.x.lo, region.y.hi, region.z.lo),
-            (region.x.hi, region.y.hi, region.z.lo),
-            (region.x.lo, region.y.lo, region.z.hi),
-            (region.x.hi, region.y.lo, region.z.hi),
-            (region.x.lo, region.y.hi, region.z.hi),
-            (region.x.hi, region.y.hi, region.z.hi),
-        ]
-        .map(|(x, y, z)| Point3::new(x, y, z))
-    };
     match (a, b) {
         (Surface::Plane(p), Surface::Plane(q)) => {
             let (n, m) = (p.normal_vec(), q.normal_vec());
@@ -104,16 +167,26 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
             let flip = if d < 0.0 { -1.0 } else { 1.0 };
             let c = n.cross(m).length();
             if c <= tol::ANGULAR {
-                return None;
+                return parallel_in(p, q, region);
             }
             let flush = if c <= NEAR {
-                corners(region)
-                    .iter()
-                    .all(|&k| (p.signed_distance(k) - flip * q.signed_distance(k)).abs() <= tol::LINEAR)
+                let ks = corners(region);
+                let mut all = true;
+                let mut i = 0;
+                while all && i < 8 {
+                    let k = ks[i];
+                    all = (p.signed_distance(k) - flip * q.signed_distance(k)).abs() <= tol::LINEAR;
+                    i += 1;
+                }
+                all
             } else {
                 turned_flush(p, q, region)
             };
-            flush.then_some(SurfaceSurface::Coincident)
+            if flush {
+                Some(SurfaceSurface::Coincident)
+            } else {
+                None
+            }
         }
         (Surface::Plane(p), Surface::Cylinder(c)) | (Surface::Cylinder(c), Surface::Plane(p)) => {
             let (n, ax) = (p.normal_vec(), c.frame.z());
@@ -122,20 +195,41 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
                 return None;
             }
             // the plane's distance from the axis, where the region lies along the axis
-            let along = corners(region).map(|k| ax.dot(k - c.frame.origin));
-            let (lo, hi) = along
-                .iter()
-                .fold((f64::MAX, f64::MIN), |m, &t| (m.0.min(t), m.1.max(t)));
-            let at = |t: f64| p.signed_distance(c.frame.origin + ax * t);
-            let touching = (at(lo).abs() - c.radius).abs() <= tol::LINEAR
-                && (at(hi).abs() - c.radius).abs() <= tol::LINEAR;
-            touching.then(|| {
-                let foot = c.frame.origin + ax * lo - n * at(lo);
-                SurfaceSurface::Curves(vec![(Curve::Line(Line::new(foot, ax)), Contact::Touching)])
-            })
+            let ks = corners(region);
+            let mut along = [0.0; 8];
+            let mut i = 0;
+            while i < 8 {
+                along[i] = ax.dot(ks[i] - c.frame.origin);
+                i += 1;
+            }
+            let (mut lo, mut hi) = (f64::MAX, f64::MIN);
+            let mut i = 0;
+            while i < 8 {
+                lo = lo.min(along[i]);
+                hi = hi.max(along[i]);
+                i += 1;
+            }
+            let at_lo = p.signed_distance(c.frame.origin + ax * lo);
+            let touching = (at_lo.abs() - c.radius).abs() <= tol::LINEAR
+                && (p.signed_distance(c.frame.origin + ax * hi).abs() - c.radius).abs() <= tol::LINEAR;
+            if touching {
+                let foot = c.frame.origin + ax * lo - n * at_lo;
+                Some(SurfaceSurface::Curves(vec![(
+                    Curve::Line(Line::new(foot, ax)),
+                    Contact::Touching,
+                )]))
+            } else {
+                None
+            }
         }
         _ => None,
     }
+}
+
+/// Whether plane `q` is within LINEAR of the projection of `k` onto plane `p`.
+#[inline]
+fn within_at_foot(p: &Plane, q: &Plane, k: Point3) -> bool {
+    q.signed_distance(k - p.normal_vec() * p.signed_distance(k)).abs() <= tol::LINEAR
 }
 
 /// Two planes turned more than NEAR, flush by the tolerance rule (ForgeExact.Snap `tolEq`, coverage
@@ -145,28 +239,20 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
 #[cold]
 #[inline(never)]
 fn turned_flush(p: &Plane, q: &Plane, region: &Box3) -> bool {
-    let corners = |region: &Box3| {
-        [
-            (region.x.lo, region.y.lo, region.z.lo),
-            (region.x.hi, region.y.lo, region.z.lo),
-            (region.x.lo, region.y.hi, region.z.lo),
-            (region.x.hi, region.y.hi, region.z.lo),
-            (region.x.lo, region.y.lo, region.z.hi),
-            (region.x.hi, region.y.lo, region.z.hi),
-            (region.x.lo, region.y.hi, region.z.hi),
-            (region.x.hi, region.y.hi, region.z.hi),
-        ]
-        .map(|(x, y, z)| Point3::new(x, y, z))
-    };
     let r = region.grow(-tol::LINEAR);
-    let across = [r.x, r.y, r.z]
-        .iter()
-        .filter(|i| i.hi - i.lo > 4.0 * tol::LINEAR)
-        .count();
-    let within = |p: &Plane, q: &Plane, k: Point3| {
-        q.signed_distance(k - p.normal_vec() * p.signed_distance(k)).abs() <= tol::LINEAR
-    };
-    across >= 2 && corners(&r).iter().all(|&k| within(p, q, k) && within(q, p, k))
+    let wide = |i: forge_math::Interval| i.hi - i.lo > 4.0 * tol::LINEAR;
+    let across = wide(r.x) as usize + wide(r.y) as usize + wide(r.z) as usize;
+    if across < 2 {
+        return false;
+    }
+    let ks = corners(&r);
+    let mut all = true;
+    let mut i = 0;
+    while all && i < 8 {
+        all = within_at_foot(p, q, ks[i]) && within_at_foot(q, p, ks[i]);
+        i += 1;
+    }
+    all
 }
 
 /// Pairs searched: a boolean meets one pair several times over the same region, and a drag meets over again every
@@ -225,8 +311,38 @@ pub fn searched_keeps(most: usize) {
     MET.with(|m| *m.borrow_mut() = Default::default());
 }
 
+/// `r` pushed out to a grid of powers of two about 2^-36 of its size: the same face boxes reach here
+/// by more than one path, a rounding apart, and each would be searched again (the answers are kept by
+/// their region's exact bits). The grid's box holds `r`, a hair larger, and it is the same box for
+/// all of them.
+fn snapped(r: Box3) -> Box3 {
+    let size = r.diagonal().max(
+        r.x.lo
+            .abs()
+            .max(r.x.hi.abs())
+            .max(r.y.lo.abs().max(r.y.hi.abs()))
+            .max(r.z.lo.abs().max(r.z.hi.abs())),
+    );
+    if !(size.is_finite() && size > 0.0) || r.is_empty() {
+        return r;
+    }
+    // the power of two just past size, times 2^-36: x / g and back are exact
+    let e = ((size.to_bits() >> 52) & 0x7ff) as i64 - 1023 + 1 - 36;
+    let g = f64::from_bits(((e + 1023).clamp(1, 2046) as u64) << 52);
+    let out = |i: forge_math::Interval| forge_math::Interval {
+        lo: (i.lo / g).floor() * g,
+        hi: (i.hi / g).ceil() * g,
+    };
+    Box3 {
+        x: out(r.x),
+        y: out(r.y),
+        z: out(r.z),
+    }
+}
+
 /// Where two surfaces with no closed form meet in `region`: by marching or tracing.
 pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
+    let region = snapped(region);
     // an apex in the region: a branch may change sheets there, and curves cannot end at one yet
     if forge_geom::sheet::apex_met(a, b, &region) {
         return SurfaceSurface::NotAnalytic;
@@ -291,8 +407,10 @@ fn search(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
         Some(r) if r != SurfaceSurface::NotAnalytic => r,
         _ => match forge_geom::intcurve::trace(a, b, region) {
             Some(cs) if cs.is_empty() => SurfaceSurface::Empty,
+            // two rounds touching where their springs cross: the trace mended there (forge-geom node.rs)
             Some(cs) => SurfaceSurface::Curves(
-                cs.into_iter()
+                forge_geom::node::mend(a, b, cs)
+                    .into_iter()
                     .map(|c| (Curve::Intersection(std::sync::Arc::new(c)), Contact::Crossing))
                     .collect(),
             ),
@@ -498,6 +616,53 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// B1 (research/kernel-audit/tilt-wrong-ok.md): two walls 5e-12 rad apart (within ANGULAR) that
+    /// cross at x = 4e6 inside a 1.6e7-long region. `plane_plane` calls them Empty at the frame
+    /// origin; over the region they meet in a line, on both walls along the whole region, the same
+    /// either way round; and where they do not cross in the region, Empty or Coincident by the gap.
+    #[test]
+    fn nearly_parallel_walls_are_decided_over_the_region() {
+        use forge_math::{Frame, Interval, Vec3};
+        let wall = |o: Point3, n: Vec3| Plane::new(Frame::from_z(o, n.normalize().unwrap()));
+        let (l, y0, y1) = (1.6e7, -2e-5, 6e-5);
+        let a = wall(Point3::new(0.0, 0.0, 0.0), Vec3::new(0.0, -1.0, 0.0));
+        let b = wall(Point3::new(l, y1, 0.0), Vec3::new(-(y1 - y0), l, 0.0));
+        let region = Box3 {
+            x: Interval::new(0.0, l),
+            y: Interval::new(y0, y1),
+            z: Interval::new(0.0, 10.0),
+        };
+        assert_eq!(forge_geom::intersect::plane_plane(&a, &b), SurfaceSurface::Empty);
+        let (sa, sb) = (Surface::Plane(a), Surface::Plane(b));
+        for (p, q) in [(&sa, &sb), (&sb, &sa)] {
+            let SurfaceSurface::Curves(cs) = surfaces_in(p, q, region) else {
+                panic!("{:?}", surfaces_in(p, q, region))
+            };
+            let Curve::Line(line) = cs[0].0 else {
+                panic!("{cs:?}")
+            };
+            // the crossing: x = 4e6 on y = 0, along z
+            for k in [0.0, 0.5, 1.0] {
+                let at = line.origin + line.dir.get() * ((k - 0.5) * 20.0);
+                assert!(sa.distance(at) <= 1e-7 && sb.distance(at) <= 1e-7, "{line:?}");
+            }
+            assert!((line.origin.x - 4e6).abs() < 1.0, "{line:?}");
+        }
+        // the same walls over a stretch where they do not cross: Empty (gap past LINEAR) or
+        // Coincident (within LINEAR all over)
+        let far = Box3 {
+            x: Interval::new(1.2e7, l),
+            ..region
+        };
+        assert_eq!(surfaces_in(&sa, &sb, far), SurfaceSurface::Empty);
+        let near = Box3 {
+            x: Interval::new(3.5e6, 4.5e6),
+            ..region
+        };
+        assert_eq!(surfaces_in(&sa, &sb, near), SurfaceSurface::Coincident);
+        assert_eq!(surfaces_in(&sb, &sa, near), SurfaceSurface::Coincident);
     }
 
     #[test]
@@ -784,9 +949,19 @@ mod tests {
             Point3::new(-206.39862274227644, -0.22540519861131517, 87.06967569277985),
             Point3::new(-142.12940588811063, 9.994697390738665, 100.51202637097762),
         ]);
-        assert!(forge_geom::intcurve::trace(&rod, &torus, region).is_none());
-        let got = past_stalls(&rod, &torus, region, |_| true);
-        assert!(past_stalls(&rod, &torus, region, |_| false).is_none());
+        // certified, the touch is a singular site the chains run into, and the trace is whole
+        #[cfg(feature = "certified_trace")]
+        {
+            let cs = forge_geom::intcurve::trace(&rod, &torus, region).expect("certified through the touch");
+            assert!(forge_geom::certify::certify(&rod, &torus, region, &cs).is_ok());
+            return;
+        }
+        #[allow(unreachable_code)]
+        let got = {
+            assert!(forge_geom::intcurve::trace(&rod, &torus, region).is_none());
+            assert!(past_stalls(&rod, &torus, region, |_| false).is_none());
+            past_stalls(&rod, &torus, region, |_| true)
+        };
         for (c, _) in got.expect("the branches off the touch") {
             let d = c.domain();
             for i in 0..=20 {

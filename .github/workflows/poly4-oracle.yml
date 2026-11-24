@@ -1,0 +1,33 @@
+# M.ct's oracle (verify/forge-bool-proof/LEDGER.md M.ct, M.cert): the shipped torus × cylinder event
+# search is not proven complete (research/decide-once/mct-options.md; David: keep it, oracle in CI).
+# Every such search on the gate parts, mixed and fuzz 1–300 is certified by forge-geom's meet_cert
+# (decisions feature only); one it does not certify fails this job.
+name: poly4-oracle
+
+on:
+  push:
+    branches: [main]
+    paths: ["kernel/**", ".github/workflows/poly4-oracle.yml"]
+  pull_request:
+    paths: ["kernel/**", ".github/workflows/poly4-oracle.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  oracle:
+    # (a push to main only refreshes the cache: pull requests ran the check on the tree that lands)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: rust (rust-toolchain.toml)
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+      - name: every torus × cylinder event search certified
+        if: ${{ github.event_name != 'push' }}
+        env:
+          FORGECAD_CACHE: "off"
+        run: cargo test --release --locked -p forge-model --features decisions --test poly4_oracle

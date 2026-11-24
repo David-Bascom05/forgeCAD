@@ -7,6 +7,8 @@
 //! `listen-wav\tPATH` (a WAV file at its own pace, in the microphone's place), `stop`, `cancel`.
 //! From it: `ready\tENGINE\tLOAD_MS`, `level\tL` (0..1), `partial\tTEXT`,
 //! `final\tMS\tTEXT` (MS: stop to text), `error\tTEXT`.
+// desktop only: a page starts no speech engine (docs/web.md)
+#![cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
 
 pub mod words;
 

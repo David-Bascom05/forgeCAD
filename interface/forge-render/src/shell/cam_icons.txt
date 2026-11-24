@@ -2,6 +2,7 @@
 cam_setup M4 14h12v6H4zM4 14l4-4h12l-4 4M20 10v6l-4 4M10 9V3M10 3l-2 2M10 3l2 2
 cam_face M3 20h18M4 16h16M9 3v7h6V3M5 13h14
 cam_clear M3 4h18v16H3zM7 8h10v8H7zM11 11h2v2h-2z
+cam_adaptive M3 4h18v16H3zM7 8h10v8H7zM5 6c3 0 3 1 6 1s3-1 6-1M5 18c3 0 3-1 6-1s3 1 6 1
 cam_contour M4 6h12l4 4v10H4zM14.0 6.0A2.0 2.0 0 1 0 18.0 6.0A2.0 2.0 0 1 0 14.0 6.0
 cam_pocket M3 7h18v13H3zM8 7v7h8V7
 cam_chamfer M4 20V8l4-4h12M4 8h4V4M10 20l6-6
@@ -16,3 +17,4 @@ cam_sim M3 5h18v14H3zM10 9v6l5-3z
 cam_check M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6zM8 12l3 3 5-6
 cam_stock M4 8l8-4 8 4v9l-8 4-8-4zM4 8l8 4 8-4M12 12v9
 cam_folder M3 7h6l2 2h10v10H3z
+cam_lathe M3 9h4v6H3zM7 7h6v10H7zM13 10h8v4h-8zM10 4v3M10 17v3

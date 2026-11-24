@@ -900,6 +900,13 @@ impl Shell {
                     }
                 }
                 KeyCmd::Markup => self.agent.markup.toggle(),
+                KeyCmd::Photo if self.fg.is_some() => {
+                    super::capture::command_of(self, super::capture::Capture::Photo)
+                }
+                KeyCmd::Record if self.fg.is_some() => {
+                    super::capture::command_of(self, super::capture::Capture::Record)
+                }
+                KeyCmd::Photo | KeyCmd::Record => {}
                 c => self.out.push(Action::Key(c)),
             }
         }
@@ -924,6 +931,9 @@ pub enum KeyCmd {
     Lines,
     Ao,
     Markup,
+    /// Capture's Photo, and Record (or Stop while recording).
+    Photo,
+    Record,
 }
 
 impl KeyCmd {
@@ -944,6 +954,8 @@ impl KeyCmd {
             "lines" => KeyCmd::Lines,
             "ao" => KeyCmd::Ao,
             "markup" => KeyCmd::Markup,
+            "photo" => KeyCmd::Photo,
+            "record" => KeyCmd::Record,
             _ => return None,
         })
     }

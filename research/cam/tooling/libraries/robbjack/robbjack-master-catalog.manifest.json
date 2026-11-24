@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "1.1",
+  "generated": "2026-11-02",
+  "toolCount": 7106,
+  "sawFamilies": 88,
+  "cam": {
+    "fusion360": {
+      "tools": 6746,
+      "endMills": 5262,
+      "saws": 1484,
+      "toolsWithPresets": 6734,
+      "presets": 12310
+    },
+    "nx": {
+      "tools": 6746,
+      "endMills": 5262,
+      "saws": 1484,
+      "toolsWithCutData": 6734,
+      "cutDataRows": 12310
+    }
+  },
+  "files": [
+    {
+      "path": "/data/robbjack-master-catalog.json",
+      "bytes": 5432629,
+      "sha256": "3a37b6cb41d453edd11bf07706d21932c46d19c2caacfbea40a43c323513d0a9"
+    },
+    {
+      "path": "/data/robbjack-master-catalog.csv",
+      "bytes": 3673671,
+      "sha256": "f0c22323f60284961682031d9a8478f35804420ded1a0d8940be0351d958c60c"
+    },
+    {
+      "path": "/data/cam/robbjack-fusion360.tools",
+      "bytes": 802291,
+      "sha256": "75f115baa41cdd909fb73f6f51e56e91a5be2e1b0083c45eda67d76293fc7031"
+    },
+    {
+      "path": "/data/cam/robbjack-nx-tool-database.dat",
+      "bytes": 5430175,
+      "sha256": "12a9b1d77a5bee084ff3123f7c574a1d6658f1fee2c0892dbfd69051fb382484"
+    }
+  ]
+}

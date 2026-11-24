@@ -20,6 +20,10 @@ if [ -f interface/forge-speech/Cargo.toml ]; then
     cargo install --locked --path interface/forge-speech --bin forge-speech --root "$install_root" --force
 fi
 install -m 755 "$repo/tools/update.sh" "$install_root/bin/forgecad-update"
+# ffmpeg for recording video (tools/fetch-ffmpeg.sh); a failed fetch leaves the install as it is
+if [ -f "$repo/tools/fetch-ffmpeg.sh" ] && ! sh "$repo/tools/fetch-ffmpeg.sh" "$install_root"; then
+    printf '\nNo ffmpeg installed: recording saves PNG frames until forgecad-update succeeds.\n' >&2
+fi
 # macOS: an app in ~/Applications, so Launchpad, Spotlight and the Dock open it
 if [ "$(uname -s)" = Darwin ]; then
     app="$HOME/Applications/ForgeCAD.app/Contents"

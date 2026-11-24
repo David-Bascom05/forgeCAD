@@ -1231,6 +1231,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # Brother SPEEDIO M200X3: BT30 mill-turn (discontinued). A tilts the trunnion about X
 # (-30..+120 deg, roller gear cam) and carries C, a direct-drive turning spindle on a 140 mm table
 # (2,000 rpm, 55 N.m, 3.6 kW motor); turning uses a stationary tool locked in the milling spindle.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "brother-speedio-m200x3"
 kind = "table-table"
@@ -1593,6 +1599,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # ---------------------------------------------------------------------------------------------
 # Brother SPEEDIO S300Xd2: SPEEDIO S-Xd2 compact machining center, Brother CNC-D00 (15in touch LCD), 5
 # X 300 Y 450 Z 300; 12000 rpm 7/24 No.30 (MAS-BT30, pull stud MAS-P30T-2); 14 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "brother-speedio-s300xd2"
 kind = "vmc3"
