@@ -753,7 +753,7 @@ pub fn generic_toml(table: &[Generic]) -> String {
             ),
         ] {
             s.push_str(&format!(
-                "[[generic.cite]]\npath = \"{path}\"\nstatus = \"estimate\"\nsource = \"research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)\"\ntaken = \"2026-11-24\"\nbasis = \"min, lower quartile, median, max of {} makers' {what} over {} rows of class {}\"\n",
+                "[[generic.cite]]\npath = \"{path}\"\nstatus = \"estimate\"\nsource = \"research/cam/tooling/raw/*.json (each row's maker URL in verify/feeds-vs-makers/rows.tsv)\"\ntaken = \"2026-11-24\"\nbasis = \"min, lower quartile, median, max of {} makers' {what} over {} rows of class {}; the tier (material-specific / general-purpose) is an estimate from the makers' product-line names (no maker states a tier)\"\n",
                 g.makers.len(),
                 g.n,
                 g.class()
