@@ -741,8 +741,8 @@ impl TurnCam {
 }
 
 /// Runs a turning document (its file's directory finds the part): the normal path.
-/// The programs' certifications made by earlier runs in this process (forge-cam-lang's memo.rs).
-static CERTIFIED: forge_cam_lang::memo::Memo<Result<ops::Report, String>> = forge_cam_lang::memo::Memo::new();
+/// The programs' certifications made by earlier runs in this process (forge-memo).
+static CERTIFIED: forge_memo::Memo<Result<ops::Report, String>> = forge_memo::Memo::new();
 
 /// `ops::certify` (exact) or `ops::certify_fast`, taken from an earlier run when every argument is
 /// the same (each number the same number: the full Debug text, memo.rs): the certification is a
@@ -893,9 +893,9 @@ mod certify_memo_tests {
             (super::CERTIFIED.computed() - before, reply(&tc))
         };
         let fresh = |d: &str| {
-            forge_cam_lang::memo::bypass(true);
+            forge_memo::bypass(true);
             let tc = super::run(d, &dir);
-            forge_cam_lang::memo::bypass(false);
+            forge_memo::bypass(false);
             reply(&tc)
         };
         let (n, first) = run(&doc);

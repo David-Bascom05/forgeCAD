@@ -13,8 +13,8 @@ forge-turn = { path = "../../kernel/forge-turn" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
-# its memo (memo.rs): the certification taken from an earlier run of the same inputs
-forge-cam-lang = { path = "../forge-cam-lang" }
+# the certification taken from an earlier run of the same inputs
+forge-memo = { path = "../../kernel/forge-memo" }
 
 [lints]
 workspace = true

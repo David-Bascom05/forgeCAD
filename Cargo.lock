@@ -154,6 +154,7 @@ dependencies = [
  "forge-machine",
  "forge-material",
  "forge-math",
+ "forge-memo",
  "forge-model",
  "forge-post",
  "forge-sketch",
@@ -452,6 +453,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-memo"
+version = "0.1.0"
+
+[[package]]
 name = "forge-mesh"
 version = "0.1.0"
 dependencies = [
@@ -701,9 +706,9 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-cam-geom",
- "forge-cam-lang",
  "forge-dirs",
  "forge-lang",
+ "forge-memo",
  "forge-tooling",
  "forge-turn",
 ]

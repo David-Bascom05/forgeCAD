@@ -27,7 +27,8 @@ use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod export;
 pub mod holes;
 pub mod life;
-pub mod memo;
+/// The memos (kernel/forge-memo), by the path they had here.
+pub use forge_memo as memo;
 pub mod probing;
 pub mod sim;
 pub mod toollog;
