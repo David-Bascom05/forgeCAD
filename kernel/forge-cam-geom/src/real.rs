@@ -1076,7 +1076,7 @@ impl Ctx {
             if exact
                 && p == 128
                 && k <= 1
-                && let Some(o) = self.exact_sign(&order, (2 * need).max(4096) as u64)
+                && let Some(o) = self.exact_sign(&self.closure(a), (2 * need).max(4096) as u64)
             {
                 return o;
             }
@@ -1283,7 +1283,7 @@ mod tests {
             for t in tests {
                 let want = c.sign_with(t, false);
                 let order = c.closure(t);
-                if c.radicals(&order) <= 1
+                if c.radicals(t) <= 1
                     && let Some(got) = c.exact_sign(&order, 1 << 20)
                 {
                     routed += 1;
