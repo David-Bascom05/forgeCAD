@@ -96,6 +96,8 @@ pub struct BendSimUi {
     pub pane: Pane,
     /// The Axes switch as it was on entry (put back on Finish).
     pub axes_was: Option<bool>,
+    /// The press overview is shown (Press Overview): the stations' chips over the view.
+    pub overview: bool,
     /// Follow bend: each new step framed afresh (off: the eye is the user's).
     pub follow: bool,
     /// See-through: what stands between the eye and the bend being made drawn as a ghost, at
@@ -224,6 +226,7 @@ impl BendSimUi {
             settle: 0,
             pane: Pane::Program,
             axes_was: None,
+            overview: false,
             follow: false,
             see_through: true,
             opacity: 0.45,
@@ -291,6 +294,7 @@ impl BendSimUi {
             settle: 0,
             pane: Pane::Program,
             axes_was: None,
+            overview: false,
             follow: false,
             see_through: true,
             opacity: 0.45,

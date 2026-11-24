@@ -370,10 +370,17 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
 /// The view is the renderer's (the press in 3D, gui_bendsim.rs): over it, the machine, step and
 /// failures, and the timeline along its foot. The view keeps its pointer (orbit, zoom).
 pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
+    let camera = s.camera;
+    let theme = s.theme;
     let Some(b) = s.sheet.bend_sim.as_deref_mut() else {
         return false;
     };
     super::bendsim::overlay(ui, view, b);
+    if b.overview {
+        for (k, r) in station_chips(ui, view, camera, &theme, b) {
+            s.places.push((format!("env:bendsim:station:{}", k + 1), r));
+        }
+    }
     // a narrow view: the view's settings on a row of their own, the bar taller for it
     let bar = super::bendsim::Bar::for_width(view.width());
     let narrow = bar == super::bendsim::Bar::Narrow;
@@ -427,6 +434,7 @@ pub(super) fn command(s: &mut Shell, c: u16) {
             b.follow = !b.follow;
             if b.follow {
                 b.frame = Some(super::bendsim::Framing::Work);
+                b.overview = false;
             }
         }
         SEE => b.see_through = !b.see_through,
@@ -443,7 +451,10 @@ pub(super) fn command(s: &mut Shell, c: u16) {
                 s.status = format!("Bend Simulation: {e}");
             }
         }
-        OVERVIEW => b.frame = Some(super::bendsim::Framing::Overview),
+        OVERVIEW => {
+            b.frame = Some(super::bendsim::Framing::Overview);
+            b.overview = true;
+        }
         PLAN => {
             // the program's tools laid out as stations along the bed (BENDSIM-TOOLS' planner);
             // over a document's own stations only when the user says so
@@ -515,6 +526,134 @@ pub(super) fn label_at(s: &Shell, t: f64) -> Option<String> {
     ))
 }
 
+/// A station's chip in the press overview: its name, tools and bends, over its place on the bed.
+pub struct Chip {
+    pub station: usize,
+    pub text: String,
+    pub rect: Rect,
+    /// Its station's place on the screen (the chip's leader runs to it).
+    pub at: egui::Pos2,
+    /// The station the shown bend works at.
+    pub here: bool,
+}
+
+/// The stations' chips, where they stand on the screen (UX-LEAD: the overview labelled, a click
+/// selects): each over its die's middle at the bed, the working station's in the accent.
+pub fn chips(ui: &Ui, view: Rect, camera: Option<(crate::camera::Camera, (u32, u32))>, b: &BendSimUi) -> Vec<Chip> {
+    let (Some((cam, size)), Ok(sim)) = (camera, b.sim.as_ref()) else {
+        return vec![];
+    };
+    let ppp = ui.ctx().pixels_per_point();
+    let here = sim.plan.steps.get(b.step).and_then(|s| s.station);
+    let short = |id: &str| id.rsplit('/').next().unwrap_or(id).to_string();
+    let mut out = Vec::new();
+    for (k, st) in sim.tooling.stations.iter().enumerate() {
+        let bends: Vec<String> = sim
+            .plan
+            .steps
+            .iter()
+            .enumerate()
+            .filter(|(_, s)| s.station == Some(k))
+            .map(|(i, _)| (i + 1).to_string())
+            .collect();
+        let text = format!(
+            "S{} · {} / {} · {}",
+            k + 1,
+            short(&sim.tooling.punches[st.punch].id),
+            short(&sim.tooling.dies[st.die].id),
+            if bends.is_empty() {
+                "no bends".to_string()
+            } else {
+                format!("bend{} {}", if bends.len() == 1 { "" } else { "s" }, bends.join(", "))
+            }
+        );
+        // the die's foot on the bed, at the station's middle
+        let at = [0.0f32, st.y as f32, -(sim.tooling.dies[st.die].height as f32) - 10.0];
+        let Some((x, y)) = cam.pixel_of(at, size.0, size.1) else { continue };
+        let q = egui::pos2(view.left() + x / ppp, view.top() + y / ppp);
+        if !view.contains(q) {
+            continue;
+        }
+        let g = ui.painter().layout_no_wrap(text.clone(), egui::FontId::proportional(12.0), egui::Color32::WHITE);
+        let rect = Rect::from_center_size(q, g.size() + egui::vec2(12.0, 6.0));
+        out.push(Chip {
+            station: k,
+            text,
+            rect,
+            at: q,
+            here: here == Some(k),
+        });
+    }
+    // stations close on the screen (seen along the bed): each chip moved down clear of the ones
+    // already placed, a leader back to its station
+    let mut placed: Vec<Rect> = Vec::new();
+    for c in &mut out {
+        while placed.iter().any(|r| r.expand(2.0).intersects(c.rect)) {
+            c.rect = c.rect.translate(egui::vec2(0.0, c.rect.height() + 4.0));
+        }
+        placed.push(c.rect);
+    }
+    out
+}
+
+fn station_chips(
+    ui: &mut Ui,
+    view: Rect,
+    camera: Option<(crate::camera::Camera, (u32, u32))>,
+    t: &super::theme::Theme,
+    b: &mut BendSimUi,
+) -> Vec<(usize, Rect)> {
+    let list = chips(ui, view, camera, b);
+    let p = ui.painter_at(view);
+    let mut go = None;
+    for c in &list {
+        let r = ui.interact(c.rect, egui::Id::unique("bendsim-station-chip").with(c.station), egui::Sense::click());
+        let fill = if c.here {
+            t.accent
+        } else if r.hovered() {
+            egui::Color32::from_black_alpha(220)
+        } else {
+            egui::Color32::from_black_alpha(170)
+        };
+        if !c.rect.contains(c.at) {
+            let from = egui::pos2(c.rect.left() + 10.0, c.rect.top());
+            p.line_segment([from, c.at], egui::Stroke::new(1.0, egui::Color32::from_black_alpha(170)));
+            p.circle_filled(c.at, 3.0, fill);
+        }
+        p.rect_filled(c.rect, 9.0, fill);
+        p.text(
+            c.rect.center(),
+            egui::Align2::CENTER_CENTER,
+            &c.text,
+            egui::FontId::proportional(12.0),
+            egui::Color32::WHITE,
+        );
+        let r = r.on_hover_text("go to this station's first bend");
+        if r.clicked() {
+            go = Some(c.station);
+        }
+    }
+    if let Some(k) = go {
+        select_station(b, k);
+    }
+    list.iter().map(|c| (c.station, c.rect)).collect()
+}
+
+/// A station chosen (its chip clicked): its first bend shown, framed at its tools.
+pub fn select_station(b: &mut BendSimUi, k: usize) {
+    let first = b
+        .sim
+        .as_ref()
+        .ok()
+        .and_then(|s| s.plan.steps.iter().position(|st| st.station == Some(k)));
+    if let Some(i) = first {
+        b.go(i);
+        b.playing = false;
+        b.overview = false;
+        b.frame = Some(super::bendsim::Framing::Work);
+    }
+}
+
 #[cfg(test)]
 mod timeline_tests {
     use super::*;
@@ -554,3 +693,4 @@ mod timeline_tests {
         assert_eq!((b.step, b.t), (1, 1.0));
     }
 }
+

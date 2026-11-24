@@ -1666,3 +1666,41 @@ fn no_feasible_order_is_said_and_bend_one_has_no_previous() {
     click(&mut h, "tool:Next Bend");
     assert_eq!(h.gui.shell.sheet.bend_sim.as_ref().unwrap().step, 1);
 }
+
+/// The press overview labels its stations (UX-LEAD): a chip each, over its place on the bed; a
+/// click on one goes to that station's first bend, framed at its tools.
+#[test]
+fn the_overview_labels_its_stations_and_a_chip_selects_one() {
+    let Some(mut h) = headless() else { return };
+    let part = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sheetmetal/load_tray.fg");
+    open(&mut h, part);
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let c = Choice {
+        press: Some("trumpf-trubend-5130".into()),
+        stations_auto: true,
+        ..Choice::default()
+    };
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().redo(c, "std-eu");
+    h.step();
+    let (n, want) = {
+        let sim = h.gui.shell.sheet.bend_sim.as_ref().unwrap().sim.as_ref().unwrap();
+        let n = sim.tooling.stations.len();
+        // the last station's first bend
+        (n, sim.plan.steps.iter().position(|s| s.station == Some(n.saturating_sub(1))))
+    };
+    assert!(n >= 2, "stations: {n}");
+    click(&mut h, "tool:Press Overview");
+    for _ in 0..30 {
+        h.step();
+    }
+    shot(&mut h, "ux-overview-station-chips");
+    for k in 1..=n {
+        assert!(h.placed(&format!("env:bendsim:station:{k}")).is_some(), "station {k}'s chip");
+    }
+    let want = want.unwrap();
+    click(&mut h, &format!("env:bendsim:station:{n}"));
+    let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+    assert_eq!(b.step, want);
+    assert!(!b.overview, "the overview left for the station");
+}
