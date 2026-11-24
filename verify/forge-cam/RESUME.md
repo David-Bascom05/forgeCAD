@@ -59,7 +59,9 @@ Expect about 2 min with the Mathlib cache. Post.lean's `step` takes about 45 s.
   a line is 1-Lipschitz, so a set whose distances lie in [d_min, d_max] is at least
   max(d_min − s_hi, s_lo − d_max, 0) from a shell of radii [s_lo, s_hi]; (3) the tangent-plane
   lower bound of a convex quadratic over a box (minimum at a corner); (4) the full surface bounds
-  the trimmed patch below (Clear only). Dist2.lean has the metric pieces. Non-finite or
+  the trimmed patch below (Clear only). The bounds are to the full surface, independent of the
+  face's sense: convex and concave faces alike ("convex" in (3) is the squared-distance
+  polynomial, not the face). Dist2.lean has the metric pieces. Non-finite or
   overflowing data is refused in the code (no Clear), tested.
 
 ## The vise code (3e8a91d, 0a4c189): done
