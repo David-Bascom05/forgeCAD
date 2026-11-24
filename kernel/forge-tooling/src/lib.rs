@@ -1119,13 +1119,19 @@ impl Library {
         Ok(())
     }
 
-    /// The built-in library: ours, generic.
+    /// The built-in library: ours, generic. Read from its files once per process (they are
+    /// compiled in, so every read gives the same library), then cloned.
     pub fn builtin() -> Library {
-        let mut l = Library::default();
-        for (f, s) in BUILTIN {
-            l.add(f, s).expect("the built-in library reads");
-        }
-        l
+        static BUILT: std::sync::OnceLock<Library> = std::sync::OnceLock::new();
+        BUILT
+            .get_or_init(|| {
+                let mut l = Library::default();
+                for (f, s) in BUILTIN {
+                    l.add(f, s).expect("the built-in library reads");
+                }
+                l
+            })
+            .clone()
     }
 
     pub fn tool(&self, id: &str) -> Result<&Tool, LibError> {
@@ -1371,6 +1377,20 @@ impl Library {
 
 #[cfg(test)]
 mod tests {
+    /// The built-in library kept from the first read is the library its files read as, and a
+    /// caller's changes to its copy reach no other.
+    #[test]
+    fn the_kept_builtin_is_the_read_one() {
+        let mut fresh = super::Library::default();
+        for (f, s) in super::BUILTIN {
+            fresh.add(f, s).unwrap();
+        }
+        let mut a = super::Library::builtin();
+        assert_eq!(a, fresh);
+        a.tools.clear();
+        assert_eq!(super::Library::builtin(), fresh);
+    }
+
     use super::*;
 
     #[test]
