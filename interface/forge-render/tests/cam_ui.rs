@@ -760,3 +760,28 @@ fn document_text_is_a_bottom_panel() {
     h.step();
     assert!(text(&h).contains("stickout: 34"), "{}", text(&h));
 }
+
+/// An adaptive op selected: clear's time on the same setup, tool and heights is measured off the
+/// UI thread and shown beside its own (TOOLPATH-QUALITY's alternative_clear).
+#[test]
+fn an_adaptive_op_shows_what_clear_would_take() {
+    use forge_render::shell::cam::Cmd;
+    let Some((mut h, _)) = open("altclear") else { return };
+    let text = text(&h);
+    let top = text.lines().find(|l| l.starts_with("top")).unwrap().to_string();
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    w.set_text(text.replace(&top, "top  = adaptive(op1, tool: t1, from: 18, to: 12, step: 3)"));
+    settle(&mut h);
+    h.gui.shell.cam.as_mut().unwrap().command(Cmd::Select("top".into()));
+    let t0 = std::time::Instant::now();
+    while h.gui.shell.cam.as_ref().unwrap().alt.is_none() && t0.elapsed().as_secs() < 120 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let (op, _, got) = w.alt.as_ref().expect("clear's time measured");
+    assert_eq!(op, "top");
+    let (lo, est) = got.expect("clear builds on the flange");
+    assert!(lo > 0.0 && est >= lo);
+    shot(&mut h, "cam-adaptive-vs-clear");
+}

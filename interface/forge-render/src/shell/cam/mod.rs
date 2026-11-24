@@ -227,6 +227,10 @@ pub struct PartInfo {
     pub sketches: Vec<String>,
 }
 
+/// An adaptive op's comparison with clear: (op, the run's text it was measured on, clear's bound
+/// and estimate, or None when clear does not build there).
+pub type AltClear = (String, String, Option<(f64, f64)>);
+
 pub struct CamWs {
     pub path: String,
     pub dir: PathBuf,
@@ -244,6 +248,13 @@ pub struct CamWs {
     pub running: Option<String>,
     /// Where the host's run lands.
     pub job: Arc<Mutex<Option<run::Run>>>,
+    /// An adaptive op's comparison: the same setup, tool and heights as `clear` at its defaults
+    /// (forge-cam-quality's alternative_clear), measured off the UI thread: (op, the run's text
+    /// it is for, its bound and estimate, or None when it does not build). `alt_job` is the
+    /// worker's slot; `alt_asked` the (op, text) asked last.
+    pub alt: Option<AltClear>,
+    pub alt_job: Arc<Mutex<Option<AltClear>>>,
+    pub alt_asked: Option<(String, String)>,
     pub auto: bool,
     pub selected: Option<String>,
     pub focus: Focus,
@@ -332,6 +343,9 @@ impl CamWs {
             want_check: false,
             running: None,
             job: Arc::new(Mutex::new(None)),
+            alt: None,
+            alt_job: Arc::new(Mutex::new(None)),
+            alt_asked: None,
             auto: true,
             selected: None,
             focus: Focus::default(),
