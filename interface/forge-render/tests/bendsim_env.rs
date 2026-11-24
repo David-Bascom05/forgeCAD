@@ -1274,3 +1274,76 @@ fn only_what_hides_the_bend_is_seen_through() {
         assert!(h.gui.bend.whole());
     }
 }
+
+/// A staged program's clip (BENDSIM-TOOLS): the part on a library press, its tools laid out as
+/// stations along the bed by the planner, every bend at its station. Off unless BENDSIM_CLIP
+/// names a folder; BENDSIM_CLIP_PART the part, BENDSIM_CLIP_PRESS the press
+/// (default trumpf-trubend-5130). Frames frame-NNNN.ppm, and the plan's stations on stderr.
+#[test]
+fn a_staged_clip() {
+    let (Ok(dir), Ok(part)) = (std::env::var("BENDSIM_CLIP"), std::env::var("BENDSIM_CLIP_PART")) else {
+        return;
+    };
+    let press = std::env::var("BENDSIM_CLIP_PRESS").unwrap_or_else(|_| "trumpf-trubend-5130".into());
+    let Some(mut h) = headless() else { return };
+    open(&mut h, &part);
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let choice = Choice {
+        press: Some(press),
+        stations_auto: true,
+        ..Choice::default()
+    };
+    h.gui
+        .shell
+        .sheet
+        .bend_sim
+        .as_mut()
+        .unwrap()
+        .redo(choice, "std-eu");
+    for _ in 0..4 {
+        h.step();
+    }
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        let sim = b.sim.as_ref().expect("simulated");
+        assert!(sim.plan.feasible, "{}", h.gui.shell.status);
+        let st = sim.stage.as_ref().expect("a staged program");
+        for (k, s) in st.stations.iter().enumerate() {
+            eprintln!(
+                "station {} {} {} y {} bends {:?}",
+                k + 1,
+                s.punch,
+                s.die,
+                s.y,
+                s.steps
+            );
+        }
+    }
+    // BENDSIM_CLIP_VIEW=overview: the whole press, the eye held (the layout and the part's
+    // moves between stations in view), not following the bend
+    if std::env::var("BENDSIM_CLIP_VIEW").is_ok_and(|v| v == "overview") {
+        h.gui.shell.sheet.bend_sim.as_mut().unwrap().follow = false;
+        frame(&mut h, Framing::Overview);
+        for _ in 0..8 {
+            h.step();
+        }
+    }
+    let total = h
+        .gui
+        .shell
+        .env_timeline()
+        .expect("the timeline")
+        .duration(&h.gui.shell);
+    let n: usize = std::env::var("BENDSIM_CLIP_FRAMES")
+        .ok()
+        .and_then(|x| x.parse().ok())
+        .unwrap_or(360);
+    for i in 0..n {
+        let tl = h.gui.shell.env_timeline().unwrap();
+        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
+        h.step();
+        std::fs::write(format!("{dir}/frame-{i:04}.ppm"), h.ppm()).unwrap();
+    }
+    eprintln!("clip: {n} frames over {total} s of program");
+}

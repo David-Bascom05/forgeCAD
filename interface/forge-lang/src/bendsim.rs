@@ -44,6 +44,11 @@ pub struct Ask {
     pub stations: Vec<StationAsk>,
     /// Per step of `sequence`, what the program states of its setup.
     pub steps: Vec<StepAsk>,
+    /// Lay the program's tools out as stations along the bed (`stations auto`): stage bending.
+    pub stage: bool,
+    /// Bends locked to a station (`lock rear=2,tab=1`: a bend's name or number, a station's
+    /// number from 1, into `stations`): each made there; the order and the rest are searched.
+    pub locks: Vec<(String, usize)>,
 }
 
 /// A station: its punch and die (library ids), its centre along the bed from the bed's centre,
@@ -82,6 +87,28 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
             "vendor" => a.vendor = Some(val("vendor")?),
             "sequence" => a.sequence = Some(val("sequence")?),
             "keep_tools" => a.keep_tools = true,
+            "lock" => {
+                for item in val("lock")?.split(',').map(str::trim).filter(|x| !x.is_empty()) {
+                    let (b, k) = item
+                        .split_once('=')
+                        .ok_or_else(|| format!("`lock` takes bend=station pairs, not `{item}`"))?;
+                    let k = k
+                        .trim()
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|k| *k >= 1)
+                        .ok_or_else(|| format!("`lock`: `{k}` is not a station number (1, 2, ..)"))?;
+                    a.locks.push((b.trim().to_string(), k - 1));
+                }
+            }
+            "stations" => match val("stations")?.as_str() {
+                "auto" => a.stage = true,
+                other => {
+                    return Err(format!(
+                        "`stations` takes `auto` (lay the tools out along the bed), not `{other}`"
+                    ));
+                }
+            },
             "programs" => {
                 a.programs = Some(
                     val("programs")?
@@ -103,7 +130,7 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
             }
             other => {
                 return Err(format!(
-                    "bendsim takes press P, punches A,B, dies C,D, tooling T, vendor V, sequence S, sheet NAME, uts MPA; not `{other}`"
+                    "bendsim takes press P, punches A,B, dies C,D, tooling T, vendor V, sequence S, stations auto, lock B=N, sheet NAME, uts MPA; not `{other}`"
                 ));
             }
         }
@@ -156,6 +183,34 @@ pub struct Sim {
     pub answer: Answer,
     /// Ranked feasible programs, when asked for (`Ask::programs`).
     pub programs: Vec<fb::Program>,
+    /// The staged program (`stations auto`): its stations and why; `tooling` and `plan` are its.
+    pub stage: Option<fb::Staged>,
+}
+
+/// `BENDSIM_TIME=1`: each phase's wall time on stderr (native only: no clock on wasm32).
+struct Phases {
+    #[cfg(not(target_arch = "wasm32"))]
+    at: Option<std::time::Instant>,
+}
+
+impl Phases {
+    fn start() -> Phases {
+        Phases {
+            #[cfg(not(target_arch = "wasm32"))]
+            at: std::env::var_os("BENDSIM_TIME").map(|_| std::time::Instant::now()),
+        }
+    }
+
+    fn lap(&mut self, _what: &str) {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(t) = &mut self.at {
+            eprintln!(
+                "bendsim time: {_what:<10} {:>8.1} ms",
+                t.elapsed().as_secs_f64() * 1e3
+            );
+            *t = std::time::Instant::now();
+        }
+    }
 }
 
 /// The part's sheet simulated: Err is the typed error reply.
@@ -165,7 +220,9 @@ pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &As
         root,
         ..Options::default()
     };
+    let mut ph = Phases::start();
     let (r, _) = run(src, opts, Default::default());
+    ph.lap("build");
     if r.sheets.is_empty() {
         return Err(match r.errors.first() {
             Some(e) => {
@@ -222,7 +279,9 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         ask.dies.get_or_insert(ds);
     }
     let ask = &ask;
+    let mut ph = Phases::start();
     let (mut tooling, tsource) = tooling(ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
+    ph.lap("tooling");
     for st in &ask.stations {
         let (Some(p), Some(d)) = (
             tooling.punches.iter().position(|x| x.id == st.punch),
@@ -253,6 +312,7 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         Err(e) => return Err(model_err(sh, &e)),
     };
     let bend_names: Vec<String> = model.bends.iter().map(|b| joint_name(sh, b.joint)).collect();
+    ph.lap("model");
     let sequence = match &ask.sequence {
         None => None,
         Some(s) => Some(sequence(s, &bend_names)?),
@@ -263,7 +323,24 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
             .and_then(forge_material::find)
             .and_then(|m| m.uts)
     });
+    let mut locks = vec![None; model.bends.len()];
+    for (b, k) in &ask.locks {
+        let j = sequence_one(b, &bend_names)?;
+        if *k >= tooling.stations.len() {
+            return Err(err(
+                "BadStation",
+                format!(
+                    "`lock {b}={}`: the press has {} stations",
+                    k + 1,
+                    tooling.stations.len()
+                ),
+                vec![],
+            ));
+        }
+        locks[j] = Some(*k);
+    }
     let opts = fb::Options {
+        locks,
         sequence,
         material: sh.material.clone(),
         uts,
@@ -284,15 +361,59 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         }),
         ..fb::Options::default()
     };
-    let mut plan = fb::plan(&model, &tooling, &opts);
+    // stage bending: the program's tools laid out along the bed, simulated all on the press
+    let mut tooling = tooling;
+    let mut staged: Option<fb::Staged> = None;
+    let mut stage_json: Option<Json> = None;
+    let mut plan = if ask.stage && tooling.stations.is_empty() && opts.sequence.is_none() {
+        match fb::stage(&model, &tooling, &opts, 8) {
+            Ok(s) => {
+                let speeds = ask
+                    .press
+                    .as_deref()
+                    .and_then(|p| catalog(dir).ok().and_then(|c| c.press(p).map(|r| r.speeds)));
+                stage_json = Some(staged_json(sh, &s, &bend_names, speeds.as_ref()));
+                tooling = s.tooling.clone();
+                let p = s.plan.clone();
+                staged = Some(s);
+                p
+            }
+            Err(fb::StageFail::NoProgram(p)) => {
+                stage_json = Some(Json::obj(vec![
+                    ("ok", false.into()),
+                    (
+                        "why",
+                        "no feasible program to lay out: `blocking` says why".into(),
+                    ),
+                ]));
+                p
+            }
+            Err(fb::StageFail::NoLayout { why, .. }) => {
+                stage_json = Some(Json::obj(vec![
+                    ("ok", false.into()),
+                    ("why", why.as_str().into()),
+                ]));
+                fb::plan(&model, &tooling, &opts)
+            }
+        }
+    } else {
+        fb::plan(&model, &tooling, &opts)
+    };
+    ph.lap(if ask.stage { "stage" } else { "plan" });
     let ranked = ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n));
+    ph.lap("programs");
     // the operator's move into each step after the first, checked (a warning if not proven clear)
     fb::scene::annotate_handling(&model, &tooling, &mut plan);
+    ph.lap("handling");
     let mut answer = answer(sh, &model, &tooling, &plan, &bend_names);
+    ph.lap("reply");
     if let Json::Obj(f) = &mut answer.json {
         f.insert(4, ("tooling_source".into(), tsource));
         if let Some(r) = &ranked {
             f.push(("programs".into(), programs_json(&tooling, r, &bend_names)));
+        }
+        if let Some(j) = stage_json {
+            f.push(("stage".into(), j));
         }
     }
     Ok(Sim {
@@ -302,6 +423,7 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         names: bend_names,
         answer,
         programs: ranked.unwrap_or_default(),
+        stage: staged,
     })
 }
 
@@ -452,6 +574,11 @@ fn wall_name(sh: &SheetOut, w: WallId) -> String {
         .iter()
         .find(|x| x.0 == w)
         .map_or_else(|| format!("wall{}", w.0), |x| x.1.clone())
+}
+
+/// One bend by name or number (as in a sequence).
+fn sequence_one(item: &str, names: &[String]) -> Result<usize, Answer> {
+    Ok(sequence(item, names)?[0])
 }
 
 fn sequence(s: &str, names: &[String]) -> Result<Vec<usize>, Answer> {
@@ -688,6 +815,133 @@ fn tooling(ask: &Ask, dir: Option<&Path>, sheet_vendor: Option<&str>) -> Result<
 
 /// Ranked programs: each its order, what it asks of the operator and the setter, and its steps'
 /// tooling and orientation.
+/// The staged program: its stations along the bed (each with its tools, place, lengths, the
+/// steps made there and why its punch), every step's station, the moves between them, and the
+/// ram's time where the press's speeds are published.
+fn staged_json(
+    sh: &SheetOut,
+    s: &fb::Staged,
+    names: &[String],
+    speeds: Option<&fb::catalog::Speeds>,
+) -> Json {
+    let tl = &s.tooling;
+    let stations: Vec<Json> = s
+        .stations
+        .iter()
+        .enumerate()
+        .map(|(k, u)| {
+            let bends: Vec<Json> = u
+                .steps
+                .iter()
+                .map(|i| names[s.plan.steps[*i].bend].as_str().into())
+                .collect();
+            let mut why = match u.kind {
+                fb::PunchKind::Straight => "a straight punch: the first choice".to_string(),
+                kind => {
+                    let mut rules: Vec<&str> = u
+                        .instead_of
+                        .iter()
+                        .filter(|r| tl.punch(&r.0).is_some_and(|p| p.kind == fb::PunchKind::Straight))
+                        .map(|r| r.1.word())
+                        .collect();
+                    rules.sort_unstable();
+                    rules.dedup();
+                    let article = if kind == fb::PunchKind::Acute { "an" } else { "a" };
+                    if rules.is_empty() {
+                        format!("{article} {} punch: it makes these bends", kind.word())
+                    } else {
+                        format!(
+                            "{article} {} punch: every straight punch failed ({})",
+                            kind.word(),
+                            rules.join(", ")
+                        )
+                    }
+                }
+            };
+            if let Some(c) = &u.punch_clear {
+                let at = c.part.as_ref().map(|p| part(sh, p));
+                let what = at
+                    .as_ref()
+                    .and_then(|a| a.get("anchor"))
+                    .and_then(Json::str)
+                    .map(str::to_string)
+                    .unwrap_or_else(|| "the part".into());
+                let at = c.bound.unwrap_or(c.value);
+                why.push_str(&if c.near.is_some() {
+                    format!(
+                        "; {what} comes within {} mm of it: near the {} mm limit, within the check's resolution (a warning)",
+                        r6s(at),
+                        r6s(c.limit)
+                    )
+                } else {
+                    format!("; {what} clears it by {} mm (limit {} mm)", r6s(at), r6s(c.limit))
+                });
+            }
+            Json::obj(vec![
+                ("n", (k + 1).into()),
+                ("punch", u.punch.as_str().into()),
+                ("die", u.die.as_str().into()),
+                ("kind", u.kind.word().into()),
+                ("y", r6(u.y)),
+                ("punch_length", r6(u.punch_length)),
+                ("die_length", r6(u.die_length)),
+                ("reach", Json::Arr(vec![r6(u.reach.0), r6(u.reach.1)])),
+                ("bends", Json::Arr(bends)),
+                ("why", why.as_str().into()),
+                (
+                    "punch_clear",
+                    u.punch_clear.as_ref().map_or(Json::Null, |c| check(sh, c)),
+                ),
+            ])
+        })
+        .collect();
+    let steps: Vec<Json> = s
+        .plan
+        .steps
+        .iter()
+        .zip(&s.station_of)
+        .zip(&s.travel)
+        .map(|((st, k), t)| {
+            Json::obj(vec![
+                ("bend", names[st.bend].as_str().into()),
+                ("station", (k + 1).into()),
+                ("travel", Json::Arr(vec![r6(t.approach), r6(t.work), r6(t.ret)])),
+                (
+                    "seconds",
+                    speeds.and_then(|sp| t.seconds(sp)).map_or(Json::Null, r6),
+                ),
+            ])
+        })
+        .collect();
+    let ram = speeds.and_then(|sp| s.ram_seconds(sp));
+    Json::obj(vec![
+        ("ok", true.into()),
+        ("stations", Json::Arr(stations)),
+        ("steps", Json::Arr(steps)),
+        ("flips", s.flips.into()),
+        ("turns", s.turns.into()),
+        ("shifts", s.shifts.into()),
+        ("tool_changes", 0.0.into()),
+        ("tight", s.tight.into()),
+        ("programs_tried", s.programs_tried.into()),
+        ("layouts_tried", s.layouts_tried.into()),
+        (
+            "time",
+            Json::obj(vec![
+                ("ram_seconds", ram.map_or(Json::Null, r6)),
+                (
+                    "counted",
+                    "the ram's approach, bend and return at the press's published speeds".into(),
+                ),
+                (
+                    "not_counted",
+                    "handling, the part's moves between stations, gauging (no published times)".into(),
+                ),
+            ]),
+        ),
+    ])
+}
+
 fn programs_json(tl: &fb::Tooling, ps: &[fb::Program], names: &[String]) -> Json {
     Json::Arr(
         ps.iter()
@@ -1258,12 +1512,23 @@ fn choice(m: &fb::Model, tl: &fb::Tooling, st: &fb::Step) -> Json {
         .collect();
     let punch_why = match punch.map(|p| p.kind) {
         Some(fb::PunchKind::Straight) => "a straight punch: the first choice".to_string(),
-        Some(k) => format!("a {} punch: every straight punch failed ({})", k.word(), {
-            let mut rules: Vec<&str> = straight_failed.iter().map(|r| r.3.word()).collect();
-            rules.sort_unstable();
-            rules.dedup();
-            rules.join(", ")
-        }),
+        // no setup tried before it: the last step's tools, kept (no tool change)
+        Some(k) if st.rejected.is_empty() => format!(
+            "{} {} punch: the step before's, kept (no tool change)",
+            if k == fb::PunchKind::Acute { "an" } else { "a" },
+            k.word()
+        ),
+        Some(k) => format!(
+            "{} {} punch: every straight punch failed ({})",
+            if k == fb::PunchKind::Acute { "an" } else { "a" },
+            k.word(),
+            {
+                let mut rules: Vec<&str> = straight_failed.iter().map(|r| r.3.word()).collect();
+                rules.sort_unstable();
+                rules.dedup();
+                rules.join(", ")
+            }
+        ),
         None => String::new(),
     };
     let rejected: Vec<Json> = st

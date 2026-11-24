@@ -728,11 +728,12 @@ impl Gui {
             sc.table_height = h;
         }
         let bodies = sc.bodies(step, b.t);
-        // framed: on entry, when asked (the View tools, F), and when the part moves to another
-        // station (a new subject); held through the step otherwise
+        // the station the step works at (along the bed)
         let at = {
-            let st = &sim.plan.steps[step].setup;
-            sim.tooling.station(st.punch, st.die).map(|x| x.y.to_bits())
+            let st = &sim.plan.steps[step];
+            st.station
+                .and_then(|k| sim.tooling.stations.get(k))
+                .map(|x| x.y.to_bits())
         };
         let ask = b.frame;
         // framed on entry and when asked (the View tools, F); otherwise the eye stands still as an
@@ -748,9 +749,13 @@ impl Gui {
             // (fitting it draws the eye far back): it may pass out of the frame's edge and back
             let envelope = match how {
                 Framing::Work => {
+                    // the step's own station (BENDSIM-TOOLS' Step.station: a punch and die may
+                    // stand at two stations)
                     let here = |k: usize| {
-                        let st = &sim.plan.steps[k].setup;
-                        sim.tooling.station(st.punch, st.die).map(|x| x.y.to_bits())
+                        let st = &sim.plan.steps[k];
+                        st.station
+                            .and_then(|j| sim.tooling.stations.get(j))
+                            .map(|x| x.y.to_bits())
                     };
                     let samples: Vec<Vec<Body>> = (0..n)
                         .filter(|&k| here(k) == at)

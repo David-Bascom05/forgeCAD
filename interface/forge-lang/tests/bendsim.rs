@@ -619,3 +619,91 @@ fn ranked_programs_are_offered() {
     let plain = ask_src(&channel(), None, None, &Ask::default());
     assert_eq!(plain.json.get("sequence"), a.json.get("sequence"));
 }
+
+/// Stage bending on a real press (`stations auto`): the showcase load tray on a TruBend 5130 with
+/// Trumpf's catalogue tools needs more than one station (its lips and rear want goosenecks, its
+/// tab a short stack); every station on the bed, none overlapping, every step at the station
+/// holding its tools, the program feasible with all of them on the press, and each station says
+/// why its punch.
+#[test]
+fn stations_auto_on_a_real_press() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap();
+    let ask =
+        forge_lang::bendsim::parse(&["press", "trumpf-trubend-5130", "stations", "auto"].map(String::from))
+            .unwrap();
+    assert!(ask.stage);
+    let a = ask_src(&src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let j = &a.json;
+    assert_eq!(j.get("feasible"), Some(&Json::Bool(true)));
+    let st = j.get("stage").expect("stage");
+    assert_eq!(st.get("ok"), Some(&Json::Bool(true)), "{st:?}");
+    let stations = arr(st, "stations");
+    assert!(stations.len() >= 2, "{stations:?}");
+    let n = |x: &Json, k: &str| x.get(k).and_then(Json::num).unwrap();
+    let mut spans: Vec<(f64, f64)> = Vec::new();
+    for s in &stations {
+        let w = 0.5 * n(s, "punch_length").max(n(s, "die_length"));
+        let y = n(s, "y");
+        assert!(
+            (-1615.0..=1615.0).contains(&(y - w)) && y + w <= 1615.0,
+            "on the bed: {s:?}"
+        );
+        for (a, b) in &spans {
+            assert!(y + w <= *a || y - w >= *b, "stacks overlap");
+        }
+        spans.push((y - w, y + w));
+        assert!(!s.get("why").and_then(Json::str).unwrap_or("").is_empty());
+    }
+    let steps = arr(j, "steps");
+    let at = arr(st, "steps");
+    assert_eq!(steps.len(), at.len());
+    for (s, a) in steps.iter().zip(&at) {
+        let k = n(a, "station") as usize - 1;
+        assert_eq!(s.get("punch"), stations[k].get("punch"));
+        assert_eq!(s.get("die"), stations[k].get("die"));
+        assert_eq!(s.get("pass"), Some(&Json::Bool(true)));
+        // the press's speeds are published: each step's ram time is known
+        assert!(a.get("seconds").and_then(Json::num).is_some_and(|x| x > 0.0));
+    }
+}
+
+/// `lock B=N`: a bend made at the station the user set, the rest searched; a station that is not
+/// there, or a bend that is not, is a typed error.
+#[test]
+fn a_lock_keeps_a_bend_at_its_station() {
+    use forge_lang::bendsim::StationAsk;
+    let st = |punch: &str, y: f64| StationAsk {
+        punch: punch.into(),
+        die: "std-eu/V12-88".into(),
+        y,
+        punch_length: 200.0,
+        die_length: 200.0,
+    };
+    let mut ask = forge_lang::bendsim::parse(&["lock", "left=2"].map(String::from)).unwrap();
+    assert_eq!(ask.locks, vec![("left".to_string(), 1)]);
+    ask.stations = vec![st("std-eu/P85-R08-H120", -600.0), st("std-eu/G88-R08", 600.0)];
+    let a = ask_src(&channel(), None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)));
+    for s in arr(&a.json, "steps") {
+        let want = if s.get("bend").and_then(Json::str) == Some("left") {
+            "std-eu/G88-R08"
+        } else {
+            "std-eu/P85-R08-H120"
+        };
+        assert_eq!(s.get("punch").and_then(Json::str), Some(want));
+    }
+    let mut bad = ask.clone();
+    bad.locks = vec![("left".into(), 5)];
+    let e = ask_src(&channel(), None, None, &bad);
+    assert!(!e.ok && e.text.contains("BadStation"), "{}", e.text);
+    bad.locks = vec![("nope".into(), 0)];
+    let e = ask_src(&channel(), None, None, &bad);
+    assert!(!e.ok && e.text.contains("NoSuchBend"), "{}", e.text);
+    assert!(forge_lang::bendsim::parse(&["lock", "left=0"].map(String::from)).is_err());
+}

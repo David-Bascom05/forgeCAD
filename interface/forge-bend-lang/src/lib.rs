@@ -593,6 +593,32 @@ pub fn document(part: &str, sheet: Option<&str>, press: Option<&str>, standin: &
         Some(p) => format!("press = press({p:?})\n"),
         None => format!("press = tooling({standin:?})\n"),
     });
+    // the stations the program was simulated with (a staged program's, as laid out), each step
+    // at its own; else one per distinct punch and die, side by side
+    if !tl.stations.is_empty() && sim.plan.steps.iter().all(|s| s.station.is_some()) {
+        for (i, s) in tl.stations.iter().enumerate() {
+            out.push_str(&format!(
+                "s{} = station(punch: {:?}, die: {:?}, y: {}, punch_length: {}, die_length: {})\n",
+                i + 1,
+                tl.punches[s.punch].id,
+                tl.dies[s.die].id,
+                num(s.y),
+                num(s.punch_length),
+                num(s.die_length)
+            ));
+        }
+        for (i, st) in sim.plan.steps.iter().enumerate() {
+            out.push_str(&format!(
+                "b{} = bend({:?}, at: s{}{})\n",
+                i + 1,
+                sim.names[st.bend],
+                st.station.unwrap_or(0) + 1,
+                if st.setup.rotate { ", rotate: true" } else { "" }
+            ));
+        }
+        out.push_str("sheet = setup_sheet()\n");
+        return out;
+    }
     let mut pairs: Vec<(usize, usize, f64, f64)> = Vec::new();
     for st in &sim.plan.steps {
         let (pl, dl) = (st.punch_length.unwrap_or(0.0), st.die_length.unwrap_or(0.0));
@@ -800,9 +826,14 @@ pub fn cincinnati(sim: &Sim, doc: &Doc) -> (String, Vec<String>) {
     x.push_str("<StepData>");
     let mut no_gauge = Vec::new();
     for (i, st) in sim.plan.steps.iter().enumerate() {
-        let k = stations
-            .iter()
-            .position(|s| (s.0, s.1) == (st.setup.punch, st.setup.die))
+        let k = st
+            .station
+            .filter(|_| !tl.stations.is_empty())
+            .or_else(|| {
+                stations
+                    .iter()
+                    .position(|s| (s.0, s.1) == (st.setup.punch, st.setup.die))
+            })
             .unwrap_or(0)
             + 1;
         let included = 180.0 - st.angle.to_degrees();

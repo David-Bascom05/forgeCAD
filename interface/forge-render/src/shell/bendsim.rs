@@ -39,6 +39,9 @@ pub struct Choice {
     pub sequence: Option<Vec<String>>,
     /// Keep the last step's tools where they pass (a ranked program applied).
     pub keep_tools: bool,
+    /// Lay the program's tools out as stations along the bed (stage bending), each bend at its
+    /// station, all of them on the press.
+    pub stations_auto: bool,
 }
 
 /// The panel's pages.
@@ -164,6 +167,7 @@ impl BendSimUi {
             dies: choice.dies.clone(),
             sequence: choice.sequence.as_ref().map(|s| s.join(",")),
             keep_tools: choice.keep_tools,
+            stage: choice.stations_auto,
             // the ranked alternatives are searched for when asked (find_programs), not on opening
             programs: None,
             ..Ask::default()
@@ -408,6 +412,7 @@ impl BendSimUi {
             punches: c.punches.clone(),
             dies: c.dies.clone(),
             keep_tools: c.keep_tools,
+            stage: c.stations_auto,
             programs: Some(5),
             ..Ask::default()
         };
@@ -1080,7 +1085,7 @@ pub fn layout_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
             .plan
             .steps
             .iter()
-            .filter(|x| (x.setup.punch, x.setup.die) == (s.punch, s.die))
+            .filter(|x| x.station == Some(k))
             .filter_map(|x| x.force)
             .fold(None, |m: Option<f64>, f| Some(m.map_or(f, |m| m.max(f))));
         let line = match (cap.is_finite(), most) {
@@ -1161,17 +1166,7 @@ pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
         .collect();
     // the station each step works at (its punch and die), and the stations there are
     let stations: Vec<String> = st.doc.as_ref().map(|d| d.stations.clone()).unwrap_or_default();
-    let at: Vec<Option<usize>> = sim
-        .plan
-        .steps
-        .iter()
-        .map(|s| {
-            sim.tooling
-                .stations
-                .iter()
-                .position(|x| (x.punch, x.die) == (s.setup.punch, s.setup.die))
-        })
-        .collect();
+    let at: Vec<Option<usize>> = sim.plan.steps.iter().map(|s| s.station).collect();
     let ids: Vec<String> = match &st.doc {
         Some(d) => d.bends.clone(),
         // as the document written from this program will name them
@@ -1568,11 +1563,8 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
             flat = Some(names[s.bend].clone());
         }
         head(ui, t, "Tooling");
-        let station = sim
-            .tooling
-            .stations
-            .iter()
-            .position(|x| (x.punch, x.die) == (s.setup.punch, s.setup.die));
+        // the station the simulation worked the step at (the same tools may stand at two)
+        let station = s.station;
         egui::Grid::new("bendsim-sheet-tools")
             .num_columns(2)
             .spacing([12.0, 4.0])
@@ -1844,7 +1836,7 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                 .and_then(|s| s.plan.steps.get(st.step))
                 .and_then(|x| {
                     let sim = st.sim.as_ref().ok()?;
-                    sim.tooling.station(x.setup.punch, x.setup.die).map(|k| k.y)
+                    x.station.and_then(|k| sim.tooling.stations.get(k)).map(|k| k.y)
                 })
                 .unwrap_or(0.0);
             [a[0], a[1] + oy, a[2]]
