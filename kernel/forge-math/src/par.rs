@@ -39,6 +39,40 @@ pub fn cap(requested: usize) -> usize {
     requested.min(threads()).max(1)
 }
 
+/// For tests (cargo feature `force_helpers`, off in every shipped build): [`map_adaptive`] starts
+/// every helper it may at its first item, and n-ary's small-boolean stages run threaded, so a test
+/// can see that no bit depends on the threads (`nary_threads`). Bits are the same either way (the
+/// answers come in item order); only which thread makes which changes.
+#[cfg(feature = "force_helpers")]
+pub fn force_helpers(on: bool) {
+    FORCED.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(feature = "force_helpers")]
+static FORCED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// For tests (`force_helpers`): how many helper threads [`map_adaptive`] has started.
+#[cfg(feature = "force_helpers")]
+pub fn helpers_started() -> usize {
+    STARTED.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+#[cfg(feature = "force_helpers")]
+static STARTED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// Whether a test forces helpers ([`force_helpers`]); `false` in every shipped build.
+#[inline(always)]
+pub fn forced() -> bool {
+    #[cfg(feature = "force_helpers")]
+    {
+        FORCED.load(std::sync::atomic::Ordering::Relaxed)
+    }
+    #[cfg(not(feature = "force_helpers"))]
+    {
+        false
+    }
+}
+
 /// How long the calling thread works alone before [`map_adaptive`] considers helpers.
 pub const HELPERS_AFTER: std::time::Duration = std::time::Duration::from_micros(200);
 
@@ -109,7 +143,10 @@ pub fn map_adaptive_for<T: Send>(
             // asked after every item: items differ widely in cost, so the projection can grow
             let taken = i + 1;
             let elapsed = start.elapsed();
-            if taken < n && elapsed > HELPERS_AFTER && elapsed >= HELPERS_ITEM.mul_f64(taken as f64) {
+            if forced() && taken < n {
+                let k = (threads - 1).min(n - taken).max(1);
+                helpers = (0..k).map(|_| s.spawn(work)).collect();
+            } else if taken < n && elapsed > HELPERS_AFTER && elapsed >= HELPERS_ITEM.mul_f64(taken as f64) {
                 // the work left, at the pace so far
                 let left = elapsed.mul_f64((n - taken) as f64 / taken as f64);
                 if left > helpers_for {
@@ -122,6 +159,8 @@ pub fn map_adaptive_for<T: Send>(
                 }
             }
         }
+        #[cfg(feature = "force_helpers")]
+        STARTED.fetch_add(helpers.len(), Ordering::Relaxed);
         // with helpers: the rest by index
         let done = first.len();
         let mut rest: Vec<Option<T>> = (done..n).map(|_| None).collect();

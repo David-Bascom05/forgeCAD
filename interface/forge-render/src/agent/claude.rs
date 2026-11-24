@@ -1,5 +1,7 @@
 //! Claude Code, headless: `claude -p` reading and writing stream-json, one process per chat kept
 //! open across turns (resumed by its session id if it ends), David's own login and settings.
+// desktop only: a page starts no CLI (std's threads and sleeps never run there)
+#![cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
 
 use super::{Backend, Event, Out, Watch, clean_env};
 use crate::shell::agent::tool_summary;
@@ -193,7 +195,7 @@ pub struct Config {
 
 /// Legacy working directory, retained for importing conversations from older installs.
 pub fn clean_cwd() -> PathBuf {
-    let base = forge_dirs::state().unwrap_or_else(std::env::temp_dir);
+    let base = forge_dirs::state().unwrap_or_else(forge_dirs::temp_dir);
     base.join("forgecad").join("agent")
 }
 

@@ -67,6 +67,8 @@ fn pinned_subset() {
     let cfg = Config {
         cell: Some(0.1),
         machine: None,
+        feeds: Vec::new(),
+        lookahead: None,
     };
     let jobs: Vec<JobQ> = files.iter().map(|f| measure(f, &cfg)).collect();
     // every milling op has its per-move values, one per feed move, the chip load within them

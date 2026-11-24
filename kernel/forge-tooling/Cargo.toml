@@ -6,6 +6,11 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# the makers' published libraries in bulk (data/libraries/, e.g. RobbJack's ~5,000 end mills):
+# Library::with_maker_libraries()
+maker-libraries = []
+
 [dependencies]
 forge-cam-geom = { path = "../forge-cam-geom" }
 forge-math = { path = "../forge-math" }
