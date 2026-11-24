@@ -263,7 +263,14 @@ fn model_attach_split_check_list_remove() {
     let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl", "table", "nope"]);
     assert_eq!(o.code, 1);
     assert!(o.err.contains("no body `nope`"), "{}", o.err);
-    let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl", "table", "head", "-"]);
+    // by name: an STL's parts have none, so `*` is the one rule that names them
+    let o = run(&e, &["model", "split", "haas-vf-2", "VF-2.stl", "*=table", "head"]);
+    assert_eq!(o.code, 1);
+    assert!(o.err.contains("PART=BODY"), "{}", o.err);
+    let o = run(
+        &e,
+        &["model", "split", "haas-vf-2", "VF-2.stl", "table", "head", "-"],
+    );
     assert_eq!(o.code, 0, "{}", o.err);
     assert!(!kept.join("VF-2.stl").exists(), "the whole file goes once split");
     let o = run(&e, &["model", "list", "haas-vf-2", "--json"]);

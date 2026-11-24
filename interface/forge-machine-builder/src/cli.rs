@@ -607,6 +607,7 @@ pub fn model(env: &Env, argv: &[String]) -> Out {
                 argv[3..].iter().map(|b| (b != "-").then(|| b.clone())).collect();
             // by name: PART=BODY rules, the first whose PART is in a part's name (any case; `*`
             // any part) giving it BODY, or dropping it with `-`; a part no rule names is dropped
+            let mut read = None;
             if argv[3..].iter().any(|a| a.contains('=')) {
                 let mut rules = Vec::new();
                 for a in &argv[3..] {
@@ -615,19 +616,21 @@ pub fn model(env: &Env, argv: &[String]) -> Out {
                     };
                     rules.push((p.to_lowercase(), (b != "-").then(|| b.to_string())));
                 }
-                to = match mf::read_file(&dir.join(file)) {
-                    Ok(ps) => ps
-                        .iter()
-                        .map(|p| {
-                            let n = p.name.to_lowercase();
-                            rules
-                                .iter()
-                                .find(|(k, _)| k == "*" || n.contains(k.as_str()))
-                                .and_then(|(_, b)| b.clone())
-                        })
-                        .collect(),
+                let ps = match mf::read_file(&dir.join(file)) {
+                    Ok(ps) => ps,
                     Err(e) => return fail(1, e),
                 };
+                to = ps
+                    .iter()
+                    .map(|p| {
+                        let n = p.name.to_lowercase();
+                        rules
+                            .iter()
+                            .find(|(k, _)| k == "*" || n.contains(k.as_str()))
+                            .and_then(|(_, b)| b.clone())
+                    })
+                    .collect();
+                read = Some(ps);
             }
             if let Some(b) = to
                 .iter()
@@ -673,7 +676,11 @@ pub fn model(env: &Env, argv: &[String]) -> Out {
                     Err(e) => fail(1, e),
                 };
             }
-            match mf::split(&dir, &mut ms, i, &to) {
+            let done = match &read {
+                Some(ps) => mf::split_read(&dir, &mut ms, i, ps, &to),
+                None => mf::split(&dir, &mut ms, i, &to),
+            };
+            match done {
                 Ok(made) => match save(&ms) {
                     Ok(()) => Out {
                         code: 0,

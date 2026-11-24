@@ -352,8 +352,20 @@ pub fn check(def: &MachineDef, dir: &Path, m: &Model) -> Result<Option<(Outside,
 /// becomes a model of its own (`<stem>-<n>.stl` beside it), with the same placement and note;
 /// the original goes. `to` has one entry per piece, in `read`'s order. Returns the new models.
 pub fn split(dir: &Path, ms: &mut Vec<Model>, i: usize, to: &[Option<String>]) -> Result<Vec<Model>, String> {
-    let m = ms.get(i).cloned().ok_or("no such model")?;
+    let m = ms.get(i).ok_or("no such model")?;
     let pieces = read_file(&dir.join(&m.file))?;
+    split_read(dir, ms, i, &pieces, to)
+}
+
+/// `split` with the model's pieces already read (`read_file` of it): a large file read once.
+pub fn split_read(
+    dir: &Path,
+    ms: &mut Vec<Model>,
+    i: usize,
+    pieces: &[Piece],
+    to: &[Option<String>],
+) -> Result<Vec<Model>, String> {
+    let m = ms.get(i).cloned().ok_or("no such model")?;
     if to.len() != pieces.len() {
         return Err(format!(
             "{} has {} parts; {} given",
