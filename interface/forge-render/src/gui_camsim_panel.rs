@@ -70,6 +70,8 @@ pub struct CamSimUi {
     pub fixture: bool,
     /// The machine's bodies, when a machine run plays.
     pub machine: bool,
+    /// The toolpath coloured by a measured value per move (the workspace's colour-by).
+    pub values: Option<crate::camsim::draw::Values>,
     pub follow: bool,
     pub path_width: f32,
     pub tab: Tab,
@@ -108,6 +110,7 @@ impl CamSimUi {
             tool: true,
             fixture: true,
             machine: true,
+            values: None,
             follow: false,
             path_width: 2.0,
             tab: Tab::Program,
@@ -843,6 +846,21 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
 }
 
 fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
+    // the toolpath coloured by a measured value: its legend
+    if let Some(v) = &st.values {
+        heading(ui, t, &format!("Coloured by {}", v.name));
+        ui.horizontal_wrapped(|ui| {
+            for (_, c, word) in &v.bands {
+                let (r, _) = ui.allocate_exact_size(vec2(14.0, 4.0), Sense::hover());
+                ui.painter().rect_filled(r, 1.0, srgb(*c));
+                ui.label(egui::RichText::new(word).small());
+            }
+            let (r, _) = ui.allocate_exact_size(vec2(14.0, 4.0), Sense::hover());
+            ui.painter().rect_filled(r, 1.0, srgb(look::NO_VALUE));
+            ui.label(egui::RichText::new("not measured").small());
+        });
+        ui.label(egui::RichText::new(format!("unit: {}", v.unit)).small().color(t.ink2));
+    }
     heading(ui, t, "Toolpath");
     ui.checkbox(&mut st.rapids, "Rapids");
     ui.checkbox(&mut st.played_only, "Only what has played");

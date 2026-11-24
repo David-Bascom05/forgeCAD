@@ -300,6 +300,7 @@ pub fn geometry(
         played_only: st.played_only,
         width: st.path_width,
         picked: st.picked,
+        values: st.values.as_ref(),
     };
     draw::toolpath(&st.sim.tl, &eye, &show, world);
     // the leftover regions (G4, exact), once their setup is done

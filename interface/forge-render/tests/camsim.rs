@@ -360,3 +360,23 @@ fn the_flanges_posted_program_on_its_machine() {
     sim.set_source(None).unwrap();
     assert!(sim.machine().is_none());
 }
+
+/// Colour by a measured value: each piece of a move takes the move's value, coloured by its
+/// band against its scale; pieces without one are grey.
+#[test]
+fn moves_coloured_by_a_measured_value() {
+    use forge_render::camsim::draw::{Values, look};
+    let sim = flange();
+    // a made-up measure for the test: the move's index over the op's first path, scale 10
+    let v = Values::of_moves(&sim.tl, "chip load", "mm", Values::chip_bands(), &|op, path, mv| {
+        (op == 1 && path == 0).then_some((mv as f32 / 10.0, 10.0))
+    });
+    assert_eq!(v.per_piece.len(), sim.tl.segs.len());
+    for (g, x) in sim.tl.segs.iter().zip(&v.per_piece) {
+        assert_eq!(x.is_some(), g.op == 1, "piece of op {}", g.op);
+    }
+    assert_eq!(v.colour(0.2, 1.0), look::LOW);
+    assert_eq!(v.colour(0.8, 1.0), look::GOOD);
+    assert_eq!(v.colour(1.2, 1.0), look::HIGH);
+    assert_eq!(v.colour(3.0, 1.0), look::OVER);
+}
