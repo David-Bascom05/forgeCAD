@@ -28,6 +28,21 @@ MCP: query {file: F, sel: "bendsim", tooling?, vendor?, sequence?}   (or all of 
   `[tooling]`.
 - `S`: the bends in order, comma separated, by name (the flange's feature name) or number (1 is the
   sheet's first bend, as `bends` lists them). Left out, the order is searched.
+- `stations auto` (stage bending): the program's tools laid out as stations along the bed, all
+  on the press for every step. Each station is a punch, a die and their stacks' lengths; a bend
+  works at the station holding its tools whose stacks cover it and stand inside it, so the same
+  tools may stand twice (a box's last sides want shorter stacks). Stations go left to right in
+  the order the program first uses them, spaced so the part at one stays off its neighbours'
+  stacks (else packed tight and checked), on a 5 mm grid, centred on the bed; the whole program
+  is then simulated with every station on the press, every check certified. The reply's `stage`:
+  `stations[{n, punch, die, kind, y, punch_length, die_length, reach, bends, why, punch_clear}]`,
+  `steps[{bend, station, travel [approach, bend, return] mm, seconds}]`, `flips`, `turns`,
+  `shifts` (moves between stations), `time {ram_seconds, counted, not_counted}`: the ram's motion
+  at the press's published speeds; handling and moves between stations are not timed (no
+  published times). `{ok: false, why}` when no layout fits and passes.
+- Tools that cannot make a bend at all (the die's or the punch's angle, the punch's radius,
+  decided in closed form) are named in `choice.rejected` with their rule, never simulated: the
+  search's budget goes to setups that may pass.
 - `--uts`: tensile strength for the force check; else the part's material's, if the material
   library has it; else there is no force check.
 
