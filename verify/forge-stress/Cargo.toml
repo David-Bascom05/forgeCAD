@@ -1,0 +1,22 @@
+[package]
+name = "forge-stress"
+description = "The kernel under real machine models: import, check, mass, mesh, section and booleans on every solid of a STEP file, each op watched (tools/kernel-stress/run.sh)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-ops = { path = "../../kernel/forge-ops" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-bool = { path = "../../kernel/forge-bool" }
+forge-step = { path = "../../kernel/forge-step" }
+forge-asm = { path = "../../kernel/forge-asm" }
+forge-agent = { path = "../../interface/forge-agent" }
+
+[lints]
+workspace = true

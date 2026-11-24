@@ -1197,6 +1197,9 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
             dev
         };
         if dev > LINEAR {
+            // with room over what was measured: `check` measures again, on other points and after
+            // any rigid move, and a tolerance of exactly the gap fails it by the last bit
+            let dev = dev * (1.0 + 1e-6) + 1e-9;
             body.edges[e.index()].tol = dev;
             stats.tolerant_edges += 1;
             stats.max_edge_tol = stats.max_edge_tol.max(dev);
