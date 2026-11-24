@@ -191,7 +191,13 @@ fn nc_programs_post_export_and_go_stale() {
     h.step();
     let t = text(&h);
     let w = h.gui.shell.cam.as_ref().unwrap();
-    assert!(t.contains("file: \"flange-1\""), "{:?} {:?} {}", w.said, w.prog_field, t.lines().filter(|l| l.starts_with("prog")).collect::<String>());
+    assert!(
+        t.contains("file: \"flange-1\""),
+        "{:?} {:?} {}",
+        w.said,
+        w.prog_field,
+        t.lines().filter(|l| l.starts_with("prog")).collect::<String>()
+    );
     assert!(t.contains("tools: \"list\""), "{t}");
     settle(&mut h);
     let st = |h: &mut forge_render::gui::Headless| h.gui.shell.cam.as_mut().unwrap().posted();
@@ -204,7 +210,10 @@ fn nc_programs_post_export_and_go_stale() {
     h.step();
     h.step();
     let nc = std::fs::read_to_string(file.with_file_name("nc").join("flange-1.nc")).expect("posted");
-    assert!(nc.contains("(TOOLS)") && nc.contains("(NOT CERTIFIED IN FULL"), "{nc}");
+    assert!(
+        nc.contains("(TOOLS)") && nc.contains("(NOT CERTIFIED IN FULL"),
+        "{nc}"
+    );
     assert_eq!(st(&mut h)[0].1, Posted::Current);
     shot(&mut h, "cam-nc-programs");
     // the same file for Export…: the host's Save As is asked
@@ -216,7 +225,11 @@ fn nc_programs_post_export_and_go_stale() {
     assert!(x.dir.ends_with("nc"), "{:?}", x.dir);
     // an op changed: the run changes, the file is stale; Re-post Stale makes it current
     let w = h.gui.shell.cam.as_mut().unwrap();
-    w.edit(&forge_render::shell::cam::doc::Edit::Set { id: "prof".into(), arg: "leave".into(), text: "0.2".into() });
+    w.edit(&forge_render::shell::cam::doc::Edit::Set {
+        id: "prof".into(),
+        arg: "leave".into(),
+        text: "0.2".into(),
+    });
     settle(&mut h);
     assert_eq!(st(&mut h)[0].1, Posted::Stale);
     assert!(h.click("cam:programs:repost"));

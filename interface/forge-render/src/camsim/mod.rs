@@ -225,8 +225,10 @@ impl Sim {
             }
             let Some((_, z)) = cur.as_mut() else { continue };
             let tool = g.tool as usize;
-            let (Some(Some(c)), h) = (self.cutters.get(tool), self.holders.get(tool).and_then(|h| h.as_ref()))
-            else {
+            let (Some(Some(c)), h) = (
+                self.cutters.get(tool),
+                self.holders.get(tool).and_then(|h| h.as_ref()),
+            ) else {
                 continue;
             };
             let name = &self.tl.ops[g.op as usize].name;
@@ -240,7 +242,10 @@ impl Sim {
                     verdict: "fail".into(),
                     at,
                     t: g.t0,
-                    text: format!("{name}: a rapid goes {d:.3} mm into the stock as cut (move {})", g.mv),
+                    text: format!(
+                        "{name}: a rapid goes {d:.3} mm into the stock as cut (move {})",
+                        g.mv
+                    ),
                     region: None,
                 });
             }
@@ -255,7 +260,10 @@ impl Sim {
                     verdict: "fail".into(),
                     at,
                     t: g.t0,
-                    text: format!("{name}: the shank or holder goes {d:.3} mm into the stock as cut (move {})", g.mv),
+                    text: format!(
+                        "{name}: the shank or holder goes {d:.3} mm into the stock as cut (move {})",
+                        g.mv
+                    ),
                     region: None,
                 });
             }

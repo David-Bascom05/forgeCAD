@@ -628,6 +628,47 @@ impl Values {
         }
     }
 
+    /// Values measured per feed move of an op's planned paths (forge-cam-quality's `MoveQ`:
+    /// rapids and hole cycles skipped), laid onto the moves the simulation plays. `per_op(i)`
+    /// gives op i's values as (path, value, scale) in move order. The played path is the posted
+    /// one where a program posted it, which can differ from the planned one by rounding: the
+    /// k-th feed move (line or arc) of a played path takes the k-th value of that path, and a
+    /// path whose count of feed moves differs from its count of values is left grey (not
+    /// measured) rather than coloured by a guess.
+    pub fn of_feeds(
+        cam: &forge_cam_lang::Cam,
+        tl: &Timeline,
+        name: &str,
+        unit: &str,
+        bands: Vec<(f32, [f32; 3], String)>,
+        per_op: &dyn Fn(usize) -> Option<Vec<(usize, f32, f32)>>,
+    ) -> Values {
+        use forge_cam::ops::PMove;
+        let mut at = std::collections::HashMap::new();
+        for i in 0..cam.ops.len() {
+            let Some(q) = per_op(i) else { continue };
+            for (p, path) in cam.sim_paths(i).iter().enumerate() {
+                let feeds: Vec<usize> = path
+                    .moves
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, m)| matches!(m, PMove::Line { .. } | PMove::Arc { .. }))
+                    .map(|(k, _)| k)
+                    .collect();
+                let vals: Vec<(f32, f32)> = q.iter().filter(|x| x.0 == p).map(|x| (x.1, x.2)).collect();
+                if feeds.len() != vals.len() {
+                    continue;
+                }
+                for (mv, v) in feeds.into_iter().zip(vals) {
+                    at.insert((i, p, mv), v);
+                }
+            }
+        }
+        Self::of_moves(tl, name, unit, bands, &|op, path, mv| {
+            at.get(&(op, path, mv)).copied()
+        })
+    }
+
     /// Chip thickness against the op's target feed per tooth: rubbing below half, overload
     /// above 1.25 (the quality measurement's own thresholds).
     pub fn chip_bands() -> Vec<(f32, [f32; 3], String)> {

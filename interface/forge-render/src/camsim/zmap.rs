@@ -248,7 +248,12 @@ impl ZMap {
     }
 
     /// The tool stamped with its tip at p; whether anything changed.
-    fn stamp_with(&mut self, p: [f64; 3], tool: &Cutter, act: &mut dyn FnMut(&mut ZMap, usize, f32) -> bool) -> bool {
+    fn stamp_with(
+        &mut self,
+        p: [f64; 3],
+        tool: &Cutter,
+        act: &mut dyn FnMut(&mut ZMap, usize, f32) -> bool,
+    ) -> bool {
         let r = tool.r;
         let (i0, j0, i1, j1) = self.range(p[0] - r, p[1] - r, p[0] + r, p[1] + r);
         let mut any = false;
@@ -265,7 +270,14 @@ impl ZMap {
     }
 
     /// Sweeps the tool along `seg` from fraction u0 to u1; whether anything changed.
-    fn cut_with(&mut self, seg: &Seg, u0: f64, u1: f64, tool: &Cutter, act: &mut dyn FnMut(&mut ZMap, usize, f32) -> bool) -> bool {
+    fn cut_with(
+        &mut self,
+        seg: &Seg,
+        u0: f64,
+        u1: f64,
+        tool: &Cutter,
+        act: &mut dyn FnMut(&mut ZMap, usize, f32) -> bool,
+    ) -> bool {
         if u1 <= u0 {
             return false;
         }

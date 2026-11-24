@@ -859,7 +859,11 @@ fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
             ui.painter().rect_filled(r, 1.0, srgb(look::NO_VALUE));
             ui.label(egui::RichText::new("not measured").small());
         });
-        ui.label(egui::RichText::new(format!("unit: {}", v.unit)).small().color(t.ink2));
+        ui.label(
+            egui::RichText::new(format!("unit: {}", v.unit))
+                .small()
+                .color(t.ink2),
+        );
     }
     heading(ui, t, "Toolpath");
     ui.checkbox(&mut st.rapids, "Rapids");

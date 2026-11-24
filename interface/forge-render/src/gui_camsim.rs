@@ -98,11 +98,15 @@ impl Gui {
                     crate::shell::cam::ColourBy::ChipLoad => {
                         ("chip load", "mm, against the op's fz", Values::chip_bands())
                     }
-                    crate::shell::cam::ColourBy::Engagement => ("engagement", "degrees", Values::engagement_bands()),
+                    crate::shell::cam::ColourBy::Engagement => {
+                        ("engagement", "degrees", Values::engagement_bands())
+                    }
                 };
-                // per-move values: forge-cam-quality (w.run.quality) reports per op so far; until
-                // its MoveQ lands every cutting move is grey, "not measured" in the legend
-                Values::of_moves(&st.sim.tl, name, unit, bands, &|_, _, _| None)
+                // per feed move, from forge-cam-quality's measurement of the run (w.run.quality):
+                // its per-move values (MoveQ) are not on this branch yet, so every cutting move is
+                // grey, "not measured" in the legend; with them, per_op is op i's OpQ (by name)
+                // mapped to (path, load or phi, 1.0) per moves_q entry
+                Values::of_feeds(&st.sim.cam, &st.sim.tl, name, unit, bands, &|_| None)
             });
             self.shell.camsim_job.focus = Some(f);
             if let Some(v) = &mut self.view {

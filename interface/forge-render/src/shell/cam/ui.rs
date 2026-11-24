@@ -2311,7 +2311,11 @@ fn program_row(
     places: &mut Places,
 ) {
     use super::nc::Posted;
-    let res = w.run.as_ref().and_then(|r| r.programs.iter().find(|x| x.name == p.name)).cloned();
+    let res = w
+        .run
+        .as_ref()
+        .and_then(|r| r.programs.iter().find(|x| x.name == p.name))
+        .cloned();
     let state = posted.iter().find(|x| x.0 == p.name);
     // the name, and its file's state as a painted mark
     let (r, _) = ui.allocate_exact_size(vec2(width, 26.0), Sense::hover());
@@ -2321,14 +2325,27 @@ fn program_row(
         Some(Posted::Refused) => t.error,
         _ => t.ink2,
     };
-    ui.painter().circle_filled(pos2(r.left() + 19.0, r.center().y), 4.0, ink);
-    ui.painter().text(pos2(r.left() + 30.0, r.center().y), Align2::LEFT_CENTER, &p.name, medium(14.0), t.ink);
+    ui.painter()
+        .circle_filled(pos2(r.left() + 19.0, r.center().y), 4.0, ink);
+    ui.painter().text(
+        pos2(r.left() + 30.0, r.center().y),
+        Align2::LEFT_CENTER,
+        &p.name,
+        medium(14.0),
+        t.ink,
+    );
     let words = match state {
         Some((_, s, path)) if !path.is_empty() => format!("{path}: {}", s.words()),
         Some((_, s, _)) => s.words().to_string(),
         None => "not generated".into(),
     };
-    ui.painter().text(pos2(r.right() - 14.0, r.center().y), Align2::RIGHT_CENTER, words, sans(12.0), ink);
+    ui.painter().text(
+        pos2(r.right() - 14.0, r.center().y),
+        Align2::RIGHT_CENTER,
+        words,
+        sans(12.0),
+        ink,
+    );
     places.push((format!("cam:programs:{}:state", p.name), r));
     // its setups: a check each (the first positional argument: one name or a list)
     let now = p.pos(0).unwrap_or("").to_string();
@@ -2356,13 +2373,24 @@ fn program_row(
     });
     if want != had && !want.is_empty() {
         let ordered: Vec<String> = setups.iter().filter(|s| want.contains(s)).cloned().collect();
-        let text = if ordered.len() == 1 { ordered[0].clone() } else { format!("[{}]", ordered.join(", ")) };
+        let text = if ordered.len() == 1 {
+            ordered[0].clone()
+        } else {
+            format!("[{}]", ordered.join(", "))
+        };
         // a program reads its setups: below the last of them first
         let at = |n: &str| w.stmts.iter().position(|x| x.name == n);
         if ordered.iter().any(|su| at(su) > at(&p.name)) {
-            edits.push(super::doc::Edit::Move { id: p.name.clone(), before: None });
+            edits.push(super::doc::Edit::Move {
+                id: p.name.clone(),
+                before: None,
+            });
         }
-        edits.push(super::doc::Edit::Set { id: p.name.clone(), arg: "#0".into(), text });
+        edits.push(super::doc::Edit::Set {
+            id: p.name.clone(),
+            arg: "#0".into(),
+            text,
+        });
     }
     let line = format!(
         "{} · O{} · {}",
@@ -2374,9 +2402,23 @@ fn program_row(
             None => "not generated".into(),
         }
     );
-    note(ui, &line, width, if res.as_ref().is_some_and(|r| r.text.is_some()) { t.ink } else { t.warn });
+    note(
+        ui,
+        &line,
+        width,
+        if res.as_ref().is_some_and(|r| r.text.is_some()) {
+            t.ink
+        } else {
+            t.warn
+        },
+    );
     if ops_changed && state.is_some_and(|s| s.1 == Posted::Current) {
-        note(ui, "Ops changed since the run: generate, then re-post.", width, t.warn);
+        note(
+            ui,
+            "Ops changed since the run: generate, then re-post.",
+            width,
+            t.warn,
+        );
     }
     // its file: name, folder, extension, header
     let ext_default = forge_cam_lang::export::ext_of(&p.arg_str("post").unwrap_or_default()).to_string();
@@ -2385,7 +2427,18 @@ fn program_row(
         prog_field(ui, t, "File", 110.0, p, "file", &p.name, field, edits, places);
         prog_field(ui, t, "Folder", 90.0, p, "out", "beside it", field, edits, places);
         prog_field(ui, t, "Ext.", 44.0, p, "ext", &ext_default, field, edits, places);
-        prog_field(ui, t, "Comment", 140.0, p, "comment", "header line", field, edits, places);
+        prog_field(
+            ui,
+            t,
+            "Comment",
+            140.0,
+            p,
+            "comment",
+            "header line",
+            field,
+            edits,
+            places,
+        );
     });
     ui.horizontal(|ui| {
         ui.add_space(14.0);
@@ -2395,20 +2448,52 @@ fn program_row(
         places.push((format!("cam:programs:{}:tools", p.name), r.rect));
         if on != had {
             edits.push(if on {
-                super::doc::Edit::Set { id: p.name.clone(), arg: "tools".into(), text: "\"list\"".into() }
+                super::doc::Edit::Set {
+                    id: p.name.clone(),
+                    arg: "tools".into(),
+                    text: "\"list\"".into(),
+                }
             } else {
-                super::doc::Edit::Unset { id: p.name.clone(), arg: "tools".into() }
+                super::doc::Edit::Unset {
+                    id: p.name.clone(),
+                    arg: "tools".into(),
+                }
             });
         }
         ui.add_space(12.0);
         let ok = res.as_ref().is_some_and(|r| r.text.is_some());
-        if ok && button(ui, t, "Post", true, format!("cam:programs:{}:post", p.name), places) {
+        if ok
+            && button(
+                ui,
+                t,
+                "Post",
+                true,
+                format!("cam:programs:{}:post", p.name),
+                places,
+            )
+        {
             cmds.push(Cmd::PostNc(Some(p.name.clone())));
         }
-        if ok && button(ui, t, "Export…", false, format!("cam:programs:{}:export", p.name), places) {
+        if ok
+            && button(
+                ui,
+                t,
+                "Export…",
+                false,
+                format!("cam:programs:{}:export", p.name),
+                places,
+            )
+        {
             cmds.push(Cmd::ExportNc(Some(p.name.clone())));
         }
-        if button(ui, t, "Post Process", false, format!("cam:programs:{}:open", p.name), places) {
+        if button(
+            ui,
+            t,
+            "Post Process",
+            false,
+            format!("cam:programs:{}:open", p.name),
+            places,
+        ) {
             cmds.push(Cmd::PostAt(k));
         }
     });
@@ -2454,9 +2539,16 @@ fn prog_field(
         let v = v.trim().replace(['"', '\\'], "");
         if v != now {
             edits.push(if v.is_empty() {
-                super::doc::Edit::Unset { id: p.name.clone(), arg: arg.into() }
+                super::doc::Edit::Unset {
+                    id: p.name.clone(),
+                    arg: arg.into(),
+                }
             } else {
-                super::doc::Edit::Set { id: p.name.clone(), arg: arg.into(), text: format!("\"{v}\"") }
+                super::doc::Edit::Set {
+                    id: p.name.clone(),
+                    arg: arg.into(),
+                    text: format!("\"{v}\""),
+                }
             });
         }
     }

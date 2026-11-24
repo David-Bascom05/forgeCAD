@@ -333,14 +333,26 @@ fn the_flanges_posted_program_on_its_machine() {
     // or the workholding meets the tool (a drill breaking through may come within the
     // clearance of the table: a `near`, said)
     assert!(
-        m.contacts.contacts.iter().all(|c| !matches!(c.verdict, forge_machine::collide::Verdict::Hit { .. })),
+        m.contacts
+            .contacts
+            .iter()
+            .all(|c| !matches!(c.verdict, forge_machine::collide::Verdict::Hit { .. })),
         "{:?}",
-        m.contacts.contacts.iter().find(|c| matches!(c.verdict, forge_machine::collide::Verdict::Hit { .. }))
+        m.contacts
+            .contacts
+            .iter()
+            .find(|c| matches!(c.verdict, forge_machine::collide::Verdict::Hit { .. }))
     );
-    assert!(mv.markers.iter().all(|k| k.verdict != "fail"), "{:?}", mv.markers.first());
+    assert!(
+        mv.markers.iter().all(|k| k.verdict != "fail"),
+        "{:?}",
+        mv.markers.first()
+    );
     // the posted code's rapids and holders against the stock as it cuts it: none
     assert!(
-        sim.markers.iter().all(|k| k.rule != "rapid_into_stock" && k.rule != "holder_into_stock"),
+        sim.markers
+            .iter()
+            .all(|k| k.rule != "rapid_into_stock" && k.rule != "holder_into_stock"),
         "{:?}",
         sim.markers.iter().find(|k| k.rule.ends_with("_into_stock"))
     );
@@ -374,9 +386,13 @@ fn moves_coloured_by_a_measured_value() {
     use forge_render::camsim::draw::{Values, look};
     let sim = flange();
     // a made-up measure for the test: the move's index over the op's first path, scale 10
-    let v = Values::of_moves(&sim.tl, "chip load", "mm", Values::chip_bands(), &|op, path, mv| {
-        (op == 1 && path == 0).then_some((mv as f32 / 10.0, 10.0))
-    });
+    let v = Values::of_moves(
+        &sim.tl,
+        "chip load",
+        "mm",
+        Values::chip_bands(),
+        &|op, path, mv| (op == 1 && path == 0).then_some((mv as f32 / 10.0, 10.0)),
+    );
     assert_eq!(v.per_piece.len(), sim.tl.segs.len());
     for (g, x) in sim.tl.segs.iter().zip(&v.per_piece) {
         assert_eq!(x.is_some(), g.op == 1, "piece of op {}", g.op);
@@ -387,6 +403,65 @@ fn moves_coloured_by_a_measured_value() {
     assert_eq!(v.colour(3.0, 1.0), look::OVER);
 }
 
+/// Values per feed move (as forge-cam-quality measures them: rapids and cycles skipped) land
+/// on the played path's lines and arcs in order; a path whose count differs stays grey.
+#[test]
+fn feed_move_values_land_on_lines_and_arcs() {
+    use forge_cam::ops::PMove;
+    use forge_render::camsim::draw::Values;
+    let sim = flange();
+    let feeds = |i: usize, p: usize| {
+        sim.cam.sim_paths(i)[p]
+            .moves
+            .iter()
+            .filter(|m| matches!(m, PMove::Line { .. } | PMove::Arc { .. }))
+            .count()
+    };
+    // op 1: value k for its k-th feed move of each path; op 0: one value short (left grey)
+    let v = Values::of_feeds(
+        &sim.cam,
+        &sim.tl,
+        "chip load",
+        "",
+        Values::chip_bands(),
+        &|i| match i {
+            0 => Some(
+                (0..feeds(0, 0).saturating_sub(1))
+                    .map(|k| (0, k as f32, 1.0))
+                    .collect(),
+            ),
+            1 => Some(
+                (0..sim.cam.sim_paths(1).len())
+                    .flat_map(|p| (0..feeds(1, p)).map(move |k| (p, k as f32, 1.0)))
+                    .collect(),
+            ),
+            _ => None,
+        },
+    );
+    let mut seen = std::collections::HashMap::new();
+    let mut coloured = 0;
+    for (g, x) in sim.tl.segs.iter().zip(&v.per_piece) {
+        if g.op != 1 {
+            assert!(x.is_none(), "op {} piece coloured", g.op);
+            continue;
+        }
+        let m = &sim.cam.sim_paths(1)[g.path as usize].moves[g.mv as usize];
+        let feed = matches!(m, PMove::Line { .. } | PMove::Arc { .. });
+        assert_eq!(x.is_some(), feed, "op 1 move {} {:?}", g.mv, m);
+        if let Some((val, _)) = x {
+            // the k-th feed move of its path, in order
+            let k = sim.cam.sim_paths(1)[g.path as usize].moves[..g.mv as usize]
+                .iter()
+                .filter(|m| matches!(m, PMove::Line { .. } | PMove::Arc { .. }))
+                .count();
+            assert_eq!(*val, k as f32);
+            seen.insert((g.path, g.mv), ());
+            coloured += 1;
+        }
+    }
+    assert!(coloured > 0 && !seen.is_empty());
+}
+
 /// Rapids and holders against the stock as cut, on the grid: none on the certified flange
 /// (milliseconds, the whole program); the bolt holes drilled before the plate's top is cleared
 /// rapid into the stock, as the certified checker also says.
@@ -395,7 +470,10 @@ fn rapids_and_holders_against_the_stock_as_cut() {
     let sim = flange();
     let t0 = std::time::Instant::now();
     let issues = sim.stock_issues();
-    eprintln!("stock issues over the flange: {:.1} ms", t0.elapsed().as_secs_f64() * 1e3);
+    eprintln!(
+        "stock issues over the flange: {:.1} ms",
+        t0.elapsed().as_secs_f64() * 1e3
+    );
     assert!(issues.is_empty(), "{:?}", issues.first());
     let dir = machined();
     let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
@@ -404,7 +482,9 @@ fn rapids_and_holders_against_the_stock_as_cut() {
     assert_eq!(sim.cam.ops[b].status, "refused");
     let issues = sim.stock_issues();
     assert!(
-        issues.iter().any(|m| m.rule == "rapid_into_stock" && m.op == Some(b)),
+        issues
+            .iter()
+            .any(|m| m.rule == "rapid_into_stock" && m.op == Some(b)),
         "{issues:?}"
     );
 }

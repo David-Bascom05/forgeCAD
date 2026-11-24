@@ -82,8 +82,10 @@ impl CamWs {
             return Err("generate first".into());
         }
         export::files(&self.text, &self.prog_ins(), which, self.allow_uncertified).map_err(|e| {
-            e.text()
-                .replace("export it anyway with --allow-uncertified", "tick Allow uncertified to post it anyway")
+            e.text().replace(
+                "export it anyway with --allow-uncertified",
+                "tick Allow uncertified to post it anyway",
+            )
         })
     }
 
@@ -249,11 +251,20 @@ pub fn save_dialog(x: ExportAsk) -> String {
         else {
             return "Export cancelled".into();
         };
-        let there: Vec<&str> = x.files.iter().map(|f| base(&f.path)).filter(|n| d.join(n).exists()).collect();
+        let there: Vec<&str> = x
+            .files
+            .iter()
+            .map(|f| base(&f.path))
+            .filter(|n| d.join(n).exists())
+            .collect();
         if !there.is_empty() {
             let yes = rfd::MessageDialog::new()
                 .set_title("Replace files?")
-                .set_description(format!("{} already in {}: replace them?", there.join(", "), d.display()))
+                .set_description(format!(
+                    "{} already in {}: replace them?",
+                    there.join(", "),
+                    d.display()
+                ))
                 .set_buttons(rfd::MessageButtons::YesNo)
                 .show();
             if yes != rfd::MessageDialogResult::Yes {
@@ -287,7 +298,12 @@ pub fn page_json(x: &ExportAsk) -> String {
             Json::Arr(
                 x.files
                     .iter()
-                    .map(|f| Json::obj(vec![("path", base(&f.path).to_string().into()), ("text", f.text.clone().into())]))
+                    .map(|f| {
+                        Json::obj(vec![
+                            ("path", base(&f.path).to_string().into()),
+                            ("text", f.text.clone().into()),
+                        ])
+                    })
                     .collect(),
             ),
         ),
@@ -303,13 +319,26 @@ mod tests {
     fn several_files_go_into_a_folder_by_their_names() {
         let d = forge_dirs::temp_dir().join(format!("fg-cam-nc-{}", forge_dirs::process_id()));
         let files = vec![
-            NcFile { path: "nc/a.nc".into(), text: "%\nG0\n%\n".into() },
-            NcFile { path: "b.ngc".into(), text: "G1\n".into() },
+            NcFile {
+                path: "nc/a.nc".into(),
+                text: "%\nG0\n%\n".into(),
+            },
+            NcFile {
+                path: "b.ngc".into(),
+                text: "G1\n".into(),
+            },
         ];
         let ps = write_to(&files, &d).unwrap();
         assert_eq!(ps, vec![d.join("a.nc"), d.join("b.ngc")]);
-        assert_eq!(forge_dirs::fs::read_to_string(d.join("a.nc")).unwrap(), "%\nG0\n%\n");
-        let j = page_json(&ExportAsk { files, dir: d.clone(), zip: "x-nc.zip".into() });
+        assert_eq!(
+            forge_dirs::fs::read_to_string(d.join("a.nc")).unwrap(),
+            "%\nG0\n%\n"
+        );
+        let j = page_json(&ExportAsk {
+            files,
+            dir: d.clone(),
+            zip: "x-nc.zip".into(),
+        });
         assert!(j.contains("\"path\":\"a.nc\"") && j.contains("x-nc.zip"), "{j}");
     }
 }
