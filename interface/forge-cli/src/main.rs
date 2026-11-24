@@ -242,10 +242,15 @@ fn main() -> ExitCode {
         Some("tool") if args.get(2).is_some_and(|w| w == "log") => {
             let env = forge_cam_lang::toollog::Env {
                 project: std::path::PathBuf::from("."),
-                user_cam: forge_tooling_builder::user_cam(),
                 today: today(),
             };
-            let o = forge_cam_lang::toollog::run(&env, &args[3..]);
+            let user = forge_tooling_builder::user_cam();
+            let mut store = forge_tooling_builder::instances::store(
+                &env.project,
+                user.as_deref(),
+                args.iter().any(|a| a == "--project"),
+            );
+            let o = forge_cam_lang::toollog::run(&env, &mut store, &args[3..]);
             let _ = write!(std::io::stdout(), "{}", o.out);
             if !o.err.is_empty() {
                 eprintln!("{}", o.err.trim_end());

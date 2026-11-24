@@ -8,6 +8,7 @@
 //! tables), so `write(parse(write(r))) == write(r)` and `parse(write(r)) == r`.
 pub mod cli;
 pub mod dynamic;
+pub mod instances;
 pub mod write;
 
 use forge_library::{Catalog, Kind, Level};

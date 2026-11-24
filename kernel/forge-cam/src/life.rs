@@ -97,6 +97,7 @@ pub fn measure(
         let d_eff = effective_diameter(tool.d, tool.ball, e.ap);
         cuts.push(Cut {
             op,
+            path: 0,
             mv: Some(s.mv),
             line: None,
             minutes: len / f,
