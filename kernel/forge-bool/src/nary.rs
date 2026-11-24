@@ -1039,7 +1039,11 @@ fn nary_body(
                     SurfaceSurface::Curves(cs) => cs,
                 };
                 // where two rounds touch at their springs' crossing, the trace is mended (node.rs)
-                let curves = crate::node::mend(a, fa, b, fb, curves);
+                let curves = if curves.iter().any(|c| matches!(c.0, Curve::Intersection(_))) {
+                    crate::node::mend(a, fa, b, fb, curves)
+                } else {
+                    curves
+                };
                 // branches of one intersection may meet where the surfaces touch
                 let branches = [
                     curves.iter().filter(|c| c.1 == Contact::Crossing).count() > 1,

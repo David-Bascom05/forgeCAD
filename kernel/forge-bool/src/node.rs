@@ -24,7 +24,7 @@
 //! Anything outside those conditions is left as the trace gave it.
 
 use forge_geom::blend::Pipe;
-use forge_geom::intcurve::{IntCurve, from_chain, towards_touch};
+use forge_geom::intcurve::{IntCurve, direction, refine, towards_touch};
 use forge_geom::intersect::Contact;
 use forge_geom::{Curve, CurveGeom, Surface};
 use forge_math::{Interval, Point3, Vec3, tol};
@@ -191,6 +191,26 @@ fn on_edge(body: &Body, e: EdgeId, p: Point3) -> bool {
     edge.curve.eval(edge.curve.closest(p, edge.range)).distance(p) <= tol::LINEAR
 }
 
+/// Whether one plane can lie a radius over both spines, parallel to each, on one side: the cheap
+/// test before any face is read. Its normal n is square to every spine direction (a circle's:
+/// along its axis), and the spines' offsets along it differ by the radii's difference.
+fn one_plane_fits((x, rx): (Spine, f64), (y, ry): (Spine, f64)) -> bool {
+    let level = |n: Vec3, p: Point3, q: Point3| {
+        ((q - p).dot(n).abs() - (rx - ry).abs()).abs() <= 1e-9 * (1.0 + rx + ry)
+    };
+    match (x, y) {
+        (Spine::Line(p, d), Spine::Line(q, e)) => match d.cross(e).normalize() {
+            Some(n) => level(n.get(), p, q),
+            // parallel lines: a plane square to their common way through both levels
+            None => true,
+        },
+        (Spine::Line(p, d), Spine::Circle(c, n, _)) | (Spine::Circle(c, n, _), Spine::Line(p, d)) => {
+            d.dot(n).abs() <= 1e-12 && level(n, p, c)
+        }
+        (Spine::Circle(c, a, _), Spine::Circle(k, b, _)) => a.cross(b).length() <= 1e-12 && level(a, c, k),
+    }
+}
+
 /// The tangent nodes of face `fa` of `a` (surface a tube) and `fb` of `b` (a tube).
 fn nodes(a: &Body, fa: FaceId, b: &Body, fb: FaceId, ta: (Spine, f64), tb: (Spine, f64)) -> Vec<Node> {
     let mut out: Vec<Node> = Vec::new();
@@ -240,6 +260,7 @@ fn nodes(a: &Body, fa: FaceId, b: &Body, fb: FaceId, ta: (Spine, f64), tb: (Spin
 
 /// The curves where faces `fa` of `a` and `fb` of `b` meet, mended at their tangent nodes (see the
 /// module's note); as they came wherever that does not apply.
+#[cold]
 #[inline(never)]
 pub(crate) fn mend(
     a: &Body,
@@ -248,18 +269,41 @@ pub(crate) fn mend(
     fb: FaceId,
     curves: Vec<(Curve, Contact)>,
 ) -> Vec<(Curve, Contact)> {
-    if !curves.iter().any(|c| matches!(c.0, Curve::Intersection(_))) {
-        return curves;
-    }
     let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
     let (Some(ta), Some(tb)) = (tube(sa), tube(sb)) else {
         return curves;
     };
+    if !one_plane_fits(ta, tb) {
+        return curves;
+    }
     let found = nodes(a, fa, b, fb, ta, tb);
     if found.is_empty() {
         return curves;
     }
     mended(sa, sb, &curves, &found).unwrap_or(curves)
+}
+
+/// A chain of points on both surfaces as a curve, as forge-geom's trace ends one: its sag (each
+/// chord's middle from the curve, 1.5 times, plus LINEAR) and its directions (na x nb, turned to
+/// follow the chain; the chord's where the normals are parallel).
+fn chain(sa: &Surface, sb: &Surface, pts: Vec<Point3>, step: f64) -> IntCurve {
+    let n = pts.len();
+    let sag = (0..n - 1)
+        .map(|i| {
+            let m = pts[i].lerp(pts[i + 1], 0.5);
+            refine(sa, sb, m).map_or(step, |q| q.distance(m))
+        })
+        .fold(0.0, f64::max);
+    let tans = (0..n)
+        .map(|i| {
+            let along = pts[(i + 1).min(n - 1)] - pts[i.saturating_sub(1)];
+            let d = direction(sa, sb, pts[i])
+                .or_else(|| along.normalize().map(|u| u.get()))
+                .unwrap_or(Vec3::ZERO);
+            if d.dot(along) < 0.0 { -d } else { d }
+        })
+        .collect();
+    IntCurve::new(sa.clone(), sb.clone(), pts, tans, false, 1.5 * sag + tol::LINEAR)
 }
 
 /// A chain's longest step.
@@ -352,7 +396,7 @@ fn mended(
             if pts.len() < 2 {
                 continue;
             }
-            let mut r = from_chain(sa, sb, pts, false, step);
+            let mut r = chain(sa, sb, pts, step);
             // at a node the normals are parallel and their cross product says nothing: the way in
             // is the last chord's
             let n = r.pts.len();
