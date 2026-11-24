@@ -281,10 +281,10 @@ read; counsel confirms.
 | 10,108,176 | Celeritive | 2033 | **replace an arc of a previously generated path with curves holding a new arc closer to the boundary**. Broad. |
 | 8,560,113 | Truemill | 2031 | corner arcs joined back to a first arc by transition passes |
 | 9,778,649; 9,958,859; 10,488,847 | DP/Hexagon | 2033–2034 | blend radius from the allowed engagement change; smoothed offsets; trochoidal links |
-| 10,108,172 | Autodesk (inventor Abrahamsen) | 2036 | spiral for a pocket with a hole, from a modified Voronoi diagram and a "wave". **Only 2 of 22 claims read.** |
+| 10,108,172 | Autodesk (inventor Abrahamsen) | 2036 | spiral for a pocket with a hole, from a modified Voronoi diagram (exactly one cycle) and a "wave". All 22 claims read: both independents need a polygonal hole; a no-hole pocket is reached only by dependent claims that treat a skeleton as a zero-area hole. Don't spiral outward from a medial-axis skeleton used as a hole. |
 | 8,676,372 | Boeing | 2032 | engagement chosen from an axial-vs-radial depth-of-cut plot |
 | **9,892,215** | MERL | 2035 | the **live adaptive-feed** claim: split the path where engagement varies beyond a range, then a feed per segment from an engagement function with a material "abrasive resistance" parameter |
-| 12,663,778 | CNC Software | — | the CAM pipeline as an ordered graph (architecture) |
+| 12,663,778 (B1) | CNC Software | 2045 | cl.1: generator → **de-gouging filter that modifies the path** → linking filter → processing, as a DAG with ordering numbers. cl.10/13: per-point normal, tip and orientation records, then de-gouge, then link. forgeCAD's checker only refuses and never moves a point; its moves store XYZ only; it has no DAG. So it avoids elements of every independent claim, except an open question: does source-statement order count as "ordering numbers"? |
 | 12,485,511 | OPEN MIND | 2044 | multi-axis links |
 
 **Found later** (unclaimed-methods.md; fto-adaptive.md §7):
@@ -298,8 +298,9 @@ read; counsel confirms.
   - EPFL corner looping, US 2014/0297021 (abandoned).
 
 **Candidate design that avoids at least one required element of every live independent claim
-that was read** (claim-element matrix in fto-adaptive.md §3). Open gaps: the SolidCAM spiral-loop
-machine/product claims, and the unread claims of 10,108,172 and 12,663,778.
+that was read** (claim-element matrix in fto-adaptive.md §3). Open gap: the SolidCAM spiral-loop
+machine/product claims. All independent claims of 10,108,172 and 12,663,778 are now read
+(fto-adaptive.md §1.6, §1.10).
 
 1. **Clearing** driven by a cleared-area simulation, steering each step to **one capped target**:
    - no minimum and no band;

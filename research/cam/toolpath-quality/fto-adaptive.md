@@ -55,7 +55,8 @@ Companion survey: `patents-fto.md` (this folder). Earlier table: `../patents.md`
    - **Truemill US 8,560,113** corner arcs (to 2031).
    - **DP/Hexagon profit milling** (9,778,649 / 9,958,859 / 10,488,847, to 2033-2034).
    - **Autodesk US 10,108,172 (Abrahamsen, to 2036-12-18).** Spiral from a specially modified
-     Voronoi diagram plus a "wave" model.
+     Voronoi diagram plus a "wave" model. All 22 claims read: both independents need a hole in
+     the pocket; hole-less pockets only via a skeleton as a zero-area hole (dependent cl.10/21).
 4. **Recommended design (§3, matrix §3.2).** (A) Step-by-step clearing driven by a cleared-area
    simulation, holding **one** target (removed area per step, upper-bounded). There is no
    min/max engagement band, no spiral loops built to a cyclic engagement pattern, and no
@@ -225,8 +226,26 @@ holder; the page names him as inventor and Autodesk as assignee). Priority 2014-
   from the cycle, a leaf on every corner of P and H, and all faces convex; (4) for each tree a
   "wave" model running from H's leaves (t=0) to P's leaves (t=1); (5) a polyline spiral made by
   travelling around the wave, going around H; (6) mill the pocket along it.
-- I read only cl.1 and 12 of 22 claims. Other independents may cover pockets without holes.
-  This is UNKNOWN and must be checked.
+  Cl.12 (medium) repeats cl.1 step for step ("leaf on the boundary of P∖H" in place of "of P or
+  H"; no change in substance).
+- **All 22 claims read [R].** The only independents are **cl.1 (method) and cl.12 (medium)**;
+  cl.2-11 depend on 1 and cl.13-22 mirror them on 12. Every claim therefore needs elements
+  (1)-(6) above: a hole H, the modified VD with its single cycle and convex faces, the wave
+  model, and a spiral around H. Dependents add: perpendicular edges spaced along the boundary
+  (cl.2/13); a bisector replacing double edges at concave corners (cl.3/14); wave times and
+  speeds node by node, smoothed around the cycle (cl.4-6/15-17); revolutions set from the user
+  stepover, interpolated between wavefronts and rounded to lines and arcs (cl.7-9/18-20).
+- **Pockets without a hole.** No independent claim covers them. Dependents **cl.10/21** reach
+  them only by *building a skeleton inside P and treating it as a zero-area hole H*; cl.11/22
+  join several holes by bridges into one hole. So a hole-less pocket reads only if the method
+  still builds the modified VD and wave around such a skeleton.
+- **Spirals not built from a modified VD.** No claim covers them: the modified VD (3) and the
+  wave model over its trees (4) are in both independents.
+- **forgeCAD (§3).** A builds no VD and no spiral, so it avoids (2)-(5). B's plain offsets avoid
+  (2)-(5); B's circles along an *unmodified* medial axis avoid (3) (no added edges, no single
+  cycle forced, no convex faces required) and (4) (no wave model). Design rule: do not turn a
+  medial-axis skeleton into a zero-area "hole" and spiral outward from it with timed
+  wavefronts; that is cl.10/21.
 
 ### 1.7 Boeing US 8,676,372 B1: "Tool path generation for machining operations"
 
@@ -253,15 +272,8 @@ Priority 2013-09-23; expiry 2035-04-16; 4th and 8th fees paid (8th 2025-07-30) [
 
 ### 1.9 Other live items checked; low relevance to 3-axis adaptive roughing
 
-- **CNC Software (Mastercam) US 12,663,778 B1**, priority 2025-06-27, expiry about 2045 [R].
-  **cl.1:** nodes arranged as a DAG with ordering numbers (generator → filters → processor); (1) a
-  generator node makes a "raw pass packet"; (2) a de-gouging filter node; (3) a linking filter
-  node; (4) a processing node converts to machine instructions; (5) a node sends only to nodes
-  with higher ordering numbers. **cl.10/13:** (1) a model; (2) a raw pass packet; (3) add, *for
-  every point*, a surface normal, tip position and tool orientation ("Offset Cutter Location
-  Data"); (4) de-gouge to get "Safe" data; (5) add linking. This touches **architecture**, not
-  adaptive clearing. A forgeCAD pipeline of generator, gouge-check and link stages is close in
-  spirit to cl.1. See §5 Q8.
+- **CNC Software (Mastercam) US 12,663,778 B1**: CAM pipeline as a graph of numbered nodes. All
+  three independent claims are now read; see §1.10.
 - **OPEN MIND US 12,485,511 B2** (assignee confirmed: Open Mind Technologies AG), priority
   2021-08-18, expiry 2044-06-20 [R]. **cl.1/16/17:** a multi-axis path with two engagement
   segments and a collision-free non-engaging link; (1) an "interpolation group" of 1 to N−1 of
@@ -283,6 +295,54 @@ Priority 2013-09-23; expiry 2035-04-16; 4th and 8th fees paid (8th 2025-07-30) [
 - **ModuleWorks**: Google Patents assignee search returned 0 US results [R, query]. Siemens
   Industry Software: no adaptive-clearing patent among the 69 "milling" hits [R, list only].
   CGTech: only a fibre-placement patent [R, list].
+
+### 1.10 CNC Software (Mastercam) US 12,663,778 B1: "Systems and methods for generating a tool path using computer aided manufacturing for machining"
+
+Published as a B1 (no pre-grant publication; the B2 URL returns 404). Inventors Seth Jackson,
+Dylan Gondyke, Mike Johnson, Dave Conigliaro, Carlos Carbonera, Dustin Peirolo; assignee CNC Software LLC. Filed and priority 2025-06-27
+(US 19/251,917); granted 2026-06-23; Google's anticipated expiration **2045-06-27**; large entity;
+no maintenance fee due yet [R]. 14 claims. Independents: **1** (system), **10** (method), **13**
+(computer program); 14 is a carrier of 13. Read in full [R].
+- **cl.1 (system of nodes):** (1) a *generator node* that makes and sends a "raw pass packet":
+  several passes, each a list of points in space for the tool to traverse; (2) *filter nodes*
+  that receive the packet, **modify** it and pass it on, of two kinds, both required: (2a) a
+  *de-gouging node* that, for every point, makes the tool hit nothing but the stock and never go
+  past the part's surface; (2b) a *linking node* that adds the transition from each pass's end to
+  the next pass's start; (3) a *processing node* that turns the packet into machine instructions;
+  (4) the nodes are arranged as a **directed acyclic graph**, each node has an **ordering
+  number**, and a node may only send to higher-numbered nodes and only receive from
+  lower-numbered ones. (Dependents add per-node configuration data, a tool-axis-control node,
+  super nodes, wait-for-predecessors, a logic node.)
+- **cl.10 (method) and cl.13 (program; cl.14 its carrier):** (1) obtain a model of the part; (2)
+  generate a raw pass packet (passes of points); (3) add tool-axis-control data, *for every point*
+  a surface normal, a tip position and a tool orientation, giving "Offset Cutter Location Data";
+  (4) de-gouge that data (same two conditions as cl.1 (2a)), giving "Safe" data; (5) then add the
+  linking between passes, giving the tool path. No node graph is required. **Cl.10 does not
+  require machining** (only dependent cl.11 does), so a program that only generates a path could
+  practice cl.10 directly; see §5 Q10.
+- **forgeCAD's CAM pipeline, as the code stands [R, code read]:** `interface/forge-cam-lang`
+  (`run`) evaluates the machining document statement by statement in source order and keeps the
+  ops in a plain `Vec<OpOut>` in that order. Each op is one pure function in
+  `kernel/forge-cam/src/ops.rs` (`facing`, `contour`, `pocket`, `holes`) that returns an
+  `OpPath` whose moves **already include the retract links** (`Phase::Link`); there is no
+  separate linking stage. The program is then posted, the G-code read back (round trip), and the
+  read-back motion is checked by `certify_fixtured` (G1 gouge, G2 shank and holder, G3 rapids).
+  The checker **never moves a point**: an op that is not clear is refused with the check, place
+  and a fix. Moves (`PMove`) hold only an XYZ end point (and an arc centre); no per-point normal
+  or tool orientation is stored. There are no node objects, no graph structure and no ordering
+  numbers. So: **no DAG with ordering numbers**, no de-gouging filter that modifies the path, no
+  stand-alone linking filter, no Offset Cutter Location Data.
+- **Elements forgeCAD avoids.** cl.1: (2a) (check-and-refuse, not modify), (2b) (links made
+  inside the generator, before any check), and on a plain reading (4). Weak point: the document's
+  statements run in source order and later statements use names defined earlier, so someone
+  could argue that statement order is an "ordering number" and that a linear chain is a trivial
+  DAG (Q8). Even so, (2a) is absent. cl.10/13: (3) (no per-point normal and orientation) and (4)
+  (no de-gouging step that yields corrected data); the order also differs (links before checking,
+  checking after posting). **Design rules:** keep gouge handling as check-and-refuse; if an
+  automatic gouge *fix* is ever added, do not run it as a stage that rewrites points ahead of a
+  separate linking stage; do not store a per-point normal + tip + orientation record for 3-axis
+  output; do not build the CAM pipeline as a user-visible graph of numbered generator / filter /
+  processor nodes.
 
 ---
 
@@ -384,12 +444,12 @@ what the claim covers at all, so a core element is absent. "may read" means ever
 | DP '847 cl.1/8/15 (2033) | avoids [1]-[3] | avoids [1], [2] | n/a | n/a | n/a | avoids |
 | Delcam/Autodesk '339 cl.1/10 (2035) | avoids [2], [4] | avoids [2], [4] (uniform stepover, no backfill) | n/a | n/a | n/a | avoids [2] |
 | Delcam/Autodesk '339 cl.18/26 (2035) | avoids [1], [3] (not offset subsets; no preceding-path enlargement) | avoids [3] cap by trochoid or feed, not by enlarging the previous radius | n/a | avoids [3] | n/a | avoids [3] |
-| Autodesk '172 cl.1/12 (2036) | n/a-avoids (no VD) | avoids [3]-[4] unmodified MA, no wave model | n/a | n/a | n/a | avoids; other 20 claims **unknown** |
+| Autodesk '172 cl.1/12, all 22 read (2036) | n/a-avoids (no VD, no spiral around a hole) | avoids [3]-[4] unmodified MA, no wave model; a medial-axis skeleton used as a zero-area "hole" (cl.10/21) still needs [3]-[4] | n/a | n/a | n/a | avoids [3]-[4] |
 | Boeing '372 cl.1/17/19/28 (2032) | avoids [1] if no axial-vs-radial engagement plot is used | same | n/a | **may read** if feed/engagement picked from a stability-lobe-style DOC map | n/a | avoids [1] (Q5) |
 | Boeing '372 cl.14/33 | avoids [1]; also not an aircraft part | | | | | avoids |
 | MERL '215 cl.1/11/13 (2035) | n/a | n/a | n/a | avoids [1] (no engagement-variation partition) and [2] (no abrasive-resistance term); cl.11/13 also avoid distance-field/ADF elements | n/a | avoids [1], [2] (Q6) |
-| CNC Software '778 cl.1 (2045) | **unknown**: depends on forgeCAD's pipeline architecture | | | | | Q8 |
-| CNC Software '778 cl.10/13 | avoids [3] if 3-axis output does not store per-point normal + orientation as a stage | | | | | likely avoids, unknown |
+| CNC Software '778 cl.1 (2045) | avoids [2a] (gouge check refuses, never modifies points), [2b] (links made inside the op function, no linking filter) and [4] (no node graph, no ordering numbers; code read §1.10) | same | avoids [2b] | n/a | n/a | avoids [2a], [2b]; [4] subject to Q8 |
+| CNC Software '778 cl.10/13 (2045) | avoids [3] (no per-point normal + tip + orientation) and [4] (no de-gouge step producing corrected data); links precede checking | same | same | n/a | n/a | avoids [3], [4] |
 | OPEN MIND '511 (2044) | n/a 3-axis | n/a | **unknown** for 3-axis links interpolating a subset of axes | n/a | n/a | out of scope for 3-axis v1; Q9 |
 | Siemens '470 (2039) | n/a | n/a | n/a | avoids final element (no path correction from stiffness) | n/a | avoids |
 
@@ -401,8 +461,8 @@ engagement rises and falls within each loop. The safest technical reading: make 
 *not* a spiral of closed loops (finish each region with open passes and links), and hold
 engagement near a single target. Whether "engagement held at a target ± tolerance" counts as
 "gradually decreases from a maximum to a minimum" is a construction question (Q1, Q2). (2)
-Claims not read in full: Autodesk '172 (20 of 22), '282 tails, '019 tails, CNC Software
-architecture.
+Claims not read in full: '282 tails, '019 tails. Autodesk '172 (all 22) and CNC Software
+'778 (all 14; §1.10) are now read; both are avoided.
 
 ---
 
@@ -470,10 +530,15 @@ architecture.
 7. Celeritive US 10,108,176 cl.1 is broad (replace an arc of a previous path with curves
    containing a new arc closer to the boundary). Does any corner post-processing (arc fitting,
    G2/G3 output, smoothing) that moves an arc outward read on it? Is MATHSM 2005 invalidating art?
-8. CNC Software US 12,663,778 cl.1: does a software pipeline of generator, gouge-check, link and
-   post stages, with data flowing one way, meet the "directed acyclic graph ... ordering number"
-   element? Is there prior art (OpenCAMLib or FreeCAD pipelines, before 2025-06-27) on the
-   record?
+8. CNC Software US 12,663,778 B1 cl.1: forgeCAD runs machining statements in source order, each
+   op one function that emits cuts with links already in them, then posts, reads back and
+   *checks* (refuses on a gouge, never modifies points) (§1.10). Does source-statement order, with
+   later statements naming earlier ones, count as nodes "arranged as a directed acyclic graph"
+   with "ordering numbers"? Does a check that refuses, with no correction, fall outside a
+   "de-gouging node ... adapted to ... modify"? Cl.10/13 need no graph and no machining: is
+   adding per-point normal, tip and orientation (element 3) the clear line for 3-axis output?
+   Is there prior art (OpenCAMLib, FreeCAD Path, Mastercam's own earlier releases, before
+   2025-06-27) on the record?
 9. OPEN MIND US 12,485,511: does a 3-axis link that interpolates Z separately from XY meet the
    "interpolation group of at least one and no more than N−1 axes"?
 10. Liability model: most method claims end with "milling / machining the workpiece". forgeCAD
