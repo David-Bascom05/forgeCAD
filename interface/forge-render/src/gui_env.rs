@@ -64,7 +64,8 @@ impl Gui {
         let Some(name) = self.env_asked.clone() else {
             return;
         };
-        if self.loading() || self.fg.as_ref().is_none_or(|s| s.done != s.seq) {
+        // a document open and built (a file that failed to open leaves none: still waiting)
+        if self.loading() || self.shell.fg.is_none() || self.fg.as_ref().is_none_or(|s| s.done != s.seq) {
             return;
         }
         self.env_asked = None;

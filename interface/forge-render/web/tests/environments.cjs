@@ -53,14 +53,20 @@ server.listen(0, async () => {
     }
   };
 
-  // a deep link's ?env=: kept until a document has built, then entered (with storage=memory the
-  // examples arrive after the first frame, so the part is opened once they are in)
-  await run("deep link ?env=thermoform", async () => {
-    const p = await t.page(b, `${base}&env=thermoform`);
+  // a deep link (?open=..&env=..): the environment asked is kept until the document opened with
+  // it has built, then entered. With storage=memory the examples arrive after the first frame
+  // (and the page then opens the first of them), so the link's two asks are made as app.js makes
+  // them, together, once the files are in.
+  await run("deep link env=thermoform", async () => {
+    const p = await t.page(b, base);
     await t.until(p, (s) => s.ready, "ready");
     await p.evaluate(() => window.forgecad.loaded);
-    await p.evaluate(() => window.forgecad.fc.app_open("/project/examples/thermoform/cover.fg"));
-    const s = await t.until(p, (s) => s.env === "thermoform", "in Thermoform");
+    await t.until(p, (s) => s.path && s.done === s.seq, "the first example built");
+    await p.evaluate(() => {
+      window.forgecad.fc.app_env("thermoform");
+      window.forgecad.fc.app_open("/project/examples/thermoform/cover.fg");
+    });
+    const s = await t.until(p, (s) => s.env === "thermoform" && /cover/.test(s.path), "in Thermoform");
     // Thermoform (7), then Inspect, View, Manage
     if (JSON.stringify(s.tabs) !== "[7,2,3,4]") throw new Error(`tabs ${JSON.stringify(s.tabs)}`);
     await picture(p, "web-thermoform.png");
