@@ -70,6 +70,13 @@ pub struct Adaptive {
     pub two_way: bool,
 }
 
+/// A link at depth back along what was cut is taken only within k times the straight distance
+/// plus d tool radii (fto-adaptive.md §10 (3): a fixed geometric cap, no time compared): one-way
+/// passes (k, d) = CAP_ONE_WAY, two-way CAP_TWO_WAY (whose passes end near the next start, so a
+/// longer retrace still saves the climb).
+pub const CAP_ONE_WAY: (f64, f64) = (10.0, 20.0);
+pub const CAP_TWO_WAY: (f64, f64) = (20.0, 40.0);
+
 /// The most a pass's heading may turn from the sweep direction (either way).
 pub const PEEL: f64 = 75.0;
 
@@ -80,6 +87,9 @@ pub struct AdaptiveOut {
     /// The rings each level ends with (fto-adaptive.md §9 (a)-(c)): one record per ring or run
     /// of one, its moves `path.moves[first..end]`.
     pub rings: Vec<RingRun>,
+    /// The links at depth that retrace a pass (fto-adaptive.md §10 (A)): `path.moves[first..end]`
+    /// each; their arcs are links, not cuts (a posted arc carries no phase).
+    pub retraces: Vec<(usize, usize)>,
 }
 
 /// A ring at the end of a level, or a run of one: `k` = 0 the wall pass (one offset of all the
@@ -379,8 +389,7 @@ pub fn adaptive(
     // the direction the last pass went along the sweep (+1 with it, −1 against it)
     let mut last_sign = 1.0f64;
     let mut rings_log: Vec<RingRun> = Vec::new();
-    // the last pass at this level as cut: its start and its moves
-    let mut last_pass: ([f64; 3], Vec<PMove>) = ([0.0; 3], Vec::new());
+    let mut retraces_log: Vec<(usize, usize)> = Vec::new();
     // the way back over the last pass, for a link by retract (one-way passes)
     let mut back: Vec<[f64; 2]> = Vec::new();
     let mut mv: Vec<PMove> = Vec::new();
@@ -390,6 +399,9 @@ pub fn adaptive(
     let mut start: Option<[f64; 3]> = None;
     let mut above = sp.top;
     for z in levels(sp.top, sp.bottom, sp.step) {
+        // what the tool has done at depth since it last came down at this level, as cut and
+        // linked: where that began and the moves (each sweeps only what is cleared or cuts it)
+        let mut hist: ([f64; 3], Vec<PMove>) = ([0.0, 0.0, f64::NAN], Vec::new());
         let mut moves_at_level: Vec<([f64; 3], [f64; 3])> = Vec::new();
         // candidate starts: allowed centres on a grid of r/4 (fine enough to find the band beside
         // the stock that is clear of it yet inside the region)
@@ -613,6 +625,8 @@ pub fn adaptive(
                     start = Some([p[0] + rh, p[1], h.clear]);
                 }
                 at = Some(cur);
+                // after an entry the history at depth begins where it ends
+                hist = (cur, Vec::new());
                 entered = true;
                 continue;
             }
@@ -642,28 +656,34 @@ pub fn adaptive(
                 retrace_link(
                     cur,
                     p,
-                    &last_pass,
+                    &hist,
                     z,
                     &|a, b| f.link_clear(a, b, z),
-                    3.0,
-                    4.0 * f.r,
+                    if prm.two_way { CAP_TWO_WAY.0 } else { CAP_ONE_WAY.0 },
+                    (if prm.two_way { CAP_TWO_WAY.1 } else { CAP_ONE_WAY.1 }) * f.r,
                 )
             } else {
                 None
             };
             if cur[2] == z && f.link_clear([cur[0], cur[1]], p, z) {
-                mv.push(PMove::Line {
+                let l = PMove::Line {
                     to: target,
                     f: feed.0,
                     phase: Phase::Link,
-                });
+                };
+                mv.push(l);
+                hist.1.push(l);
             } else if let Some(back_moves) = retrace {
-                mv.extend(back_moves);
-                mv.push(PMove::Line {
+                let l = PMove::Line {
                     to: target,
                     f: feed.0,
                     phase: Phase::Link,
-                });
+                };
+                retraces_log.push((mv.len(), mv.len() + back_moves.len()));
+                mv.extend_from_slice(&back_moves);
+                mv.push(l);
+                hist.1.extend(back_moves);
+                hist.1.push(l);
             } else {
                 if cur[2] == z && std::env::var_os("FORGE_ADAPTIVE_DIAG").is_some() {
                     // what blocks the straight link: the highest material over the tool's disk
@@ -699,6 +719,8 @@ pub fn adaptive(
                     eprintln!("diag retract len={l:.2} block={block:.3} other_reachable={reach}");
                 }
                 f.retract_link(&mut mv, cur, target, h.retract, feed, &back);
+                // down at the start: the history at depth begins here
+                hist = (target, Vec::new());
             }
             moves_at_level.push((target, target));
             // the heading: the sweep direction, or two-way its reverse (the way material lies)
@@ -816,8 +838,8 @@ pub fn adaptive(
             pts.extend_from_slice(&pass[..keep]);
             let k0 = mv.len();
             fit_arcs(&pts, f.r, feed.0, &mut mv);
-            // the pass as cut (its posted moves from its start), for a link back along it
-            last_pass = (target, mv[k0..].to_vec());
+            // the pass as cut, for a link back along it
+            hist.1.extend_from_slice(&mv[k0..]);
             at = Some(if keep > 0 { pass[keep - 1] } else { target });
             // the way back over this pass: its points from the end to its start, simplified to
             // within r/2 of it (inside the swath it cut)
@@ -1093,6 +1115,7 @@ pub fn adaptive(
         },
         voids,
         rings: rings_log,
+        retraces: retraces_log,
     })
 }
 
@@ -1423,15 +1446,22 @@ mod tests {
     /// The path as travelled: points no further apart than 0.25 mm (arcs by chords), each with
     /// whether the move reaching it cuts (a feed move that is not a link or a plunge).
     fn travelled(path: &OpPath) -> Vec<([f64; 3], bool)> {
+        travelled_links(path, &[])
+    }
+
+    /// `travelled`, the moves in `links` (index ranges) taken as links, not cuts.
+    fn travelled_links(path: &OpPath, links: &[(usize, usize)]) -> Vec<([f64; 3], bool)> {
         let mut pts = vec![(path.start, false)];
         let mut at = path.start;
-        for mv in &path.moves {
+        for (mi, mv) in path.moves.iter().enumerate() {
+            let is_link = links.iter().any(|&(a, b)| (a..b).contains(&mi));
             let (to, cut) = match *mv {
                 PMove::Rapid { to } => (to, false),
                 PMove::Line { to, phase, .. } => (to, phase == Phase::Cut),
                 PMove::Arc { to, .. } => (to, true),
                 PMove::Cycle { .. } => continue,
             };
+            let cut = cut && !is_link;
             match *mv {
                 PMove::Arc { c, cw, .. } => {
                     let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
@@ -1452,7 +1482,7 @@ mod tests {
                     for k in 1..=n {
                         let t = k as f64 / n as f64;
                         let (sn, cs) = dmath::sin_cos(a0 + sw * t);
-                        pts.push(([c[0] + r * cs, c[1] + r * sn, at[2] + t * (to[2] - at[2])], true));
+                        pts.push(([c[0] + r * cs, c[1] + r * sn, at[2] + t * (to[2] - at[2])], cut));
                     }
                 }
                 _ => {
@@ -1483,8 +1513,15 @@ mod tests {
     ///     sweeps an angle about every island point, and about every point of material while it
     ///     is still uncut, that stays strictly inside (−2π, 2π) at every prefix: a spiral or a
     ///     moat accumulates whole turns, peels with their returns oscillate.
-    fn assert_no_winding(path: &OpPath, island: [f64; 4], stock: [f64; 4], z: f64, r: f64, what: &str) {
-        let pts = travelled(path);
+    fn assert_no_winding(out: &AdaptiveOut, island: [f64; 4], stock: [f64; 4], z: f64, r: f64, what: &str) {
+        let path = &out.path;
+        if std::env::var_os("FORGE_ADAPTIVE_TDUMP").is_some() {
+            for (i, m) in path.moves.iter().enumerate() {
+                let link = out.retraces.iter().any(|&(a, b)| (a..b).contains(&i));
+                eprintln!("mv {i} link={link} {m:?}");
+            }
+        }
+        let pts = travelled_links(path, &out.retraces);
         // (1)
         let mut run: Vec<[f64; 2]> = Vec::new();
         let mut check = |run: &mut Vec<[f64; 2]>| {
@@ -1510,8 +1547,11 @@ mod tests {
             }
             assert!(
                 total.abs().to_degrees() <= 2.0 * PEEL + 1.0,
-                "{what}: a pass turns {:.1} deg in all",
-                total.to_degrees()
+                "{what}: a pass turns {:.1} deg in all, from {:?} to {:?} ({} points)",
+                total.to_degrees(),
+                run.first(),
+                run.last(),
+                run.len()
             );
             run.clear();
         };
@@ -1645,7 +1685,7 @@ mod tests {
             )
             .unwrap();
             assert_no_winding(
-                &out.path,
+                &out,
                 [15.0, 11.0, 25.0, 19.0],
                 [0.0, 0.0, 40.0, 30.0],
                 -3.0,
@@ -1906,18 +1946,21 @@ mod tests {
             let lim = dmath::cos((PEEL + 1.0).to_radians());
             let mut at = out.path.start;
             let mut n = 0;
-            for mv in &out.path.moves {
+            for (mi, mv) in out.path.moves.iter().enumerate() {
                 let to = match *mv {
                     PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
                     PMove::Cycle { .. } => continue,
                 };
-                let cutting = matches!(
-                    mv,
-                    PMove::Line {
-                        phase: Phase::Cut,
-                        ..
-                    } | PMove::Arc { .. }
-                );
+                // a retrace's arcs are links (back along a pass), not steps of a pass
+                let link = out.retraces.iter().any(|&(a, b)| (a..b).contains(&mi));
+                let cutting = !link
+                    && matches!(
+                        mv,
+                        PMove::Line {
+                            phase: Phase::Cut,
+                            ..
+                        } | PMove::Arc { .. }
+                    );
                 if cutting && to[2] == -3.0 && at[2] == -3.0 {
                     let (dx, dy) = (to[0] - at[0], to[1] - at[1]);
                     let l = (dx * dx + dy * dy).sqrt();
