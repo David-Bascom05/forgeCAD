@@ -88,6 +88,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-brake-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-brake",
+ "forge-library",
+ "forge-vendor",
+]
+
+[[package]]
 name = "forge-cam"
 version = "0.1.0"
 dependencies = [
