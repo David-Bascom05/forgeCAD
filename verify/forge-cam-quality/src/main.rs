@@ -4,7 +4,6 @@
 use forge_cam_quality::{Config, json, measure, table};
 use std::path::PathBuf;
 
-
 /// A stock box: its min and max corners (mm).
 type Bounds = ([f64; 3], [f64; 3]);
 fn main() {
