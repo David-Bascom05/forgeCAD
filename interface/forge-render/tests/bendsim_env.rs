@@ -1352,3 +1352,55 @@ fn a_staged_clip() {
     }
     eprintln!("clip: {n} frames over {total} s of program");
 }
+
+/// A re-plan never silently replaces what the user set in the bending document (UX-LEAD's P1,
+/// BENDSIM-TOOLS' audit): with the same press and tools it plans the order around the document's
+/// own stations (a station the user moved stays where they put it); another press or tooling asks
+/// first, and replacing is undone by Undo.
+#[test]
+fn a_replan_keeps_the_users_stations() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "replan", "trumpf-trubend-5130", None);
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    b.write_doc().expect("the program written");
+    let file = b.companion();
+    let src = std::fs::read_to_string(&file).unwrap();
+    // the user moves the first station 40 mm along the bed
+    let at = src.find("y: ").expect("a station's place") + 3;
+    let end = at + src[at..].find(',').unwrap();
+    let y: f64 = src[at..end].trim().parse().unwrap();
+    let moved = format!("{}{}{}", &src[..at], y + 40.0, &src[end..]);
+    std::fs::write(&file, &moved).unwrap();
+    b.reload();
+    let mine = format!("y: {}", y + 40.0);
+    // simulated again, the same press and tools: planned around the user's stations
+    let (c, t) = (b.choice.clone(), b.tooling.clone());
+    b.redo(c, &t);
+    assert!(b.pending_replace.is_none(), "nothing to ask");
+    let now = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        now.contains(&mine),
+        "the station stays where the user put it:\n{now}"
+    );
+    assert!(b.sim.as_ref().is_ok_and(|s| s.plan.feasible), "{:?}", b.note);
+    // stations laid out afresh: asked first, nothing written until the user says so
+    let mut c = b.choice.clone();
+    c.stations_auto = true;
+    let t = b.tooling.clone();
+    b.redo(c, &t);
+    assert!(b.pending_replace.is_some(), "asked before replacing");
+    assert_eq!(
+        std::fs::read_to_string(&file).unwrap(),
+        now,
+        "nothing written yet"
+    );
+    let (c, t) = b.pending_replace.clone().unwrap();
+    b.redo_replacing(c, &t);
+    assert!(b.pending_replace.is_none());
+    // replaced, and undone
+    b.doc_step(true).expect("undo");
+    assert!(
+        std::fs::read_to_string(&file).unwrap().contains(&mine),
+        "undo brings the user's station back"
+    );
+}

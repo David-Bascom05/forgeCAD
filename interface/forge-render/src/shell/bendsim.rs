@@ -114,6 +114,12 @@ pub struct BendSimUi {
     /// The ranked programs have been searched for (they are not on opening: four-fifths of the
     /// time a part took to open was that search; BENDSIM-TOOLS' measure).
     pub programs_found: bool,
+    /// A re-plan that would replace the bending document's stations and order (another press or
+    /// tooling, or Plan Stations), held for the user's choice (UX-LEAD's P1): the choice and the
+    /// tooling it asks for.
+    pub pending_replace: Option<(Choice, String)>,
+    /// What the last re-plan around the document could not do, said in the panel.
+    pub note: Option<String>,
     /// The step's checks all shown, not only failures and those not checked.
     pub all_checks: bool,
     /// Each step's picture, for the simulation they were drawn from (its address).
@@ -228,6 +234,8 @@ impl BendSimUi {
             all_checks: false,
             suggest: false,
             programs_found: false,
+            pending_replace: None,
+            note: None,
             pictures: None,
         };
         if let Some(p) = b.choice.press.clone() {
@@ -293,6 +301,8 @@ impl BendSimUi {
             all_checks: false,
             suggest: false,
             programs_found: false,
+            pending_replace: None,
+            note: None,
             pictures: None,
         };
         if let Some(p) = b.choice.press.clone() {
@@ -349,7 +359,7 @@ impl BendSimUi {
     }
 
     /// Read again from the document (or the choice, if the document is gone), step kept.
-    fn reload(&mut self) {
+    pub fn reload(&mut self) {
         let cat = self.catalog.take();
         let (source, path, tooling, choice) = (
             self.source.clone(),
@@ -378,6 +388,60 @@ impl BendSimUi {
     /// bending document, the choice planned and written to it (one undo step).
     pub fn redo(&mut self, choice: Choice, tooling: &str) {
         if self.doc.is_some() {
+            // the same press and tools: re-planned around the document's own stations (what the
+            // user set stays); anything else would replace them: the user is asked first
+            let same = choice.press == self.choice.press
+                && tooling == self.tooling
+                && choice.punches == self.choice.punches
+                && choice.dies == self.choice.dies
+                && !choice.stations_auto;
+            if same {
+                self.replan_keep();
+            } else {
+                self.pending_replace = Some((choice, tooling.to_string()));
+            }
+            return;
+        }
+        self.redo_fresh(choice, tooling);
+    }
+
+    /// The document's stations kept (their places, stack lengths and tools, as the user set
+    /// them): the order and each bend's station planned again among them (BENDSIM-TOOLS' planner:
+    /// stations given, no sequence), written back (undoable).
+    pub fn replan_keep(&mut self) {
+        self.note = None;
+        let Some(d) = self.doc.as_ref() else { return };
+        let dir = dir_of(&self.path);
+        let run = forge_bend_lang::run_with(&d.src, &self.source, dir.as_deref());
+        let mut ask = run.doc.ask();
+        ask.sequence = None;
+        ask.steps = Vec::new();
+        ask.programs = None;
+        let part = std::path::Path::new(&self.path)
+            .file_name()
+            .map(|f| f.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        match simulate(&self.source, dir, None, &ask) {
+            Ok(sim) if sim.plan.feasible => {
+                let text = forge_bend_lang::document(&part, None, self.choice.press.as_deref(), &self.tooling, &sim);
+                if let Err(e) = self.commit_doc(text) {
+                    self.note = Some(e);
+                }
+            }
+            Ok(_) => {
+                self.note = Some(
+                    "no feasible order with the document's stations: the program is kept; Plan Stations lays out new ones"
+                        .into(),
+                )
+            }
+            Err(a) => self.note = Some(a.text),
+        }
+    }
+
+    /// The re-plan the user chose to let replace the document's stations and order.
+    pub fn redo_replacing(&mut self, choice: Choice, tooling: &str) {
+        self.pending_replace = None;
+        if self.doc.is_some() {
             let cat = self.catalog.take();
             let mut planned = BendSimUi::plan_with(&self.source.clone(), &self.path.clone(), tooling, choice);
             planned.catalog = cat;
@@ -388,6 +452,10 @@ impl BendSimUi {
             *self = planned;
             return;
         }
+        self.redo_fresh(choice, tooling);
+    }
+
+    fn redo_fresh(&mut self, choice: Choice, tooling: &str) {
         let cat = self.catalog.take();
         let mut fresh = BendSimUi::open_with(&self.source.clone(), &self.path.clone(), tooling, choice);
         if fresh.catalog.is_none() {
@@ -1440,6 +1508,37 @@ fn tally(checks: &[fb::Check]) -> Vec<(String, egui::Color32)> {
 }
 
 pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<String> {
+    // a re-plan that would replace what the user set in the document: asked, never silent
+    if let Some((c, tooling)) = st.pending_replace.clone() {
+        egui::Frame::new()
+            .fill(look::WARN.gamma_multiply(0.12))
+            .stroke(egui::Stroke::new(1.0, look::WARN))
+            .corner_radius(5.0)
+            .inner_margin(egui::Margin::same(8))
+            .show(ui, |ui| {
+                ui.add(
+                    egui::Label::new(
+                        egui::RichText::new(
+                            "This re-plan replaces the bending document's stations and order (your stations, stack lengths and tools there). Undo brings them back.",
+                        )
+                        .color(t.ink),
+                    )
+                    .wrap(),
+                );
+                ui.horizontal(|ui| {
+                    if ui.button("Replace").clicked() {
+                        st.redo_replacing(c.clone(), &tooling);
+                    }
+                    if ui.button("Keep mine").clicked() {
+                        st.pending_replace = None;
+                    }
+                });
+            });
+        ui.add_space(6.0);
+    }
+    if let Some(n) = st.note.clone() {
+        ui.add(egui::Label::new(egui::RichText::new(n).color(look::WARN)).wrap());
+    }
     let mut flat = None;
     let all = st.all_checks;
     let mut toggle = false;

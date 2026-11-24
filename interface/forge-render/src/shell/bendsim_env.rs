@@ -22,6 +22,7 @@ const WRITE: u16 = 109;
 const LAST: u16 = 110;
 const FOLLOW: u16 = 111;
 const SEE: u16 = 112;
+const PLAN: u16 = 113;
 
 fn tool(name: &'static str, icon: &'static str, action: Option<Action>, on: bool) -> Tool {
     Tool {
@@ -154,7 +155,10 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
         ),
         group(
             "Program",
-            vec![tool("Suggest Order", "redo", cmd(SUGGEST), false)],
+            vec![
+                tool("Suggest Order", "redo", cmd(SUGGEST), false),
+                tool("Plan Stations", "bendtable", cmd(PLAN), false),
+            ],
             vec![
                 tool(
                     "Write Program",
@@ -393,6 +397,14 @@ pub(super) fn command(s: &mut Shell, c: u16) {
             }
         }
         OVERVIEW => b.frame = Some(super::bendsim::Framing::Overview),
+        PLAN => {
+            // the program's tools laid out as stations along the bed (BENDSIM-TOOLS' planner);
+            // over a document's own stations only when the user says so
+            let mut c = b.choice.clone();
+            c.stations_auto = true;
+            let tooling = b.tooling.clone();
+            b.redo(c, &tooling);
+        }
         AGAIN => {
             if let Some(fg) = s.fg.as_ref() {
                 let tooling = b.tooling.clone();
