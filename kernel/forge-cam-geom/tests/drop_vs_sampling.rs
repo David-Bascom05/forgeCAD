@@ -572,3 +572,133 @@ fn a_move_by_a_dome_cylinders_end_is_cleared_only_where_it_is() {
     println!("moves: {clear} clear, {over} over");
     assert!(clear > 60 && over > 10);
 }
+
+/// `sampled_gap` over the face's trimmed part only (points its trim test proves inside).
+fn sampled_gap_in(col: &Column, f: &Face, x: f64, y: f64, z: f64, n: usize) -> f64 {
+    let mut m = f64::INFINITY;
+    for i in 0..=n {
+        for j in 0..=n {
+            let p = f.p.lo + (f.p.hi - f.p.lo) * i as f64 / n as f64;
+            let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / n as f64;
+            if f.holds(Ival::pt(p), Ival::pt(q)) != 1 {
+                continue;
+            }
+            let pt = f.surf.eval(Ival::pt(p), Ival::pt(q));
+            let (px, py, pz) = (pt[0].mid(), pt[1].mid(), pt[2].mid());
+            let rho = ((px - x).powi(2) + (py - y).powi(2)).sqrt();
+            if rho > col.r {
+                continue;
+            }
+            m = m.min(col.solid.sd_rz(Ival::pt(rho), Ival::pt(pz - z)).mid());
+        }
+    }
+    m
+}
+
+/// gap_move's quick routes: a level flat passed beside (its region's distance), a vertical
+/// plane with an L-shaped trim (the wall over its box), and a face under the move (its height):
+/// every Clear holds at every sampled face point and instant, and the quick routes do decide
+/// most moves (one cell or none).
+#[test]
+fn quick_routes_clear_only_what_sampling_holds() {
+    use forge_cam_geom::check::{TSeg, Trim};
+    let mut rng = Rng(0x7a11_f1a7_0bad_cafe);
+    let (mut clear, mut quick) = (0, 0);
+    for (name, c) in cutters() {
+        let (col, _) = column(&c);
+        for k in 0..30 {
+            let rr = rng.r(3.0, 10.0);
+            let (cx, cy, zf) = (rng.r(-2.0, 2.0), rng.r(-2.0, 2.0), rng.r(-2.0, 2.0));
+            // a disk flat (four ccw quarter arcs), or an L-shaped vertical wall in x-z
+            let f = if k % 2 == 0 {
+                let q = [[cx + rr, cy], [cx, cy + rr], [cx - rr, cy], [cx, cy - rr]];
+                let segs = (0..4)
+                    .map(|i| TSeg::Arc {
+                        a: [q[i][0] - cx + rr, q[i][1] - cy + rr],
+                        b: [q[(i + 1) % 4][0] - cx + rr, q[(i + 1) % 4][1] - cy + rr],
+                        c: [rr, rr],
+                        r: rr,
+                        ccw: true,
+                    })
+                    .collect();
+                Face::new(
+                    Surf::Plane {
+                        o: [cx - rr, cy - rr, zf],
+                        u: [1.0, 0.0, 0.0],
+                        v: [0.0, 1.0, 0.0],
+                    },
+                    Ival::new(0.0, 2.0 * rr),
+                    Ival::new(0.0, 2.0 * rr),
+                    Some(Trim { segs }),
+                    1e-9,
+                    0,
+                )
+            } else {
+                let (w, h) = (2.0 * rr, rr);
+                let l = [
+                    [0.0, 0.0],
+                    [w, 0.0],
+                    [w, 0.5 * h],
+                    [0.5 * w, 0.5 * h],
+                    [0.5 * w, h],
+                    [0.0, h],
+                ];
+                let segs = (0..6)
+                    .map(|i| TSeg::Line {
+                        a: l[i],
+                        b: l[(i + 1) % 6],
+                    })
+                    .collect();
+                Face::new(
+                    Surf::Plane {
+                        o: [cx - rr, cy, zf - 0.5 * h],
+                        u: [1.0, 0.0, 0.0],
+                        v: [0.0, 0.0, 1.0],
+                    },
+                    Ival::new(0.0, w),
+                    Ival::new(0.0, h),
+                    Some(Trim { segs }),
+                    1e-9,
+                    0,
+                )
+            };
+            assert!(
+                k % 2 == 0 || f.prism.is_none(),
+                "the L-shaped wall has no prism of its own"
+            );
+            // moves beside or over it, at heights about its own
+            // a direction by the rational map (no platform trig)
+            let t = rng.r(-3.0, 3.0);
+            let (dc, ds) = ((1.0 - t * t) / (1.0 + t * t), 2.0 * t / (1.0 + t * t));
+            // (some from well inside its region: a flat passed over, not beside)
+            let d = if rng.f() < 0.3 {
+                rng.r(0.0, 0.3 * rr)
+            } else {
+                rr + rng.r(-1.0, 1.5) * col.r
+            };
+            let (sx, sy) = (cx + d * dc, cy + d * ds);
+            let e = [sx + rng.r(-3.0, 3.0), sy + rng.r(-3.0, 3.0)];
+            let (za, zb) = (zf + rng.r(-2.0, 3.0), zf + rng.r(-2.0, 3.0));
+            let mv = Move::Line {
+                a: [sx, sy, za],
+                b: [e[0], e[1], zb],
+            };
+            let (g, cells) = gap_move(&col, &f, &mv, -0.005, 1e-4, 4_000);
+            if let Gap::Clear { lower } = g {
+                clear += 1;
+                if cells <= 1 {
+                    quick += 1;
+                }
+                for s in 0..=10 {
+                    let t = s as f64 / 10.0;
+                    let (x, y) = (sx + t * (e[0] - sx), sy + t * (e[1] - sy));
+                    let z = za + t * (zb - za);
+                    let v = sampled_gap_in(&col, &f, x, y, z, 40);
+                    assert!(v >= lower - 1e-9, "{name} {k}: v {v} < {lower} at {t} on {mv:?}");
+                }
+            }
+        }
+    }
+    println!("moves: {clear} clear, {quick} by a quick route");
+    assert!(clear > 40 && quick > 20);
+}
