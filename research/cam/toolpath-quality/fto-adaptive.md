@@ -901,4 +901,5 @@ Celeritive's region-splitting is nearby too.
 The safer form needs no channel: let the first peel pass from the entry simply be the first pass
 of the ordinary sweep. If it happens to open a corridor, that is the step rule's doing, not a
 separately designed channel. Never add a channel pass whose purpose is to divide the region.
-Counsel Q4 covers channels if we ever want them.
+If we ever want channels, add counsel Q14: does a separating channel chosen without any time
+comparison avoid the SolidCAM channel claims, given Celeritive's region-splitting nearby?
