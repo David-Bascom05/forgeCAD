@@ -3378,3 +3378,88 @@ taken = "2026-11-24"
 value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 3/4 in. (19.050 mm); vc SFM 310; Feed Rate - IPR 3/4 in. 0.0220"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9055180058000"
+type = "drill"
+dc = 5.8
+dcon = 6
+oal = 82
+lcf = 44
+sig = 130
+nof = 3
+material = "carbide"
+vendor = "Guhring"
+product_id = "9055180058000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=328"
+taken = "2026-11-24"
+note = "5xD 3-flute drills, Series 5518, 5.80 mm"
+[[tool.preset]]
+name = "P general"
+group = "P"
+vc = 79.248
+fz = 0.0889
+[[tool.preset]]
+name = "N general"
+group = "N"
+vc = 179.832
+fz = 0.127
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=328"
+taken = "2026-11-24"
+value = "d1 5.80 (row: 0.2283 5.80 6.00 82.00 35.30 44.00 9055180058000)"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=328"
+taken = "2026-11-24"
+value = "d2 6.00 (row: 0.2283 5.80 6.00 82.00 35.30 44.00 9055180058000)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=328"
+taken = "2026-11-24"
+value = "l1 82.00 (row: 0.2283 5.80 6.00 82.00 35.30 44.00 9055180058000)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=328"
+taken = "2026-11-24"
+value = "l2 44.00 (row: 0.2283 5.80 6.00 82.00 35.30 44.00 9055180058000)"
+[[tool.cite]]
+path = "sig"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=328"
+taken = "2026-11-24"
+value = "Point angle 130°"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=328"
+taken = "2026-11-24"
+value = "5xD 3-flute drills"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=328"
+taken = "2026-11-24"
+value = "Tool material Solid Carbide"
+[[tool.cite]]
+path = "preset.P general"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
