@@ -716,12 +716,17 @@ impl Shell {
     }
 
     /// A tool that does nothing without a document is drawn off then, its tooltip saying why;
-    /// what makes or opens one, Settings, and Thermoform's own tab stay on.
+    /// what makes or opens one, Settings, Thermoform's own tab, the Machine Builder's tools (its
+    /// libraries need no document) and every environment's Finish stay on.
     fn needs_document(&self, tool: &Tool) -> bool {
         self.no_document()
             && tool.action.is_some()
             && self.tab != super::THERMO_TAB
             && !matches!(tool.name, "Settings" | "Open" | "New" | "New Sheet Metal")
+            && !matches!(
+                tool.action,
+                Some(super::Action::ExitEnv) | Some(super::Action::Machine(_))
+            )
     }
 
     pub(super) fn tool_response(
@@ -806,5 +811,30 @@ impl Shell {
             sans(12.0),
             ink,
         );
+    }
+}
+
+#[cfg(test)]
+mod document_tests {
+    use super::*;
+
+    /// With no part open, the Machine Builder's tools and every Finish stay on (its libraries
+    /// need no document); a part's tools are off.
+    #[test]
+    fn the_machine_builder_and_finish_need_no_document() {
+        let s = Shell::default();
+        assert!(s.no_document());
+        let t = |name, action| Tool {
+            name,
+            icon: "check",
+            action: Some(action),
+            on: false,
+        };
+        assert!(!s.needs_document(&t("Finish Machine Builder", Action::ExitEnv)));
+        assert!(!s.needs_document(&t(
+            "Check",
+            Action::Machine(super::super::machine::MachineCmd::Check)
+        )));
+        assert!(s.needs_document(&t("Undo", Action::Undo)));
     }
 }
