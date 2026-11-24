@@ -7,7 +7,7 @@ use common::dir;
 
 fn doc(body: &str) -> String {
     format!(
-        "machining\nf = part(\"blind_holes.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 2), origin: \"top-corner\", tol: 0.01, at: (-20, -20, -250))\n{body}\np = program(op1, post: \"fanuc\", number: 1)\n"
+        "machining\nf = part(\"blind_holes.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 6), origin: \"top-corner\", tol: 0.01, at: (-20, -20, -250))\n{body}\np = program(op1, post: \"fanuc\", number: 1)\n"
     )
 }
 
@@ -36,5 +36,34 @@ fn a_pointed_hole_is_drilled_to_its_point() {
         !cam.warnings.iter().any(|w| w.contains("flat floor")),
         "{:?}",
         cam.warnings
+    );
+}
+
+#[test]
+fn a_counterbore_is_cut_after_the_drill() {
+    // no counterbore tool of 11 mm in the library: the largest end mill under it (flat-10)
+    // pockets its circle to its depth
+    let cam = forge_cam_lang::run(&doc("h = drill(op1, f.cbh, plan: \"drill\")"), &dir());
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let o = cam.ops.iter().find(|o| o.name == "h").unwrap();
+    assert_eq!(o.status, "built", "{:?}", o.refusal);
+    assert!(
+        o.plan.iter().any(|p| p.starts_with("counterbore by flat-10")),
+        "{:?}",
+        o.plan
+    );
+}
+
+#[test]
+fn a_countersink_is_cut_after_the_drill() {
+    // a 90 deg tool of at least 9 mm plunged until its cone is 9 mm across at the mouth
+    let cam = forge_cam_lang::run(&doc("h = drill(op1, f.csk, plan: \"drill\")"), &dir());
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let o = cam.ops.iter().find(|o| o.name == "h").unwrap();
+    assert_eq!(o.status, "built", "{:?}", o.refusal);
+    assert!(
+        o.plan.iter().any(|p| p.starts_with("countersink ")),
+        "{:?}",
+        o.plan
     );
 }
