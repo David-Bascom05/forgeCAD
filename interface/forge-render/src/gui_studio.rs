@@ -205,6 +205,7 @@ impl Gui {
         // the camera, the settings
         let cam = &v.nav.camera;
         let mut view = View::of(cam);
+        st.view_focal_mm = if cam.parallel { 0.0 } else { view.focal_mm() };
         if st.depth_of_field && !cam.parallel {
             view = view.with_lens(view.focal_mm(), Some(st.f_number), cam.dist);
         }

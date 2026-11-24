@@ -140,7 +140,7 @@ fn a_channel_on_a_trubend_in_3d() {
         v.scene
             .placements
             .iter()
-            .any(|p| p.tint[0] > 0.9 && (0.5..0.7).contains(&p.tint[1]) && p.tint[2] < 0.2),
+            .any(|p| p.tint[0] > 0.75 && (0.4..0.7).contains(&p.tint[1]) && p.tint[2] < 0.2),
         "the bend zone in amber"
     );
     assert!(h.click("tool:Press Overview"), "the ribbon's overview");

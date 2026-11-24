@@ -21,7 +21,7 @@ pub const RESTART: u16 = 7;
 /// The lighting's choices: the drawn studio (0), the manifest's HDRIs (1..=n, `studio::hdri`),
 /// a Radiance file the user names (n + 1).
 pub fn lights() -> Vec<String> {
-    let mut v = vec!["Studio (drawn)".to_string()];
+    let mut v = vec!["Studio softbox (drawn)".to_string()];
     for h in crate::studio::hdri::list() {
         v.push(if h.bundled {
             format!("{} (bundled)", h.name)
@@ -55,7 +55,9 @@ pub struct StudioUi {
     pub floor: bool,
     pub denoise: bool,
     pub depth_of_field: bool,
-    pub focal_mm: f32,
+    /// The view's focal length, mm (35 mm frame), as the GUI found it: shown, not set; 0 for a
+    /// parallel view.
+    pub view_focal_mm: f32,
     pub f_number: f32,
     pub size: (u32, u32),
     pub spp: u32,
@@ -84,7 +86,7 @@ impl Default for StudioUi {
             floor: true,
             denoise: true,
             depth_of_field: false,
-            focal_mm: 85.0,
+            view_focal_mm: 50.0,
             f_number: 4.0,
             size: (1920, 1080),
             spp: 512,
@@ -182,6 +184,32 @@ pub(super) fn command(s: &mut Shell, c: u16) {
     }
 }
 
+/// A setting's row: its words with its value and unit, then its control.
+fn row(ui: &mut Ui, label: String, control: impl FnOnce(&mut Ui)) {
+    ui.horizontal(|ui| {
+        ui.allocate_ui_with_layout(
+            egui::vec2(128.0, 18.0),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.set_min_width(128.0);
+                ui.add(egui::Label::new(label).truncate());
+            },
+        );
+        control(ui);
+    });
+}
+
+/// A number with its sign, a true minus.
+fn signed(v: f32) -> String {
+    if v < -0.005 {
+        format!("\u{2212}{:.1}", -v)
+    } else if v > 0.005 {
+        format!("+{v:.1}")
+    } else {
+        "0.0".into()
+    }
+}
+
 /// A heading in the browser.
 fn head(ui: &mut Ui, s: &Shell, text: &str) {
     ui.add_space(8.0);
@@ -259,26 +287,44 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                         .on_hover_text("a Radiance .hdr, equirectangular");
                 });
             }
-            ui.add(egui::Slider::new(&mut st.turn_deg, -180.0..=180.0).text("Turn °"));
-            ui.add(
-                egui::Slider::new(&mut st.strength, 0.05..=8.0)
-                    .logarithmic(true)
-                    .text("Strength"),
-            );
-            ui.add(egui::Slider::new(&mut st.exposure, -4.0..=4.0).text("Exposure EV"));
+            row(ui, format!("Turn {:.0}°", st.turn_deg), |ui| {
+                ui.add(egui::Slider::new(&mut st.turn_deg, -180.0..=180.0).show_value(false));
+            });
+            row(ui, format!("Strength {:.2}×", st.strength), |ui| {
+                ui.add(
+                    egui::Slider::new(&mut st.strength, 0.05..=8.0)
+                        .logarithmic(true)
+                        .show_value(false),
+                );
+            });
+            row(ui, format!("Exposure {} EV", signed(st.exposure)), |ui| {
+                ui.add(egui::Slider::new(&mut st.exposure, -4.0..=4.0).show_value(false));
+            });
 
             head(ui, s, "Camera");
-            ui.add(
-                egui::Slider::new(&mut st.focal_mm, 14.0..=300.0)
-                    .logarithmic(true)
-                    .text("Focal mm"),
+            ui.label(
+                RichText::new(if st.view_focal_mm > 0.0 {
+                    format!("Lens {:.0} mm (the view's)", st.view_focal_mm)
+                } else {
+                    "Parallel view: no lens (Camera › Perspective)".into()
+                })
+                .color(s.theme.ink2),
             );
-            ui.add_enabled(
-                st.depth_of_field,
-                egui::Slider::new(&mut st.f_number, 1.0..=22.0)
-                    .logarithmic(true)
-                    .text("f/"),
-            );
+            row(ui, format!("Aperture f/{:.1}", st.f_number), |ui| {
+                ui.add_enabled(
+                    st.depth_of_field,
+                    egui::Slider::new(&mut st.f_number, 1.0..=22.0)
+                        .logarithmic(true)
+                        .show_value(false),
+                );
+            });
+            if !st.depth_of_field {
+                ui.label(
+                    RichText::new("Depth of field is off: Camera › Depth of Field")
+                        .small()
+                        .color(s.theme.ink2),
+                );
+            }
 
             head(ui, s, "Output");
             ui.horizontal(|ui| {
@@ -287,12 +333,16 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                 ui.label("×");
                 ui.add(egui::DragValue::new(&mut st.size.1).range(16..=8192));
             });
-            ui.add(
-                egui::Slider::new(&mut st.spp, 16..=8192)
-                    .logarithmic(true)
-                    .text("Samples"),
-            );
-            ui.add(egui::Slider::new(&mut st.frames, 4..=360).text("Turntable frames"));
+            row(ui, format!("Samples {}", st.spp), |ui| {
+                ui.add(
+                    egui::Slider::new(&mut st.spp, 16..=8192)
+                        .logarithmic(true)
+                        .show_value(false),
+                );
+            });
+            row(ui, format!("Turntable {} frames", st.frames), |ui| {
+                ui.add(egui::Slider::new(&mut st.frames, 4..=360).show_value(false));
+            });
             ui.horizontal(|ui| {
                 ui.label("File");
                 ui.text_edit_singleline(&mut st.out);
