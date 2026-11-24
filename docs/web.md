@@ -81,6 +81,28 @@ served on loopback only (from another machine, use an SSH tunnel). The page neve
 program, argument, folder or prompt: only messages, answers, a mode (Ask first, Accept edits,
 Plan only) and Stop. The threat model is research/agent-tab/bridge-threat-model.md.
 
+#### A page hosted elsewhere: `--allow-origin`
+
+```
+forgecad web DIR --agent --allow-origin https://forge.example
+```
+
+For the app served from somewhere else (a static host), this machine's `forgecad web` is the
+bridge: the page reads the project from `DIR` and drives Claude Code through it. It prints a
+second link, `https://forge.example/#bridge=http://127.0.0.1:PORT&agent=TOKEN`: open that one.
+
+- Only the origins you name may use it, compared whole (scheme, host and port; no wildcards,
+  no paths, never `null`). Any other page is refused, and its browser is told nothing.
+- From that origin every call, the files' as well as the agent's, needs the token.
+- If your Claude settings bypass permissions, a page on another origin runs that way only if
+  you also give `--allow-bypass`. Without it the session ends and the page says why.
+- The page's own Content-Security-Policy lets it reach loopback (127.0.0.1, localhost, [::1])
+  and nothing else. Chrome may ask you to allow a public page to reach this machine; that's
+  the browser's own check, kept.
+
+Prefer the first form when you can: a hosted origin's every script can read the token while
+the page is open.
+
 ## Run it from static files
 
 Serve `OUT` from any static host (a CDN, GitHub Pages, `python3 -m http.server`). With no

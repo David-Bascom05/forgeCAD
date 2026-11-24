@@ -7,6 +7,8 @@
 //   ?token=T         `forgecad web`'s token, when it was started with one (kept for the tab)
 //   #agent=T         `forgecad web --agent`'s agent token: held in memory only, taken off the
 //                    address bar; a reload pairs again from the link forgecad web printed
+//   #bridge=URL      a page hosted elsewhere (case 2): `forgecad web DIR --agent --allow-origin
+//                    ORIGIN` on this machine, at http://127.0.0.1:PORT, has the files and agent
 //   ?storage=memory  nothing kept (tests)
 //   ?offscreen=WxH  frames drawn to a texture, not the canvas (a headless browser's software
 //                    WebGPU can't show a canvas); forgecad.pixels() reads them
@@ -18,6 +20,20 @@ import { zip, unzip } from "./zip.js";
 
 const q = new URLSearchParams(location.search);
 const MOUNT = "/project";
+
+// The agent's pairing, from the link forgecad web printed: its token (held here only, never
+// stored) and, for a page hosted elsewhere, where the bridge is (loopback only). Both taken off
+// the address bar at once.
+const pairing = (() => {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const agent = /^[0-9a-f]{32}$/.test(h.get("agent") ?? "") ? h.get("agent") : null;
+  const b = h.get("bridge") ?? "";
+  const bridge = /^http:\/\/(127\.0\.0\.1|localhost|\[::1\]):\d{1,5}$/.test(b) ? b : null;
+  if (h.has("agent") || h.has("bridge")) history.replaceState(null, "", location.pathname + location.search);
+  return { agent, bridge: agent ? bridge : null };
+})();
+/// Where the API is: this page's own server, or the paired bridge.
+const apiBase = pairing.bridge ?? "";
 const say = (s) => console.log(`forge-app: ${s}`);
 
 function token() {
@@ -29,7 +45,8 @@ function token() {
 /// The server's files when `forgecad web` serves the page, else the browser's own.
 async function backend() {
   if (q.get("storage") === "memory") return null;
-  const server = new ServerBackend("", token());
+  // a page hosted elsewhere: the project is the bridge's folder, read with the agent's token
+  const server = pairing.bridge ? new ServerBackend(pairing.bridge, pairing.agent) : new ServerBackend("", token());
   try {
     const info = await server.info();
     if (info.server === "forgecad web") {
@@ -322,11 +339,7 @@ const loaded = (async () => {
 // The agent: the person's own Claude Code on the machine serving this page (`forgecad web DIR
 // --agent`, interface/forge-cli/src/agent_bridge.rs). Its token is held here only, never stored;
 // the page's id (which page owns the session) lasts the tab, so a reload keeps it.
-const agentToken = (() => {
-  const m = /(?:^#|&)agent=([0-9a-f]{32})(?:&|$)/.exec(location.hash);
-  if (m) history.replaceState(null, "", location.pathname + location.search);
-  return m ? m[1] : null;
-})();
+const agentToken = pairing.agent;
 let agentClient = sessionStorage.getItem("forgecad-agent-client");
 if (!agentClient) {
   agentClient = crypto.randomUUID();
@@ -338,7 +351,7 @@ window.forge_agent_ready = () => agentToken !== null;
 /// A call: its status and body, as JSON text (status 0: it didn't reach the server).
 window.forge_agent_call = async (name, body) => {
   try {
-    const r = await fetch(`/api/agent/${name}`, {
+    const r = await fetch(`${apiBase}/api/agent/${name}`, {
       method: "POST",
       headers: { ...agentHeaders(), "Content-Type": "application/json" },
       body,
@@ -356,7 +369,7 @@ window.forge_agent_events = (from, onLine) => {
   const said = (e) => onLine(JSON.stringify({ type: "forge_bridge", error: e }));
   (async () => {
     try {
-      const r = await fetch(`/api/agent/events?from=${from}`, { headers: agentHeaders(), signal: ctl.signal });
+      const r = await fetch(`${apiBase}/api/agent/events?from=${from}`, { headers: agentHeaders(), signal: ctl.signal });
       if (!r.ok) return said(`The agent's stream was refused (HTTP ${r.status})`);
       const rd = r.body.getReader();
       const dec = new TextDecoder();

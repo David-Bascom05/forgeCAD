@@ -65,6 +65,10 @@ impl Drop for Server {
 }
 
 fn serve(dir: &Path, claude: &Path) -> Server {
+    serve_with(dir, claude, &[])
+}
+
+fn serve_with(dir: &Path, claude: &Path, extra: &[&str]) -> Server {
     let mut child = Command::new(env!("CARGO_BIN_EXE_forgecad"))
         .args([
             "web",
@@ -73,6 +77,7 @@ fn serve(dir: &Path, claude: &Path) -> Server {
             "0",
             "--agent",
         ])
+        .args(extra)
         .env("FORGECAD_CLAUDE", claude)
         .env("CLAUDECODE", "1")
         .stdout(Stdio::piped())
@@ -525,4 +530,183 @@ fn the_bridges_own_code_names_no_credential() {
     ] {
         assert!(!src.contains(word), "agent_bridge.rs names `{word}`");
     }
+}
+
+const HOSTED: &str = "https://forge.example";
+
+/// The other origin's page asking: its Origin, the token, and what else.
+fn from_hosted(
+    srv: &Server,
+    method: &str,
+    path: &str,
+    token: bool,
+    more: &[(&str, &str)],
+    body: &str,
+) -> Reply {
+    let auth = format!("Bearer {}", srv.token);
+    let mut h = vec![("Origin", HOSTED)];
+    if token {
+        h.push(("Authorization", &auth));
+    }
+    h.extend_from_slice(more);
+    request(srv.port, method, path, &h, body)
+}
+
+#[test]
+fn a_page_on_an_allowed_origin_uses_the_files_and_the_agent_with_the_token_only() {
+    let dir = scratch("case2");
+    std::fs::write(dir.join("proj/plate.fg"), PART).unwrap();
+    let srv = serve_with(&dir, &fake(&dir, "default", false), &["--allow-origin", HOSTED]);
+    // the browser asks first: allowed, with what it may send, and loopback from a public page
+    let pre = from_hosted(
+        &srv,
+        "OPTIONS",
+        "/api/agent/start",
+        false,
+        &[
+            ("Access-Control-Request-Method", "POST"),
+            ("Access-Control-Request-Headers", "authorization, content-type"),
+            ("Access-Control-Request-Private-Network", "true"),
+        ],
+        "",
+    );
+    assert_eq!(pre.status, 204, "{}", pre.head);
+    let head = pre.head.to_ascii_lowercase();
+    assert!(
+        head.contains(&format!("access-control-allow-origin: {HOSTED}")),
+        "{head}"
+    );
+    assert!(head.contains("access-control-allow-private-network: true"));
+    assert!(head.contains("authorization"));
+    // the files: the token needed, and then read through CORS, the version with them
+    assert_eq!(from_hosted(&srv, "GET", "/api/files", false, &[], "").status, 401);
+    let got = from_hosted(&srv, "GET", "/api/files/plate.fg", true, &[], "");
+    assert_eq!(got.status, 200, "{}", got.body);
+    let head = got.head.to_ascii_lowercase();
+    assert!(head.contains(&format!("access-control-allow-origin: {HOSTED}")));
+    assert!(head.contains("access-control-expose-headers: etag"));
+    assert_eq!(got.body, PART);
+    // the agent
+    let start = from_hosted(
+        &srv,
+        "POST",
+        "/api/agent/start",
+        true,
+        &[("Content-Type", "application/json"), ("X-Forge-Client", "hosted")],
+        "{}",
+    );
+    assert_eq!(start.status, 200, "{}", start.body);
+    assert!(
+        start
+            .head
+            .to_ascii_lowercase()
+            .contains(&format!("access-control-allow-origin: {HOSTED}"))
+    );
+    drop(srv);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn any_other_origin_is_refused_and_told_nothing() {
+    let dir = scratch("case2-other");
+    std::fs::write(dir.join("proj/plate.fg"), PART).unwrap();
+    let srv = serve_with(&dir, &fake(&dir, "default", false), &["--allow-origin", HOSTED]);
+    let auth = format!("Bearer {}", srv.token);
+    for o in [
+        "https://evil.example",
+        "null",
+        "https://forge.example.evil.example",
+        "http://forge.example",
+    ] {
+        let pre = request(
+            srv.port,
+            "OPTIONS",
+            "/api/files",
+            &[("Origin", o), ("Access-Control-Request-Method", "GET")],
+            "",
+        );
+        assert_eq!(pre.status, 403, "{o}");
+        assert!(
+            !pre.head.to_ascii_lowercase().contains("access-control-allow"),
+            "{o}: {}",
+            pre.head
+        );
+        // even with the token
+        let r = request(
+            srv.port,
+            "GET",
+            "/api/files/plate.fg",
+            &[("Origin", o), ("Authorization", &auth)],
+            "",
+        );
+        assert_eq!(r.status, 403, "{o}");
+        assert!(!r.body.contains("param"), "{o}: nothing of the files");
+    }
+    drop(srv);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_bypass_from_the_settings_runs_for_another_origin_only_if_allowed() {
+    for (flag, runs) in [(false, false), (true, true)] {
+        let dir = scratch(&format!("case2-bypass-{flag}"));
+        std::fs::write(dir.join("proj/plate.fg"), PART).unwrap();
+        let mut extra = vec!["--allow-origin", HOSTED];
+        if flag {
+            extra.push("--allow-bypass");
+        }
+        let srv = serve_with(&dir, &fake(&dir, "bypassPermissions", false), &extra);
+        assert_eq!(post(&srv, "start", "{}", "p").status, 200);
+        let rx = events(&srv, 0, "p");
+        let said = until(&rx, |j| ty(j) == "system" || ty(j) == "forge_bridge");
+        if runs {
+            assert_eq!(
+                said.get("permissionMode").and_then(Json::str),
+                Some("bypassPermissions")
+            );
+        } else {
+            let ended = if ty(&said) == "forge_bridge" {
+                said
+            } else {
+                until(&rx, |j| ty(j) == "forge_bridge")
+            };
+            let why = ended.get("error").and_then(Json::str).unwrap_or("");
+            assert!(why.contains("--allow-bypass"), "{why}");
+        }
+        drop(srv);
+        let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[test]
+fn allow_origin_takes_an_origin_and_comes_with_the_agent() {
+    let dir = scratch("case2-args");
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_forgecad"))
+            .args(["web", dir.join("proj").to_str().unwrap(), "--port", "0"])
+            .args(args)
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .output()
+            .unwrap()
+    };
+    for (args, says) in [
+        (&["--allow-origin", HOSTED][..], "with --agent"),
+        (
+            &["--agent", "--allow-origin", "https://*.example"][..],
+            "no wildcard",
+        ),
+        (
+            &["--agent", "--allow-origin", "https://forge.example/app"][..],
+            "no path",
+        ),
+        (&["--agent", "--allow-origin", "null"][..], "an origin"),
+        (&["--agent", "--allow-bypass"][..], "another origin"),
+    ] {
+        let out = run(args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        let err = String::from_utf8_lossy(&out.stderr);
+        assert!(err.contains(says), "{args:?}: {err}");
+    }
+    let _ = std::fs::remove_dir_all(dir);
 }

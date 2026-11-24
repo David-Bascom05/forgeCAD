@@ -52,10 +52,13 @@ pub struct Config {
     pub writable: bool,
     /// `--agent`: the page's agent is the person's Claude Code, run here (agent_bridge.rs).
     pub agent: Option<Arc<crate::agent_bridge::Agent>>,
+    /// `--allow-origin`: pages from these origins (exactly: scheme, host, port) may use the
+    /// files and the agent, with the agent's token (research/agent-tab, case 2).
+    pub origins: Vec<String>,
 }
 
-const USAGE: &str =
-    "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only] [--agent]";
+const USAGE: &str = "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only] [--agent \
+     [--allow-origin URL]... [--allow-bypass]]";
 
 /// The command line's words after `web`.
 pub fn main(args: &[String]) -> ExitCode {
@@ -80,6 +83,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
     let (mut root, mut app, mut bind, mut port, mut token, mut writable) =
         (None, None, IpAddr::from([127, 0, 0, 1]), 8080u16, None, true);
     let mut agent = false;
+    let (mut origins, mut allow_bypass) = (Vec::new(), false);
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut val = |name: &str| it.next().cloned().ok_or(format!("{name} takes a value"));
@@ -90,6 +94,8 @@ fn parse(args: &[String]) -> Result<Config, String> {
             "--app" => app = Some(PathBuf::from(val("--app")?)),
             "--read-only" => writable = false,
             "--agent" => agent = true,
+            "--allow-origin" => origins.push(origin(&val("--allow-origin")?)?),
+            "--allow-bypass" => allow_bypass = true,
             s if s.starts_with("--") => return Err(format!("{s}: not an option")),
             s if root.is_none() => root = Some(PathBuf::from(s)),
             s => return Err(format!("{s}: one folder only")),
@@ -116,12 +122,18 @@ fn parse(args: &[String]) -> Result<Config, String> {
     if agent && !writable {
         return Err("--agent: Claude Code writes the files; drop --read-only".into());
     }
+    if !origins.is_empty() && !agent {
+        return Err("--allow-origin: with --agent (the other origin's page pairs with its token)".into());
+    }
+    if allow_bypass && origins.is_empty() {
+        return Err("--allow-bypass: for a page on another origin (--allow-origin); this server's own page honours your settings' bypass already".into());
+    }
     let agent = agent.then(|| {
         Arc::new(crate::agent_bridge::Agent::new(
             root.clone(),
             random_token(),
-            false,
-            false,
+            !origins.is_empty(),
+            allow_bypass,
         ))
     });
     Ok(Config {
@@ -132,7 +144,27 @@ fn parse(args: &[String]) -> Result<Config, String> {
         token,
         writable,
         agent,
+        origins,
     })
+}
+
+/// An `--allow-origin` value as browsers send it in `Origin`: http(s), a host, a port if any;
+/// no path, no wildcard, not `null`.
+fn origin(v: &str) -> Result<String, String> {
+    let bad = || {
+        format!("--allow-origin {v}: an origin, as https://host or http://host:port (no path, no wildcard)")
+    };
+    let v = v.trim_end_matches('/').to_ascii_lowercase();
+    let (scheme, rest) = v.split_once("://").ok_or_else(bad)?;
+    let fine = matches!(scheme, "http" | "https")
+        && !rest.is_empty()
+        && rest
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || ".-:[]".contains(c));
+    if !fine {
+        return Err(bad());
+    }
+    Ok(v)
 }
 
 /// The built app beside the installed binary (`share/forgecad/web`), or `FORGECAD_WEB`.
@@ -173,6 +205,7 @@ pub fn serve(c: Config, ready: impl FnOnce(&Path, &str)) -> Result<(), String> {
     // the agent's token in the fragment: never sent to a server, never in a Referer
     if let Some(a) = &c.agent {
         url.push_str(&format!("#agent={}", a.token));
+
         let a = a.clone();
         std::thread::spawn(move || {
             loop {
@@ -185,6 +218,18 @@ pub fn serve(c: Config, ready: impl FnOnce(&Path, &str)) -> Result<(), String> {
         eprintln!("forgecad web: no built app (FORGECAD_WEB, --app): only the API is served");
     }
     ready(&c.root, &url);
+    // a page on another origin: the same token, and where this bridge is
+    if let Some(a) = &c.agent {
+        for o in &c.origins {
+            // not println!: nothing reading stdout any more mustn't end the server
+            let _ = writeln!(
+                std::io::stdout(),
+                "forgecad web: for the page at {o}, open {o}/#bridge=http://127.0.0.1:{}&agent={}",
+                at.port(),
+                a.token
+            );
+        }
+    }
     run(l, Arc::new(c))
 }
 
@@ -354,9 +399,14 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
                     && q.path == "/api/agent/events"
                     && let Some(a) = &c.agent
                 {
-                    return match agent_gate(&q, a) {
-                        Err(e) => write_response(&mut out, &e, false, false),
-                        Ok(client) => stream_events(&mut out, a, &q, &client),
+                    return match agent_gate(&q, c, a) {
+                        Err(mut e) => {
+                            if let Some(o) = allowed_other(&q, c) {
+                                cors(&mut e, o);
+                            }
+                            write_response(&mut out, &e, false, false)
+                        }
+                        Ok(client) => stream_events(&mut out, a, &q, &client, allowed_other(&q, c)),
                     };
                 }
                 let keep = !q
@@ -375,16 +425,15 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
 
 /// An agent call's gate, before its route: a loopback Host, the page's own Origin (when one's
 /// sent), then the agent's token; the page's id (`X-Forge-Client`) if it passes.
-fn agent_gate(q: &Request, a: &crate::agent_bridge::Agent) -> Result<String, Response> {
+fn agent_gate(q: &Request, c: &Config, a: &crate::agent_bridge::Agent) -> Result<String, Response> {
     if !q.header("host").is_some_and(is_loopback_name) {
         return Err(error(421, "this server answers to localhost only"));
     }
-    if let Some(o) = q.header("origin") {
-        let h = q.header("host").unwrap_or_default();
-        let o = o.split_once("://").map_or(o, |x| x.1);
-        if !o.eq_ignore_ascii_case(h) {
-            return Err(error(403, "a request from another origin"));
-        }
+    if let Some(o) = q.header("origin")
+        && !own_origin(q, o)
+        && allowed_other(q, c).is_none()
+    {
+        return Err(error(403, "a request from another origin"));
     }
     let given = q.header("authorization").and_then(|v| v.strip_prefix("Bearer "));
     if !given.is_some_and(|g| same(g, &a.token)) {
@@ -416,11 +465,18 @@ fn stream_events(
     a: &crate::agent_bridge::Agent,
     q: &Request,
     client: &str,
+    other: Option<&str>,
 ) -> std::io::Result<()> {
     let from = q.query("from").and_then(|f| f.parse().ok()).unwrap_or(0);
-    let head = "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\n\
+    // an allowed other origin's page reads it through CORS
+    let cors = other.map_or(String::new(), |o| {
+        format!("Access-Control-Allow-Origin: {o}\r\nVary: Origin\r\n")
+    });
+    let head = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\n\
          X-Content-Type-Options: nosniff\r\nCache-Control: no-cache\r\nReferrer-Policy: no-referrer\r\n\
-         Cross-Origin-Resource-Policy: same-origin\r\nConnection: close\r\n\r\n";
+         Cross-Origin-Resource-Policy: same-origin\r\n{cors}Connection: close\r\n\r\n"
+    );
     out.write_all(head.as_bytes())?;
     out.flush()?;
     a.stream(from, client, |bytes| {
@@ -456,12 +512,70 @@ fn is_loopback_name(h: &str) -> bool {
     n.eq_ignore_ascii_case("localhost") || n.parse::<IpAddr>().is_ok_and(|ip| ip.is_loopback())
 }
 
+/// The page's Origin is this server's own (scheme aside: the Host header has none).
+fn own_origin(q: &Request, o: &str) -> bool {
+    let h = q.header("host").unwrap_or_default();
+    o.split_once("://").map_or(o, |x| x.1).eq_ignore_ascii_case(h)
+}
+
+/// The request's Origin when it's another one `--allow-origin` named: its answer carries CORS.
+fn allowed_other<'a>(q: &'a Request, c: &Config) -> Option<&'a str> {
+    let o = q.header("origin")?;
+    (!own_origin(q, o) && c.origins.iter().any(|a| a.eq_ignore_ascii_case(o))).then_some(o)
+}
+
+/// What an allowed other origin's page may read of an answer.
+fn cors(r: &mut Response, o: &str) {
+    r.headers.push(("Access-Control-Allow-Origin", o.to_string()));
+    r.headers.push(("Vary", "Origin".into()));
+    r.headers.push(("Access-Control-Expose-Headers", "ETag".into()));
+}
+
 fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
+    let mut r = answer_inner(q, c, lock);
+    if let Some(o) = allowed_other(q, c) {
+        cors(&mut r, o);
+    }
+    r
+}
+
+fn answer_inner(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
     // on loopback, only a loopback Host: a page elsewhere can't reach this through DNS
     if c.bind.is_loopback() && !q.header("host").is_some_and(is_loopback_name) {
         return error(421, "this server answers to localhost only");
     }
     let api = q.path == "/api" || q.path.starts_with("/api/");
+    // a page on an allowed other origin asks first (CORS): what it may send, and (Chrome's
+    // Private Network Access) that a public page may reach this loopback server
+    if api && q.method == "OPTIONS" {
+        let Some(o) = allowed_other(q, c) else {
+            return error(403, "a request from another origin");
+        };
+        let mut r = Response {
+            status: 204,
+            kind: "text/plain",
+            headers: vec![
+                (
+                    "Access-Control-Allow-Methods",
+                    "GET, HEAD, PUT, DELETE, POST".into(),
+                ),
+                (
+                    "Access-Control-Allow-Headers",
+                    "Authorization, Content-Type, X-Forge-Client, If-Match, If-None-Match".into(),
+                ),
+                ("Access-Control-Max-Age", "600".into()),
+            ],
+            body: vec![],
+        };
+        if q.header("access-control-request-private-network")
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+        {
+            r.headers
+                .push(("Access-Control-Allow-Private-Network", "true".into()));
+        }
+        let _ = o; // its CORS added with every answer's, below
+        return r;
+    }
     if !api {
         return match q.method.as_str() {
             "GET" | "HEAD" => static_file(c, &q.path),
@@ -478,11 +592,20 @@ fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
             return error(401, "a token is needed (Authorization: Bearer T, or ?token=T)");
         }
     }
-    // a page from another origin may not drive the API with this browser's access
-    if let (Some(o), Some(h)) = (q.header("origin"), q.header("host")) {
-        let o = o.split_once("://").map_or(o, |x| x.1);
-        if !o.eq_ignore_ascii_case(h) {
+    // a page from another origin may not drive the API with this browser's access, unless
+    // --allow-origin named it; then only with the agent's token, files as much as the agent
+    if let Some(o) = q.header("origin")
+        && !own_origin(q, o)
+    {
+        let Some(a) = c.agent.as_ref().filter(|_| allowed_other(q, c).is_some()) else {
             return error(403, "a request from another origin");
+        };
+        let given = q.header("authorization").and_then(|v| v.strip_prefix("Bearer "));
+        if !given.is_some_and(|g| same(g, &a.token)) {
+            return error(
+                401,
+                "the agent's token is needed (Authorization: Bearer T, from the link forgecad web printed)",
+            );
         }
     }
     let rest = q.path.strip_prefix("/api").unwrap_or_default();
@@ -490,7 +613,7 @@ fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
         if q.method != "POST" {
             return error(405, "POST");
         }
-        let client = match agent_gate(q, a) {
+        let client = match agent_gate(q, c, a) {
             Ok(c) => c,
             Err(e) => return e,
         };
@@ -1165,6 +1288,7 @@ mod tests {
             token: token.map(str::to_string),
             writable,
             agent: None,
+            origins: vec![],
         });
         std::thread::spawn(move || run(l, c));
         (at, root)
