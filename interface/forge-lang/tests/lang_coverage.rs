@@ -96,13 +96,16 @@ fn arms(rel: &str, marker: &str) -> Vec<String> {
     for line in f.lines() {
         let lead = line.len() - line.trim_start().len();
         let t = line.trim_start();
-        let starts = t.starts_with('"') && (t.contains("\" =>") || t.contains("\" |"));
+        let starts =
+            t.starts_with('"') && (t.contains("\" =>") || t.contains("\" |") || t.contains("\" if "));
         if indent.is_none() && starts {
             indent = Some(lead);
         }
         let Some(i) = indent else { continue };
         if (lead == i && starts) || (pending && lead >= i && t.starts_with("| \"")) {
+            // the pattern, not a guard's strings (`"link" if a.get("#0").is_none() =>`)
             let pat = t.split("=>").next().unwrap_or("");
+            let pat = pat.split(" if ").next().unwrap_or("");
             out.extend(quoted(pat));
             pending = !t.contains("=>");
         } else {
@@ -139,12 +142,27 @@ fn expr_builtins(rel: &str) -> Vec<String> {
     out
 }
 
+/// The names an evaluator reads as its own before any binding: `ExprKind::Name(n) if n == "x"`
+/// arms in the function `marker` begins.
+fn name_arms(rel: &str, marker: &str) -> Vec<String> {
+    let src = read(rel);
+    let f = function(&src, marker);
+    let mut out = vec![];
+    for line in f.lines() {
+        if let Some(i) = line.find("ExprKind::Name(n) if n == \"") {
+            out.extend(quoted(&line[i..]).into_iter().take(1));
+        }
+    }
+    out
+}
+
 /// The built-in families: one line each. A new family is a new line here and its row in
 /// COVERAGE.md.
 fn families() -> Vec<(&'static str, Vec<String>, Model)> {
     use forge_lang::*;
     const CAM: &str = "interface/forge-cam-lang/src/lib.rs";
     const TURN: &str = "interface/forge-turn-lang/src/lib.rs";
+    const ROBOT: &str = "interface/forge-lang/src/robot.rs";
     vec![
         ("core", owned(builtins::BUILTINS), Model::Shadow),
         ("shapes", owned(shapes::NAMES), Model::Shadow),
@@ -174,6 +192,26 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
         ("cam-expr", expr_builtins(CAM), Model::Closed),
         ("turn", arms(TURN, "fn call(&mut self"), Model::Closed),
         ("turn-expr", expr_builtins(TURN), Model::Closed),
+        (
+            "robot-assign",
+            arms(ROBOT, "match fname.as_str() {"),
+            Model::Closed,
+        ),
+        (
+            "robot-stmt",
+            arms(ROBOT, "fn statement(r: &mut Robot"),
+            Model::Closed,
+        ),
+        (
+            "robot-value",
+            arms(ROBOT, "fn value(&self, f: &str"),
+            Model::Closed,
+        ),
+        (
+            "robot-constants",
+            name_arms(ROBOT, "fn eval(&self, e: &Expr"),
+            Model::Own,
+        ),
     ]
 }
 
@@ -294,6 +332,10 @@ const HEADER_FILES: &[(&str, &str)] = &[
     ("interface/forge-cam-lang/src/lib.rs", "families cam, cam-expr"),
     ("interface/forge-turn-lang/src/lib.rs", "families turn, turn-expr"),
     ("interface/forge-lang/src/drawing/doc.rs", "family drawing"),
+    (
+        "interface/forge-lang/src/robot.rs",
+        "families robot-assign, robot-stmt, robot-value, robot-constants",
+    ),
     (
         "interface/forge-lang/src/asm.rs",
         "families assembly, assembly-part, assembly-kinds",
@@ -554,6 +596,17 @@ fn lean_family_lists_are_the_rusts() {
     assert_eq!(lean(&src, "turnStmt"), rust("turn"), "Families.turnStmt");
     assert_eq!(lean(&src, "turnExpr"), rust("turn-expr"), "Families.turnExpr");
     assert_eq!(lean(&weld, "weld"), rust("weld"), "Builtins.weld");
+    assert_eq!(
+        lean(&src, "robotAssign"),
+        rust("robot-assign"),
+        "Families.robotAssign"
+    );
+    assert_eq!(lean(&src, "robotStmt"), rust("robot-stmt"), "Families.robotStmt");
+    assert_eq!(
+        lean(&src, "robotValue"),
+        rust("robot-value"),
+        "Families.robotValue"
+    );
     let hd: BTreeSet<String> = lean(&src, "headers");
     let words: BTreeSet<String> = headers().into_iter().map(|h| h.0).collect();
     assert!(hd.is_subset(&words), "Families.headers: {hd:?} vs {words:?}");

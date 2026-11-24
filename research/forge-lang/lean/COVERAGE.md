@@ -24,7 +24,8 @@ axioms: `lake build`, `lake env lean CheckAxioms.lean` (standard axioms only, no
   family here, is `lang_coverage::shadow_families_bound_nowhere` (every `.fg` that is not a
   machining document or drawing; files already refused with `ShadowsBuiltin` for that name are
   counted, not failed: `research/kernel-audit/audit2/ell.fg` binds `cut`).
-* **Closed** (`machining` documents: forge-cam-lang, forge-turn-lang): a call's head is looked up
+* **Closed** (`machining` documents: forge-cam-lang, forge-turn-lang; `robot` documents,
+  forge-lang `robot.rs`, which add bare statement calls from a table of their own): a call's head is looked up
   among the built-ins only, a read among the bindings only; no refusal for binding a built-in's
   name (`drill = drill(..)` is fine). `Families.run_ext_accepted`: adding match arms changes no
   accepted document; `Families.stmt_new_refused`: a document calling a new name was refused
@@ -56,6 +57,10 @@ no family extension changes where a document goes.
 | builtins | `cam-expr` | `box`, `vise` | `Cam::eval` (`fname == ..`); closed namespace | `Families.cam_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.families_not_keywords` |
 | builtins | `turn` | `part`, `lathe_tool`, `lathe_setup`, `turn_face`, `turn_rough`, `bore_rough`, `turn_finish`, `turn_groove`, `turn_thread`, `part_off`, `turn_drill`, `lathe_program` | `interface/forge-turn-lang/src/lib.rs` `Turn::call` arms; closed namespace | `Families.turn_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.families_not_keywords`; `LL1.Documents.turning_doc_accepted` |
 | builtins | `turn-expr` | `chuck` | `Turn::eval` (`match fname.as_str()`); closed namespace | `Families.turn_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.families_not_keywords` |
+| builtins | `robot-assign` | `source`, `link`, `joint`, `frame` | `interface/forge-lang/src/robot.rs` `run`'s `match fname` (then `Reader::value`); closed namespace | `Families.robot_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.exec_new_refused`, `Families.families_not_keywords`; Rename `FamiliesRename.rename_run` |
+| builtins | `robot-stmt` | `root`, `cut`, `freeze`, `merge`, `drop`, `visual`, `collision`, `collisions`, `actuation`, `inertial`, `joint`, `transmission` | `robot.rs` `statement` (a bare `f(..)` statement, `St.exec`); closed namespace | `Families.robot_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.exec_new_refused`, `Families.families_not_keywords`; Rename `FamiliesRename.rename_run` |
+| builtins | `robot-value` | `pose`, `box`, `cylinder`, `capsule`, `sphere`, `mesh` | `robot.rs` `Reader::value` (nested, or an assignment's fall-through); closed namespace | `Families.robot_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.exec_new_refused`, `Families.families_not_keywords`; Rename `FamiliesRename.rename_run` |
+| builtins | `robot-constants` | `hull`, `none` | `robot.rs` `Reader::eval`: read before any binding | GAP: read before bindings and binding them is not refused, so a binding named `hull` or `none` is accepted and never read (reported to URDF); a new such name would change documents that bind it. `Families.families_not_keywords` (they lex as identifiers) |
 
 ## Document headers and keywords
 
@@ -70,6 +75,7 @@ documents in `examples/machined/` included. Headers that are names add no syntax
 | header | `machining` | | forge-cam-lang `is_machining`, forge-turn-lang `is_turning` (first statement the bare name; turning when a statement calls `lathe_setup`) | `LL1.Documents.milling_doc_accepted`, `LL1.Documents.turning_doc_accepted`, `LL1.Documents.header_glued_refused`, `Families.families_not_keywords`; semantics `Families.run_ext_accepted` |
 | header | `drawing` | | forge-lang `drawing::doc::declared` (and the `drawing` keyword's statement) | `LL1.Unified.accept_drawing_header`, `LL1.Unified.accept_drawing_empty` (on the unified prototype grammar; on `Impl` by `LL1.Impl.grammar_ll1` and parse_diff). Semantics: GAP (drawing evaluator) |
 | header | `assembly` | | forge-render `is_assembly` (optional first line; an assembly is a file with components or joints) | `LL1.Documents.assembly_header_accepted`, `Families.families_not_keywords`. Semantics: GAP (assembly namespace, see `assembly`) |
+| header | `robot` | | forge-lang `robot::is_robot` (first statement the bare name) | `LL1.Documents.robot_doc_accepted` (its own example lexes and parses), `Families.families_not_keywords`; semantics `Families.robot_conservative`; the grammar is the one parse_diff checks on every file |
 | keywords | `syntax::KEYWORDS` | `shared`, `param`, `fn`, `for`, `in`, `if`, `else`, `return`, `expect`, `and`, `or`, `not`, `true`, `false`, `sketch`, `path`, `at`, `component`, `drawing`, `harness` | `interface/forge-lang/src/syntax.rs` (`RESERVED`: `at`, a keyword that texts used as a name) | `LL1.Impl.grammar_ll1`, `LL1.Impl.impl_unambiguous`, `LL1.Impl.source_to_tree`, `LL1.Impl.impl_roundtrip`, `LL1.Driver.rd_eq_run`, `LL1.Lex.word_maximal`, `LL1.Lex.lex_lossless`, `LL1.LexUnits.in_keyword_after_number` |
 
 ## Edit ops
@@ -161,8 +167,6 @@ scope).
 
 ## Pending
 
-* `robot` document (URDF worker; research/export/urdf-editor.md on branch claude/urdf-export):
-  a header word and its built-ins (`source`, `drop`, ..); rows when it lands.
 * Workholding / tool-library built-ins (WORKHOLDING, MACHINE-LIB): rows when they reach a
   document.
 * PR #13 (language limits, `ForgeLang/Bounds.lean` on branch
