@@ -258,3 +258,76 @@ fn presets_follow_the_spec() {
             .any(|c| c.note.contains("upper limit"))
     );
 }
+
+/// Parting: a groove insert, the blade it seats in and the block the blade clamps in, each
+/// read with its cites (CAM-TURN's shape: the cut is the insert's width, the reach the blade's
+/// cdx, the blade body its t_blade).
+#[test]
+fn parting_records_read() {
+    let src = r#"
+[[groove_insert]]
+id = "x-gi"
+code = "GI 3.00-0.20"
+width = 3.0
+re = 0.2
+real = true
+[[groove_insert.preset]]
+name = "P"
+group = "P"
+vc = 100
+fz = 0.08
+[[groove_insert.cite]]
+path = "code"
+status = "published"
+source = "s"
+taken = "2026-11-24"
+[[groove_insert.cite]]
+path = "width"
+status = "published"
+source = "s"
+taken = "2026-11-24"
+[[groove_insert.cite]]
+path = "re"
+status = "published"
+source = "s"
+taken = "2026-11-24"
+
+[[blade]]
+id = "x-bl"
+code = "BL 26-3"
+h = 26
+t_blade = 2.4
+l1 = 110
+cdx = 40
+max_bar = 80
+hand = "N"
+
+[[tool_block]]
+id = "x-tb"
+code = "TB 25"
+h = 25
+b = 25
+l1 = 110
+"#;
+    // a real record must cite its preset
+    let mut l = Library::default();
+    assert!(matches!(
+        l.add("x.toml", src),
+        Err(LibError::Bad { field: "real", .. })
+    ));
+    let ok = src.replace(
+        "[[groove_insert.cite]]\npath = \"code\"",
+        "[[groove_insert.cite]]\npath = \"preset.P\"\nstatus = \"published\"\nsource = \"s\"\ntaken = \"2026-11-24\"\n[[groove_insert.cite]]\npath = \"code\"",
+    );
+    let mut l = Library::default();
+    l.add("x.toml", &ok).unwrap();
+    assert_eq!((l.groove_inserts[0].width, l.groove_inserts[0].re), (3.0, 0.2));
+    assert_eq!(l.groove_inserts[0].presets[0].fz, 0.08);
+    let b = &l.blades[0];
+    assert_eq!((b.h, b.t_blade, b.cdx, b.max_bar), (26.0, 2.4, 40.0, Some(80.0)));
+    assert_eq!(l.tool_blocks[0].h, 25.0);
+    // a blade with no reach is refused by name
+    let mut l = Library::default();
+    let e = l.add("x.toml", &ok.replace("cdx = 40\n", "")).unwrap_err();
+    assert!(matches!(e, LibError::Missing { field: "cdx", .. }), "{e:?}");
+}

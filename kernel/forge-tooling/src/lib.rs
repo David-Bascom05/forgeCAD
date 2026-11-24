@@ -613,6 +613,9 @@ pub struct Library {
     pub pull_studs: Vec<PullStud>,
     pub inserts: Vec<turning::Insert>,
     pub turn_holders: Vec<turning::TurnHolder>,
+    pub groove_inserts: Vec<turning::GrooveInsert>,
+    pub blades: Vec<turning::Blade>,
+    pub tool_blocks: Vec<turning::ToolBlock>,
     /// Each record's own table as read: (TOML key, id, table), for `build::derive`.
     pub sources: Vec<(String, String, Table)>,
 }
@@ -963,6 +966,14 @@ impl Library {
         unique!("pull_stud", pull_studs, PullStud, "pull stud");
         unique!("insert", inserts, turning::Insert, "insert");
         unique!("turn_holder", turn_holders, turning::TurnHolder, "turning holder");
+        unique!(
+            "groove_insert",
+            groove_inserts,
+            turning::GrooveInsert,
+            "groove insert"
+        );
+        unique!("blade", blades, turning::Blade, "blade");
+        unique!("tool_block", tool_blocks, turning::ToolBlock, "tool block");
         Ok(())
     }
 
