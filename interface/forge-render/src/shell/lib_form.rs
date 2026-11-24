@@ -418,6 +418,16 @@ pub fn set_doc_units(u: &'static str) {
 /// A number kept in `unit` edited in place: a length shown in the window's unit (inches in an
 /// inch document), anything else in the unit the record keeps it in. True when changed.
 pub fn num_edit(ui: &mut Ui, x: &mut f64, unit: &str) -> bool {
+    num_edit_in(ui, x, unit, "", None)
+}
+
+/// `num_edit` with a word before the number ("X ") and, given one, a fixed width (for a row of
+/// three that must fit a narrow panel).
+pub fn num_edit_in(ui: &mut Ui, x: &mut f64, unit: &str, prefix: &str, width: Option<f32>) -> bool {
+    let put = |ui: &mut Ui, w: egui::DragValue| match width {
+        Some(px) => ui.add_sized([px, 20.0], w),
+        None => ui.add(w),
+    };
     let doc = DOC_UNITS.with(|c| c.get());
     if unit == "mm"
         && doc != "mm"
@@ -425,25 +435,30 @@ pub fn num_edit(ui: &mut Ui, x: &mut f64, unit: &str) -> bool {
     {
         let per = top / bottom;
         let mut v = *x / per;
-        let ch = ui
-            .add(
-                egui::DragValue::new(&mut v)
-                    .speed(0.01)
-                    .max_decimals(4)
-                    .suffix(format!(" {doc}")),
-            )
-            .changed();
+        let ch = put(
+            ui,
+            egui::DragValue::new(&mut v)
+                .speed(0.01)
+                .max_decimals(4)
+                .prefix(prefix)
+                .suffix(format!(" {doc}")),
+        )
+        .changed();
         if ch {
             *x = v * per;
         }
         return ch;
     }
     let u = unit.to_string();
-    ui.add(
+    let pre = prefix.to_string();
+    put(
+        ui,
         egui::DragValue::new(x)
             .speed(0.1)
-            .custom_formatter(move |v, _| value_text(v, &u))
-            .custom_parser(leading_number),
+            .custom_formatter(move |v, _| format!("{pre}{}", value_text(v, &u)))
+            .custom_parser(move |t| {
+                leading_number(t.trim_start_matches(|c: char| c.is_alphabetic() || c == ' '))
+            }),
     )
     .changed()
 }

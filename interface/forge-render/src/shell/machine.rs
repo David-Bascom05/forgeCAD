@@ -18,6 +18,7 @@ use forge_machine::def::{
 use forge_machine_builder::catalog::{self, Catalog, Level};
 use forge_machine_builder::check::{self, CheckReport, EnvelopeCheck, Travel};
 use forge_machine_builder::make::{self, Copied, Template};
+use forge_machine_builder::models::{self, Model, Outside};
 use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -116,6 +117,15 @@ pub struct MachineUi {
     pub brake: Option<super::machine_brake::BrakeUi>,
     /// The tooling record last shown (its text): the host is told when it changes.
     tooling_seen: String,
+    /// Models the user attached to this machine (their own files, kept in their library:
+    /// forge_machine_builder::models), and each one's check against its body's envelope.
+    pub models: Vec<Model>,
+    pub model_checks: Vec<Result<Outside, String>>,
+    /// The chosen body's envelope boxes on the screen (8 corners each, bit 0 x, 1 y, 2 z) while
+    /// its model is drawn in its place, and where the model is farthest outside it (the host's,
+    /// each frame).
+    pub envelope_px: Vec<[egui::Pos2; 8]>,
+    pub out_px: Option<(egui::Pos2, f64)>,
 }
 
 fn today() -> String {
@@ -172,6 +182,10 @@ impl MachineUi {
             workholding: None,
             brake: None,
             tooling_seen: String::new(),
+            models: Vec::new(),
+            model_checks: Vec::new(),
+            envelope_px: Vec::new(),
+            out_px: None,
         };
         if let Some(e) = m.cat.entries.first() {
             let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
@@ -195,7 +209,121 @@ impl MachineUi {
         self.report = None;
         self.pick = 0;
         self.fit += 1;
+        self.models = self
+            .models_dir()
+            .map(|d| models::load_in(&d))
+            .transpose()
+            .unwrap_or_else(|e| {
+                self.message = e;
+                None
+            })
+            .unwrap_or_default();
+        self.check_models();
         self.edited(true);
+    }
+
+    /// The folder this machine's attached models are kept in (the user's library).
+    pub fn models_dir(&self) -> Option<PathBuf> {
+        Some(models::dir_in(self.user.as_ref()?, &self.def.as_ref()?.name))
+    }
+
+    /// A model's triangles in its file's coordinates.
+    pub fn model_tris(&self, m: &Model) -> Result<std::sync::Arc<crate::machine_mesh::Tris>, String> {
+        let d = self
+            .models_dir()
+            .ok_or("no folder for your library on this system")?;
+        crate::machine_model::file_tris(&d.join(&m.file))
+    }
+
+    /// Each model against its body's envelope (a whole-machine model is not checked).
+    pub fn check_models(&mut self) {
+        let Some(d) = &self.def else {
+            self.model_checks.clear();
+            return;
+        };
+        self.model_checks = self
+            .models
+            .iter()
+            .map(|m| {
+                let t = self.model_tris(m)?;
+                Ok(
+                    match m
+                        .body
+                        .as_ref()
+                        .and_then(|b| d.bodies.iter().find(|x| &x.name == b))
+                    {
+                        Some(b) => {
+                            models::outside(&b.prims, crate::machine_model::placed_points(&t, m).into_iter())
+                        }
+                        None => Outside::default(),
+                    },
+                )
+            })
+            .collect();
+    }
+
+    /// After the models changed: written to the user's library, checked, redrawn.
+    pub fn models_changed(&mut self) {
+        match self.models_dir() {
+            Some(dir) => {
+                if let Err(e) = models::save_in(&dir, &self.models) {
+                    self.message = e;
+                }
+            }
+            None => {
+                self.message = "no folder for your library on this system: the models are not kept".into()
+            }
+        }
+        self.check_models();
+        self.geom += 1;
+    }
+
+    /// Attaches the file at `path` to `body` (None: the whole machine), placed on its envelope
+    /// (or on the machine's bounds), with inch or metre units when its size says so.
+    pub fn attach_model(&mut self, body: Option<String>, path: &str) -> Result<String, String> {
+        let def = self.def.as_ref().ok_or("no machine")?;
+        let dir = self
+            .models_dir()
+            .ok_or("no folder for your library on this system")?;
+        let path = std::path::Path::new(path.trim());
+        let target = match &body {
+            Some(b) => {
+                let b = def.bodies.iter().find(|x| &x.name == b).ok_or("no such body")?;
+                models::prims_bounds(&b.prims)
+            }
+            None => models::bounds(
+                def.bodies
+                    .iter()
+                    .filter_map(|b| models::prims_bounds(&b.prims))
+                    .flat_map(|(lo, hi)| [lo, hi]),
+            ),
+        }
+        .ok_or("the body has no envelope to place the model on")?;
+        let file = models::copy_in(&dir, path, &self.models)?;
+        let mut m = Model::new(body.clone(), file.clone());
+        let t = match crate::machine_model::file_tris(&dir.join(&file)) {
+            Ok(t) => t,
+            Err(e) => {
+                let _ = forge_dirs::fs::remove_file(dir.join(&file));
+                return Err(e);
+            }
+        };
+        let mut said = String::new();
+        if let Some(own) = models::bounds(t.pos.iter().copied())
+            && let Some(s) = models::guess_scale(own, target)
+        {
+            m.scale = s;
+            said = format!(
+                "; its size reads as {}, so its units are set to {} (change Units if not)",
+                if s == 25.4 { "inches" } else { "metres" },
+                if s == 25.4 { "in" } else { "m" }
+            );
+        }
+        m.sit_on(&t.pos, target);
+        self.models.push(m);
+        self.models_changed();
+        let on = body.map_or("the whole machine".to_string(), |b| format!("`{b}`"));
+        Ok(format!("{file} attached to {on}, placed on its envelope{said}"))
     }
 
     /// After any edit: the refusal, the live verdicts, and what the host must redo.
@@ -443,6 +571,13 @@ struct Touch {
     attach: Option<String>,
     fit: bool,
     detach: bool,
+    /// Bodies tab, models: attach a file to a body (None: the whole machine); the models were
+    /// edited; drop one; place one on its envelope again; fit its body's envelope to it.
+    attach_model: Option<(Option<String>, String)>,
+    models: bool,
+    drop_model: Option<usize>,
+    replace_model: Option<usize>,
+    fit_to_model: Option<usize>,
 }
 
 struct Ctx<'a> {
@@ -977,6 +1112,8 @@ impl Shell {
         if self.env == Some(super::env::EnvId::MachineBuilder) {
             if st.lib != "machine" {
                 overlay(ctx, &t, &st, v);
+            } else {
+                envelope_overlay(ctx, &t, &st, v);
             }
             if st.lib == "machine" {
                 egui::Window::new("Jog")
@@ -1506,7 +1643,14 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             Tab::Spindles => tab_spindles(ui, &c, &mut d2, &mut st.pick, &mut touch),
             Tab::Changer => tab_changer(ui, &c, &mut d2, &mut touch),
             Tab::Mounts => tab_mounts(ui, &c, &mut d2, &mut st.pick, &mut touch),
-            Tab::Bodies => tab_bodies(ui, &c, &mut d2, &mut st.pick, &mut st.file_in, &mut touch),
+            Tab::Bodies => {
+                let ms = ModelsCtx {
+                    models: &mut st.models,
+                    checks: &st.model_checks,
+                    kept: st.user.is_some(),
+                };
+                tab_bodies(ui, &c, &mut d2, &mut st.pick, &mut st.file_in, ms, &mut touch)
+            }
             Tab::Check => tab_check(ui, t, st.report.as_ref(), &d, &st.q),
         });
     // a body's geometry from a file: beside the saved machine
@@ -1518,8 +1662,14 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             _ => None,
         };
         let b = st.pick;
+        let not_part = touch
+            .attach
+            .as_ref()
+            .is_some_and(|f| !f.trim().to_ascii_lowercase().ends_with(".fg"));
         let got = if b >= d2.bodies.len() {
             Err("no body chosen".to_string())
+        } else if not_part {
+            Err("a maker's STEP, IGES or STL file is attached as the body's Model (below): kept in your own library, never beside the machine in a project".into())
         } else if touch.detach {
             d2.bodies[b].part = None;
             Ok(format!(
@@ -1551,6 +1701,68 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             Err(e) => st.message = e,
         }
     }
+    if let Some((body, f)) = touch.attach_model.take() {
+        let saved_def = st.def.replace(d2.clone());
+        st.message = st.attach_model(body, &f).unwrap_or_else(|e| e);
+        st.def = saved_def;
+    }
+    if let Some(i) = touch.drop_model.filter(|i| *i < st.models.len()) {
+        let m = st.models.remove(i);
+        st.message = format!("{} removed (and its copy in your library)", m.file);
+        st.models_changed();
+    }
+    if let Some(i) = touch.replace_model.filter(|i| *i < st.models.len()) {
+        let m = st.models[i].clone();
+        let target = match &m.body {
+            Some(b) => d2
+                .bodies
+                .iter()
+                .find(|x| &x.name == b)
+                .and_then(|b| models::prims_bounds(&b.prims)),
+            None => models::bounds(
+                d2.bodies
+                    .iter()
+                    .filter_map(|b| models::prims_bounds(&b.prims))
+                    .flat_map(|(lo, hi)| [lo, hi]),
+            ),
+        };
+        if let (Some(target), Ok(t)) = (target, st.model_tris(&m)) {
+            st.models[i].sit_on(&t.pos, target);
+            st.message = format!("{} placed on its envelope again", m.file);
+        }
+        st.models_changed();
+    } else if touch.models {
+        st.models_changed();
+    }
+    if let Some(i) = touch.fit_to_model.filter(|i| *i < st.models.len()) {
+        let m = st.models[i].clone();
+        let at = m
+            .body
+            .as_ref()
+            .and_then(|b| d2.bodies.iter().position(|x| &x.name == b));
+        match (at, st.model_tris(&m)) {
+            (Some(b), Ok(t)) => {
+                if let Some((lo, hi)) =
+                    models::bounds(crate::machine_model::placed_points(&t, &m).into_iter())
+                {
+                    d2.bodies[b].prims = vec![super::machine_parts::fitted(lo, hi)];
+                    st.message = format!(
+                        "`{}`: envelope = the model's bounds + {} mm ({:.1} x {:.1} x {:.1}); a box: it covers more than the model where the model is not boxy",
+                        d2.bodies[b].name,
+                        super::machine_parts::FIT_MARGIN,
+                        hi[0] - lo[0],
+                        hi[1] - lo[1],
+                        hi[2] - lo[2]
+                    );
+                    touch.edited.push(format!("body.{}", d2.bodies[b].name));
+                    touch.any = true;
+                    touch.geometry = true;
+                }
+            }
+            (_, Err(e)) => st.message = e,
+            (None, _) => st.message = "a whole-machine model has no envelope of its own".into(),
+        }
+    }
     if touch.any {
         for p in &touch.edited {
             d2.cites.retain(|c| &c.path != p);
@@ -1571,6 +1783,9 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
         st.changed = true;
         st.report = None;
         st.edited(touch.geometry || !touch.edited.is_empty());
+        if touch.geometry {
+            st.check_models();
+        }
     }
 }
 
@@ -2042,12 +2257,164 @@ fn tab_mounts(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
     ));
 }
 
+/// The Bodies tab's view of the attached models.
+struct ModelsCtx<'a> {
+    models: &'a mut Vec<Model>,
+    checks: &'a [Result<Outside, String>],
+    /// The user's library has a folder here (models are kept in it).
+    kept: bool,
+}
+
+/// A model file to attach, from the platform's picker (every format forgecad reads, and the
+/// ones it does not so it can say what to send instead).
+fn pick_model() -> Option<String> {
+    let mut exts: Vec<&str> = models::Format::EXTS.to_vec();
+    exts.extend(["x_t", "x_b"]);
+    crate::plat::pick_file(
+        Some("A model of this body (STEP, IGES or STL)"),
+        "STEP, IGES or STL",
+        &exts,
+    )
+}
+
+/// One attached model's rows: units, turn, move, and how it sits in the envelope.
+fn model_rows(
+    ui: &mut Ui,
+    t: &Theme,
+    i: usize,
+    m: &mut Model,
+    check: Option<&Result<Outside, String>>,
+    touch: &mut Touch,
+) {
+    let mut ch = false;
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Model");
+        ui.add(egui::Label::new(RichText::new(&m.file).font(sans(12.0)).color(t.ink)).truncate()).on_hover_text(
+            "Your own copy, kept in your library (not in the project): the body is drawn as this model; collisions are still found on the envelope.",
+        );
+        ui.add_space(6.0);
+        if ui.small_button("Remove").clicked() {
+            touch.drop_model = Some(i);
+        }
+    });
+    ui.horizontal(|ui| {
+        label_w(ui, t, "From");
+        ch |= ui
+            .add(
+                egui::TextEdit::singleline(&mut m.from)
+                    .hint_text("where you got it (for your own notes)")
+                    .desired_width(200.0),
+            )
+            .lost_focus();
+    });
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Units");
+        for (w, s) in [("mm", 1.0), ("in", 25.4), ("m", 1000.0)] {
+            if ui.selectable_label(m.scale == s, w).clicked() && m.scale != s {
+                m.scale = s;
+                touch.replace_model = Some(i);
+            }
+        }
+    });
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Turn");
+        for (k, a) in ["X ", "Y ", "Z "].iter().enumerate() {
+            ch |= ui
+                .add_sized(
+                    [74.0, 20.0],
+                    egui::DragValue::new(&mut m.rotate[k])
+                        .speed(1.0)
+                        .prefix(*a)
+                        .suffix("°")
+                        .max_decimals(2),
+                )
+                .changed();
+        }
+    });
+    ui.horizontal(|ui| {
+        label_w(ui, t, "");
+        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+            if ui
+                .add_sized([74.0, 18.0], egui::Button::new(format!("{a} +90°")).small())
+                .on_hover_text("a quarter turn, then placed on the envelope again")
+                .clicked()
+            {
+                m.rotate[k] = (m.rotate[k] + 90.0) % 360.0;
+                touch.replace_model = Some(i);
+            }
+        }
+    });
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Move");
+        for (k, a) in ["X ", "Y ", "Z "].iter().enumerate() {
+            ch |= super::lib_form::num_edit_in(ui, &mut m.offset[k], "mm", a, Some(74.0));
+        }
+    });
+    ui.horizontal(|ui| {
+        label_w(ui, t, "");
+        if ui
+            .small_button("Place on envelope")
+            .on_hover_text("centred over the body's envelope, its bottom on the envelope's bottom")
+            .clicked()
+        {
+            touch.replace_model = Some(i);
+        }
+    });
+    if m.body.is_none() {
+        ui.label(small(
+            t,
+            "Drawn as one piece on the base: it does not move with the axes. For moving parts, attach a model to each body.",
+        ));
+    }
+    match check {
+        Some(Ok(o)) if m.body.is_some() && o.out == 0 => {
+            ui.label(
+                RichText::new(format!(
+                    "Inside the collision envelope ({} points checked)",
+                    o.points
+                ))
+                .font(sans(11.0))
+                .color(t.success),
+            );
+        }
+        Some(Ok(o)) if m.body.is_some() => {
+            ui.label(
+                RichText::new(format!(
+                    "Sticks out of the collision envelope by up to {:.1} mm ({} of {} points). Collisions there are not found.",
+                    o.worst, o.out, o.points
+                ))
+                .font(sans(11.0))
+                .color(t.warn),
+            )
+            .on_hover_text(format!(
+                "farthest out at ({:.1}, {:.1}, {:.1}) in the machine's frame at home",
+                o.at[0], o.at[1], o.at[2]
+            ));
+            if ui
+                .button("Fit envelope to model")
+                .on_hover_text("the body's envelope becomes one box around the model")
+                .clicked()
+            {
+                touch.fit_to_model = Some(i);
+            }
+        }
+        Some(Err(e)) => {
+            ui.label(RichText::new(e).font(sans(11.0)).color(t.error));
+        }
+        _ => {}
+    }
+    if ch {
+        touch.models = true;
+    }
+}
+
 fn tab_bodies(
     ui: &mut Ui,
     c: &Ctx,
     d: &mut MachineDef,
     pick: &mut usize,
     file_in: &mut String,
+    ms: ModelsCtx,
     touch: &mut Touch,
 ) {
     let t = c.t;
@@ -2078,6 +2445,24 @@ fn tab_bodies(
             touch.geometry = true;
         }
     });
+    // the whole machine's model, if any, or the button to attach one
+    let whole: Vec<usize> = (0..ms.models.len())
+        .filter(|&i| ms.models[i].body.is_none())
+        .collect();
+    for &i in &whole {
+        model_rows(ui, t, i, &mut ms.models[i], ms.checks.get(i), touch);
+    }
+    if whole.is_empty()
+        && ui
+            .add_enabled(ms.kept, egui::Button::new("Attach a model of the whole machine…"))
+            .on_hover_text("your own STEP, IGES or STL of the machine, drawn as one piece; kept in your library, never in the project")
+            .on_disabled_hover_text("no folder for your library on this system")
+            .clicked()
+        && let Some(f) = pick_model()
+    {
+        touch.attach_model = Some((None, f));
+    }
+    ui.separator();
     let links: Vec<String> = std::iter::once("base".to_string())
         .chain(d.joints.iter().map(|j| j.name.clone()))
         .collect();
@@ -2101,19 +2486,38 @@ fn tab_bodies(
                 .unwrap_or_else(|| "none (the envelope is the body)".into()),
         ));
     });
+    // the model drawn as this body (the user's own file)
+    let bname = b.name.clone();
+    match ms
+        .models
+        .iter()
+        .position(|m| m.body.as_deref() == Some(bname.as_str()))
+    {
+        Some(i) => model_rows(ui, t, i, &mut ms.models[i], ms.checks.get(i), touch),
+        None => {
+            ui.horizontal(|ui| {
+                label_w(ui, t, "Model");
+                if ui
+                    .add_enabled(ms.kept, egui::Button::new("Attach model…"))
+                    .on_hover_text("your own STEP, IGES or STL of this body (the maker's, say): drawn in its place, placed on its envelope; kept in your library, never in the project")
+                    .on_disabled_hover_text("no folder for your library on this system")
+                    .clicked()
+                    && let Some(f) = pick_model()
+                {
+                    touch.attach_model = Some((Some(bname.clone()), f));
+                }
+            });
+        }
+    }
     ui.horizontal(|ui| {
-        label_w(ui, t, "Geometry");
+        label_w(ui, t, "Part file");
         ui.add(
             egui::TextEdit::singleline(file_in)
-                .hint_text(".fg, .step or .stl path")
+                .hint_text("a forgecad .fg part")
                 .desired_width(170.0),
         );
         if ui.button("Browse").clicked()
-            && let Some(f) = crate::plat::pick_file(
-                Some("A body's geometry"),
-                "Part, STEP or mesh",
-                &["fg", "step", "stp", "stl"],
-            )
+            && let Some(f) = crate::plat::pick_file(Some("A body's part"), "forgecad part", &["fg"])
         {
             *file_in = f;
         }
@@ -2434,6 +2838,43 @@ fn brake_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(Strin
         t,
         "The preview is the record's exact section (forge-brake's) drawn along the bed (over its longest segment, at most four times the section's size); a press: its ram, bed and housing as blocks. Amber: stand-in values for unknown ones.",
     ));
+}
+
+/// Over a machine's view, while the chosen body is drawn as the user's model: its collision
+/// envelope dashed on top (the model would hide it), and where the model is farthest outside it.
+fn envelope_overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
+    if st.envelope_px.is_empty() {
+        return;
+    }
+    let p = ctx
+        .layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::unique("machine:envelope"),
+        ))
+        .with_clip_rect(v);
+    let col = if st.out_px.is_some() { t.warn } else { t.ink2 };
+    let stroke = egui::Stroke::new(1.5, col);
+    for c in &st.envelope_px {
+        for a in 0..8usize {
+            for bit in [1usize, 2, 4] {
+                if a & bit == 0 {
+                    p.extend(egui::Shape::dashed_line(&[c[a], c[a | bit]], stroke, 6.0, 4.0));
+                }
+            }
+        }
+    }
+    if let Some((at, d)) = st.out_px {
+        p.circle_filled(at, 4.5, t.warn);
+        let text = format!("{d:.1} mm outside the envelope");
+        let g = p.layout_no_wrap(text, sans(11.0), t.ink);
+        let r = egui::Rect::from_min_size(
+            at + vec2(10.0, -g.size().y / 2.0 - 3.0),
+            g.size() + vec2(10.0, 6.0),
+        );
+        p.rect_filled(r, 3.0, t.raised);
+        p.rect_stroke(r, 3.0, egui::Stroke::new(1.0, t.warn), egui::StrokeKind::Inside);
+        p.galley(r.min + vec2(5.0, 3.0), g, t.ink);
+    }
 }
 
 /// Over the view of a library record: the ghosts' labels (what the record does not give), and a
