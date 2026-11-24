@@ -318,6 +318,10 @@ urdf-export, machines/builder, posts/dialects.
 - macOS ffmpeg: unpinned pending David (Riedl builds are --enable-nonfree: not redistributable).
 - ZERO-SPEED RULE, judged LAYOUT exception (coordinator ruling): allowed only with per-function callgrind showing zero increase in any forge-* fn own cost, identical call counts, excess solely glibc maps parse / std generics codegen / memcmp alignment; 0 regen1 lines over; strict total <= main; bits identical; analysis in PR band section.
 - 11-24 rulings: layout exception re-confirmed on fixed-path gate (EXACT-CORE; residues real but glibc/std/memcmp only). Refactor own-cost rises are NOT excepted (forge-bb CAM migration +33 Ir/call refused: 1h to reach parity, else hold, brake-only). Leak fix ui/leakfix 1ba6d40a = correctness exception (+0.0001% total), replaces 319b39a3; 319b39a3 is fallback only if leakfix not ready.
+- Language-path state rule (FALLBACK): any new or larger process-lifetime allocation (incl. a thread_local whose type has Drop -> glibc calloc for dtor registration) shifts the heap and shows as realloc memcpy on app/edit lines. Use Cell<u64> tokens + static tables entered only on use.
+- Gate now counts from main() (tools/gate-from-main-t5, lands after train 5; needs train 5's fixed clock). Re-baseline everything once it lands.
+- User vendor/material libraries are DECLARED inputs: every run records path+hash128 (feat/declared-libraries).
+- Train 5 = squash PR #52 (FTO commit in ancestry). Train 5b = PR #51 merged (80d61870).
 - forge-lang codegen is chaotic: small edits regroup CGUs and swing bench lines +-0.1%; profile per function before believing a line.
 - hidden_inputs.rs scanner stopped at first #[cfg(test)] (review gap) -> FALLBACK fixing to skip only the test item.
 - Train 5 lands as ONE squash commit (e3148c8b FTO commit in ancestry; David: no active-patent material in repo incl. history). 5b lands --no-ff (clean).
