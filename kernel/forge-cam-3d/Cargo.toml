@@ -9,6 +9,11 @@ repository.workspace = true
 [dependencies]
 forge-cam-geom = { path = "../forge-cam-geom" }
 forge-math = { path = "../forge-math" }
+forge-cam = { path = "../forge-cam" }
+forge-post = { path = "../forge-post" }
+
+[dev-dependencies]
+forge-tooling = { path = "../forge-tooling" }
 
 [lints]
 workspace = true

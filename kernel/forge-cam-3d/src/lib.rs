@@ -11,5 +11,6 @@
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
 
 pub mod drop;
+pub mod path;
 pub mod scallop;
 pub mod waterline;
