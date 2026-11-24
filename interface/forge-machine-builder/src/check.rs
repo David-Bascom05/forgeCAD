@@ -147,6 +147,7 @@ fn setup(def: &MachineDef) -> Setup<'_> {
         start: def.joints.iter().map(|j| j.home).collect(),
         start_tool: None,
         skip_stops: Vec::new(),
+        radius: Vec::new(),
     }
 }
 
