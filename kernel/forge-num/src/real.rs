@@ -618,33 +618,6 @@ fn bmul(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
     }
 }
 
-/// `bmul` as it was (all four corners compared): the reference for the case split.
-#[cfg(test)]
-fn bmul_corners(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
-    match (&a.lo, &a.hi, &b.lo, &b.hi) {
-        (Some(al), Some(ah), Some(bl), Some(bh)) => {
-            let c = [al.mul(bl), al.mul(bh), ah.mul(bl), ah.mul(bh)];
-            let mut lo = 0usize;
-            let mut hi = 0usize;
-            let mut i = 1;
-            while i < 4 {
-                if c[i].cmp(&c[lo]) == Ordering::Less {
-                    lo = i;
-                }
-                if c[i].cmp(&c[hi]) == Ordering::Greater {
-                    hi = i;
-                }
-                i += 1;
-            }
-            BigIval {
-                lo: Some(c[lo].round(p, false)),
-                hi: Some(c[hi].round(p, true)),
-            }
-        }
-        _ => BigIval::whole(),
-    }
-}
-
 fn bdiv(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
     if b.contains_zero() {
         return BigIval::whole();
@@ -1419,6 +1392,32 @@ impl Ctx {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `bmul` as it was (all four corners compared): the reference for the case split.
+    fn bmul_corners(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
+        match (&a.lo, &a.hi, &b.lo, &b.hi) {
+            (Some(al), Some(ah), Some(bl), Some(bh)) => {
+                let c = [al.mul(bl), al.mul(bh), ah.mul(bl), ah.mul(bh)];
+                let mut lo = 0usize;
+                let mut hi = 0usize;
+                let mut i = 1;
+                while i < 4 {
+                    if c[i].cmp(&c[lo]) == Ordering::Less {
+                        lo = i;
+                    }
+                    if c[i].cmp(&c[hi]) == Ordering::Greater {
+                        hi = i;
+                    }
+                    i += 1;
+                }
+                BigIval {
+                    lo: Some(c[lo].round(p, false)),
+                    hi: Some(c[hi].round(p, true)),
+                }
+            }
+            _ => BigIval::whole(),
+        }
+    }
 
     /// The order of dyadics, and the interval product by its sign cases, are what comparing
     /// differences and all four corners give: on random intervals with zero, negative,
