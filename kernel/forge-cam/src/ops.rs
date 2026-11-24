@@ -1405,6 +1405,9 @@ pub fn pocket_in(
     mv.push(PMove::Rapid {
         to: [s0.x, s0.y, h.clear],
     });
+    if let Some(sx) = sbox {
+        mv = trim_air(&mv, start, region_box(sx), r, h.retract, feed);
+    }
     Ok(OpPath {
         tool: tidx,
         start,
@@ -1412,6 +1415,306 @@ pub fn pocket_in(
         rpm: 0.0,
         coolant: forge_post::Coolant::Flood,
     })
+}
+
+/// How far beyond the radius a point's tool disk keeps from the stock's box for `trim_air` to go
+/// up or down there by rapid (mm): rapids are certified 0.1 mm clear of the stock.
+const AIR_CLEAR: f64 = 0.6;
+
+/// The least distance from the segment a → b to the box [lo, hi] (0 if they meet): the distance
+/// to a convex set is least at an end, or where the segment is nearest a corner, or it crosses.
+fn seg_box_dist(a: [f64; 2], b: [f64; 2], lo: [f64; 2], hi: [f64; 2]) -> f64 {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let ll = dx * dx + dy * dy;
+    // the segment's points on the box's edge lines, inside the edge: a crossing
+    for (k, v) in [(0, lo[0]), (0, hi[0]), (1, lo[1]), (1, hi[1])] {
+        let (d, o) = if k == 0 { (dx, 1) } else { (dy, 0) };
+        if d != 0.0 {
+            let t = (v - a[k]) / d;
+            if (0.0..=1.0).contains(&t) {
+                let w = a[o] + t * if o == 0 { dx } else { dy };
+                if w >= lo[o] && w <= hi[o] {
+                    return 0.0;
+                }
+            }
+        }
+    }
+    let mut best = box_dist(a[0], a[1], lo, hi).min(box_dist(b[0], b[1], lo, hi));
+    for q in [[lo[0], lo[1]], [hi[0], lo[1]], [hi[0], hi[1]], [lo[0], hi[1]]] {
+        if ll > 0.0 {
+            let t = (((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / ll).clamp(0.0, 1.0);
+            best = best.min(box_dist(a[0] + t * dx, a[1] + t * dy, lo, hi));
+        }
+    }
+    best
+}
+
+/// The least distance from an arc (from a about c, sweep `sw` radians, + counter-clockwise) to the
+/// box: at an end, at a point where the arc's normal is along an axis (nearest an edge), on the
+/// ray from c to a corner (nearest the corner), or 0 where it crosses an edge.
+fn arc_box_dist(a: [f64; 2], c: [f64; 2], sw: f64, lo: [f64; 2], hi: [f64; 2]) -> f64 {
+    let rr = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+    let a0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
+    let tau = std::f64::consts::TAU;
+    let within = |th: f64| {
+        let mut d = (th - a0) * sw.signum();
+        while d < 0.0 {
+            d += tau;
+        }
+        while d >= tau {
+            d -= tau;
+        }
+        d <= sw.abs()
+    };
+    let at = |th: f64| {
+        let (sn, cs) = dmath::sin_cos(th);
+        [c[0] + rr * cs, c[1] + rr * sn]
+    };
+    // crossings of the edge lines, inside the edge and the sweep
+    for (k, v) in [(0, lo[0]), (0, hi[0]), (1, lo[1]), (1, hi[1])] {
+        let o = 1 - k;
+        let h = v - c[k];
+        let q = rr * rr - h * h;
+        if q < 0.0 {
+            continue;
+        }
+        for sgn in [-1.0, 1.0] {
+            let w = c[o] + sgn * q.sqrt();
+            if w >= lo[o] && w <= hi[o] {
+                let p = if k == 0 { [v, w] } else { [w, v] };
+                if within(dmath::atan2(p[1] - c[1], p[0] - c[0])) {
+                    return 0.0;
+                }
+            }
+        }
+    }
+    let end = at(a0 + sw);
+    let mut best = box_dist(a[0], a[1], lo, hi).min(box_dist(end[0], end[1], lo, hi));
+    let mut cands: Vec<f64> = (0..4).map(|k| k as f64 * std::f64::consts::FRAC_PI_2).collect();
+    for q in [[lo[0], lo[1]], [hi[0], lo[1]], [hi[0], hi[1]], [lo[0], hi[1]]] {
+        cands.push(dmath::atan2(q[1] - c[1], q[0] - c[0]));
+    }
+    for th in cands {
+        if within(th) {
+            let p = at(th);
+            best = best.min(box_dist(p[0], p[1], lo, hi));
+        }
+    }
+    best
+}
+
+/// Distance from (x, y) to the box [lo, hi] (0 inside).
+fn box_dist(x: f64, y: f64, lo: [f64; 2], hi: [f64; 2]) -> f64 {
+    let dx = (lo[0] - x).max(0.0).max(x - hi[0]);
+    let dy = (lo[1] - y).max(0.0).max(y - hi[1]);
+    (dx * dx + dy * dy).sqrt()
+}
+
+/// The open region's air taken out: a run of level feed moves (cuts and links at one depth) whose
+/// tool disk keeps at least r from the stock's box all along (tangent to it at most) removes
+/// nothing (the stock and the part lie in the box), so it is replaced by up, across at the
+/// retract height, and down, when the run is longer than that detour is worth (4r): rapid up and
+/// down (the last `SIDE_IN` at the plunge feed) where the disk is `AIR_CLEAR` beyond the box,
+/// else at the feed (air beside the box). The box distance is sampled every `AIR_SAMPLE` along the moves; it moves
+/// at most as fast as the point, so the sampled least, less half a sample, bounds it. What the op
+/// clears is unchanged: only moves that remove nothing go. A clear round a part that fills the
+/// stock (rings mostly outside it, a slot between) is then left with what cuts.
+fn trim_air(
+    mv: &[PMove],
+    start: [f64; 3],
+    (lo, hi): ([f64; 2], [f64; 2]),
+    r: f64,
+    retract: f64,
+    feed: (f64, f64),
+) -> Vec<PMove> {
+    // air: the disk at least r from the box (tangent to it at most: it removes nothing), less a
+    // rounding allowance far under any cut
+    let need = r - 1e-6;
+    let rapid_ok = |p: [f64; 3]| box_dist(p[0], p[1], lo, hi) >= r + AIR_CLEAR;
+    // each move: (from, to, air at depth, length)
+    let mut info: Vec<([f64; 3], [f64; 3], bool, f64)> = Vec::with_capacity(mv.len());
+    let mut at = start;
+    // the straight level moves cut so far, by their ends (either way): one that repeats a
+    // segment already cut at its depth is air (the tool's body swept those very places)
+    let key = |p: [f64; 3]| [p[0].to_bits(), p[1].to_bits(), p[2].to_bits()];
+    let mut done: std::collections::BTreeSet<([u64; 3], [u64; 3])> = std::collections::BTreeSet::new();
+    for m in mv {
+        let to = match *m {
+            PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+            PMove::Cycle { .. } => {
+                info.push((at, at, false, 0.0));
+                continue;
+            }
+        };
+        let level = to[2] == at[2];
+        let (air, len) = match *m {
+            PMove::Line { phase, .. } if level && matches!(phase, Phase::Cut | Phase::Link) => {
+                let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                let again = done.contains(&(key(at), key(to))) || done.contains(&(key(to), key(at)));
+                if phase == Phase::Cut {
+                    done.insert((key(at), key(to)));
+                }
+                (
+                    again || seg_box_dist([at[0], at[1]], [to[0], to[1]], lo, hi) >= need,
+                    l,
+                )
+            }
+            PMove::Arc { c, cw, .. } if level => {
+                let rr = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
+                let tau = std::f64::consts::TAU;
+                let mut sw = a1 - a0;
+                if cw {
+                    while sw >= 0.0 {
+                        sw -= tau;
+                    }
+                } else {
+                    while sw <= 0.0 {
+                        sw += tau;
+                    }
+                }
+                let _ = a1;
+                (arc_box_dist([at[0], at[1]], c, sw, lo, hi) >= need, sw.abs() * rr)
+            }
+            _ => (false, 0.0),
+        };
+        info.push((at, to, air, len));
+        at = to;
+    }
+    let mut out = Vec::with_capacity(mv.len());
+    let mut i = 0;
+    while i < mv.len() {
+        if !info[i].2 {
+            out.push(mv[i]);
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        let mut len = 0.0;
+        while j < mv.len() && info[j].2 {
+            len += info[j].3;
+            j += 1;
+        }
+        let (a, b) = (info[i].0, info[j - 1].1);
+        if len > 4.0 * r && a[2] + SIDE_IN < retract {
+            // came straight down to a just before: take that descent back instead of going up
+            let mut came_down = false;
+            while let Some(PMove::Rapid { to } | PMove::Line { to, .. }) = out.last().copied() {
+                let prev_at = out_prev(&out, start);
+                if to[0] == a[0]
+                    && to[1] == a[1]
+                    && prev_at[0] == a[0]
+                    && prev_at[1] == a[1]
+                    && prev_at[2] > to[2]
+                {
+                    out.pop();
+                    came_down = true;
+                } else {
+                    break;
+                }
+            }
+            if came_down {
+                let p = out_prev_end(&out, start);
+                if p[2] < retract {
+                    out.push(PMove::Rapid {
+                        to: [p[0], p[1], retract],
+                    });
+                }
+            }
+            // up: rapid where the disk is clear of the box by the rapids' margin, else at the feed
+            // (beside the box, tangent at most: air either way)
+            if came_down {
+            } else if rapid_ok(a) {
+                out.push(PMove::Rapid {
+                    to: [a[0], a[1], retract],
+                });
+            } else {
+                out.push(PMove::Line {
+                    to: [a[0], a[1], retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
+            out.push(PMove::Rapid {
+                to: [b[0], b[1], retract],
+            });
+            if rapid_ok(b) {
+                out.push(PMove::Rapid {
+                    to: [b[0], b[1], b[2] + SIDE_IN],
+                });
+                out.push(PMove::Line {
+                    to: b,
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+            } else {
+                out.push(PMove::Line {
+                    to: b,
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
+        } else {
+            out.extend_from_slice(&mv[i..j]);
+        }
+        i = j;
+    }
+    // a visit that goes straight down and straight back up where it came (nothing between) cuts
+    // nothing it had not: both go
+    loop {
+        let mut k = None;
+        let mut prev = start;
+        for i in 0..out.len().saturating_sub(1) {
+            let (a, b) = match (out[i], out[i + 1]) {
+                (
+                    PMove::Rapid { to: a } | PMove::Line { to: a, .. },
+                    PMove::Rapid { to: b } | PMove::Line { to: b, .. },
+                ) => (a, b),
+                _ => {
+                    prev = out_prev_end(&out[..=i], start);
+                    continue;
+                }
+            };
+            let vertical = |p: [f64; 3], q: [f64; 3]| p[0] == q[0] && p[1] == q[1];
+            if vertical(prev, a) && a[2] < prev[2] && vertical(a, b) && b[2] > a[2] {
+                k = Some((i, prev, b));
+                break;
+            }
+            prev = a;
+        }
+        let Some((i, p, b)) = k else { break };
+        // down from p to a, up to b: one vertical move from p to b (or none)
+        out.remove(i + 1);
+        out.remove(i);
+        if b[2] > p[2] {
+            out.insert(i, PMove::Rapid { to: b });
+        } else if b[2] < p[2] {
+            // ends lower than it began: keep the descent to there as it was taken (feed)
+            out.insert(
+                i,
+                PMove::Line {
+                    to: b,
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                },
+            );
+        }
+    }
+    out
+}
+
+/// Where the tool is after the moves `out` (the start if none).
+fn out_prev_end(out: &[PMove], start: [f64; 3]) -> [f64; 3] {
+    match out.last() {
+        Some(PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. }) => *to,
+        _ => start,
+    }
+}
+
+/// Where the tool is before the last of `out`.
+fn out_prev(out: &[PMove], start: [f64; 3]) -> [f64; 3] {
+    out_prev_end(&out[..out.len().saturating_sub(1)], start)
 }
 
 /// A loop's box from its segments' ends (arcs may bulge past it): for choosing loops only.

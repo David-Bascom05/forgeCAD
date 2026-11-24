@@ -76,6 +76,8 @@ beside the stock where it can (rapid down clear of the stock's box, the last mm 
 feed, then in sideways: ops.rs `side_entry`): straight plunges into material in clear ops → 0,
 chip unchanged (hex max, p99, 0% overload), φmax higher at those entries (the feed follows).
 All programs of latest.txt: 2846.3 → 2763.0 s (−2.9%); manifold refuses the same ops as before.
+Then `trim_air` (above): 2763.0 → 2631.3 s (−4.8%), air in clear ops about halved (block_m6 37 →
+14%, boss 19 → 11%), the chip unchanged, coverage unchanged.
 tests/pinned.txt re-pinned for it (well_island 81.0 → 78.4 s, deep_slot 92.7 → 88.2 s).
 
 Changes (cam/quality): stay-down linking between pocket/clear passes (greedy ready-innermost
@@ -141,18 +143,23 @@ pocket at 1000, though theirs cut the circular pocket at 2000). t_stop, generic-
 
 | part | theirs | ours, our feeds | ours, their feeds |
 |---|---|---|---|
-| 1 (through slot) | 194.4 s | 134.8 s | 185.6 s |
+| 1 (through slot) | 194.4 s | 108.7 s | 105.6 s |
 | 2 (4 holes) | 315.7 s | 102.6 s | 89.0 s |
-| 3 (+ rectangular step) | 474.4 s | 149.5 s | 138.3 s |
-| 4 (+ circular step) | 514.7 s | 213.5 s | 184.9 s |
-| 5 (+ mixed step) | 463.8 s | 194.9 s | 175.9 s |
-| 6 (+ circular pocket) | 681.8 s | 251.2 s | 279.2 s |
+| 3 (+ rectangular step) | 474.4 s | 141.7 s | 125.6 s |
+| 4 (+ circular step) | 514.7 s | 205.0 s | 170.9 s |
+| 5 (+ mixed step) | 463.8 s | 186.5 s | 162.2 s |
+| 6 (+ circular pocket) | 681.8 s | 243.5 s | 266.5 s |
 
 At the same feeds the difference is the paths: their facing is one-way with a lift and a 5 mm
 plunge at 333 mm/min per pass (part 3: 172.8 s vs ours 66.6 s at their feed); their holes go
 down a 0.22 mm-per-turn helix (part 3: 238.5 s vs 26.8 s). Their step (63.2 s) and ours (44.9 s
-at their feed) are close. Part 1's slot is where ours is worse (clear wanders round a slot the
-tool's width: 66% air), and part 6 at their feeds loses on the circular pocket.
+at their feed) are close. Part 1's slot was where ours was worse (clear went round both halves
+of the part, mostly outside the stock: 47.5 s, 66% air); clear now drops level runs whose tool
+disk stays at least r from the stock's box, and straight runs that repeat a segment already cut
+at their depth (ops.rs `trim_air`: they remove nothing), so the slot is its centreline, entered
+from the side: 21.4 s against their 23.0 s, the same part left. Part 6 at their feeds loses on
+the circular pocket (one pocket op held to their hole feed). The numbers are the authors'
+programs: an academic benchmark's settings, not Autodesk's best.
 
 **3. What the times are.** generic-vmc3's rates and accelerations are placeholders (kernel/
 forge-machine/data/machines/generic.toml), so these are times on one model for both programs,
