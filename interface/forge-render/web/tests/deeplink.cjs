@@ -1,8 +1,11 @@
 // Links into the page (`?open=PATH`): one to a path outside the project starts the app with
-// nothing open (its empty state: New part, Open...) and says why; one to a drawing draws its part, which comes after the drawing (the
-// page opens the linked file first, then the project's other files, then builds what's open
-// again). Before: `?open=../x` threw before the app started (a dead page, `window.forgecad`
-// never set), and a linked drawing kept "flange.fg: no such file" with an empty sheet.
+// nothing open (its empty state: New part, Open...) and says why; one to a drawing draws its part;
+// one to a machining document generates it certified, never first refused. The page says
+// "Loading project…" until the project's files have come, then opens the linked file.
+// Before: `?open=../x` threw before the app started (a dead page, `window.forgecad` never set);
+// a linked drawing kept "flange.fg: no such file" with an empty sheet; a linked machining
+// document opened before its part came: "0/5 ops certified", every op an error and Export NC
+// refused, for seconds, until a rebuild.
 //   node web/tests/deeplink.cjs OUT   (OUT: web/build.sh's output)
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
@@ -28,17 +31,44 @@ const t = require("./lib.cjs");
     t.check(p);
     await p.close();
 
-    // a drawing: its part read once it has come
+    // a drawing: made with its part, no first sheet of problems
     p = await t.page(b, `${url}?open=machined/flange_dwg.fg&offscreen=1280x800`);
     await t.until(p, (s) => s.ready, "the app", 60000);
-    // every file in (and what's open asked to be made again: a drawing is no part document, so
-    // not t.loaded's build count)
     await p.evaluate(() => window.forgecad.loaded);
     s = await t.until(p, (s) => s.status === "Ready" || /problem/.test(s.status), "the drawing made", 300000);
-    // (made again after the files came: wait out a first "problems" made before them)
-    s = await t.until(p, (s) => s.status === "Ready", "the drawing made with its part", 120000).catch(() => s);
     assert.equal(s.status, "Ready", `the linked drawing: ${s.status}`);
     console.log("ok - ?open=machined/flange_dwg.fg: the drawing made with its part");
+    t.check(p);
+    await p.close();
+
+    // a machining document: "Loading project…" while the files come, then generated certified,
+    // with no refused generation on the way (every state watched from the start)
+    // (the project's files held back 4 s, as from a slow server: the app is up before they come)
+    const slow = (p) =>
+      p.route("**/api/bundle", async (r) => {
+        await new Promise((ok) => setTimeout(ok, 4000));
+        await r.continue();
+      });
+    p = await t.page(b, `${url}?open=machined/flange_cam.fg&offscreen=1280x800`, slow);
+    s = await t.until(p, (s) => s.ready, "the app", 60000);
+    const seen = [s];
+    const watch = (async () => {
+      for (;;) {
+        const x = await p.evaluate(() => window.forgecad.state()).catch(() => null);
+        if (!x) return;
+        seen.push(x);
+        if (x.cam?.generated && !x.cam.generating) return;
+        await new Promise((r) => setTimeout(r, 25));
+      }
+    })();
+    await p.evaluate(() => window.forgecad.loaded);
+    await watch;
+    s = seen[seen.length - 1];
+    assert.ok(seen.some((x) => x.status === "Loading project…"), `never said Loading project…: ${JSON.stringify([...new Set(seen.map((x) => x.status))].slice(0, 8))}`);
+    const early = seen.find((x) => x.cam?.generated && x.cam.certification !== "full");
+    assert.equal(early, undefined, `a generation not certified: ${JSON.stringify(early?.cam?.certification)} ${early?.status}`);
+    assert.equal(s.cam.certification, "full", JSON.stringify(s.cam.certification));
+    console.log(`ok - ?open=machined/flange_cam.fg: "Loading project…", then ${s.status}`);
     t.check(p);
   } finally {
     await b.close();
