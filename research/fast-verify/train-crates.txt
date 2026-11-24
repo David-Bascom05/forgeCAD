@@ -1,0 +1,46 @@
+gate closure (normal deps): 32
+== train 6
+   2 files  gate:no  crates= other=.github,tools | train 6: merge tools/ci-size-guard @276e8d76 (FALLBACK: mode
+   1 files  gate:no  crates= other=verify | registry: CAM-3D-FINISH's arc and closed-form entries (train
+   1 files  gate:no  crates= other=tools | train 6: hidden inputs of the crates train 6 adds to the sca
+   5 files  gate:no  crates=forge-cam,forge-cam-lang other=docs,research | train 6: cam/3axis-fit-2 @ed82f126, squashed (CAM-3D-FINISH 
+  31 files  gate:no  crates= other=interface,research | train 6: cam/sim-tools @08ed7833, squashed (CAM-SIM: grouped
+  12 files  gate:no  crates= other=interface,research | train 6: cam/ui-turn-words @f6f52eb5, squashed (CAM-UI: ui-s
+   1 files  gate:no  crates= other=interface | train 6: forge-render Cargo.lock: forge-material depends on 
+  13 files  gate:no  crates= other=interface | train 6: forge-render back to main's text where 3d-hops only
+  12 files  gate:YES crates=forge-cam-lang,forge-tooling,forge-turn-lang other=Cargo.lock,docs,interface,research | train 6: feeds/model @fe2e65bc, squashed (FEEDS-SPEEDS: turn
+  72 files  gate:YES crates=forge-alloc,forge-cam,forge-cam-3d,forge-cam-geom,forge-cam-lang,forge-cam-quali other=Cargo.lock,docs,examples,interface,resea | train 6: cam/3d-hops @cdaf264d, squashed (CAM-3D-FINISH: per
+   1 files  gate:no  crates= other=research | train 6: merge cam/speed-ledger @0dcd8f4e (CAM-3D-FINISH: CA
+   7 files  gate:no  crates=forge-machine,forge-machine-builder other=interface | train 6: merge machines/display-bodies @046b499e (CAM-MACHIN
+  11 files  gate:no  crates=forge-machine,forge-machine-builder other=docs | train 6: merge cam/train5-machine @efe0e1ee (CAM-MACHINE: lo
+   9 files  gate:YES crates=forge-bool,forge-exact-fuzz,forge-topo other=research | train 6: merge train6/drift-tols @63e163b2 (FLAT-SITES: impr
+   3 files  gate:YES crates=forge-git other= | train 6: merge fix/git-repo-local-ext @8bec3325 (FALLBACK: g
+   6 files  gate:no  crates=forge-machine,forge-post,forge-turn other= | train 6: merge fix/dialect-decimals @3a5b576c (FALLBACK: dia
+   5 files  gate:no  crates= other=verify | train 6: merge proof/conic-producers @655b5145 (FALLBACK: co
+  12 files  gate:YES crates=forge-lang,forge-material,forge-vendor other=Cargo.lock | train 6: merge feat/declared-libraries @3fa638dc (FALLBACK: 
+   4 files  gate:YES crates=forge-model other=interface,tools | train 6: merge tools/hidden-cfg-test @560e8ecb (FALLBACK: hi
+   4 files  gate:no  crates=forge-cam,forge-cam-lang other= | train 6: merge cam/3axis @a2cfcbe4 (CAM-3AXIS: zlevel all-bl
+   2 files  gate:no  crates= other=docs,interface | train 6: merge ux/glyphs @06159ad4 (UX-LEAD: STANDARD.md + l
+   3 files  gate:YES crates=forge-brake other=research | train 6: merge bendsim/see-through @1f25b06d (BEND-SIM: forg
+   3 files  gate:YES crates=forge-bool,forge-topo other= | train 6: merge proof/spine-apply-ship @24a2d677 (SPINE: spin
+== train 7
+   1 files  gate:no  crates= other=verify | REMOVED-CHECKS: contact arc entries re-reviewed with arc_fra
+  71 files  gate:YES crates=forge-bend-lang,forge-brake,forge-lang other=Cargo.lock,docs,interface,kernel,researc | train 7: bendsim/next @9cce474e, squashed (BEND-SIM/BENDSIM-
+  52 files  gate:YES crates=forge-asm,forge-exact-fuzz,forge-machine,forge-machine-builder,forge-step other=.gitignore,interface,research,tools | train 7: merge machines/haas-model-import @84275668 (CAM-HAA
+  18 files  gate:YES crates=forge-machine-builder other=Cargo.lock,interface,research | train 7: merge machines/models-cli @d0c24370 (MACHINE-BUILDE
+   2 files  gate:no  crates= other=interface | train 7: merge machines/builder-off-reasons @440b3b47 (MACHI
+  63 files  gate:no  crates=forge-cli other=docs,interface,research | train 7: merge agent/stack @d4fb5469 (AGENT-TAB: approvals, 
+  33 files  gate:no  crates= other=interface,research | train 7: merge render/studio-model @d0f82490 (RENDER-STUDIO:
+   5 files  gate:no  crates= other=interface | train 7: merge cam/export-said @e658177f (CAM-UI: quality-me
+  38 files  gate:no  crates=forge-cam-lang other=interface,research | train 7: cam/sim-fixes @5a67700b, squashed (CAM-SIM: soft-ja
+   2 files  gate:no  crates=forge-cam,forge-cam-geom other= | train 7: cam/arc-frame @0762b5f3, squashed (CAM-3D-FINISH: a
+   3 files  gate:no  crates=forge-workholding other= | train 7: merge cam/workholding-next @e4f13016 (WORKHOLDING: 
+   2 files  gate:YES crates=forge-step,forge-topo other= | train 7: merge proof/check-rounding @28791248 (FLAT-SITES: c
+   3 files  gate:YES crates=forge-bool other=research | train 7: merge proof/slit-faces @9b3bcecf (FLAT-SITES: unify
+   1 files  gate:no  crates= other=.github | train 7: merge ci/native-clippy @73b92945 (FALLBACK: native 
+   1 files  gate:YES crates=forge-topo other= | train 7: merge fix/spine-b2c-clippy @5b1190e1 (SPINE: allow 
+   2 files  gate:no  crates= other=.gitattributes,.lfsconfig | train 7: merge tools/lfs-models @1ca90198 (COORD/David: mach
+  23 files  gate:no  crates= other=.github,interface,research | train 7: ui/bughunt-3 @f7facac5, squashed (UI-BUGHUNT: statu
+  18 files  gate:no  crates=forge-cam,forge-cam-geom,forge-cam-lang other=.github,examples,verify | train 7: cam/parity @315edab8, squashed (CAM-CORE: parity, a
+  14 files  gate:YES crates=forge-cam-geom,forge-num other=Cargo.lock,interface,tools,verify | train 7: merge exact-core/real-speed @497dd78f (EXACT-CORE: 
+   1 files  gate:no  crates= other=AGENTS.md | train 7: merge docs/machine-models-ok @79bc39bd (COORD/David
