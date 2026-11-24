@@ -47,11 +47,12 @@ async function sim(p, cmd) {
       assert.equal(st.camsim.ok, true, JSON.stringify(st));
       assert.equal(st.camsim.ops, 5);
       assert.equal(st.camsim.refused, 0);
-      assert.equal(st.camsim.markers, 0);
+      // certified: no check fails; G4's leftover (the 3 mm of stock under the part) is shown
+      assert.equal(st.camsim.severe, 0, JSON.stringify(st.camsim));
       console.log(`ok - ${tag}: flange_cam.fg simulated: ${st.camsim.moves} moves, ${st.camsim.total.toFixed(1)} s, ${st.camsim.certification}`);
       const shots = [
         ["web-sim-01-start", "t=0;part=ghost"],
-        ["web-sim-02-contour", "op=2;at=0.5"],
+        ["web-sim-02-contour", "op=2;at=0.55"],
         ["web-sim-03-end-compare", "at=1;colour=compare;part=hidden"],
         ["web-sim-04-moves", "colour=material;part=ghost;op=3;locate=3,0,40,0.5;tab=moves"],
       ];
@@ -66,7 +67,7 @@ async function sim(p, cmd) {
       st = await sim(p, "tab=program;source=machine;at=0.3;colour=material;part=ghost");
       assert.deepEqual(st.camsim.machine_errors, []);
       assert.equal(st.camsim.source, "generic-vmc3", JSON.stringify(st.camsim));
-      assert.equal(st.camsim.markers, 0, "the placed flange's posted code: no collision or limit");
+      assert.equal(st.camsim.severe, 0, "the placed flange's posted code: no collision or limit");
       console.log(`ok - posted code on ${st.camsim.source}: ${st.camsim.total.toFixed(1)} s (${t.shot(`web-sim-05-machine-${tag}.png`, st.frame)})`);
       await sim(p, "source=toolpath");
       if (w === 1400) {

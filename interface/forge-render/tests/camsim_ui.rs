@@ -79,7 +79,7 @@ fn the_flange_simulates_in_the_app() {
         assert_eq!(h.gui.shell.camsim.as_ref().unwrap().sim.tl.ops.len(), 5);
         h.gui.camsim_command("t=0;part=ghost").unwrap();
         shot(&mut h, &format!("native-sim-01-start-{tag}"));
-        h.gui.camsim_command("op=2;at=0.5").unwrap();
+        h.gui.camsim_command("op=2;at=0.55").unwrap();
         shot(&mut h, &format!("native-sim-02-contour-{tag}"));
         h.gui.camsim_command("at=1;colour=compare;part=hidden").unwrap();
         shot(&mut h, &format!("native-sim-03-end-compare-{tag}"));

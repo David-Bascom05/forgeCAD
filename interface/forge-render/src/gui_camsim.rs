@@ -547,6 +547,11 @@ impl Gui {
                 }),
             ),
             ("markers", n(st.sim.markers.len() as f64)),
+            // a failed check or a machine issue (the rest: what G4 leaves, e.g. under the part)
+            (
+                "severe",
+                n(st.sim.markers.iter().filter(|m| m.severe()).count() as f64),
+            ),
             ("refused", n(refused as f64)),
             ("ok", st.sim.cam.ok.into()),
             ("certification", st.sim.cam.certification().into()),

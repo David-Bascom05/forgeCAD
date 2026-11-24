@@ -490,10 +490,15 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
                     ui.selectable_value(&mut st.speed, s, format!("{s}×"));
                 }
             });
-        ui.checkbox(&mut st.follow, "Follow tool");
-        ui.checkbox(&mut st.stop_at_markers, "Stop at issues");
+        // the playback toggles where the bar has room for them (always in the Display tab)
+        if ui.available_width() > 250.0 {
+            ui.checkbox(&mut st.follow, "Follow tool");
+            ui.checkbox(&mut st.stop_at_markers, "Stop at issues");
+        }
         // what's playing: one line, cut short with the whole of it on hover
-        if let Some((tool, p, i)) = st.tool_now() {
+        if let Some((tool, p, i)) = st.tool_now()
+            && ui.available_width() > 120.0
+        {
             let g = st.sim.tl.segs[i];
             let op = &st.sim.tl.ops[g.op as usize];
             let tu = st.sim.cam.sim_tools().get(tool);
@@ -998,6 +1003,9 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
 }
 
 fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
+    heading(ui, t, "Playback");
+    ui.checkbox(&mut st.follow, "Follow the tool");
+    ui.checkbox(&mut st.stop_at_markers, "Stop at issues");
     // the toolpath coloured by a measured value: its legend
     if let Some(v) = &st.values {
         heading(ui, t, &format!("Coloured by {}", v.name));

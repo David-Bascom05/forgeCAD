@@ -40,6 +40,11 @@ Manufacture workspace, native and in the browser. Everything is driven by the re
   SwiftShader WebGPU), plus play and a refused document; `FORGE_WEB_SHOTS=DIR` keeps the `web-*`
   set (here).
 
+The review set (STANDARD §10/§11): `native-sim-*` and `web-sim-*`, each at 1400x860, 1600x1000
+and 1024x700: 01 start, 02 the contour (selected: blue), 03 the end compared with the part, 04 the
+move list, 05 the posted code on generic-vmc3, 06 a turning document (no milling simulation),
+07 a refused op's checks (web).
+
 ## Review against docs/ux/STANDARD.md (UX-LEAD, cam/ui-3 f15eb2c8)
 
 | item | what changed |
