@@ -32,7 +32,7 @@ what their absence means.
 | field | | meaning |
 |---|---|---|
 | name | required | unique in its level |
-| kind | required | `vmc3` `vmc4` `table-table` `head-table` `head-head` `lathe` `mill-turn` `hmc` `turn-mill` (a live-turret lathe: X Z, optional Y and C, a turret whose `live` names the milling spindle that drives it; no B head) |
+| kind | required | `vmc3` `vmc4` `table-table` `head-table` `head-head` `lathe` `mill-turn` `hmc` `gantry` (3 linear joints all on the head, a dual-drive gantry axis as one joint, up to two head rotaries) `turn-mill` (a live-turret lathe: X Z, optional Y and C, a turret whose `live` names the milling spindle that drives it; no B head) |
 | control | required | the forge-post dialect its control speaks (machine and control kept apart) |
 | source | required | where the numbers come from; `taken`, `note` optional |
 | clearance | required | least gap (mm) the collision check holds between bodies |
@@ -177,6 +177,11 @@ joint that moves one relative to the other through its whole range, with the oth
 combination of their ends; no Hit and no Near.
 
 ## Structural checks (`MachineDef::validate`)
+
+A `table-table` machine may carry one turning spindle on its table's C (`c_joint` naming a table
+rotary): a mill that also turns, the milling spindle holding the stationary tool; its X is a
+radius.
+
 
 Unique names and letters; the tree is acyclic and rooted at the base; every link named exists;
 every joint lies on some mount's chain, head joints only on tool chains, table joints only on part

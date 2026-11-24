@@ -90,13 +90,16 @@ pub enum Kind {
     MillTurn,
     /// a horizontal machining centre: 3 linear and a table rotary (B), usually with pallets.
     Hmc,
+    /// a gantry router or mill: 3 linear on the head side (a dual-drive gantry axis is one
+    /// joint), up to two head rotaries, no table rotary.
+    Gantry,
     /// a live-turret lathe: X and Z (Y optional), C on the spindle optional, a turret whose live
     /// stations a milling spindle drives; no B head.
     TurnMill,
 }
 
 impl Kind {
-    pub const ALL: [(&'static str, Kind); 9] = [
+    pub const ALL: [(&'static str, Kind); 10] = [
         ("vmc3", Kind::Vmc3),
         ("vmc4", Kind::Vmc4),
         ("table-table", Kind::TableTable),
@@ -106,6 +109,7 @@ impl Kind {
         ("mill-turn", Kind::MillTurn),
         ("turn-mill", Kind::TurnMill),
         ("hmc", Kind::Hmc),
+        ("gantry", Kind::Gantry),
     ];
     /// A lathe of some kind: X is a diameter, tools on a turret, plane G18 at the start.
     pub fn turns(self) -> bool {
@@ -754,7 +758,7 @@ impl MachineDef {
             &m,
             "kind",
             &Kind::ALL,
-            "vmc3 | vmc4 | table-table | head-table | head-head | lathe | mill-turn | turn-mill | hmc",
+            "vmc3 | vmc4 | table-table | head-table | head-head | lathe | mill-turn | turn-mill | hmc | gantry",
         )?;
         let control = need_text(
             t,
@@ -1605,8 +1609,34 @@ impl MachineDef {
         let ok = match self.kind {
             Kind::Vmc3 => lin == 3 && rot_h + rot_t == 0 && mill >= 1 && turn == 0,
             Kind::Vmc4 | Kind::Hmc => lin == 3 && rot_h == 0 && rot_t == 1 && mill >= 1 && turn == 0,
+            // a turning spindle on the table's C (a mill that also turns, Brother M140X2): its X
+            // is a radius, the milling spindle holds the stationary tool
             Kind::TableTable => {
-                lin == 3 && rot_h == 0 && rot_t == 2 && carried(Side::Table) && mill >= 1 && turn == 0
+                let turns_on_c = |sp: &Spindle| {
+                    sp.c_joint
+                        .as_ref()
+                        .and_then(|c| self.joint(c))
+                        .is_some_and(|j| j.ty == JointType::Rotary && j.side == Side::Table)
+                };
+                lin == 3
+                    && rot_h == 0
+                    && rot_t == 2
+                    && carried(Side::Table)
+                    && mill >= 1
+                    && self
+                        .spindles
+                        .iter()
+                        .filter(|s| s.kind == SpindleKind::Turning)
+                        .all(turns_on_c)
+                    && turn <= 1
+            }
+            Kind::Gantry => {
+                lin == 3
+                    && rot_t == 0
+                    && rot_h <= 2
+                    && mill >= 1
+                    && turn == 0
+                    && self.joints.iter().all(|j| j.side == Side::Head)
             }
             Kind::HeadTable => lin == 3 && rot_h == 1 && rot_t == 1 && mill >= 1 && turn == 0,
             Kind::HeadHead => {

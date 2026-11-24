@@ -455,3 +455,61 @@ fn m60_swaps_the_pallet_on_a_machine_with_pallets() {
             .any(|(n, k)| *n == "hmc" && *k == forge_machine::Kind::Hmc)
     );
 }
+
+#[test]
+fn a_gantry_moves_every_joint_on_the_head() {
+    let g = vmc3()
+        .replace("kind = \"vmc3\"", "kind = \"gantry\"")
+        .replacen(
+            "side = \"table\"\ntype = \"linear\"\naxis = [0, -1, 0]",
+            "side = \"head\"\ntype = \"linear\"\naxis = [0, 1, 0]",
+            1,
+        )
+        .replacen(
+            "parent = \"Y\"\nside = \"table\"\ntype = \"linear\"\naxis = [-1, 0, 0]",
+            "parent = \"Y\"\nside = \"head\"\ntype = \"linear\"\naxis = [1, 0, 0]",
+            1,
+        )
+        .replacen(
+            "name = \"Z\"\nparent = \"base\"",
+            "name = \"Z\"\nparent = \"X\"",
+            1,
+        )
+        .replace(
+            "kind = \"part\"\nlink = \"X\"",
+            "kind = \"part\"\nlink = \"base\"",
+        )
+        .replace(
+            "name = \"table\"\nlink = \"X\"",
+            "name = \"table\"\nlink = \"base\"",
+        );
+    let m = &MachineDef::parse_all(&g).unwrap_or_else(|e| panic!("{e}"))[0];
+    assert_eq!(m.kind, forge_machine::Kind::Gantry);
+    let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+    sim::simulate("G0 X10. Y20. Z5.\nG1 X30. F800.\n", &s).unwrap();
+    // a table joint is not a gantry
+    let e = MachineDef::parse_all(&vmc3().replace("kind = \"vmc3\"", "kind = \"gantry\"")).unwrap_err();
+    assert!(e.to_string().contains("gantry"), "{e}");
+}
+
+#[test]
+fn a_trunnion_may_turn_on_its_c() {
+    let all = include_str!("../data/machines/generic.toml");
+    let a = all.find("name = \"generic-trunnion-bc\"").unwrap();
+    let a = all[..a].rfind("[[machine]]").unwrap();
+    let b = a + 1 + all[a + 1..].find("[[machine]]").unwrap();
+    let t = &all[a..b];
+    let turning = "[[machine.spindle]]\nname = \"T\"\nlink = \"C\"\nkind = \"turning\"\naxis = [0, 0, 1]\nnose = [0, 0, 0]\nrpm = [10, 2000]\nmax = [200, 150]\nc_joint = \"C\"\n\n[[machine.spindle]]";
+    let with = t.replacen("[[machine.spindle]]", turning, 1);
+    let m = &MachineDef::parse_all(&with).unwrap_or_else(|e| panic!("{e}"))[0];
+    assert_eq!(
+        m.spindles
+            .iter()
+            .filter(|s| s.kind == forge_machine::def::SpindleKind::Turning)
+            .count(),
+        1
+    );
+    // a turning spindle not on a table rotary's C does not fit
+    assert!(MachineDef::parse_all(&with.replace("c_joint = \"C\"\n", "")).is_err());
+}
