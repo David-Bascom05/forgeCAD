@@ -619,6 +619,54 @@ fn machine_configured_codes_are_refused_not_guessed() {
     }
 }
 
+/// A dialect's decimals and feed_decimals are whole numbers from 0 to MAX_DECIMALS (6), where 10^k
+/// is exact in f64; more, a fraction or a negative is refused naming the limit.
+#[test]
+fn a_dialects_decimals_are_whole_and_at_most_six() {
+    // the first dialect with inch output, so its inch decimals are read too
+    let (name, src) = DIALECTS
+        .iter()
+        .find(|d| d.1.lines().any(|l| l.trim_start().starts_with("inch_decimals =")))
+        .expect("a dialect with inch decimals");
+    let inch = PostOptions {
+        inch: true,
+        ..PostOptions::default()
+    };
+    for key in ["decimals", "feed_decimals", "inch_decimals", "inch_feed_decimals"] {
+        let line = src
+            .lines()
+            .find(|l| l.trim_start().starts_with(&format!("{key} =")))
+            .unwrap_or_else(|| panic!("{key} in {name}"));
+        for (k, ok) in [
+            ("0", true),
+            ("6", true),
+            ("7", false),
+            ("23", false),
+            ("2.5", false),
+            ("-1", false),
+        ] {
+            let r = Dialect::parse(&src.replacen(line, &format!("{key} = {k}"), 1)).and_then(|d| {
+                if key.starts_with("inch") {
+                    d.with(&inch)
+                } else {
+                    Ok(d)
+                }
+            });
+            match (ok, r) {
+                (true, Ok(_)) => {}
+                (false, Err(PostError::Dialect(why))) => {
+                    assert!(
+                        why.contains(key) && why.contains("from 0 to 6"),
+                        "{key} = {k}: {why}"
+                    )
+                }
+                (_, r) => panic!("{key} = {k}: {r:?}"),
+            }
+        }
+    }
+    assert_eq!(MAX_DECIMALS, 6);
+}
+
 /// A post's options, applied to every dialect: what each allows round-trips (the certified text is
 /// the one written), and what it does not is refused with a fix.
 #[test]

@@ -160,12 +160,12 @@ pub fn narrow_skip_unchecked(unchecked: &mut [crate::sim::Unchecked], tl: &Timel
     }
 }
 
-/// The machine's bodies (a body with no envelope, cited unknown, is left out: sim::unchecked
-/// reports it).
+/// The machine's bodies (a body with no envelope, cited unknown, or display only, `check =
+/// false`, is left out: sim::unchecked reports it).
 pub fn machine_bodies(def: &MachineDef) -> Vec<CBody> {
     def.bodies
         .iter()
-        .filter(|b| !b.prims.is_empty())
+        .filter(|b| !b.prims.is_empty() && b.check)
         .map(|b| CBody {
             name: b.name.clone(),
             link: def.joint_index(&b.link),

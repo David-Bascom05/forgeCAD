@@ -172,6 +172,23 @@ pub fn json(run: &Run, src: &str) -> Json {
             ),
         ),
     ];
+    // the vendor and material library files the part used: its inputs as much as its text
+    if !run.libraries.is_empty() {
+        f.push((
+            "libraries",
+            Json::Arr(
+                run.libraries
+                    .iter()
+                    .map(|(p, h)| {
+                        Json::obj(vec![
+                            ("path", Json::Str(p.to_string_lossy().into_owned())),
+                            ("hash", h.map_or(Json::Null, |h| Json::Str(format!("{h:032x}")))),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ));
+    }
     if !run.components.is_empty() {
         // each evaluation's own occurrences: the calls with its values and provenance (proof E3)
         let occ = |eval: &str| -> Json {
