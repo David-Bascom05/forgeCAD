@@ -627,7 +627,7 @@ interface = "SK40"
 
 [[machine.changer]]
 pockets = 32
-change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+change_s = 5.8   # estimate fitted from the dataset's log (cite): the least of 5.8-6.0 s, so t_min stays a lower bound
 max_tool_kg = 7
 
 [[machine.mount]]
@@ -866,8 +866,11 @@ basis = "a used-machine dealer's listing restating the maker's data (no maker do
 
 [[machine.cite]]
 path = "changer.change_s"
-status = "unknown"
-basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+status = "estimate"
+source = "research/cam/timing/rptu-u5-620/logtimes4.py (cam/timing-u5 @447717bf) on Zenodo 15735480 data_v1_0_1.csv (RPTU/Spinner dataset log, CC BY 4.0)"
+taken = "2026-11-24"
+value = "5.8-6.0 s per tool change (the least, 5.8, used)"
+basis = "fitted from RPTU logs, U5-620 only, not published: the time in the tool-change subprogram (Program_line_number -2) at 100 % override, divided by the program's M6 count (the closing T0 M6 included): Keychain 18 s / 3 = 6.0, Bottle opener 23 s / 4 = 5.8, Achskreuz 29 s / 5 = 5.8, over 27 executions of 3 programs; it includes the subprogram's own moves to the change position"
 
 [[machine.cite]]
 path = "changer.max_tool_kg"
