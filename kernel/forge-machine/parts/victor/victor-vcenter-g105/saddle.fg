@@ -1,0 +1,14 @@
+# victor-vcenter-g105 saddle: a conservative envelope solid from published dimensions (see the
+# machine's [[machine.cite]] for body.saddle); not the maker's CAD.
+# frame: the machine's base frame at the home pose.
+shared b0x0 = -329.5
+shared b0y0 = -599.5
+shared b0z0 = -199.5
+shared b0sx = 659
+shared b0sy = 599
+shared b0h = 119
+
+sketch sb0(on: offset(xy, b0z0)) {
+  outline = rect(corner: (b0x0, b0y0), size: (b0sx, b0sy))
+}
+b0 = extrude(sb0, b0h)

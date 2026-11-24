@@ -59,11 +59,15 @@ per_doc!(
         new_drawing: Option<super::drawing::NewDrawing>,
         dwgdoc: Option<super::dwgdoc::DwgDoc>,
         robot: Option<super::robot::RobotPanel>,
+        camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
+        camsim_job: crate::gui_camsim_panel::SimJob,
+        cam: Option<super::cam::CamWs>,
     ],
     app [
         theme, view, out, view_rect, places, cube_menu, cube_menu_fresh, cube_region, marking, window_box,
         view_blocks, side_px, overlays, file_menu, style_set, settings,
         prefs, doc_tabs, active_doc, close_ask, open_paths, open_blocks, doc_scroll, doc_drag, agent,
+        machine,
     ]
 );
 
@@ -105,6 +109,9 @@ impl ShellDoc {
             new_drawing: None,
             dwgdoc: None,
             robot: None,
+            camsim: None,
+            camsim_job: Default::default(),
+            cam: None,
         }
     }
 }

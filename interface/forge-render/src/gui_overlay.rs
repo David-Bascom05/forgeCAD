@@ -188,7 +188,7 @@ impl Gui {
             self.shell.overlays(),
             sel,
             self.extras.frames.len() + feats,
-            self.explode_key() ^ self.robot_key(),
+            self.explode_key() ^ self.cam_key() as u64 ^ self.robot_key(),
         );
         if self.extras.was.as_ref() != Some(&key) {
             self.extras.was = Some(key);
@@ -334,6 +334,7 @@ impl Gui {
             }
         }
         self.explode_trails(&mut out);
+        self.cam_overlay(&mut out, &mut behind);
         (out, behind)
     }
 }

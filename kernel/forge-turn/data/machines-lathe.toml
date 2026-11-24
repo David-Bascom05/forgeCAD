@@ -1,0 +1,105 @@
+# CAM-MACHINE's generic-lathe (branch cam/machine, kernel/forge-machine/data/machines.toml @9fb8684), copied
+# here until forge-machine is on main (the boundary conversion, machine.rs). Placeholders, not a real machine.
+[[machine]]
+name = "generic-lathe"
+kind = "lathe"
+control = "fanuc-lathe"
+coolants = ["flood"]
+clearance = 1.0
+source = "forgecad generic 2-axis lathe; placeholders, not a real machine"
+taken = "2026-11-23"
+note = "verify travel, rates and envelope against your machine's manual before trusting a collision verdict"
+
+[[machine.joint]]
+name = "Z"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-60, 400]
+home = 400
+rapid = 24000
+max_feed = 5000
+accel = 4000
+
+[[machine.joint]]
+name = "X"
+parent = "Z"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-10, 250]       # the joint's travel (radius); the program's X word is twice it
+home = 250
+rapid = 20000
+max_feed = 5000
+accel = 4000
+diameter = true
+
+[[machine.spindle]]
+name = "main"
+link = "base"
+kind = "turning"
+axis = [0, 0, 1]
+nose = [0, 0, 0]
+rpm = [50, 4500]
+curve_rpm = [0, 800, 4500]
+curve_kw = [0, 11, 11]
+max = [300, 400]
+interface = "A2-6"
+
+[[machine.turret]]
+name = "T1"
+link = "X"
+stations = 12
+index_s = 0.3
+center = [270, 0, 0]
+index_axis = [0, 0, 1]
+
+[[machine.mount]]
+name = "turret"
+kind = "tool"
+link = "X"
+at = [120, 0, 0]
+dir = [-1, 0, 0]
+
+[[machine.mount]]
+name = "chuck"
+kind = "part"
+link = "base"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "headstock"
+link = "base"
+part = "parts/generic-lathe/headstock.fg"
+ignore = ["chuck"]
+[[machine.body.box]]
+min = [-200, -200, -400]
+max = [200, 200, -80]
+
+[[machine.body]]
+name = "chuck"
+link = "base"
+part = "parts/generic-lathe/chuck.fg"
+ignore = ["headstock"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 100
+h = 80
+
+[[machine.body]]
+name = "turret"
+link = "X"
+part = "parts/generic-lathe/turret.fg"
+[[machine.body.cyl]]
+base = [270, 0, -40]
+axis = [0, 0, 1]
+r = 150
+h = 80
+
+# ---------------------------------------------------------------------------------------------
+# A mill-turn: main spindle (C) at the origin, a sub-spindle (Z2, C2) facing it, and a B-axis
+# milling head on X Y Z. Z along the spindles, X radial (a diameter), Y across.

@@ -1,0 +1,13 @@
+# mazak-hcn-6000 table: the B index table under the pallet, a disc covering the pallet's corners (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared d = 121
+shared u = 0
+shared v = 0
+shared r = 355
+shared h = 249
+
+sketch plan(on: offset(xz, d)) {
+  outline = circle((u, v), r)
+}
+body = extrude(plan.outline, h)

@@ -311,10 +311,19 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
             let o2 = cross(u, sub2(d, a));
             let o3 = cross(v, sub2(a, c));
             let o4 = cross(v, sub2(b, c));
+            // or one beyond the other along its direction (a line across it separates them:
+            // what decides collinear segments; Dist2.lean `beyond`)
+            let (uu, vv) = (dot(u, u), dot(v, v));
+            let (p1, p2) = (dot(u, sub2(c, a)), dot(u, sub2(d, a)));
+            let (p3, p4) = (dot(v, sub2(a, c)), dot(v, sub2(b, c)));
             let apart = (o1.lo > 0.0 && o2.lo > 0.0)
                 || (o1.hi < 0.0 && o2.hi < 0.0)
                 || (o3.lo > 0.0 && o4.lo > 0.0)
-                || (o3.hi < 0.0 && o4.hi < 0.0);
+                || (o3.hi < 0.0 && o4.hi < 0.0)
+                || (p1.lo > uu.hi && p2.lo > uu.hi)
+                || (p1.hi < 0.0 && p2.hi < 0.0)
+                || (p3.lo > vv.hi && p4.lo > vv.hi)
+                || (p3.hi < 0.0 && p4.hi < 0.0);
             let cross_sure = ((o1.lo > 0.0 && o2.hi < 0.0) || (o1.hi < 0.0 && o2.lo > 0.0))
                 && ((o3.lo > 0.0 && o4.hi < 0.0) || (o3.hi < 0.0 && o4.lo > 0.0));
             if !apart {
@@ -814,6 +823,8 @@ pub fn locate(mv: &crate::check::Move, pr: &Prism) -> (f64, [f64; 3]) {
 }
 
 /// The verdict for a planar move against a prism face (module doc).
+/// (The path is taken as `pl` states it: an arc's stored ends exact. For a move's own arc use
+/// check::certify, which widens by Move::path_gap.)
 pub fn certify(
     body: &Body,
     f: &Face,
@@ -823,7 +834,7 @@ pub fn certify(
     res: f64,
     budget: usize,
 ) -> (Verdict, usize) {
-    certify_shared(body, f, pr, pl, limit, res, budget, &mut None)
+    certify_shared(body, f, pr, pl, limit, res, budget, &mut None, 0.0)
 }
 
 /// `certify`, the move's distance to the face's section shared between calls for the same move
@@ -840,8 +851,41 @@ pub fn certify_shared(
     res: f64,
     budget: usize,
     shared: &mut Option<(Ival, f64)>,
+    path_gap: f64,
 ) -> (Verdict, usize) {
     let (path, zt) = path_sec(pl);
+    certify_path(body, f, pr, &path, zt, limit, res, budget, shared, path_gap)
+}
+
+/// The verdict for a tool tip whose xy runs along `path` and whose height is, at every instant,
+/// in `zt` (a planar move: its one height; a helix or a ramp: the range it sweeps, a superset:
+/// then only `Clear` is a proof about the move, by `certified_clear` with the heights in Zt).
+/// `path_gap`: how far the path curve's distances may be misstated (check::Move::path_gap: an
+/// arc's stored ends), the distance widened by it.
+#[allow(clippy::too_many_arguments)]
+pub fn certify_path(
+    body: &Body,
+    f: &Face,
+    pr: &Prism,
+    path: &Sec,
+    zt: Ival,
+    limit: f64,
+    res: f64,
+    budget: usize,
+    shared: &mut Option<(Ival, f64)>,
+    path_gap: f64,
+) -> (Verdict, usize) {
+    let path = *path;
+    let widen = |d: Ival| -> Ival {
+        if path_gap > 0.0 {
+            Ival {
+                lo: Ival::pt(d.lo).sub(Ival::pt(path_gap)).lo.max(0.0),
+                hi: Ival::pt(d.hi).add(Ival::pt(path_gap)).hi,
+            }
+        } else {
+            d
+        }
+    };
     let (lim_clear, lim_hit) = (limit + f.mu, limit - f.mu);
     let (d, dz) = match pr {
         Prism::Flat {
@@ -864,7 +908,7 @@ pub fn certify_shared(
             let d = match *shared {
                 Some((d, cut)) if cut >= cutoff => d,
                 _ => {
-                    let d = dist_region(&path, region, boxes, gaps, cutoff);
+                    let d = widen(dist_region(&path, region, boxes, gaps, cutoff));
                     *shared = Some((d, cutoff));
                     d
                 }
@@ -877,7 +921,7 @@ pub fn certify_shared(
                 None => {
                     // a wall's arc ends are its parametrisation's, evaluated: off the circle by
                     // their rounding, accounted as for trims
-                    let d = less_gap(dist(&path, sec), *gap);
+                    let d = widen(less_gap(dist(&path, sec), *gap));
                     *shared = Some((d, f64::INFINITY));
                     d
                 }
@@ -1010,5 +1054,54 @@ mod gap_tests {
             let spacing = std::f64::consts::FRAC_PI_2 / 4000.0 + g / 100.0;
             assert!(d.lo <= m + spacing, "q {q:?}: lo {} vs trim {m}", d.lo);
         }
+    }
+}
+
+#[cfg(test)]
+mod collinear_tests {
+    use super::*;
+
+    /// Collinear segments apart along their line: the low end is their gap (it was 0, sound but
+    /// loose: neither is on one side of the other's line). Overlapping ones: 0.
+    #[test]
+    fn collinear_segments_apart_have_their_gap() {
+        let s = Sec::Seg {
+            a: [0.0, 0.0],
+            b: [1.0, 0.0],
+        };
+        for (t, gap) in [
+            (
+                Sec::Seg {
+                    a: [3.0, 0.0],
+                    b: [4.0, 0.0],
+                },
+                2.0,
+            ),
+            (
+                Sec::Seg {
+                    a: [-2.5, 0.0],
+                    b: [-4.0, 0.0],
+                },
+                2.5,
+            ),
+            (
+                Sec::Seg {
+                    a: [3.0, 3.0],
+                    b: [4.0, 4.0],
+                },
+                (2.0f64 * 2.0 + 3.0 * 3.0).sqrt(),
+            ),
+        ] {
+            let d = dist(&s, &t);
+            assert!(d.lo > 0.0 && d.lo <= gap && gap - d.lo < 1e-12, "{d:?} vs {gap}");
+        }
+        let d = dist(
+            &s,
+            &Sec::Seg {
+                a: [0.5, 0.0],
+                b: [2.0, 0.0],
+            },
+        );
+        assert_eq!(d.lo, 0.0);
     }
 }
