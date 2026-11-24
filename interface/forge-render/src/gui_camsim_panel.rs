@@ -76,6 +76,13 @@ pub struct CamSimUi {
     /// The toolpath coloured by a measured value per move (the workspace's colour-by).
     pub values: Option<crate::camsim::draw::Values>,
     pub follow: bool,
+    /// The operator's view while the posted code plays on a machine: the camera's target held
+    /// fixed in the machine's base frame (so the table and the part move under a still head, as
+    /// they do in the shop), carried into the part's frame each frame; re-anchored where the
+    /// person pans. Off: the part stays still and the machine moves about it.
+    pub shop_eye: bool,
+    /// (the target in the machine's base frame, the target last set in the part's frame).
+    pub eye_anchor: Option<([f64; 3], [f32; 3])>,
     pub path_width: f32,
     pub tab: Tab,
     /// The move list's selection (a piece), drawn wider.
@@ -138,6 +145,8 @@ impl CamSimUi {
             machine: true,
             values: None,
             follow: false,
+            shop_eye: true,
+            eye_anchor: None,
             path_width: 2.0,
             tab: Tab::Program,
             picked: None,
@@ -1271,6 +1280,10 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
 fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     heading(ui, t, "Playback");
     ui.checkbox(&mut st.follow, "Follow the tool");
+    if st.sim.machine().is_some() {
+        ui.checkbox(&mut st.shop_eye, "Operator's view")
+            .on_hover_text("The camera stays put in the machine: the table and the part move under the head, as in the shop. Off: the part stays still and the machine moves about it.");
+    }
     ui.checkbox(&mut st.stop_at_markers, "Stop at issues");
     // the toolpath coloured by a measured value: its legend
     if let Some(v) = &st.values {

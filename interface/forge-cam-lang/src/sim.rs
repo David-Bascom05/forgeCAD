@@ -155,9 +155,9 @@ impl Cam {
             .find(|p| p.setups.contains(&si) && p.text.is_some())
             .ok_or_else(|| format!("setup {}: no program posted for it", s.name))?;
         let text = prog.text.clone().expect("found with text");
-        let def = forge_machine::library::builtin()
-            .into_iter()
-            .find(|d| d.name == s.machine)
+        // the one machine list's record (read once), not the built-ins parsed again
+        let def = crate::machines::record(&s.machine)
+            .cloned()
             .ok_or_else(|| format!("machine `{}` is not one forge-machine defines", s.machine))?;
         let control = gcode::Control::for_dialect(&def, &prog.post, 1)?;
         // the tools, as stacked cylinders from the tip; their gauge length is the assembly's top
@@ -332,9 +332,7 @@ impl Cam {
     /// or a rate is not published, and the simulation plays rapids at its own speed.
     pub fn sim_rapids(&self, si: usize) -> Option<[f64; 3]> {
         let s = self.setups.get(si)?;
-        let def = forge_machine::library::builtin()
-            .into_iter()
-            .find(|d| d.name == s.machine)?;
+        let def = crate::machines::record(&s.machine)?;
         let mut out = [0.0; 3];
         for (k, l) in ["X", "Y", "Z"].iter().enumerate() {
             let j = def

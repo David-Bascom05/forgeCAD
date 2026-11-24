@@ -50,6 +50,7 @@ impl Gui {
                 ui.tool = old.tool;
                 ui.fixture = old.fixture;
                 ui.follow = old.follow;
+                ui.shop_eye = old.shop_eye;
                 ui.path_width = old.path_width;
                 ui.tab = old.tab;
                 ui.folded = old.folded;
@@ -261,6 +262,29 @@ impl Gui {
                 && let Some((_, p, _)) = st.tool_now()
             {
                 v.nav.camera.target = [p[0] as f32, p[1] as f32, p[2] as f32];
+            } else if st.shop_eye
+                && let Some(mv) = st.sim.machine()
+            {
+                // the operator's view: the target fixed in the machine's base frame
+                let to_part = mv.to_part(&mv.q_at(st.t));
+                let cur = v.nav.camera.target;
+                let base = match st.eye_anchor {
+                    // still where it was last put: the same place in the machine
+                    Some((b, last)) if last == cur => b,
+                    // panned (or first): anchored where it is now
+                    _ => to_part
+                        .inverse()
+                        .apply([cur[0] as f64, cur[1] as f64, cur[2] as f64]),
+                };
+                let p = to_part.apply(base);
+                let p = [p[0] as f32, p[1] as f32, p[2] as f32];
+                if p != cur {
+                    v.nav.camera.target = p;
+                    v.dirty = true;
+                }
+                st.eye_anchor = Some((base, p));
+            } else {
+                st.eye_anchor = None;
             }
             // the picture follows the time shown
             let key = (
@@ -472,6 +496,12 @@ impl Gui {
                     }
                 }
                 "follow" => st.follow = on()?,
+                // the operator's view on a machine (`eye=shop`), or the part held still
+                "eye" => match v {
+                    "shop" => st.shop_eye = true,
+                    "part" => st.shop_eye = false,
+                    _ => return Err(format!("`{cmd}`: shop or part")),
+                },
                 "source" => {
                     let want = match v {
                         "toolpath" => None,

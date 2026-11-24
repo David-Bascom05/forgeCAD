@@ -284,3 +284,65 @@ fn the_mould_cores_cut_surface() {
     shot(&mut h, "native-surface-01-mould-finish-1400x860");
     eprintln!("stock drawn and shot: {:.0} ms", t0.elapsed().as_secs_f64() * 1e3);
 }
+
+/// The flange's posted program played on the Haas VF-2 (CAM-HAAS's cited record, named in the
+/// document through the one machine list): the machine drawn from its record's parts, the table
+/// carrying the part under the head. `FORGE_UI_SHOTS` keeps the shot.
+#[test]
+fn the_flange_on_a_haas_vf2() {
+    let dir = copied("vf2", &["flange.fg"]);
+    let src = std::fs::read_to_string(machined().join("flange_cam.fg"))
+        .unwrap()
+        .replace("machine(\"generic-vmc3\")", "machine(\"haas-vf-2\")")
+        .replace("at: (0, 0, -250)", "at: (-381, -203, -400)")
+        .replace("post: \"fanuc\"", "post: \"haas\"");
+    std::fs::write(dir.join("flange_vf2_cam.fg"), src).unwrap();
+    let Some(mut h) = open(&dir.join("flange_vf2_cam.fg"), (1400.0, 860.0), true) else {
+        return;
+    };
+    for _ in 0..20 {
+        h.step();
+    }
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    assert!(st.sim.cam.ok, "{:?}", st.sim.cam.errors);
+    h.gui
+        .camsim_command("tab=program;source=machine;machine=1;at=0.3;part=hidden;fit=machine")
+        .unwrap();
+    let mv = h
+        .gui
+        .shell
+        .camsim
+        .as_ref()
+        .unwrap()
+        .sim
+        .machine()
+        .expect("the VF-2 runs it");
+    assert_eq!(mv.run.def.name, "haas-vf-2");
+    assert!(mv.markers.is_empty(), "{:?}", mv.markers.first().map(|m| &m.text));
+    shot(&mut h, "native-machine-01-vf2-flange-1400x860");
+    // the operator's view: the eye stays put in the machine, so as the table carries the part
+    // the target moves in the part's frame by just the table's travel
+    let target = |h: &Headless| h.gui.view.as_ref().unwrap().nav.camera.target;
+    let joints = |h: &Headless, t: f64| {
+        let mv = h.gui.shell.camsim.as_ref().unwrap().sim.machine().unwrap();
+        let q = mv.joints_at(t);
+        let get = |n: &str| q.iter().find(|j| j.0 == n).unwrap().1;
+        (get("X"), get("Y"))
+    };
+    h.gui.camsim_command("eye=shop;follow=0;at=0.3").unwrap();
+    shot(&mut h, "native-machine-02-vf2-shop-eye-a");
+    let (a, ta) = (target(&h), h.gui.shell.camsim.as_ref().unwrap().t);
+    h.gui.camsim_command("at=0.62").unwrap();
+    shot(&mut h, "native-machine-03-vf2-shop-eye-b");
+    let (b, tb) = (target(&h), h.gui.shell.camsim.as_ref().unwrap().t);
+    let ((xa, ya), (xb, yb)) = (joints(&h, ta), joints(&h, tb));
+    // the table moves −x for +X: in the part's frame a still eye moves +x by the same
+    let (dx, dy) = ((b[0] - a[0]) as f64, (b[1] - a[1]) as f64);
+    assert!(
+        (dx - (xb - xa)).abs() < 1e-3 && (dy - (yb - ya)).abs() < 1e-3,
+        "eye moved ({dx}, {dy}), joints ({}, {})",
+        xb - xa,
+        yb - ya
+    );
+    assert!((xb - xa).abs() + (yb - ya).abs() > 1.0, "the table moved");
+}

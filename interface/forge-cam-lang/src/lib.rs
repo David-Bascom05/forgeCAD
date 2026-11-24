@@ -28,6 +28,7 @@ pub mod cycle;
 pub mod export;
 pub mod holes;
 pub mod life;
+pub mod machines;
 mod memo;
 pub mod probing;
 pub mod sim;
@@ -2224,7 +2225,11 @@ pub fn run(src: &str, dir: &Path) -> Cam {
         src,
         dir,
         BUILTIN
-            .get_or_init(|| std::sync::Arc::new(Library::builtin()))
+            .get_or_init(|| {
+                let mut lib = Library::builtin();
+                machines::merge(&mut lib);
+                std::sync::Arc::new(lib)
+            })
             .clone(),
     )
 }
@@ -2233,7 +2238,8 @@ pub fn run(src: &str, dir: &Path) -> Cam {
 /// (forge-tooling-builder's `library(project, user_cam)`: the project's records over the user's
 /// over the built-in), so tools, holders and inserts made in the builder reach CAM. The
 /// document's `cam/*.toml` beside it are added on top, as with `run`.
-pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
+pub fn run_with_library(src: &str, dir: &Path, mut lib: Library) -> Cam {
+    machines::merge(&mut lib);
     run_shared(src, dir, std::sync::Arc::new(lib))
 }
 
@@ -2280,11 +2286,16 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
                 .collect();
             files.sort();
             for f in files {
-                if let Ok(s) = forge_dirs::fs::read_to_string(&f)
-                    && let Err(e) = std::sync::Arc::make_mut(&mut cam.lib).add(&f.display().to_string(), &s)
-                {
-                    cam.errors.push(e.to_string());
-                    cam.ok = false;
+                if let Ok(s) = forge_dirs::fs::read_to_string(&f) {
+                    let lib = std::sync::Arc::make_mut(&mut cam.lib);
+                    match lib.add(&f.display().to_string(), &s) {
+                        // a machine it adds joins the one list
+                        Ok(_) => machines::merge(lib),
+                        Err(e) => {
+                            cam.errors.push(e.to_string());
+                            cam.ok = false;
+                        }
+                    }
                 }
             }
         }
@@ -2758,6 +2769,9 @@ impl Cam {
             "machine" => {
                 let n = get_str(a, "#0", None)?;
                 self.lib.machine(&n).map_err(|e| e.to_string())?;
+                if let Some(why) = machines::conflict(&self.lib, &n) {
+                    return Err(why);
+                }
                 Ok(V::Machine(n))
             }
             "tool" => {
