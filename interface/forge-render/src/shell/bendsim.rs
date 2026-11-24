@@ -20,6 +20,8 @@ pub mod look {
     pub const FAIL: Color32 = Color32::from_rgb(0xE0, 0x40, 0x40);
     pub const PASS: Color32 = Color32::from_rgb(0x3A, 0xA8, 0x5A);
     pub const WARN: Color32 = Color32::from_rgb(0xE8, 0xA0, 0x30);
+    /// Near: the warning amber at about 70 % (UX-LEAD: weaker than a warning, clearly not green).
+    pub const NEAR: Color32 = Color32::from_rgba_premultiplied(0xA2, 0x70, 0x22, 0xB3);
     pub const MUTED: Color32 = Color32::from_rgb(0x90, 0x94, 0x9A);
 }
 
@@ -97,6 +99,8 @@ pub struct BendSimUi {
     /// `opacity`; with `see_press`, the press's frame too.
     pub see_through: bool,
     pub opacity: f32,
+    /// The user's units are inches (the status bar's switch): lengths shown in them.
+    pub inch: bool,
     pub see_press: bool,
     /// The tool library shows only what fits the press and the part.
     pub fit_only: bool,
@@ -208,6 +212,7 @@ impl BendSimUi {
             follow: false,
             see_through: true,
             opacity: 0.45,
+            inch: false,
             see_press: false,
             fit_only: true,
             all_checks: false,
@@ -270,6 +275,7 @@ impl BendSimUi {
             follow: false,
             see_through: true,
             opacity: 0.45,
+            inch: false,
             see_press: false,
             fit_only: true,
             all_checks: false,
@@ -1363,6 +1369,41 @@ fn prop(ui: &mut egui::Ui, t: &Theme, label: &str, value: String, key: Option<&s
 /// press's part in it, and its checks as a table (Check, Result, Measured, Limit) with human
 /// names and units; failures and checks that could not run first, the passes on asking.
 /// Returns the bend's name when its "flat pattern" link is clicked.
+/// A step's checks that are not passes, counted by kind, worst first, each in its colour: "1 fail",
+/// "2 warnings", "1 not checked", "1 near" (UX-LEAD: nothing that is not a pass goes uncounted).
+fn tally(checks: &[fb::Check]) -> Vec<(String, egui::Color32)> {
+    let n = |f: &dyn Fn(&fb::Check) -> bool| checks.iter().filter(|c| !c.pass && f(c)).count();
+    let fail = n(&|c| c.severity == fb::Severity::Error);
+    let warn = n(&|c| c.severity == fb::Severity::Warning && c.unchecked.is_none() && c.near.is_none());
+    let unchecked = n(&|c| c.unchecked.is_some());
+    let near = n(&|c| c.near.is_some());
+    let plural = |k: usize, w: &str| {
+        if k == 1 {
+            format!("{k} {w}")
+        } else {
+            format!("{k} {w}s")
+        }
+    };
+    [
+        (
+            fail,
+            if fail == 1 {
+                "1 fail".to_string()
+            } else {
+                format!("{fail} fail")
+            },
+            look::FAIL,
+        ),
+        (warn, plural(warn, "warning"), look::WARN),
+        (unchecked, format!("{unchecked} not checked"), look::MUTED),
+        (near, format!("{near} near"), look::NEAR),
+    ]
+    .into_iter()
+    .filter(|x| x.0 > 0)
+    .map(|x| (x.1, x.2))
+    .collect()
+}
+
 pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<String> {
     let mut flat = None;
     let all = st.all_checks;
@@ -1387,18 +1428,41 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     .color(t.ink),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let c = if ok { look::PASS } else { look::FAIL };
+                // the outline amber once anything warns (UX-LEAD); a pass's green otherwise
+                let warns = s.checks.iter().any(|c| {
+                    !c.pass
+                        && c.severity == fb::Severity::Warning
+                        && c.unchecked.is_none()
+                        && c.near.is_none()
+                });
+                let c = if !ok {
+                    look::FAIL
+                } else if warns {
+                    look::WARN
+                } else {
+                    look::PASS
+                };
                 egui::Frame::new()
                     .fill(c.gamma_multiply(0.18))
                     .stroke(egui::Stroke::new(1.0, c))
                     .corner_radius(9.0)
                     .inner_margin(egui::Margin::symmetric(8, 2))
                     .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(if ok { "Passes" } else { "Fails" })
-                                .color(c)
-                                .size(12.0),
-                        );
+                        // laid out right to left (the badge's row): the near after the word
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing.x = 4.0;
+                            // nothing that is not a pass hidden behind the word (UX-LEAD), the
+                            // worst first: right to left, so the last first
+                            for (w, col) in tally(&s.checks).into_iter().rev() {
+                                ui.label(egui::RichText::new(format!("· {w}")).color(col).size(12.0));
+                            }
+                            // the word in its own colour (a feasible step passes), the outline warning
+                            ui.label(
+                                egui::RichText::new(if ok { "Passes" } else { "Fails" })
+                                    .color(if ok { look::PASS } else { look::FAIL })
+                                    .size(12.0),
+                            );
+                        });
                     });
             });
         });
@@ -1533,7 +1597,43 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
             });
         // the checks: what failed and what could not be checked; the passes on asking
         let passing = s.checks.iter().filter(|c| c.pass).count();
-        let shown: Vec<&fb::Check> = s.checks.iter().filter(|c| all || !c.pass).collect();
+        let kinds = tally(&s.checks);
+        // failures first, then warnings and what could not be checked, then the nears (seen,
+        // not shouting), then the passes (UX-LEAD)
+        let rank = |c: &fb::Check| {
+            if c.pass {
+                3
+            } else if c.near.is_some() {
+                2
+            } else if c.severity == fb::Severity::Warning || c.unchecked.is_some() {
+                1
+            } else {
+                0
+            }
+        };
+        let mut shown: Vec<&fb::Check> = s.checks.iter().filter(|c| all || !c.pass).collect();
+        shown.sort_by_key(|c| rank(c));
+        // a length in the user's units, to a hundredth of a mm (a thousandth of an inch) as the
+        // other rows show it; a proven lower bound rounded down, so its "≥" stays true
+        let fixed = |mm: f64, down: bool| {
+            let (x, d, unit) = if st.inch {
+                (mm / 25.4, 1000.0, "in")
+            } else {
+                (mm, 100.0, "mm")
+            };
+            let x = if down {
+                (x * d).floor() / d
+            } else {
+                (x * d).round() / d
+            };
+            if st.inch {
+                format!("{x:.3} {unit}")
+            } else {
+                format!("{x:.2} {unit}")
+            }
+        };
+        let len = |mm: f64| fixed(mm, false);
+        let len_down = |mm: f64| fixed(mm, true);
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
@@ -1543,9 +1643,14 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     .color(t.ink),
             );
             ui.label(
-                egui::RichText::new(format!("{passing} of {} pass", s.checks.len()))
-                    .small()
-                    .color(t.ink2),
+                egui::RichText::new(
+                    std::iter::once(format!("{passing} of {} pass", s.checks.len()))
+                        .chain(kinds.iter().map(|k| k.0.clone()))
+                        .collect::<Vec<_>>()
+                        .join(" · "),
+                )
+                .small()
+                .color(t.ink2),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.link(if all { "Failures only" } else { "Show all" }).clicked() {
@@ -1567,6 +1672,10 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                         (look::PASS, "pass")
                     } else if c.unchecked.is_some() {
                         (look::MUTED, "not checked")
+                    } else if c.near.is_some() {
+                        // proven within the resolution of the limit, not at it (David): a word, in
+                        // a muted amber, weaker than a warning (UX-LEAD)
+                        (look::NEAR, "near")
                     } else if c.severity == fb::Severity::Warning {
                         (look::WARN, "warning")
                     } else if c.undecided {
@@ -1578,6 +1687,12 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     // it was against
                     let why = match (&c.unchecked, &c.tool) {
                         (Some(u), _) => format!("not checked: {u} unknown"),
+                        _ if c.near.is_some() => format!(
+                            "Proven at least {}; the limit is {}. That is within the simulation's resolution ({}), so it isn't proven clear.",
+                            len_down(c.value),
+                            len(c.limit),
+                            len(c.near.unwrap_or(0.0))
+                        ),
                         (None, Some(x)) => format!("against {}", cards::body_words(cat, x)),
                         _ => String::new(),
                     };
@@ -1622,11 +1737,25 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                                 .wrap(),
                             );
                         }
+                        // only a lower bound is known (near, undecided): what was proven, the limit
+                        None if c.near.is_some() || c.undecided => {
+                            hover(ui.label(format!("≥ {} · {}", len_down(c.value), len(c.limit))));
+                        }
+                        // no limit to hold it to: the value alone, the rule on hover (UX-LEAD)
+                        None if c.limit == 0.0 && !c.at_most => {
+                            hover(ui.label(cards::rule_value(c.rule, c.value)));
+                        }
+                        // the relation as it is: a failing row's is the other way (UX-LEAD)
                         None => {
+                            let rel = match (c.at_most, c.pass) {
+                                (true, true) => "≤",
+                                (true, false) => ">",
+                                (false, true) => "≥",
+                                (false, false) => "<",
+                            };
                             hover(ui.label(format!(
-                                "{} {} {}",
+                                "{} {rel} {}",
                                 cards::rule_value(c.rule, c.value),
-                                if c.at_most { "≤" } else { "≥" },
                                 cards::rule_value(c.rule, c.limit)
                             )));
                         }

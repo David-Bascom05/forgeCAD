@@ -443,6 +443,28 @@ fn clearances_just_pass_and_just_fail() {
     let mut t = tl.clone();
     t.clearance = lower - 0.01;
     assert!(measure(&t).pass);
+    // between a limit that passes and one a real point is under (halved till then): proven
+    // within the resolution of the limit, not at it, and no point under it: Near (David), a mild
+    // warning, not a pass
+    let (mut lo, mut hi) = (lower - 0.01, upper + 0.01);
+    let mut c = measure(&t);
+    for _ in 0..40 {
+        t.clearance = 0.5 * (lo + hi);
+        c = measure(&t);
+        match (c.pass, c.near) {
+            (_, Some(_)) => break,
+            (true, None) => lo = t.clearance,
+            (false, None) => hi = c.value.min(t.clearance),
+        }
+    }
+    assert!(
+        !c.pass
+            && c.near.is_some()
+            && c.severity == forge_brake::Severity::Warning
+            && c.bound
+                .is_some_and(|b| b < t.clearance && b >= t.clearance - c.near.unwrap()),
+        "{c:?}"
+    );
     t.clearance = upper + 0.01;
     let c = measure(&t);
     assert!(!c.pass && c.value < t.clearance && c.certified, "{c:?}");
@@ -512,4 +534,54 @@ fn programs_are_feasible_and_ranked() {
             .map(|p| (p.plan.sequence.clone(), p.key()))
             .collect::<Vec<_>>()
     );
+}
+
+/// A verdict kept across steps never answers another search (FALLBACK's review: the memo's key
+/// left out the search's limit, resolution and start cells; two approaches of the ram with
+/// different travel shared a key, and a kept Clear hid a hit 0.27 mm off the wall): every tool
+/// check, through every order's steps and setups with one memo shared as the planner shares it,
+/// is the same as with none.
+#[test]
+fn a_kept_verdict_answers_only_its_own_search() {
+    let (mut s, base) = sheet(2.0, 2.0, 60.0, 200.0);
+    let (f1, _) = s.flange(base, 1, deg(90.0), 40.0).unwrap();
+    s.flange(f1, 1, deg(90.0), 15.0).unwrap();
+    s.flange(base, 3, deg(90.0), 40.0).unwrap();
+    let m = Model::new(&s).unwrap();
+    let tl = library::std_eu();
+    let n = m.bends.len();
+    let memo: std::rc::Rc<std::cell::RefCell<forge_brake::sim::Memo>> = Default::default();
+    let seen = |c: &Check| (c.rule, c.pass, c.value.to_bits(), c.certified, c.undecided);
+    let mut compared = 0;
+    for j in 0..n {
+        for mask in 0..1u32 << n {
+            if mask >> j & 1 == 1 {
+                continue;
+            }
+            let done: Vec<bool> = (0..n).map(|k| mask >> k & 1 == 1).collect();
+            for punch in 0..tl.punches.len().min(3) {
+                for die in 0..tl.dies.len().min(2) {
+                    for rotate in [false, true] {
+                        let setup = Setup { punch, die, rotate };
+                        let ob = tl.overbend(None, m.bends[j].theta);
+                        for phase in [Phase::Approach, Phase::Bend, Phase::Return] {
+                            let mut kept = StepCtx::new(&m, &tl, &done, j, setup, ob);
+                            kept.memo = Some(memo.clone());
+                            let fresh = StepCtx::new(&m, &tl, &done, j, setup, ob);
+                            let (mut a, mut b) = (Vec::new(), Vec::new());
+                            kept.collisions(phase, None, &mut a, true);
+                            fresh.collisions(phase, None, &mut b, true);
+                            assert_eq!(
+                                a.iter().map(seen).collect::<Vec<_>>(),
+                                b.iter().map(seen).collect::<Vec<_>>(),
+                                "bend {j} after {done:?}, {setup:?}, {phase:?}"
+                            );
+                            compared += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert!(compared > 100, "{compared}");
 }

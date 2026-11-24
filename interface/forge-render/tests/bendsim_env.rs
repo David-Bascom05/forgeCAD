@@ -770,3 +770,202 @@ fn a_ghost_is_drawn_at_its_opacity() {
         "the ghost drawn at its opacity: {differ} pixels differ, under {floor}"
     );
 }
+
+/// Near (David; UX-LEAD's words): a clearance proven only within the simulation's resolution of
+/// its limit is not a pass but a mild warning, "near", listed after the warnings and before the
+/// passes, never hidden behind the step's "Passes" badge. A narrow, tall channel on the
+/// standard tooling, on no press, has one.
+#[test]
+fn a_near_clearance_is_listed_as_near() {
+    let Some(mut h) = headless() else { return };
+    let narrow = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 200))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+right = flange(base.edge(plan.outline[1]), height: 60)\n\
+left = flange(base.edge(plan.outline[3]), height: 60)\n";
+    let d = scratch("near");
+    let f = d.join("near.fg");
+    std::fs::write(&f, narrow).unwrap();
+    open(&mut h, f.to_str().unwrap());
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    // the standard tooling alone, on no press (as `query F bendsim` asks it by default)
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().expect("simulated");
+        b.redo(Choice::default(), "std-eu");
+    }
+    h.step();
+    h.step();
+    let b = h.gui.shell.sheet.bend_sim.as_mut().expect("simulated");
+    let plan = &b.sim.as_ref().expect("a program").plan;
+    assert!(plan.feasible, "Near never makes a program infeasible");
+    let at = plan
+        .steps
+        .iter()
+        .position(|s| s.checks.iter().any(|c| c.near.is_some()))
+        .expect("a near clearance on some step");
+    let s = &plan.steps[at];
+    assert!(s.pass(), "a near is a warning: the step still passes");
+    let c = s.checks.iter().find(|c| c.near.is_some()).unwrap();
+    assert!(!c.pass && c.severity == forge_brake::Severity::Warning);
+    assert!(
+        c.bound
+            .is_some_and(|l| l < c.limit && l >= c.limit - c.near.unwrap()),
+        "{c:?}"
+    );
+    b.step = at;
+    b.all_checks = true;
+    for _ in 0..4 {
+        h.step();
+    }
+    shot(&mut h, "16-near-in-the-checks");
+}
+
+/// A clip for David (the coordinator): `BENDSIM_CLIP=DIR` writes 270 frames (9 s at 30 fps)
+/// through the whole program of a narrow channel on the standard tooling (it has a near row),
+/// seeked on the environment's timeline as a recording seeks it, and the Checks panel at the
+/// near step. Off unless asked.
+#[test]
+#[ignore]
+fn a_clip_for_david() {
+    let Ok(dir) = std::env::var("BENDSIM_CLIP") else {
+        return;
+    };
+    let Some(mut h) = headless() else { return };
+    let narrow = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 200))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+right = flange(base.edge(plan.outline[1]), height: 60)\n\
+left = flange(base.edge(plan.outline[3]), height: 60)\n";
+    let d = scratch("clip");
+    let f = d.join("narrow-channel.fg");
+    std::fs::write(&f, narrow).unwrap();
+    open(&mut h, f.to_str().unwrap());
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    h.gui
+        .shell
+        .sheet
+        .bend_sim
+        .as_mut()
+        .unwrap()
+        .redo(Choice::default(), "std-eu");
+    for _ in 0..4 {
+        h.step();
+    }
+    let tl = h.gui.shell.env_timeline().expect("the timeline");
+    let total = tl.duration(&h.gui.shell);
+    assert!(total > 0.0);
+    // settle on the first instant before the first frame
+    tl.seek(&mut h.gui.shell, 0.0);
+    for _ in 0..20 {
+        h.step();
+    }
+    let n = 270;
+    for i in 0..n {
+        let tl = h.gui.shell.env_timeline().unwrap();
+        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
+        h.step();
+        std::fs::write(format!("{dir}/frame-{i:04}.ppm"), h.ppm()).unwrap();
+    }
+    // the Checks panel at the near step, every check shown
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    let at = b
+        .sim
+        .as_ref()
+        .unwrap()
+        .plan
+        .steps
+        .iter()
+        .position(|s| s.checks.iter().any(|c| c.near.is_some()))
+        .expect("a near");
+    b.step = at;
+    b.t = 0.6;
+    b.all_checks = true;
+    for _ in 0..20 {
+        h.step();
+    }
+    std::fs::write(format!("{dir}/checks.ppm"), h.ppm()).unwrap();
+    eprintln!("clip: {n} frames over {total} s of program");
+}
+
+/// The frames the coordinator saw the bed fill (the channel on the TruBend 5130, native frame
+/// ~125 at 30 fps: t = 4.17 s, the handling before bend 2), as they stand now. Off unless asked.
+#[test]
+#[ignore]
+fn the_handling_frames_on_the_trubend() {
+    let Ok(dir) = std::env::var("BENDSIM_CLIP") else {
+        return;
+    };
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "trubend-clip", "trumpf-trubend-5130", None);
+    let tl = h.gui.shell.env_timeline().expect("the timeline");
+    tl.seek(&mut h.gui.shell, 0.0);
+    for _ in 0..20 {
+        h.step();
+    }
+    for i in 0..=130u32 {
+        let tl = h.gui.shell.env_timeline().unwrap();
+        tl.seek(&mut h.gui.shell, i as f64 / 30.0);
+        h.step();
+        if i >= 120 {
+            std::fs::write(format!("{dir}/trubend-{i:04}.ppm"), h.ppm()).unwrap();
+        }
+    }
+}
+
+/// A complex part's whole program for David (the coordinator): `BENDSIM_CLIP=DIR` and
+/// `BENDSIM_CLIP_PART=FILE.fg` write 360 frames (12 s at 30 fps) through every bend, flips and
+/// turns included, seeked on the timeline as a recording seeks it; the press the environment
+/// picks if its program is feasible, else the standard tooling alone. Off unless asked.
+#[test]
+#[ignore]
+fn a_complex_part_clip() {
+    let (Ok(dir), Ok(part)) = (std::env::var("BENDSIM_CLIP"), std::env::var("BENDSIM_CLIP_PART")) else {
+        return;
+    };
+    let Some(mut h) = headless() else { return };
+    open(&mut h, &part);
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let feasible = |h: &Headless| {
+        h.gui
+            .shell
+            .sheet
+            .bend_sim
+            .as_ref()
+            .and_then(|b| b.sim.as_ref().ok())
+            .is_some_and(|s| s.plan.feasible)
+    };
+    if !feasible(&h) {
+        h.gui
+            .shell
+            .sheet
+            .bend_sim
+            .as_mut()
+            .unwrap()
+            .redo(Choice::default(), "std-eu");
+        for _ in 0..4 {
+            h.step();
+        }
+    }
+    assert!(feasible(&h), "{}", h.gui.shell.status);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        eprintln!("clip on {} {:?}: {} bends", b.tooling, b.choice.press, b.steps());
+    }
+    let tl = h.gui.shell.env_timeline().expect("the timeline");
+    let total = tl.duration(&h.gui.shell);
+    tl.seek(&mut h.gui.shell, 0.0);
+    for _ in 0..20 {
+        h.step();
+    }
+    let n = 360;
+    for i in 0..n {
+        let tl = h.gui.shell.env_timeline().unwrap();
+        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
+        h.step();
+        std::fs::write(format!("{dir}/frame-{i:04}.ppm"), h.ppm()).unwrap();
+    }
+    eprintln!("clip: {n} frames over {total} s of program");
+}

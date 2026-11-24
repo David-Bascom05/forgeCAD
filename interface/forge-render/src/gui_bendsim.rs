@@ -685,8 +685,10 @@ impl Gui {
                     // the cube's home is the working zone
                     v.nav.home_view = Some(cam);
                 }
-                // tracking the handling is continuous: placed, not travelled to
-                eye = Some((cam, first || (handling && !moved && ask.is_none())));
+                // tracking the handling is continuous: placed, not travelled to; a new step that
+                // opens with the handling is placed too (a cut: travelling from the last bend's
+                // working zone crosses the press, the bed filling the picture on the way)
+                eye = Some((cam, first || (handling && ask.is_none())));
             }
             self.bend.framed = true;
             self.bend.station = at;

@@ -1177,6 +1177,8 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
                 "pass"
             } else if c.unchecked.is_some() {
                 "not_checked"
+            } else if c.near.is_some() {
+                "near"
             } else if c.undecided {
                 "undecided"
             } else {
@@ -1189,6 +1191,10 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
     ];
     if let Some(u) = &c.unchecked {
         f.push(("unknown", u.as_str().into()));
+    }
+    if let Some(r) = c.near {
+        // proven at least `value`, within this of the limit: not proven at it
+        f.push(("resolution", v(r)));
     }
     if c.estimate {
         f.push((

@@ -245,6 +245,7 @@ pub(super) fn dock(s: &mut Shell, ui: &mut Ui, r: Rect) {
         return;
     };
     let t = s.theme;
+    b.inch = s.units == "in";
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(egui::vec2(12.0, 10.0))));
     child.set_clip_rect(r);
     let mut flat = None;
