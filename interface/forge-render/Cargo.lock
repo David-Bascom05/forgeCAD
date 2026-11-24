@@ -1391,6 +1391,7 @@ name = "forge-render"
 version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
+ "arboard",
  "egui",
  "egui-wgpu",
  "egui-winit",

@@ -539,6 +539,19 @@ impl ApplicationHandler for App {
                 }
                 redraw = true;
             }
+            // Ctrl+V (Cmd+V) with the Agent tab showing: a picture on the clipboard goes with the
+            // next message (egui's own paste is text only, and still has the text, if any)
+            WindowEvent::KeyboardInput { event, .. }
+                if event.state == ElementState::Pressed
+                    && event.physical_key == PhysicalKey::Code(winit::keyboard::KeyCode::KeyV)
+                    && (self.mods.control_key() || self.mods.super_key())
+                    && l.gui.shell.agent.tab == crate::shell::agent::SideTab::Agent =>
+            {
+                if let Some(png) = clipboard_picture() {
+                    l.gui.agent_picture(png);
+                    redraw = true;
+                }
+            }
             WindowEvent::KeyboardInput { event, .. }
                 if matches!(event.physical_key, PhysicalKey::Code(c)
                     if l.gui.held_key(c, event.state == ElementState::Pressed)) => {}
@@ -716,5 +729,42 @@ mod tests {
             while_out(now, Some(later), Some(end), false).0,
             ControlFlow::WaitUntil(end)
         );
+    }
+}
+
+/// The clipboard's picture, if it holds one, as PNG (the agent's tray takes it as a pasted one).
+fn clipboard_picture() -> Option<Vec<u8>> {
+    let img = arboard::Clipboard::new().ok()?.get_image().ok()?;
+    rgba_png(img.width, img.height, &img.bytes)
+}
+
+/// RGBA pixels as a PNG, their alpha over white (a screenshot's is opaque anyway).
+fn rgba_png(w: usize, h: usize, rgba: &[u8]) -> Option<Vec<u8>> {
+    if rgba.len() != w * h * 4 || w == 0 || h == 0 {
+        return None;
+    }
+    let rgb: Vec<u8> = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .flat_map(|p| {
+            let a = p[3] as u32;
+            [0, 1, 2].map(|k| ((p[k] as u32 * a + 255 * (255 - a)) / 255) as u8)
+        })
+        .collect();
+    crate::agent::apptools::png(w as u32, h as u32, &rgb).ok()
+}
+
+#[cfg(test)]
+mod paste_tests {
+    #[test]
+    fn a_clipboard_picture_is_a_png_its_alpha_over_white() {
+        // 2×1: opaque red, and blue at half alpha
+        let png = super::rgba_png(2, 1, &[255, 0, 0, 255, 0, 0, 255, 128]).unwrap();
+        let (w, h, rgba) = crate::look::decode_image(&png).unwrap();
+        assert_eq!((w, h), (2, 1));
+        assert_eq!(&rgba[..3], &[255, 0, 0]);
+        assert_eq!(&rgba[4..7], &[127, 127, 255]);
+        assert_eq!(super::rgba_png(2, 2, &[0; 4]), None, "not its size: nothing");
     }
 }
