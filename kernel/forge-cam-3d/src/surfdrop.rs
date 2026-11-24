@@ -39,28 +39,47 @@ impl<'s, 'a> SurfDrop<'s, 'a> {
             a[1].max(b[1]) + r,
         );
         let mv = Move::Line { a, b };
+        // the answer is "every face near is proven clear", the same in any order of the faces:
+        // the face that refused this thread's last move first (the pieces of a split chord
+        // and the next chords mostly fail on the same face), so a refusal costs one face
+        let first = LAST_REFUSED.with(|c| c.get());
+        if idx.contains(&first) && !self.face_clear(first as usize, &mv, limit) {
+            return false;
+        }
         let mut i = 0;
         while i < idx.len() {
-            let f = &self.sf.faces[idx[i] as usize];
-            // the closed form for a ball cutter (contact.rs: sphere, cylinder, plane, torus,
-            // cone), then the column's gap on a small budget: undecided is "not proven", and
-            // the strategy splits the piece
-            if forge_cam_geom::contact::clear(&self.sf.cutter, f, &mv, self.sf.leave + limit).is_some() {
-                i += 1;
-                continue;
-            }
-            match gap_move(&self.chk, f, &mv, limit, self.sf.res, GAP_BUDGET).0 {
-                Gap::Clear { .. } => {}
-                Gap::Over { .. } => return false,
-                // undecided by the column: not proven. The generator splits the piece (short
-                // pieces resolve by the closed forms), which is far cheaper than a branch and
-                // bound here; the path's certification is the checker's, after
-                Gap::Unknown => return false,
+            if idx[i] != first && !self.face_clear(idx[i] as usize, &mv, limit) {
+                LAST_REFUSED.with(|c| c.set(idx[i]));
+                return false;
             }
             i += 1;
         }
         true
     }
+
+    /// Face `fi` proven at least `-limit` below the grown column over the move.
+    fn face_clear(&self, fi: usize, mv: &Move, limit: f64) -> bool {
+        let f = &self.sf.faces[fi];
+        // the closed form for a ball cutter (contact.rs: sphere, cylinder, plane, torus,
+        // cone), then the column's gap on a small budget: undecided is "not proven", and
+        // the strategy splits the piece
+        if forge_cam_geom::contact::clear(&self.sf.cutter, f, mv, self.sf.leave + limit).is_some() {
+            return true;
+        }
+        match gap_move(&self.chk, f, mv, limit, self.sf.res, GAP_BUDGET).0 {
+            Gap::Clear { .. } => true,
+            Gap::Over { .. } => false,
+            // undecided by the column: not proven. The generator splits the piece (short
+            // pieces resolve by the closed forms), which is far cheaper than a branch and
+            // bound here; the path's certification is the checker's, after
+            Gap::Unknown => false,
+        }
+    }
+}
+
+std::thread_local! {
+    /// The face index that refused this thread's last segment test (a hint only: see `clear`).
+    static LAST_REFUSED: std::cell::Cell<u32> = const { std::cell::Cell::new(u32::MAX) };
 }
 
 impl DropCutter for SurfDrop<'_, '_> {

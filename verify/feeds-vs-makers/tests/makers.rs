@@ -90,15 +90,17 @@ fn generic_held_out_by_maker() {
         assert!((0.25..=1.5).contains(&c), "{m}: held-out P10 chip median {c}");
     }
     // the general-purpose maker (the stand-in for an unknown tool): how often our default is
-    // above its own number. Target ~5% (coordinator); measured with the family split: speed
-    // 11% (Lakeshore's cast-aluminium and high-tensile steel rows, slower than the material-
-    // specific makers' aluminium tools), chip 6%. Pinned here so it cannot grow silently.
+    // above its own number. Target ~5% (coordinator); measured with the family and hardness
+    // splits: speed 17%, chip 13% (Lakeshore's soft-steel, cast-aluminium and high-tensile rows
+    // are slower than the material-specific makers' classes they now resolve in; with the group
+    // pooled they were 11% / 6%, at the cost of hardened-steel speeds for mild steel). Pinned
+    // here so it cannot grow silently.
     let lk: Vec<_> = ho.iter().filter(|x| rows[x.0].vendor == "lakeshore").collect();
     let share = |v: Vec<f64>| v.iter().filter(|x| **x > 1.0 + 1e-9).count() as f64 / v.len() as f64;
     let sv = share(lk.iter().map(|x| x.1).collect());
     let sc = share(lk.iter().filter_map(|x| x.2).collect());
     assert!(
-        sv <= 0.12 && sc <= 0.07,
+        sv <= 0.18 && sc <= 0.14,
         "lakeshore above-maker shares: speed {sv}, chip {sc}"
     );
 }

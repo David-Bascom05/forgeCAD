@@ -67,6 +67,8 @@ enum Ask {
     BendAt(u32, f64),
     /// A file the app wrote that the page's storage refused or lost: (project path, why).
     StoreFailed(String, String),
+    /// The page's word for the status line (a link's file it would not open, say).
+    Say(String),
     /// Words for the toolpath simulation (`app_camsim`).
     CamSim(String),
     /// A click on what the shell noted by this name (`app_click`): the tests' hand. The button
@@ -512,13 +514,7 @@ impl Host {
                         self.gui.shell.status = e;
                     }
                 }
-                Ask::Rebuild => {
-                    if let Some(s) = &mut self.gui.fg {
-                        s.rebuild();
-                    }
-                    // a machining document reads its parts: run again with what arrived
-                    self.gui.camsim_reload();
-                }
+                Ask::Rebuild => self.gui.rebuild_open(),
                 Ask::Apply(op) => {
                     if let Err(e) = self.gui.fg_apply(op) {
                         self.gui.shell.status = e;
@@ -526,6 +522,7 @@ impl Host {
                 }
                 Ask::Pixels(f) => self.pixels(f),
                 Ask::StoreFailed(path, why) => self.gui.store_failed(&path, &why),
+                Ask::Say(text) => self.gui.shell.status = text,
                 Ask::CamSim(c) => {
                     if let Err(e) = self.gui.camsim_command(&c) {
                         self.gui.shell.status = e;
@@ -956,6 +953,20 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
             let (k, v) = rest.split_once(' ').unwrap_or((rest, ""));
             w.op_dlg.as_mut().ok_or("no op dialog")?.set(k, v.into());
         }
+        // the tool library: narrowed, a tool shown, a new one derived from it or made
+        "tools-find" => w.tools_find.text = rest.into(),
+        "tools-kind" => {
+            w.tools_find.kind = crate::shell::cam::toollib::KIND_CHIPS.iter().position(|c| c.0.eq_ignore_ascii_case(rest))
+        }
+        "tools-pick" => {
+            w.tools_form = None;
+            w.tools_sel = Some(rest.into());
+        }
+        "tools-derive" => {
+            let x = w.tools_sel.as_ref().and_then(|id| w.lib.tools.iter().find(|x| &x.id == id)).ok_or("no tool shown")?;
+            w.tools_form = Some(crate::shell::cam::toollib::ToolForm::derived(&w.lib, x));
+        }
+        "tools-new" => w.tools_form = Some(crate::shell::cam::toollib::ToolForm::blank(&w.lib, forge_tooling::Kind::Flat)),
         "earlier" => w.command(Cmd::Move(rest.into(), true)),
         "suppress" => w.command(Cmd::Suppress(rest.into())),
         "ok" => {
@@ -1269,6 +1280,13 @@ pub fn app_store_failed(path: String, why: String) {
 #[wasm_bindgen]
 pub fn app_sketches_kept() -> usize {
     forge_keep::kept()
+}
+
+/// Says `text` in the app's status line: what the page refused (a link's file outside the
+/// project, a name to save as that isn't a project path).
+#[wasm_bindgen]
+pub fn app_say(text: String) {
+    ask(Ask::Say(text));
 }
 
 /// The app's next frame as `{width, height, rgba}`, through a callback (see `Host::pixels`).

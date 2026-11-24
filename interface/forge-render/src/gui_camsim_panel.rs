@@ -89,9 +89,15 @@ pub struct CamSimUi {
     pub hosted: bool,
     /// Docked last frame: the panel is in the environment's properties column, not over the view.
     pub docked: bool,
+    /// The drawn tool's turn about its axis, radians (advanced while playing).
+    pub spin: f64,
     /// Each op's cycle time on the machine (the workspace's run, forge-cam-quality: the lower
     /// bound and the estimate), by name; set by the host as it draws the panel.
     pub cycles: Vec<(String, (f64, f64))>,
+    /// The workspace's word on each op (name, the verdict's words, its colour) and its notes
+    /// (what is left over, the run's warnings), for the Checks tab; set by the host.
+    pub op_checks: Vec<(String, String, egui::Color32)>,
+    pub check_notes: Vec<String>,
     /// The op the workspace selected (its path drawn in the selection's blue).
     pub selected_op: Option<usize>,
     /// Every problem of the document listed, not the first few.
@@ -134,9 +140,12 @@ impl CamSimUi {
             folded: false,
             all_errors: false,
             selected_op: None,
+            spin: 0.0,
             hosted: false,
             docked: false,
             cycles: vec![],
+            op_checks: vec![],
+            check_notes: vec![],
             drawn_key: None,
             stock_mesh: vec![],
             stop_at_markers: true,
@@ -197,6 +206,16 @@ impl CamSimUi {
         if !self.playing {
             return false;
         }
+        // the flutes turn with the spindle of the op playing (slowed to read as turning)
+        let rpm = self
+            .sim
+            .tl
+            .op_at(self.t)
+            .and_then(|o| self.sim.cam.ops.get(o))
+            .and_then(|o| o.feeds.as_ref())
+            .map_or(0.0, |f| f.rpm);
+        let turns = crate::camsim::tools::turns_per_s(rpm, self.speed, true);
+        self.spin = (self.spin + std::f64::consts::TAU * turns * dt).rem_euclid(std::f64::consts::TAU);
         let was = self.t;
         let to = (self.t + dt * self.speed).min(self.total());
         // a marker passed: stop on it
@@ -361,11 +380,19 @@ impl Shell {
         let t = self.theme;
         st.hosted = true;
         st.folded = false;
+        if let Some(w) = self.cam.as_ref() {
+            (st.op_checks, st.check_notes) = crate::shell::cam::check_lines(w, &t);
+        }
         st.cycles = self
             .cam
             .as_ref()
             .and_then(|w| w.run.as_ref())
-            .map(|r| r.ops.iter().filter_map(|o| Some((o.name.clone(), r.cycle([o.name.as_str()])?))).collect())
+            .map(|r| {
+                r.ops
+                    .iter()
+                    .filter_map(|o| Some((o.name.clone(), r.cycle([o.name.as_str()])?)))
+                    .collect()
+            })
             .unwrap_or_default();
         ui.scope_builder(egui::UiBuilder::new().max_rect(r), |ui| {
             ui.set_width(r.width());
@@ -503,6 +530,28 @@ impl Shell {
             }
             if let Some(tm) = jump {
                 st.jump(tm);
+            }
+            // what the tool's drawing leaves out, said beside its top (the holder's interface)
+            if st.tool
+                && let Some((tool, p, _)) = st.tool_now()
+                && let Some((at, note)) = st.sim.looks.get(tool).and_then(|l| l.note.as_ref())
+                && let Some(a) = st
+                    .sim
+                    .cam
+                    .sim_tools()
+                    .get(tool)
+                    // on the tool where it shows: the top of its cutting length, its left side
+                    .and_then(|tu| to_px([p[0] - 0.5 * tu.tool.dc, p[1], p[2] + tu.tool.lcf.min(at[1])]))
+                && v.contains(a)
+            {
+                // leftwards from it, so it never runs under the panel; kept inside the view
+                let at = pos2((a.x - 14.0).max(v.left() + 8.0), (a.y - 10.0).max(v.top() + 64.0));
+                painter.line_segment([a, at], Stroke::new(1.0, t.ink2));
+                let galley = painter.layout_no_wrap(note.clone(), FontId::proportional(11.0), t.ink);
+                let r = Align2::RIGHT_BOTTOM.anchor_size(at, galley.size());
+                let r = r.translate(vec2((v.left() + 8.0 - r.left()).max(0.0), 0.0));
+                painter.rect_filled(r.expand(3.0), 3.0, t.surface.gamma_multiply(0.9));
+                painter.galley(r.min, galley, t.ink);
             }
         }
         if st.playing {
@@ -786,9 +835,18 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
             format!("Not certified: {refused} op{} refused", plural(refused)),
         )
     } else {
-        (t.success, format!("Certified ({})", cam.certification()))
+        (t.success, String::new())
     };
-    ui.colored_label(c, s);
+    if s.is_empty() {
+        // certified: the workspace's words (a rule left unchecked named, its meaning on hover)
+        let (words, hover) = crate::shell::cam::certified_words(cam.certification());
+        let r = ui.colored_label(if hover.is_some() { t.ink2 } else { c }, words);
+        if let Some(h) = hover {
+            r.on_hover_text(h);
+        }
+    } else {
+        ui.colored_label(c, s);
+    }
     // the posted code on the machine: its own result, beside the toolpath's certificate
     if let Some(mv) = st.sim.machine() {
         let n = mv.markers.len();
@@ -817,6 +875,7 @@ fn verdict(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     };
     for e in &cam.errors[..shown] {
         let (at, what) = problem(e);
+        let what = crate::camsim::tidy(&what);
         ui.horizontal(|ui| {
             if let Some(at) = at {
                 ui.label(egui::RichText::new(at).size(11.0).color(t.ink2));
@@ -1060,9 +1119,14 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                                     format!("\u{2265} {} \u{b7} est. {}", mmss(lo), mmss(est)),
                                     crate::shell::cam::CYCLE_TIP.to_string(),
                                 ),
+                                // not timed on the machine (its setup's program was not
+                                // posted): one format in the column, the feed time on hover
                                 None => (
-                                    duration(op.t1 - op.t0),
-                                    "Feed time: feeds and rapids at their programmed rates (not a cycle time)".into(),
+                                    "\u{2014}".to_string(),
+                                    format!(
+                                        "Not timed on the machine: this setup's program was not posted (an op is refused). Feed time {}: feeds at their programmed rates, rapids at the machine's",
+                                        duration(op.t1 - op.t0)
+                                    ),
                                 ),
                             };
                             let g = ui.painter().layout_no_wrap(words.clone(), FontId::proportional(12.0), t.ink2);
@@ -1078,9 +1142,18 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
                         });
                     });
                     if let Some(r) = &out.refusal {
+                        // in words: the first failed check's sentence, else the refusal tidied;
+                        // the run's own text on hover
+                        let said = out
+                            .checks
+                            .iter()
+                            .find(|c| c.verdict != "pass")
+                            .map(crate::camsim::check_sentence)
+                            .unwrap_or_else(|| crate::camsim::tidy(r));
                         ui.horizontal_wrapped(|ui| {
                             ui.add_space(32.0);
-                            ui.label(egui::RichText::new(r).size(11.0).color(t.error));
+                            ui.add(egui::Label::new(egui::RichText::new(said).size(11.0).color(t.error)).wrap())
+                                .on_hover_text(r);
                         });
                     }
                 }
@@ -1224,6 +1297,23 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
         .size(11.0)
         .color(t.ink2),
     );
+    // each op's verdict (the workspace's: certified, refused, not posted), then the notes
+    if !st.op_checks.is_empty() {
+        heading(ui, t, "Ops");
+        for (name, words, c) in &st.op_checks {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(name).size(12.0).color(t.ink));
+                // right-aligned, as wide as the Program tab's time column (78 px at least)
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.set_min_width(78.0);
+                    ui.label(egui::RichText::new(words).size(12.0).color(*c));
+                });
+            });
+        }
+    }
+    for n in &st.check_notes {
+        ui.label(egui::RichText::new(n).size(11.0).color(t.warn));
+    }
     heading(ui, t, &format!("Issues ({})", st.sim.markers.len()));
     let mut jump = None;
     egui::ScrollArea::vertical()

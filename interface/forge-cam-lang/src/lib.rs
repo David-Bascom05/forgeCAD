@@ -55,11 +55,28 @@ pub static FULL_STOCK: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 pub static CYCLE_PARAMS: std::sync::Mutex<(f64, f64)> =
     std::sync::Mutex::new((forge_post::PECK_CLEAR, forge_post::CHIP_LIFT));
 
-/// Whether a source is a machining document.
+/// A surfacing op's path and z-level's voids, or its refusal.
+type Surfaced = Result<(OpPath, Vec<(Region, f64)>), String>;
+static SURFACED: memo::Memo<Surfaced> = memo::Memo::new();
+
 /// The certifications made by earlier runs of documents in this process (memo.rs).
 static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
 
-/// `ops::certify_fixtured`, taken from an earlier run when every argument is the same (each
+/// Parts' sections at a height (`PartIn::section`).
+static SECTIONS: memo::Memo<Result<Region, forge_cam::section::SectionError>> = memo::Memo::new();
+
+/// Programs' round trips (G6): the text and the motion read back, or why not.
+type RoundTrip = Result<(String, Vec<forge_post::Motion>), String>;
+static ROUND_TRIPS: memo::Memo<RoundTrip> = memo::Memo::new();
+
+/// 2D ops' engagement samples, per path (`feeds_from_engagement`).
+static SCHEDULED: memo::Memo<Vec<Vec<forge_cam::engage::Sample>>> = memo::Memo::new();
+
+/// A 3-axis finishing op's paths (or refusal), the lines it adds to the plan, and its finish record.
+type Finished = (Result<Vec<OpPath>, String>, Vec<String>, Option<Finish>);
+static FINISHED: memo::Memo<Finished> = memo::Memo::new();
+
+/// `ops::certify_with`, taken from an earlier run when every argument is the same (each
 /// number the same number): it is a function of these arguments alone (no clock, file or other
 /// state; the kernel's own memos are by content), so the summary is the one it would make. An
 /// edit to one op re-certifies only the ops whose posted path, tool, target faces, stock
@@ -68,23 +85,29 @@ static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
 fn certify_memo(
     p: &OpPath,
     tool: &ops::ToolUse,
-    part: &[Face],
-    stages: &[(usize, Vec<Face>)],
-    fixture: &[Face],
+    (part, part_key): (&[Face], &str),
+    (stages, stages_key): (&[(usize, Vec<Face>)], &str),
+    (fixture, fixture_key): (&[Face], &str),
     fclear: f64,
     tol: f64,
     clearance: f64,
     column: bool,
 ) -> ops::CheckSummary {
+    // the faces by what they are made from (each `*_key` names its faces exactly: see the
+    // caller), the rest by their full text
+    // each stand-in Debug-printed as a string (quoted and escaped): the components cannot run
+    // into each other, so distinct inputs give distinct keys by construction
     let key = format!(
-        "certify_with/1 {:?}",
-        (p, tool, part, stages, fixture, fclear, tol, clearance, column)
+        "certify_with/3 {:?} {:?}",
+        (p, tool, fclear, tol, clearance, column),
+        (part_key, stages_key, fixture_key)
     );
     CERTIFIED.get_or(key, || {
         ops::certify_with(p, tool, part, stages, fixture, fclear, tol, clearance, column)
     })
 }
 
+/// Whether a source is a machining document.
 pub fn is_machining(src: &str) -> bool {
     match syntax::parse(src) {
         Ok(p) => {
@@ -162,6 +185,9 @@ struct PartIn {
     turn_of: Option<usize>,
     file: String,
     faces: Vec<Face>,
+    /// `faces`' full text, made once (the certification memo's key for them): `faces` is not
+    /// changed after the part is read.
+    faces_text: std::sync::OnceLock<String>,
     holes: Vec<holes::HoleInfo>,
     bbox: ([f64; 3], [f64; 3]),
     /// ISO 513 group: `group:`, else the stock material's record, else its family; "" when
@@ -172,6 +198,8 @@ struct PartIn {
     /// The stock material's family (forge-material: aluminium, copper, steel, ...), for the
     /// generic class of a tool with no maker data.
     family: Option<String>,
+    /// The stock's hardness band from its record's cited hardness (feeds::hardness_band_of_hb).
+    hardness: Option<&'static str>,
     /// Where the material and group came from, for the reply and the fixes.
     material_note: String,
     /// The material's machining data (its record's machining.* keys), read once.
@@ -234,7 +262,11 @@ pub struct OpOut {
     pub pairs: usize,
     pub cells: usize,
     pub status: &'static str,
+    /// Why it was refused, for a person (units, a subject, where).
     pub refusal: Option<String>,
+    /// The refusal's typed code, for a program: a check's rule (`gouge`, `holder_collision`,
+    /// `rapid_clear`, ..) or a refusal's own (`NeedTool`, `WrongPitch`, `NotPrism`, ..).
+    pub code: Option<String>,
     pub fix: Option<String>,
     pub moves: usize,
     pub length_cut: f64,
@@ -284,7 +316,11 @@ pub struct ProgramOut {
     pub post: String,
     pub text: Option<String>,
     pub lines: usize,
+    /// Why it is not released, for a person.
     pub error: Option<String>,
+    /// The error's typed code, for a program (`UnknownPost`, `OutOfRange`, `NotReleased`,
+    /// `OutOfOrder`, ..).
+    pub code: Option<String>,
     pub round_trip: bool,
 }
 
@@ -1286,6 +1322,9 @@ pub struct Cam {
     pub leftover_done: bool,
     pub ok: bool,
     pub errors: Vec<String>,
+    /// The typed codes of `errors` that have one, by index (`NotPrism`, `BadTool`, ..): the text
+    /// carries none.
+    pub error_codes: Vec<(usize, String)>,
     pub warnings: Vec<String>,
     parts: Vec<PartIn>,
     tools: Vec<ToolUse>,
@@ -1294,11 +1333,23 @@ pub struct Cam {
     setups: Vec<SetupIn>,
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
-    lib: Library,
+    lib: std::sync::Arc<Library>,
     jaws: Vec<forge_cam::fixture::SoftJaws>,
 }
 
 impl PartIn {
+    /// `faces`' full text, made at the first call.
+    fn faces_key(&self) -> &str {
+        self.faces_text.get_or_init(|| format!("part {:?}", self.faces))
+    }
+
+    /// The section of the part at height z (forge_cam::section), from an earlier call with the
+    /// same faces, z and mu (memo.rs): a function of these alone.
+    fn section(&self, z: f64, mu: f64) -> Result<Region, forge_cam::section::SectionError> {
+        let key = format!("section/1 {:?}", (self.faces_key(), z, mu));
+        SECTIONS.get_or(key, || forge_cam::section::section(&self.faces, z, mu))
+    }
+
     /// Its lowest plus its highest z: turning over about x maps z to h − z.
     fn h(&self) -> f64 {
         self.bbox.0[2] + self.bbox.1[2]
@@ -1422,9 +1473,9 @@ impl Cam {
         let mut secs = vec![];
         for w in zs.windows(2) {
             let zm = 0.5 * (w[0] + w[1]);
-            let sec = forge_cam::section::section(&p.faces, zm, 1e-5).map_err(|e| {
-                format!("stock: the part's section at z = {zm}: {e:?} (a shaped stock needs a 2.5D part)")
-            })?;
+            let sec = p
+                .section(zm, 1e-5)
+                .map_err(|e| e.refusal(&format!("A shaped stock needs a 2.5D part: at z = {} mm", mm(zm))))?;
             secs.push((zm, sec));
         }
         let (st, outline) = match spec {
@@ -1496,7 +1547,7 @@ impl Cam {
                 }
                 let body = run.body.ok_or("the stock has no body")?;
                 let faces = forge_cam::lower::lower(&body)
-                    .map_err(|e| format!("the stock `{file}` is outside this phase's CAM domain: {e:?}"))?;
+                    .map_err(|e| e.refusal(&format!("The stock `{file}` cannot be used")))?;
                 let mut lo = [f64::INFINITY; 3];
                 let mut hi = [f64::NEG_INFINITY; 3];
                 for fc in &faces {
@@ -1526,7 +1577,7 @@ impl Cam {
                 }
                 let zm = 0.5 * (lo[2] + hi[2]);
                 let outline = forge_cam::section::section(&faces, zm, 1e-5)
-                    .map_err(|e| format!("the stock `{file}`'s section: {e:?}"))?;
+                    .map_err(|e| e.refusal(&format!("The stock `{file}` cannot be used: its section")))?;
                 (Stock { min: lo, max: hi }, outline)
             }
             _ => unreachable!("shaped_stock takes a round or modelled stock"),
@@ -1604,6 +1655,7 @@ impl Cam {
             turn_of: Some(i),
             file: p.file.clone(),
             faces,
+            faces_text: std::sync::OnceLock::new(),
             // the holes in the turned frame, (x, y, z) -> (x, -y, h - z), their direction
             // turned too: one drilled from below is now drilled from above, and one from
             // above is refused here as before (a hole is drilled from the side it opens on)
@@ -1621,6 +1673,7 @@ impl Cam {
             group: p.group.clone(),
             material: p.material.clone(),
             family: p.family.clone(),
+            hardness: p.hardness,
             material_note: p.material_note.clone(),
             stock: p.stock.clone(),
         };
@@ -1725,7 +1778,7 @@ impl Cam {
                         let below = match named.get("below") {
                             None => 0.0,
                             Some(V::Num(b)) if *b >= 0.0 => *b,
-                            Some(_) => return Err("box: below: a length ≥ 0".into()),
+                            Some(_) => return Err("`below` must be a length ≥ 0 mm".into()),
                         };
                         return Ok(V::Stock(StockSpec::Margin(m, below)));
                     }
@@ -1743,32 +1796,32 @@ impl Cam {
                         match a.get(k) {
                             None => Ok(None),
                             Some(V::Num(x)) if *x > 0.0 && x.is_finite() => Ok(Some(*x)),
-                            Some(_) => Err(format!("{fname}: {k}: a length over 0")),
+                            Some(_) => Err(format!("`{k}` must be a length over 0 mm")),
                         }
                     };
                     let (radial, above) = match a.get("margin") {
                         None => (0.0, 0.0),
                         Some(V::Tuple(t)) if t.len() == 2 => match (num(&t[0]), num(&t[1])) {
                             (Some(r), Some(z)) if r >= 0.0 && z >= 0.0 => (r, z),
-                            _ => return Err(format!("{fname}: margin: (radial, above), lengths ≥ 0")),
+                            _ => return Err("`margin` must be (radial, above), lengths ≥ 0 mm".to_string()),
                         },
-                        Some(_) => return Err(format!("{fname}: margin: (radial, above), lengths ≥ 0")),
+                        Some(_) => return Err("`margin` must be (radial, above), lengths ≥ 0 mm".to_string()),
                     };
                     let below = match a.get("below") {
                         None => 0.0,
                         Some(V::Num(b)) if *b >= 0.0 => *b,
-                        Some(_) => return Err(format!("{fname}: below: a length ≥ 0")),
+                        Some(_) => return Err("`below` must be a length ≥ 0 mm".to_string()),
                     };
                     let d = len("d")?;
                     let id = len("id")?;
                     if d.is_some() && a.contains_key("margin") && radial > 0.0 {
-                        return Err(format!("{fname}: d: or a radial margin, not both"));
+                        return Err("give `d` or a radial `margin`, not both".to_string());
                     }
                     if fname == "tube" && id.is_none() {
-                        return Err("tube: id: the bore's diameter".into());
+                        return Err("`id` must be the bore's diameter in mm".into());
                     }
                     if fname == "cylinder" && id.is_some() {
-                        return Err("cylinder: no id: (a bored bar is a tube)".into());
+                        return Err("a cylinder takes no `id` (a bored bar is a tube)".into());
                     }
                     return Ok(V::Stock(StockSpec::Round {
                         d,
@@ -1889,7 +1942,7 @@ fn get_num(m: &BTreeMap<String, V>, k: &str, default: Option<f64>) -> Result<f64
     match m.get(k) {
         Some(V::Num(x)) => Ok(*x),
         Some(_) => Err(format!("`{k}` must be a number")),
-        None => default.ok_or_else(|| format!("missing `{k}:`")),
+        None => default.ok_or_else(|| format!("`{k}:` is missing")),
     }
 }
 /// An op's resolved feeds and speeds for the report and the UI's Feeds & Speeds tab: each value
@@ -2158,13 +2211,22 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
         Some(_) => Err(format!("`{k}` must be a string")),
         None => default
             .map(str::to_string)
-            .ok_or_else(|| format!("missing `{k}:`")),
+            .ok_or_else(|| format!("`{k}:` is missing")),
     }
 }
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
-    run_with_library(src, dir, Library::builtin())
+    // the built-in library, shared: read once (Library::builtin), and copied only if the
+    // document's project files add to it (run_with_library)
+    static BUILTIN: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
+    run_shared(
+        src,
+        dir,
+        BUILTIN
+            .get_or_init(|| std::sync::Arc::new(Library::builtin()))
+            .clone(),
+    )
 }
 
 /// Runs a machining document on a given tooling library: the one the user's levels make
@@ -2172,11 +2234,17 @@ pub fn run(src: &str, dir: &Path) -> Cam {
 /// over the built-in), so tools, holders and inserts made in the builder reach CAM. The
 /// document's `cam/*.toml` beside it are added on top, as with `run`.
 pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
+    run_shared(src, dir, std::sync::Arc::new(lib))
+}
+
+/// `run_with_library` on a shared library (copied where the project's files add to it).
+fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
     let mut cam = Cam {
         leftover: vec![],
         leftover_done: false,
         ok: true,
         errors: vec![],
+        error_codes: vec![],
         warnings: vec![],
         parts: vec![],
         tools: vec![],
@@ -2213,7 +2281,7 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
             files.sort();
             for f in files {
                 if let Ok(s) = forge_dirs::fs::read_to_string(&f)
-                    && let Err(e) = cam.lib.add(&f.display().to_string(), &s)
+                    && let Err(e) = std::sync::Arc::make_mut(&mut cam.lib).add(&f.display().to_string(), &s)
                 {
                     cam.errors.push(e.to_string());
                     cam.ok = false;
@@ -2281,8 +2349,25 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
         })();
         if let Err(e) = r {
             cam.ok = false;
-            cam.errors
-                .push(format!("line {}: {e}", line_of(src, st.span.lo as usize)));
+            // the statement by its name and its built-in: `bolts` (drill)
+            let who = match &st.kind {
+                StmtKind::Assign { name, value } => match &value.kind {
+                    ExprKind::Call(f, _) => match &f.kind {
+                        ExprKind::Name(fname) => format!(", `{name}` ({fname})"),
+                        _ => format!(", `{name}`"),
+                    },
+                    _ => format!(", `{name}`"),
+                },
+                _ => String::new(),
+            };
+            let (code, words) = split_code(&e);
+            if let Some(c) = code {
+                cam.error_codes.push((cam.errors.len(), c));
+            }
+            cam.errors.push(format!(
+                "line {}{who}: {words}",
+                line_of(src, st.span.lo as usize)
+            ));
         }
     }
     // each op was certified on the stock every earlier op of its setup, and every op of the
@@ -2315,9 +2400,10 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
         if let Some((oi, j)) = missing {
             let p = &mut cam.programs[pi];
             let e = format!(
-                "program `{}` posts `{}`, certified on the stock `{}` leaves, which no program posts before it; fix: post `{}` first (an earlier program, or in this one's `ops:`)",
-                p.name, cam.ops[oi].name, cam.ops[j].name, cam.ops[j].name
+                "Program `{}` posts op `{}`, which was certified on the stock op `{}` leaves, but no program posts `{}` before it. Post `{}` first (in an earlier program, or earlier in this one's `ops:`).",
+                p.name, cam.ops[oi].name, cam.ops[j].name, cam.ops[j].name, cam.ops[j].name
             );
+            p.code = Some("OutOfOrder".into());
             p.error = Some(e.clone());
             p.text = None;
             p.lines = 0;
@@ -2451,7 +2537,7 @@ impl Cam {
                 let mut found = None;
                 let mut failed = false;
                 for (zp, g) in tries {
-                    match forge_cam::section::section(&part.faces, zp, 1e-5) {
+                    match part.section(zp, 1e-5) {
                         Ok(sec) => {
                             if std::env::var("FORGE_CAM_DEBUG").is_ok() {
                                 eprintln!("G4 band {w:?}: section at {zp}, grown {g}");
@@ -2640,7 +2726,7 @@ impl Cam {
                     Ok(f) => f,
                     Err(e) => forge_cam::lower3d::lower_surfacing(&body)
                         .map(|x| x.0)
-                        .map_err(|_| format!("the part is outside this phase's CAM domain: {e:?}"))?,
+                        .map_err(|_| e.refusal("The part cannot be machined yet"))?,
                 };
                 let mut lo = [f64::INFINITY; 3];
                 let mut hi = [f64::NEG_INFINITY; 3];
@@ -2657,11 +2743,13 @@ impl Cam {
                     turn_of: None,
                     file,
                     faces,
+                    faces_text: std::sync::OnceLock::new(),
                     holes,
                     bbox: (lo, hi),
                     stock: material.as_deref().map(|m| stock_of(m, &group, dir)),
                     group,
                     family: material.as_deref().and_then(|m| Self::stock_family(m, dir)),
+                    hardness: material.as_deref().and_then(|m| Self::stock_hardness(m, dir)),
                     material,
                     material_note,
                 });
@@ -2683,7 +2771,7 @@ impl Cam {
                 };
                 let shape = t
                     .shape(stickout, holder.as_ref())
-                    .map_err(|e| format!("tool `{id}`: {e:?}"))?;
+                    .map_err(|e| tool_words(&id, &t, stickout, &e))?;
                 self.tools.push(ToolUse {
                     t: tn,
                     tool: t,
@@ -2909,7 +2997,7 @@ impl Cam {
                     match a.get(k) {
                         None => Ok(None),
                         Some(V::Num(x)) if x.fract() == 0.0 && *x >= 0.0 && *x <= most => Ok(Some(*x as u32)),
-                        Some(_) => Err(format!("{k}: a whole number from 0 to {most}")),
+                        Some(_) => Err(format!("`{k}` must be a whole number from 0 to {most}")),
                     }
                 };
                 let coolant = match a.get("coolant") {
@@ -3064,7 +3152,7 @@ impl Cam {
         if relief {
             for w in zs.windows(2) {
                 let zm = 0.5 * (w[0] + w[1]);
-                if let Ok(sec) = forge_cam::section::section(&part.faces, zm, 1e-5) {
+                if let Ok(sec) = part.section(zm, 1e-5) {
                     relief_at.extend(forge_cam::fixture::corners(&sec));
                 }
             }
@@ -3171,12 +3259,16 @@ impl Cam {
             turn_of: None,
             file: format!("{name} (soft jaws, {})", bl.name),
             faces: sj.part.clone(),
+            faces_text: std::sync::OnceLock::new(),
             holes: vec![],
             bbox: (b.min, b.max),
             stock: jaw_material
                 .as_deref()
                 .map(|m| stock_of(m, &jaw_group, Path::new("."))),
             group: jaw_group,
+            hardness: jaw_material
+                .as_deref()
+                .and_then(|m| Self::stock_hardness(m, Path::new("."))),
             family: jaw_material
                 .as_deref()
                 .and_then(|m| Self::stock_family(m, Path::new("."))),
@@ -3381,7 +3473,7 @@ impl Cam {
         let depth = get_num(a, "depth", None)?;
         // a NaN depth is refused too
         if depth.is_nan() || depth <= 0.0 {
-            return Err(format!("{what}: depth > 0"));
+            return Err("`depth` must be over 0 mm".to_string());
         }
         // `axial_offset:` raises (> 0) or lowers the tip from the depth
         let bottom = o[2] - depth + get_num(a, "axial_offset", Some(0.0))?;
@@ -3534,21 +3626,28 @@ impl Cam {
             return Err(not_down(&hn, hole.dir));
         }
         if t.tool.kind != Kind::ThreadMill {
-            return Err(format!("thread_mill: `{}` is not a thread mill", t.tool.id));
+            return Err(format!(
+                "NotThreadMill: Tool `{}` is not a thread mill.",
+                t.tool.id
+            ));
         }
         if (t.tool.tp - pitch).abs() > 1e-9 {
             out.fix = Some(format!("a thread mill of pitch {pitch}"));
             return Err(format!(
-                "thread_mill: the tool's pitch {} is not the thread's {pitch}",
-                t.tool.tp
+                "WrongPitch: Thread mill `{}` cuts a {} mm pitch; the thread needs {} mm.",
+                t.tool.id,
+                mm(t.tool.tp),
+                mm(pitch)
             ));
         }
         let (rb, rm, rt) = (0.5 * hole.d, 0.5 * major, 0.5 * t.tool.dc);
         if rt >= rb {
             out.fix = Some(format!("a thread mill under {:.3} mm across", hole.d));
             return Err(format!(
-                "thread_mill: the tool ({} mm) does not go down the bore ({} mm)",
-                t.tool.dc, hole.d
+                "ToolTooBig: Thread mill `{}` is {} mm across; it does not fit down the {} mm bore.",
+                t.tool.id,
+                mm(t.tool.dc),
+                mm(hole.d)
             ));
         }
         let rc = rm - rt;
@@ -3559,7 +3658,9 @@ impl Cam {
         let len = get_num(a, "length", Some(depth - 2.0 * pitch))?;
         if !(len > 0.0 && len <= depth) {
             return Err(format!(
-                "thread_mill: length {len} must be over 0 and at most the hole's depth {depth}"
+                "BadLength: The thread length must be over 0 mm and at most the hole's depth, {} mm (it is {} mm).",
+                mm(depth),
+                mm(len)
             ));
         }
         // the target: P ∖ Δ's boundary (a superset's), for every place
@@ -3832,7 +3933,7 @@ impl Cam {
         {
             out.fix = Some("a chamfer mill or spot drill of 30° to 150° (chamfer-10-90)".into());
             return Err(format!(
-                "edge_break: `{}` is not a chamfer mill or spot drill of 30° to 150°",
+                "NotChamferMill: Tool `{}` is not a chamfer mill or spot drill of 30° to 150°; an edge break needs one.",
                 t.tool.id
             ));
         }
@@ -3861,7 +3962,7 @@ impl Cam {
         }
         let c = r0 + tip_off * tan_b;
         if s.is_nan() || s <= 0.0 {
-            return Err("edge_break: size must be over 0".into());
+            return Err("`size` must be over 0 mm".into());
         }
         let s_v = s / tan_b;
         if c + s >= rt {
@@ -4188,7 +4289,7 @@ impl Cam {
             true,
         )
         .map(|p| vec![p])
-        .map_err(|e| format!("{e:?}"))
+        .map_err(|e| e.refusal(""))
     }
 
     /// The milling ops' feeds set from the engagement each FIXED-LENGTH sample meets
@@ -4205,7 +4306,7 @@ impl Cam {
         out: &OpOut,
         paths: Vec<OpPath>,
     ) -> Vec<OpPath> {
-        use forge_cam::engage::{HeightMap, Profile, Sched, schedule_samples};
+        use forge_cam::engage::{HeightMap, Profile, Sched, sample_feeds, schedule_samples};
         if !matches!(
             kind,
             "facing" | "pocket" | "clear" | "adaptive" | "contour" | "slot"
@@ -4256,7 +4357,18 @@ impl Cam {
             // samples of one diameter, fixed by length
             sample: t.tool.dc,
         };
-        let mut map = HeightMap::of_stock(&s.ip, cell);
+        // the samples, from an earlier run when every input is the same (memo.rs): they are a
+        // function of the paths, the in-process stock they start from, the tool's profile and
+        // the schedule's numbers (the cell and sample length among them) alone; the feeds are
+        // set from them below as before
+        let key = format!("engagement/3 {:?}", ((&paths, &s.ip), (prof, sc)));
+        let all = SCHEDULED.get_or(key, || {
+            let mut map = HeightMap::of_stock(&s.ip, cell);
+            paths
+                .iter()
+                .map(|p| schedule_samples(p, &mut map, &prof, &sc))
+                .collect()
+        });
         // the cutting force at the actual speed: the stock's rows, else the group's
         let part = &self.parts[s.part];
         let kg = self.lib.group(&part.group).map(|g| match part.stock.as_ref() {
@@ -4301,8 +4413,8 @@ impl Cam {
         let mut short = 0usize;
         let out_paths: Vec<OpPath> = paths
             .iter()
-            .map(|p| {
-                let samples = schedule_samples(p, &mut map, &prof, &sc);
+            .zip(&all)
+            .map(|(p, samples)| {
                 let n = samples.len();
                 // the chip held per sample: a rough class's factor only where the sample's width is
                 // under D/2 (a full-width sample keeps the slot chip)
@@ -4310,35 +4422,40 @@ impl Cam {
                     Some((n, f)) if n == "rough" && r.slot_chip.is_finite() => Some((r.slot_chip, *f)),
                     _ => None,
                 };
-                let target = |e: &Option<forge_cam::engage::Engage>| match (rough, e) {
-                    // engaged under 90° (ae < D/2 on a straight cut): the peak chip is thinned
-                    (Some((slot, f)), Some(g)) if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 => {
-                        slot * f
-                    }
-                    (Some((slot, _)), Some(_)) => slot,
-                    _ => sc.fz,
-                };
-                let want = |e: &Option<forge_cam::engage::Engage>| -> (f64, bool) {
-                    let fz0 = target(e);
-                    match e {
-                        Some(g) if g.cos_max * sc.cap > 1.0 => (fz0 / g.cos_max, false),
-                        _ => (sc.cap * fz0, true),
+                // the chip rule has one home, forge_cam::engage::sample_feeds (fz / max cos θ per
+                // sample, at most cap fz, no faster than the next sample, within [f_min, f_max]):
+                // at the op's chip, and for a rough op at its class chip, taken where the sample is
+                // engaged under 90° (ae < D/2 on a straight cut: the peak chip is thinned)
+                let base = sample_feeds(samples, &sc);
+                let rough_feed = rough.map(|(slot, f)| {
+                    (
+                        sample_feeds(samples, &Sched { fz: slot * f, ..sc }),
+                        sample_feeds(samples, &Sched { fz: slot, ..sc }),
+                    )
+                });
+                let chosen = |k: usize| -> f64 {
+                    match (&rough_feed, samples[k].engage) {
+                        (Some((rf, _)), Some(g))
+                            if g.phi < std::f64::consts::FRAC_PI_2 && g.cos_max < 1.0 =>
+                        {
+                            rf[k]
+                        }
+                        (Some((_, sf)), _) => sf[k],
+                        (None, _) => base[k],
                     }
                 };
                 let mut feed: Vec<(f64, bool)> = Vec::with_capacity(n);
-                for k in 0..n {
-                    let (mut fz, mut clamp) = want(&samples[k].engage);
-                    let mut capped = false;
-                    // no faster than the next sample (the engagement it runs into)
-                    if let Some(nx) = samples.get(k + 1) {
-                        let (f2, c2) = want(&nx.engage);
-                        if f2 < fz {
-                            fz = f2;
-                            clamp = c2;
-                        }
+                for (k, smp) in samples.iter().enumerate() {
+                    let mut f = chosen(k);
+                    // across a change of class target: still no faster than the next sample
+                    if k + 1 < n {
+                        f = f.min(chosen(k + 1));
                     }
-                    // power and torque: the feed lowered to the tightest cap, exactly
-                    if let (Some(g), Some(e)) = (kg.as_ref(), samples[k].engage) {
+                    let mut fz = f / (sc.flutes * sc.rpm).max(1e-9);
+                    let mut capped = false;
+                    // power, torque and deflection: the feed lowered (only lowered) to the
+                    // tightest cap, exactly (P ∝ fz^(1 − mc))
+                    if let (Some(g), Some(e)) = (kg.as_ref(), smp.engage) {
                         let cut = feeds::Cut {
                             d,
                             flutes: z,
@@ -4355,25 +4472,20 @@ impl Cam {
                                 let now = feeds::at_contact(g, &cut, fz, r.rpm.v, ct, dr).power;
                                 if now > *cap {
                                     fz *= forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
-                                    clamp = true;
                                     capped = true;
                                     lowered += 1;
                                 }
                             }
                         }
                     }
-                    let mut f = fz * sc.flutes * sc.rpm;
-                    if f >= sc.f_max {
-                        f = sc.f_max;
-                        clamp = true;
-                    } else if f <= sc.f_min {
-                        if capped {
+                    if capped {
+                        f = fz * sc.flutes * sc.rpm;
+                        if f <= sc.f_min {
                             short += 1;
+                            f = sc.f_min;
                         }
-                        f = sc.f_min;
-                        clamp = true;
                     }
-                    feed.push((f, clamp));
+                    feed.push((f, capped));
                 }
                 let mut moves = Vec::with_capacity(p.moves.len() + n);
                 let mut k = 0;
@@ -4393,6 +4505,23 @@ impl Cam {
                         PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
                         _ => 0.0,
                     };
+                    // adaptive's passes are long arcs and lines: each move whole, one F, the lowest
+                    // its samples call for (a move wholly in air keeps its own feed where higher)
+                    if kind == "adaptive" {
+                        let air = samples[start..k].iter().all(|sm| sm.engage.is_none());
+                        let lo = feed[start..k].iter().map(|x| x.0).fold(f64::INFINITY, f64::min);
+                        let f = if air && own > lo {
+                            own.min(sc.f_max.max(sc.f_min))
+                        } else {
+                            lo
+                        };
+                        moves.push(match *mv {
+                            PMove::Line { to, phase, .. } => PMove::Line { to, f, phase },
+                            PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f },
+                            other => other,
+                        });
+                        continue;
+                    }
                     // every fixed-length sample is its own move: no joins of any kind (the post
                     // does not repeat an F word equal to the one before)
                     for i in start..k {
@@ -4492,7 +4621,7 @@ impl Cam {
         })
         .ok_or_else(|| {
             format!(
-                "no drilling data for `{}` ({} drill) in group `{}` ({}): no preset on the drill, no [[drill]] row, no `vc:`/`rpm:` and `f:`/`feed:` given",
+                "NoDrillingData: No drilling data for drill `{}` ({}) in material group `{}` ({}): the drill has no preset, the library no [[drill]] row, and the op gives no `vc:`/`rpm:` and `f:`/`feed:`.",
                 t.tool.id,
                 sub.name(),
                 part.group,
@@ -4525,6 +4654,23 @@ impl Cam {
     /// found). The group is the material's `[[stock]]` record's, else its family's ISO 513
     /// class; None when the name is unknown or its family has no class.
     /// A forge-material record's family, by its name.
+    /// A forge-material record's hardness band: its `machining.hardness_hb`, else its
+    /// `machining.hardness_hrc` read as Brinell (feeds::hb_of_hrc), banded at the makers' class
+    /// edges (feeds::hardness_band_of_hb); None where the record cites no hardness.
+    fn stock_hardness(name: &str, dir: &Path) -> Option<&'static str> {
+        let libs = forge_material::Libraries::cached(Some(dir));
+        let (_, m) = libs.find(name)?;
+        let hb = match (
+            m.extra("machining.hardness_hb"),
+            m.extra("machining.hardness_hrc"),
+        ) {
+            (Some(forge_material::Value::Num(hb)), _) => *hb,
+            (_, Some(forge_material::Value::Num(hrc))) => feeds::hb_of_hrc(*hrc),
+            _ => return None,
+        };
+        feeds::hardness_band_of_hb(hb)
+    }
+
     fn stock_family(name: &str, dir: &Path) -> Option<String> {
         forge_material::Libraries::cached(Some(dir))
             .find(name)
@@ -4624,6 +4770,7 @@ impl Cam {
         let gu = if preset.is_none() {
             let tc = feeds::ToolClass {
                 family: self.parts[self.setups[su].part].family.as_deref(),
+                hardness: self.parts[self.setups[su].part].hardness,
                 tier: None,
                 flutes: Some(t.tool.nof.max(1)),
                 coated: feeds::ToolClass::coated(&t.tool.coating),
@@ -4655,9 +4802,31 @@ impl Cam {
             (None, Some(c)) => Some((c.name.as_str(), c.chip_factor, class_src)),
             _ => None,
         };
+        // hardness unknown where the group's classes split by hardness: the pooled class is
+        // the conservative default, and the note says what would sharpen it (coordinator's rule)
+        let pooled_note = gu
+            .filter(|_| self.parts[self.setups[su].part].hardness.is_none())
+            .and_then(|u| {
+                let banded = ["soft", "21-36HRC", "36-50HRC"].into_iter().any(|b| {
+                    let tc = feeds::ToolClass {
+                        family: self.parts[self.setups[su].part].family.as_deref(),
+                        hardness: Some(b),
+                        tier: None,
+                        flutes: Some(t.tool.nof.max(1)),
+                        coated: feeds::ToolClass::coated(&t.tool.coating),
+                        helix: None,
+                    };
+                    self.lib
+                        .generic(group_name, class, &tc)
+                        .is_some_and(|g| g.hardness == b && g.vc.p10 != u.op.vc.p10)
+                });
+                banded.then_some(
+                    "; hardness unknown: pooled over the hardness classes (conservative) — name the alloy and condition (e.g. material: \"1045 cold drawn\") for realistic speeds",
+                )
+            });
         let part = &self.parts[self.setups[su].part];
         let stock = part.stock.as_ref();
-        resolve::milling_on(
+        let mut r = resolve::milling_on(
             &asked,
             &resolve::ToolData {
                 d: t.tool.dc,
@@ -4679,7 +4848,11 @@ impl Cam {
                 power: &m.power,
             },
             nominal,
-        )
+        )?;
+        if let Some(n) = pooled_note {
+            r.vc.note.push_str(n);
+        }
+        Some(r)
     }
 
     /// A probing op: `probe_wcs` (a feature's position for a work offset) or `inspect` (one
@@ -4794,6 +4967,7 @@ impl Cam {
             cells: 0,
             status: "built",
             refusal: None,
+            code: None,
             fix: None,
             moves: 0,
             length_cut: 0.0,
@@ -4841,7 +5015,9 @@ impl Cam {
             }
             Err(e) => {
                 out.status = "refused";
-                out.refusal = Some(e);
+                let (code, words) = split_code(&e);
+                out.code = code;
+                out.refusal = Some(words);
             }
         }
         self.ops.push(out);
@@ -4899,6 +5075,7 @@ impl Cam {
             cells: 0,
             status: "built",
             refusal: None,
+            code: None,
             fix: None,
             moves: 0,
             length_cut: 0.0,
@@ -4923,14 +5100,14 @@ impl Cam {
             _ => {
                 let ti = match a.get("tool") {
                     Some(V::Tool(i)) => *i,
-                    _ => return Err(format!("{kind}: missing `tool:`")),
+                    _ => return Err("`tool:` is missing".to_string()),
                 };
                 out.tool = Some(ti);
                 // the stock left on floors (Fusion's axial stock to leave): each floor raised
                 // by it; `leave` stays the radial stock, on walls
                 let ax = get_num(a, "leave_axial", Some(0.0))?;
                 if !ax.is_finite() {
-                    return Err("leave_axial: a length".into());
+                    return Err("`leave_axial` must be a length in mm".into());
                 }
 
                 let d = self.tools[ti].tool.dc;
@@ -4972,7 +5149,7 @@ impl Cam {
                 let ramp = match a.get("ramp") {
                     None => None,
                     Some(V::Num(x)) if *x > 0.0 && *x <= 30.0 => Some(*x),
-                    Some(_) => return Err("ramp: an angle in degrees, over 0 and at most 30".into()),
+                    Some(_) => return Err("`ramp` must be an angle over 0° and at most 30°".into()),
                 };
                 // `ae` is a clearing op's `stepover` under its cutting-data name; one of them.
                 // Offset clearing (clear, pocket) cuts its stepover wide; the op's nominal
@@ -5053,8 +5230,9 @@ impl Cam {
                     None => {
                         let p = &self.parts[s.part];
                         out.status = "refused";
+                        out.code = Some("NoCuttingData".into());
                         out.refusal = Some(format!(
-                            "no cutting data: no speed or chip given, no preset on tool `{}` for group `{}`, and no group data ({}; substrate {})",
+                            "No cutting data for tool `{}` in material group `{}` ({}; substrate {}): the op gives no speed or chip, the tool has no preset for the group, and the library has no data for it.",
                             self.tools[ti].tool.id,
                             p.group,
                             p.material_note,
@@ -5075,9 +5253,15 @@ impl Cam {
                     let mut it = r.checks.iter().filter(|c| c.verdict == Verdict::Fail);
                     if let Some(c) = it.next() {
                         out.status = "refused";
+                        out.code = Some("OverLimit".into());
                         out.refusal = Some(format!(
-                            "{} {:.3} {} over the limit {:.3} ({})",
-                            c.what, c.value, c.unit, c.limit, c.why
+                            "{} would be {} {}, over the limit of {} {} ({}).",
+                            cap(c.what),
+                            mm(c.value),
+                            c.unit,
+                            mm(c.limit),
+                            c.unit,
+                            c.why
                         ));
                         out.fix = Some(format!(
                             "lower the {} (`max_power:`/`max_torque:` lower the feed to fit; or a smaller `ap`/`ae`, another tool or machine)",
@@ -5134,8 +5318,9 @@ impl Cam {
                         let top = get_num(a, "from", Some(s.stock.max[2]))?;
                         let bottom = get_num(a, "to", None)?;
                         let zmid = 0.5 * (top + bottom);
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
-                            .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                        let sec = part
+                            .section(zmid, 1e-5)
+                            .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                         let regions = match get_str(a, "region", Some("outside"))?.as_str() {
                             "outside" => {
                                 let islands = outer_or_inner(&sec, true)?;
@@ -5223,8 +5408,9 @@ impl Cam {
                         let bottom = get_num(a, "to", None)? + ax;
                         let zmid = 0.5 * (top + bottom);
                         let r = 0.5 * d;
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
-                            .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                        let sec = part
+                            .section(zmid, 1e-5)
+                            .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                         let islands = outer_or_inner(&sec, true)?;
                         // the tool may pass wholly outside the stock: a strip between the part
                         // and the stock's face narrower than the tool is still cleared
@@ -5283,7 +5469,7 @@ impl Cam {
                             ramp,
                             Some(&sbox),
                         )
-                        .map_err(|e| format!("{e:?}"))?;
+                        .map_err(|e| e.refusal(""))?;
                         if stepover <= r
                             && let Some(o) = opening(&rg, r)
                         {
@@ -5302,8 +5488,9 @@ impl Cam {
                             tabs: contour_tabs(a, d, top - bottom)?,
                         };
                         let zmid = 0.5 * (top + bottom);
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
-                            .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                        let sec = part
+                            .section(zmid, 1e-5)
+                            .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                         let rg = outer_or_inner(&sec, side == "outside")?;
                         if side == "outside" {
                             // the band the loop sweeps is cleared
@@ -5346,7 +5533,7 @@ impl Cam {
                                 &fin,
                             )
                             .map(|p| vec![p])
-                            .map_err(|e| format!("{e:?}"))
+                            .map_err(|e| e.refusal(""))
                         } else {
                             ops::contour_passes(
                                 &rg,
@@ -5365,7 +5552,7 @@ impl Cam {
                                 &fin,
                             )
                             .map(|p| vec![p])
-                            .map_err(|e| format!("{e:?}"))
+                            .map_err(|e| e.refusal(""))
                         }
                     }
                     _ => {
@@ -5375,8 +5562,9 @@ impl Cam {
                             let top = get_num(a, "from", None)?;
                             let bottom = get_num(a, "to", None)? + ax;
                             let zmid = 0.5 * (top + bottom);
-                            let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
-                                .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                            let sec = part
+                                .section(zmid, 1e-5)
+                                .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                             let pockets = pockets_of(&sec)?;
                             let leave = get_num(a, "leave", Some(0.0))?;
                             let mut paths = vec![];
@@ -5387,7 +5575,7 @@ impl Cam {
                             // a hole that ends above `to:` (a drilled hole's floor or point) is
                             // left to its own op: the section just above the bottom shows
                             // material where it was (when that section can be made)
-                            let below = forge_cam::section::section(&part.faces, bottom + 1e-3, 1e-5).ok();
+                            let below = part.section(bottom + 1e-3, 1e-5).ok();
                             let mut shallow: Vec<[f64; 4]> = vec![];
                             for rg in pockets {
                                 // (where no section can be made there, a drill point crossing
@@ -5432,7 +5620,7 @@ impl Cam {
                                         skipped.push(region_box(&rg));
                                         continue;
                                     }
-                                    Err(e) => return Err(format!("{e:?}")),
+                                    Err(e) => return Err(e.refusal("")),
                                 }
                                 let o = if stepover <= 0.5 * d {
                                     opening(&rg, 0.5 * d)
@@ -5522,7 +5710,7 @@ impl Cam {
                                         get_num(a, "leave", Some(0.0))?,
                                         ramp,
                                     )
-                                    .map_err(|e| format!("{e:?}"))?,
+                                    .map_err(|e| e.refusal(""))?,
                                 );
                                 if stepover <= 0.5 * d
                                     && let Some(o) = opening(&rg, 0.5 * d)
@@ -5540,7 +5728,9 @@ impl Cam {
             Ok(p) => p,
             Err(e) => {
                 out.status = "refused";
-                out.refusal = Some(e);
+                let (code, words) = split_code(&e);
+                out.code = code;
+                out.refusal = Some(words);
                 self.ops.push(out);
                 return Ok(V::Op(self.ops.len() - 1));
             }
@@ -5619,44 +5809,75 @@ impl Cam {
             lead_feed: None,
         };
         let grid = get_num(a, "grid", Some(0.25 * d))?;
-        let e = |x: forge_cam::ops::OpError| format!("{x:?}");
-        let p = match kind {
-            "parallel" => surf::parallel(
-                &sf,
-                c,
-                area,
-                get_num(a, "stepover", Some(0.1 * d))?,
-                get_num(a, "angle", Some(0.0))?,
-                get_num(a, "sample", Some(0.5))?,
+        let e = |x: forge_cam::ops::OpError| x.refusal("");
+        // the op's path (and z-level's voids) from an earlier run when every input is the same:
+        // the generators are functions of these alone (the kind, its arguments, the part's faces
+        // and box, the cutter's body and diameter (surf.rs reads no other part of the tool: not
+        // its stickout or holder, which only the certification sees; surfacing_memo_tests::
+        // the_generators_read_no_other_part_of_the_tool fails if one starts to), the tool's
+        // index, the heights and feeds, the stock box, the setup's tolerance), see memo.rs.
+        // A generator that starts reading the in-process stock (s.ip, stock_before) must put it
+        // in this key: the voids it returns feed later ops' stock stages.
+        let key = format!(
+            "surfacing/3 {:?}",
+            (
+                kind,
+                (a, &part.faces, body, d, ti, h, feed, leave),
+                (
+                    s.tol,
+                    floor,
+                    area,
+                    grid,
+                    part.bbox,
+                    &s.stock,
+                    c.ramp_feed,
+                    c.lead_feed
+                )
             )
-            .map_err(e)?,
-            "waterline" => {
-                let top = get_num(a, "from", Some(part.bbox.1[2]))?;
-                let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
-                let zs = ops::levels(top, bottom, step_down(a, 1.0)?);
-                surf::waterline(&sf, c, area, &zs, grid).map_err(e)?
-            }
-            "zlevel" => {
-                let top = get_num(a, "from", Some(s.stock.max[2]))?;
-                let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
-                let (p, vs) = surf::zlevel_voids(
+        );
+        let made = SURFACED.get_or(key, || -> Surfaced {
+            let mut made_voids = Vec::new();
+            let p = match kind {
+                "parallel" => surf::parallel(
                     &sf,
                     c,
                     area,
-                    top,
-                    bottom,
-                    step_down(a, 0.5 * d)?,
-                    get_num(a, "stepover", Some(0.4 * d))?,
-                    grid,
+                    get_num(a, "stepover", Some(0.1 * d))?,
+                    get_num(a, "angle", Some(0.0))?,
+                    get_num(a, "sample", Some(0.5))?,
                 )
-                .map_err(e)?;
-                for (r, z) in vs {
-                    voids.push((Some(r), z));
+                .map_err(e)?,
+                "waterline" => {
+                    let top = get_num(a, "from", Some(part.bbox.1[2]))?;
+                    let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
+                    let zs = ops::levels(top, bottom, step_down(a, 1.0)?);
+                    surf::waterline(&sf, c, area, &zs, grid).map_err(e)?
                 }
-                p
-            }
-            _ => return Err(format!("{kind}: not a surfacing op")),
-        };
+                "zlevel" => {
+                    let top = get_num(a, "from", Some(s.stock.max[2]))?;
+                    let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
+                    let (p, vs) = surf::zlevel_voids(
+                        &sf,
+                        c,
+                        area,
+                        top,
+                        bottom,
+                        step_down(a, 0.5 * d)?,
+                        get_num(a, "stepover", Some(0.4 * d))?,
+                        grid,
+                    )
+                    .map_err(e)?;
+                    made_voids = vs;
+                    p
+                }
+                _ => return Err(format!("{kind}: not a surfacing op")),
+            };
+            Ok((p, made_voids))
+        });
+        let (p, vs) = made?;
+        for (r, z) in vs {
+            voids.push((Some(r), z));
+        }
         Ok(vec![p])
     }
 
@@ -5675,6 +5896,57 @@ impl Cam {
         h: Heights,
         feed: (f64, f64),
         out: &mut OpOut,
+    ) -> Result<Vec<OpPath>, String> {
+        // from an earlier run when every input is the same (memo.rs): `finish3d_made` reads the
+        // kind, its arguments, the part's faces and box, the tool (its cutter, diameter and
+        // body), rest's earlier tool's cutter body (`after:`), the setup's tolerance, the tool's
+        // index, the heights and feeds, and nothing else of the document; what it adds to the
+        // plan and the finish record are kept with the paths
+        let s = &self.setups[su];
+        let part = &self.parts[s.part];
+        let t = &self.tools[ti];
+        let cutter = |u: &ToolUse| {
+            u.shape
+                .bodies
+                .iter()
+                .find(|b| b.part == forge_cam_geom::tool::Part::Cutter)
+                .cloned()
+        };
+        let after = match a.get("after") {
+            Some(V::Tool(j)) => self.tools.get(*j).map(cutter),
+            _ => None,
+        };
+        let key = format!(
+            "finish3d/2 {:?}",
+            (
+                kind,
+                (a, &part.faces, part.bbox, &t.tool, cutter(t), after),
+                (s.tol, ti, h, feed)
+            )
+        );
+        let (paths, plan, finish) = FINISHED.get_or(key, || {
+            let (mut plan, mut finish) = (Vec::new(), None);
+            let r = self.finish3d_made(su, kind, a, ti, h, feed, &mut plan, &mut finish);
+            (r, plan, finish)
+        });
+        out.plan.extend(plan);
+        if finish.is_some() {
+            out.finish = finish;
+        }
+        paths
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn finish3d_made(
+        &self,
+        su: usize,
+        kind: &str,
+        a: &BTreeMap<String, V>,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        plan: &mut Vec<String>,
+        finish: &mut Option<Finish>,
     ) -> Result<Vec<OpPath>, String> {
         use forge_cam::surf::Surfacer;
         use forge_cam_3d::contain::Containment;
@@ -6019,7 +6291,7 @@ impl Cam {
                     .into_iter()
                     .filter(|z| *z >= bottom - 1e-9 && *z <= top + 1e-9)
                     .collect();
-                out.plan.push(format!("flat heights: {levels:?}"));
+                plan.push(format!("flat heights: {levels:?}"));
                 if std::env::var("FORGE_CAM3D_TIME").is_ok() {
                     eprintln!("flat: levels at {:.1} s", t_start.elapsed().as_secs_f64());
                 }
@@ -6071,18 +6343,18 @@ impl Cam {
             eprintln!("{kind}: linked at {:.1} s", t_start.elapsed().as_secs_f64());
         }
         if let Some(h0) = fin.cusp {
-            out.plan.push(format!(
+            plan.push(format!(
                 "cusp {h0} mm: stepover {:.4} mm, step-down {:.4} mm (proven cusp on a plane at the op's slopes ≤ {:.5} mm)",
                 fin.stepover,
                 fin.stepdown,
                 fin.cusp_bound.unwrap_or(f64::NAN)
             ));
         }
-        out.plan.push(format!(
+        plan.push(format!(
             "links: {} stayed down, {} lifted, {} retracted",
             c.stay, c.lift, c.retract
         ));
-        out.finish = Some(fin);
+        *finish = Some(fin);
         Ok(vec![p])
     }
 
@@ -6142,7 +6414,10 @@ impl Cam {
                         "add a {} mm {class} reamer to the project's cam/*.tools.toml",
                         hole.d
                     ));
-                    return Err(format!("NeedTool: no {} mm reamer for `{hn}` ({class})", hole.d));
+                    return Err(format!(
+                        "NeedTool: No {} mm reamer for hole `{hn}` ({class} fit) in the tool library.",
+                        mm(hole.d)
+                    ));
                 };
                 Some((reamer, class))
             }
@@ -6184,7 +6459,8 @@ impl Cam {
                 "add a drill of {drill_d} mm to the project's cam/*.tools.toml"
             ));
             return Err(format!(
-                "NeedTool: no {drill_d} mm drill in the library for `{hn}`"
+                "NeedTool: No {} mm drill for hole `{hn}` in the tool library.",
+                mm(drill_d)
             ));
         };
         let spot = self
@@ -6212,7 +6488,11 @@ impl Cam {
                     .cloned();
                 if t.is_none() {
                     out.fix = Some(format!("add a tap M{major}x{pitch}"));
-                    return Err(format!("NeedTool: no tap {major} x {pitch} for `{hn}`"));
+                    return Err(format!(
+                        "NeedTool: No M{} × {} mm tap for hole `{hn}` in the tool library.",
+                        mm(major),
+                        mm(pitch)
+                    ));
                 }
                 t
             }
@@ -6523,7 +6803,9 @@ impl Cam {
                     "add a counterbore of {cd} mm, or an end mill under {cd} mm with {cdep} mm of flute"
                 ));
                 return Err(format!(
-                    "NeedTool: no counterbore of {cd} mm nor end mill to pocket it for `{hn}`"
+                    "NeedTool: No {} mm counterbore, nor an end mill under {} mm to pocket it, for hole `{hn}` in the tool library.",
+                    mm(cd),
+                    mm(cd)
                 ));
             }
         }
@@ -6545,7 +6827,9 @@ impl Cam {
             let Some(ct) = ct else {
                 out.fix = Some(format!("add a {ang} deg countersink of at least {csd} mm"));
                 return Err(format!(
-                    "NeedTool: no {ang} deg countersink of at least {csd} mm for `{hn}`"
+                    "NeedTool: No {}° countersink of at least {} mm for hole `{hn}` in the tool library.",
+                    mm(ang),
+                    mm(csd)
                 ));
             };
             let ti = add(self, ct, base_t + 4)?;
@@ -7309,6 +7593,265 @@ fn loop_band(
     Some(region_of(&band))
 }
 
+/// A kernel error as a refusal: its typed code and its words for a person.
+trait Words {
+    fn code(&self) -> &'static str;
+    fn words(&self) -> String;
+    /// `Code: Context, words.`, which `split_code` takes apart into the code and the sentence.
+    fn refusal(&self, context: &str) -> String {
+        let w = self.words();
+        if context.is_empty() {
+            let mut c = w.chars();
+            let w = match c.next() {
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                None => w,
+            };
+            format!("{}: {w}.", self.code())
+        } else {
+            format!("{}: {context}, {w}.", self.code())
+        }
+    }
+}
+
+impl Words for ops::OpError {
+    fn code(&self) -> &'static str {
+        match self {
+            ops::OpError::Region(_) => "BadRegion",
+            ops::OpError::ToolTooBig { .. } => "ToolTooBig",
+            ops::OpError::NeedTool { .. } => "NeedTool",
+        }
+    }
+    fn words(&self) -> String {
+        match self {
+            ops::OpError::Region(why) => format!("the area to cut is not a usable region ({why})"),
+            ops::OpError::ToolTooBig { tool_d, why } => {
+                format!("the {} mm tool does not fit: {why}", mm(*tool_d))
+            }
+            ops::OpError::NeedTool { what } => format!("no tool in the library for this: {what}"),
+        }
+    }
+}
+
+impl Words for forge_cam::section::SectionError {
+    fn code(&self) -> &'static str {
+        match self {
+            forge_cam::section::SectionError::NotPrism { .. } => "NotPrism",
+            forge_cam::section::SectionError::Open { .. } => "OpenSection",
+            forge_cam::section::SectionError::Empty => "EmptySection",
+        }
+    }
+    fn words(&self) -> String {
+        match self {
+            forge_cam::section::SectionError::NotPrism { face } => format!(
+                "the part's face {face} is not straight-sided (a wall along z) there, so a 2.5D op cannot cut it: use a 3D op (zlevel) for that height"
+            ),
+            forge_cam::section::SectionError::Open { at } => format!(
+                "the part's section there does not close into loops (it is open near ({}, {}))",
+                mm(at.x),
+                mm(at.y)
+            ),
+            forge_cam::section::SectionError::Empty => "the part has no section there".into(),
+        }
+    }
+}
+
+impl Words for forge_cam::lower::LowerError {
+    fn code(&self) -> &'static str {
+        "UnsupportedFace"
+    }
+    fn words(&self) -> String {
+        match self {
+            forge_cam::lower::LowerError::Unsupported { face, why } => {
+                format!("its face {face} cannot be checked yet ({why})")
+            }
+        }
+    }
+}
+
+/// A tool that cannot be built, for a person: which dimension, its value, what it must be.
+fn tool_words(
+    id: &str,
+    t: &forge_tooling::Tool,
+    stickout: f64,
+    e: &forge_cam_geom::tool::ToolError,
+) -> String {
+    use forge_cam_geom::tool::ToolError;
+    match e {
+        ToolError::Bad("stickout") => format!(
+            "BadTool: Tool `{id}`: its stick-out ({} mm) must be longer than its flute length ({} mm); lengthen the stick-out to more than {} mm, or pick a tool with shorter flutes.",
+            mm(stickout),
+            mm(t.lcf),
+            mm(t.lcf)
+        ),
+        ToolError::Bad("lcf") => format!(
+            "BadTool: Tool `{id}`: its flute length ({} mm) is shorter than its cutting tip.",
+            mm(t.lcf)
+        ),
+        ToolError::Bad("dcon") => format!("BadTool: Tool `{id}`: its shank diameter must be over 0 mm."),
+        ToolError::Bad("dc") => format!(
+            "BadTool: Tool `{id}`: its cutting diameter ({} mm) is out of range for its kind.",
+            mm(t.dc)
+        ),
+        ToolError::Bad("re") => format!(
+            "BadTool: Tool `{id}`: its corner radius ({} mm) is out of range for its diameter.",
+            mm(t.re)
+        ),
+        ToolError::Bad("angle") => format!(
+            "BadTool: Tool `{id}`: its point angle ({}°) is out of range.",
+            mm(t.angle)
+        ),
+        ToolError::Bad(what) => format!("BadTool: Tool `{id}`: its {what} is missing or out of range."),
+        ToolError::Chain => format!("BadTool: Tool `{id}`: its profile does not close on its axis."),
+    }
+}
+
+/// A sentence's first letter in capitals.
+fn cap(s: &str) -> String {
+    let mut c = s.chars();
+    match c.next() {
+        Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        None => String::new(),
+    }
+}
+
+/// A post's error for a person, and its typed code.
+fn post_words(e: &forge_post::PostError, post: &str) -> (&'static str, String) {
+    use forge_post::PostError;
+    match e {
+        PostError::Dialect(why) => (
+            "BadDialect",
+            format!("The `{post}` post's table cannot be read: {why}."),
+        ),
+        PostError::Unavailable { name, reason } => (
+            "PostUnavailable",
+            format!("The post for the `{name}` control is not available: {reason}."),
+        ),
+        PostError::UnknownDialect { name, known } => (
+            "UnknownPost",
+            format!(
+                "There is no post `{name}`; the posts are {}.",
+                known
+                    .iter()
+                    .map(|k| format!("`{k}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+        ),
+        PostError::Unsupported { what, fix } => (
+            "PostUnsupported",
+            format!("The `{post}` post cannot do this: {what}. {}.", cap(fix)),
+        ),
+        PostError::Range { what, value } => (
+            "OutOfRange",
+            format!(
+                "{} is {}, more than the `{post}` post's words can hold.",
+                cap(what),
+                mm(*value)
+            ),
+        ),
+    }
+}
+
+/// A refusal's typed code and its words: an error that starts `Code: ` with a code in
+/// CamelCase (`NeedTool: no 6 mm reamer ..`) gives that code and the rest; any other has no code.
+fn split_code(e: &str) -> (Option<String>, String) {
+    if let Some((head, rest)) = e.split_once(": ")
+        && !head.is_empty()
+        && head.chars().all(|c| c.is_ascii_alphanumeric())
+        && head.starts_with(|c: char| c.is_ascii_uppercase())
+    {
+        return (Some(head.to_string()), rest.to_string());
+    }
+    (None, e.to_string())
+}
+
+/// A length in mm for a person: at most three decimals, no trailing zeros.
+fn mm(x: f64) -> String {
+    let s = format!("{x:.3}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.into() }
+}
+
+/// A check that refused an op, for a person: what part of the tool meets what, by how much, what
+/// it must keep, and where (the move, its kind, the point). The check itself stays in `checks`,
+/// typed, and its rule is the op's `code`.
+fn check_words(c: &CheckOut) -> String {
+    let kind = match c.phase {
+        "cut" => "a cutting move",
+        "plunge" => "a plunge",
+        "link" => "a link",
+        "rapid" => "a rapid",
+        "touch" => "a probing move",
+        other => other,
+    };
+    let at = if c.at.iter().all(|x| x.is_finite()) {
+        format!(" at ({}, {}, {})", mm(c.at[0]), mm(c.at[1]), mm(c.at[2]))
+    } else {
+        String::new()
+    };
+    let place = format!("on move {} ({kind}){at}", c.move_index);
+    // "part face 12" -> the part, face 12
+    let (thing, face) = match c.other.rsplit_once(" face ") {
+        Some((w, id)) => (
+            match w {
+                "part" => "the part",
+                "stock" => "the stock",
+                "fixture" => "the workholding",
+                x => x,
+            }
+            .to_string(),
+            format!(" (its face {id})"),
+        ),
+        None => (c.other.clone(), String::new()),
+    };
+    match c.rule {
+        "machine_limit" | "axis_limit" | "containment" => {
+            let what = match c.rule {
+                "machine_limit" => "The machine cannot run this op",
+                "axis_limit" => "The path leaves the machine's travel",
+                _ => "This move cannot be checked: the tool's top is not above the part and stock",
+            };
+            if c.rule == "containment" {
+                format!(
+                    "{what} {place} (the tool reaches z = {} mm; the part and stock rise to z = {} mm).",
+                    mm(c.value),
+                    mm(c.limit)
+                )
+            } else {
+                format!("{what}: {}.", c.other)
+            }
+        }
+        _ => {
+            let subject = match (c.rule, c.tool_part) {
+                ("probe_clear", _) => "The probe",
+                ("rapid_clear", "cutter") => "On a rapid, the cutter",
+                ("rapid_clear", _) => "On a rapid, the tool's shank or holder",
+                (_, "cutter") => "The cutter",
+                _ => "The tool's shank or holder",
+            };
+            let (d, lim) = (c.value, c.limit);
+            let met = if c.verdict == "undecided" {
+                format!(
+                    "could not be proven clear of {thing}{face}: the closest it is proven to stay is {} mm",
+                    mm(d)
+                )
+            } else if d < 0.0 {
+                format!("would go {} mm into {thing}{face}", mm(-d))
+            } else {
+                format!("would come within {} mm of {thing}{face}", mm(d))
+            };
+            let need = if lim > 0.0 {
+                format!("it must stay at least {} mm clear", mm(lim))
+            } else if lim < 0.0 {
+                format!("at most {} mm is allowed (the tolerance)", mm(-lim))
+            } else {
+                "it must not touch it".to_string()
+            };
+            format!("{subject} {met} {place}; {need}.")
+        }
+    }
+}
+
 /// A region's box: its segments' ends and each arc's extreme points that lie on it (in f64).
 fn region_box(rg: &Region) -> [f64; 4] {
     let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
@@ -7450,7 +7993,7 @@ fn contour_passes(a: &BTreeMap<String, V>, d: f64) -> Result<ops::Passes, String
     let count = |k: &str, default: f64, least: f64| -> Result<usize, String> {
         let x = get_num(a, k, Some(default))?;
         if x.fract() != 0.0 || x < least || x > 100.0 {
-            return Err(format!("{k}: a whole number from {least} to 100"));
+            return Err(format!("`{k}` must be a whole number from {least} to 100"));
         }
         Ok(x as usize)
     };
@@ -7462,7 +8005,7 @@ fn contour_passes(a: &BTreeMap<String, V>, d: f64) -> Result<ops::Passes, String
     };
     let finish_step = get_num(a, "finish_step", Some(0.1 * d))?;
     if !(finish_step > 0.0 && finish_step.is_finite()) {
-        return Err("finish_step: a length over 0".into());
+        return Err("`finish_step` must be a length over 0 mm".into());
     }
     Ok(ops::Passes {
         climb,
@@ -7929,7 +8472,11 @@ impl Cam {
             .stock_before
             .clone()
             .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
+        // what each stage's faces are made from, in order (the memo key's: `faces_of` is a
+        // function of the in-process stock and, on its error, the setup's stock alone)
+        let stage_ips: std::cell::RefCell<Vec<String>> = std::cell::RefCell::new(Vec::new());
         let faces_of = |ip: &forge_cam::stock::InProcess| {
+            stage_ips.borrow_mut().push(format!("{ip:?}"));
             // a clock only when asked: std's panics in a browser page
             let t0 = std::env::var("FORGE_CAM_DEBUG")
                 .is_ok()
@@ -8168,12 +8715,30 @@ impl Cam {
                 | "ramping"
                 | "flat"
         );
+        // the key's stand-ins for the faces (each formatted once, not per op): the part's
+        // faces' text (made once per part), or the op's own target's; the stages' in-process
+        // stocks (and the setup's stock, `faces_of`'s fallback) with their move indices; the
+        // fixture (its faces are `Fixture::faces` of it) or the stock (its support face)
+        let target_key: std::borrow::Cow<str> = match &self.ops[oi].target {
+            Some(t) => format!("own {t:?}").into(),
+            None => part.faces_key().into(),
+        };
+        let stages_key = format!(
+            "{:?}",
+            (
+                stock_needed,
+                stages.iter().map(|x| x.0).collect::<Vec<_>>(),
+                &s.stock,
+                &*stage_ips.borrow()
+            )
+        );
+        let fixture_key = format!("{:?} {:?}", s.fixture, s.stock);
         let mut sum = certify_memo(
             posted,
             &tool,
-            target,
-            &stages,
-            &ffaces,
+            (target, &target_key),
+            (&stages, &stages_key),
+            (&ffaces, &fixture_key),
             fclear,
             s.tol,
             s.clearance,
@@ -8217,12 +8782,15 @@ impl Cam {
             text: None,
             lines: 0,
             error: None,
+            code: None,
             round_trip: false,
         };
         let mut d = match forge_post::Dialect::get(post) {
             Ok(d) => d,
             Err(e) => {
-                po.error = Some(format!("{e:?}"));
+                let (c, w) = post_words(&e, post);
+                po.code = Some(c.into());
+                po.error = Some(w);
                 return po;
             }
         };
@@ -8478,11 +9046,19 @@ impl Cam {
         let q = match forge_post::quantize(&program, &d) {
             Ok(q) => q,
             Err(e) => {
-                po.error = Some(format!("{e:?}"));
+                let (c, w) = post_words(&e, post);
+                po.code = Some(c.into());
+                po.error = Some(w);
                 return po;
             }
         };
-        match forge_post::round_trip(&q, &d) {
+        // from an earlier run when the program and the dialect are the same (memo.rs): the
+        // round trip prints, reads back and compares, a function of these alone; the key is
+        // the quantised program (integers) and the dialect, each in full
+        let rt = ROUND_TRIPS.get_or(format!("round_trip/2 {:?}", (&q, &d)), || {
+            forge_post::round_trip(&q, &d)
+        });
+        match rt {
             Ok((txt, _)) => {
                 po.round_trip = true;
                 // the single-surface measure's S writes a surface probe's work offset
@@ -8500,7 +9076,10 @@ impl Cam {
                 po.text = Some(txt);
             }
             Err(e) => {
-                po.error = Some(e);
+                po.code = Some("RoundTrip".into());
+                po.error = Some(format!(
+                    "The posted text does not read back as the path it was made from ({e}): a fault in the `{post}` post, not in the document; please report it."
+                ));
                 return po;
             }
         }
@@ -8805,10 +9384,8 @@ impl Cam {
             if !sum.clear && op.status == "built" {
                 op.status = "refused";
                 let c = &op.checks[0];
-                op.refusal = Some(format!(
-                    "{} {} at move {} ({}): {} vs {} on {}",
-                    c.rule, c.verdict, c.move_index, c.phase, c.value, c.limit, c.other
-                ));
+                op.code = Some(c.rule.to_string());
+                op.refusal = Some(check_words(c));
                 op.fix = Some(match c.rule {
                     "machine_limit" => "a tool or feeds the machine can run (its spindle range and feed limit are in the machine's record), or another machine".into(),
                     "axis_limit" => "SetArg at: a work offset that keeps the program within travel, or the part placed elsewhere on the table (or a shorter tool for Z)".into(),
@@ -8840,12 +9417,27 @@ impl Cam {
                 });
             }
         }
-        if self
+        let refused: Vec<&str> = self
             .ops
             .iter()
-            .any(|o| setups.contains(&o.setup) && o.status != "built")
-        {
-            po.error = Some("an operation was refused: the program is not released".into());
+            .filter(|o| setups.contains(&o.setup) && o.status != "built")
+            .map(|o| o.name.as_str())
+            .collect();
+        if !refused.is_empty() {
+            po.code = Some("NotReleased".into());
+            po.error = Some(format!(
+                "Program `{name}` is not released: {} refused ({}).",
+                if refused.len() == 1 {
+                    "an operation was"
+                } else {
+                    "operations were"
+                },
+                refused
+                    .iter()
+                    .map(|n| format!("`{n}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
             po.text = None;
         }
         po
@@ -9058,6 +9650,7 @@ impl Cam {
                         )]),
                     ),
                     ("refusal", o.refusal.clone().map(Json::Str).unwrap_or(Json::Null)),
+                    ("code", o.code.clone().map(Json::Str).unwrap_or(Json::Null)),
                     (
                         "probe",
                         match &o.probe {
@@ -9118,7 +9711,7 @@ impl Cam {
         let suggestions: Vec<Json> = self
             .ops
             .iter()
-            .filter(|o| o.refusal.as_ref().is_some_and(|r| r.starts_with("NeedTool")))
+            .filter(|o| o.code.as_deref() == Some("NeedTool"))
             .map(|o| {
                 Json::obj(vec![
                     ("kind", Json::Str("NeedTool".into())),
@@ -9156,6 +9749,7 @@ impl Cam {
                         ),
                     ),
                     ("error", p.error.clone().map(Json::Str).unwrap_or(Json::Null)),
+                    ("code", p.code.clone().map(Json::Str).unwrap_or(Json::Null)),
                 ])
             })
             .collect();
@@ -9164,6 +9758,17 @@ impl Cam {
             ("certification", Json::Str(self.certification().into())),
             ("schema", Json::Str("forgecad.cam/1".into())),
             ("errors", Json::Arr(self.errors.iter().map(|e| Json::Str(e.clone())).collect())),
+            (
+                "error_codes",
+                Json::Arr(
+                    (0..self.errors.len())
+                        .map(|i| match self.error_codes.iter().find(|(k, _)| *k == i) {
+                            Some((_, c)) => Json::Str(c.clone()),
+                            None => Json::Null,
+                        })
+                        .collect(),
+                ),
+            ),
             ("warnings", Json::Arr(self.warnings.iter().map(|e| Json::Str(e.clone())).collect())),
             ("setups", Json::Arr(setups)),
             ("ops", Json::Arr(ops)),
@@ -9462,6 +10067,32 @@ mod loop_band_tests {
         let far = path(&[3.0 + lcf + 1.0, 3.0], -10.0);
         assert!(loop_band(&far, &froms(&far), 0, far.moves.len(), 3.0, &tool, 3.0 + lcf).is_none());
         assert!(loop_band(&p, &f, 0, p.moves.len(), 3.0, &tool, 6.0 + lcf + 1.0).is_none());
+        // a closed curve that crosses itself (a figure eight) is not a region's boundary: no band
+        let eight = |z: f64| -> Vec<PMove> {
+            let c = |x: f64, y: f64| PMove::Line {
+                to: [x, y, z],
+                f: 500.0,
+                phase: Phase::Cut,
+            };
+            vec![c(10.0, 10.0), c(10.0, -10.0), c(-10.0, 10.0), c(-10.0, -10.0)]
+        };
+        let mut moves = vec![];
+        for z in [6.0, 3.0] {
+            moves.push(PMove::Line {
+                to: [-10.0, -10.0, z],
+                f: 200.0,
+                phase: Phase::Plunge,
+            });
+            moves.extend(eight(z));
+        }
+        let fig = OpPath {
+            tool: 0,
+            start: [-10.0, -10.0, 20.0],
+            moves,
+            rpm: 8000.0,
+            coolant: forge_post::Coolant::Flood,
+        };
+        assert!(loop_band(&fig, &froms(&fig), 0, fig.moves.len(), 3.0, &tool, 8.0).is_none());
     }
 }
 
@@ -9607,7 +10238,21 @@ mod certify_memo_tests {
             0.01,
             2.0,
         );
-        let run = |a: &Args| certify_memo(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7, false);
+        let run = |a: &Args| {
+            // the faces' stand-ins: here their own full text, which names them exactly
+            let (k2, k3, k4) = (format!("{:?}", a.2), format!("{:?}", a.3), format!("{:?}", a.4));
+            certify_memo(
+                &a.0,
+                &a.1,
+                (&a.2, &k2),
+                (&a.3, &k3),
+                (&a.4, &k4),
+                a.5,
+                a.6,
+                a.7,
+                false,
+            )
+        };
         let fresh = |a: &Args| ops::certify_with(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7, false);
         let same = |x: &ops::CheckSummary, y: &ops::CheckSummary| format!("{x:?}") == format!("{y:?}");
         let n0 = CERTIFIED.computed();
@@ -9664,5 +10309,323 @@ mod certify_memo_tests {
         let before = CERTIFIED.computed();
         assert!(same(&run(&base), &s0));
         assert_eq!(CERTIFIED.computed(), before, "the same arguments certified again");
+    }
+}
+
+#[cfg(test)]
+mod memo_edit_tests {
+    /// Runs through the memos are the runs made fresh, byte for byte, after edits of each kind
+    /// on a document every memo serves (2D ops with engagement feeds, holes, two setups): the
+    /// part's dimensions (every face, so every certification key's stand-in for the part and
+    /// the stocks), an op's numbers, a tool, the stock; each edit run after the original, so the
+    /// memos hold the original's entries.
+    #[test]
+    fn edited_runs_through_the_memos_are_the_fresh_runs() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/memo_edit_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("well_island.fg")).unwrap();
+        let doc = forge_dirs::fs::read_to_string(src_dir.join("well_island_cam.fg")).unwrap();
+        let reply = |d: &str| {
+            let cam = super::run(d, &dir);
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let both = |d: &str, p: &str| {
+            forge_dirs::fs::write(dir.join("well_island.fg"), p).unwrap();
+            let memo = reply(d);
+            super::memo::bypass(true);
+            let fresh = reply(d);
+            super::memo::bypass(false);
+            (memo, fresh)
+        };
+        let (m, f) = both(&doc, &part);
+        assert_eq!(m, f, "the original");
+        // the part: its length (every face and path changes); and the well's floor raised
+        // under a pocket that still cuts to its old depth (the same paths and stock, only the
+        // part's faces differ: the certification must find the gouge, not take the old verdict)
+        let p2 = part.replacen("shared L = 60", "shared L = 62", 1);
+        let p3 = part.replacen("shared depth = 6", "shared depth = 5", 1);
+        assert!(p2 != part && p3 != part);
+        let mut edits = vec![(doc.clone(), p2), (doc.clone(), p3)];
+        for (a, b) in [("stepover: ", "stepover: 1.3"), ("margin: (", "margin: (4, ")] {
+            if let Some(k) = doc.find(a) {
+                let end = doc[k..].find([',', ')']).map(|e| k + e).unwrap_or(doc.len());
+                let mut d = doc.clone();
+                d.replace_range(k..end, if a == "stepover: " { b } else { "margin: (4" });
+                edits.push((d, part.clone()));
+            }
+        }
+        assert!(edits.len() >= 2, "no op edit found in the document");
+        for (k, (d, p)) in edits.iter().enumerate() {
+            // the original first, so the memos hold its entries
+            let _ = both(&doc, &part);
+            let (m, f) = both(d, p);
+            assert_eq!(m, f, "edit {k}: the run through the memos is not the fresh run");
+        }
+        // the part alone changed under paths that stay the same: a facing over a stock given
+        // outright, the boss raised into it. Only the part's faces (the certification key's
+        // stand-in for them) tell the two runs apart; the edited one must be refused
+        let skim = "machining\nf = part(\"well_island.fg\", material: \"6061-T6\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(min: (-3, -3, 0), max: (63, 43, 13)), origin: \"top-corner\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 12.5, step: 1)\nprog = program(op1, post: \"fanuc\", number: 3001)\n";
+        let raised = part.replacen(
+            "boss = extrude(bs.c, depth)",
+            "boss = extrude(bs.c, depth + 0.8)",
+            1,
+        );
+        assert_ne!(raised, part);
+        let (m0, f0) = both(skim, &part);
+        assert_eq!(m0, f0);
+        assert!(
+            m0.starts_with("{\"ok\":true"),
+            "the facing clears the part: {}",
+            &m0[..200]
+        );
+        let (m1, f1) = both(skim, &raised);
+        assert_eq!(
+            m1, f1,
+            "the raised boss: the run through the memos is not the fresh run"
+        );
+        assert!(
+            m1.starts_with("{\"ok\":false"),
+            "the raised boss is gouged: {}",
+            &m1[..200]
+        );
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod engagement_memo_tests {
+    /// Every input of `feeds_from_engagement` is in its memo key: the op's path (its
+    /// arguments), the stock an earlier op left, the tool, the material's chip load and the
+    /// machine's feed limit each schedule anew; the same text, and edits the schedule does not
+    /// read (the stickout), take it from the memo with the same reply.
+    #[test]
+    fn each_input_class_schedules_anew() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/engagement_memo_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("slot_plate.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("slot_plate.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"slot_plate.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nt2 = tool(\"flat-6\", t: 2, stickout: 26, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: \"top-corner\")\nskim = facing(op1, tool: t1, to: 10, step: 1)\nslots = slot(op1, f.lines, tool: t2, depth: 4, step: 2, ramp: 3)\n";
+        let run = |d: &str| {
+            let before = super::SCHEDULED.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            let reply = format!("{:?}", cam.ops.iter().map(|o| &o.paths).collect::<Vec<_>>());
+            (super::SCHEDULED.computed() - before, reply)
+        };
+        let (n, reply) = run(doc);
+        assert_eq!(n, 2, "facing and slot each scheduled");
+        let again = run(doc);
+        assert_eq!((again.0, &again.1), (0, &reply), "the same text scheduled again");
+        let r = run(&doc.replace("stickout: 26", "stickout: 28"));
+        assert_eq!((r.0, &r.1), (0, &reply), "a stickout edit scheduled again");
+        for (what, d, want) in [
+            (
+                "the slot's path",
+                doc.replace("step: 2, ramp", "step: 1.5, ramp"),
+                1,
+            ),
+            (
+                "the stock the facing left (its depth)",
+                doc.replace("to: 10, step: 1", "to: 9.5, step: 1"),
+                2,
+            ),
+            ("the tool", doc.replace("\"flat-6\"", "\"flat-3\""), 1),
+            ("the material", doc.replace("group: \"N\"", "group: \"P\""), 2),
+        ] {
+            assert!(run(&d).0 >= want, "{what}: not scheduled anew");
+        }
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod finish3d_memo_tests {
+    /// Every input class of a 3-axis finishing op (forge-cam-3d) is in its memo key: its
+    /// arguments, the cutter, the earlier tool's cutter (rest's `after:`), the part's faces and
+    /// the setup's tolerance each make the paths anew; the same text, and edits it does not read
+    /// (the tools' stickouts, the stock), take them from the memo, with the same reply.
+    #[test]
+    fn each_input_class_makes_the_paths_anew() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/finish3d_memo_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("mold_core.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nleft = rest(op1, tool: t2, after: t1, stepover: 3, area: (-30, -24, 30, 24), grid: 1.5)\n";
+        let run = |d: &str| {
+            let before = super::FINISHED.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            let reply = format!("{:?} {:?}", cam.ops[0].paths, cam.ops[0].plan);
+            (
+                super::FINISHED.computed() - before,
+                reply,
+                cam.ops[0].paths.iter().map(|p| p.moves.len()).sum::<usize>(),
+            )
+        };
+        let (n, reply, moves) = run(doc);
+        assert_eq!(n, 1);
+        assert!(moves > 0, "{reply}");
+        let again = run(doc);
+        assert_eq!(
+            (again.0, &again.1),
+            (0, &reply),
+            "the same text made the paths again"
+        );
+        for (what, d) in [
+            ("stickouts", doc.replace("stickout: 40", "stickout: 42")),
+            (
+                "stock beside the part",
+                doc.replace("margin: (0, 0, 2)", "margin: (3, 3, 2)"),
+            ),
+        ] {
+            let r = run(&d);
+            assert_eq!((r.0, &r.1), (0, &reply), "{what}: the paths were made again");
+        }
+        for (what, d) in [
+            ("stepover", doc.replace("stepover: 3", "stepover: 2.5")),
+            ("area", doc.replace("(-30, -24, 30, 24)", "(-30, -24, 30, 23)")),
+            ("cutter", doc.replace("\"ball-6\"", "\"bull-10-r1\"")),
+            ("earlier cutter", doc.replace("\"flat-10\"", "\"flat-12\"")),
+            ("tolerance", doc.replace("tol: 0.01", "tol: 0.02")),
+            (
+                "heights (the stock's top)",
+                doc.replace("margin: (0, 0, 2)", "margin: (0, 0, 3)"),
+            ),
+        ] {
+            assert_eq!(run(&d).0, 1, "{what}: the paths were not made anew");
+        }
+        let edited = part.replacen("shared bw = 40", "shared bw = 38", 1);
+        assert_ne!(edited, part);
+        forge_dirs::fs::write(dir.join("mold_core.fg"), &edited).unwrap();
+        assert_eq!(run(doc).0, 1, "part: the paths were not made anew");
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod surfacing_memo_tests {
+    /// Every input class of a surfacing op is in its memo key: the op's arguments (stepover,
+    /// area, leave, floor), the cutter, the part's faces, the setup's tolerance and stock each
+    /// make the path anew; the same text, and an edit only the certification sees (the tool's
+    /// stickout: surf.rs reads no part of the tool but its cutter's body and diameter), take it
+    /// from the memo. Each changed run's path is the one it posts (its reply is ok).
+    #[test]
+    fn each_input_class_makes_the_path_anew() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/surfacing_memo_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("mold_core.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nfin = parallel(op1, tool: t2, stepover: 6, area: (-12, -9, 12, 9))\n";
+        let run = |d: &str| {
+            let before = super::SURFACED.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            (
+                super::SURFACED.computed() - before,
+                cam.ops[0].paths.iter().map(|p| p.moves.len()).sum::<usize>(),
+            )
+        };
+        let (n, moves) = run(doc);
+        assert_eq!(n, 1);
+        assert!(moves > 0);
+        assert_eq!(run(doc).0, 0, "the same text made the path again");
+        assert_eq!(
+            run(&doc.replace("stickout: 40", "stickout: 42")).0,
+            0,
+            "a stickout edit made the path again"
+        );
+        for (what, d) in [
+            ("stepover", doc.replace("stepover: 6", "stepover: 5")),
+            ("area", doc.replace("(-12, -9, 12, 9)", "(-12, -9, 12, 8)")),
+            ("leave", doc.replace("area: (", "leave: 0.1, area: (")),
+            ("floor", doc.replace("area: (", "floor: 1, area: (")),
+            ("cutter", doc.replace("\"ball-6\"", "\"bull-10-r1\"")),
+            ("tolerance", doc.replace("tol: 0.01", "tol: 0.02")),
+            ("stock", doc.replace("margin: (0, 0, 2)", "margin: (0, 0, 3)")),
+        ] {
+            assert_eq!(run(&d).0, 1, "{what}: the path was not made anew");
+        }
+        // the part: one of its numbers changed
+        let edited = part.replacen("shared bw = 40", "shared bw = 38", 1);
+        assert_ne!(edited, part);
+        forge_dirs::fs::write(dir.join("mold_core.fg"), &edited).unwrap();
+        assert_eq!(run(doc).0, 1, "part: the path was not made anew");
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
+    }
+
+    /// The surfacing key leaves out the tool's stickout, holder and number: surf.rs's
+    /// generators read the cutter (through the Surfacer) and the Cut's index, heights and feeds
+    /// only. Each generator run with the same cutter but a tool differing in all the rest
+    /// (stickout, holder, T number, its shape's other bodies) makes the same path; this fails if
+    /// a generator starts reading any of them, and the key must then take them.
+    #[test]
+    fn the_generators_read_no_other_part_of_the_tool() {
+        use forge_cam::ops::{Cut, Heights, ToolUse};
+        use forge_cam::surf::{self, Surfacer};
+        use forge_tooling::Library;
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let src = forge_dirs::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
+        let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+        let faces = forge_cam::lower3d::lower_surfacing(&run.body.unwrap()).unwrap().0;
+        let lib = Library::builtin();
+        let tl = lib.tool("ball-6").unwrap().clone();
+        let a = ToolUse {
+            t: 2,
+            tool: tl.clone(),
+            holder: Some("bt40-er32".into()),
+            stickout: 40.0,
+            shape: tl.shape(40.0, Some(lib.holder("bt40-er32").unwrap())).unwrap(),
+            probe: false,
+        };
+        let b = ToolUse {
+            t: 9,
+            tool: tl.clone(),
+            holder: None,
+            stickout: 61.0,
+            shape: tl.shape(61.0, None).unwrap(),
+            probe: false,
+        };
+        let cutter = a
+            .shape
+            .bodies
+            .iter()
+            .find(|x| x.part == forge_cam_geom::tool::Part::Cutter)
+            .unwrap()
+            .clone();
+        let sf = Surfacer::new(&faces, &cutter, 0.0, 0.01, -1.0).unwrap();
+        let cut = |t: &ToolUse| {
+            let c = Cut {
+                tool: t,
+                tidx: 1,
+                h: Heights {
+                    clear: 40.0,
+                    retract: 30.0,
+                },
+                feed: (1200.0, 400.0),
+                ramp_feed: None,
+                lead_feed: None,
+            };
+            let area = [-12.0, -9.0, 12.0, 9.0];
+            format!(
+                "{:?}\n{:?}\n{:?}",
+                surf::parallel(&sf, c, area, 6.0, 0.0, 0.5),
+                surf::waterline(&sf, c, area, &[20.0, 14.0], 1.0),
+                surf::zlevel_voids(&sf, c, area, 26.0, 12.0, 7.0, 3.0, 1.0)
+            )
+        };
+        let (pa, pb) = (cut(&a), cut(&b));
+        assert!(pa.contains("moves"), "the generators made no path: {pa}");
+        assert_eq!(pa, pb, "a generator read the tool beyond its cutter");
     }
 }

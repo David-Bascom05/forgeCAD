@@ -99,7 +99,7 @@ pub struct Inspector {
     wall: Arc<WallCtl>,
     /// Where jobs run on the page's one thread: the wall's search, stepped a few milliseconds a
     /// frame (its measurement, the search, where its part stands).
-    walking: Option<(u64, forge_agent::measure::WallSearch<Arc<TriMesh>>, Frame)>,
+    walking: Option<(u64, forge_wall::WallSearch<Arc<TriMesh>>, Frame)>,
 }
 
 fn ent(e: Entity) -> Ent {
@@ -218,7 +218,7 @@ fn handle(
         Job::Wall(id, b, at, ctl) => {
             use std::sync::atomic::Ordering::Relaxed;
             let r = mesh(&b).and_then(|m| {
-                let mut w = forge_agent::measure::WallSearch::new(&b, &*m);
+                let mut w = forge_wall::WallSearch::new(&b, &*m);
                 // a few thousand rays at a time: how far, and whether it's still wanted
                 while !w.step(4096) {
                     if ctl.wanted.load(Relaxed) != id {
@@ -822,7 +822,7 @@ impl Gui {
                         .map_err(|e| forge_lang::error::words(&e));
                     match r {
                         Ok(mesh) => {
-                            let w = forge_agent::measure::WallSearch::new(&b, Arc::new(mesh));
+                            let w = forge_wall::WallSearch::new(&b, Arc::new(mesh));
                             self.inspector.walking = Some((id, w, at));
                             walking = true;
                         }

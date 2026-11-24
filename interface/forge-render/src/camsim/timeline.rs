@@ -2,7 +2,8 @@
 //! duration, so a time finds the tool's place and a check's move finds its time. Built from the
 //! real run (`forge_cam_lang::run`): the paths as posted where a program posted them (what the
 //! certified checks ran on), else as planned. Times: feeds as programmed, rapids at the run's
-//! rate (`RAPID`, the figure forge-cam-lang's own `time_s` uses), canned cycles as their motion.
+//! rate (the setup's machine's published rapid rates per axis; `RAPID`, the figure forge-cam-lang's
+//! own `time_s` uses, where it has none), canned cycles as their motion.
 
 use forge_cam::ops::{OpPath, PMove, Phase};
 use forge_cam_lang::Cam;
@@ -142,7 +143,21 @@ fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
 }
 
 /// Pushes the pieces of one path, from time `t`; returns the time after it.
-pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64) -> f64 {
+pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, t: f64) -> f64 {
+    push_path_at(op, path, p, segs, t, None)
+}
+
+/// The same, rapids at a machine's rates (mm/min along X, Y, Z: the axes move together, so a
+/// rapid takes its longest axis's time, as the machine's own lower bound counts it); None: every
+/// rapid at `RAPID`.
+pub fn push_path_at(
+    op: u32,
+    path: u32,
+    p: &OpPath,
+    segs: &mut Vec<Seg>,
+    mut t: f64,
+    rapids: Option<[f64; 3]>,
+) -> f64 {
     let tool = p.tool as u32;
     let mut at = p.start;
     let put = |segs: &mut Vec<Seg>,
@@ -157,8 +172,16 @@ pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64
             None => dist(a, b),
             Some(ar) => ((ar.r * ar.sweep).powi(2) + (b[2] - a[2]).powi(2)).sqrt(),
         };
-        let rate = if kind == Kind::Rapid || f <= 0.0 { RAPID } else { f };
-        let dt = len / rate * 60.0;
+        let fast = kind == Kind::Rapid || f <= 0.0 || f >= RAPID;
+        let (rate, dt) = match (fast, rapids) {
+            // the longest axis's time at its rate; the piece's own rate is what that comes to
+            (true, Some(r)) => {
+                let dt = (0..3).map(|k| (b[k] - a[k]).abs() / r[k]).fold(0.0, f64::max) * 60.0;
+                (if dt > 0.0 { len / dt * 60.0 } else { r[0] }, dt)
+            }
+            (true, None) => (RAPID, len / RAPID * 60.0),
+            (false, _) => (f, len / f * 60.0),
+        };
         segs.push(Seg {
             op,
             path,
@@ -280,8 +303,9 @@ impl Timeline {
             let first = tl.segs.len();
             let t0 = t;
             let paths = cam.sim_paths(oi);
+            let rapids = cam.sim_rapids(op.setup);
             for (pi, p) in paths.iter().enumerate() {
-                t = push_path(oi as u32, pi as u32, p, &mut tl.segs, t);
+                t = push_path_at(oi as u32, pi as u32, p, &mut tl.segs, t, rapids);
             }
             tl.ops.push(OpSpan {
                 name: op.name.clone(),

@@ -611,6 +611,9 @@ fn tool(t: &Tool) -> Json {
 /// `named` holds `Value::Ent`s of itself). A run frees none itself, so the speed gate's builds do
 /// what they did; between builds, never during one, on the thread that ran them. Without it every
 /// run kept its sketches (5.5 KB a run of a small part natively, ~30 KB an edit in the browser).
+/// A process that never calls it (the speed gate's benchparts, a one-shot CLI command) keeps them
+/// till it exits, as every process did before. Its own cost: the freeing a run paid before, about
+/// 5,500 instructions a run of a small one-sketch part.
 fn release_sketches() {
     for x in forge_keep::take_all() {
         if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {

@@ -12,6 +12,7 @@ pub mod cite;
 pub mod entry;
 pub mod feeds;
 pub mod instances;
+pub mod interface;
 pub mod life;
 pub mod resolve;
 pub mod toml;
@@ -722,6 +723,8 @@ pub struct Library {
     pub collets: Vec<Collet>,
     pub collet_nuts: Vec<ColletNut>,
     pub pull_studs: Vec<PullStud>,
+    /// Spindle interfaces' cited dimension tables (`[[interface]]`, data/interfaces.toml).
+    pub interfaces: Vec<interface::Interface>,
     pub inserts: Vec<turning::Insert>,
     pub turn_holders: Vec<turning::TurnHolder>,
     pub groove_inserts: Vec<turning::GrooveInsert>,
@@ -1102,6 +1105,7 @@ impl Library {
         unique!("collet", collets, Collet, "collet");
         unique!("collet_nut", collet_nuts, ColletNut, "collet nut");
         unique!("pull_stud", pull_studs, PullStud, "pull stud");
+        unique!("interface", interfaces, interface::Interface, "interface");
         unique!("insert", inserts, turning::Insert, "insert");
         unique!("turn_holder", turn_holders, turning::TurnHolder, "turning holder");
         unique!(
@@ -1115,13 +1119,19 @@ impl Library {
         Ok(())
     }
 
-    /// The built-in library: ours, generic.
+    /// The built-in library: ours, generic. Read from its files once per process (they are
+    /// compiled in, so every read gives the same library), then cloned.
     pub fn builtin() -> Library {
-        let mut l = Library::default();
-        for (f, s) in BUILTIN {
-            l.add(f, s).expect("the built-in library reads");
-        }
-        l
+        static BUILT: std::sync::OnceLock<Library> = std::sync::OnceLock::new();
+        BUILT
+            .get_or_init(|| {
+                let mut l = Library::default();
+                for (f, s) in BUILTIN {
+                    l.add(f, s).expect("the built-in library reads");
+                }
+                l
+            })
+            .clone()
     }
 
     pub fn tool(&self, id: &str) -> Result<&Tool, LibError> {
@@ -1134,6 +1144,11 @@ impl Library {
                 near: near(id, self.tools.iter().map(|t| t.id.as_str())),
             })
     }
+    /// The interface table a holder's `interface` names (by id or alias), if the library has one.
+    pub fn interface(&self, name: &str) -> Option<&interface::Interface> {
+        self.interfaces.iter().find(|i| i.is(name))
+    }
+
     pub fn holder(&self, id: &str) -> Result<&Holder, LibError> {
         self.holders
             .iter()
@@ -1183,7 +1198,7 @@ impl Library {
     }
     /// The chip factor record of an op class ("rough" | "finish").
     /// The generic class a tool cuts a group in: the narrowest class that has data, opening
-    /// the dimensions in `feeds::GENERIC_LEVELS` order (a dimension the tool does not state is
+    /// the dimensions in `feeds::generic_levels()` order (a dimension the tool does not state is
     /// open from the start).
     pub fn generic(&self, group: &str, op: &str, tc: &feeds::ToolClass) -> Option<&feeds::Generic> {
         feeds::generic_in(&self.generics, group, op, tc)
@@ -1362,6 +1377,20 @@ impl Library {
 
 #[cfg(test)]
 mod tests {
+    /// The built-in library kept from the first read is the library its files read as, and a
+    /// caller's changes to its copy reach no other.
+    #[test]
+    fn the_kept_builtin_is_the_read_one() {
+        let mut fresh = super::Library::default();
+        for (f, s) in super::BUILTIN {
+            fresh.add(f, s).unwrap();
+        }
+        let mut a = super::Library::builtin();
+        assert_eq!(a, fresh);
+        a.tools.clear();
+        assert_eq!(super::Library::builtin(), fresh);
+    }
+
     use super::*;
 
     #[test]

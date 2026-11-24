@@ -6,14 +6,23 @@
 //!   same volume within 0.5 %, so a time compared between them compares the same job (adaptive
 //!   once left 12 % of a level while its time was compared with clear's). Pairs that differ by
 //!   design are listed with the reason.
+//! - no micro-moves: every adaptive op's mean move (all its moves, links and rapids too) is at
+//!   least the tool's radius and at least the mean move of clear on the same part (adaptive was
+//!   once posted as its 0.75 mm simulation steps: 5,348 blocks where clear has 1,171).
 use forge_cam_quality::{Config, JobQ, measure};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 /// Parts whose strategies cut different regions by design.
 const UNEQUAL: &[(&str, &str)] = &[
-    ("rptu4", "closed pockets: clear clears them, adaptive does not take region \"pockets\""),
-    ("rptu5", "closed pockets: clear clears them, adaptive does not take region \"pockets\""),
+    (
+        "rptu4",
+        "closed pockets: clear clears them, adaptive does not take region \"pockets\"",
+    ),
+    (
+        "rptu5",
+        "closed pockets: clear clears them, adaptive does not take region \"pockets\"",
+    ),
 ];
 
 fn files() -> Vec<PathBuf> {
@@ -51,19 +60,39 @@ fn chip_load_and_equal_work() {
     let mut over = Vec::new();
     // (part, strategy) -> removed, for the parts named NAME_STRATEGY_cam
     let mut work: BTreeMap<String, Vec<(String, f64)>> = BTreeMap::new();
+    // part -> (strategy, op, mean move, tool radius), the clearing ops
+    let mut means: BTreeMap<String, Vec<(String, String, f64, f64)>> = BTreeMap::new();
     for j in &jobs {
-        let stem = PathBuf::from(&j.file).file_stem().unwrap().to_string_lossy().into_owned();
+        let stem = PathBuf::from(&j.file)
+            .file_stem()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
         assert!(j.errors.is_empty(), "{stem}: {:?}", j.errors);
         for q in &j.ops {
             if q.fz_target > 0.0 && q.hex_max > 1.10 * q.fz_target {
-                over.push(format!("{stem}/{}: hex_max {:.4} against fz {:.4}", q.name, q.hex_max, q.fz_target));
+                over.push(format!(
+                    "{stem}/{}: hex_max {:.4} against fz {:.4}",
+                    q.name, q.hex_max, q.fz_target
+                ));
             }
         }
         let name = stem.trim_end_matches("_cam");
         for strat in ["_clear", "_adaptive", "_zigzag"] {
             if let Some(part) = name.strip_suffix(strat) {
                 let removed: f64 = j.ops.iter().map(|q| q.removed).sum();
-                work.entry(part.to_string()).or_default().push((strat[1..].to_string(), removed));
+                work.entry(part.to_string())
+                    .or_default()
+                    .push((strat[1..].to_string(), removed));
+                for q in j.ops.iter().filter(|q| q.kind == "adaptive" || q.kind == "clear") {
+                    let len = q.len_cut + q.len_air + q.len_rapid;
+                    means.entry(part.to_string()).or_default().push((
+                        q.kind.clone(),
+                        q.name.clone(),
+                        len / (q.moves.max(1) as f64),
+                        0.5 * q.d,
+                    ));
+                }
             }
         }
     }
@@ -79,5 +108,92 @@ fn chip_load_and_equal_work() {
             unequal.push(format!("{part}: {v:?}"));
         }
     }
-    assert!(unequal.is_empty(), "strategies of one part remove different volumes:\n{}", unequal.join("\n"));
+    assert!(
+        unequal.is_empty(),
+        "strategies of one part remove different volumes:\n{}",
+        unequal.join("\n")
+    );
+    let mut micro = Vec::new();
+    for (part, v) in &means {
+        let clear = v
+            .iter()
+            .filter(|x| x.0 == "clear")
+            .map(|x| x.2)
+            .fold(0.0, f64::max);
+        for (kind, name, mean, r) in v.iter().filter(|x| x.0 == "adaptive") {
+            if *mean < *r || *mean < clear {
+                micro.push(format!(
+                    "{part}/{name} ({kind}): mean move {mean:.2} mm, r {r}, clear's {clear:.2}"
+                ));
+            }
+        }
+    }
+    assert!(
+        micro.is_empty(),
+        "adaptive posts short moves:\n{}",
+        micro.join("\n")
+    );
+}
+
+/// A ratchet on micro-moves: in every adaptive op, at most a quarter of the cutting moves (cut
+/// lines and arcs) are shorter than 1 mm. (They were 5,348 blocks with a 2.2 mm mean on
+/// deep_boss once; now 7-24 % of cutting moves are under 1 mm, at pass ends and transitions;
+/// the most on the shallow RPTU levels.)
+#[test]
+fn adaptive_cutting_moves_not_micro() {
+    use forge_cam::ops::{PMove, Phase};
+    let mut bad = Vec::new();
+    for f in files() {
+        let src = std::fs::read_to_string(&f).unwrap();
+        if !src.contains("adaptive(") {
+            continue;
+        }
+        let cam = forge_cam_lang::run(&src, f.parent().unwrap());
+        for op in cam.ops.iter().filter(|o| o.kind == "adaptive") {
+            let (mut n, mut short) = (0usize, 0usize);
+            for p in &op.paths {
+                let mut at = p.start;
+                for m in &p.moves {
+                    let (to, len) = match *m {
+                        PMove::Line { to, phase, .. } => {
+                            let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                            (
+                                to,
+                                if phase == Phase::Cut && (to[2] - at[2]).abs() < 1e-9 {
+                                    Some(l)
+                                } else {
+                                    None
+                                },
+                            )
+                        }
+                        PMove::Arc { to, c, .. } => {
+                            // the chord bounds the arc's length from below
+                            let _ = c;
+                            (
+                                to,
+                                Some(((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt()),
+                            )
+                        }
+                        PMove::Rapid { to } => (to, None),
+                        _ => continue,
+                    };
+                    if let Some(l) = len {
+                        n += 1;
+                        if l < 1.0 {
+                            short += 1;
+                        }
+                    }
+                    at = to;
+                }
+            }
+            if n > 0 && short * 4 > n {
+                bad.push(format!(
+                    "{}/{}: {short} of {n} cutting moves under 1 mm",
+                    f.display(),
+                    op.name
+                ));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "adaptive posts micro-moves:\n{}", bad.join("\n"));
 }

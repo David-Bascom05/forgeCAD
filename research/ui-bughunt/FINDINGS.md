@@ -287,11 +287,18 @@ list on main: this branch's new strings add none).
   outer loop are unchanged, so the answer is the same to the bit: only triangles that could not
   be nearer are left out, and the point depends only on the ray and the distance. 269 s ->
   about 3.5 s.
-- Tests: `measure::tests::the_tree_finds_the_wall_every_pair_does_bit_for_bit` (the old loop
-  kept as the reference: a plate with holes, a tube). Also every example compared old vs new
-  with `forgecad measure F wall exact`: identical.
+- Tests: `forge-wall`'s `the_tree_finds_the_wall_every_pair_does_bit_for_bit`, with
+  `forge_agent::measure::wall` itself as the reference (a plate with holes, a tube; whole and
+  stepped 7 rays at a time). Also every example compared old vs new with
+  `forgecad measure F wall exact`: identical (on one tree; across train 5's merge two parts'
+  geometry changed, and on the merged tree both algorithms agree there too).
+- It lives in its own crate, `interface/forge-wall`, used by the CLI and the app only.
+  forge-agent is as on main. Inside forge-agent it moved how forge-lang's binaries are compiled
+  (forge-lang links forge-agent; its codegen units shifted): a few hundred instructions on some
+  of the speed gate's lines, within the band but over main. Out of it, the gate's binaries are
+  built from main's sources.
 - Then (coordinator): in the single-threaded page Wall no longer measures on open. The panel
-  shows "Measure thinnest wall", and the search (`forge_agent::measure::WallSearch`, `wall`
+  shows "Measure thinnest wall", and the search (`forge_wall::WallSearch`, `wall`
   stepped, the same rays in the same order) then runs 25 ms per frame. The page keeps drawing,
   the panel shows "Working it out... N%", and Cancel stops it. On the desktop and in the
   threaded page it still measures on open, on a worker, which now reports how far it is and
@@ -309,6 +316,41 @@ list on main: this branch's new strings add none).
   page's edges showed resize cursors; a page has no window of its own, so none of them did
   anything (the page's host drops those actions). Not drawn in the page now (shell/mod.rs
   `title_bar`, `resize_edges`). Test: `web/tests/chrome.cjs` (no icon pixels there; fails before).
+
+## 20. Deep links: `?open=../x` killed the page; a linked drawing never drew its part (ui/bughunt-3)
+
+- `?open=../../../etc/passwd` (any path with `..`): app.js's `cleanPath` threw at the top level,
+  before `start_app`, so the page stayed dead (`window.forgecad` never set, a page error). The
+  app now starts with nothing open (its empty state: New part, Open…), and its status says
+  "Couldn't open ../x: it isn't in this project." (`app_say`; UX-LEAD's wording). File > Save As
+  with such a name threw the same way and said nothing. Now it says "Couldn't save as ../x: it
+  isn't in this project."
+- `?open=machined/flange_dwg.fg`: the page opens the linked file before the project's other
+  files (they follow its first frame), then asks for a rebuild once they have come. That rebuild
+  covered the part document and machining documents, not a drawing, so the sheet stayed empty
+  with "flange.fg: no such file". A file that was missing when the drawing was made is watched by
+  nothing, so the same happened on the desktop when the part was saved after its drawing was
+  opened. `Gui::rebuild_open` makes every open document again from its files, the drawing
+  included (`DrawingEnv::rebuild`). The page's rebuild is that.
+- Tests: `tests/late_part.rs` (native: the drawing opened before its part, the part written,
+  `rebuild_open`: no "no such file"; fails before) and `web/tests/deeplink.cjs` (both links in the
+  page; fails before: the page error).
+- Not changed: `?env=bogus` is ignored without a word; a missing file says its path twice
+  ("nope/missing.fg: nope/missing.fg: no such file").
+
+## 21. The page's status said "Agent connection: operation not supported…"; a STEP picked said nothing (ui/bughunt-3)
+
+- At start the app published its agent's terminal connection (`start_agent_bridge`, from
+  `load_settings`). A page has no terminal to connect (the agent runs in the desktop app), so it
+  failed, and "Agent connection: operation not supported on this platform" stood in the status
+  bar until something said otherwise. A linked DWG said nothing over it. Not started in a page now.
+- File > Open > From this computer with a STEP model (or a font): the file was added to the
+  project, the dialog closed, and nothing on screen changed. It has nothing to open itself (a
+  part reads it), so now the status says "Added to the project: NAME". A DWG opens, as before.
+- Test: `web/tests/import.cjs` (a STEP added and said; a DWG opened; a DWG linked to in a new
+  page, with no agent failure in the status; fails before on both).
+- Swept fine in the page: Markup (draw, text with typing, Esc, Done); DWG open (layers,
+  properties, its command line).
 
 ## Open (reported, not fixed here)
 
