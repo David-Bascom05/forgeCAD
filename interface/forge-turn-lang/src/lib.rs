@@ -243,7 +243,7 @@ impl TurnCam {
                 };
                 let machine = match a.get("machine") {
                     Some(V::Str(m)) => {
-                        Some(machine::lathe(machine::BUILTIN, m).map_err(|e| format!("{e:?}"))?)
+                        Some(machine::builtin(m).map_err(|e| format!("{e:?}"))?)
                     }
                     None => None,
                     Some(v) => return Err(format!("`machine:` is a name, not {v:?}")),
