@@ -61,6 +61,10 @@ static SURFACED: memo::Memo<Surfaced> = memo::Memo::new();
 /// The certifications made by earlier runs of documents in this process (memo.rs).
 static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
 
+/// Programs' round trips (G6): the text and the motion read back, or why not.
+type RoundTrip = Result<(String, Vec<forge_post::Motion>), String>;
+static ROUND_TRIPS: memo::Memo<RoundTrip> = memo::Memo::new();
+
 /// 2D ops' engagement samples, per path (`feeds_from_engagement`).
 static SCHEDULED: memo::Memo<Vec<Vec<forge_cam::engage::Sample>>> = memo::Memo::new();
 
@@ -8534,7 +8538,13 @@ impl Cam {
                 return po;
             }
         };
-        match forge_post::round_trip(&q, &d) {
+        // from an earlier run when the program and the dialect are the same (memo.rs): the
+        // round trip prints, reads back and compares, a function of these alone; the key is
+        // the quantised program (integers) and the dialect, each in full
+        let rt = ROUND_TRIPS.get_or(format!("round_trip/1 {q:?} {d:?}"), || {
+            forge_post::round_trip(&q, &d)
+        });
+        match rt {
             Ok((txt, _)) => {
                 po.round_trip = true;
                 po.lines = txt.lines().count();
