@@ -75,14 +75,16 @@ impl Fit {
         }
     }
 
-    /// Lines and planar arcs of radius 0.05..1000 mm, within `tol`.
+    /// Lines and arcs of radius 0.05..200 mm, within `tol`; an arc's ends at most `tol` apart in
+    /// height (planar but for rounding: a level pass's heights are computed, not copied). A
+    /// larger radius is a line to a control (and a long reach to a check that boxes the circle).
     pub fn arcs(tol: f64) -> Fit {
         Fit {
             tol,
             arcs: true,
             min_r: 0.05,
-            max_r: 1000.0,
-            arc_dz: 0.0,
+            max_r: 200.0,
+            arc_dz: tol,
         }
     }
 }
@@ -293,6 +295,131 @@ pub fn fit(pts: &[[f64; 3]], f: Fit, accept: &mut dyn FnMut([f64; 3], &Piece) ->
     out
 }
 
+/// A point of the piece from `at`, at the fraction t of it (an arc's height linear in the angle).
+fn point(at: [f64; 3], p: &Piece, t: f64) -> [f64; 3] {
+    match *p {
+        Piece::Line { to } => [
+            at[0] + (to[0] - at[0]) * t,
+            at[1] + (to[1] - at[1]) * t,
+            at[2] + (to[2] - at[2]) * t,
+        ],
+        Piece::Arc { to, c, cw } => {
+            let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+            let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
+            let mut a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
+            let tau = std::f64::consts::TAU;
+            if cw {
+                while a1 >= a0 {
+                    a1 -= tau;
+                }
+            } else {
+                while a1 <= a0 {
+                    a1 += tau;
+                }
+            }
+            let (s, co) = dmath::sin_cos(a0 + (a1 - a0) * t);
+            [c[0] + r * co, c[1] + r * s, at[2] + (to[2] - at[2]) * t]
+        }
+    }
+}
+
+fn seg_dist(p: [f64; 3], a: [f64; 3], b: [f64; 3]) -> f64 {
+    let d = sub(b, a);
+    let l2 = dot(d, d);
+    let s = if l2 > 0.0 {
+        (dot(sub(p, a), d) / l2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    norm(sub(p, [a[0] + s * d[0], a[1] + s * d[1], a[2] + s * d[2]]))
+}
+
+/// A point's distance to the piece from `at`: exact for a line; for an arc, to the arc's point
+/// at the point's own angle (clamped to the sweep), which is at least the true distance.
+fn piece_dist(q: [f64; 3], at: [f64; 3], p: &Piece) -> f64 {
+    match *p {
+        Piece::Line { to } => seg_dist(q, at, to),
+        Piece::Arc { to, c, cw } => {
+            let tau = std::f64::consts::TAU;
+            let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
+            // the angle from the start in the direction of travel, in [0, τ)
+            let fwd = |x: f64, y: f64| {
+                let t = dmath::atan2(y - c[1], x - c[0]);
+                let mut u = if cw { a0 - t } else { t - a0 };
+                while u < 0.0 {
+                    u += tau;
+                }
+                while u >= tau {
+                    u -= tau;
+                }
+                u
+            };
+            let sweep = fwd(to[0], to[1]);
+            if sweep <= 0.0 {
+                return norm(sub(q, at)).min(norm(sub(q, to)));
+            }
+            let u = fwd(q[0], q[1]);
+            // past the end: the nearer end of the sweep (by angle on the far side)
+            let t = if u <= sweep {
+                u / sweep
+            } else if u - sweep < tau - u {
+                1.0
+            } else {
+                0.0
+            };
+            norm(sub(q, point(at, p, t)))
+        }
+    }
+}
+
+fn poly_dist(p: [f64; 3], poly: &[[f64; 3]]) -> f64 {
+    let mut m = f64::INFINITY;
+    for w in poly.windows(2) {
+        m = m.min(seg_dist(p, w[0], w[1]));
+    }
+    m
+}
+
+/// The fitted pieces' measured distance from the polyline they replace, both ways: points
+/// sampled along each piece (at most `h` apart) against the input points it covers, and those
+/// points (and their chords' midpoints) against the piece itself (an arc's point at the same
+/// angle: at least the true distance). A measurement, beside the
+/// bound `fit` keeps by construction; NaN when the pieces do not end on the input's vertices
+/// in order.
+pub fn deviation(pts: &[[f64; 3]], ps: &[Piece], h: f64) -> f64 {
+    let mut worst: f64 = 0.0;
+    let mut i = 0;
+    for p in ps {
+        let to = p.to();
+        let Some(dj) = pts[i + 1..].iter().position(|&q| q == to) else {
+            return f64::NAN;
+        };
+        let j = i + 1 + dj;
+        let run = &pts[i..=j];
+        let at = pts[i];
+        // the piece's length bounds its samples' count
+        let mut len = 0.0;
+        for w in run.windows(2) {
+            len += norm(sub(w[1], w[0]));
+        }
+        let n = ((len / h).ceil() as usize).clamp(2, 100_000);
+        let samples: Vec<[f64; 3]> = (0..=n).map(|k| point(at, p, k as f64 / n as f64)).collect();
+        for &q in &samples {
+            worst = worst.max(poly_dist(q, run));
+        }
+        for w in run.windows(2) {
+            let m = [
+                0.5 * (w[0][0] + w[1][0]),
+                0.5 * (w[0][1] + w[1][1]),
+                0.5 * (w[0][2] + w[1][2]),
+            ];
+            worst = worst.max(piece_dist(w[0], at, p)).max(piece_dist(m, at, p));
+        }
+        i = j;
+    }
+    worst
+}
+
 /// The pieces as moves at feed `f` (arcs are cutting moves to the checker, whatever `phase`).
 pub fn to_moves(ps: &[Piece], f: f64, phase: Phase) -> Vec<PMove> {
     ps.iter()
@@ -409,6 +536,9 @@ mod tests {
         assert!(ps.len() <= 4, "{}", ps.len());
         assert!(ps.iter().all(|p| matches!(p, Piece::Arc { cw: false, .. })));
         assert!(deviation(&pts, &ps) <= tol * 1.0001, "{}", deviation(&pts, &ps));
+        // the public measurement agrees (sampled more finely here than there)
+        let m = super::deviation(&pts, &ps, 0.001);
+        assert!(m <= tol * 1.0001 && m > 0.0, "{m}");
         // lines only: many more pieces, still within tolerance
         let pl = fit(&pts, Fit::lines(tol), &mut yes);
         assert!(pl.len() > 20 && pl.len() < n, "{}", pl.len());
