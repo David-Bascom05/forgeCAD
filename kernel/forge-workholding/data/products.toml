@@ -13,22 +13,17 @@ name = "kurt-dx6"
 kind = "vise"
 vendor = "Kurt"
 product = "DX6 CrossOver"
-note = "height = bed height 2.875 in + jaw depth 1.735 in = 4.61 in, as Penn Tool lists (it also lists a 'vise height' of 4-3/8 in, unexplained). Weight conflicts between sources (65 / 69 lb), not recorded. Kurt's own site refused automated reading."
-unknown = ["jaw_thickness"]
+note = "height unknown: bed height 2.875 in + jaw depth 1.735 in = 4.61 in (Penn Tool's overall height), but Penn Tool also lists a vise height of 4-3/8 in and Haas prints OAH 4.36 in for the same vise (haas-vise-05-0404): measure it. Weight conflicts between sources (65 / 69 lb), not recorded. Kurt's own site refused automated reading."
+unknown = ["jaw_thickness", "height"]
 jaw_width = 152.4
 jaw_height = 44.07
 max_opening = 230.63
 body_length = 426.97
 body_width = 187.73
-height = 117.09
 clamp_force = 30621
 [[workholding.cite]]
 fields = ["jaw_width", "jaw_height", "max_opening", "body_length", "body_width", "clamp_force"]
 source = "https://www.marssupply.com/userfiles/products/documents/k/KURT_DX6_Catalog.pdf (Kurt DX6 catalog, Dimensional Data: B 6.000, H 1.735, AA 9.080, C 16.810, I 7.391; 6,884 lbf at 80 ft-lb)"
-taken = "2026-11-23"
-[[workholding.cite]]
-fields = ["height"]
-source = "https://www.penntoolco.com/kurt-dx6-crossover-precision-machine-vise-61-421-171/ (overall height 4.61 in)"
 taken = "2026-11-23"
 
 [[workholding]]

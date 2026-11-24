@@ -8,6 +8,9 @@
 use crate::geom::{IDENT, Pose, Prim, V3, xy_dist};
 use crate::{Body, Box3, Kind, Mount, Placed, Record, Role, WhError};
 
+/// How far below the bed a vise's base reaches when its height is not published.
+pub const ENVELOPE_DEPTH: f64 = 1000.0;
+
 fn refuse(device: &str, what: impl Into<String>, fix: impl Into<String>) -> WhError {
     WhError::Placement {
         device: device.to_string(),
@@ -84,11 +87,31 @@ pub fn vise_with(
     let (a, o) = (axis, 1 - axis);
     let jw = rec.get("jaw_width")?;
     let jh = rec.get("jaw_height")?;
-    let t = rec.get("jaw_thickness")?;
     let max = rec.get("max_opening")?;
     let bl = rec.get("body_length")?;
     let bw = rec.get("body_width")?;
-    let height = rec.get("height")?;
+    // a size the maker does not publish (not one merely missing): a conservative envelope from
+    // the published overall sizes instead (see below)
+    let unpublished = |e: &WhError| matches!(e, WhError::Unpublished { .. });
+    let t = match rec.get("jaw_thickness") {
+        Ok(t) => Some(t),
+        Err(e) if unpublished(&e) => None,
+        Err(e) => return Err(e),
+    };
+    let (height, deep) = match rec.get("height") {
+        Ok(h) => (h, false),
+        // the base reaches 1 m below the bed (as the support plane of a setup with no
+        // workholding: far below any table this models)
+        Err(e) if unpublished(&e) => (jh + ENVELOPE_DEPTH, true),
+        Err(e) => return Err(e),
+    };
+    if bl < max {
+        return Err(refuse(
+            &rec.name,
+            format!("its body ({bl}) is shorter than its opening ({max})"),
+            "correct the record",
+        ));
+    }
     if height < jh {
         return Err(refuse(
             &rec.name,
@@ -149,24 +172,45 @@ pub fn vise_with(
     let mid_a = 0.5 * (s0 + s1);
     let acr = |w: f64| (mid_o - 0.5 * w, mid_o + 0.5 * w);
     let centred = rec.kind == Kind::SelfCentring;
-    let base_along = if centred {
-        (mid_a - 0.5 * bl, mid_a + 0.5 * bl)
-    } else {
-        (s0 - tb - t, s0 - tb - t + bl)
+    // the jaws' outer faces: with the thickness, exact; without it, every place the body can
+    // be: a fixed jaw t thick has its body from s0 − t, and the body (bl long) holds the opening,
+    // so 0 ≤ t ≤ bl − max; the union over t is the envelope (a self-centring vise's body is
+    // centred, so its jaws reach at most to the body's ends)
+    let (f0, m1, base_along) = match (t, centred) {
+        (Some(t), false) => (s0 - tb - t, s1 + tb + t, (s0 - tb - t, s0 - tb - t + bl)),
+        (Some(t), true) => (s0 - tb - t, s1 + tb + t, (mid_a - 0.5 * bl, mid_a + 0.5 * bl)),
+        (None, false) => {
+            let lo = s0 - tb - (bl - max);
+            (lo, s0 - tb + bl, (lo, s0 - tb + bl))
+        }
+        (None, true) => (
+            mid_a - 0.5 * bl,
+            mid_a + 0.5 * bl,
+            (mid_a - 0.5 * bl, mid_a + 0.5 * bl),
+        ),
     };
+    // without the jaw thickness the jaws' envelope is the body's width (the jaws lie within it)
+    let jwe = if t.is_some() { jw } else { bw.max(jw) };
     let mut bodies = vec![
         Body::new("base", Role::Base, vec![bx(a, base_along, acr(bw), (table, bed))]),
         Body::new(
             "fixed jaw",
             if centred { Role::Jaw } else { Role::FixedJaw },
-            vec![bx(a, (s0 - tb - t, s0 - tb), acr(jw), (bed, htop))],
+            vec![bx(a, (f0, s0 - tb), acr(jwe), (bed, htop))],
         ),
         Body::new(
             "moving jaw",
             if centred { Role::Jaw } else { Role::MovingJaw },
-            vec![bx(a, (s1 + tb, s1 + tb + t), acr(jw), (bed, htop))],
+            vec![bx(a, (s1 + tb, m1), acr(jwe), (bed, htop))],
         ),
     ];
+    let mut envelope = Vec::new();
+    if t.is_none() {
+        envelope.push("jaw thickness");
+    }
+    if deep {
+        envelope.push("height");
+    }
     let mut notes = vec![format!(
         "{} {}: jaws closed along {} on {:.2} mm, gripping {clamp:.2} mm (jaw top z = {top:.2}); its base on the table at z = {table:.2}",
         rec.kind.name(),
@@ -174,6 +218,13 @@ pub fn vise_with(
         ["x", "y"][a],
         size[a]
     )];
+    if !envelope.is_empty() {
+        notes.push(format!(
+            "a conservative envelope: the maker does not publish its {} (measure them and give them with the vise for its exact bodies){}",
+            envelope.join(" or "),
+            if deep { "; its base reaches 1 m below the bed" } else { "" }
+        ));
+    }
     if let Some((tb, _, sw)) = soft {
         let j = jaws.expect("soft is from jaws");
         let (mut j0, mut j1) = (

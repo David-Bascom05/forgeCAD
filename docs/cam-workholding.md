@@ -23,7 +23,7 @@ body = "base"
 file = "generic-vise-150/base.fg"
 ```
 
-Our generic records say `generic = true` and give one `source`. A size the job measures is
+Stand-ins say `standin = true` and give their `basis`; a user's own values cite `source = "user"`. Vises whose jaw thickness or height is unpublished get a conservative envelope (see research/cam/workholding.md §6). A size the job measures is
 given with the device (`Record::with("jaw_thickness", 22)`); the reply names the field when one
 is missing.
 

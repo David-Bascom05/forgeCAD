@@ -96,10 +96,18 @@ clearance (closed form over boxes and cylinders), and the body that sets it.
 
 ## 6. Library
 
-Generic set (ours, round numbers, "verify with the vendor") plus real products from openly
-published specs, each value cited with source and date; a value not published is UNKNOWN and
-the record says which (a body whose size is UNKNOWN is not generated: the record is listed but
-refused for collision with a typed error naming the missing value). Search order as the machine
+Real products first, the machine vendors' own workholding first (data/vendors.toml: Haas,
+Tormach, Carbide 3D, DATRON, Sherline, Grizzly, Mazak, DN Solutions; then Kurt), then the
+independents (data/products.toml, data/lathe.toml), each value cited with source and date; a
+value not published is UNKNOWN (`unknown = [..]`), never filled in. Stand-ins last
+(data/standins.toml, `standin = true`): only for a class no maker publishes enough of, each with
+its `basis` (which published values it follows, which numbers are ours).
+
+A body whose size is unpublished: for a vise (jaw thickness, height, the sizes no maker gives)
+a conservative envelope from the published overall sizes (the union over every jaw thickness
+the body allows, 0 ≤ t ≤ body length − opening; the base 1 m below the bed without a height),
+said in the notes; elsewhere refused with a typed error naming the field and the fix (measure
+it: `Record::with`, or `forgecad workholding new NAME --from X field=value`, provenance user). Search order as the machine
 library: project `cam/workholding/*.toml`, then the user's, then built-in (a name in an upper
 level hides a lower one; twice in one level is an error). Real parts under `parts/`: each built
 by forge-lang in a test and checked to lie inside its envelope.
@@ -112,3 +120,25 @@ parallel (and one that clears), a toe-clamp job where the path that avoids the c
 one through it is not, a dovetail job held for five-sided access (only the dovetail's grip is
 held; each side's tool axis clears the vise), a lathe chuck job whose turned length needs a jaw
 stick-out the chuck allows (and one it does not); vacuum rule both ways; native and wasm32.
+
+## 8. Field schema (for MACHINE-BUILDER's library editor)
+
+`forge_workholding::schema::schema()` (and `forgecad workholding schema [--json]`,
+`forgecad.workholding-schema/1`) gives every kind: its name, what it is, lathe or mill, and its
+fields: name, unit (mm, N, kPa, deg, rpm, N·m, count, mm[]), required or optional, meaning (one
+meaning per field name across kinds). A record's provenance is one of: cited (a maker's values,
+each `[[workholding.cite]]` with fields, source, date read), standin (with its basis), user
+(`source = "user"`; no date needed). Validation is `Record::from_table` (typed errors: missing,
+not published, bad value, a field the kind does not have, an uncited product value);
+`Record::to_toml` writes a record that reads back equal; `schema::new_from(lib, NAME, FROM,
+given)` makes a user record from any other. Posing preview data: `Workholding::prims()` (named
+blocks and cylinders in the part frame) and, for the lathe, `lathe::Spin.rings` ((ρ, z)
+polygons).
+
+## 9. Generated workholding (a part you machine, with its own setup)
+
+generate.rs: a fixture plate from the part's through holes (round pin and diamond pin in the two
+holes farthest apart, toe clamps at the long sides' middles, the plate as its own `.fg`); step
+jaws (soft jaws with ledges the stock seats on); lathe soft jaws bored to the part (the bore
+region in (ρ, z) for CAM-TURN's boring op, the wall check). forge-cam's soft_jaws (CAM-CORE)
+stays the vise soft-jaw pocket op. Contoured 3D jaws wait for CAM-3AXIS's drop-cutter.

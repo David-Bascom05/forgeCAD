@@ -685,7 +685,11 @@ pub struct Library {
     pub records: Vec<(Record, String)>,
 }
 
-pub const BUILTIN: [(&str, &str); 3] = [
+pub const BUILTIN: [(&str, &str); 4] = [
+    (
+        "builtin/workholding/vendors.toml",
+        include_str!("../data/vendors.toml"),
+    ),
     (
         "builtin/workholding/products.toml",
         include_str!("../data/products.toml"),

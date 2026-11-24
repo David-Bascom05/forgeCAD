@@ -350,24 +350,48 @@ fn plates_zero_point_patterns_and_custom() {
     let w = Workholding { placed: vec![v, z] };
     assert!(!w.faces(1e-9).is_empty() && w.prims().len() >= 6);
     // a real product needing an unpublished size refuses: the Kurt DX6's jaw thickness
-    let e = mill::vise("v", l.get("kurt-dx6").unwrap(), &s, 0, 25.0, None, None).unwrap_err();
-    assert!(e.to_string().contains("jaw_thickness"), "{e}");
-    let measured = l.get("kurt-dx6").unwrap().with("jaw_thickness", 22.0).unwrap();
+    // a real vise whose jaw thickness and height are not published: a conservative envelope
+    // from its published overall sizes, which holds the exact bodies for any measured values
+    let s6 = Box3 {
+        min: [0.0; 3],
+        max: [100.0, 60.0, 44.07],
+    };
+    let env = mill::vise("v", l.get("kurt-dx6").unwrap(), &s6, 0, 44.07, None, None).unwrap();
     assert!(
-        mill::vise(
-            "v",
-            &measured,
-            &Box3 {
-                min: [0.0; 3],
-                max: [100.0, 60.0, 44.07]
-            },
-            0,
-            44.07,
-            None,
-            None
-        )
-        .is_ok()
+        env.notes.iter().any(|n| n.contains("conservative envelope")),
+        "{:?}",
+        env.notes
     );
+    for (t, h) in [(15.0, 117.1), (22.0, 111.1), (190.0, 100.0)] {
+        let m = l
+            .get("kurt-dx6")
+            .unwrap()
+            .with("jaw_thickness", t)
+            .unwrap()
+            .with("height", h)
+            .unwrap();
+        let exact = mill::vise("v", &m, &s6, 0, 44.07, None, None).unwrap();
+        for b in &exact.bodies {
+            let (lo, hi) = b.bounds();
+            let inside = env.bodies.iter().any(|e| {
+                let (a, c) = e.bounds();
+                (0..3).all(|k| lo[k] >= a[k] - 1e-9 && hi[k] <= c[k] + 1e-9)
+            });
+            assert!(inside, "t {t} h {h}: {} {lo:?} {hi:?}", b.name);
+        }
+    }
+    // a value that is merely missing (not listed unknown) is still refused
+    let e = mill::vise(
+        "v",
+        l.get("tormach-vise-35285").unwrap(),
+        &s6,
+        0,
+        30.0,
+        None,
+        None,
+    )
+    .unwrap_err();
+    assert!(e.to_string().contains("body_width"), "{e}");
     // two vises side by side: a pattern
     let one = mill::vise(
         "v",
