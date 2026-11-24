@@ -40,3 +40,4 @@ import IEEE754.Interval.Horner
 import IEEE754.Expansion
 import IEEE754.ExpansionSum
 import IEEE754.Axioms
+import IEEE754.Conic
