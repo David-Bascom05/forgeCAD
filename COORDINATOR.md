@@ -278,3 +278,5 @@ urdf-export, machines/builder, posts/dialects.
 - RULE: a change to a source file the Aeneas translations cite (e.g. forge-geom intersect.rs) needs regenerated translations (TRANSLATE runs translate.sh) in the same train.
 - Curved search (#7, M.ct): option 1: keep today's search, run the certifier as a CI oracle, M.ct UNKNOWN.
 - #21: waiting for David's OK on its 52 bits lines.
+- BAND EXCEPTION (judged, coordinator): B1 near-parallel fix (FLAT-SITES 6f45e5fb on B2, with TRANSLATE cb344640). Patterns seq is about +0.034%, 0.004% over the per-line limit. Accepted because it fixes a false refusal on valid input inside InputSize. Open item: prove an edge-parameter bound so the cost can be recovered.
+- Decisions 2026-11-24: climb is the default cut direction; an unknown op argument is an error with a closest-name fix; forge-machine's own digest may be re-pinned for an exact-in-reals speedup (kernel bits.txt untouched); David: judged bug fixes that change bits.txt merge without asking him.
