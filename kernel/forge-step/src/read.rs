@@ -1248,7 +1248,9 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
             || faces
                 .iter()
                 .any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)));
-        let measure = |n: usize| {
+        let measure = |n: usize, refine: bool| {
+            let x = body.edge(e);
+            let at = |i: usize| x.range.lo + x.range.width() * (i as f64 / n as f64);
             let pts = body.edge_points(e, n);
             faces
                 .iter()
@@ -1256,28 +1258,59 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
                     let s = &body.face(f).surface;
                     // each point from the one before, where the walk holds
                     let mut near = None;
-                    let mut worst = 0.0_f64;
+                    let mut gaps: Vec<(f64, forge_math::Point2)> = Vec::with_capacity(pts.len());
                     for &p in &pts {
                         let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
                         near = Some(uv);
-                        worst = worst.max(s.eval(uv).distance(p));
+                        gaps.push((s.eval(uv).distance(p), uv));
+                    }
+                    let mut worst = gaps.iter().fold(0.0_f64, |m, g| m.max(g.0));
+                    if refine && gaps.len() > 2 {
+                        // a gap can peak sharply between samples (a free-form edge's came out 1.15%
+                        // over 256 samples' on MM 2024): around the three highest local peaks, 32
+                        // more each, what 2048 evenly would find at a twentieth of the work
+                        let mut peaks: Vec<usize> = (0..gaps.len())
+                            .filter(|&i| {
+                                (i == 0 || gaps[i].0 >= gaps[i - 1].0)
+                                    && (i + 1 == gaps.len() || gaps[i].0 >= gaps[i + 1].0)
+                            })
+                            .collect();
+                        peaks.sort_by(|&a, &b| gaps[b].0.total_cmp(&gaps[a].0));
+                        for &i in peaks.iter().take(3) {
+                            let (lo, hi) = (at(i.saturating_sub(1)), at((i + 1).min(n)));
+                            let mut uv = gaps[i].1;
+                            for k in 0..=32 {
+                                let t = lo + (hi - lo) * (k as f64 / 32.0);
+                                let p = x.curve.eval(t.min(x.range.hi));
+                                uv = s.project_near(p, uv);
+                                worst = worst.max(s.eval(uv).distance(p));
+                            }
+                        }
                     }
                     worst
                 })
                 .fold(0.0, f64::max)
         };
-        let dev = measure(16);
+        let dev = measure(16, false);
         let dev = if free_form || dev > LINEAR {
-            dev.max(measure(256))
+            let fine = measure(256, false);
+            // an edge off its faces: its peaks looked at closely, as `check` will ask between these
+            // samples once a boolean has trimmed it
+            if fine > LINEAR {
+                dev.max(measure(256, true))
+            } else {
+                dev.max(fine)
+            }
         } else {
             dev
         };
         if dev > LINEAR {
             // with room over what was measured: `check` measures again, after any rigid move and,
             // once a boolean has trimmed the edge, at other points, where a gap that peaks between
-            // these samples comes out larger (by 1.7e-5 of it on a spline edge of GM2-5AX): a
-            // tolerance of exactly the gap fails it
-            let dev = dev * (1.0 + 1e-3) + 1e-9;
+            // these samples comes out larger (by 1.7e-5 of it on a spline edge of GM2-5AX, by
+            // 1.3e-3 on a piece of TRT210's cylinder-cylinder intersection a boolean split off): a
+            // tolerance of exactly the gap fails it. A hundredth of the gap is room for both
+            let dev = dev * (1.0 + 1e-2) + 1e-9;
             body.edges[e.index()].tol = dev;
             stats.tolerant_edges += 1;
             stats.max_edge_tol = stats.max_edge_tol.max(dev);

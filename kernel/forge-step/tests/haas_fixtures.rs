@@ -130,9 +130,9 @@ fn oring_as_one_closed_nurbs_face_reads() {
 
 /// ST20LY-25LY #140177 (40 faces): a bore along z through the middle, subtracted. The Ok's new
 /// cylinder-cylinder intersection edge (tolerance 1e-5) has a vertex 2.1e-5 off it
-/// (VertexOffEdge); intersect fails alike. FLAT-SITES (drift). 6 such Oks in the first 43 zips.
+/// (VertexOffEdge); intersect failed alike (6 such Oks in the first 43 zips). Fixed by main's
+/// train 6 (drift tolerances).
 #[test]
-#[ignore = "open: a boolean's vertex drifts off its intersection edge"]
 fn bore_through_a_part_checks() {
     use forge_bool::{Op, boolean};
     use forge_math::{Frame, Point2, UnitVec3, Vec3};
@@ -151,6 +151,36 @@ fn bore_through_a_part_checks() {
         let p = check(&r);
         assert!(p.is_empty(), "{op:?}: {p:?}");
     }
+}
+
+/// TRT210 #204568: a file's spline edge (a cylinder-cylinder intersection) whose gap from its faces
+/// peaks between the reader's samples; a boolean that split it left a piece 1.3e-3 over its
+/// tolerance (corpus K029, FLAT-SITES). Every tolerant edge's tolerance covers its gap measured
+/// at 4096 points.
+#[test]
+fn a_tolerant_edges_gap_is_covered_everywhere() {
+    use forge_geom::SurfaceGeom;
+    let b = one("trt210_split_spline_edge.step");
+    let mut n = 0;
+    for e in b.edge_ids() {
+        let x = b.edge(e);
+        if x.tol <= forge_math::tol::LINEAR {
+            continue;
+        }
+        n += 1;
+        let pts = b.edge_points(e, 4096);
+        for &c in &x.coedges {
+            let s = &b.face(b.coedge_face(c)).surface;
+            let mut near = None;
+            for &p in &pts {
+                let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
+                near = Some(uv);
+                let gap = s.eval(uv).distance(p);
+                assert!(gap <= x.tol, "edge {e:?}: gap {gap:e} over tolerance {:e}", x.tol);
+            }
+        }
+    }
+    assert!(n > 0, "the part has tolerant edges");
 }
 
 /// A boolean and a check run under one operation's work budget: past it they refuse, `TooLong`,
