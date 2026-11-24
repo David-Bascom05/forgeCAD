@@ -754,6 +754,16 @@ impl Gui {
                         });
                     }
                 }
+                AgentAct::Answer(id, answer) => {
+                    if let Some(b) = &mut self.agent.backend {
+                        b.answer(&id, answer);
+                    }
+                }
+                AgentAct::Mode(m) => {
+                    if let Some(b) = &mut self.agent.backend {
+                        b.set_mode(m);
+                    }
+                }
                 AgentAct::ListConversations => self.agent_list_conversations(),
                 AgentAct::ResumeConversation(id) => self.agent_resume_conversation(&id),
                 AgentAct::NewChat => {
@@ -998,7 +1008,7 @@ impl Gui {
             }
             self.agent.app_tools = Some(tools);
         }
-        self.agent.backend = Some(match s.kind {
+        let mut backend: Box<dyn crate::agent::Backend> = match s.kind {
             Kind::ClaudeCode => {
                 let c = ClaudeCode::new(
                     claude::Config {
@@ -1065,7 +1075,11 @@ impl Gui {
                 self.agent.endpoint_history = Some(backend.history_handle());
                 Box::new(backend)
             }
-        });
+        };
+        if self.shell.agent.mode_chosen {
+            backend.set_mode(self.shell.agent.mode);
+        }
+        self.agent.backend = Some(backend);
     }
 }
 
