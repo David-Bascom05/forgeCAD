@@ -1146,14 +1146,59 @@ pub fn adaptive(
                             }
                         }
                         // gently (10°): the strip a pass cuts follows the edge the last one
-                        // left, so a steep approach would set every strip's slope
+                        // left, so a steep approach would set every strip's slope. But only as
+                        // far toward the material as the engagement the heading meets ahead
+                        // stays within the cap: going straight on, out to a radius past where
+                        // it first meets material (a start whose disk already overlaps a face
+                        // by more than the cap allows would otherwise turn into it and stall at
+                        // the stock's corner, and whether it does would depend on where the
+                        // grids fall). The first heading, from most toward the material to
+                        // away from it, whose engagement ahead is within the cap; none: the one
+                        // meeting the least
                         let gentle = 10f64.to_radians();
-                        if side > 1e-9 {
-                            gentle.clamp(lo_d, hi_d)
+                        let s = if side > 1e-9 {
+                            1.0
                         } else if side < -1e-9 {
-                            (-gentle).clamp(lo_d, hi_d)
+                            -1.0
                         } else {
+                            0.0
+                        };
+                        if s == 0.0 {
                             0.0f64.clamp(lo_d, hi_d)
+                        } else {
+                            // the most engagement met going straight along w from here: out to
+                            // a radius past the first contact, at most four radii (∞ steps off
+                            // the allowed centres end the look)
+                            let ahead_max = |w: [f64; 2]| -> f64 {
+                                let (mut t, mut hit, mut most) = (len, None::<f64>, 0.0f64);
+                                while t <= 4.0 * f.r && hit.is_none_or(|h| t <= h + f.r) {
+                                    let q = [pos[0] + t * w[0], pos[1] + t * w[1], z];
+                                    let ph = f.phi(q, w);
+                                    if !ph.is_finite() {
+                                        break;
+                                    }
+                                    if ph > 0.0 && hit.is_none() {
+                                        hit = Some(t);
+                                    }
+                                    most = most.max(ph);
+                                    t += len;
+                                }
+                                most
+                            };
+                            let mut least: Option<(f64, f64)> = None;
+                            let mut pick = None;
+                            for k in [1.0, 0.5, 0.0, -0.5, -1.0, -2.0] {
+                                let d = (s * k * gentle).clamp(lo_d, hi_d);
+                                let m = ahead_max(rot(u, d));
+                                if m <= cap {
+                                    pick = Some(d);
+                                    break;
+                                }
+                                if least.is_none_or(|(_, lm)| m < lm) {
+                                    least = Some((d, m));
+                                }
+                            }
+                            pick.or(least.map(|(d, _)| d)).unwrap_or(0.0f64.clamp(lo_d, hi_d))
                         }
                     } else if eval(toward).0 <= cap {
                         toward
