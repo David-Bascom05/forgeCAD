@@ -11,6 +11,7 @@ macro_rules! decided {
     };
 }
 
+mod apex;
 /// This crate's Cargo features and whether this build has each: a result cache keyed by the
 /// sources alone would hand one build's answers to a build with other features
 /// (forge-lang's `store::key` folds them in).
@@ -46,3 +47,7 @@ pub use classify::{Index, Where};
 pub use nary::{Batch, CpuBatch, nary, nary_phase_times, nary_with};
 pub use shape::{Member, Seg2, Shape};
 pub use unify::unify;
+
+// last, so that with the feature off every line above is the line it was
+#[cfg(feature = "certify")]
+pub mod certify;

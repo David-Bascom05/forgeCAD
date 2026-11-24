@@ -2,5 +2,9 @@ import ForgeBoolProof.Statement
 import ForgeBoolProof.Contracts
 import ForgeBoolProof.Compose
 import ForgeBoolProof.KeepRule
+import ForgeBoolProof.FlatSites.Where
+import ForgeBoolProof.FlatSites.G15
+import ForgeBoolProof.FlatSites.G13
+import ForgeBoolProof.FlatSites.TolOn
 import ForgeBoolProof.Bridge
 import ForgeBoolProof.Assembly

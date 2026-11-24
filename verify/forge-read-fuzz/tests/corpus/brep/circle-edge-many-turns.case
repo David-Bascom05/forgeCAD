@@ -1,0 +1,8 @@
+# A circle's edge given the range -1e308 to pi/2: the check drew it in 65536 samples (`default_segments`
+# overflowed past that) that all overlap, and its crossing sweep compared every pair: minutes. An edge
+# runs at most once round a closed curve, over a finite range (`finish`).
+from: verify/forge-read-fuzz/seeds/strike.brep
+replace: \n1  2 0 0 1.5707963267949\n
+with: \n1  2 0 -1.E308 1.5707963267949\n
+# (the import reads, the solid is refused within it)
+max-ms: 5000

@@ -89,6 +89,47 @@ pub const BUILTINS: &[&str] = &[
     "properties",
 ];
 
+/// The built-ins that are functions of numbers alone: their arguments may be past
+/// `within_bounds`'s, as any arithmetic's may.
+const PURE: &[&str] = &[
+    "sqrt", "div", "mod", "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "abs", "min", "max", "count",
+    "ratio", "len",
+];
+
+/// Every number in `v` (through tuples and lists) finite and within `eval::MAX_MAGNITUDE` (angles
+/// `eval::MAX_ANGLE`): what a feature, a sketch or a placement may be given.
+pub fn within_bounds(v: &Value, span: Span) -> R<()> {
+    match v {
+        Value::Num(n) => {
+            let most = if n.dim == Dim::Angle {
+                crate::eval::MAX_ANGLE
+            } else {
+                crate::eval::MAX_MAGNITUDE
+            };
+            if !n.v.is_finite() || n.v.abs() > most {
+                return Err(Error::TooLarge { span, value: n.v });
+            }
+            Ok(())
+        }
+        Value::Tuple(xs) | Value::List(xs) => xs.iter().try_for_each(|x| within_bounds(x, span)),
+        _ => Ok(()),
+    }
+}
+
+/// Whether `within_bounds` passes `v`: the test alone, the refusal left to it. (NaN and the
+/// infinities fail the comparison.)
+#[inline]
+fn fits(v: &Value) -> bool {
+    match v {
+        Value::Num(n) => {
+            n.v.abs() <= crate::eval::MAX_ANGLE
+                || (n.dim != Dim::Angle && n.v.abs() <= crate::eval::MAX_MAGNITUDE)
+        }
+        Value::Tuple(xs) | Value::List(xs) => xs.iter().all(fits),
+        _ => true,
+    }
+}
+
 /// A built-in function's name, this module's or another's (shapes).
 pub fn builtin(name: &str) -> Option<&'static str> {
     names_get(name).and_then(|n| n.1)
@@ -268,14 +309,25 @@ impl Args {
                 })?,
             };
             let v = ev.expr(&a.value)?;
-            if let Some(sk) = ev.sketch_ref() {
+            // where values enter the kernel: a number no part has is refused here, at its
+            // argument; arithmetic (and these functions of numbers) may pass through larger ones
+            // (a number or a point within the smaller bound is fine whatever its dimension: checked
+            // here, the walk only for what may hold more)
+            if !fits(&v) && !PURE.contains(&func) {
+                within_bounds(&v, a.value.span)?;
+            }
+            // (the sketch borrowed, not its handle cloned for each argument)
+            if let Some(sk) = &ev.sketch {
                 crate::eval::collect_keys(&v, &mut sk.borrow_mut().params);
             }
             crate::eval::collect_keys(&v, &mut ev.reads);
             // an empty face set is unknown only after an earlier failure (or in `check`); on a
             // part built so far without one, it is a selection that found nothing
-            let known_empty = ev.b.building && ev.errors.is_empty() && !unresolved_in(&v);
-            ev.poisoned |= unknown_in(&v) && !known_empty;
+            // (the scan for an unresolved value only where the value holds something unknown)
+            if unknown_in(&v) {
+                let known_empty = ev.b.building && ev.errors.is_empty() && !unresolved_in(&v);
+                ev.poisoned |= !known_empty;
+            }
             // (given twice, the last is the one)
             match vals.iter_mut().find(|x| x.0 == key) {
                 Some(x) => x.1 = (v, a.value.span),
@@ -875,6 +927,13 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             let r = a.req_num("r", LEN)?;
             let st = a.num("start", ANG)?.unwrap_or(Num::konst(0.0, Dim::Angle));
             let src = values::join_src(&values::join_src(&n.src, &r.src), &st.src);
+            // a count is a size
+            if !(n.v >= 0.0 && n.v <= crate::eval::MAX_COUNT as f64) {
+                return Err(Error::TooLarge {
+                    span: a.span("n"),
+                    value: n.v,
+                });
+            }
             let k = n.v.round() as usize;
             let pts = (0..k)
                 .map(|i| {
