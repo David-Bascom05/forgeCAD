@@ -71,6 +71,9 @@ inductive Err where
   | notHere : Name → Err
   /-- a statement calling a name the statement table lacks ("is not a machining built-in") -/
   | unknownCall : Name → Err
+  /-- an argument the built-in does not take (`named` against its list: forge-cam-lang's
+  argument lists) -/
+  | unknownArg : Name → Name → Err
   /-- any error of a built-in or of arithmetic -/
   | other : String → Err
 

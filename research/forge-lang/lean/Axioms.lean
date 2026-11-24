@@ -197,3 +197,7 @@ open ForgeLang ForgeLang.Counter
 #print axioms renFirst_keep
 #print axioms lift_nested
 #print axioms liftLiteral_body
+#print axioms Families.checkArgs_ok_iff
+#print axioms Families.misspelled_refused
+#print axioms Families.checkArgs_extend
+#print axioms Families.checkArgs_new

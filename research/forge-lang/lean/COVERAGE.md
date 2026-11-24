@@ -72,6 +72,21 @@ documents in `examples/machined/` included. Headers that are names add no syntax
 | header | `assembly` | | forge-render `is_assembly` (optional first line; an assembly is a file with components or joints) | `LL1.Documents.assembly_header_accepted`, `Families.families_not_keywords`. Semantics: GAP (assembly namespace, see `assembly`) |
 | keywords | `syntax::KEYWORDS` | `shared`, `param`, `fn`, `for`, `in`, `if`, `else`, `return`, `expect`, `and`, `or`, `not`, `true`, `false`, `sketch`, `path`, `at`, `component`, `drawing`, `harness` | `interface/forge-lang/src/syntax.rs` (`RESERVED`: `at`, a keyword that texts used as a name) | `LL1.Impl.grammar_ll1`, `LL1.Impl.impl_unambiguous`, `LL1.Impl.source_to_tree`, `LL1.Impl.impl_roundtrip`, `LL1.Driver.rd_eq_run`, `LL1.Lex.word_maximal`, `LL1.Lex.lex_lossless`, `LL1.LexUnits.in_keyword_after_number` |
 
+## Arguments
+
+A built-in's arguments are its keywords and positionals (`#0`, `#1`, ..). Where a crate lists
+them (`pub const ARGS: &[(&str, &[&str])]`, the list `named` checks and CAM-UI's dialog schema is
+checked against), each built-in has a row here whose names are its list's; until then the kind
+has one row, a GAP. The check: `FamiliesArgs.checkArgs_ok_iff` (a call is taken exactly when every
+argument it gives is listed), `FamiliesArgs.misspelled_refused`, and for an extension
+`FamiliesArgs.checkArgs_extend` (a built-in that gains arguments takes every call it took) and
+`FamiliesArgs.checkArgs_new`.
+
+| Kind | Item | Names | Rust site | Lean |
+|---|---|---|---|---|
+| args | `cam` | | `interface/forge-cam-lang/src/lib.rs` `named`: no list yet | GAP: a keyword no built-in reads is ignored (`stepovr:` runs on the default); the check, once a list exists, is `FamiliesArgs.misspelled_refused` |
+| args | `turn` | | `interface/forge-turn-lang/src/lib.rs` `named_args`: no list yet | GAP: as for `cam`; `FamiliesArgs.misspelled_refused` once a list exists |
+
 ## Edit ops
 
 The theorems are about the core model of a part document (`Core.lean`). The text-level ones
