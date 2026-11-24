@@ -53,9 +53,21 @@ fn emit() -> Emit {
 
 /// Links the passes and certifies the path; returns (moves, seconds).
 fn certify(dc: &dyn DropCutter, what: &str, ps: Vec<Pass>, faces: &[Face], tool: &ToolUse) -> (usize, f64) {
+    certify_fit(dc, what, ps, faces, tool, None)
+}
+
+/// `certify` with the passes fitted first (forge_cam::fit through link::path_fit).
+fn certify_fit(
+    dc: &dyn DropCutter,
+    what: &str,
+    ps: Vec<Pass>,
+    faces: &[Face],
+    tool: &ToolUse,
+    fit: Option<link::FitRule>,
+) -> (usize, f64) {
     assert!(!ps.is_empty(), "{what}: no passes");
     let ps = link::order(vec![ps], [0.0, 0.0, 50.0], true);
-    let (p, count) = link::path(
+    let (p, count) = link::path_fit(
         dc,
         &ps,
         link::Rules {
@@ -64,7 +76,15 @@ fn certify(dc: &dyn DropCutter, what: &str, ps: Vec<Pass>, faces: &[Face], tool:
             slack: 0.0,
         },
         emit(),
+        fit,
     );
+    if let Some(f) = fit {
+        assert!(
+            count.fit_dev <= f.fit.tol * (1.0 + 1e-9),
+            "{what}: fitted {} from the passes",
+            count.fit_dev
+        );
+    }
     let t0 = std::time::Instant::now();
     let sum = ops::certify_with(&p, tool, faces, &[(0, Vec::new())], &[], 0.0, 0.01, 1.0, true);
     let secs = t0.elapsed().as_secs_f64();
@@ -119,6 +139,7 @@ fn every_strategy_on_the_mould_core_is_certified() {
         bottom: 10.5,
         grid: 1.0,
         tol: 0.01,
+        contour: 0.01,
         area: None,
     };
     let (st, sh) = steep::steep_and_shallow(&dc, p).unwrap();
@@ -142,20 +163,21 @@ fn every_strategy_on_the_mould_core_is_certified() {
         &tool,
     );
 
+    // the same spiral fitted (its pattern chorded finely, so arcs fit its points) and the flat
+    // passes fitted: far fewer moves, every piece proven by the drop-cutter and certified here
+    let fr = link::FitRule {
+        fit: forge_cam::fit::Fit::arcs(0.0005),
+        slack: 0.005,
+    };
+    let sp = strategy::spiral_sag(&dc, [0.0, 0.0], 0.0, 12.0, 2.0, false, 0.0001, d, &top_box).unwrap();
+    let (n0, _) = certify(&dc, "spiral, fine", sp.clone(), &faces, &tool);
+    let (n1, _) = certify_fit(&dc, "spiral, fitted", sp, &faces, &tool, Some(fr));
+    assert!(n1 * 5 < n0, "spiral: {n1} fitted moves vs {n0}");
+
     // ramp between two waterline levels on the walls, a quarter of each ring
     let lv: Vec<_> = [22.0, 20.0]
         .iter()
-        .map(|&z| {
-            waterline::level(
-                &dc,
-                z,
-                waterline::Params {
-                    grid: 1.0,
-                    tol_xy: 0.01,
-                },
-            )
-            .unwrap()
-        })
+        .map(|&z| waterline::level(&dc, z, waterline::Params::new(1.0, 0.01)).unwrap())
         .collect();
     certify(
         &dc,
@@ -172,13 +194,10 @@ fn every_strategy_on_the_mould_core_is_certified() {
         lv.iter().any(|z| (z - 26.0).abs() < 0.01) && lv.iter().any(|z| (z - 10.0).abs() < 0.01),
         "{lv:?}"
     );
-    certify(
-        &dc,
-        "flat",
-        strategy::flat(&dc, &lv, 0.0, 3.0, 0.5, 0.01, &quarter),
-        &faces,
-        &tool,
-    );
+    let fl = strategy::flat(&dc, &lv, 0.0, 3.0, 0.5, 0.01, &quarter);
+    let (n0, _) = certify(&dc, "flat", fl.clone(), &faces, &tool);
+    let (n1, _) = certify_fit(&dc, "flat, fitted", fl, &faces, &tool, Some(fr));
+    assert!(n1 * 3 < n0, "flat: {n1} fitted moves vs {n0}");
 
     // scallop rings on the top, pencil along the foot fillet (a quarter)
     certify(

@@ -227,6 +227,9 @@ pub struct Params {
     pub grid: f64,
     /// Tolerances: waterline xy, drape slack and leave.
     pub tol: f64,
+    /// The waterline contours' accuracy in xy (vertices and chord sag), at most `tol`: `tol`
+    /// for the plain op, finer for a fitter (the proofs keep `tol`'s slack).
+    pub contour: f64,
     /// The xy box the parallel passes span (None: the part's extent).
     pub area: Option<[[f64; 2]; 2]>,
 }
@@ -246,7 +249,8 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
         && p.dz > 0.0
         && p.stepover > 0.0
         && p.grid > 0.0
-        && p.tol > 0.0)
+        && p.tol > 0.0
+        && p.contour > 0.0)
     {
         return Err(SteepError::Bad("params"));
     }
@@ -261,7 +265,8 @@ pub fn steep_and_shallow(dc: &dyn DropCutter, p: Params) -> Result<(Vec<Pass>, V
         &zs,
         waterline::Params {
             grid: p.grid,
-            tol_xy: p.tol,
+            tol_xy: p.contour.min(p.tol),
+            slack: 0.5 * p.tol,
         },
     )
     .map_err(SteepError::Waterline)?;
@@ -312,6 +317,7 @@ mod tests {
             bottom: 0.0,
             grid: 1.0,
             tol: 0.01,
+            contour: 0.01,
             area: None,
         };
         let (steep, shallow) = steep_and_shallow(&dc, p).unwrap();

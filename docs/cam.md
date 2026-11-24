@@ -90,7 +90,13 @@ tip height), `sample:` (the spacing of the drop-cutter's samples along a pass), 
 proven above the surface) and `lift:` (a lifted link's height over the surface); otherwise a
 link retracts. Every move is certified like any op. With `cusp:` the reply's `finish` gives the
 cusp asked, the cusp the spacing is proven to bound, the stepover, the step-down and the links
-made.
+made. The ops from `pencil` to `flat` also take `fit:`, a chord tolerance in mm (default
+0.25 × the setup's `tol`, at most 0.05 × `cusp`; `fit: 0` turns it off): each pass's points are
+fitted into the longest lines and arcs (G2/G3 in xy, level) that stay within it of the pass, both
+ways, and each piece is proven by the drop-cutter as a chord is before it is kept (forge-cam's
+`fit`, shared with adaptive). With `cusp:` the spacing is taken for the cusp less the fit (`flat`:
+the stepover less twice the fit, its pieces being level), so the cusp asked still holds. The plan
+gives the pieces made and their measured largest distance from the passes.
 | `program(SETUP or [SETUPS], post:, number:, ops:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control); `ops: OP` or `[OPS]` posts only those ops of its setups. Each op is certified on the stock every earlier op of its setup (and of the setup it continues) leaves, so those are posted first, by an earlier program or earlier in this one, or the program is refused with the fix; an op no program posts is not certified (`unposted`). `decimals:` and `feed_decimals:` set the program's number formats (the text is quantised, read back and certified at them), `coolant:` (`"flood"`, `"mist"`, `"through"`, `"off"`) every path's coolant, refused if the machine has none of it. `split: "setup"`: one program per setup, named `PROGRAM/SETUP` and numbered on from `number:` (the reply's program has its `setup`) |
 
 `ramp: DEG` (over 0, at most 30) enters each pass by a helix of half the tool's radius at that angle,

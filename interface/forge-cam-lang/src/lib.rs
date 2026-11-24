@@ -828,6 +828,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "kink",
             "min_len",
             "vc",
@@ -867,6 +868,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "stepover",
             "walls",
             "vc",
@@ -905,6 +907,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "after",
             "after_leave",
             "stepover",
@@ -947,6 +950,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "threshold",
             "step",
             "down",
@@ -989,6 +993,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "stepover",
             "center",
             "r0",
@@ -1030,6 +1035,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "stepover",
             "center",
             "r0",
@@ -1070,6 +1076,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "slope_min",
             "step",
             "down",
@@ -1109,6 +1116,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "stepover",
             "angle",
             "vc",
@@ -5732,6 +5740,25 @@ impl Cam {
             (w(sn), w(cs))
         };
         let cut = t.tool.cutter();
+        // the fitter's chord tolerance (forge_cam::fit): each pass's points are fitted into
+        // longer lines and arcs within it, each piece proven as a chord is. The stepover is
+        // taken for the cusp less it, so a fitted piece (within it of its pass, both ways) keeps
+        // the cusp asked for. 0: no fitting
+        let fit_default = match a.get("cusp") {
+            Some(V::Num(h)) => (0.25 * tol).min(0.05 * h),
+            _ => 0.25 * tol,
+        };
+        let fit_tol = get_num(a, "fit", Some(fit_default))?;
+        if !(fit_tol >= 0.0 && fit_tol.is_finite()) {
+            return Err("fit: a chord tolerance in mm, 0 or more".into());
+        }
+        if let Some(V::Num(h)) = a.get("cusp")
+            && fit_tol > 0.5 * h
+        {
+            return Err(format!("fit: at most half the cusp ({} mm)", 0.5 * h));
+        }
+        // curved xy patterns chorded well within the fit's tolerance, so arcs fit their points
+        let pattern_sag = if fit_tol > 0.0 { 0.2 * fit_tol } else { tol };
         // the spacing along the surface from the cusp, at the slope that bounds the op's passes
         let cusp_at = |deg: f64| -> Result<Option<(f64, f64, Ival, Ival)>, String> {
             match a.get("cusp") {
@@ -5739,8 +5766,13 @@ impl Cam {
                 Some(V::Num(h)) => {
                     let (sn, cs) = sc(deg);
                     let c = Contact::of(&cut, sn, cs).map_err(|e| format!("cusp: {e:?} for this tool"))?;
-                    let sp = step_for(c, *h, 2.0 * d).map_err(|e| format!("cusp: {e:?}"))?;
-                    Ok(Some((*h, cusp(c, Ival::pt(sp)).hi, sn, cs)))
+                    let sp = step_for(c, *h - fit_tol, 2.0 * d).map_err(|e| format!("cusp: {e:?}"))?;
+                    Ok(Some((
+                        *h,
+                        cusp(c, Ival::pt(sp)).add(Ival::pt(fit_tol)).hi,
+                        sn,
+                        cs,
+                    )))
                 }
                 Some(_) => Err("cusp: a height in mm".into()),
             }
@@ -5774,7 +5806,7 @@ impl Cam {
                         fin.cusp_bound = Some(hb);
                         let sp = step_for(
                             Contact::of(&cut, sn, cs).map_err(|x| format!("{x:?}"))?,
-                            h0,
+                            h0 - fit_tol,
                             2.0 * d,
                         )
                         .map_err(|x| format!("{x:?}"))?;
@@ -5795,6 +5827,7 @@ impl Cam {
                     bottom,
                     grid,
                     tol,
+                    contour: if fit_tol > 0.0 { pattern_sag } else { tol },
                     area: Some([[area[0], area[1]], [area[2], area[3]]]),
                 };
                 let (st, sh) = steep::steep_and_shallow(&dc, p).map_err(|x| e(format!("{x:?}")))?;
@@ -5807,7 +5840,7 @@ impl Cam {
                         fin.cusp_bound = Some(hb);
                         step_for(
                             Contact::of(&cut, Ival::pt(0.0), Ival::pt(1.0)).map_err(|x| format!("{x:?}"))?,
-                            h0,
+                            h0 - fit_tol,
                             2.0 * d,
                         )
                         .map_err(|x| format!("{x:?}"))?
@@ -5835,7 +5868,7 @@ impl Cam {
                         "in" => true,
                         _ => return Err("direction: \"in\" or \"out\"".into()),
                     };
-                    strategy::spiral(&dc, centre, r0, r1, so, inward, dr, &within)
+                    strategy::spiral_sag(&dc, centre, r0, r1, so, inward, pattern_sag, dr, &within)
                 } else {
                     strategy::radial(&dc, centre, r0.max(0.5 * so), r1, so, dr, &within)
                 };
@@ -5849,7 +5882,7 @@ impl Cam {
                         fin.cusp_bound = Some(hb);
                         let sp = step_for(
                             Contact::of(&cut, sn, cs).map_err(|x| format!("{x:?}"))?,
-                            h0,
+                            h0 - fit_tol,
                             2.0 * d,
                         )
                         .map_err(|x| format!("{x:?}"))?;
@@ -5867,7 +5900,12 @@ impl Cam {
                     &zs,
                     waterline::Params {
                         grid,
-                        tol_xy: 0.5 * tol,
+                        tol_xy: if fit_tol > 0.0 {
+                            pattern_sag.min(0.5 * tol)
+                        } else {
+                            0.5 * tol
+                        },
+                        slack: 0.25 * tol,
                     },
                 )
                 .map_err(|x| e(format!("{x:?}")))?;
@@ -5888,7 +5926,7 @@ impl Cam {
                         fin.cusp_bound = Some(hb);
                         step_for(
                             Contact::of(&cut, Ival::pt(0.0), Ival::pt(1.0)).map_err(|x| format!("{x:?}"))?,
-                            h0,
+                            h0 - fit_tol,
                             2.0 * d,
                         )
                         .map_err(|x| format!("{x:?}"))?
@@ -5951,7 +5989,7 @@ impl Cam {
                         fin.cusp_bound = Some(hb);
                         step_for(
                             Contact::of(&cut, Ival::pt(0.0), Ival::pt(1.0)).map_err(|x| format!("{x:?}"))?,
-                            h0,
+                            h0 - fit_tol,
                             2.0 * d,
                         )
                         .map_err(|x| format!("{x:?}"))?
@@ -5986,19 +6024,29 @@ impl Cam {
                 vec![rp]
             }
             _ => {
-                // flat: the flat heights within the band, raster passes at each
-                let so = match cusp_at(0.0)? {
-                    Some((h0, hb, ..)) => {
-                        fin.cusp = Some(h0);
-                        fin.cusp_bound = Some(hb);
-                        step_for(
-                            Contact::of(&cut, Ival::pt(0.0), Ival::pt(1.0)).map_err(|x| format!("{x:?}"))?,
-                            h0,
-                            2.0 * d,
-                        )
-                        .map_err(|x| format!("{x:?}"))?
-                        .min(0.9 * d)
+                // flat: the flat heights within the band, raster passes at each. Every pass and
+                // every fitted piece lies at its flat's exact height, so a piece is off its pass
+                // in xy only: the spacing of two fitted passes is at most the stepover plus twice
+                // the fit's tolerance, and the stepover is taken that much under the cusp's
+                let so = match a.get("cusp") {
+                    Some(V::Num(h0)) => {
+                        let c =
+                            Contact::of(&cut, Ival::pt(0.0), Ival::pt(1.0)).map_err(|x| format!("{x:?}"))?;
+                        let sp = step_for(c, *h0, 2.0 * d)
+                            .map_err(|x| format!("{x:?}"))?
+                            .min(0.9 * d);
+                        let so = sp - 2.0 * fit_tol;
+                        if so <= 0.0 {
+                            return Err(format!(
+                                "fit: under half the stepover ({} mm)",
+                                0.5 * sp
+                            ));
+                        }
+                        fin.cusp = Some(*h0);
+                        fin.cusp_bound = Some(cusp(c, Ival::pt(so).add(Ival::pt(2.0 * fit_tol))).hi);
+                        so
                     }
+                    Some(_) => return Err("cusp: a height in mm".into()),
                     None => get_num(a, "stepover", Some(0.5 * d))?,
                 };
                 fin.stepover = so;
@@ -6052,7 +6100,7 @@ impl Cam {
             rpm: 0.0,
             coolant: forge_post::Coolant::Flood,
         };
-        let (p, c) = link::path(
+        let (p, c) = link::path_fit(
             &dc,
             &ordered,
             link::Rules {
@@ -6061,6 +6109,10 @@ impl Cam {
                 slack: 0.25 * tol,
             },
             em,
+            (fit_tol > 0.0).then_some(link::FitRule {
+                fit: forge_cam::fit::Fit::arcs(fit_tol),
+                slack: 0.5 * tol,
+            }),
         );
         fin.links = [c.stay, c.lift, c.retract];
         if std::env::var("FORGE_CAM3D_TIME").is_ok() {
@@ -6078,6 +6130,27 @@ impl Cam {
             "links: {} stayed down, {} lifted, {} retracted",
             c.stay, c.lift, c.retract
         ));
+        if fit_tol > 0.0 {
+            let points: usize = ordered.iter().map(|p| p.len().saturating_sub(1)).sum();
+            let arcs = p.moves.iter().filter(|m| matches!(m, PMove::Arc { .. })).count();
+            let cuts = p
+                .moves
+                .iter()
+                .filter(|m| {
+                    matches!(
+                        m,
+                        PMove::Line {
+                            phase: forge_cam::ops::Phase::Cut,
+                            ..
+                        }
+                    )
+                })
+                .count();
+            out.plan.push(format!(
+                "fit within {fit_tol} mm (the cusp's budget): {points} pass points as {cuts} lines and {arcs} arcs, measured {:.5} mm from the passes at most",
+                c.fit_dev
+            ));
+        }
         out.finish = Some(fin);
         Ok(vec![p])
     }
@@ -7734,11 +7807,46 @@ impl Cam {
                     add(to);
                     at = to;
                 }
-                PMove::Arc { to, c, .. } => {
+                PMove::Arc { to, c, cw, .. } => {
+                    // the arc's own box: its ends, and each axis extreme its sweep passes
+                    // (c ± r on that axis), widened past rounding; the full circle's box when
+                    // the sweep's ends are not resolved
                     let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt() * (1.0 + 1e-12);
-                    add([c[0] - r, c[1] - r, to[2].min(at[2])]);
-                    add([c[0] + r, c[1] + r, to[2].max(at[2])]);
-                    add(to);
+                    let (zl, zh) = (to[2].min(at[2]), to[2].max(at[2]));
+                    add([at[0], at[1], zl]);
+                    add([to[0], to[1], zh]);
+                    let a0 = forge_math::dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                    let a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
+                    let tau = std::f64::consts::TAU;
+                    // the counter-clockwise sweep from its start s to its end e, in [0, τ)
+                    let (st, en) = if cw { (a1, a0) } else { (a0, a1) };
+                    let mut sw = en - st;
+                    while sw < 0.0 {
+                        sw += tau;
+                    }
+                    while sw >= tau {
+                        sw -= tau;
+                    }
+                    // a sweep of (almost) nothing is the whole circle to the control
+                    let full = sw <= 1e-9;
+                    for (q, ext) in [
+                        (0.0, [c[0] + r, c[1], zh]),
+                        (0.5 * std::f64::consts::PI, [c[0], c[1] + r, zh]),
+                        (std::f64::consts::PI, [c[0] - r, c[1], zl]),
+                        (1.5 * std::f64::consts::PI, [c[0], c[1] - r, zl]),
+                    ] {
+                        let mut d = q - st;
+                        while d < 0.0 {
+                            d += tau;
+                        }
+                        while d >= tau {
+                            d -= tau;
+                        }
+                        // within the sweep, or within a few ulps of its ends (taken as within)
+                        if full || d <= sw + 1e-9 || d >= tau - 1e-9 {
+                            add(ext);
+                        }
+                    }
                     at = to;
                 }
                 // a probe move reaches as far as its overtravel past the contact
