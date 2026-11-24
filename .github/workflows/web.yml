@@ -203,6 +203,7 @@ jobs:
           node web/tests/shade.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/history.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/pace.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/select.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)
         if: matrix.test != 'e2e'
         working-directory: interface/forge-render

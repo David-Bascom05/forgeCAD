@@ -205,11 +205,25 @@ tools,Machine Builder"; cam_ui `post_process_shows_the_program_and_writes_it`; c
 flange tests; glyphs "drawn as boxes: '▸' shell/cam/mod.rs, '└' shell/machine.rs" (the same
 list on main: this branch's new strings add none).
 
+## 15. A clicked face was never drawn selected; an origin plane lit up instead (ui/bughunt-3)
+
+- Symptom, desktop and page alike: clicking a face said "Picked: base.end" and selected it, but
+  nothing showed it: once the pointer left, the frame was the one before the click; and with the
+  pointer on the selected face the XZ origin plane behind it lit up green.
+- Root causes (gui.rs): the frame's marks were filtered to `!m.selected`, so what was selected was
+  never drawn; and the origin planes counted as hit wherever every mark was a selected one (a
+  stand-in for "nothing of the part under the pointer"), which is so exactly when the face under
+  the pointer is selected (its hover mark is left out then).
+- Fix: selected marks drawn (the theme's chosen colour over the face); a plane is hit only where
+  `nav.hover_hit()` says nothing of the part is under the pointer. Shots:
+  `shots/face-pick-before.png`, `shots/face-pick-after.png` (native).
+- Tests: `tests/selection.rs` (native, headless: the face's pixel warm after the pointer leaves,
+  the plane's pixel unchanged with the pointer on the face; both fail before) and
+  `web/tests/select.cjs` (the same in the page; fails before).
+- Not done: an outline along the selected face's edges (the tint is the selection's mark now).
+
 ## Open (reported, not fixed here)
 
-- Selection highlight: in the page a click or window selects (state().selected counts them) but
-  no tint showed in the read-back frames; natively a feature selected from the tree is tinted.
-  Not yet compared like for like.
 
 - 8. Memory kept by every forge-lang run (a reference cycle), natively too. A long session grows
   without bound: in the page, ~30 KB per edit of a 137-byte part (16 -> 63 MB over 1500

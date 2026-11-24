@@ -619,7 +619,10 @@ impl Gui {
             .map(|(_, i)| i)
             .collect();
         let (c, r) = v.scene.bounds();
-        let empty = v.nav.marks().iter().all(|m| m.selected);
+        // the part under the pointer, selected or not, is what's there: a plane behind it isn't
+        // (with the face under the pointer selected its hover mark wasn't there, and the plane
+        // behind the face lit up instead of it)
+        let empty = v.nav.hover_hit().is_none();
         crate::origin::hit(
             &shown,
             crate::origin::reach(c, r),
@@ -1528,7 +1531,9 @@ impl Gui {
                         .nav
                         .marks()
                         .into_iter()
-                        .filter(|m| !m.selected && !quiet)
+                        // what's selected drawn in the chosen colour (it wasn't drawn at all:
+                        // a face clicked showed nothing once the pointer left it)
+                        .filter(|_| !quiet)
                         .collect(),
                 };
                 m.extend(self.fg_located_marks.iter().copied());
