@@ -877,8 +877,9 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
         assert_eq!(o.status, "refused", "{}", o.name);
         let why = o.refusal.as_deref().unwrap();
         assert!(
-            why.starts_with("no cutting data") || why.starts_with("no drilling data"),
-            "{why}"
+            matches!(o.code.as_deref(), Some("NoCuttingData") | Some("NoDrillingData")),
+            "{:?}: {why}",
+            o.code
         );
         assert!(o.fix.is_some() || why.contains("give"), "{}", o.name);
     }
@@ -1032,8 +1033,9 @@ fn feeds_and_speeds_are_params() {
     let cam = forge_cam_lang::run(&src.replace("generic-vmc3", "weak-vmc"), &tmp);
     let prof = cam.ops.iter().find(|o| o.name == "prof").unwrap();
     assert_eq!(prof.status, "refused");
+    assert_eq!(prof.code.as_deref(), Some("OverLimit"));
     assert!(
-        prof.refusal.as_deref().unwrap().starts_with("power"),
+        prof.refusal.as_deref().unwrap().starts_with("Power would be "),
         "{:?}",
         prof.refusal
     );
