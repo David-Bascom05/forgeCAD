@@ -583,3 +583,32 @@ source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(
 taken = "2026-11-24"
 value = "Austenitic 304, 316: Drilling Speed 40-60 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.013"
 basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Austenitic 304, 316, held for other HSS drills in group M: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+
+[[drill]]
+group = "S"
+substrate = "carbide"
+real = true
+vc = 39.624
+d_rows = [3, 6, 10, 12]
+f_rows = [0.0254, 0.0381, 0.061, 0.0635]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%20215_%20220D_%20200_%20233.pdf"
+taken = "2026-11-24"
+value = "Titanium Alloys (Annealed): Drilling Speed 120-140 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12 mm: 0.0010, 0.0015, 0.0024, 0.0025"
+basis = "OSG solid carbide general drilling (Lists 215/220D/200/233, catalog pages 338-340) for annealed titanium alloys, held for other carbide drills in group S: vc at the middle of the printed SFM range, the feed at the LOW end (errs slow); not for nickel alloys or solution-treated titanium (OSG prints 50-70 SFM for those)"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%20215_%20220D_%20200_%20233.pdf"
+taken = "2026-11-24"
+value = "Titanium Alloys (Annealed): Drilling Speed 120-140 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12 mm: 0.0010, 0.0015, 0.0024, 0.0025"
+basis = "OSG solid carbide general drilling (Lists 215/220D/200/233, catalog pages 338-340) for annealed titanium alloys, held for other carbide drills in group S: vc at the middle of the printed SFM range, the feed at the LOW end (errs slow); not for nickel alloys or solution-treated titanium (OSG prints 50-70 SFM for those)"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%20215_%20220D_%20200_%20233.pdf"
+taken = "2026-11-24"
+value = "Titanium Alloys (Annealed): Drilling Speed 120-140 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12 mm: 0.0010, 0.0015, 0.0024, 0.0025"
+basis = "OSG solid carbide general drilling (Lists 215/220D/200/233, catalog pages 338-340) for annealed titanium alloys, held for other carbide drills in group S: vc at the middle of the printed SFM range, the feed at the LOW end (errs slow); not for nickel alloys or solution-treated titanium (OSG prints 50-70 SFM for those)"
