@@ -1535,6 +1535,137 @@ theorem count_edge_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF)
   · have h0 : (0#usize).val = 0 := rfl
     simp only [h0, List.take_zero, List.append_nil]; exact ⟨by simp, hI⟩
 
+theorem usesUpTo_sublist (b : Body) (k : Nat) (hk : k ≤ b.edges.size) :
+    List.Sublist (usesUpTo b k) (allUses b) := by
+  rw [← usesUpTo_all]
+  unfold usesUpTo
+  have : List.range b.edges.size = List.range k ++ List.range' k (b.edges.size - k) := by
+    rw [List.range_eq_range', List.range_eq_range']
+    conv_lhs => rw [show b.edges.size = k + (b.edges.size - k) by omega]
+    rw [← List.range'_append_1]; simp
+  rw [this, List.flatMap_append]; exact List.sublist_append_left _ _
+
+theorem count_all_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF)
+    (hsmall : (allUses b).length < Usize.max) (ne : Usize) (hne : ne.val = b.edges.size)
+    (off : alloc.vec.Vec Usize) (hI : CountInv b [] off) :
+    topo_fans.fans_loop0 FI t ne off 0#usize ⦃ r => CountInv b (allUses b) r ⦄ := by
+  unfold topo_fans.fans_loop0
+  apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Usize × Usize) => ne.val - y.2.val)
+    (fun y => y.2.val ≤ ne.val ∧ CountInv b (usesUpTo b y.2.val) y.1)
+  · rintro ⟨o, e⟩ ⟨hle, hI0⟩
+    simp only at hle hI0 ⊢
+    unfold topo_fans.fans_loop0.body
+    split
+    · rename_i hlt
+      have hlt' : e.val < ne.val := by scalar_tac
+      have he : e.val < b.edges.size := by omega
+      step with R.base.edge_n_uses e he as ⟨n, hn⟩
+      have hsub : List.Sublist (usesUpTo b e.val ++ (b.ed e.val).uses) (allUses b) := by
+        rw [← usesUpTo_succ]; exact usesUpTo_sublist b _ (by omega)
+      step with count_edge_spec FI t R H W hsmall _ (usesUpTo_sublist b _ (by omega)) e n he hn hsub o hI0 as ⟨o1, hI1⟩
+      step with usize_add_wspec e 1#usize (succ_le_max e ne hlt') as ⟨e1, he1⟩
+      have he1v : e1.val = e.val + 1 := by rw [he1]; exact succ_val e ne hlt'
+      rw [he1v, usesUpTo_succ]
+      exact ⟨by omega, hI1, by omega⟩
+    · rename_i hlt
+      have hk : e.val = ne.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [hk, hne, usesUpTo_all] at hI0; exact hI0
+  · have h0 : (0#usize).val = 0 := rfl
+    simp only [h0]; exact ⟨by simp, by simpa [usesUpTo] using hI⟩
+
+/-- The uses of `A` starting below `k`. -/
+def cntLt (b : Body) (A : List Nat) (k : Nat) : Nat := (A.filter fun c => decide (b.start c < k)).length
+
+theorem cntLt_succ (b : Body) (A : List Nat) (k : Nat) : cntLt b A (k + 1) = cntLt b A k + cntQ b A k := by
+  induction A with
+  | nil => simp [cntLt, cntQ]
+  | cons c A ih =>
+    unfold cntLt cntQ at ih ⊢
+    rw [List.filter_cons, List.filter_cons, List.filter_cons]
+    by_cases h1 : b.start c < k
+    · have h2 : b.start c < k + 1 := by omega
+      have h3 : (b.start c == k) = false := by simp; omega
+      rw [if_pos (by simpa using h2), if_pos (by simpa using h1), if_neg (by simp [h3])]
+      simp only [List.length_cons]; omega
+    · by_cases h4 : b.start c = k
+      · rw [if_pos (by simp; omega), if_neg (by simpa using h1), if_pos (by simp [h4])]
+        simp only [List.length_cons]; omega
+      · rw [if_neg (by simp; omega), if_neg (by simpa using h1), if_neg (by simp [h4])]
+        omega
+
+/-- Where vertex `w`'s leaving coedges start in `items`. -/
+def vpre (b : Body) (A : List Nat) (w : Nat) : Nat := ((List.range w).map (cntQ b A)).sum
+
+theorem vpre_eq (b : Body) (A : List Nat) (w : Nat) : vpre b A w = cntLt b A w := by
+  induction w with
+  | zero => simp [vpre, cntLt]
+  | succ w ih => rw [cntLt_succ, ← ih]; simp [vpre, List.range_succ]
+
+theorem vpre_succ (b : Body) (A : List Nat) (w : Nat) : vpre b A (w + 1) = vpre b A w + cntQ b A w := by
+  simp [vpre, List.range_succ]
+
+theorem vpre_le (b : Body) (A : List Nat) (w : Nat) : vpre b A w ≤ A.length := by
+  rw [vpre_eq]; exact List.length_filter_le _ _
+
+theorem prefix_spec (hsmall : (allUses b).length < Usize.max) (nv : Usize) (hnv : nv.val = b.nv)
+    (off atv : alloc.vec.Vec Usize) (hI : CountInv b (allUses b) off) (hat : atv.val.length = b.nv) :
+    topo_fans.fans_loop1 nv off atv 0#usize ⦃ r =>
+      r.1.val.length = b.nv + 1 ∧ r.2.val.length = b.nv ∧
+      (∀ w ≤ b.nv, (r.1.val[w]!).val = vpre b (allUses b) w) ∧
+      (∀ w < b.nv, (r.2.val[w]!).val = vpre b (allUses b) w) ⦄ := by
+  set A := allUses b
+  obtain ⟨hol, ho0, hos⟩ := hI
+  unfold topo_fans.fans_loop1
+  apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Usize × alloc.vec.Vec Usize × Usize) => nv.val - y.2.2.val)
+    (fun y => y.2.2.val ≤ nv.val ∧ y.1.val.length = b.nv + 1 ∧ y.2.1.val.length = b.nv ∧
+      (∀ w ≤ y.2.2.val, (y.1.val[w]!).val = vpre b A w) ∧
+      (∀ w, y.2.2.val ≤ w → w < b.nv → (y.1.val[w + 1]!).val = cntQ b A w) ∧
+      (∀ w < y.2.2.val, (y.2.1.val[w]!).val = vpre b A w))
+  · rintro ⟨o, a, v⟩ ⟨hle, hol', hal, hpre, hcnt, hat'⟩
+    simp only at hle hol' hal hpre hcnt hat' ⊢
+    unfold topo_fans.fans_loop1.body
+    split
+    · rename_i hlt
+      have hlt' : v.val < nv.val := by scalar_tac
+      step as ⟨x, hx⟩
+      have hxv : x.val = vpre b A v.val := by rw [hx, ← getElem!_pos o.val v.val (by omega)]; exact hpre v.val (le_refl _)
+      step as ⟨y0, backa, hy0, hbacka⟩
+      step with usize_add_wspec v 1#usize (succ_le_max v nv hlt') as ⟨v1, hv1⟩
+      have hv1v : v1.val = v.val + 1 := by rw [hv1]; exact succ_val v nv hlt'
+      step as ⟨z, backo, hz, hbacko⟩
+      have hzv : z.val = cntQ b A v.val := by
+        rw [hz, ← getElem!_pos o.val v1.val (by omega), hv1v]; exact hcnt v.val (le_refl _) (by omega)
+      have hsum : z.val + x.val ≤ Usize.max := by
+        have := vpre_le b A (v.val + 1); rw [vpre_succ] at this; omega
+      step with usize_add_wspec z x hsum as ⟨z1, hz1⟩
+      have hz1v : z1.val = vpre b A (v.val + 1) := by
+        rw [hz1, add_val z x (lt_size_of_le_max _ hsum), hzv, hxv, vpre_succ]; omega
+      rw [hv1v, hbacko, hbacka]
+      have hs1 : (o.set v1 z1).val = o.val.set v1.val z1 := by simp
+      have hs2 : (a.set v x).val = a.val.set v.val x := by simp
+      refine ⟨by omega, by rw [hs1]; simp [hol'], by rw [hs2]; simp [hal], fun w hw => ?_, fun w hw1 hw2 => ?_,
+        fun w hw => ?_, by omega⟩
+      · rw [hs1, getElem!_set _ _ _ _ (by omega), hv1v]
+        split
+        · rename_i h; subst h; exact hz1v
+        · exact hpre w (by omega)
+      · rw [hs1, getElem!_set _ _ _ _ (by omega), hv1v, if_neg (by omega)]; exact hcnt w (by omega) hw2
+      · rw [hs2, getElem!_set _ _ _ _ (by omega)]
+        split
+        · rename_i h; subst h; exact hxv
+        · exact hat' w (by omega)
+    · rename_i hlt
+      have hv : v.val = nv.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [hv, hnv] at hpre hat'
+      exact ⟨hol', hal, hpre, hat'⟩
+  · have h0 : (0#usize).val = 0 := rfl
+    simp only [h0]
+    refine ⟨by omega, hol, hat, fun w hw => ?_, fun w _ hw => hos w hw, fun w hw => by omega⟩
+    have : w = 0 := by omega
+    subst this; rw [ho0]; simp [vpre]
+
 end sort
 
 end forge_topo
