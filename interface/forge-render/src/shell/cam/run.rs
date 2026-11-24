@@ -186,15 +186,38 @@ pub fn measure(r: &Run) -> Option<forge_cam_quality::JobQ> {
 
 /// A milling run's toolpath quality.
 pub fn measure_cam(cam: &forge_cam_lang::Cam) -> forge_cam_quality::JobQ {
-    forge_cam_quality::measure_cam(cam, String::new(), &forge_cam_quality::Config::default())
+    measure_cam_unless(cam, &|| false).expect("never stopped")
 }
 
-/// `measure_cam`, given up (None) once `stop` says so (a later run has started).
+/// The last measure made, by the full `Debug` text of all it read (`forge_cam_quality::CamView`:
+/// the measure reads nothing else of the run) and its config: a rerun, which leaves all of it as
+/// it was, takes the measure again instead of making it (seconds of a core for a large job). One
+/// kept: a measure holds its setups' height maps.
+static LAST_QUALITY: std::sync::Mutex<Option<(String, forge_cam_quality::JobQ)>> =
+    std::sync::Mutex::new(None);
+
+/// `measure_cam`, given up (None) once `stop` says so (a later run has started). A measure
+/// given up is not kept.
 pub fn measure_cam_unless(
     cam: &forge_cam_lang::Cam,
     stop: &dyn Fn() -> bool,
 ) -> Option<forge_cam_quality::JobQ> {
-    forge_cam_quality::measure_cam_unless(cam, String::new(), &forge_cam_quality::Config::default(), stop)
+    let cfg = forge_cam_quality::Config::default();
+    let view = forge_cam_quality::CamView::of(cam);
+    let key = format!("quality/1 {:?}", (&view, &cfg));
+    // (NaN's text does not tell NaNs apart: such a key is never kept)
+    let keep = !key.contains("NaN");
+    if keep
+        && let Some((k, q)) = LAST_QUALITY.lock().unwrap_or_else(|e| e.into_inner()).as_ref()
+        && *k == key
+    {
+        return Some(q.clone());
+    }
+    let q = forge_cam_quality::measure_view(&view, String::new(), &cfg, stop)?;
+    if keep {
+        *LAST_QUALITY.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, q.clone()));
+    }
+    Some(q)
 }
 
 /// `run` without the quality (`measure`): the app shows the paths first and measures after.
@@ -832,5 +855,36 @@ mod tests {
         );
         assert!(bad.iter().any(|o| o.refusal.is_some()));
         assert_eq!(r.certification, "refused");
+    }
+}
+
+#[cfg(test)]
+mod quality_memo_tests {
+    /// The kept measure is the fresh one: runs of two documents asked in turn (A, A, B, A)
+    /// each get what measuring that run anew gives, and a measure given up is not kept.
+    #[test]
+    fn the_kept_measure_is_the_fresh_one() {
+        let ex = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let run = |f: &str| forge_cam_lang::run(&std::fs::read_to_string(ex.join(f)).unwrap(), &ex);
+        let (a, b) = (run("flange_cam.fg"), run("plate_mark_cam.fg"));
+        let fresh = |c: &forge_cam_lang::Cam| {
+            format!(
+                "{:?}",
+                forge_cam_quality::measure_cam_unless(
+                    c,
+                    String::new(),
+                    &forge_cam_quality::Config::default(),
+                    &|| false
+                )
+            )
+        };
+        let (fa, fb) = (fresh(&a), fresh(&b));
+        assert_ne!(fa, fb);
+        for (c, f) in [(&a, &fa), (&a, &fa), (&b, &fb), (&a, &fa)] {
+            assert_eq!(&format!("{:?}", super::measure_cam_unless(c, &|| false)), f);
+        }
+        // given up at once: nothing, and nothing kept (b is then measured in full)
+        assert!(super::measure_cam_unless(&b, &|| true).is_none());
+        assert_eq!(format!("{:?}", super::measure_cam_unless(&b, &|| false)), fb);
     }
 }
