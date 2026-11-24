@@ -92,6 +92,9 @@ pub struct Die {
     pub shoulder_radius: f64,
     pub height: f64,
     pub width: f64,
+    /// The V's depth below the top where a flat floor (a relief channel) cuts it off, when
+    /// it stops short of the sharp bottom.
+    pub floor: Option<f64>,
     pub profile: Option<Vec<Seg>>,
     pub segments: Vec<Segment>,
     pub max_load: Option<f64>,
@@ -410,8 +413,13 @@ impl Die {
         Ok(())
     }
 
-    /// The V's depth below the top (to its sharp bottom).
+    /// The V's depth below the top: to its sharp bottom, or to its floor.
     pub fn depth(&self) -> f64 {
+        let sharp = self.sharp_depth();
+        self.floor.map_or(sharp, |f| f.min(sharp))
+    }
+
+    fn sharp_depth(&self) -> f64 {
         (self.v / 2.0) / tan(self.angle / 2.0)
     }
 
@@ -431,7 +439,10 @@ impl Die {
         let rs = self.shoulder_radius;
         let s = self.shoulder();
         let (w, h) = (self.width / 2.0, self.height);
-        let bottom = Point2::new(0.0, -self.depth());
+        let bottom = Point2::new(0.0, -self.sharp_depth());
+        // a floored V: the flanks meet the floor at +-xf
+        let floored = self.floor.filter(|f| *f < self.sharp_depth());
+        let xf = floored.map(|f| (self.sharp_depth() - f) * tan(a));
         // the flank's tangent point on the right shoulder: the circle's normal towards the V,
         // perpendicular to the flank (direction (-sin a, -cos a)), pointing up-left
         let n_ang = dmath::PI - a; // (-cos a, sin a)
@@ -455,14 +466,30 @@ impl Die {
                 sweep: n_ang - dmath::FRAC_PI_2,
             });
         }
-        l.push(Seg::Line {
-            a: if rs > 0.0 { ft } else { tt },
-            b: bottom,
-        });
-        l.push(Seg::Line {
-            a: bottom,
-            b: if rs > 0.0 { mirror(ft) } else { mirror(tt) },
-        });
+        match (floored, xf) {
+            (Some(f), Some(xf)) => {
+                let (r0, l0) = (Point2::new(xf, -f), Point2::new(-xf, -f));
+                l.push(Seg::Line {
+                    a: if rs > 0.0 { ft } else { tt },
+                    b: r0,
+                });
+                l.push(Seg::Line { a: r0, b: l0 });
+                l.push(Seg::Line {
+                    a: l0,
+                    b: if rs > 0.0 { mirror(ft) } else { mirror(tt) },
+                });
+            }
+            _ => {
+                l.push(Seg::Line {
+                    a: if rs > 0.0 { ft } else { tt },
+                    b: bottom,
+                });
+                l.push(Seg::Line {
+                    a: bottom,
+                    b: if rs > 0.0 { mirror(ft) } else { mirror(tt) },
+                });
+            }
+        }
         if rs > 0.0 {
             l.push(Seg::Arc {
                 c: mirror(s),

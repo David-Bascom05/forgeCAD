@@ -514,8 +514,10 @@ fn punch_rec(file: &str, t: &Table) -> Result<PunchRec, CatalogError> {
             let z1 = rd.2.unwrap_or(z0 + 0.25 * (h - z0));
             p.relief = Some(Relief { depth, z0, z1 });
         }
-        p.validate().map_err(|e| r.bad("record", &format!("{e:?}")))?;
-        Ok(p)
+        match p.validate() {
+            Ok(()) => Ok(p),
+            Err(e) => Err(vec![format!("inconsistent: {e:?}")]),
+        }
     } else {
         Err(unknown)
     };
@@ -552,6 +554,7 @@ fn die_rec(file: &str, t: &Table) -> Result<DieRec, CatalogError> {
     let rs = r.num("shoulder_radius")?;
     let height = r.num("height")?;
     let width = r.num("width")?;
+    let floor = r.num("floor")?;
     let max_load = r.num("max_load")?;
     let segments = r.segments()?;
     let outline = r.outline()?;
@@ -578,12 +581,15 @@ fn die_rec(file: &str, t: &Table) -> Result<DieRec, CatalogError> {
             shoulder_radius: rs.unwrap(),
             height: height.unwrap(),
             width: width.unwrap(),
+            floor,
             profile: outline,
             segments,
             max_load,
         };
-        d.validate().map_err(|e| r.bad("record", &format!("{e:?}")))?;
-        Ok(d)
+        match d.validate() {
+            Ok(()) => Ok(d),
+            Err(e) => Err(vec![format!("inconsistent: {e:?}")]),
+        }
     } else {
         Err(unknown)
     };
@@ -902,5 +908,89 @@ impl Catalog {
             return Err(ToolingError::NoDies);
         }
         self.tooling(press, &ps, &ds)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn builtin_library_reads_and_cites_every_value() {
+        let c = Catalog::builtin();
+        assert!(!c.punches.is_empty() && !c.dies.is_empty());
+        for p in &c.punches {
+            assert!(p.prov.real, "{}", p.id);
+            if let Ok(x) = &p.punch {
+                for f in ["height", "tip_radius", "tip_angle"] {
+                    assert_eq!(p.prov.status(f), Some(Status::Published), "{} {f}", p.id);
+                }
+                x.validate().unwrap();
+            }
+        }
+        for d in &c.dies {
+            if d.die.is_ok() {
+                for f in ["v", "angle", "shoulder_radius", "height"] {
+                    assert_eq!(d.prov.status(f), Some(Status::Published), "{} {f}", d.id);
+                }
+            }
+        }
+        let known = |m: &str| {
+            (
+                c.punches
+                    .iter()
+                    .filter(|p| p.prov.maker == m && p.punch.is_ok())
+                    .count(),
+                c.dies
+                    .iter()
+                    .filter(|p| p.prov.maker == m && p.die.is_ok())
+                    .count(),
+            )
+        };
+        eprintln!(
+            "trumpf {:?} bystronic {:?} amada {:?}",
+            known("Trumpf"),
+            known("Bystronic"),
+            known("Amada")
+        );
+        assert!(known("Trumpf").0 > 0 && known("Trumpf").1 > 0);
+    }
+
+    #[test]
+    fn unknown_geometry_refuses() {
+        let src = r#"
+[[punch]]
+id = "x/p"
+maker = "X"
+real = true
+clamp = "promecam"
+kind = "straight"
+height = 100
+tip_angle = 88
+[[punch.cite]]
+path = "height"
+status = "published"
+source = "https://example.invalid"
+taken = "2026-11-24"
+[[punch.cite]]
+path = "tip_angle"
+status = "published"
+source = "https://example.invalid"
+taken = "2026-11-24"
+"#;
+        let c = Catalog::from_sources(&[("t.toml", src)]).unwrap();
+        assert_eq!(
+            c.punch("x/p").unwrap().punch,
+            Err(vec!["tip_radius".to_string(), "width".to_string()])
+        );
+        // an uncited value of a real record is refused
+        let bad = src.replace(
+            "[[punch.cite]]\npath = \"height\"",
+            "[[punch.cite]]\npath = \"nothing\"",
+        );
+        assert!(matches!(
+            Catalog::from_sources(&[("t.toml", &bad)]),
+            Err(CatalogError::Cite { .. })
+        ));
     }
 }

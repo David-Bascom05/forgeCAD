@@ -71,6 +71,7 @@ name = "forge-brake"
 version = "0.1.0"
 dependencies = [
  "forge-math",
+ "forge-mesh",
  "forge-ops",
  "forge-sheet",
  "forge-vendor",

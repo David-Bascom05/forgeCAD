@@ -14,6 +14,7 @@ pub mod library;
 pub mod model;
 pub mod num;
 pub mod plan;
+pub mod scene;
 pub mod sim;
 pub mod tooling;
 pub mod view;

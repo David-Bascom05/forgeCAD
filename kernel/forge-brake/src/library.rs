@@ -97,6 +97,7 @@ fn die(
         shoulder_radius: rs,
         height,
         width,
+        floor: None,
         profile: None,
         segments: if style == Style::Eu {
             eu_segments()
