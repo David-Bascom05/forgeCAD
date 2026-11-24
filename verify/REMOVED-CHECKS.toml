@@ -41,7 +41,7 @@ id = "blend-node-mend"
 owner = "CURVED-SITES"
 removed = "the marching trace near a tangent node of two tubes, replaced by mend (gating helpers tube, spring, one_plane_fits, nodes, crossings, reach_of in the same file)"
 rust = { file = "kernel/forge-geom/src/node.rs", fn = "mend" }
-reviewed_at = "1dfc2dc6a152339f"
+reviewed_at = "3b7d91c6d4da2230"
 level = "L1"
 hyp = "LEDGER C.node: the face is its tube's whole cap within reach; towards_touch's points exact to its tolerance only"
 lemmas = [
@@ -58,6 +58,9 @@ tests = [
   { file = "interface/forge-lang/tests/round_node.rs", name = "the_volume_falls_smoothly_through_the_two_rounds_range", kind = "sampling" },
   { file = "interface/forge-lang/tests/round_node.rs", name = "past_the_corners_limit_every_radius_is_refused", kind = "unit" },
   { file = "kernel/forge-geom/src/node.rs", name = "a_spring_needs_the_spine_a_radius_under_the_plane", kind = "mutation" },
+  # the mend switched off (feature node-mend-off; .github/workflows/node-mutation.yml): the radii once
+  # refused are refused again
+  { file = "interface/forge-lang/tests/round_node.rs", name = "without_the_mend_the_radii_once_refused_are_refused_again", kind = "mutation" },
   { file = "kernel/forge-geom/src/node.rs", name = "a_line_crosses_a_circle_where_its_chord_ends", kind = "unit" },
   { file = "kernel/forge-geom/src/node.rs", name = "two_circles_cross_on_their_common_chord", kind = "unit" },
 ]
