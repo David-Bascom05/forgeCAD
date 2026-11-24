@@ -1798,7 +1798,45 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     ui.label(egui::RichText::new(h).small().color(t.ink2));
                 }
                 ui.end_row();
+                // the checks that could not run collapsed into one row (UX-LEAD): they share a
+                // cause (a press or tool value unknown), each named on hover
+                let unchecked: Vec<&&fb::Check> = shown.iter().filter(|c| c.unchecked.is_some()).collect();
+                let mut unchecked_drawn = unchecked.len() < 2;
                 for c in &shown {
+                    if c.unchecked.is_some() && !unchecked_drawn {
+                        unchecked_drawn = true;
+                        let why: Vec<String> = unchecked
+                            .iter()
+                            .map(|c| {
+                                format!(
+                                    "{}: {} unknown",
+                                    cards::rule_label(c.rule),
+                                    c.unchecked.as_deref().unwrap_or("")
+                                )
+                            })
+                            .collect();
+                        let why = why.join("\n");
+                        ui.label(
+                            egui::RichText::new(format!("Not checked ({})", unchecked.len())).color(t.ink),
+                        )
+                        .on_hover_text(&why);
+                        ui.label(egui::RichText::new("not checked").color(look::MUTED))
+                            .on_hover_text(&why);
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new("values unknown (hover)")
+                                    .font(super::theme::caption())
+                                    .color(t.ink2),
+                            )
+                            .wrap(),
+                        )
+                        .on_hover_text(&why);
+                        ui.end_row();
+                        continue;
+                    }
+                    if c.unchecked.is_some() && unchecked.len() >= 2 {
+                        continue;
+                    }
                     let (col, verdict) = if c.pass {
                         (look::PASS, "pass")
                     } else if c.unchecked.is_some() {
