@@ -167,6 +167,15 @@ impl<'a> Search<'a> {
             .overbend(self.opts.material.as_deref(), self.m.bends[j].theta)
     }
 
+    /// The first closed-form rule a setup fails for bend j, decided before it is simulated
+    /// (the die's and the punch's angle, the punch's radius): the same arithmetic, in the same
+    /// order, as `StepCtx::rules`, so the verdict is the one the simulation would give. These read
+    /// only the bend and the tools, never the bends done: a tool that fails one fails it in every
+    /// state, and is not simulated (nor counted against the budget).
+    fn screen(&self, j: usize, setup: Setup) -> Option<Rule> {
+        screen(self.m, self.tl, j, setup, self.overbend(j))
+    }
+
     /// One setup simulated: quick stops at the first failure.
     fn run(&mut self, done: &[bool], j: usize, setup: Setup, quick: bool) -> Step {
         self.explored += 1;
@@ -195,6 +204,7 @@ impl<'a> Search<'a> {
             die: ctx.die.id.clone(),
             punch_length: pl,
             die_length: dl,
+            station: ctx.station,
             flip: self.m.bends[j].sigma < 0.0,
             gauge: None,
             travel,
@@ -312,7 +322,15 @@ impl<'a> Search<'a> {
         let n_done = done.iter().filter(|d| **d).count();
         let mut found = None;
         let mut rejected = Vec::new();
+        let mut screened = None;
         for s in self.setups.clone() {
+            // a tool that cannot make this bend at all is named with its rule, not simulated
+            if let Some(rule) = self.screen(j, s) {
+                let (p, d) = (&self.tl.punches[s.punch], &self.tl.dies[s.die]);
+                rejected.push((p.id.clone(), d.id.clone(), s.rotate, rule));
+                screened.get_or_insert(s);
+                continue;
+            }
             if self.explored >= self.budget {
                 self.exhausted = true;
                 break;
@@ -348,6 +366,16 @@ impl<'a> Search<'a> {
                 self.best[j] = Some((n_done, nf, step, mask(done)));
             }
         }
+        // every setup screened out: the bend's best attempt is the first of them, simulated once
+        // so the reply can say why
+        if found.is_none()
+            && self.best[j].is_none()
+            && let Some(s) = screened
+        {
+            let step = self.run(done, j, s, true);
+            let nf = step.failures().len();
+            self.best[j] = Some((n_done, nf, step, mask(done)));
+        }
         self.memo.insert(key, found.clone());
         found
     }
@@ -370,6 +398,9 @@ impl<'a> Search<'a> {
                         continue;
                     }
                     let s = Setup { rotate, ..p };
+                    if self.screen(j, s).is_some() {
+                        break;
+                    }
                     if self.run(done, j, s, true).pass() {
                         found = Some(self.run(done, j, s, false));
                         break;
@@ -427,6 +458,33 @@ impl<'a> Search<'a> {
         self.dead.insert(key);
         false
     }
+}
+
+/// The first closed-form rule (the die's angle, the punch's angle, its radius) a setup fails for
+/// bend j at this overbend, in `StepCtx::rules`'s order and arithmetic; None: it may pass. These
+/// read only the bend and the tools, so the planner decides them before simulating anything.
+pub fn screen(m: &Model, tl: &Tooling, j: usize, setup: Setup, overbend: f64) -> Option<Rule> {
+    let b = &m.bends[j];
+    let phimax = (b.theta + overbend).min(forge_math::dmath::PI - 1e-6);
+    let included = forge_math::dmath::PI - phimax;
+    let (p, d) = (&tl.punches[setup.punch], &tl.dies[setup.die]);
+    if !Check::rule(Rule::DieAngle, included, d.angle, false).pass {
+        return Some(Rule::DieAngle);
+    }
+    if !Check::rule(Rule::PunchAngle, included, p.tip_angle, false).pass {
+        return Some(Rule::PunchAngle);
+    }
+    if !Check::rule(
+        Rule::PunchRadius,
+        p.tip_radius,
+        b.inside_radius(phimax) + 1e-9,
+        true,
+    )
+    .pass
+    {
+        return Some(Rule::PunchRadius);
+    }
+    None
 }
 
 /// A bend order and tooling that pass every check, or why none does.

@@ -1077,7 +1077,7 @@ impl<'a> Scene<'a> {
             });
         }
         for (i, s) in self.tl.stations.iter().enumerate() {
-            if s.punch == st.setup.punch && s.die == st.setup.die {
+            if Some(i) == ctx.station {
                 continue;
             }
             let (p, d) = (&self.tl.punches[s.punch], &self.tl.dies[s.die]);

@@ -629,8 +629,8 @@ impl Gui {
         // framed: on entry, when asked (the View tools, F), and when the part moves to another
         // station (a new subject); held through the step otherwise
         let at = {
-            let st = &sim.plan.steps[step].setup;
-            sim.tooling.station(st.punch, st.die).map(|x| x.y.to_bits())
+            let st = &sim.plan.steps[step];
+            st.station.and_then(|k| sim.tooling.stations.get(k)).map(|x| x.y.to_bits())
         };
         let ask = b.frame;
         // with Follow bend, each new step is framed afresh, and through the operator's handling

@@ -267,6 +267,8 @@ pub struct Step {
     pub die: String,
     pub punch_length: Option<f64>,
     pub die_length: Option<f64>,
+    /// The station it works at (index into the tooling's stations), when stations are set.
+    pub station: Option<usize>,
     /// The part turned over (its reference skin down).
     pub flip: bool,
     pub gauge: Option<Gauged>,
@@ -407,6 +409,8 @@ pub struct StepCtx<'a> {
     /// The working station's centre along the bed from the bed's centre (the part is centred
     /// on its station: y = 0).
     pub oy: f64,
+    /// The working station (index into the tooling's stations), when stations are set.
+    pub station: Option<usize>,
     /// Verdicts kept across steps: a piece's place depends only on the bends on its path to
     /// the moving one, so its verdict against a tool holds wherever those are bent alike.
     pub memo: Option<std::rc::Rc<std::cell::RefCell<Memo>>>,
@@ -576,7 +580,8 @@ impl<'a> StepCtx<'a> {
         // length by the clearance at each end (flanges standing at the ends stay clear)
         let need = (bj.len - 2.0 * tl.short_end.unwrap_or(t.max(3.0))).max(0.0);
         let room = bj.len - 2.0 * tl.clearance;
-        let station = tl.station(setup.punch, setup.die);
+        let station_ix = tl.station_for(setup.punch, setup.die, need, room);
+        let station = station_ix.map(|k| &tl.stations[k]);
         let lengths = match station {
             Some(st) => (Some(st.punch_length), Some(st.die_length)),
             None => (
@@ -606,6 +611,7 @@ impl<'a> StepCtx<'a> {
             die_index: setup.die,
             punch_index: setup.punch,
             oy,
+            station: station_ix,
             memo: None,
             legs: None,
         }
@@ -839,7 +845,7 @@ impl<'a> StepCtx<'a> {
         // (their tips meet the same sheet line when all punches are one height; a taller or
         // shorter one is placed by its own height from the clamp)
         for (k, st) in tl.stations.iter().enumerate() {
-            if st.punch == self.punch_index && st.die == self.die_index {
+            if Some(k) == self.station {
                 continue;
             }
             let (p, d) = (&tl.punches[st.punch], &tl.dies[st.die]);
@@ -1524,6 +1530,14 @@ impl<'a> StepCtx<'a> {
 
     /// The part's length along the bed (press y), exact for walls, enclosed for zones.
     pub fn part_extent_y(&self) -> f64 {
+        let (lo, hi) = self.part_span_y();
+        hi - lo
+    }
+
+    /// Where the part reaches along the bed, in the working station's frame (y = 0 the bend's
+    /// middle): an enclosure, so it errs wide. The bend turns about a line along y, so this holds
+    /// through the whole step.
+    pub fn part_span_y(&self) -> (f64, f64) {
         let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
         for pc in &self.pieces {
             let roots = self.roots(pc, Interval::point(0.0));
@@ -1544,7 +1558,7 @@ impl<'a> StepCtx<'a> {
                 }
             }
         }
-        hi - lo
+        (lo, hi)
     }
 
     /// The backgauge: the outermost stop on the gauged leg's side the fingers reach, clear of the

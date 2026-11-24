@@ -1804,7 +1804,7 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                 .and_then(|s| s.plan.steps.get(st.step))
                 .and_then(|x| {
                     let sim = st.sim.as_ref().ok()?;
-                    sim.tooling.station(x.setup.punch, x.setup.die).map(|k| k.y)
+                    x.station.and_then(|k| sim.tooling.stations.get(k)).map(|k| k.y)
                 })
                 .unwrap_or(0.0);
             [a[0], a[1] + oy, a[2]]

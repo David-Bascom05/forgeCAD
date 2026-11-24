@@ -580,9 +580,28 @@ impl Tooling {
         Ok(())
     }
 
-    /// The station a step with this punch and die works at.
+    /// The first station holding this punch and die.
     pub fn station(&self, punch: usize, die: usize) -> Option<&Station> {
         self.stations.iter().find(|s| s.punch == punch && s.die == die)
+    }
+
+    /// The station a bend works at: of those holding its punch and die, the first whose stacks
+    /// both cover `need` and stand within `room` (the bend's length less its allowed ends, and
+    /// less the clearance at each end), else the first holding them. The same tools may stand at
+    /// two stations with different stack lengths (a box's last sides want shorter ones).
+    pub fn station_for(&self, punch: usize, die: usize, need: f64, room: f64) -> Option<usize> {
+        let fits = |x: f64| x >= need && x <= room + 1e-9;
+        let mut first = None;
+        for (k, s) in self.stations.iter().enumerate() {
+            if s.punch != punch || s.die != die {
+                continue;
+            }
+            if fits(s.punch_length) && fits(s.die_length) {
+                return Some(k);
+            }
+            first.get_or_insert(k);
+        }
+        first
     }
 
     pub fn punch(&self, id: &str) -> Option<&Punch> {
