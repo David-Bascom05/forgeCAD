@@ -634,6 +634,164 @@ pub fn setup_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     if let Some((c, t)) = redo {
         st.redo(c, &t);
     }
+    layout_ui(ui, st);
+}
+
+/// The tooling layout along the bed (with a bending document): each station's place and stack
+/// lengths, dragged on the bed or typed; the bed's and the housings' extent; each station's stack
+/// load capacity against the most force a step at it takes. Every change is a SetArg on the
+/// document's `station` statement.
+pub fn layout_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
+    use forge_lang::error::Op;
+    let (Some(doc), Ok(sim)) = (&st.doc, &st.sim) else {
+        return;
+    };
+    let tl = &sim.tooling;
+    if tl.stations.is_empty() {
+        return;
+    }
+    let names = doc.stations.clone();
+    let mut op: Option<Op> = None;
+    ui.separator();
+    ui.strong("Tooling layout");
+    let pr = &tl.press;
+    let bed = pr.bed_length;
+    let (w, h) = (ui.available_width().max(120.0), 54.0);
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::click_and_drag());
+    let p = ui.painter_at(rect);
+    let x_of = |y: f64| rect.left() + ((y + 0.5 * bed) / bed) as f32 * rect.width();
+    let y_of = |x: f32| f64::from((x - rect.left()) / rect.width()) * bed - 0.5 * bed;
+    p.rect_filled(rect, 2.0, egui::Color32::from_gray(40));
+    // the housing gap
+    let g = 0.5 * pr.housing_gap;
+    p.line_segment(
+        [
+            egui::pos2(x_of(-g), rect.top()),
+            egui::pos2(x_of(-g), rect.bottom()),
+        ],
+        egui::Stroke::new(1.0, look::WARN),
+    );
+    p.line_segment(
+        [
+            egui::pos2(x_of(g), rect.top()),
+            egui::pos2(x_of(g), rect.bottom()),
+        ],
+        egui::Stroke::new(1.0, look::WARN),
+    );
+    let dragging = ui
+        .ctx()
+        .memory(|m| m.data.get_temp::<usize>(egui::Id::unique("bendsim-drag")));
+    for (k, s) in tl.stations.iter().enumerate() {
+        let half = 0.5 * s.punch_length.max(s.die_length);
+        let r = egui::Rect::from_min_max(
+            egui::pos2(x_of(s.y - half), rect.top() + 8.0),
+            egui::pos2(x_of(s.y + half), rect.bottom() - 8.0),
+        );
+        let c = if dragging == Some(k) {
+            look::GAUGE
+        } else {
+            look::TOOL
+        };
+        p.rect_filled(r, 2.0, c);
+        p.text(
+            r.center(),
+            egui::Align2::CENTER_CENTER,
+            names.get(k).cloned().unwrap_or_default(),
+            egui::FontId::proportional(11.0),
+            egui::Color32::BLACK,
+        );
+    }
+    // drag a station along the bed: written when let go
+    if resp.drag_started()
+        && let Some(pt) = resp.interact_pointer_pos()
+    {
+        let y = y_of(pt.x);
+        let hit = tl
+            .stations
+            .iter()
+            .position(|s| (s.y - y).abs() <= 0.5 * s.punch_length.max(s.die_length));
+        ui.ctx().memory_mut(|m| match hit {
+            Some(k) => {
+                m.data.insert_temp(egui::Id::unique("bendsim-drag"), k);
+            }
+            None => m.data.remove::<usize>(egui::Id::unique("bendsim-drag")),
+        });
+    }
+    if resp.drag_stopped()
+        && let (Some(k), Some(pt)) = (dragging, resp.interact_pointer_pos())
+    {
+        ui.ctx()
+            .memory_mut(|m| m.data.remove::<usize>(egui::Id::unique("bendsim-drag")));
+        let y = (y_of(pt.x) / 5.0).round() * 5.0;
+        if let Some(n) = names.get(k) {
+            op = Some(Op::SetArg {
+                id: n.clone(),
+                arg: "y".into(),
+                text: format!("{y}"),
+            });
+        }
+    }
+    // per station: its values, typed, and its load
+    for (k, s) in tl.stations.iter().enumerate() {
+        let Some(n) = names.get(k) else { continue };
+        let (punch, die) = (&tl.punches[s.punch], &tl.dies[s.die]);
+        ui.horizontal(|ui| {
+            ui.label(format!("{n}: {} / {}", punch.id, die.id));
+        });
+        ui.horizontal(|ui| {
+            for (arg, v0) in [
+                ("y", s.y),
+                ("punch_length", s.punch_length),
+                ("die_length", s.die_length),
+            ] {
+                let mut v = v0;
+                ui.label(arg);
+                let r = ui.add(egui::DragValue::new(&mut v).speed(1.0).suffix(" mm"));
+                if (r.lost_focus() || r.drag_stopped()) && (v - v0).abs() > 1e-9 {
+                    op = Some(Op::SetArg {
+                        id: n.clone(),
+                        arg: arg.into(),
+                        text: format!("{}", (v * 10.0).round() / 10.0),
+                    });
+                }
+            }
+        });
+        // the stack's capacity: the least rated load per metre of its punch and die times its
+        // length, against the most force a step at it takes (with the material's strength)
+        let cap = punch
+            .max_load
+            .map(|l| l * s.punch_length / 1000.0)
+            .into_iter()
+            .chain(die.max_load.map(|l| l * s.die_length / 1000.0))
+            .fold(f64::INFINITY, f64::min);
+        let most = sim
+            .plan
+            .steps
+            .iter()
+            .filter(|x| (x.setup.punch, x.setup.die) == (s.punch, s.die))
+            .filter_map(|x| x.force)
+            .fold(None, |m: Option<f64>, f| Some(m.map_or(f, |m| m.max(f))));
+        let line = match (cap.is_finite(), most) {
+            (true, Some(f)) => (
+                format!("load: {f:.1} kN of {cap:.1} kN the stack takes"),
+                if f <= cap { look::PASS } else { look::FAIL },
+            ),
+            (true, None) => (
+                format!("stack takes {cap:.1} kN (force not known: no material strength)"),
+                look::MUTED,
+            ),
+            (false, _) => (
+                "stack load: not checked (tools' ratings unknown)".into(),
+                look::MUTED,
+            ),
+        };
+        ui.colored_label(line.1, line.0);
+    }
+    if let Some(op) = op
+        && let Err(e) = st.doc_op(&op)
+    {
+        st.sim = Err(e);
+    }
 }
 
 /// The Sequence panel: the program's steps, edited in place. With the part's bending document

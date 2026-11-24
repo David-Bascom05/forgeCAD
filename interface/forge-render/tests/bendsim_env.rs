@@ -138,6 +138,15 @@ fn a_channel_on_a_trubend_in_3d() {
         b.t = t;
         shot(&mut h, name);
     }
+    // the program written as the part's bending document: the editor's layout and steps
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.write_doc().expect("written");
+        assert!(b.doc.is_some());
+        b.step = 1;
+        b.t = 0.6;
+    }
+    shot(&mut h, "06-program-editor");
     // scrub to the end: the part folded, the design back on Finish
     click(&mut h, "tool:Finish Bend Simulation");
     h.step();
