@@ -56,6 +56,8 @@ cte = 12.2
 colour = "#8C8F93"
 source = "Elgin Fasteners / MW Components, 'Carbon Steel Grade 1010 Data Sheet - AISI 1010 Steel, cold drawn' (MatWeb-derived), https://www.mwcomponents.com/uploads/Resource-Center/Elgin-Material-Sheets/Carbon-Steel-Grade-1010-Data-Sheet_Elgin-Fasteners.pdf"
 note = "Cold drawn bar/wire, typical values. No sourced data for 1010 cold-rolled SHEET was found; cold-rolled 1010-chemistry sheet is sold to ASTM A1008 CS and matches the '1008 cold rolled' record. E and Poisson are 'typical for steel'. CTE 0-100 C. Same values in AZoM 'AISI 1010 Carbon Steel (UNS G10100)', https://www.azom.com/article.aspx?ArticleID=6539"
+machining.hardness_hb = 105
+source_machining.hardness_hb = "Elgin / MW Components, Carbon Steel Grade 1010 data sheet, https://www.mwcomponents.com/uploads/Resource-Center/Elgin-Material-Sheets/Carbon-Steel-Grade-1010-Data-Sheet_Elgin-Fasteners.pdf#page=1; 'AISI 1010 Steel, cold drawn ... Hardness, Brinell 105' (typical)"
 
 [[material]]
 name = "1018 cold drawn"
@@ -75,6 +77,8 @@ kind_machining.kc1_1 = "stand-in"
 machining.mc = 0.21
 source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 1 (Non-alloy steel <0.25 %C, annealed, 125 HB): mc 0.21 (chip thickness factor); this material held in that group row"
 kind_machining.mc = "stand-in"
+machining.hardness_hb = 126
+source_machining.hardness_hb = "Elgin / MW Components, Carbon Steel Grade 1018 data sheet, https://www.mwcomponents.com/uploads/Resource-Center/Elgin-Material-Sheets/Carbon-Steel-Grade-1018-Data-Sheet_Elgin.pdf#page=1; 'AISI 1018 Steel, cold drawn ... Hardness, Brinell 126' (typical)"
 
 [[material]]
 name = "ASTM A36"
@@ -148,6 +152,8 @@ kind_machining.kc1_1 = "stand-in"
 machining.mc = 0.2
 source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 14 (Stainless steel, austenitic/duplex, 180 HB): mc 0.2 (chip thickness factor); this material held in that group row"
 kind_machining.mc = "stand-in"
+machining.hardness_hb = 201
+source_machining.hardness_hb = "Atlas Steels, Stainless Steel 304/304L/304H grade data sheet, https://atlassteels.com.au/stainless-steel-304-304l-304h-grade-data-sheet-23-04-21#page=2; Mechanical Property Specification (ASTM A240): Brinell (HB) max. 201 (a MAXIMUM; typical HRB 84, Cleveland-Cliffs)"
 
 [[material]]
 name = "316 annealed"
@@ -169,6 +175,8 @@ kind_machining.kc1_1 = "stand-in"
 machining.mc = 0.2
 source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 14 (Stainless steel, austenitic/duplex, 180 HB): mc 0.2 (chip thickness factor); this material held in that group row"
 kind_machining.mc = "stand-in"
+machining.hardness_hb = 217
+source_machining.hardness_hb = "Atlas Steels, Stainless Steel 316/316L/316H grade data sheet, https://atlassteels.com.au/stainless-steel-316-316l-316h-grade-data-sheet-27-04-21#page=2; Mechanical Property Specification: Brinell (HB) max. 217 (a MAXIMUM; typical HRB 79, Cleveland-Cliffs)"
 
 [[material]]
 name = "430 annealed"
@@ -186,6 +194,8 @@ source_poisson = "AZoM, 'Properties: Stainless Steel - Grade 430 (UNS S43000)', 
 note = "Annealed sheet, typical values (annealed bar: yield 310 MPa). CTE 0-100 C. Poisson is the midpoint of AZoM's 0.275-0.285 range; the ASM sheet gives none. Magnetic."
 
 # ---------------------------------------------------------------- aluminium
+machining.hardness_hb = 183
+source_machining.hardness_hb = "Atlas Steels, Stainless Steel 430/430F grade data sheet, https://atlassteels.com.au/wp-content/uploads/2021/06/Stainless-Steel-430-430F-Grade-Data-Sheet-27-04-21.pdf#page=2; Mechanical Property Specification (ASTM A240): Brinell (HB) max. 183 (a MAXIMUM; typical HRB 78, Cleveland-Cliffs)"
 
 [[material]]
 name = "5052-H32"
@@ -386,6 +396,8 @@ machining.mc_rows = [0.21, 0.22, 0.22, 0.22, 0.28, 0.27, 0.27, 0.24, 0.32, 0.28,
 source_machining.mc_rows = "Klippel, Suessmaier, Kuffa, Wegener, Dry Cutting Experiments Database Ti6Al4V and Ck45, ETH Zurich IWF, arXiv:2209.04197 (2022), CC BY 4.0, https://arxiv.org/abs/2209.04197; Table 16 (Ti6Al4V), mc at each vc; orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, kc extrapolated to h = 1 mm per vc (paper section 3.7); read from the authors TeX source"
 
 # ---------------------------------------------------------------- rubber
+machining.hardness_hrc = 30
+source_machining.hardness_hrc = "ATI 6-4 technical data sheet, https://www.atimaterials.com/Products/Documents/datasheets/titanium/alloyed/ati_6-4_tds_en_v1.pdf#page=1; 'Typical hardness in the annealed condition is Rockwell C 30-34' (the low end)"
 
 [[material]]
 name = "EPDM 70A"
@@ -1328,6 +1340,8 @@ kind_machining.kc1_1 = "stand-in"
 machining.mc = 0.22
 source_machining.mc = "ISCAR, MATERIAL GROUPS According to DIN / ISO 513 and VDI 3323, catalog p. 1112, https://www.iscar.com/lms/wp-content/uploads/2021/04/Materials-group.pdf; row 2 (Non-alloy steel >=0.25 %C, annealed, 190 HB (cold drawn bar is not annealed)): mc 0.22 (chip thickness factor); this material held in that group row"
 kind_machining.mc = "stand-in"
+machining.hardness_hb = 179
+source_machining.hardness_hb = "Elgin / MW Components, Carbon Steel Grade 1045 fact sheet, https://www.mwcomponents.com/uploads/Resource-Center/Elgin-Material-Sheets/Carbon-Steel-Grade-1045-Fact-Sheet_Elgin-Website.pdf#page=1; 'AISI 1045 Steel, cold drawn, 19-32 mm (0.75-1.25 in) round ... Hardness, Brinell 179' (typical; Chicago Tube lists the same 179)"
 
 [[material]]
 name = "4140 annealed"

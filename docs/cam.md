@@ -163,10 +163,11 @@ the tool's finish preset's ae where wider) finish, else rough; the rest general.
 kernel/forge-tooling/data/generic.toml (generated from the makers' cited rows by
 verify/feeds-vs-makers, `cargo run -p feeds-vs-makers -- --generic`): a class is material group ×
 material family (the part's forge-material family: N splits aluminium / copper, S titanium /
-nickel) × op class × maker tier (material-specific / general-purpose, an estimate from the
+nickel) × hardness band (soft up to 98 HRB, 21–36 HRC, 36–50 HRC: the makers' printed classes,
+an unmarked row counted soft; the part's from its record's cited hardness) × op class × maker tier (material-specific / general-purpose, an estimate from the
 makers' product lines) × flutes × coating × helix band, written only with ≥ 10 rows from ≥ 2
 makers; where the tool's class has fewer, the lookup opens helix, then tier, coating, flutes, op
-class, and last the family (the note names the class used). A part that names only its group
+class; the material (family, then hardness) is kept longest (the note names the class used). A part that names only its group
 gets the whole group (in N, copper's speeds among them). P10, not the median, because the costs are asymmetric: too fast breaks tools, too
 slow only costs time. Speed is the class's P10 speed; the chip is the class's P10 slot chip relative to
 the group's slot chip at the diameter; a rough or finish op's factor is the class's own P10

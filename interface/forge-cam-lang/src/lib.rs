@@ -172,6 +172,8 @@ struct PartIn {
     /// The stock material's family (forge-material: aluminium, copper, steel, ...), for the
     /// generic class of a tool with no maker data.
     family: Option<String>,
+    /// The stock's hardness band from its record's cited hardness (feeds::hardness_band_of_hb).
+    hardness: Option<&'static str>,
     /// Where the material and group came from, for the reply and the fixes.
     material_note: String,
     /// The material's machining data (its record's machining.* keys), read once.
@@ -1621,6 +1623,7 @@ impl Cam {
             group: p.group.clone(),
             material: p.material.clone(),
             family: p.family.clone(),
+            hardness: p.hardness,
             material_note: p.material_note.clone(),
             stock: p.stock.clone(),
         };
@@ -2662,6 +2665,7 @@ impl Cam {
                     stock: material.as_deref().map(|m| stock_of(m, &group, dir)),
                     group,
                     family: material.as_deref().and_then(|m| Self::stock_family(m, dir)),
+                    hardness: material.as_deref().and_then(|m| Self::stock_hardness(m, dir)),
                     material,
                     material_note,
                 });
@@ -3177,6 +3181,9 @@ impl Cam {
                 .as_deref()
                 .map(|m| stock_of(m, &jaw_group, Path::new("."))),
             group: jaw_group,
+            hardness: jaw_material
+                .as_deref()
+                .and_then(|m| Self::stock_hardness(m, Path::new("."))),
             family: jaw_material
                 .as_deref()
                 .and_then(|m| Self::stock_family(m, Path::new("."))),
@@ -4536,6 +4543,20 @@ impl Cam {
     /// found). The group is the material's `[[stock]]` record's, else its family's ISO 513
     /// class; None when the name is unknown or its family has no class.
     /// A forge-material record's family, by its name.
+    /// A forge-material record's hardness band: its `machining.hardness_hb`, else its
+    /// `machining.hardness_hrc` read as Brinell (feeds::hb_of_hrc), banded at the makers' class
+    /// edges (feeds::hardness_band_of_hb); None where the record cites no hardness.
+    fn stock_hardness(name: &str, dir: &Path) -> Option<&'static str> {
+        let libs = forge_material::Libraries::cached(Some(dir));
+        let (_, m) = libs.find(name)?;
+        let hb = match (m.extra("machining.hardness_hb"), m.extra("machining.hardness_hrc")) {
+            (Some(forge_material::Value::Num(hb)), _) => *hb,
+            (_, Some(forge_material::Value::Num(hrc))) => feeds::hb_of_hrc(*hrc),
+            _ => return None,
+        };
+        feeds::hardness_band_of_hb(hb)
+    }
+
     fn stock_family(name: &str, dir: &Path) -> Option<String> {
         forge_material::Libraries::cached(Some(dir))
             .find(name)
@@ -4635,6 +4656,7 @@ impl Cam {
         let gu = if preset.is_none() {
             let tc = feeds::ToolClass {
                 family: self.parts[self.setups[su].part].family.as_deref(),
+                hardness: self.parts[self.setups[su].part].hardness,
                 tier: None,
                 flutes: Some(t.tool.nof.max(1)),
                 coated: feeds::ToolClass::coated(&t.tool.coating),

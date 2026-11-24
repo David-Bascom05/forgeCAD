@@ -2058,3 +2058,27 @@ fn the_3axis_step_down_is_step() {
             .any(|o| o.name == "w" && o.paths.iter().any(|p| !p.moves.is_empty()))
     );
 }
+
+/// A named steel resolves in its hardness band (its forge-material record's cited hardness:
+/// 1018 cold drawn, 126 HB, soft), not over every P row down to 50 HRC; a part naming only P
+/// takes the whole group, slower.
+#[test]
+fn a_named_steel_resolves_in_its_hardness_band() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let skim = |src: &str| {
+        let cam = forge_cam_lang::run(src, &dir);
+        cam.ops
+            .iter()
+            .find(|o| o.name == "skim")
+            .unwrap()
+            .resolved
+            .clone()
+            .unwrap()
+    };
+    let mild = skim(&src.replace("material: \"6061-T6\"", "material: \"1018 cold drawn\""));
+    let p = skim(&src.replace("material: \"6061-T6\"", "group: \"P\""));
+    let sp = mild.spread.clone().unwrap();
+    assert!(sp.class.contains("soft"), "{}", sp.class);
+    assert!(mild.vc.v > p.vc.v, "{} {}", mild.vc.v, p.vc.v);
+}

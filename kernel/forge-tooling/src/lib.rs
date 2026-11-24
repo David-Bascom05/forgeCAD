@@ -1183,7 +1183,7 @@ impl Library {
     }
     /// The chip factor record of an op class ("rough" | "finish").
     /// The generic class a tool cuts a group in: the narrowest class that has data, opening
-    /// the dimensions in `feeds::GENERIC_LEVELS` order (a dimension the tool does not state is
+    /// the dimensions in `feeds::generic_levels()` order (a dimension the tool does not state is
     /// open from the start).
     pub fn generic(&self, group: &str, op: &str, tc: &feeds::ToolClass) -> Option<&feeds::Generic> {
         feeds::generic_in(&self.generics, group, op, tc)
