@@ -118,28 +118,44 @@ pub struct Feeds {
 pub const THIN_CAP: f64 = 3.0;
 
 pub fn feeds(g: &Group, c: &Cut, rpm_range: [f64; 2]) -> Feeds {
-    let d_eff = if c.ball && c.ap < 0.5 * c.d {
-        2.0 * (c.ap * (c.d - c.ap)).max(0.0).sqrt()
-    } else {
-        c.d
-    };
+    let d_eff = effective_diameter(c.d, c.ball, c.ap);
     let vc0 = if c.carbide { g.vc_carbide } else { g.vc_hss };
     let n0 = 1000.0 * vc0 / (std::f64::consts::PI * d_eff.max(1e-6));
     let rpm = n0.clamp(rpm_range[0], rpm_range[1]);
-    let vc = rpm * std::f64::consts::PI * d_eff / 1000.0;
     let target = g.fz_at(c.d);
-    let r = (c.ae / c.d).clamp(0.0, 1.0);
-    let k = if r < 0.5 {
-        2.0 * (r - r * r).max(0.0).sqrt()
-    } else {
-        1.0
-    };
+    let k = thinning((c.ae / c.d).clamp(0.0, 1.0));
     let fz = if k > 0.0 {
         (target / k).min(THIN_CAP * target)
     } else {
         target
     };
-    let hex = fz * k;
+    let mut f = at(g, c, fz, rpm, d_eff);
+    f.rpm_limited = rpm != n0;
+    f
+}
+
+/// The diameter that cuts: D, or for a ball at depth ap < D/2, 2 √(ap (D − ap)).
+pub fn effective_diameter(d: f64, ball: bool, ap: f64) -> f64 {
+    if ball && ap < 0.5 * d {
+        2.0 * (ap * (d - ap)).max(0.0).sqrt()
+    } else {
+        d
+    }
+}
+
+/// Peak-chip factor hex/fz = sin φ = 2 √(r − r²) for r = ae/D < 1/2, else 1.
+pub fn thinning(r: f64) -> f64 {
+    if r < 0.5 {
+        2.0 * (r - r * r).max(0.0).sqrt()
+    } else {
+        1.0
+    }
+}
+
+/// The numbers of a cut at a given fz and rpm: chips, feed, power, torque.
+pub fn at(g: &Group, c: &Cut, fz: f64, rpm: f64, d_eff: f64) -> Feeds {
+    let r = (c.ae / c.d).clamp(0.0, 1.0);
+    let hex = fz * thinning(r);
     let vf = fz * rpm * c.flutes.max(1) as f64;
     let phi = engagement_angle(r);
     let hm = fz * mean_chip_factor(r, phi);
@@ -153,7 +169,7 @@ pub fn feeds(g: &Group, c: &Cut, rpm_range: [f64; 2]) -> Feeds {
     };
     Feeds {
         rpm,
-        vc,
+        vc: rpm * std::f64::consts::PI * d_eff / 1000.0,
         fz,
         hex,
         hm,
@@ -162,7 +178,7 @@ pub fn feeds(g: &Group, c: &Cut, rpm_range: [f64; 2]) -> Feeds {
         power,
         torque,
         d_eff,
-        rpm_limited: rpm != n0,
+        rpm_limited: false,
     }
 }
 
@@ -331,13 +347,13 @@ mod tests {
             let mut sum = 0.0;
             for i in 0..n {
                 let th = std::f64::consts::PI - phi + phi * (i as f64 + 0.5) / n as f64;
-                sum += th.sin();
+                sum += forge_math::dmath::sin(th);
             }
             let avg = sum / n as f64;
             assert!((avg - mean_chip_factor(r, phi)).abs() < 1e-9, "r {r}");
             // and the peak factor sin φ (k in the engine) below D/2
             if r < 0.5 {
-                assert!((phi.sin() - 2.0 * (r - r * r).sqrt()).abs() < 1e-12);
+                assert!((forge_math::dmath::sin(phi) - 2.0 * (r - r * r).sqrt()).abs() < 1e-12);
             }
         }
     }
