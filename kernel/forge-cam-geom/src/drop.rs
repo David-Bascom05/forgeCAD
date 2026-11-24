@@ -522,12 +522,24 @@ struct Cell {
 /// column's footprint), or None when no point of the cell is within R. Also which parameter
 /// to split (the one whose derivative times width is largest).
 fn cell_upper(col: &Column, f: &Face, mv: &Move, c: &Cell) -> Option<(f64, usize)> {
-    cell_upper_side(col, f, mv, c, false)
+    cell_upper_side(col, f, mv, c, false, None)
 }
 
 /// `cell_upper`; with `side`, of min(u, R − ρ) (the depth into the column is at most the
 /// radial gap to its side as well as the vertical one to its bottom).
-fn cell_upper_side(col: &Column, f: &Face, mv: &Move, c: &Cell, side: bool) -> Option<(f64, usize)> {
+///
+/// `stop`: a caller that only asks whether the bound is above it (and splits nothing at or
+/// below it) gets, once one of the bounds the minimum is taken of is at or below it, that bound
+/// and no split (`gap_clear`).
+fn cell_upper_side(
+    col: &Column,
+    f: &Face,
+    mv: &Move,
+    c: &Cell,
+    side: bool,
+    stop: Option<f64>,
+) -> Option<(f64, usize)> {
+    let done = |best: f64| matches!(stop, Some(n) if best <= n);
     // natural enclosures and the monotone bound
     let y = f.surf.eval(c.p, c.q);
     let g = mv.at(c.s);
@@ -537,6 +549,9 @@ fn cell_upper_side(col: &Column, f: &Face, mv: &Move, c: &Cell, side: bool) -> O
     let rho = r2.sqrt();
     let bb = col.b(rho)?;
     let mut best = y[2].sub(bb).sub(g[2]).hi;
+    if done(best) {
+        return Some((best, 0));
+    }
     if side {
         let rad = Ival::pt(col.r)
             .sub(Ival {
@@ -547,9 +562,15 @@ fn cell_upper_side(col: &Column, f: &Face, mv: &Move, c: &Cell, side: bool) -> O
         if rad < best {
             best = rad;
         }
+        if done(best) {
+            return Some((best, 0));
+        }
         let sd = col.solid.sd_rz(rho, y[2].sub(g[2]));
         if -sd.lo < best {
             best = -sd.lo;
+        }
+        if done(best) {
+            return Some((best, 0));
         }
     }
     let point = c.p.width() == 0.0 && c.q.width() == 0.0 && c.s.width() == 0.0;
@@ -607,7 +628,8 @@ fn cell_upper_side(col: &Column, f: &Face, mv: &Move, c: &Cell, side: bool) -> O
     let w = [
         diam2(&f.surf.eval(c.p, qc)),
         diam2(&f.surf.eval(pc, c.q)),
-        diam2(&mv.at(c.s)),
+        // (mv.at(c.s))
+        diam2(&g),
     ];
     while k < 3 {
         let sm = grad[k] + 1e-3 * w[k];
@@ -1995,6 +2017,9 @@ fn gap_search(
     // cells near the limit; a cell too small to split leaves the verdict unknown, but the search
     // goes on for a witness
     let mut heap = Heap { v: Vec::new() };
+    // ("Clear?" only: a cell at or below the limit is dropped whatever its bound, so its bound
+    // stops at the first of its terms that shows it)
+    let stop = if clear_only { Some(need) } else { None };
     // (the heap's cells over the limit, each of which a Clear verdict must split)
     let mut over = 0usize;
     let mut i = 0;
@@ -2005,7 +2030,7 @@ fn gap_search(
             s: rest[i],
         };
         cells += 1;
-        if let Some((u, kk)) = cell_upper_side(col, f, mv, &c, true) {
+        if let Some((u, kk)) = cell_upper_side(col, f, mv, &c, true, stop) {
             if u > need {
                 over += 1;
             }
@@ -2060,7 +2085,7 @@ fn gap_search(
             if f.holds(h.p, h.q) == -1 {
                 continue;
             }
-            if let Some((u2, k2)) = cell_upper_side(col, f, mv, &h, true) {
+            if let Some((u2, k2)) = cell_upper_side(col, f, mv, &h, true, stop) {
                 if u2 <= need {
                     if u2 > worst {
                         worst = u2;
