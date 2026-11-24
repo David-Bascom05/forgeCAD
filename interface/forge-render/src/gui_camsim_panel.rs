@@ -81,6 +81,8 @@ pub struct CamSimUi {
     /// they do in the shop), carried into the part's frame each frame; re-anchored where the
     /// person pans. Off: the part stays still and the machine moves about it.
     pub shop_eye: bool,
+    /// The finer stock about the tool (`Sim::detail_at`), in the material's colours.
+    pub detail: bool,
     /// (the target in the machine's base frame, the target last set in the part's frame).
     pub eye_anchor: Option<([f64; 3], [f32; 3])>,
     pub path_width: f32,
@@ -146,6 +148,7 @@ impl CamSimUi {
             values: None,
             follow: false,
             shop_eye: true,
+            detail: true,
             eye_anchor: None,
             path_width: 2.0,
             tab: Tab::Program,
@@ -1280,6 +1283,13 @@ fn program(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
 fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     heading(ui, t, "Playback");
     ui.checkbox(&mut st.follow, "Follow the tool");
+    if ui
+        .checkbox(&mut st.detail, "Fine detail at the tool")
+        .on_hover_text("The stock about the tool on a grid of about 0.03 mm, so a ball's cusps and the stepover show; the rest of the stock on the coarser grid. Display only.")
+        .changed()
+    {
+        st.drawn_key = None;
+    }
     if st.sim.machine().is_some() {
         ui.checkbox(&mut st.shop_eye, "Operator's view")
             .on_hover_text("The camera stays put in the machine: the table and the part move under the head, as in the shop. Off: the part stays still and the machine moves about it.");

@@ -283,6 +283,17 @@ fn the_mould_cores_cut_surface() {
     let t0 = std::time::Instant::now();
     shot(&mut h, "native-surface-01-mould-finish-1400x860");
     eprintln!("stock drawn and shot: {:.0} ms", t0.elapsed().as_secs_f64() * 1e3);
+    // close on the cut mid-way through the steep-and-shallow finishing: the detail window's
+    // cusps beside the coarser stock
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    let k = st.sim.tl.ops.iter().position(|o| o.name == "ss").unwrap();
+    let t = 0.5 * (st.sim.tl.ops[k].t0 + st.sim.tl.ops[k].t1);
+    h.gui
+        .camsim_command(&format!("t={t};tool=1;detail=1;follow=1;fit=tool"))
+        .unwrap();
+    shot(&mut h, "native-surface-02-mould-detail-1400x860");
+    h.gui.camsim_command("detail=0").unwrap();
+    shot(&mut h, "native-surface-03-mould-no-detail-1400x860");
 }
 
 /// The flange's posted program played on the Haas VF-2 (CAM-HAAS's cited record, named in the

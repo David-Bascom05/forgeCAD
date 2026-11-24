@@ -51,6 +51,7 @@ impl Gui {
                 ui.fixture = old.fixture;
                 ui.follow = old.follow;
                 ui.shop_eye = old.shop_eye;
+                ui.detail = old.detail;
                 ui.path_width = old.path_width;
                 ui.tab = old.tab;
                 ui.folded = old.folded;
@@ -336,16 +337,27 @@ pub fn geometry(
             let t = st.t;
             let mut mesh = std::mem::take(&mut st.stock_mesh);
             mesh.clear();
-            if st.sim.stock_at(t).is_some()
-                && let Some((z, s)) = st.sim.stock_shown()
-            {
-                draw::stock(
-                    z,
-                    st.sim.part_maps.get(s).and_then(|m| m.as_ref()),
-                    colour,
-                    tol,
-                    &mut mesh,
-                );
+            if st.sim.stock_at(t).is_some() {
+                // the detail window about the tool (the material's own look: its cusps and
+                // stepover), drawn in place of the whole grid's columns under it
+                let hole = if st.detail && colour == StockColour::Material {
+                    st.sim.detail_near(t, !st.playing).map(|(z, cols)| {
+                        draw::stock(z, None, colour, tol, &mut mesh);
+                        cols
+                    })
+                } else {
+                    None
+                };
+                if let Some((z, s)) = st.sim.stock_shown() {
+                    draw::stock_but(
+                        z,
+                        st.sim.part_maps.get(s).and_then(|m| m.as_ref()),
+                        colour,
+                        tol,
+                        hole,
+                        &mut mesh,
+                    );
+                }
             }
             st.stock_mesh = mesh;
             st.drawn_key = Some(key);
@@ -496,6 +508,11 @@ impl Gui {
                     }
                 }
                 "follow" => st.follow = on()?,
+                // the finer grid about the tool
+                "detail" => {
+                    st.detail = on()?;
+                    st.drawn_key = None;
+                }
                 // the operator's view on a machine (`eye=shop`), or the part held still
                 "eye" => match v {
                     "shop" => st.shop_eye = true,

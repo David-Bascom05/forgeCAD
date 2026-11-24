@@ -852,3 +852,47 @@ fn the_stock_mesh_is_quick_to_build() {
         assert!(!out.is_empty());
     }
 }
+
+/// The detail window about the tool (`Sim::detail_at`): a grid of about 0.03 mm over a square
+/// snapped to the whole grid's columns, played from the setup's start; its time from nothing
+/// (the window moved, or time went back) and for the next frame's step, mid-way through the
+/// mould core's ball-end finishing.
+#[test]
+fn the_detail_window_is_fine_and_quick() {
+    let src = std::fs::read_to_string(machined().join("mold_core_finish_cam.fg")).unwrap();
+    let mut sim = Sim::open(&src, &machined());
+    let k = sim.tl.ops.iter().position(|o| o.name == "ss").unwrap();
+    let t = 0.5 * (sim.tl.ops[k].t0 + sim.tl.ops[k].t1);
+    sim.stock_at(t).unwrap();
+    let t0 = std::time::Instant::now();
+    let (cell, n, cols) = {
+        let (z, cols) = sim.detail_at(t).expect("a window");
+        (z.cell, z.nx * z.ny, cols)
+    };
+    let first = t0.elapsed().as_secs_f64() * 1e3;
+    // the next frames (a 30 fps clip at 10× through a 34 min op: a few pieces each)
+    let t1 = std::time::Instant::now();
+    let steps = 30;
+    for s in 1..=steps {
+        let tt = t + s as f64 * 10.0 / 30.0;
+        sim.stock_at(tt).unwrap();
+        sim.detail_at(tt);
+    }
+    let step = t1.elapsed().as_secs_f64() * 1e3 / steps as f64;
+    // while playing: the window advances, never moves (it follows at the next pause)
+    let t2 = std::time::Instant::now();
+    let mut shown = 0;
+    for s in 1..=steps {
+        let tt = t + (steps + s) as f64 * 10.0 / 30.0;
+        sim.stock_at(tt).unwrap();
+        shown += usize::from(sim.detail_near(tt, false).is_some());
+    }
+    let playing = t2.elapsed().as_secs_f64() * 1e3 / steps as f64;
+    eprintln!("while playing: {playing:.1} ms a frame (stock and window), the window shown in {shown} of {steps}");
+    eprintln!(
+        "detail window: {n} cells of {cell:.3} mm, columns {cols:?}: {first:.0} ms from nothing, {step:.1} ms a frame after (stock and window)"
+    );
+    assert!(cell <= 0.035, "fine: {cell}");
+    let coarse = sim.stock_shown().unwrap().0.cell;
+    assert!(coarse > 4.0 * cell, "finer than the whole grid ({coarse})");
+}

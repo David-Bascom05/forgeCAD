@@ -55,6 +55,21 @@ impl Marker {
     }
 }
 
+/// The detail window's stock (`Sim::detail_at`).
+struct Detail {
+    setup: usize,
+    /// The op it was started for (from the whole stock as that op began).
+    op: u32,
+    centre: [f64; 2],
+    half: f64,
+    /// The whole grid's columns it stands for: [i0, j0, i1, j1) (the drawing leaves them out).
+    cols: [usize; 4],
+    /// After `done` pieces.
+    z: ZMap,
+    done: usize,
+    shown: Option<ZMap>,
+}
+
 /// The display stock played along the timeline.
 struct Play {
     cells: usize,
@@ -93,6 +108,11 @@ pub struct Sim {
     play: Option<Play>,
     /// The stock shown and the time it was made for.
     shown: Option<(f64, usize, ZMap)>,
+    /// The detail window: a finer grid about the tool (`detail_at`).
+    detail: Option<Detail>,
+    /// The whole stock as an op began (its index): the detail window's start, kept while that op
+    /// plays.
+    op_start: Option<(u32, ZMap)>,
 }
 
 /// The default grid: about this many columns per setup.
@@ -138,6 +158,8 @@ impl Sim {
             own: None,
             play: None,
             shown: None,
+            detail: None,
+            op_start: None,
         };
         sim.markers = sim.markers_of();
         // each setup's posted program on its machine
@@ -411,6 +433,150 @@ impl Sim {
         self.shown = Some((t, s, z));
         let (_, s, z) = self.shown.as_ref()?;
         Some((z, *s))
+    }
+
+    /// The stock about the tool at time t, finer than the whole stock's grid (about 0.03 mm), so
+    /// a ball's cusps and a stepover's marks are in it: a square window snapped to the whole
+    /// grid's columns (which the drawing leaves out under it), its side about five tool radii,
+    /// played from its setup's start through every piece that reaches it. It moves when the
+    /// tool leaves its middle half (and is played again); time going back plays it again too.
+    /// None in a setup turned over from another (its start is that setup's stock), or with no
+    /// cutter. Display only, like the whole stock.
+    pub fn detail_at(&mut self, t: f64) -> Option<(&ZMap, [usize; 4])> {
+        self.detail_near(t, true)
+    }
+
+    /// `detail_at`, moving the window (a fresh start, some hundreds of ms) only if `may_move`
+    /// (else None where it would have to move): playback keeps its pace and the window follows
+    /// at the next pause.
+    pub fn detail_near(&mut self, t: f64, may_move: bool) -> Option<(&ZMap, [usize; 4])> {
+        let (p, i) = self.tl.pos(t)?;
+        let s = self.setup_of_seg(i);
+        let su = self.setups.get(s)?;
+        if su.from.is_some() {
+            return None;
+        }
+        let g = self.tl.segs[i];
+        let r = self.cutters.get(g.tool as usize)?.as_ref()?.r;
+        let half = (2.5 * r).clamp(4.0, 12.0);
+        let coarse = self.blank(s, self.cells());
+        let keep = self.detail.as_ref().is_some_and(|d| {
+            d.setup == s
+                && d.op == g.op
+                && d.half == half
+                && i + 1 >= d.done
+                && (p[0] - d.centre[0]).abs() < 0.6 * half
+                && (p[1] - d.centre[1]).abs() < 0.6 * half
+        });
+        if !keep && !may_move {
+            return None;
+        }
+        if !keep {
+            // the window's columns of the whole grid, about the tool
+            let c = coarse.cell;
+            let col = |x: f64, x0: f64, n: usize| (((x - x0) / c).round().max(0.0) as usize).min(n);
+            let (i0, i1) = (
+                col(p[0] - half, coarse.x0, coarse.nx),
+                col(p[0] + half, coarse.x0, coarse.nx),
+            );
+            let (j0, j1) = (
+                col(p[1] - half, coarse.y0, coarse.ny),
+                col(p[1] + half, coarse.y0, coarse.ny),
+            );
+            if i1 <= i0 || j1 <= j0 {
+                self.detail = None;
+                return None;
+            }
+            let (x0, x1) = (coarse.x0 + i0 as f64 * c, coarse.x0 + i1 as f64 * c);
+            let (y0, y1) = (coarse.y0 + j0 as f64 * c, coarse.y0 + j1 as f64 * c);
+            let fine = 0.03f64.max((x1 - x0).max(y1 - y0) / 700.0);
+            let n = ((x1 - x0) * (y1 - y0) / (fine * fine)).round() as usize;
+            let (lo, hi) = (su.stock.min, su.stock.max);
+            let mut z = ZMap::new([x0, y0, lo[2]], [x1, y1, hi[2]], n.max(1));
+            // stamped no closer than the chord the smallest cutter leaves no ridge of over a
+            // twentieth of a cell (s²/8r): a ball's 0.03 mm cell, r 3 → 0.19 mm
+            let rmin = self
+                .cutters
+                .iter()
+                .flatten()
+                .map(|c| c.r)
+                .fold(f64::INFINITY, f64::min);
+            if rmin.is_finite() {
+                z.step = Some((0.5 * z.cell).max((8.0 * rmin * z.cell / 20.0).sqrt()));
+            }
+            // from the whole stock as this op began (its columns interpolated onto the fine
+            // grid), then the op's own pieces on the fine grid: what made the surface being
+            // looked at is the op cutting it, and what earlier ops left shows as finely as the
+            // whole grid has it (cutting only lowers columns: this is the whole stock's
+            // surface wherever the op has not been yet)
+            let first = self.tl.ops[g.op as usize].first;
+            if self.op_start.as_ref().is_none_or(|(o, _)| *o != g.op) {
+                let before = if first == 0 || self.setup_of_seg(first - 1) != s {
+                    self.blank(s, self.cells())
+                } else {
+                    self.advance(first);
+                    self.play.as_ref()?.cur.clone()
+                };
+                self.op_start = Some((g.op, before));
+            }
+            z.resample(&self.op_start.as_ref()?.1);
+            self.detail = Some(Detail {
+                setup: s,
+                op: g.op,
+                centre: [p[0], p[1]],
+                half,
+                cols: [i0, j0, i1, j1],
+                z,
+                done: first,
+                shown: None,
+            });
+        }
+        let mut d = self.detail.take()?;
+        // every whole piece before t's that reaches the window
+        let (wx0, wy0) = (d.z.x0, d.z.y0);
+        let (wx1, wy1) = (wx0 + d.z.nx as f64 * d.z.cell, wy0 + d.z.ny as f64 * d.z.cell);
+        let reaches = |g: &timeline::Seg, r: f64| {
+            let (mut lo, mut hi) = (
+                [g.a[0].min(g.b[0]), g.a[1].min(g.b[1])],
+                [g.a[0].max(g.b[0]), g.a[1].max(g.b[1])],
+            );
+            if let Some(a) = &g.arc {
+                let rr = a.r + a.dr.abs();
+                lo = [a.c[0] - rr, a.c[1] - rr];
+                hi = [a.c[0] + rr, a.c[1] + rr];
+            }
+            !(hi[0] + r < wx0 || lo[0] - r > wx1 || hi[1] + r < wy0 || lo[1] - r > wy1)
+        };
+        if d.done > i {
+            // time went back: from the op's start again
+            self.detail = None;
+            return self.detail_near(t, may_move);
+        }
+        while d.done < i {
+            let g = self.tl.segs[d.done];
+            if let Some(Some(c)) = self.cutters.get(g.tool as usize)
+                && reaches(&g, c.r)
+            {
+                d.z.cut(&g, 0.0, 1.0, c);
+            }
+            d.done += 1;
+        }
+        // t's piece up to t
+        let mut z = d.z.clone();
+        let u = if g.dt > 0.0 {
+            ((t - g.t0) / g.dt).clamp(0.0, 1.0)
+        } else {
+            1.0
+        };
+        if let Some(Some(c)) = self.cutters.get(g.tool as usize)
+            && reaches(&g, c.r)
+        {
+            z.cut(&g, 0.0, u, c);
+        }
+        d.shown = Some(z);
+        self.detail = Some(d);
+        let d = self.detail.as_ref()?;
+        Some((d.shown.as_ref()?, d.cols))
     }
 
     /// The stock last made by `stock_at`, and its setup.

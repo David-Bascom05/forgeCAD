@@ -280,16 +280,70 @@ fn column_colour(g: &ZMap, part: Option<&PartMap>, k: usize, mode: StockColour, 
 /// height and colour are merged into runs. Bottoms are runs; walls stand where neighbours do not
 /// meet smoothly (a step, a wall of the part, the stock's sides).
 pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out: &mut Vec<WorldVert>) {
+    stock_but(g, part, mode, tol, None, out);
+}
+
+/// `stock` with a hole: the columns [i0, j0, i1, j1) left out (where the detail window's finer
+/// grid is drawn instead; its own sides close the hole).
+pub fn stock_but(
+    g: &ZMap,
+    part: Option<&PartMap>,
+    mode: StockColour,
+    tol: f32,
+    hole: Option<[usize; 4]>,
+    out: &mut Vec<WorldVert>,
+) {
     let (nx, ny, c) = (g.nx, g.ny, g.cell as f32);
     let x = |i: usize| g.x0 as f32 + i as f32 * c;
     let y = |j: usize| g.y0 as f32 + j as f32 * c;
-    let full = |k: usize| g.hi[k] > g.lo[k];
-    // two columns more than this apart in height meet at a wall, not a slope (a 63° slope and
-    // steeper)
-    let steep = 2.0 * c;
+    let out_of = |k: usize| {
+        hole.is_some_and(|[i0, j0, i1, j1]| {
+            let (i, j) = (k % nx, k / nx);
+            i >= i0 && i < i1 && j >= j0 && j < j1
+        })
+    };
+    // each column holds material (and is not in the hole), worked out once: asked ~20 times a
+    // column below
+    let holds: Vec<bool> = (0..nx * ny).map(|k| g.hi[k] > g.lo[k] && !out_of(k)).collect();
+    let full = |k: usize| holds[k];
+    // two columns more than this apart in height meet at a wall, not a slope: two cells (a 63°
+    // slope and steeper) on the whole grid, at least 0.25 mm on a fine one (whose steep fillets
+    // would otherwise be many tiny walls)
+    let steep = (2.0 * c).max(0.25);
     let cols: Vec<[f32; 3]> = (0..nx * ny)
         .map(|k| column_colour(g, part, k, mode, tol))
         .collect();
+    // the columns about corner (ci, cj) that meet column height h smoothly: their heights by
+    // place (−x−y, +x−y, −x+y, +x+y), None where absent or not met
+    // on a fine grid (the detail window's), the light reads a lightly smoothed surface (each
+    // column the mean of the 3×3 about it that meet it smoothly): at a cell a pixel, the
+    // stamps' sub-micron ripple would otherwise alias to speckle, while the cusps worth seeing
+    // are ten cells and more apart. The surface itself stays where it is.
+    let lit: Option<Vec<f32>> = (c < 0.06).then(|| {
+        (0..nx * ny)
+            .map(|k| {
+                if !full(k) {
+                    return g.hi[k];
+                }
+                let (i, j) = ((k % nx) as isize, (k / nx) as isize);
+                let (mut sum, mut n) = (0.0, 0.0);
+                for dj in -1..=1 {
+                    for di in -1..=1 {
+                        let (a, b) = (i + di, j + dj);
+                        if a < 0 || b < 0 || a >= nx as isize || b >= ny as isize {
+                            continue;
+                        }
+                        let q = b as usize * nx + a as usize;
+                        if full(q) && (g.hi[q] - g.hi[k]).abs() <= steep {
+                            sum += g.hi[q];
+                            n += 1.0;
+                        }
+                    }
+                }
+                sum / n
+            })
+            .collect()
+    });
     // the columns about corner (ci, cj) that meet column height h smoothly: their heights by
     // place (−x−y, +x−y, −x+y, +x+y), None where absent or not met
     let about = |ci: usize, cj: usize, h: f32| -> [Option<f32>; 4] {
@@ -323,14 +377,36 @@ pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out:
         }
         std::array::from_fn(|q| v[q].filter(|_| inn[q]))
     };
-    // a corner's height and normal for a column of height h
+    // a corner's height and normal for a column of height h; on a fine grid the slope is the lit
+    // (smoothed) surface's, from the same columns
     let corner = |ci: usize, cj: usize, h: f32| -> (f32, [f32; 3]) {
         let v = about(ci, cj, h);
         let (sum, n) = v.iter().flatten().fold((0.0, 0), |a, z| (a.0 + z, a.1 + 1));
         let m = if n > 0 { sum / n as f32 } else { h };
-        let z = |q: usize| v[q].unwrap_or(m);
-        let dx = (z(1) + z(3) - z(0) - z(2)) / (2.0 * c);
-        let dy = (z(2) + z(3) - z(0) - z(1)) / (2.0 * c);
+        let (dx, dy) = match &lit {
+            None => {
+                let z = |q: usize| v[q].unwrap_or(m);
+                (
+                    (z(1) + z(3) - z(0) - z(2)) / (2.0 * c),
+                    (z(2) + z(3) - z(0) - z(1)) / (2.0 * c),
+                )
+            }
+            Some(l) => {
+                let k = |q: usize| {
+                    let (di, dj) = [(0, 0), (1, 0), (0, 1), (1, 1)][q];
+                    (ci + di - 1) + (cj + dj - 1) * nx
+                };
+                let (ls, ln) = (0..4)
+                    .filter(|&q| v[q].is_some())
+                    .fold((0.0, 0.0), |a, q| (a.0 + l[k(q)], a.1 + 1.0));
+                let ml = if ln > 0.0 { ls / ln } else { h };
+                let z = |q: usize| if v[q].is_some() { l[k(q)] } else { ml };
+                (
+                    (z(1) + z(3) - z(0) - z(2)) / (2.0 * c),
+                    (z(2) + z(3) - z(0) - z(1)) / (2.0 * c),
+                )
+            }
+        };
         let l = (dx * dx + dy * dy + 1.0).sqrt();
         (m, [-dx / l, -dy / l, 1.0 / l])
     };
@@ -411,7 +487,7 @@ pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out:
                 p1: [f32; 2],
                 n: [f32; 3]| {
         let (l, h) = (g.lo[k], g.hi[k]);
-        if h <= l {
+        if !full(k) {
             return;
         }
         let (ol, oh) = match other {
@@ -445,8 +521,11 @@ pub fn stock(g: &ZMap, part: Option<&PartMap>, mode: StockColour, tol: f32, out:
             let k = j * nx + i;
             // +x side: this column's part not in the neighbour's, facing +x; and the neighbour's
             // part not in this one, facing −x
-            let same =
-                |o: usize| g.lo[o] == g.lo[k] && full(o) == full(k) && (g.hi[o] - g.hi[k]).abs() <= steep;
+            // neighbours that meet smoothly, top and bottom (a fine grid's columns, interpolated
+            // from the whole grid's, differ a little at the bottom too), have no wall between
+            let same = |o: usize| {
+                full(o) == full(k) && (g.lo[o] - g.lo[k]).abs() <= steep && (g.hi[o] - g.hi[k]).abs() <= steep
+            };
             let right = (i + 1 < nx).then_some(k + 1).filter(|&r| !same(r));
             let edge_x = i + 1 == nx;
             if right.is_some() || edge_x {
