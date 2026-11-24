@@ -7,7 +7,12 @@ measures what the certificate does not: cycle time, engagement, chip, removal, a
 cargo run --release -p forge-cam-quality -- [--json OUT] [--machine NAME] [--cell MM] [FILE..]
 ```
 
-With no files it runs `examples/machined/*_cam.fg` and the benchmark parts in `parts/`
+After the table it prints coverage: per document, the ops certified of all and each refusal
+with its reason (turning documents, `*_turn.fg`, are read by forge-turn-lang and give coverage
+only: the path measures are milling's). The shop parts manifold and hub (examples/machined,
+SHOP-PARTS.md) are coverage targets: a refusal there is a gap.
+
+With no files it runs `examples/machined/*_cam.fg`, `*_turn.fg` and the benchmark parts in `parts/`
 (pocket with islands, thin wall, deep slot, open step, boss). `baseline.txt` / `baseline.json`
 are the numbers at the commit that made them. `tests/pinned.rs` pins a CI-cheap subset
 (well_island, deep_slot; 0.5 s in debug, native and wasm32 the same): re-pin with

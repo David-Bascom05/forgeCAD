@@ -188,6 +188,8 @@ pub struct OpQ {
     pub setup: usize,
     pub kind: String,
     pub status: String,
+    /// Why it was refused (as the op reports it).
+    pub refusal: Option<String>,
     pub tool: String,
     pub d: f64,
     pub flutes: u32,
@@ -386,8 +388,70 @@ pub fn measure(path: &Path, cfg: &Config) -> JobQ {
         }
     };
     let dir = path.parent().unwrap_or(Path::new("."));
+    if forge_turn_lang::is_turning(&src) {
+        return measure_turn(&forge_turn_lang::run(&src, dir), file);
+    }
     let cam = forge_cam_lang::run(&src, dir);
     measure_cam(&cam, file, cfg)
+}
+
+/// A turning document: its ops as built or refused (coverage); the path measures here are
+/// milling's (engagement round a cutter), so a turned op's numbers are left at zero.
+pub fn measure_turn(cam: &forge_turn_lang::TurnCam, file: String) -> JobQ {
+    let mut job = JobQ {
+        file,
+        ok: cam.ok,
+        errors: cam.errors.clone(),
+        ..JobQ::default()
+    };
+    for o in &cam.ops {
+        job.ops.push(OpQ {
+            name: o.name.clone(),
+            kind: o.kind.clone(),
+            status: o.status.clone(),
+            refusal: o.refusal.clone(),
+            moves: o.moves,
+            ..OpQ::default()
+        });
+    }
+    for p in &cam.programs {
+        job.progs.push(ProgQ {
+            name: p.name.clone(),
+            error: p
+                .error
+                .clone()
+                .or_else(|| p.text.is_none().then(|| "no program text".into())),
+            ..ProgQ::default()
+        });
+    }
+    job
+}
+
+/// Coverage: per document, the ops certified of all, and each refusal with its reason.
+pub fn coverage(jobs: &[JobQ]) -> String {
+    let mut o = String::new();
+    let (mut built, mut all) = (0, 0);
+    for j in jobs {
+        let b = j.ops.iter().filter(|q| q.status == "built").count();
+        built += b;
+        all += j.ops.len();
+        let _ = writeln!(o, "{}: {b} of {} ops certified", j.file, j.ops.len());
+        for q in j.ops.iter().filter(|q| q.status != "built") {
+            let _ = writeln!(
+                o,
+                "  {} {} {}: {}",
+                q.name,
+                q.kind,
+                q.status,
+                q.refusal.as_deref().unwrap_or("(no reason given)")
+            );
+        }
+        for e in &j.errors {
+            let _ = writeln!(o, "  error: {e}");
+        }
+    }
+    let _ = writeln!(o, "all: {built} of {all} ops certified");
+    o
 }
 
 pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
@@ -435,6 +499,7 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             setup: op.setup,
             kind: op.kind.to_string(),
             status: op.status.to_string(),
+            refusal: op.refusal.clone(),
             moves: op.moves,
             hex_min: f64::INFINITY,
             ..OpQ::default()

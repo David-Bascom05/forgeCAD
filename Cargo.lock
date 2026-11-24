@@ -129,6 +129,7 @@ dependencies = [
  "forge-mesh",
  "forge-post",
  "forge-tooling",
+ "forge-turn-lang",
 ]
 
 [[package]]

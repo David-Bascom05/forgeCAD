@@ -1,5 +1,6 @@
 //! `forge-cam-quality [--json OUT] [--machine NAME] [--cell MM] [FILE..]`: the quality table of
-//! each machining document (default: examples/machined/*_cam.fg and this crate's parts/*_cam.fg).
+//! each machining document (default: examples/machined/*_cam.fg, *_turn.fg and this crate's
+//! parts/*_cam.fg), then coverage: each document's ops certified and its refusals.
 use forge_cam_quality::{Config, json, measure, table};
 use std::path::PathBuf;
 
@@ -152,7 +153,10 @@ fn main() {
                 .into_iter()
                 .flatten()
                 .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.to_string_lossy().ends_with("_cam.fg"))
+                .filter(|p| {
+                    let n = p.to_string_lossy();
+                    n.ends_with("_cam.fg") || n.ends_with("_turn.fg")
+                })
                 .collect();
             v.sort();
             files.extend(v);
@@ -160,6 +164,7 @@ fn main() {
     }
     let jobs: Vec<_> = files.iter().map(|f| measure(f, &cfg)).collect();
     print!("{}", table(&jobs));
+    print!("{}", forge_cam_quality::coverage(&jobs));
     ends(&jobs, &part);
     if let Some(o) = out {
         std::fs::write(&o, json(&jobs)).expect("write the JSON");
