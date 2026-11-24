@@ -1,0 +1,13 @@
+# haas-vf-5-40 base (stand-in until measured)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -9
+shared y0 = -9
+shared z0 = -9
+shared lx = 18
+shared ly = 18
+shared lz = 18
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

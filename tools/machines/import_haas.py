@@ -76,6 +76,14 @@ AUTO = {
     "haas-vf-1": "vf-1_11_2021.zip",
     "haas-tm-1": "tm_1_1p_10_2021.zip",
     "haas-dm-1": "dm-1_solid_models_01_2026.zip",
+    "haas-vf-3": "vf-3_ss_solid_models_2_2023.zip",
+    "haas-vf-4": "vf-4_4ss_solid_models_1_2022.zip",
+    "haas-mini-mill": "mini_mill_solid_models_2_2022.zip",
+    "haas-tm-2": "tm_2_2p_10_2021-.zip",
+    "haas-dm-2": "dm-2_solid_models_04_2025.zip",
+    "haas-dt-2": "dt-2_solid_models_04_2025.zip",
+    "haas-vf-2yt": "vf-2yt_2ssyt_solid_models_11_2021.zip",
+    "haas-vf-5-40": "vf-5_40_ss_tr_solid_models_3_2022.zip",
 }
 VMC_RULES = ["anchor=-", "waycover=-", "table=table", "saddle=saddle", "spindle=head", "z axis=head", "head=head",
              "casting=base", "base=base", "column=base", "pads=base", "leveling=base", "enclosure=enclosure",
@@ -149,7 +157,9 @@ def auto(name, zips, bin_, cell):
     with tempfile.TemporaryDirectory() as tmp:
         env = dict(os.environ, XDG_CONFIG_HOME=os.path.join(tmp, "config"))
         with zipfile.ZipFile(os.path.join(zips, AUTO[name])) as z:
-            step = next(n for n in z.namelist() if re.search(r"\.ste?p$", n, re.I) and "__MACOSX" not in n)
+            # the whole machine: the zip's largest STEP (a Mini Mill's also holds its Z axis alone)
+            step = max((i for i in z.infolist() if re.search(r"\.ste?p$", i.filename, re.I) and "__MACOSX" not in i.filename),
+                       key=lambda i: i.file_size).filename
             src = z.extract(step, os.path.join(tmp, "zip"))
         source = f"Haas Automation solid model {os.path.basename(step)} (haascnc.com download)"
         out = run([bin_, "machine", "model", "attach", name, src, "--from", source], env)

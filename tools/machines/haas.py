@@ -32,10 +32,8 @@ MODEL_SRC = {
 # measures it took of the placed model (research/cam/machines/haas/model-measures.json): the table
 # box, the saddle, base and enclosure boxes (display-only bodies here), and the spindle at home
 # where the model stands at home.
-AUTO_MODELS = {
-    "haas-vf-1": "VF-1_STEP_11_2021.STEP", "haas-tm-1": "TM-1_1P_STEP_10_2021.STEP",
-    "haas-dm-1": "DM-1_1_2026.STEP",
-}
+AUTO_MODELS = {"haas-vf-1", "haas-tm-1", "haas-dm-1", "haas-vf-3", "haas-vf-4", "haas-mini-mill", "haas-tm-2",
+               "haas-dm-2", "haas-dt-2", "haas-vf-2yt", "haas-vf-5-40"}
 MEASURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../research/cam/machines/haas/model-measures.json")
 MEASURED = json.load(open(MEASURES)) if os.path.exists(MEASURES) else {}
 # measured: the spindle axis (x, y) at home where the model stands at home (the VF-2's does: its nose
@@ -54,9 +52,9 @@ MODEL = {
                                    "r+": [([-270, 370, -320], [270, 400, 130]), ([-270, 560, -320], [270, 675, 310])]},
                          column=([-47, 539, 500], [803, 1319, 2212])),
 }
-for _n, _f in AUTO_MODELS.items():
-    MODEL_SRC[_n] = MODEL_REPO + f"{_n} (Haas solid model {_f})"
+for _n in sorted(AUTO_MODELS):
     _m = MEASURED.get(_n)
+    MODEL_SRC[_n] = MODEL_REPO + f"{_n} (Haas solid model {(_m or {}).get('file', '')})"
     if _m:
         MODEL.setdefault(_n, {})
         if _m.get("at_home") and _m.get("spindle_xy"):
