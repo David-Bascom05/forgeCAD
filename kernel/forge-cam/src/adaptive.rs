@@ -277,6 +277,73 @@ impl Field {
         via: &[[f64; 2]],
     ) {
         const CLEAR: f64 = 0.5;
+        if std::env::var_os("FORGE_HOP").is_some() && cur[2] == target[2] {
+            // the hop: up, over and down along the straight way, every move G1 at the link
+            // feed, the tip at each sample (h apart) above the highest material left within
+            // r + h of it (the map) by CLEAR: the same disk test as a link at depth, at height
+            let z = cur[2];
+            let rr = self.r + self.map.h;
+            let need_at = |x: f64, y: f64| -> f64 {
+                let h = self.map.h;
+                let n = (rr / h).ceil() as i64;
+                let mut t = f64::NEG_INFINITY;
+                for j in -n..=n {
+                    for i in -n..=n {
+                        let (dx, dy) = (i as f64 * h, j as f64 * h);
+                        if dx * dx + dy * dy <= rr * rr {
+                            t = t.max(self.map.top(x + dx, y + dy));
+                        }
+                    }
+                }
+                (t + CLEAR).max(z)
+            };
+            let (a, b) = ([cur[0], cur[1]], [target[0], target[1]]);
+            let l = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+            let n = (l / self.map.h).ceil().max(1.0) as usize;
+            let need: Vec<f64> = (0..=n)
+                .map(|k| {
+                    let t = k as f64 / n as f64;
+                    need_at(a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]))
+                })
+                .collect();
+            let hc = need.iter().cloned().fold(z, f64::max);
+            if hc <= retract {
+                let ds = l / n as f64;
+                // the ramp up: the farthest sample k such that the line from (0, z) to (k, hc)
+                // stays above need; likewise the ramp down from the end
+                let ramp = |need: &[f64]| -> usize {
+                    let mut best = 0usize;
+                    for k in 1..=n / 2 {
+                        let ok = (0..=k).all(|i| z + (hc - z) * (i as f64 / k as f64) >= need[i]);
+                        if ok {
+                            best = k;
+                        }
+                    }
+                    best
+                };
+                let ku = ramp(&need);
+                let rev: Vec<f64> = need.iter().rev().cloned().collect();
+                let kd = ramp(&rev);
+                let at = |k: usize, zz: f64| {
+                    let t = k as f64 / n as f64;
+                    [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1]), zz]
+                };
+                let _ = ds;
+                let mut pts = vec![at(ku, hc)];
+                if n - kd > ku {
+                    pts.push(at(n - kd, hc));
+                }
+                pts.push(target);
+                for p in pts {
+                    mv.push(PMove::Line {
+                        to: p,
+                        f: feed.0,
+                        phase: Phase::Link,
+                    });
+                }
+                return;
+            }
+        }
         let rr = self.r + CLEAR + self.map0.h;
         // the height to cross at: just over the stock as it stood before the op along the whole
         // way across (the same disk test as the rapids' check), never above the retract height;

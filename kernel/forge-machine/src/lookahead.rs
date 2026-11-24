@@ -131,7 +131,11 @@ pub fn plan(def: &MachineDef, tl: &Timeline, p: &LookAhead) -> (Vec<f64>, f64) {
             let pv = &tl.segments[si - 1];
             let gap_t = (sg.t0 - (pv.t0 + pv.t_min)).abs() > 1e-9 * sg.t0.abs().max(1.0);
             let gap_q = pv.q1.iter().zip(&sg.q0).any(|(a, b)| (a - b).abs() > 1e-9);
-            if gap_t || gap_q || pv.tool != sg.tool || pv.spindle != sg.spindle {
+            // (analysis) a control that does not blend rapids: an exact stop before and after
+            // every G0 block
+            let g0_stop = std::env::var_os("FORGE_G0_STOP").is_some()
+                && (matches!(pv.kind, crate::sim::SegKind::Rapid) || matches!(sg.kind, crate::sim::SegKind::Rapid));
+            if gap_t || gap_q || pv.tool != sg.tool || pv.spindle != sg.spindle || g0_stop {
                 flush(&mut run, &mut per);
             }
         }
@@ -376,7 +380,11 @@ pub fn plan_scurve(def: &MachineDef, tl: &Timeline, p: &SCurve) -> (Vec<f64>, f6
             let pv = &tl.segments[si - 1];
             let gap_t = (sg.t0 - (pv.t0 + pv.t_min)).abs() > 1e-9 * sg.t0.abs().max(1.0);
             let gap_q = pv.q1.iter().zip(&sg.q0).any(|(a, b)| (a - b).abs() > 1e-9);
-            if gap_t || gap_q || pv.tool != sg.tool || pv.spindle != sg.spindle {
+            // (analysis) a control that does not blend rapids: an exact stop before and after
+            // every G0 block
+            let g0_stop = std::env::var_os("FORGE_G0_STOP").is_some()
+                && (matches!(pv.kind, crate::sim::SegKind::Rapid) || matches!(sg.kind, crate::sim::SegKind::Rapid));
+            if gap_t || gap_q || pv.tool != sg.tool || pv.spindle != sg.spindle || g0_stop {
                 flush(&mut run, &mut per);
             }
         }
