@@ -13,7 +13,8 @@
 //! - `Limited`: one of the user's own limits (max power, max torque, feed range).
 //!
 //! The formulas are feeds.rs's (chip thinning, mean chip, Kienzle power, torque). Power and
-//! torque limits lower the feed only, never ap or ae (patent note: fto-adaptive.md, '607).
+//! torque limits lower the feed only, never ap or ae (the path, and so the certified
+//! geometry, stays what was planned).
 use crate::feeds::{self, Cut, Group, THIN_CAP};
 use crate::{Cite, Preset};
 use std::f64::consts::PI;

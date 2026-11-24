@@ -1,0 +1,12 @@
+machining
+# RPTU part 1 (verify/cam-parts/rptu-10, CC BY 4.0) with forge-cam's ops, one 6 mm end mill as
+# Autodesk's program: face 1 mm, the through slot (clear).
+shared tol = 0.01
+
+f     = part("rptu1.fg", group: "N")
+m     = machine("generic-vmc3")
+t1    = tool("flat-6", t: 1, stickout: 30, holder: "bt40-er32")
+op1   = setup(f, machine: m, stock: box(margin: (0, 0, 1)), origin: "top-corner", tol: tol)
+skim  = facing(op1, tool: t1, to: 52, step: 1)
+nut   = clear(op1, tool: t1, from: 52, to: 46, step: 3, stepover: 2.4)
+prog  = program(op1, post: "linuxcnc", number: 1)

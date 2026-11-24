@@ -100,7 +100,12 @@ Storage goes through `instances::Store` (toolstore::LevelStore on disk, MemStore
 Runs keep their cut as condition bins, so D can be recomputed against any row (cited or
 calibrated). A life ends at worn/chipped/broken/regrind; the next starts fresh.
 
-CLI: `forgecad tool log add|list|observe|worn|chipped|broken|regrind|predict|run|calibrate`
+Mounts (which instance is each tool number of a job) are per-project UI/CLI state in
+`.forgecad/cam-mounts.toml` (`instances::Mounts`, `[mounts] T1 = "label"`), shared by the CAM
+workspace and `forgecad tool log mount|unmount`; `--use T1=LABEL` overrides for one run. Not in
+the .fg (no `instance:` argument: what is in the spindle changes run to run).
+
+CLI: `forgecad tool log add|list|observe|worn|chipped|broken|regrind|mount|unmount|predict|run|calibrate`
 (interface/forge-cam-lang/src/toollog.rs).
 
 ## 4. Calibration
