@@ -1046,6 +1046,12 @@ fn ends(s: &Surface, p: Point3, d: Vec3, h: f64) -> bool {
     pr.point(pr.project(x)).distance(x) > 0.5 * h
 }
 
+/// A chain of points on both surfaces as a curve (`trace`'s own ending): its sag measured, its
+/// directions taken from the normals.
+pub fn from_chain(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, step: f64) -> IntCurve {
+    finish(a, b, pts, closed, step)
+}
+
 pub(crate) fn finish(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, step: f64) -> IntCurve {
     // measured: how far each chord's midpoint sits from the curve
     let n = pts.len();
