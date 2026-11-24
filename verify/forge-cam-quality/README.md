@@ -166,3 +166,25 @@ forge-machine/data/machines/generic.toml), so these are times on one model for b
 not either program's time on the RPTU machine. The model is still to be checked against a
 measured log (the Spinner U5-620 set, tools/bench: its programs are Siemens 840D with variables,
 which forge-machine's interpreter does not read yet).
+
+## Measured machine times: Bílek et al. 2025 (bilek.txt)
+
+Bílek, Řezníček, Matras, Solařík, Macků, *Materials* 18:1669 (2025), DOI 10.3390/ma18071669,
+CC BY 4.0 (research/cam/benchmarks/cam-comparisons.md §2.2, branch research/toolpath-quality):
+a 60 × 46 × 12 mm pocket with 4 mm corner radii in a 76 × 76 × 40 GFRP block (parts/bilek/
+bilek.fg, from the stated dimensions), cut on a DMG Mori DMU 50 with a Ø6 end mill.
+NX Cavity Mill at vf 1000 mm/min, ae 1.8 mm, ap 1.5–3.5 mm: measured 5 min 27 s (327 s), NX's
+estimate 5 min 26 s. NX Adaptive at vf 2652, ae 0.42, ap 12: measured 4 min 11 s (251 s), NX's
+estimate 3 min 49 s (−9 %).
+
+Ours (parts/bilek/bilek_cam.fg): the offset pocket at their conventional data (ae 1.8, ap 3, run
+at vf 1000 with `--feeds well=1000,1000`; their ramp feed is not stated): t_stop 351.8 s, t_min
+344.7 s on generic-vmc3, certified, the part left (end state). That is our path's time, not
+theirs: their Cavity Mill path is not published, so this is a check of magnitude, not of our
+timing model (+7.6 % on 327 s, the paths differing). generic-vmc3's acceleration is a
+placeholder and there is no DMU 50 record. Adaptive: forge-cam's adaptive does not take closed
+pockets (fto-adaptive.md §8), so their Adaptive run has no counterpart here.
+
+Ward et al. 2021 (arXiv 2102.02062): its timed pockets (cases 1–2, Table 1) are not dimensioned
+in the paper; the dimensioned pocket (case 4, 40 × 60 × 10 open) has forces, not a time. Not
+rebuilt.
