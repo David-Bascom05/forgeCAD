@@ -112,3 +112,40 @@ fn save_reads_back_refuses_what_it_should_and_moves_the_generation() {
     assert!(!d.join("n.toml").exists());
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// A kind outside `cam/` (press-brake tooling lives under `bend/`).
+struct Bent;
+
+impl Kind for Bent {
+    type Record = Rec;
+    const WORD: &'static str = "bent";
+    const ROOT: &'static str = "bend";
+    const FOLDER: &'static str = "tooling";
+    fn builtin() -> Vec<(String, String)> {
+        Vec::new()
+    }
+    fn parse(text: &str) -> Result<Vec<Rec>, String> {
+        Toy::parse(text)
+    }
+    fn write(header: &str, rs: &[Rec]) -> Result<String, String> {
+        Toy::write(header, rs)
+    }
+    fn id(r: &Rec) -> &str {
+        &r.id
+    }
+}
+
+#[test]
+fn a_kind_names_its_own_root() {
+    let p = tmp("root");
+    assert_eq!(forge_library::project_dir::<Toy>(&p), p.join("cam/toys"));
+    assert_eq!(forge_library::project_dir::<Bent>(&p), p.join("bend/tooling"));
+    std::fs::create_dir_all(p.join("bend/tooling")).unwrap();
+    std::fs::write(p.join("bend/tooling/a.toml"), "v-88 = 1\n").unwrap();
+    std::fs::create_dir_all(p.join("cam/tooling")).unwrap();
+    std::fs::write(p.join("cam/tooling/b.toml"), "stray = 1\n").unwrap();
+    let cat = Catalog::<Bent>::load(Some(&p), None);
+    let ids: Vec<_> = cat.entries.iter().map(|e| e.def.id.as_str()).collect();
+    assert_eq!(ids, ["v-88"]);
+    let _ = std::fs::remove_dir_all(&p);
+}
