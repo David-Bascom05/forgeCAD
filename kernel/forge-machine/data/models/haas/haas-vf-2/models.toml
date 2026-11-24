@@ -1,0 +1,50 @@
+# forgecad's own models of this machine, drawn in place of its bodies (collisions use the
+# bodies' envelopes): written by `forgecad machine model ship`; a user's attached models win.
+
+[[model]]
+body = "base"
+file = "base.stl"
+from = "Haas Automation solid model VF-2_STEP__1_2023.step (haascnc.com download)"
+scale = 1
+rotate = [90, 0, 0]
+offset = [381, 692.247, -347.72]
+
+[[model]]
+body = "column"
+file = "column.stl"
+from = "Haas Automation solid model VF-2_STEP__1_2023.step (haascnc.com download)"
+scale = 1
+rotate = [90, 0, 0]
+offset = [381, 692.247, -347.72]
+
+[[model]]
+body = "enclosure"
+file = "enclosure.stl"
+from = "Haas Automation solid model VF-2_STEP__1_2023.step (haascnc.com download)"
+scale = 1
+rotate = [90, 0, 0]
+offset = [381, 692.247, -347.72]
+
+[[model]]
+body = "head"
+file = "head.stl"
+from = "Haas Automation solid model VF-2_STEP__1_2023.step (haascnc.com download)"
+scale = 1
+rotate = [90, 0, 0]
+offset = [381, 692.247, -347.72]
+
+[[model]]
+body = "saddle"
+file = "saddle.stl"
+from = "Haas Automation solid model VF-2_STEP__1_2023.step (haascnc.com download)"
+scale = 1
+rotate = [90, 0, 0]
+offset = [381, 692.247, -347.72]
+
+[[model]]
+body = "table"
+file = "table.stl"
+from = "Haas Automation solid model VF-2_STEP__1_2023.step (haascnc.com download)"
+scale = 1
+rotate = [90, 0, 0]
+offset = [381, 692.247, -347.72]

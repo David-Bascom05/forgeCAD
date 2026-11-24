@@ -521,7 +521,17 @@ pub fn ship(
     if shipped.is_empty() {
         return Err("no model is given a body: split the machine's model first".into());
     }
-    models::save_in(to_dir, &shipped)?;
+    // its own header: forgecad's models, not a user's library
+    let body: String = models::write(&shipped)?
+        .lines()
+        .skip_while(|l| l.starts_with('#') || l.is_empty())
+        .map(|l| format!("{l}\n"))
+        .collect();
+    let text = format!(
+        "# forgecad's own models of this machine, drawn in place of its bodies (collisions use the\n\
+         # bodies' envelopes): written by `forgecad machine model ship`; a user's attached models win.\n\n{body}"
+    );
+    forge_dirs::fs::write(to_dir.join(models::INDEX), text).map_err(|e| format!("{}: {e}", to_dir.display()))?;
     Ok(out)
 }
 
