@@ -42,6 +42,9 @@ mkdir -p "$out"
 scratch="${TMPDIR:-/tmp}/kernel-stress.$$"
 mkdir -p "$scratch"
 trap 'rm -rf "$scratch"' EXIT
+# the binary as it is now: a rebuild while the sweep runs must not change it halfway
+cp "$bin" "$scratch/forge-stress" || exit 1
+bin="$scratch/forge-stress"
 
 if [ -z "$zipdir" ]; then
   git -C "$root" rev-parse -q --verify origin/haas-3d-models >/dev/null ||

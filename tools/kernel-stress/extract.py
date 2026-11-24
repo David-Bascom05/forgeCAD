@@ -4,7 +4,7 @@ file's units and uncertainty). For shrinking a failure the sweep found to the bo
 
     python3 -I tools/kernel-stress/extract.py IN.step ENTITY OUT.step [--faces N,M,..]
 
-ENTITY is the solid's `#` number (the sweep's `ent`). `--faces` keeps only those faces of its
+ENTITY is the solid's `#` number (the sweep's `ent`), or several, comma-separated. `--faces` keeps only those faces of its
 shell (by their `#` numbers): an open shell, read as a sheet, for a failure on a few faces.
 """
 
@@ -66,7 +66,9 @@ def closure(recs, roots):
 
 def main():
     args = sys.argv[1:]
-    src, ent, dst = args[0], int(args[1]), args[2]
+    src, dst = args[0], args[2]
+    ents = [int(x) for x in args[1].split(",")]
+    ent = ents[0]
     faces = None
     if "--faces" in args:
         faces = [int(x) for x in args[args.index("--faces") + 1].split(",")]
@@ -97,12 +99,13 @@ def main():
             if r.startswith("ADVANCED_BREP_SHAPE_REPRESENTATION"):
                 ctx = int(REF.findall(strip_strings(r))[-1])
                 break
-    keep = closure(recs, [ent, ctx])
+    keep = closure(recs, ents + [ctx])
     rep = max(recs) + 1
     out = [head]
     for i in sorted(keep):
         out.append(f"#{i}={recs[i]};\n")
-    out.append(f"#{rep}={kind}('',(#{ent}),#{ctx});\n")
+    items = ",".join(f"#{e}" for e in ents)
+    out.append(f"#{rep}={kind}('',({items}),#{ctx});\n")
     out.append("ENDSEC;\nEND-ISO-10303-21;\n")
     open(dst, "w", encoding="latin-1").write("".join(out))
     print(f"{dst}: {len(keep)} entities, {sum(len(x) for x in out)} bytes")
