@@ -1057,11 +1057,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.03708,
+      "unit": "mm/tooth",
+      "stated": ".00146 IPT (0.125 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 1.587,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.04318,
+      "unit": "mm/tooth",
+      "stated": ".00170 IPT (0.125 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 1.587,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       1.587,
+       3.175
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.04648,
+      "unit": "mm/tooth",
+      "stated": ".00183 IPT (0.125 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.318,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       1.587,
+       3.175
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.04953,
+      "unit": "mm/tooth",
+      "stated": ".00195 IPT (0.125 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt"
   },
   {
    "kind": "flat",
@@ -2118,11 +2217,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.05537,
+      "unit": "mm/tooth",
+      "stated": ".00218 IPT (0.187 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 4.763,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 2.381,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.06452,
+      "unit": "mm/tooth",
+      "stated": ".00254 IPT (0.187 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 2.381,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       2.381,
+       4.763
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.0696,
+      "unit": "mm/tooth",
+      "stated": ".00274 IPT (0.187 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.476,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       2.381,
+       4.763
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.07417,
+      "unit": "mm/tooth",
+      "stated": ".00292 IPT (0.187 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt"
   },
   {
    "kind": "flat",
@@ -3179,11 +3377,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.06706,
+      "unit": "mm/tooth",
+      "stated": ".00264 IPT (0.250 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 6.35,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.07823,
+      "unit": "mm/tooth",
+      "stated": ".00308 IPT (0.250 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       3.175,
+       6.35
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.08382,
+      "unit": "mm/tooth",
+      "stated": ".00330 IPT (0.250 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.635,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       3.175,
+       6.35
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.08941,
+      "unit": "mm/tooth",
+      "stated": ".00352 IPT (0.250 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
   },
   {
    "kind": "flat",
@@ -4240,11 +4537,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.10566,
+      "unit": "mm/tooth",
+      "stated": ".00416 IPT (0.375 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 9.525,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 4.763,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.12319,
+      "unit": "mm/tooth",
+      "stated": ".00485 IPT (0.375 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 4.763,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       4.763,
+       9.525
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.13208,
+      "unit": "mm/tooth",
+      "stated": ".00520 IPT (0.375 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.953,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       4.763,
+       9.525
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.14072,
+      "unit": "mm/tooth",
+      "stated": ".00554 IPT (0.375 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
   },
   {
    "kind": "flat",
@@ -5301,11 +5697,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.14072,
+      "unit": "mm/tooth",
+      "stated": ".00554 IPT (0.500 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 12.7,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 6.35,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.16434,
+      "unit": "mm/tooth",
+      "stated": ".00647 IPT (0.500 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 6.35,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       6.35,
+       12.7
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.17602,
+      "unit": "mm/tooth",
+      "stated": ".00693 IPT (0.500 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 1.27,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       6.35,
+       12.7
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.18771,
+      "unit": "mm/tooth",
+      "stated": ".00739 IPT (0.500 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
   },
   {
    "kind": "flat",
@@ -6484,11 +6979,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.03353,
+      "unit": "mm/tooth",
+      "stated": ".00132 IPT (0.125 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 1.587,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.03912,
+      "unit": "mm/tooth",
+      "stated": ".00154 IPT (0.125 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 1.587,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       1.587,
+       3.175
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.04191,
+      "unit": "mm/tooth",
+      "stated": ".00165 IPT (0.125 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.318,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       1.587,
+       3.175
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.0447,
+      "unit": "mm/tooth",
+      "stated": ".00176 IPT (0.125 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
   },
   {
    "kind": "ball",
@@ -7545,11 +8139,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.06706,
+      "unit": "mm/tooth",
+      "stated": ".00264 IPT (0.250 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 6.35,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.07823,
+      "unit": "mm/tooth",
+      "stated": ".00308 IPT (0.250 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       3.175,
+       6.35
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.08382,
+      "unit": "mm/tooth",
+      "stated": ".00330 IPT (0.250 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.635,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       3.175,
+       6.35
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.08941,
+      "unit": "mm/tooth",
+      "stated": ".00352 IPT (0.250 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
   },
   {
    "kind": "ball",
@@ -8606,11 +9299,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.10566,
+      "unit": "mm/tooth",
+      "stated": ".00416 IPT (0.375 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 9.525,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 4.763,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.12319,
+      "unit": "mm/tooth",
+      "stated": ".00485 IPT (0.375 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 4.763,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       4.763,
+       9.525
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.13208,
+      "unit": "mm/tooth",
+      "stated": ".00520 IPT (0.375 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.953,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       4.763,
+       9.525
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.14072,
+      "unit": "mm/tooth",
+      "stated": ".00554 IPT (0.375 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
   },
   {
    "kind": "ball",
@@ -9667,11 +10459,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.14072,
+      "unit": "mm/tooth",
+      "stated": ".00554 IPT (0.500 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 12.7,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 6.35,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.16434,
+      "unit": "mm/tooth",
+      "stated": ".00647 IPT (0.500 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 6.35,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       6.35,
+       12.7
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.17602,
+      "unit": "mm/tooth",
+      "stated": ".00693 IPT (0.500 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 1.27,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       6.35,
+       12.7
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.18771,
+      "unit": "mm/tooth",
+      "stated": ".00739 IPT (0.500 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
   },
   {
    "kind": "bull",
@@ -10733,11 +11624,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.03353,
+      "unit": "mm/tooth",
+      "stated": ".00132 IPT (0.125 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 1.587,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.03912,
+      "unit": "mm/tooth",
+      "stated": ".00154 IPT (0.125 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 1.587,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       1.587,
+       3.175
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.04191,
+      "unit": "mm/tooth",
+      "stated": ".00165 IPT (0.125 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.318,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       1.587,
+       3.175
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.0447,
+      "unit": "mm/tooth",
+      "stated": ".00176 IPT (0.125 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
   },
   {
    "kind": "bull",
@@ -11799,11 +12789,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.06706,
+      "unit": "mm/tooth",
+      "stated": ".00264 IPT (0.250 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 6.35,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.07823,
+      "unit": "mm/tooth",
+      "stated": ".00308 IPT (0.250 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 3.175,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       3.175,
+       6.35
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.08382,
+      "unit": "mm/tooth",
+      "stated": ".00330 IPT (0.250 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.635,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       3.175,
+       6.35
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.08941,
+      "unit": "mm/tooth",
+      "stated": ".00352 IPT (0.250 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
   },
   {
    "kind": "bull",
@@ -12865,11 +13954,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.10566,
+      "unit": "mm/tooth",
+      "stated": ".00416 IPT (0.375 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 9.525,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 4.763,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.12319,
+      "unit": "mm/tooth",
+      "stated": ".00485 IPT (0.375 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 4.763,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       4.763,
+       9.525
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.13208,
+      "unit": "mm/tooth",
+      "stated": ".00520 IPT (0.375 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 0.953,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       4.763,
+       9.525
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.14072,
+      "unit": "mm/tooth",
+      "stated": ".00554 IPT (0.375 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
   },
   {
    "kind": "bull",
@@ -13931,11 +15119,110 @@
      },
      "url": "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt",
      "coating_section": "Uncoated"
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "slot",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.16205,
+      "unit": "mm/tooth",
+      "stated": ".00638 IPT (0.500 column, Slotting)"
+     },
+     "url": "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 12.7,
+      "unit": "mm",
+      "stated": "Radial 1x Dia"
+     },
+     "ap": {
+      "v": 6.35,
+      "unit": "mm",
+      "stated": "Axial .5x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "rough",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.18898,
+      "unit": "mm/tooth",
+      "stated": ".00744 IPT (0.500 column, Roughing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 6.35,
+      "unit": "mm",
+      "stated": "Radial .5x Dia"
+     },
+     "ap": {
+      "v": [
+       6.35,
+       12.7
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "finish",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.20244,
+      "unit": "mm/tooth",
+      "stated": ".00797 IPT (0.500 column, Finishing)"
+     },
+     "url": "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt",
+     "coating_section": "Uncoated",
+     "ae": {
+      "v": 1.27,
+      "unit": "mm",
+      "stated": "Radial .1x Dia"
+     },
+     "ap": {
+      "v": [
+       6.35,
+       12.7
+      ],
+      "unit": "mm",
+      "stated": "Axial .5x - 1x Dia"
+     }
+    },
+    {
+     "material": "COPPER ALLOYS: Cast Copper Alloys (C83300-C86200, C86400-C87900, C92200-C95800, C97300-C97800, C99400-C99700)",
+     "operation": "max",
+     "vc": {
+      "v": 167.64,
+      "unit": "m/min",
+      "stated": "550 SFM"
+     },
+     "fz": {
+      "v": 0.2159,
+      "unit": "mm/tooth",
+      "stated": ".00850 IPT (0.500 column, Max)"
+     },
+     "url": "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt",
+     "coating_section": "Uncoated"
     }
    ],
    "unknown": [],
-   "sf_pdf": "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt",
-   "cutting_note": "trimmed to the first 40 rows; the source has more"
+   "sf_pdf": "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt"
   },
   {
    "kind": "flat",
