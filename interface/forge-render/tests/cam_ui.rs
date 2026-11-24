@@ -296,3 +296,51 @@ fn parity_arguments_the_dialogs_write_generate() {
         }
     }
 }
+
+/// Every milling form offers only arguments the language takes (forge-cam-lang's ARGS: any other
+/// name is refused as UnknownArg), so a dialog cannot write what a run refuses.
+#[test]
+fn every_dialog_field_is_an_argument_the_language_takes() {
+    let args = |f: &str| forge_cam_lang::ARGS.iter().find(|a| a.0 == f).map(|a| a.1);
+    for s in forge_render::shell::cam::schema::OPS {
+        let Some(known) = args(s.func) else { panic!("{} is not a built-in of forge-cam-lang", s.func) };
+        for f in s.fields {
+            assert!(known.contains(&f.arg), "{} offers `{}`, which the language refuses", s.func, f.arg);
+        }
+    }
+    // the setup and program statements the dialogs write
+    for (f, keys) in [
+        ("setup", &["machine", "stock", "origin", "wcs", "tol", "clearance", "clear", "retract", "at", "fixture", "from"][..]),
+        ("program", &["post", "number", "ops", "file", "ext", "out", "comment", "tools"][..]),
+        ("cylinder", &["d", "margin", "below"][..]),
+        ("tube", &["d", "id", "margin", "below"][..]),
+    ] {
+        let known = args(f).unwrap_or_else(|| panic!("no {f}"));
+        for k in keys {
+            assert!(known.contains(k), "{f} takes no `{k}`");
+        }
+    }
+}
+
+/// NC Programs: a program's ops, ticked: unticking one writes `ops:` (the others, in order), the
+/// program posts without it; ticking it again takes `ops:` out.
+#[test]
+fn a_programs_ops_are_chosen_in_the_window() {
+    let Some((mut h, _)) = open("ops") else { return };
+    assert!(h.click("tool:NC Programs"));
+    h.step();
+    assert!(h.click("cam:programs:prog:op:bolts"));
+    h.step();
+    let t = text(&h);
+    assert!(t.contains("ops: [skim, top, prof, bore]"), "{t}");
+    settle(&mut h);
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let p = &w.run.as_ref().unwrap().programs[0];
+    let nc = p.text.clone().unwrap_or_default();
+    assert!(!nc.is_empty() && !nc.contains("T12"), "{:?} {nc}", p.error);
+    assert_eq!(w.run.as_ref().unwrap().ops.iter().find(|o| o.name == "bolts").unwrap().status, "unposted");
+    shot(&mut h, "cam-nc-ops");
+    assert!(h.click("cam:programs:prog:op:bolts"));
+    h.step();
+    assert!(!text(&h).contains("ops:"), "{}", text(&h));
+}

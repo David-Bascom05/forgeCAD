@@ -114,9 +114,9 @@ The native headless tests need a GPU adapter. On a machine without one, Mesa's l
 
 These items need forge-cam-lang or forge-post first. The window then gets a field each.
 
-- **Ops selection** (a program of some ops of a setup, not whole setups). `program(..)` takes
-  setups, so this needs an `ops:` list in forge-cam-lang. CAM-CORE owns that, and certification
-  has to cover a partial setup's stock.
+- **Ops selection**: done on cam/ui-parity. `program(.., ops: [skim, top])` (CAM-CORE); the window
+  has an Ops checklist per program, and lists ops no program posts (those are unposted, not
+  certified).
 - **One file per setup** within a program. Today you make one program per setup (New Program,
   tick one setup).
 - **Post options**: units (G20/G21), decimals, safe-start block, coolant, line numbers (N-words).

@@ -2257,6 +2257,23 @@ fn programs_window(
             for (k, p) in progs.iter().enumerate() {
                 program_row(ui, t, w, p, k, &setups, &posted, ops_changed, width, &mut field, &mut edits, &mut cmds, places);
             }
+            // ops no program posts: never on the machine, so not certified
+            let unposted: Vec<String> = w
+                .run
+                .as_ref()
+                .map(|r| r.ops.iter().filter(|o| o.status == "unposted").map(|o| o.name.clone()).collect())
+                .unwrap_or_default();
+            if !unposted.is_empty() {
+                note(
+                    ui,
+                    &format!(
+                        "Posted by no program: {}. Tick it in a program's Ops, or add a New Program for it.",
+                        unposted.join(", ")
+                    ),
+                    width,
+                    t.warn,
+                );
+            }
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
@@ -2388,6 +2405,57 @@ fn program_row(
             edits.push(super::doc::Edit::Move { id: p.name.clone(), before: None });
         }
         edits.push(super::doc::Edit::Set { id: p.name.clone(), arg: "#0".into(), text });
+    }
+    // its ops: every op of its setups unless `ops:` names some (posted in the document's order)
+    let ops: Vec<&super::doc::Stmt> = w
+        .stmts
+        .iter()
+        .filter(|o| o.is_op() && o.setup.as_ref().is_some_and(|su| had.contains(su)))
+        .collect();
+    if ops.len() > 1 {
+        let named: Option<Vec<String>> = p.arg("ops").map(|t| {
+            t.trim_matches(|c| c == '[' || c == ']' || c == '(' || c == ')')
+                .split(',')
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect()
+        });
+        let on_now = |n: &str| named.as_ref().is_none_or(|v| v.iter().any(|x| x == n));
+        let mut pick: Vec<String> = ops.iter().filter(|o| on_now(&o.name)).map(|o| o.name.clone()).collect();
+        ui.horizontal_wrapped(|ui| {
+            ui.add_space(14.0);
+            ui.label(egui::RichText::new("Ops").font(sans(13.0)).color(t.ink2));
+            for o in &ops {
+                let mut on = pick.contains(&o.name);
+                let r = ui.checkbox(&mut on, o.name.as_str());
+                places.push((format!("cam:programs:{}:op:{}", p.name, o.name), r.rect));
+                if on != pick.contains(&o.name) {
+                    if on {
+                        pick.push(o.name.clone());
+                    } else {
+                        pick.retain(|x| x != &o.name);
+                    }
+                }
+            }
+        });
+        let was: Vec<String> = ops.iter().filter(|o| on_now(&o.name)).map(|o| o.name.clone()).collect();
+        if pick.len() != was.len() && !pick.is_empty() {
+            let ordered: Vec<String> = ops.iter().filter(|o| pick.contains(&o.name)).map(|o| o.name.clone()).collect();
+            if ordered.len() == ops.len() {
+                edits.push(super::doc::Edit::Unset { id: p.name.clone(), arg: "ops".into() });
+            } else {
+                // a program reads its ops: below the last of them first
+                let at = |n: &str| w.stmts.iter().position(|x| x.name == n);
+                if ordered.iter().any(|o| at(o) > at(&p.name)) {
+                    edits.push(super::doc::Edit::Move { id: p.name.clone(), before: None });
+                }
+                edits.push(super::doc::Edit::Set {
+                    id: p.name.clone(),
+                    arg: "ops".into(),
+                    text: format!("[{}]", ordered.join(", ")),
+                });
+            }
+        }
     }
     let line = format!(
         "{} · O{} · {}",
