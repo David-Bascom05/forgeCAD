@@ -230,6 +230,34 @@ impl Dy {
         Dy::norm(neg, m, self.exp - s - o.exp)
     }
 
+    /// `(self.div(o, p, false), self.div(o, p, true))`, from one long division: the two
+    /// directions share the quotient and remainder, and differ only in which one steps away.
+    pub fn div_both(&self, o: &Dy, p: u64) -> (Dy, Dy) {
+        if self.is_zero() {
+            return (Dy::zero(), Dy::zero());
+        }
+        let ab = self.mag.bits() as i64;
+        let bb = o.mag.bits() as i64;
+        let mut s = p as i64 + bb - ab + 2;
+        if s < 0 {
+            s = 0;
+        }
+        let (q, r) = self.mag.shl(s as u64).divrem(&o.mag);
+        let neg = self.neg != o.neg;
+        let e = self.exp - s - o.exp;
+        if r.is_zero() {
+            let d = Dy::norm(neg, q, e);
+            return (d.clone(), d);
+        }
+        // toward -inf steps away from zero for a negative quotient, toward +inf for a positive one
+        let q1 = q.add(&Nat::from_u64(1));
+        if neg {
+            (Dy::norm(neg, q1, e), Dy::norm(neg, q, e))
+        } else {
+            (Dy::norm(neg, q, e), Dy::norm(neg, q1, e))
+        }
+    }
+
     /// sqrt(self) for self >= 0, rounded to about `p` bits toward -inf or +inf.
     pub fn sqrt(&self, p: u64, up: bool) -> Dy {
         if self.is_zero() || self.neg {
@@ -605,18 +633,14 @@ fn bdiv(a: &BigIval, b: &BigIval, p: u64) -> BigIval {
     }
     match (&a.lo, &a.hi, &b.lo, &b.hi) {
         (Some(al), Some(ah), Some(bl), Some(bh)) => {
-            let lo_c = [
-                al.div(bl, p, false),
-                al.div(bh, p, false),
-                ah.div(bl, p, false),
-                ah.div(bh, p, false),
-            ];
-            let hi_c = [
-                al.div(bl, p, true),
-                al.div(bh, p, true),
-                ah.div(bl, p, true),
-                ah.div(bh, p, true),
-            ];
+            let (c0, c1, c2, c3) = (
+                al.div_both(bl, p),
+                al.div_both(bh, p),
+                ah.div_both(bl, p),
+                ah.div_both(bh, p),
+            );
+            let lo_c = [c0.0, c1.0, c2.0, c3.0];
+            let hi_c = [c0.1, c1.1, c2.1, c3.1];
             let mut lo = 0usize;
             let mut hi = 0usize;
             let mut i = 1;
@@ -1428,6 +1452,10 @@ mod tests {
             for p in [64, 128, 256] {
                 let (m, c) = (bmul(&a, &b, p), bmul_corners(&a, &b, p));
                 assert_eq!((&m.lo, &m.hi), (&c.lo, &c.hi));
+                let (n, d) = (a.lo.as_ref().unwrap(), b.hi.as_ref().unwrap());
+                if !d.is_zero() {
+                    assert_eq!(n.div_both(d, p), (n.div(d, p, false), n.div(d, p, true)));
+                }
             }
         }
     }
