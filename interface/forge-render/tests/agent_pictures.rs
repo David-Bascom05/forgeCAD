@@ -97,6 +97,13 @@ fn the_tab_keeps_pictures_for_the_next_message_and_refuses_what_isnt_one() {
     assert!(
         matches!(full.entries.last(), Some(Entry::Note { text, .. }) if text.contains("20 pictures at most"))
     );
+    // and 7 MB, all told: two of 4 MB don't go together
+    let mut big = AgentTab::default();
+    let mut four = PNG.to_vec();
+    four.resize(4 << 20, 0);
+    assert!(big.add_picture(four.clone()));
+    assert!(!big.add_picture(four));
+    assert!(matches!(big.entries.last(), Some(Entry::Note { text, .. }) if text.contains("add up to 7 MB")));
     tab.entries.clear();
     // a picture alone is a message
     tab.send();

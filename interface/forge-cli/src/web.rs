@@ -34,6 +34,20 @@ use std::sync::{Arc, Mutex};
 const MAX_BODY: usize = 64 << 20;
 /// The most connections served at once.
 const MAX_CONNECTIONS: usize = 128;
+/// How long a connection may wait between requests, and a request's head may take once it
+/// starts; how long a write may wait on a reader (an event stream no one reads ends then).
+const IDLE_TIME: std::time::Duration = std::time::Duration::from_secs(120);
+const HEAD_TIME: std::time::Duration = std::time::Duration::from_secs(30);
+const WRITE_TIME: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// A connection's place among `MAX_CONNECTIONS`, given back however its thread ends.
+struct Slot(Arc<std::sync::atomic::AtomicUsize>);
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
 /// The most a request's head may hold.
 const MAX_HEAD: usize = 64 << 10;
 /// The most an agent call's body may hold (a message with a picture).
@@ -118,14 +132,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
     if agent && !writable {
         return Err("--agent: Claude Code writes the files; drop --read-only".into());
     }
-    let agent = agent.then(|| {
-        Arc::new(crate::agent_bridge::Agent::new(
-            root.clone(),
-            random_token(),
-            false,
-            false,
-        ))
-    });
+    let agent = agent.then(|| Arc::new(crate::agent_bridge::Agent::new(root.clone(), random_token())));
     Ok(Config {
         root,
         app,
@@ -215,12 +222,14 @@ pub fn run(l: TcpListener, c: Arc<Config>) -> Result<(), String> {
             drop(s);
             continue;
         }
-        let _ = s.set_read_timeout(Some(std::time::Duration::from_secs(120)));
+        let _ = s.set_read_timeout(Some(IDLE_TIME));
+        let _ = s.set_write_timeout(Some(WRITE_TIME));
         open.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        let (c, lock, open) = (c.clone(), lock.clone(), open.clone());
+        let slot = Slot(open.clone());
+        let (c, lock) = (c.clone(), lock.clone());
         std::thread::spawn(move || {
+            let _slot = slot;
             let _ = connection(s, &c, &lock);
-            open.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
         });
     }
     Ok(())
@@ -282,6 +291,7 @@ fn reason(s: u16) -> &'static str {
         415 => "Unsupported Media Type",
         503 => "Service Unavailable",
         412 => "Precondition Failed",
+        408 => "Request Timeout",
         413 => "Payload Too Large",
         421 => "Misdirected Request",
         428 => "Precondition Required",
@@ -289,13 +299,39 @@ fn reason(s: u16) -> &'static str {
     }
 }
 
+/// A read that failed: out of time (408), or otherwise (400, as `what`).
+fn slow_or(e: std::io::Error, what: &str) -> Response {
+    match e.kind() {
+        std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut => {
+            error(408, "the request came too slowly")
+        }
+        _ => error(400, what),
+    }
+}
+
 fn read_request(r: &mut BufReader<TcpStream>, c: &Config) -> Result<Option<Request>, Response> {
     let mut head = Vec::new();
+    // a request, once it starts, comes in good time: its head in 30 s, its body in 30 s more
+    // and a second a 64 KB; a client trickling it in loses the connection, not a slot forever
+    let mut began: Option<std::time::Instant> = None;
+    let stream = r.get_ref().try_clone().map_err(|_| error(400, "unreadable"))?;
+    let within = |by: std::time::Instant| -> Result<(), Response> {
+        let left = by.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            return Err(error(408, "the request came too slowly"));
+        }
+        let _ = stream.set_read_timeout(Some(left));
+        Ok(())
+    };
     loop {
+        if let Some(t) = began {
+            within(t + HEAD_TIME)?;
+        }
         let mut line = Vec::new();
         let n = r
             .read_until(b'\n', &mut line)
-            .map_err(|_| error(400, "unreadable"))?;
+            .map_err(|e| slow_or(e, "unreadable"))?;
+        began.get_or_insert_with(std::time::Instant::now);
         if n == 0 {
             return if head.is_empty() {
                 Ok(None)
@@ -352,8 +388,13 @@ fn read_request(r: &mut BufReader<TcpStream>, c: &Config) -> Result<Option<Reque
         return Err(error(413, "too large"));
     }
     let mut body = vec![0; len];
+    within(
+        std::time::Instant::now() + HEAD_TIME + std::time::Duration::from_secs((len / (64 << 10)) as u64),
+    )?;
     r.read_exact(&mut body)
-        .map_err(|_| error(400, "the body cut short"))?;
+        .map_err(|e| slow_or(e, "the body cut short"))?;
+    // idle again until the next request
+    let _ = stream.set_read_timeout(Some(IDLE_TIME));
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
     Ok(Some(Request {
         method: method.to_string(),
@@ -1760,6 +1801,40 @@ mod tests {
             String::from_utf8(got[1][1].clone()).unwrap(),
             etag(b"shared t = 2\n")
         );
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The review's: a client trickling its request in held a thread (and a slot) for as long as
+    /// it liked; now a request has 30 s from its first byte, and it's 408 then.
+    #[test]
+    fn a_request_trickled_in_is_ended_in_good_time() {
+        use std::io::{Read, Write};
+        let (at, root) = started(None, true);
+        let mut s = std::net::TcpStream::connect(at).unwrap();
+        let t = std::time::Instant::now();
+        s.write_all(b"GET /api/info HTTP/1.1\r\n").unwrap();
+        // a header line every 5 s: never idle long, never done
+        let mut all = String::new();
+        s.set_read_timeout(Some(std::time::Duration::from_millis(100)))
+            .unwrap();
+        while t.elapsed() < std::time::Duration::from_secs(45) {
+            if t.elapsed().as_secs().is_multiple_of(5) {
+                let _ = s.write_all(b"X-Slow: 1\r\n");
+            }
+            let mut b = [0u8; 512];
+            match s.read(&mut b) {
+                Ok(0) => break,
+                Ok(n) => all.push_str(&String::from_utf8_lossy(&b[..n])),
+                Err(_) => {}
+            }
+            if all.contains("\r\n\r\n") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(900));
+        }
+        assert!(all.starts_with("HTTP/1.1 408"), "{all}");
+        let took = t.elapsed().as_secs();
+        assert!((29..40).contains(&took), "{took} s");
         let _ = std::fs::remove_dir_all(&root);
     }
 

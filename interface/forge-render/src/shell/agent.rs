@@ -803,6 +803,11 @@ impl AgentTab {
                 "A message takes {} pictures at most: send these, then the rest",
                 crate::agent::PICTURES
             ))
+        } else if self.pictures.iter().map(|p| p.bytes.len()).sum::<usize>() + size
+            > crate::agent::PICTURES_BYTES
+            && size <= crate::agent::PICTURE_BYTES
+        {
+            Some("Pictures for one message add up to 7 MB at most: send these, then the rest".into())
         } else if size > crate::agent::PICTURE_BYTES {
             Some(format!(
                 "That picture is {:.1} MB · pictures over 5 MB can't be sent: resize it, or send a PNG or JPEG",
