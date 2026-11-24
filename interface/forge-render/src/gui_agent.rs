@@ -18,6 +18,8 @@ struct Followup {
     text: String,
     refs: Vec<String>,
     pictures: Vec<crate::agent::Picture>,
+    /// Its message in the chat (sent, shown, waiting): taken out if it's dropped.
+    entry: Option<usize>,
     project: Option<PathBuf>,
     model: String,
 }
@@ -232,8 +234,60 @@ impl Gui {
         self.take_bridge_requests();
     }
 
-    fn take_followups(&mut self) {
+    /// The tab's view of the queue: how many, and each one's words.
+    fn sync_queue(&mut self) {
         self.shell.agent.queued = self.agent.followups.len();
+        self.shell.agent.queue = self
+            .agent
+            .followups
+            .iter()
+            .map(|f| match f.entry.and_then(|k| self.shell.agent.entries.get(k)) {
+                Some(Entry::User { text, .. }) => text.clone(),
+                _ => f.text.clone(),
+            })
+            .collect();
+    }
+
+    /// A queued message dropped, or taken back into the box to change and send again.
+    fn unqueue(&mut self, index: usize, edit: bool) {
+        let Some(f) = self.agent.followups.remove(index) else {
+            return;
+        };
+        let mut text = f.text.clone();
+        let mut refs = f.refs.clone();
+        if let Some(k) = f.entry
+            && let Some(Entry::User { text: t, refs: r, .. }) = self.shell.agent.entries.get(k)
+        {
+            (text, refs) = (t.clone(), r.clone());
+            self.shell.agent.entries.remove(k);
+            for g in &mut self.agent.followups {
+                if let Some(j) = &mut g.entry
+                    && *j > k
+                {
+                    *j -= 1;
+                }
+            }
+        }
+        if edit {
+            let a = &mut self.shell.agent;
+            a.input = if a.input.trim().is_empty() {
+                text
+            } else {
+                format!("{text}\n{}", a.input)
+            };
+            for r in refs {
+                if !a.refs.contains(&r) {
+                    a.refs.push(r);
+                }
+            }
+            a.pictures.extend(f.pictures);
+            a.focus_input = true;
+        }
+        self.sync_queue();
+    }
+
+    fn take_followups(&mut self) {
+        self.sync_queue();
         if self.agent.turn_active
             || self.shell.agent.running
             || self.shell.agent.voice.busy()
@@ -245,7 +299,7 @@ impl Gui {
         let Some(next) = self.agent.followups.pop_front() else {
             return;
         };
-        self.shell.agent.queued = self.agent.followups.len();
+        self.sync_queue();
         if next.project != self.agent_root()
             || next.model != self.shell.agent.settings.label()
             || (next.document.is_some() && next.document != self.agent_path())
@@ -266,7 +320,7 @@ impl Gui {
         self.shell.agent.markup.sending = false;
         let count = self.agent.followups.len();
         self.agent.followups.clear();
-        self.shell.agent.queued = 0;
+        self.sync_queue();
         if count > 0 {
             self.shell.agent.take(Event::Note {
                 text: format!("Cancelled {count} queued message(s)."),
@@ -908,6 +962,7 @@ impl Gui {
                         b.set_own_mode(&m);
                     }
                 }
+                AgentAct::Unqueue { index, edit } => self.unqueue(index, edit),
                 AgentAct::ListConversations => self.agent_list_conversations(),
                 AgentAct::ResumeConversation(id) => self.agent_resume_conversation(&id),
                 AgentAct::NewChat => {
@@ -961,10 +1016,16 @@ impl Gui {
                 text: text.into(),
                 refs: refs.to_vec(),
                 pictures,
+                entry: self
+                    .shell
+                    .agent
+                    .entries
+                    .iter()
+                    .rposition(|e| matches!(e, Entry::User { .. })),
                 project: self.agent_root(),
                 model: self.shell.agent.settings.label(),
             });
-            self.shell.agent.queued = self.agent.followups.len();
+            self.sync_queue();
             return;
         }
         let fail = |g: &mut Gui, text: String, fix: Option<String>| {
