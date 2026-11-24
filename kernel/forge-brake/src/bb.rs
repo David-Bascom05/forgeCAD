@@ -142,7 +142,9 @@ pub fn certify<P: Problem>(
 }
 
 /// `certify`, measuring no further than `cut`: a distance known to be at least `cut` is not
-/// measured more finely (another piece is already nearer).
+/// measured more finely (another piece is already nearer). A search the budget would end near
+/// goes on with the budget once more; one that ends near with its cells settled at the resolution
+/// is searched again at finer ones ([`REFINE`]). Either way: Clear, Hit, or the best Near proven.
 pub fn certify_below<P: Problem>(
     pb: &P,
     roots: &[Cell],
@@ -153,10 +155,48 @@ pub fn certify_below<P: Problem>(
     cut: f64,
 ) -> Verdict {
     let mut spent = 0usize;
-    let v = search(pb, roots, limit, res, budget, measure, cut, &mut spent);
+    let mut ended = false;
+    let mut v = search(
+        pb, roots, limit, res, budget, measure, cut, true, &mut spent, &mut ended,
+    );
+    // near, its cells settled at the resolution: searched again finer (an eighth, then a
+    // sixty-fourth of it), so a pair only a coarse resolution left short of the limit is proven
+    // clear, or a point found under it; only those pairs pay (not one the budget ended, twice:
+    // a finer search proves no more there)
+    if let Verdict::Near { lower: mut best, .. } = v
+        && !ended
+    {
+        let mut r = res;
+        for _ in 0..REFINE {
+            r *= 0.125;
+            // its own budget: the first search may have spent all of its own
+            let mut more = 0usize;
+            let w = search(
+                pb, roots, limit, r, budget, measure, cut, true, &mut more, &mut ended,
+            );
+            spent += more;
+            match w {
+                // finer, the budget ran out: what was proven stands
+                Verdict::Undecided { .. } => break,
+                w @ Verdict::Near { lower, .. } => {
+                    if lower > best {
+                        best = lower;
+                        v = w;
+                    }
+                }
+                w => {
+                    v = w;
+                    break;
+                }
+            }
+        }
+    }
     CELLS.fetch_add(spent, std::sync::atomic::Ordering::Relaxed);
     v
 }
+
+/// How many times a near verdict is searched again, each at an eighth of the last resolution.
+pub const REFINE: usize = 2;
 
 #[allow(clippy::too_many_arguments)]
 fn search<P: Problem>(
@@ -167,8 +207,14 @@ fn search<P: Problem>(
     budget: usize,
     measure: bool,
     cut: f64,
+    extend: bool,
     spent: &mut usize,
+    budget_ended: &mut bool,
 ) -> Verdict {
+    // a search the budget would end near gets the budget once more, continuing where it is (as
+    // a search with twice the budget would go, with nothing searched again)
+    let mut budget = budget;
+    let mut extended = !extend;
     let mut heap = BinaryHeap::new();
     for c in roots {
         if pb.may_hold(c) {
@@ -190,12 +236,15 @@ fn search<P: Problem>(
         // measuring past a proven pass gets a tenth of the budget; a pass only as every exit
         // has it, each leaf settled to within the resolution (else a leaf no witness decided
         // would be called clear)
-        if measure && lb >= limit && *spent > budget / 10 {
-            return settle(lower.min(lb), upper, limit, res);
-        }
-        if *spent > budget {
-            // what is left is proven clear of the limit: settled as far as it was measured
-            return settle(lower.min(lb), upper, limit, res);
+        // what is left is proven clear of the limit: settled as far as it was measured
+        if (measure && lb >= limit && *spent > budget / 10) || *spent > budget {
+            let v = settle(lower.min(lb), upper, limit, res);
+            if extended || !matches!(v, Verdict::Near { .. }) {
+                *budget_ended = true;
+                return v;
+            }
+            extended = true;
+            budget *= 2;
         }
         if let Some(q) = pb.witness(&cell) {
             let at = pb.image(q);
@@ -415,7 +464,10 @@ mod tests {
         // resolution 1e-3, and nothing can name a point below it: near, with the bound proven
         match certify(&Blind, &[root(0.5003)], 0.5, 1e-3, 1_000_000, false) {
             Verdict::Near { lower, upper } => {
-                assert!((0.5 - 1e-3..0.5).contains(&lower) && lower <= 0.4997 + 1e-9, "{lower}");
+                assert!(
+                    (0.5 - 1e-3..0.5).contains(&lower) && lower <= 0.4997 + 1e-9,
+                    "{lower}"
+                );
                 assert!(upper >= lower, "{upper}");
             }
             v => panic!("{v:?}"),
@@ -436,6 +488,111 @@ mod tests {
                 assert!(lower >= 0.5, "{s1}: {lower}");
             }
         }
+    }
+
+    /// A segment across the ball's near side, at x = 3 - 1 - gap: its least distance `gap`, at
+    /// y = 0, a smooth minimum (a coarse cell's bound falls short of it by its half-diagonal).
+    fn across(gap: f64) -> Cell {
+        Cell {
+            p: [
+                Interval::point(2.0 - gap),
+                Interval::new(-1.0, 1.0),
+                Interval::point(0.0),
+                Interval::point(0.0),
+            ],
+            tag: 0,
+        }
+    }
+
+    #[test]
+    fn a_near_pair_is_refined() {
+        // 0.002 past the limit: at the resolution 0.05 the search stops near; searched again
+        // finer it is proven clear
+        let mut spent = 0;
+        let v = search(
+            &Blind,
+            &[across(0.502)],
+            0.5,
+            0.05,
+            1_000_000,
+            false,
+            f64::INFINITY,
+            true,
+            &mut spent,
+            &mut false,
+        );
+        assert!(matches!(v, Verdict::Near { .. }), "{v:?}");
+        match certify(&Blind, &[across(0.502)], 0.5, 0.05, 1_000_000, false) {
+            Verdict::Clear { lower, .. } => assert!((0.5..=0.502).contains(&lower), "{lower}"),
+            v => panic!("{v:?}"),
+        }
+        // 0.0003 under the limit, nothing to name: near at every resolution, the bound proven
+        // and the best of them kept
+        match certify(&Blind, &[across(0.4997)], 0.5, 0.05, 1_000_000, false) {
+            Verdict::Near { lower, .. } => {
+                assert!((0.5 - 0.05 / 64.0..=0.4997 + 1e-9).contains(&lower), "{lower}")
+            }
+            v => panic!("{v:?}"),
+        }
+        // with a witness, the finer search finds the point under the limit
+        assert!(matches!(
+            certify(&Seg1, &[across(0.4997)], 0.5, 0.05, 1_000_000, false),
+            Verdict::Hit { .. }
+        ));
+        // clear at once: no second search
+        let mut once = 0;
+        let v1 = search(
+            &Blind,
+            &[across(0.7)],
+            0.5,
+            0.05,
+            1_000_000,
+            false,
+            f64::INFINITY,
+            true,
+            &mut once,
+            &mut false,
+        );
+        assert!(matches!(v1, Verdict::Clear { .. }));
+        let v2 = certify(&Blind, &[across(0.7)], 0.5, 0.05, 1_000_000, false);
+        assert_eq!(v1, v2);
+    }
+
+    #[test]
+    fn a_search_the_budget_ends_near_goes_on_once() {
+        // budgets the search runs out of while near: it goes on as a search with twice the budget
+        // would, and some of those come out clear
+        let run = |budget: usize, measure: bool, extend: bool| {
+            let (mut n, mut ended) = (0, false);
+            let v = search(
+                &Blind,
+                &[across(0.53)],
+                0.5,
+                0.05,
+                budget,
+                measure,
+                f64::INFINITY,
+                extend,
+                &mut n,
+                &mut ended,
+            );
+            (v, n, ended)
+        };
+        let (mut went_on, mut cleared) = (0, 0);
+        for budget in 2..400 {
+            for measure in [false, true] {
+                let (w, _, ended) = run(budget, measure, false);
+                let v = run(budget, measure, true);
+                if matches!(w, Verdict::Near { .. }) && ended {
+                    assert_eq!(v, run(2 * budget, measure, false), "{budget} {measure}");
+                    went_on += 1;
+                    cleared += matches!(v.0, Verdict::Clear { .. }) as usize;
+                } else {
+                    assert_eq!(v.0, w, "{budget} {measure}");
+                }
+            }
+        }
+        assert!(went_on > 0 && cleared > 0, "{went_on} {cleared}");
     }
 
     #[test]
