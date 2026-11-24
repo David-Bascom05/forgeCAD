@@ -3,6 +3,14 @@
 version = 4
 
 [[package]]
+name = "feeds-vs-makers"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-agent"
 version = "0.1.0"
 dependencies = [
@@ -109,6 +117,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam-3d"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-cam-geom"
 version = "0.1.0"
 
@@ -126,6 +146,7 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-cam",
+ "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
@@ -146,10 +167,13 @@ dependencies = [
  "forge-cam",
  "forge-cam-geom",
  "forge-cam-lang",
+ "forge-lang",
  "forge-machine",
  "forge-math",
+ "forge-mesh",
  "forge-post",
  "forge-tooling",
+ "forge-turn-lang",
 ]
 
 [[package]]
@@ -172,10 +196,12 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-bend-lang",
+ "forge-cam-import",
  "forge-cam-lang",
  "forge-dirs",
  "forge-geom",
  "forge-import",
+ "forge-keep",
  "forge-lang",
  "forge-machine-builder",
  "forge-machine-lang",
@@ -189,6 +215,7 @@ dependencies = [
  "forge-topo",
  "forge-turn-lang",
  "forge-urdf",
+ "forge-wall",
  "forge-workholding-builder",
 ]
 
@@ -326,6 +353,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-keep"
+version = "0.1.0"
+
+[[package]]
 name = "forge-lang"
 version = "0.1.0"
 dependencies = [
@@ -341,6 +372,7 @@ dependencies = [
  "forge-git",
  "forge-harness",
  "forge-history",
+ "forge-keep",
  "forge-material",
  "forge-math",
  "forge-mesh",
@@ -423,6 +455,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-num",
  "forge-par",
 ]
 
@@ -464,6 +497,10 @@ dependencies = [
  "forge-sketch",
  "forge-topo",
 ]
+
+[[package]]
+name = "forge-num"
+version = "0.1.0"
 
 [[package]]
 name = "forge-ops"
@@ -706,6 +743,17 @@ dependencies = [
  "forge-dirs",
  "forge-material",
  "forge-sheet",
+]
+
+[[package]]
+name = "forge-wall"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-topo",
 ]
 
 [[package]]

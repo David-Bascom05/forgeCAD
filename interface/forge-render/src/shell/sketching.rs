@@ -2763,10 +2763,10 @@ mod tests {
             end: start,
             closed: true,
         };
-        let par = Curve::Parabola(Parabola {
-            frame: Frame::default().with_origin(Point3::new(20.0, 0.0, 0.0)),
-            focal: 2.0,
-        });
+        let par = Curve::Parabola(Parabola::new(
+            Frame::default().with_origin(Point3::new(20.0, 0.0, 0.0)),
+            2.0,
+        ));
         let bent = sk::Source::Edge {
             start: forge_geom::CurveGeom::eval(&par, -3.0),
             end: forge_geom::CurveGeom::eval(&par, 3.0),

@@ -73,6 +73,12 @@ fn scan_entries(path: &OpPath, map: &HeightMap, prof: &Profile, d: f64) -> Vec<E
     let mut at = path.start;
     for (i, mv) in path.moves.iter().enumerate() {
         match *mv {
+            // a probe cuts nothing
+            PMove::Probe { to, back, .. } => {
+                if !back {
+                    at = to;
+                }
+            }
             PMove::Rapid { to } => {
                 m.sweep(at, to, prof);
                 at = to;
@@ -188,7 +194,9 @@ pub fn measure(
     let mut prev_engaged = false;
     for s in &samples {
         let engaged = s.engage.is_some();
-        if let (true, false, PMove::Line { f, .. } | PMove::Arc { f, .. }) = (engaged, prev_engaged, path.moves[s.mv]) {
+        if let (true, false, PMove::Line { f, .. } | PMove::Arc { f, .. }) =
+            (engaged, prev_engaged, path.moves[s.mv])
+        {
             entries.push(Entry::Contact { mv: s.mv, feed: f });
         }
         prev_engaged = engaged;
@@ -297,7 +305,11 @@ mod tests {
             0.0,
         );
         // the plunge (the map's box is all stock): an entry, at half the cutting feed
-        assert!(m.entries.contains(&Entry::Plunge { mv: 0, feed: 300.0 }), "{:?}", m.entries);
+        assert!(
+            m.entries.contains(&Entry::Plunge { mv: 0, feed: 300.0 }),
+            "{:?}",
+            m.entries
+        );
         assert_eq!(m.max_cut_feed, 600.0);
         // 7 mm at 300 → not sampled, counted
         assert!((m.unsampled_minutes - 7.0 / 300.0).abs() < 1e-12);

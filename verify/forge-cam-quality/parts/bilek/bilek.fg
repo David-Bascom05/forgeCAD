@@ -1,0 +1,18 @@
+# Bílek et al. 2025, Materials 18:1669 (CC BY 4.0), the test pocket: a block about 76 x 76 x 40 mm
+# with an oblong pocket 60 x 46 x 12 mm, corner radii 4 mm (the paper's stated dimensions).
+shared L = 76
+shared H = 40
+shared PL = 60
+shared PW = 46
+shared PD = 12
+shared R = 4
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, L))
+}
+block = extrude(plan, H)
+sketch top(on: block.end) {
+  p = rect(corner: ((L - PL) / 2, (L - PW) / 2), size: (PL, PW))
+}
+well = cut(top.p, PD)
+round = fillet(edges(of: well, along: Z), R)

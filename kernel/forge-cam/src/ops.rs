@@ -6,6 +6,7 @@
 //! Linking is by retract: up to the retract height (above everything the op cuts), across at it,
 //! and down at the plunge feed. Rapids run at the clearance height, above the stock.
 use crate::leads::{self, Leads};
+use crate::movememo::{self, MoveMemo};
 use crate::tabs::{self, TabShape, Tabs};
 use forge_cam_geom::check::{self, Face, Move, Verdict};
 use forge_cam_geom::offset::offset;
@@ -77,6 +78,10 @@ pub struct ToolUse {
     pub holder: Option<String>,
     pub stickout: f64,
     pub shape: Shape,
+    /// A touch probe, not a cutter: every move of it is non-cutting (its bodies keep the rapid
+    /// clearance from part and stock), except its stylus ball (the `Cutter` body) on the contact
+    /// window of a `PMove::Probe`. Decided by the tool, never by a move's phase.
+    pub probe: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -85,6 +90,11 @@ pub enum Phase {
     Plunge,
     Link,
     Rapid,
+    /// A probe move's approach: from its start to its contact window (nothing may touch).
+    Probe,
+    /// A probe move's contact window: from `entry` before the nominal contact to `over` past it
+    /// (only the stylus ball may meet the part or stock).
+    Touch,
 }
 
 impl Phase {
@@ -94,6 +104,8 @@ impl Phase {
             Phase::Plunge => "plunge",
             Phase::Link => "link",
             Phase::Rapid => "rapid",
+            Phase::Probe => "probe",
+            Phase::Touch => "touch",
         }
     }
 }
@@ -115,6 +127,20 @@ pub enum PMove {
         c: [f64; 2],
         cw: bool,
         f: f64,
+    },
+    /// A probe (skip) move toward `to`, the stylus ball tip's nominal contact with the surface,
+    /// at feed `f`: the machine stops where the probe triggers, so the move is certified as its
+    /// whole segment to `over` past `to` along its direction. The ball may meet the part or
+    /// stock only within the contact window, from `entry` before `to` to `over` past it.
+    /// `back`: after it stops the probe returns along the same line to where the move started
+    /// (a back-off that retraces positions the move's own check covers), so the path goes on
+    /// from there; without it, from `to`.
+    Probe {
+        to: [f64; 3],
+        f: f64,
+        over: f64,
+        entry: f64,
+        back: bool,
     },
     /// A canned hole cycle at each place.
     Cycle {
@@ -238,6 +264,30 @@ pub fn checker_moves(p: &OpPath) -> Vec<(Move, Phase, usize)> {
                     out.push((mv, Phase::Cut, i));
                 }
                 at = to;
+            }
+            PMove::Probe {
+                to,
+                over,
+                entry,
+                back,
+                ..
+            } => {
+                let from = at;
+                let d = [to[0] - at[0], to[1] - at[1], to[2] - at[2]];
+                let len = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+                if len > 0.0 {
+                    let u = [d[0] / len, d[1] / len, d[2] / len];
+                    let e = entry.min(len);
+                    let w0 = [to[0] - e * u[0], to[1] - e * u[1], to[2] - e * u[2]];
+                    let w1 = [to[0] + over * u[0], to[1] + over * u[1], to[2] + over * u[2]];
+                    if e < len {
+                        out.push((Move::Line { a: at, b: w0 }, Phase::Probe, i));
+                    }
+                    out.push((Move::Line { a: w0, b: w1 }, Phase::Touch, i));
+                }
+                // the machine stops somewhere in the window; the path goes on from the nominal
+                // contact, or from where it started when it backs off along the same line
+                at = if back { from } else { to };
             }
             PMove::Cycle {
                 holes, z, r, clear, ..
@@ -381,8 +431,25 @@ pub fn certify_with(
     // the moves are independent: chunks of them are checked on all cores (forge_math::par),
     // each with its own scratch, and merged in move order with the sequential rules below
     // (stop at a containment failure, or after the 21st failing check, counting what was
-    // counted up to there), so the summary is the same at any thread count
-    const CHUNK: usize = 64;
+    // counted up to there), so the summary is the same at any thread count. Chunks are small:
+    // a move's cost varies by orders of magnitude (a cutter tangent to a torus takes thousands of
+    // cells, a rapid in the clear none) and the costly moves of a pass sit together, so large
+    // chunks left one core with all of them (manifold's `shal`: 3 chunks of 64, one with every
+    // costly move); a chunk's scratch is reset per move, so the size changes no result
+    // the per-move memo (movememo.rs): the tool's text and each face's, interned once per call
+    let tool_id = if movememo::on() {
+        MOVES.intern(format!("{:?}", (tool, column, tol, clearance, fclear)))
+    } else {
+        None
+    };
+    let lazy = |n: usize| -> Vec<std::sync::OnceLock<Option<u64>>> {
+        (0..n).map(|_| std::sync::OnceLock::new()).collect()
+    };
+    let part_ids = lazy(part.len());
+    let fix_ids = lazy(fixture.len());
+    let stage_ids: Vec<Vec<std::sync::OnceLock<Option<u64>>>> =
+        stages.iter().map(|s| lazy(s.1.len())).collect();
+    const CHUNK: usize = 8;
     let nchunks = mv.len().div_ceil(CHUNK);
     let nstock = stages.iter().map(|s| s.1.len()).max().unwrap_or(0);
     let chunks: Vec<Vec<MoveOut>> = forge_math::par::map(nchunks, |c| {
@@ -430,12 +497,11 @@ pub fn certify_with(
             }
             let stock: &[Face] = &stages[st].1;
             let sgrid = &sgrids[st];
-            for b in &tool.shape.bodies {
-                // on the surfacing route a move that has failed is not checked further (its
-                // failure is reported; the rest of its faces could only add to it)
-                if col.is_some() && !o.fails.is_empty() {
-                    break;
-                }
+            // the plan: for each body, each face set it is checked against, the limit, and the
+            // faces near it in the order they are checked (a pure function of the move, the tool
+            // and the faces; the checks below follow it, and the memo is keyed by it)
+            let mut plan: Vec<(usize, usize, f64, Vec<u32>)> = Vec::new();
+            for (bi, b) in tool.shape.bodies.iter().enumerate() {
                 let sb = check::swept_box_body(m, b);
                 // the part: the cutter may touch it within tol on a cut; nothing else may touch it
                 for (set, (faces, what, grid)) in [
@@ -449,7 +515,14 @@ pub fn certify_with(
                     if faces.is_empty() {
                         continue;
                     }
-                    if what == "stock" && !(b.part == Part::NonCutting || *phase == Phase::Rapid) {
+                    // a probe's ball in its contact window may meet the part and the stock
+                    if tool.probe && b.part == Part::Cutter && *phase == Phase::Touch && what != "fixture" {
+                        continue;
+                    }
+                    if !tool.probe
+                        && what == "stock"
+                        && !(b.part == Part::NonCutting || *phase == Phase::Rapid)
+                    {
                         // the cutter cuts the stock: that is the point
                         continue;
                     }
@@ -459,126 +532,220 @@ pub fn certify_with(
                     let narrow = b.part == Part::NonCutting && b.rmax <= cutter_r;
                     let limit = if what == "fixture" {
                         fclear
+                    } else if tool.probe {
+                        // a probe cuts nothing: every body keeps the clearance everywhere else
+                        clearance
                     } else if (b.part == Part::Cutter && what == "part" || narrow) && *phase != Phase::Rapid {
                         -tol
                     } else {
                         clearance
                     };
                     grid.near(&sb, &mut cand, &mut seen);
-                    for &fi in &cand {
-                        if col.is_some() && !o.fails.is_empty() {
-                            break;
-                        }
-                        let f = &faces[fi as usize];
-                        if check::apart(&sb, &f.bbox, limit.max(0.0) + f.mu) {
-                            continue;
-                        }
-                        o.pairs += 1;
-                        let slot = &mut shared[set][fi as usize];
-                        if slot.is_none() {
-                            touched.push((set, fi as usize));
-                        }
-                        if let Some(col) = &col
-                            && what == "part"
-                            && limit <= 0.0
-                            && *phase != Phase::Rapid
-                            && col.holds_or_is(b)
-                        {
-                            let (g, n) = forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
-                            o.cells += n;
-                            match g {
-                                forge_cam_geom::drop::Gap::Clear { lower } => {
-                                    if b.part == Part::Cutter {
-                                        o.least = o.least.min(lower);
-                                    }
-                                    continue;
-                                }
-                                forge_cam_geom::drop::Gap::Over { s, p, q, .. } => {
-                                    // the column's witness: this body's own signed distance there,
-                                    // proven below the limit (by mu more), is a real violation
-                                    let (pi, qi) = (
-                                        forge_cam_geom::ival::Ival::pt(p),
-                                        forge_cam_geom::ival::Ival::pt(q),
-                                    );
-                                    let y = f.surf.eval(pi, qi);
-                                    let t = m.at(forge_cam_geom::ival::Ival::pt(s));
-                                    let sd = b.sd(y[0].sub(t[0]), y[1].sub(t[1]), y[2].sub(t[2]));
-                                    let d = sd.add(forge_cam_geom::ival::Ival::pt(f.mu)).hi;
-                                    if f.holds(pi, qi) == 1 && d < limit {
-                                        let at = [y[0].mid(), y[1].mid(), y[2].mid()];
-                                        o.fails.push((
-                                            CheckOut {
-                                                rule: if b.part == Part::Cutter {
-                                                    "gouge"
-                                                } else {
-                                                    "holder_collision"
-                                                },
-                                                verdict: "fail",
-                                                value: d,
-                                                limit,
-                                                at,
-                                                tool_part: if b.part == Part::Cutter {
-                                                    "cutter"
-                                                } else {
-                                                    "shank/holder"
-                                                },
-                                                other: format!("{what} face {}", f.id),
-                                                phase: phase.name(),
-                                                move_index: *idx,
-                                                path: 0,
-                                            },
-                                            o.pairs,
-                                            o.cells,
-                                            o.least,
-                                        ));
-                                        continue;
-                                    }
-                                }
-                                forge_cam_geom::drop::Gap::Unknown => {}
-                            }
-                        }
-                        let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);
+                    let near: Vec<u32> = cand
+                        .iter()
+                        .copied()
+                        .filter(|&fi| {
+                            !check::apart(
+                                &sb,
+                                &faces[fi as usize].bbox,
+                                limit.max(0.0) + faces[fi as usize].mu,
+                            )
+                        })
+                        .collect();
+                    plan.push((bi, set, limit, near));
+                }
+            }
+            // the memo's key: the move, its phase, the tool, and the plan with each face by its
+            // interned text (and which visits share a face's scratch: the same set and face)
+            let mut slots: Vec<(usize, u32)> = Vec::new();
+            let slot_of = |slots: &mut Vec<(usize, u32)>, set: usize, fi: u32| match slots
+                .iter()
+                .position(|&x| x == (set, fi))
+            {
+                Some(k) => k,
+                None => {
+                    slots.push((set, fi));
+                    slots.len() - 1
+                }
+            };
+            for (_, set, _, near) in &plan {
+                for &fi in near {
+                    slot_of(&mut slots, *set, fi);
+                }
+            }
+            let key = tool_id.and_then(|tid| {
+                let mut visits: Vec<Visit> = Vec::with_capacity(plan.len());
+                for (bi, set, limit, near) in &plan {
+                    let mut v = Vec::with_capacity(near.len());
+                    for &fi in near {
+                        let slot = slots
+                            .iter()
+                            .position(|&x| x == (*set, fi))
+                            .expect("every visit has a slot");
+                        let gid = match set {
+                            0 => face_id(&part_ids, part, fi)?,
+                            1 => face_id(&stage_ids[st], stock, fi)?,
+                            _ => face_id(&fix_ids, fixture, fi)?,
+                        };
+                        v.push((slot, gid));
+                    }
+                    visits.push((*bi, *set, *limit, v));
+                }
+                Some(format!("move/1 {:?} {:?} {tid} {:?}", m, phase, visits))
+            });
+            if let Some(k) = &key
+                && let Some(mut hit) = MOVES.get(k)
+            {
+                for (f, &k) in hit.fails.iter_mut().zip(&hit.fail_slot) {
+                    f.0.move_index = *idx;
+                    // the face's name as this call numbers it
+                    let (set, fi) = slots[k];
+                    f.0.other = match set {
+                        0 => format!("part face {}", part[fi as usize].id),
+                        1 => format!("stock face {}", stock[fi as usize].id),
+                        _ => format!("fixture face {}", fixture[fi as usize].id),
+                    };
+                }
+                outs.push(hit);
+                continue;
+            }
+            let mut last_here = 0usize;
+            'plan: for (bi, set, limit, near) in &plan {
+                let b = &tool.shape.bodies[*bi];
+                let (faces, what) = match set {
+                    0 => (part, "part"),
+                    1 => (stock, "stock"),
+                    _ => (fixture, "fixture"),
+                };
+                let limit = *limit;
+                for &fi in near {
+                    // on the surfacing route a move that has failed is not checked further (its
+                    // failure is reported; the rest of its faces could only add to it)
+                    if col.is_some() && !o.fails.is_empty() {
+                        break 'plan;
+                    }
+                    let f = &faces[fi as usize];
+                    // the checks the last visit failed are that visit's face's
+                    let here = slots
+                        .iter()
+                        .position(|&x| x == (*set, fi))
+                        .expect("every visit has a slot");
+                    while o.fail_slot.len() < o.fails.len() {
+                        o.fail_slot.push(last_here);
+                    }
+                    last_here = here;
+                    o.pairs += 1;
+                    let slot = &mut shared[*set][fi as usize];
+                    if slot.is_none() {
+                        touched.push((*set, fi as usize));
+                    }
+                    if let Some(col) = &col
+                        && what == "part"
+                        && limit <= 0.0
+                        && *phase != Phase::Rapid
+                        && col.holds_or_is(b)
+                    {
+                        let (g, n) = forge_cam_geom::drop::gap_move(col, f, m, limit, tol / 4.0, 200_000);
                         o.cells += n;
-                        let rule = match (b.part, *phase, what) {
-                            (_, _, "fixture") => "fixture_collision",
-                            (_, Phase::Rapid, _) => "rapid_clear",
-                            (Part::Cutter, _, "part") => "gouge",
-                            _ => "holder_collision",
-                        };
-                        let tool_part = if b.part == Part::Cutter {
-                            "cutter"
-                        } else {
-                            "shank/holder"
-                        };
-                        let (verdict, value, at) = match v {
-                            Verdict::Clear { lower } => {
-                                if what == "part" && b.part == Part::Cutter {
+                        match g {
+                            forge_cam_geom::drop::Gap::Clear { lower } => {
+                                if b.part == Part::Cutter {
                                     o.least = o.least.min(lower);
                                 }
                                 continue;
                             }
-                            Verdict::Hit { d, at, .. } => ("fail", d, at),
-                            Verdict::Undecided { lower, .. } => ("undecided", lower, [f64::NAN; 3]),
-                        };
-                        o.fails.push((
-                            CheckOut {
-                                rule,
-                                verdict,
-                                value,
-                                limit,
-                                at,
-                                tool_part,
-                                other: format!("{what} face {}", f.id),
-                                phase: phase.name(),
-                                move_index: *idx,
-                                path: 0,
-                            },
-                            o.pairs,
-                            o.cells,
-                            o.least,
-                        ));
+                            forge_cam_geom::drop::Gap::Over { s, p, q, .. } => {
+                                // the column's witness: this body's own signed distance there,
+                                // proven below the limit (by mu more), is a real violation
+                                let (pi, qi) = (
+                                    forge_cam_geom::ival::Ival::pt(p),
+                                    forge_cam_geom::ival::Ival::pt(q),
+                                );
+                                let y = f.surf.eval(pi, qi);
+                                let t = m.at(forge_cam_geom::ival::Ival::pt(s));
+                                let sd = b.sd(y[0].sub(t[0]), y[1].sub(t[1]), y[2].sub(t[2]));
+                                let d = sd.add(forge_cam_geom::ival::Ival::pt(f.mu)).hi;
+                                if f.holds(pi, qi) == 1 && d < limit {
+                                    let at = [y[0].mid(), y[1].mid(), y[2].mid()];
+                                    o.fails.push((
+                                        CheckOut {
+                                            rule: if b.part == Part::Cutter {
+                                                "gouge"
+                                            } else {
+                                                "holder_collision"
+                                            },
+                                            verdict: "fail",
+                                            value: d,
+                                            limit,
+                                            at,
+                                            tool_part: if b.part == Part::Cutter {
+                                                "cutter"
+                                            } else {
+                                                "shank/holder"
+                                            },
+                                            other: format!("{what} face {}", f.id),
+                                            phase: phase.name(),
+                                            move_index: *idx,
+                                            path: 0,
+                                        },
+                                        o.pairs,
+                                        o.cells,
+                                        o.least,
+                                    ));
+                                    continue;
+                                }
+                            }
+                            forge_cam_geom::drop::Gap::Unknown => {}
+                        }
                     }
+                    let (v, n) = check::certify_shared(b, f, m, limit, tol / 4.0, 200_000, slot);
+                    o.cells += n;
+                    let rule = match (b.part, *phase, what) {
+                        (_, _, "fixture") => "fixture_collision",
+                        _ if tool.probe => "probe_clear",
+                        (_, Phase::Rapid, _) => "rapid_clear",
+                        (Part::Cutter, _, "part") => "gouge",
+                        _ => "holder_collision",
+                    };
+                    let tool_part = if b.part == Part::Cutter {
+                        "cutter"
+                    } else {
+                        "shank/holder"
+                    };
+                    let (verdict, value, at) = match v {
+                        Verdict::Clear { lower } => {
+                            if what == "part" && b.part == Part::Cutter {
+                                o.least = o.least.min(lower);
+                            }
+                            continue;
+                        }
+                        Verdict::Hit { d, at, .. } => ("fail", d, at),
+                        Verdict::Undecided { lower, .. } => ("undecided", lower, [f64::NAN; 3]),
+                    };
+                    o.fails.push((
+                        CheckOut {
+                            rule,
+                            verdict,
+                            value,
+                            limit,
+                            at,
+                            tool_part,
+                            other: format!("{what} face {}", f.id),
+                            phase: phase.name(),
+                            move_index: *idx,
+                            path: 0,
+                        },
+                        o.pairs,
+                        o.cells,
+                        o.least,
+                    ));
                 }
+            }
+            while o.fail_slot.len() < o.fails.len() {
+                o.fail_slot.push(last_here);
+            }
+            if let Some(k) = key {
+                MOVES.put(k, o.clone());
             }
             outs.push(o);
         }
@@ -608,13 +775,40 @@ pub fn certify_with(
     sum
 }
 
+/// A move's visits as its memo key holds them: (body, face set, limit, [(the face's scratch slot,
+/// its interned text)]).
+type Visit = (usize, usize, f64, Vec<(usize, u64)>);
+
+/// The moves' checks made by earlier certifications in this process (movememo.rs).
+static MOVES: MoveMemo<MoveOut> = MoveMemo::new();
+
+/// A face's interned text (its `Debug`, every field but its id), once per certification call.
+/// The id is only the name a check's `other` gives it, put back on the way out: an edit that
+/// renumbers the faces leaves the others' checks in the memo.
+fn face_id(ids: &[std::sync::OnceLock<Option<u64>>], faces: &[Face], fi: u32) -> Option<u64> {
+    *ids[fi as usize].get_or_init(|| {
+        let mut f = faces[fi as usize].clone();
+        f.id = 0;
+        MOVES.intern(format!("{f:?}"))
+    })
+}
+
+/// (moves worked out, moves taken from the memo) by this process's certifications (tests).
+#[doc(hidden)]
+pub fn move_memo_counts() -> (u64, u64) {
+    MOVES.counts()
+}
+
 /// One move's checks, as the merge needs them: its counts, its least cutter distance, each
 /// failing check with the counts and least as they stood when it was found.
+#[derive(Clone)]
 struct MoveOut {
     pairs: usize,
     cells: usize,
     least: f64,
     fails: Vec<(CheckOut, usize, usize, f64)>,
+    /// Each failing check's face, by its place in the move's visits (first seen first).
+    fail_slot: Vec<usize>,
     containment: Option<CheckOut>,
 }
 
@@ -625,6 +819,7 @@ impl Default for MoveOut {
             cells: 0,
             least: f64::INFINITY,
             fails: vec![],
+            fail_slot: vec![],
             containment: None,
         }
     }
@@ -1024,6 +1219,34 @@ pub fn pocket(
 /// the kept passes from k inward then still cover (Rₖ ⊕ r) ∩ S (induction), so the opening the
 /// op claims is cleared within S, and outside S there is no stock. (A clear's region reaches
 /// 2r past the stock, so its outer passes run in air.)
+/// How far the tool's disk keeps from the stock's box for a side entry (mm): rapids are
+/// certified 0.1 mm clear of the stock.
+const SIDE_CLEAR: f64 = 0.6;
+/// The last part of a side entry's way down, at the plunge feed (mm).
+const SIDE_IN: f64 = 1.0;
+
+/// The way down from the retract height to `to`, the level above the one being entered. Below
+/// the first level (`cleared`) it is air: the passes are entered in the same order and the same
+/// way at every level, so at the level above the tool stood at this very point at that depth (the
+/// helix ends where it starts; a plunge is at the pass's start), and its body swept the column
+/// above it. A link at the feed, not a plunge. At the first level the stock before the op is
+/// above it: a plunge.
+fn air_down(to: [f64; 3], cleared: bool, feed: (f64, f64)) -> PMove {
+    if cleared {
+        PMove::Line {
+            to,
+            f: feed.0,
+            phase: Phase::Link,
+        }
+    } else {
+        PMove::Line {
+            to,
+            f: feed.1,
+            phase: Phase::Plunge,
+        }
+    }
+}
+
 pub fn pocket_in(
     rg: &Region,
     c: Cut,
@@ -1166,6 +1389,87 @@ pub fn pocket_in(
             Ok(d) if d.is_empty()
         )
     };
+    // a point the tool's centre may stand at: a square of half-width LINK_EPS about it inside
+    // the tool centres' region (exact)
+    let point_ok = |q: forge_cam_geom::region::P2| -> bool {
+        let c = [
+            forge_cam_geom::region::p2(q.x - LINK_EPS, q.y - LINK_EPS),
+            forge_cam_geom::region::p2(q.x + LINK_EPS, q.y - LINK_EPS),
+            forge_cam_geom::region::p2(q.x + LINK_EPS, q.y + LINK_EPS),
+            forge_cam_geom::region::p2(q.x - LINK_EPS, q.y + LINK_EPS),
+        ];
+        let sq = Region {
+            loops: vec![forge_cam_geom::region::Loop {
+                segs: (0..4)
+                    .map(|i| Seg::Line {
+                        a: c[i],
+                        b: c[(i + 1) % 4],
+                    })
+                    .collect(),
+            }],
+        };
+        matches!(
+            forge_cam_geom::boolean::boolean(&sq, &c0, forge_cam_geom::boolean::Op::Diff),
+            Ok(d) if d.is_empty()
+        )
+    };
+    // an entry from beside the stock (a clear's open region): the stock and the part lie within
+    // the box of `within` (its loops all lines: then that box bounds them). From q, straight out
+    // along x or y from the pass's start s with the tool's disk SIDE_CLEAR beyond the box, the
+    // tool comes down rapid to SIDE_IN above the level and feeds in sideways to s, instead of
+    // plunging into the stock. The way in: up to e, where the centre is r inside the box's
+    // outline grown by r, the disk meets nothing in the box (it is beyond it); from e to s, a
+    // link the tool centres' region holds (exact, as at depth). The nearest such q within 4r.
+    let sbox = within.filter(|sx| {
+        sx.loops
+            .iter()
+            .all(|l| l.segs.iter().all(|sg| matches!(sg, Seg::Line { .. })))
+    });
+    let side_entry = |s: forge_cam_geom::region::P2| -> Option<forge_cam_geom::region::P2> {
+        let (blo, bhi) = region_box(sbox?);
+        let m = r + SIDE_CLEAR;
+        // q, and e a hair (1e-3) inside the box grown by r, along each of the four ways out
+        let ways = [
+            (
+                [blo[0] - m, s.y],
+                [blo[0] - r + 1e-3, s.y],
+                s.x > blo[0] - r + 1e-3,
+            ),
+            (
+                [bhi[0] + m, s.y],
+                [bhi[0] + r - 1e-3, s.y],
+                s.x < bhi[0] + r - 1e-3,
+            ),
+            (
+                [s.x, blo[1] - m],
+                [s.x, blo[1] - r + 1e-3],
+                s.y > blo[1] - r + 1e-3,
+            ),
+            (
+                [s.x, bhi[1] + m],
+                [s.x, bhi[1] + r - 1e-3],
+                s.y < bhi[1] + r - 1e-3,
+            ),
+        ];
+        let mut best: Option<(f64, forge_cam_geom::region::P2)> = None;
+        for (q, e, beyond) in ways {
+            if !beyond {
+                continue;
+            }
+            let (q, e) = (
+                forge_cam_geom::region::p2(q[0], q[1]),
+                forge_cam_geom::region::p2(e[0], e[1]),
+            );
+            let d = ((q.x - s.x) * (q.x - s.x) + (q.y - s.y) * (q.y - s.y)).sqrt();
+            if d > 4.0 * r || best.is_some_and(|(bd, _)| bd <= d) {
+                continue;
+            }
+            if point_ok(e) && link_ok(e, s) {
+                best = Some((d, q));
+            }
+        }
+        best.map(|(_, q)| q)
+    };
     let fits: Vec<Vec<bool>> = passes
         .iter()
         .map(|ls| {
@@ -1218,11 +1522,7 @@ pub fn pocket_in(
                 mv.push(PMove::Rapid {
                     to: [p[0], p[1], h.retract],
                 });
-                mv.push(PMove::Line {
-                    to: [p[0], p[1], above],
-                    f: feed.1,
-                    phase: Phase::Plunge,
-                });
+                mv.push(air_down([p[0], p[1], above], above < top, feed));
                 let (sa, ca) = dmath::sin_cos(deg.to_radians());
                 let per_turn = std::f64::consts::TAU * rh * sa / ca;
                 let turns = ((above - z) / per_turn - 1e-9).ceil().max(1.0) as usize;
@@ -1249,10 +1549,36 @@ pub fn pocket_in(
                     f: feed.0,
                     phase: Phase::Cut,
                 });
+            } else if let Some(q) = side_entry(s) {
+                // beside the stock: rapid down clear of it, the last SIDE_IN at the plunge feed,
+                // then in sideways
+                mv.push(PMove::Rapid {
+                    to: [q.x, q.y, h.retract],
+                });
+                if z + SIDE_IN < h.retract {
+                    mv.push(PMove::Rapid {
+                        to: [q.x, q.y, z + SIDE_IN],
+                    });
+                }
+                mv.push(PMove::Line {
+                    to: [q.x, q.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                if q != s {
+                    mv.push(PMove::Line {
+                        to: [s.x, s.y, z],
+                        f: feed.0,
+                        phase: Phase::Cut,
+                    });
+                }
             } else {
                 mv.push(PMove::Rapid {
                     to: [s.x, s.y, h.retract],
                 });
+                if above < top {
+                    mv.push(air_down([s.x, s.y, above], true, feed));
+                }
                 mv.push(PMove::Line {
                     to: [s.x, s.y, z],
                     f: feed.1,
@@ -1277,6 +1603,9 @@ pub fn pocket_in(
     mv.push(PMove::Rapid {
         to: [s0.x, s0.y, h.clear],
     });
+    if let Some(sx) = sbox {
+        mv = trim_air(&mv, start, region_box(sx), r, h.retract, feed);
+    }
     Ok(OpPath {
         tool: tidx,
         start,
@@ -1284,6 +1613,313 @@ pub fn pocket_in(
         rpm: 0.0,
         coolant: forge_post::Coolant::Flood,
     })
+}
+
+/// How far beyond the radius a point's tool disk keeps from the stock's box for `trim_air` to go
+/// up or down there by rapid (mm): rapids are certified 0.1 mm clear of the stock.
+const AIR_CLEAR: f64 = 0.6;
+
+/// The least distance from the segment a → b to the box [lo, hi] (0 if they meet): the distance
+/// to a convex set is least at an end, or where the segment is nearest a corner, or it crosses.
+fn seg_box_dist(a: [f64; 2], b: [f64; 2], lo: [f64; 2], hi: [f64; 2]) -> f64 {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let ll = dx * dx + dy * dy;
+    // the segment's points on the box's edge lines, inside the edge: a crossing
+    for (k, v) in [(0, lo[0]), (0, hi[0]), (1, lo[1]), (1, hi[1])] {
+        let (d, o) = if k == 0 { (dx, 1) } else { (dy, 0) };
+        if d != 0.0 {
+            let t = (v - a[k]) / d;
+            if (0.0..=1.0).contains(&t) {
+                let w = a[o] + t * if o == 0 { dx } else { dy };
+                if w >= lo[o] && w <= hi[o] {
+                    return 0.0;
+                }
+            }
+        }
+    }
+    let mut best = box_dist(a[0], a[1], lo, hi).min(box_dist(b[0], b[1], lo, hi));
+    for q in [[lo[0], lo[1]], [hi[0], lo[1]], [hi[0], hi[1]], [lo[0], hi[1]]] {
+        if ll > 0.0 {
+            let t = (((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / ll).clamp(0.0, 1.0);
+            best = best.min(box_dist(a[0] + t * dx, a[1] + t * dy, lo, hi));
+        }
+    }
+    best
+}
+
+/// The least distance from an arc (from a about c, sweep `sw` radians, + counter-clockwise) to the
+/// box: at an end, at a point where the arc's normal is along an axis (nearest an edge), on the
+/// ray from c to a corner (nearest the corner), or 0 where it crosses an edge.
+fn arc_box_dist(a: [f64; 2], c: [f64; 2], sw: f64, lo: [f64; 2], hi: [f64; 2]) -> f64 {
+    let rr = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
+    let a0 = dmath::atan2(a[1] - c[1], a[0] - c[0]);
+    let tau = std::f64::consts::TAU;
+    let within = |th: f64| {
+        let mut d = (th - a0) * sw.signum();
+        while d < 0.0 {
+            d += tau;
+        }
+        while d >= tau {
+            d -= tau;
+        }
+        d <= sw.abs()
+    };
+    let at = |th: f64| {
+        let (sn, cs) = dmath::sin_cos(th);
+        [c[0] + rr * cs, c[1] + rr * sn]
+    };
+    // crossings of the edge lines, inside the edge and the sweep
+    for (k, v) in [(0, lo[0]), (0, hi[0]), (1, lo[1]), (1, hi[1])] {
+        let o = 1 - k;
+        let h = v - c[k];
+        let q = rr * rr - h * h;
+        if q < 0.0 {
+            continue;
+        }
+        for sgn in [-1.0, 1.0] {
+            let w = c[o] + sgn * q.sqrt();
+            if w >= lo[o] && w <= hi[o] {
+                let p = if k == 0 { [v, w] } else { [w, v] };
+                if within(dmath::atan2(p[1] - c[1], p[0] - c[0])) {
+                    return 0.0;
+                }
+            }
+        }
+    }
+    let end = at(a0 + sw);
+    let mut best = box_dist(a[0], a[1], lo, hi).min(box_dist(end[0], end[1], lo, hi));
+    let mut cands: Vec<f64> = (0..4).map(|k| k as f64 * std::f64::consts::FRAC_PI_2).collect();
+    for q in [[lo[0], lo[1]], [hi[0], lo[1]], [hi[0], hi[1]], [lo[0], hi[1]]] {
+        cands.push(dmath::atan2(q[1] - c[1], q[0] - c[0]));
+    }
+    for th in cands {
+        if within(th) {
+            let p = at(th);
+            best = best.min(box_dist(p[0], p[1], lo, hi));
+        }
+    }
+    best
+}
+
+/// Distance from (x, y) to the box [lo, hi] (0 inside).
+fn box_dist(x: f64, y: f64, lo: [f64; 2], hi: [f64; 2]) -> f64 {
+    let dx = (lo[0] - x).max(0.0).max(x - hi[0]);
+    let dy = (lo[1] - y).max(0.0).max(y - hi[1]);
+    (dx * dx + dy * dy).sqrt()
+}
+
+/// The open region's air taken out: a run of level feed moves (cuts and links at one depth) whose
+/// tool disk keeps at least r from the stock's box all along (tangent to it at most) removes
+/// nothing (the stock and the part lie in the box), so it is replaced by up, across at the
+/// retract height, and down, when the run is longer than that detour is worth (4r): rapid up and
+/// down (the last `SIDE_IN` at the plunge feed) where the disk is `AIR_CLEAR` beyond the box,
+/// else at the feed (air beside the box). The box distance is sampled every `AIR_SAMPLE` along the moves; it moves
+/// at most as fast as the point, so the sampled least, less half a sample, bounds it. What the op
+/// clears is unchanged: only moves that remove nothing go. A clear round a part that fills the
+/// stock (rings mostly outside it, a slot between) is then left with what cuts.
+fn trim_air(
+    mv: &[PMove],
+    start: [f64; 3],
+    (lo, hi): ([f64; 2], [f64; 2]),
+    r: f64,
+    retract: f64,
+    feed: (f64, f64),
+) -> Vec<PMove> {
+    // air: the disk at least r from the box (tangent to it at most: it removes nothing), less a
+    // rounding allowance far under any cut
+    let need = r - 1e-6;
+    let rapid_ok = |p: [f64; 3]| box_dist(p[0], p[1], lo, hi) >= r + AIR_CLEAR;
+    // each move: (from, to, air at depth, length)
+    let mut info: Vec<([f64; 3], [f64; 3], bool, f64)> = Vec::with_capacity(mv.len());
+    let mut at = start;
+    // the straight level moves cut so far, by their ends (either way): one that repeats a
+    // segment already cut at its depth is air (the tool's body swept those very places)
+    let key = |p: [f64; 3]| [p[0].to_bits(), p[1].to_bits(), p[2].to_bits()];
+    let mut done: std::collections::BTreeSet<([u64; 3], [u64; 3])> = std::collections::BTreeSet::new();
+    for m in mv {
+        let to = match *m {
+            PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+            PMove::Cycle { .. } => {
+                info.push((at, at, false, 0.0));
+                continue;
+            }
+            // a probe move is never air to trim (probing ops do not come here)
+            PMove::Probe { to, back, .. } => {
+                let end = if back { at } else { to };
+                info.push((at, end, false, 0.0));
+                at = end;
+                continue;
+            }
+        };
+        let level = to[2] == at[2];
+        let (air, len) = match *m {
+            PMove::Line { phase, .. } if level && matches!(phase, Phase::Cut | Phase::Link) => {
+                let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                let again = done.contains(&(key(at), key(to))) || done.contains(&(key(to), key(at)));
+                if phase == Phase::Cut {
+                    done.insert((key(at), key(to)));
+                }
+                (
+                    again || seg_box_dist([at[0], at[1]], [to[0], to[1]], lo, hi) >= need,
+                    l,
+                )
+            }
+            PMove::Arc { c, cw, .. } if level => {
+                let rr = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
+                let tau = std::f64::consts::TAU;
+                let mut sw = a1 - a0;
+                if cw {
+                    while sw >= 0.0 {
+                        sw -= tau;
+                    }
+                } else {
+                    while sw <= 0.0 {
+                        sw += tau;
+                    }
+                }
+                let _ = a1;
+                (arc_box_dist([at[0], at[1]], c, sw, lo, hi) >= need, sw.abs() * rr)
+            }
+            _ => (false, 0.0),
+        };
+        info.push((at, to, air, len));
+        at = to;
+    }
+    let mut out = Vec::with_capacity(mv.len());
+    let mut i = 0;
+    while i < mv.len() {
+        if !info[i].2 {
+            out.push(mv[i]);
+            i += 1;
+            continue;
+        }
+        let mut j = i;
+        let mut len = 0.0;
+        while j < mv.len() && info[j].2 {
+            len += info[j].3;
+            j += 1;
+        }
+        let (a, b) = (info[i].0, info[j - 1].1);
+        if len > 4.0 * r && a[2] + SIDE_IN < retract {
+            // came straight down to a just before: take that descent back instead of going up
+            let mut came_down = false;
+            while let Some(PMove::Rapid { to } | PMove::Line { to, .. }) = out.last().copied() {
+                let prev_at = out_prev(&out, start);
+                if to[0] == a[0]
+                    && to[1] == a[1]
+                    && prev_at[0] == a[0]
+                    && prev_at[1] == a[1]
+                    && prev_at[2] > to[2]
+                {
+                    out.pop();
+                    came_down = true;
+                } else {
+                    break;
+                }
+            }
+            if came_down {
+                let p = out_prev_end(&out, start);
+                if p[2] < retract {
+                    out.push(PMove::Rapid {
+                        to: [p[0], p[1], retract],
+                    });
+                }
+            }
+            // up: rapid where the disk is clear of the box by the rapids' margin, else at the feed
+            // (beside the box, tangent at most: air either way)
+            if came_down {
+            } else if rapid_ok(a) {
+                out.push(PMove::Rapid {
+                    to: [a[0], a[1], retract],
+                });
+            } else {
+                out.push(PMove::Line {
+                    to: [a[0], a[1], retract],
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
+            out.push(PMove::Rapid {
+                to: [b[0], b[1], retract],
+            });
+            if rapid_ok(b) {
+                out.push(PMove::Rapid {
+                    to: [b[0], b[1], b[2] + SIDE_IN],
+                });
+                out.push(PMove::Line {
+                    to: b,
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+            } else {
+                out.push(PMove::Line {
+                    to: b,
+                    f: feed.0,
+                    phase: Phase::Link,
+                });
+            }
+        } else {
+            out.extend_from_slice(&mv[i..j]);
+        }
+        i = j;
+    }
+    // a visit that goes straight down and straight back up where it came (nothing between) cuts
+    // nothing it had not: both go
+    loop {
+        let mut k = None;
+        let mut prev = start;
+        for i in 0..out.len().saturating_sub(1) {
+            let (a, b) = match (out[i], out[i + 1]) {
+                (
+                    PMove::Rapid { to: a } | PMove::Line { to: a, .. },
+                    PMove::Rapid { to: b } | PMove::Line { to: b, .. },
+                ) => (a, b),
+                _ => {
+                    prev = out_prev_end(&out[..=i], start);
+                    continue;
+                }
+            };
+            let vertical = |p: [f64; 3], q: [f64; 3]| p[0] == q[0] && p[1] == q[1];
+            if vertical(prev, a) && a[2] < prev[2] && vertical(a, b) && b[2] > a[2] {
+                k = Some((i, prev, b));
+                break;
+            }
+            prev = a;
+        }
+        let Some((i, p, b)) = k else { break };
+        // down from p to a, up to b: one vertical move from p to b (or none)
+        out.remove(i + 1);
+        out.remove(i);
+        if b[2] > p[2] {
+            out.insert(i, PMove::Rapid { to: b });
+        } else if b[2] < p[2] {
+            // ends lower than it began: keep the descent to there as it was taken (feed)
+            out.insert(
+                i,
+                PMove::Line {
+                    to: b,
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                },
+            );
+        }
+    }
+    out
+}
+
+/// Where the tool is after the moves `out` (the start if none).
+fn out_prev_end(out: &[PMove], start: [f64; 3]) -> [f64; 3] {
+    match out.last() {
+        Some(PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. }) => *to,
+        _ => start,
+    }
+}
+
+/// Where the tool is before the last of `out`.
+fn out_prev(out: &[PMove], start: [f64; 3]) -> [f64; 3] {
+    out_prev_end(&out[..out.len().saturating_sub(1)], start)
 }
 
 /// A loop's box from its segments' ends (arcs may bulge past it): for choosing loops only.

@@ -732,13 +732,18 @@ impl Nav {
         true
     }
 
-    /// Starts a smooth move to a view; any mouse press or wheel stops it where it is.
     /// Straight to `to`, no transition.
     pub fn jump_to(&mut self, to: Camera) {
         self.transition = None;
         self.camera = to;
     }
 
+    /// Where the camera is going: a transition's end, else where it is.
+    pub fn heading_to(&self) -> Camera {
+        self.transition.as_ref().map_or(self.camera, |t| t.to)
+    }
+
+    /// Starts a smooth move to a view; any mouse press or wheel stops it where it is.
     pub fn go_to(&mut self, to: Camera) {
         self.transition = Some(Transition {
             from: self.camera,

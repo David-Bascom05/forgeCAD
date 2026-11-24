@@ -6,7 +6,7 @@ machining
 # the rest of the outline cleared down to just above them.
 shared tol = 0.01
 
-f    = part("bracket.fg", group: "N")
+f    = part("bracket.fg", material: "6061-T6")
 m    = machine("generic-vmc3")
 t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
 t2   = tool("flat-6", t: 2, stickout: 26, holder: "bt40-er32")

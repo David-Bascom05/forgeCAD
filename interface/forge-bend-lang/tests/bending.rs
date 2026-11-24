@@ -14,7 +14,7 @@ right = flange(base.edge(plan.outline[1]), height: h)\n\
 left = flange(base.edge(plan.outline[3]), height: h)\n";
 
 fn dir(tag: &str) -> PathBuf {
-    let d = std::env::temp_dir().join(format!("fg-bending-{}-{tag}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("fg-bending-{}-{tag}", forge_dirs::process_id()));
     std::fs::create_dir_all(&d).unwrap();
     std::fs::write(d.join("channel.fg"), CHANNEL).unwrap();
     d

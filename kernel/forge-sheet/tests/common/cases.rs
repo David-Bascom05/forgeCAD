@@ -154,7 +154,7 @@ pub fn blob(c: Point2, r: f64, rng: &mut Rng) -> ProfileLoop {
         })
         .collect();
     pts.push(pts[0]);
-    let s = PlaneSpline::through(pts, None, None).expect("a ring of distinct points");
+    let s = PlaneSpline::through_periodic(pts).expect("a ring of distinct points");
     ProfileLoop::new(vec![(Segment::Spline(Arc::new(s)), 0)])
 }
 
