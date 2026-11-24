@@ -1270,7 +1270,11 @@ fn stock_is_a_bar_a_tube_or_a_modelled_solid() {
     // the stock)
     ok(&stocked_to("solid(\"blank.fg\")", &tmp, 0.5), "solid");
     let cam = stocked("solid(\"blank.fg\")", &tmp);
-    assert!(cam.ops.iter().any(|o| o.refusal.as_deref().is_some_and(|r| r.contains("support under the stock"))));
+    assert!(cam.ops.iter().any(|o| {
+        o.refusal
+            .as_deref()
+            .is_some_and(|r| r.contains("support under the stock"))
+    }));
     // a blank whose section changes with height is not taken
     std::fs::write(
         tmp.join("stepped.fg"),
@@ -1278,6 +1282,10 @@ fn stock_is_a_bar_a_tube_or_a_modelled_solid() {
     )
     .unwrap();
     let cam = stocked_to("solid(\"stepped.fg\")", &tmp, 0.5);
-    assert!(cam.errors.iter().any(|e| e.contains("is not a prism along z")), "{:?}", cam.errors);
+    assert!(
+        cam.errors.iter().any(|e| e.contains("is not a prism along z")),
+        "{:?}",
+        cam.errors
+    );
     let _ = std::fs::remove_dir_all(&tmp);
 }
