@@ -81,8 +81,7 @@ raised by it), both default 0, either may be negative; `facing`, `clear`, `conto
 take `leave_axial:`, the others refuse it. G4 grows the part by the larger of the two.
 
 A contour's `direction:` is `"climb"` (the part on the tool's right, with the spindle M03) or
-`"conventional"`; by default, as built: the loops run counter-clockwise, so an outside contour is
-conventional and an inside one climb. `finish: n` (default 1) cuts n radial passes at each level,
+`"conventional"` (default climb, as pockets and clearing are). `finish: n` (default 1) cuts n radial passes at each level,
 `finish_step:` apart (default a tenth of the tool's diameter), the last at the contour's own offset;
 `spring: n` (default 0) repeats the last pass n times. Only `contour` takes these four.
 

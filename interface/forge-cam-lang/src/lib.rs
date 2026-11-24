@@ -3334,8 +3334,8 @@ fn pockets_of(sec: &Region) -> Result<Vec<Region>, String> {
 }
 
 /// The section's outer loops alone (outside work), or its islands as pocket boundaries.
-/// A contour's passes from its arguments: `direction: "climb" | "conventional"` (default: as
-/// built, an outside contour conventional and an inside one climb), `finish: n` radial passes
+/// A contour's passes from its arguments: `direction: "climb" | "conventional"` (default
+/// climb), `finish: n` radial passes
 /// (default 1) `finish_step:` apart (default a tenth of the tool's diameter), `spring: n` the
 /// last pass again (default 0).
 fn contour_passes(a: &BTreeMap<String, V>, d: f64) -> Result<ops::Passes, String> {
@@ -3347,9 +3347,9 @@ fn contour_passes(a: &BTreeMap<String, V>, d: f64) -> Result<ops::Passes, String
         Ok(x as usize)
     };
     let climb = match a.get("direction") {
-        None => None,
-        Some(V::Str(s)) if s == "climb" => Some(true),
-        Some(V::Str(s)) if s == "conventional" => Some(false),
+        None => true,
+        Some(V::Str(s)) if s == "climb" => true,
+        Some(V::Str(s)) if s == "conventional" => false,
         Some(_) => return Err("direction: \"climb\" or \"conventional\"".into()),
     };
     let finish_step = get_num(a, "finish_step", Some(0.1 * d))?;

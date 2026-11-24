@@ -1087,10 +1087,11 @@ fn axial_stock_to_leave_raises_the_floors() {
     );
 }
 
-/// A contour's direction and passes (Fusion parity): with M03 an outside contour as built runs
-/// counter-clockwise round the part (conventional: G3 at its corners); `direction: "climb"`
-/// reverses it (G2). `finish: n` radial passes `finish_step` apart, the last at the contour's own
-/// offset, and `spring: n` repeats the last: each a loop at every level, all certified.
+/// A contour's direction and passes (Fusion parity): with M03 an outside contour is climb by
+/// default, clockwise round the part (G2 at its corners); `direction: "conventional"` runs it
+/// counter-clockwise (G3). `finish: n` radial passes `finish_step` apart, the last at the
+/// contour's own offset, and `spring: n` repeats the last: each a loop at every level, all
+/// certified.
 #[test]
 fn a_contour_takes_its_direction_and_passes() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
@@ -1120,10 +1121,15 @@ fn a_contour_takes_its_direction_and_passes() {
         (prof.contains("G3 "), prof.contains("G2 "), plunges)
     };
     let (g3, g2, n0) = run("");
-    assert!(g3 && !g2, "as built: conventional outside");
+    assert!(g2 && !g3, "climb by default: clockwise round the part");
     let (g3, g2, n1) = run(", direction: \"climb\"");
-    assert!(g2 && !g3, "climb outside: clockwise round the part");
+    assert!(g2 && !g3);
     assert_eq!(n1, n0);
+    let (g3, g2, _) = run(", direction: \"conventional\"");
+    assert!(
+        g3 && !g2,
+        "conventional outside: counter-clockwise round the part"
+    );
     let (_, _, n2) = run(", direction: \"conventional\", finish: 2, finish_step: 0.5, spring: 1");
     assert_eq!(n2, 3 * n0, "two radial passes and a spring pass at each level");
     let cam = forge_cam_lang::run(
