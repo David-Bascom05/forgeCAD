@@ -69,13 +69,28 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `thread_mill(SETUP, PART.HOLE, tool:, length:, passes:, spring:, hand:, starts:, lead:)` | a hole's recorded thread (`thread:`, or `screw:` with `fit: "tap"`), the model not carrying it: declares a cosmetic thread Δ per place (the ring from the bore to the major diameter over `length`, default the depth less two pitches), listed in the op's `removals`, and is certified against P ∖ Δ (never a blanket tolerance). Down the bore, in to the radius, up a helix of the pitch (G3: right hand), out. `passes: n` radial passes splitting the depth from the bore to the major evenly (default 1), `spring: n` the last again, `hand: "left"` climbs down from the top (G3), `starts: n` a helix of n pitches per turn once per start, each a pitch higher, `lead: "arc"` in and out on a half circle tangent to the helix (default `"line"`) |
 | `bore(SETUP, PART.HOLE, tool:, pitch:, ramp:, finish_leave:, spring:, leave:, leave_axial:)` | helical bore of a round hole along −z: the tool's centre on the hole's radius less its own, down a helix of `pitch:` per turn (default a 3° ramp; or `ramp:` degrees, at most 30), G3 (climb), a full circle at the bottom, back to the axis, up. `finish_leave:` leaves that much for a second helix at the final radius; `spring: n` repeats it. The tool must be at least half the hole across (no core left), else refused with the fix (`pocket(..)` the hole). Certified against the part |
 | `edge_break(SETUP, tool:, size:, tip_offset:, at:)` | chamfer/deburr of the part's top edges with a chamfer mill or spot drill of 30° to 150°: a chamfer `size` wide at half the tool's angle from the wall (45° for a 90° tool), its tip `tip_offset:` below the chamfer's bottom (default 0.2) so the flank, not the tip, cuts. The removal is declared (Δ, in `removals`) and the op certified against P ∖ Δ. In this phase: the part's top, over vertical walls; sharp corners between lines only |
-| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), then its counterbore (a counterbore tool of its diameter, else the largest end mill under it pocketing the circle) or countersink (a countersink, chamfer or spot tool of its angle, plunged until the cone is its diameter at the mouth), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`). A blind hole with a flat floor is drilled with the drill's point on the floor; the ring that leaves is said |
-| `zlevel(SETUP, tool:, leave:, from:, to:, down:, stepover:, area:, grid:)` | 3-axis roughing, offset clearing (not adaptive): at each level from `from` (the stock's top) down to `to`, `down` apart (and at the part's own top), the tool centres the drop-cutter leaves free on a CL grid `grid` apart, cleared by passes `stepover` apart (at most the tool's radius) from that region's boundary; `area: (x0, y0, x1, y1)` bounds the tool centres. Its flat bottom's sweep is recorded in the in-process stock |
-| `parallel(SETUP, tool:, stepover:, angle:, step:, leave:, area:, floor:)` | 3-axis finishing: zig-zag rows `stepover` apart at `angle` degrees, each dropped onto the part (samples at most `step` apart, split until each move is proven) |
-| `waterline(SETUP, tool:, from:, to:, down:, area:, grid:)` | constant-z contours where the tool's reach crosses each level (marching squares on a CL grid, each crossing by certified bisection) |
-| `pencil(SETUP, tool:, area:, grid:, kink:)` | along the CL surface's creases (where the tool touches two faces): concave corners and fillets smaller than the tool |
-| `scallop(SETUP, tool:, stepover:, area:, grid:)` | passes `stepover` apart measured along the part (level sets of the distance over the CL surface from the area's edge) |
-| `rest(SETUP, tool:, after: TOOL, min:, stepover:, step:, area:, grid:)` | parallel rows only where `after` (a larger earlier tool) left more than `min` (default 0.05) |
+| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), then its counterbore (a counterbore tool of its diameter, else the largest end mill under it pocketing the circle) or countersink (a countersink, chamfer or spot tool of its angle, plunged until the cone is its diameter at the mouth), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`). A hole with an ISO class in the part (`hole(.., d: 6, fit: "H7")`) is drilled under size (the library's drill 0.1 to 0.4 under, nearest 0.2 under) and reamed (a reamer of its size, G85); a plain hole of a dowel's size with no class is said. A blind hole with a flat floor is drilled with the drill's point on the floor; the ring that leaves is said |
+| `zlevel(SETUP, tool:, leave:, from:, to:, step:, stepover:, area:, grid:)` | 3-axis roughing, offset clearing (not adaptive): at each level from `from` (the stock's top) down to `to`, `step` apart (and at the part's own top), the tool centres the drop-cutter leaves free on a CL grid `grid` apart, cleared by passes `stepover` apart (at most the tool's radius) from that region's boundary; `area: (x0, y0, x1, y1)` bounds the tool centres. Its flat bottom's sweep is recorded in the in-process stock |
+| `parallel(SETUP, tool:, stepover:, angle:, sample:, leave:, area:, floor:)` | 3-axis finishing: zig-zag rows `stepover` apart at `angle` degrees, each dropped onto the part (samples at most `sample` apart, split until each move is proven) |
+| `waterline(SETUP, tool:, from:, to:, step:, area:, grid:)` | constant-z contours where the tool's reach crosses each level (marching squares on a CL grid, each crossing by certified bisection) |
+| `pencil(SETUP, tool:, area:, grid:, kink:, min_len:)` | along the CL surface's creases, where the tool touches two faces at once (the double-contact locus): concave corners and fillets tighter than the tool. `kink` in 1/mm (a CL second difference: a local minimum across a jump in slope of at least that), default 1/D; `min_len` drops shorter runs |
+| `scallop(SETUP, tool:, cusp: \| stepover:, walls:, area:, from:, to:, grid:)` | constant stepover measured along the part: geodesic parallels, the level sets of the distance over the CL surface from the area's edge, or from walls steeper than `walls` degrees; `cusp:` derives the stepover |
+| `rest(SETUP, tool:, after: TOOL, after_leave:, min:, cusp: \| stepover:, sample:, margin:, angle:, area:, grid:)` | parallel rows only where `after` (an earlier tool of any end: flat, ball, bull) left more than `min` (default 0.05) that this tool reaches, from the two cutters' lower envelopes; grown by `margin` |
+| `steep_shallow(SETUP, tool:, cusp: \| (step:, stepover:), threshold:, overlap:, angle:, area:, from:, to:, grid:)` | waterlines where the surface is steeper than `threshold` (default 45°), parallel rows where it is shallower, each extended `overlap` over the other. With `cusp:` the step-down is d·sin θ and the stepover d·cos θ, d the largest spacing proven to leave at most that cusp, so the cusp holds on both sides of the threshold (on planes; curvature changes it to second order) |
+| `spiral(SETUP, tool:, cusp: \| stepover:, center: (x, y), r0:, r1:, direction: "out" \| "in", area:, from:, to:)` | an Archimedean spiral about a point, `stepover` apart per turn, dropped onto the part |
+| `radial(SETUP, tool:, cusp: \| stepover:, center: (x, y), r0:, r1:, area:, from:, to:)` | spokes about a point, at most `stepover` apart at `r1`, dropped onto the part |
+| `ramping(SETUP, tool:, cusp: \| step:, slope_min:, area:, from:, to:, grid:)` | waterline-like passes that descend continuously from one level to the next (no step-down mark); with `cusp:` the step-down is proven at slopes down to `slope_min` (default 30°) |
+| `flat(SETUP, tool:, cusp: \| stepover:, angle:, area:, from:, to:, grid:)` | the flat areas: the heights where the CL surface is flat (found and listed in the plan), each finished by rows at exactly that height where the tool stands on the face |
+
+The 3-axis ops share the 2D ops' meaning of `step:`: the step-down (zlevel, waterline,
+steep_shallow, ramping; `down:` is its old name, accepted until the next train with a warning;
+both given is refused, and `parallel` refuses `step:`, which used to mean its sample spacing).
+The finishing ops (parallel to flat) share: `leave:` (stock to leave), `floor:` (lowest
+tip height), `sample:` (the spacing of the drop-cutter's samples along a pass), `stay:` (the longest link that stays down,
+proven above the surface) and `lift:` (a lifted link's height over the surface); otherwise a
+link retracts. Every move is certified like any op. With `cusp:` the reply's `finish` gives the
+cusp asked, the cusp the spacing is proven to bound, the stepover, the step-down and the links
+made.
 | `program(SETUP or [SETUPS], post:, number:, ops:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control); `ops: OP` or `[OPS]` posts only those ops of its setups. Each op is certified on the stock every earlier op of its setup (and of the setup it continues) leaves, so those are posted first, by an earlier program or earlier in this one, or the program is refused with the fix; an op no program posts is not certified (`unposted`). `decimals:` and `feed_decimals:` set the program's number formats (the text is quantised, read back and certified at them), `coolant:` (`"flood"`, `"mist"`, `"through"`, `"off"`) every path's coolant, refused if the machine has none of it. `split: "setup"`: one program per setup, named `PROGRAM/SETUP` and numbered on from `number:` (the reply's program has its `setup`) |
 
 `ramp: DEG` (over 0, at most 30) enters each pass by a helix of half the tool's radius at that angle,
@@ -83,6 +98,109 @@ about the pass's start, where that disk lies in the tool centres' region (decide
 the pass is plunged. A helix is posted as G2/G3 with Z and checked as its arc swept over each
 piece's heights (a superset), in closed form against prism faces; next to any other face it is
 refused as undecided.
+
+### Feeds and speeds are params
+
+Every milling op (facing, clear, contour, pocket, slot, engrave, thread_mill, edge_break) and
+every `tool(..)` takes these args; an op's value wins over its tool's (kernel/forge-tooling/src/resolve.rs):
+
+| arg | unit | what |
+|---|---|---|
+| `vc:` or `rpm:` | m/min, rpm | cutting speed (at D_eff for a ball), or the spindle speed (wins) |
+| `chip:`, `fz:` or `feed:` | mm, mm, mm/min | the peak chip to hold (thinned for ae < D/2); a feed per tooth used as given (not thinned); or the feed |
+| `ap:` (= `step:`) | mm | axial depth per level (one of the two) |
+| `ae:` (= `stepover:`) or `max_angle:` | mm, degrees | radial width (clear and pocket cut their stepover wide), or the largest engagement angle |
+| `tilt:` | degrees | the tool's tilt toward the feed: a ball's contact moves out to D sin(α + tilt) |
+| `plunge_feed:`, `ramp_feed:`, `lead_in_feed:` | mm/min | entry feeds (default 30%, 30%, 100% of the feed: labelled "no data behind it"). Posted today: the plunge feed (plunges and helical ramps) and the feed; `ramp_feed` and `lead_in_feed` are resolved and reported but not yet posted on their own (forge-cam's `Cut` carries two feeds) |
+| `max_power:`, `max_torque:` | kW, N·m | limits: the feed (only the feed) is lowered to meet them; P ∝ fz^(1−mc), so exactly |
+| `max_deflection:` | mm | the tool's tip deflection limit: the feed (only) is lowered to meet it. δ = F/(3E)[(L³ − b³)/I_shank + b³/I_flute] (stepped cantilever, derived), F = 2 Mc/D the mean tangential force at the tip, L the stick-out, b the flute length, E and the flutes' equivalent diameter from the substrate's cited `[[substrate]]` record; the holder and spindle taken rigid (their compliance not checked). Reported as `derived.deflection_mm` |
+| `min_feed:`, `max_feed:` | mm/min | the feed range (engagement feed stays in it) |
+
+Thread milling: the width is the thread's own engagement on its arc in the bore (concave arc,
+feeds-speeds.md §2.3): cos φ = (r_b² − r_c² − r_t²)/(2 r_c r_t), r_b the bore, r_c = r_m − r_t the
+centre path, held as the straight cut of the same angle (source `default`, said in the note); the
+chip is held at the edge, and the centre is fed r_c/r_m of the edge's feed (plunge, ramp and
+lead-in alike). A user `ae:`/`max_angle:` or programmed `fz:`/`feed:` is used as given.
+
+Op classes (cutting.toml `[[op_class]]`, cited: medians of the makers' own rough and finish
+columns against their slot column for the same tool, verify/feeds-vs-makers): a tool preset named
+for the op's class (`N rough`, `P slot`, ...) is taken first, then a `general` one. With generic
+data, slot and general hold the slot chip; finish holds 0.75× it; rough holds 1.466× it only where
+engagement feed measures a sample engaged under 90° (ae < D/2): the op's static feed, which also
+runs entries and unmeasured moves, keeps the slot chip.
+
+Engagement feed (clear, pocket, contour, slot, facing; not when the user programmed `fz:`/`feed:`):
+TOOLPATH-QUALITY's measurement on the in-process stock gives each FIXED-LENGTH sample (one tool
+diameter) its engaged angle, ap and ae; the feed holds the resolved chip through radial thinning,
+then is lowered (only the feed) so the sample's power and torque stay within `max_power:`,
+`max_torque:` and the spindle's power at the rpm, inside [`min_feed:`, `max_feed:`]. Samples are
+joined only at the same clamp, never by engagement band; no material-abrasion term.
+
+The stock material is `part(.., material:)` (a forge-material name; stock is often not the
+part's own record), else the part document's material. Its ISO 513 group is `part(.., group:)`,
+else its `[[stock]]` record's in cutting.toml, else its family's class (steel P, stainless M,
+iron K, aluminium and copper N, titanium S); nothing defaults. A `[[stock]]` record with measured
+Kienzle rows (Ti-6Al-4V and C45: Klippel et al. 2022, CC BY 4.0) gives kc1.1/mc at the cut's speed
+for power and torque. The tool's substrate (`material`: carbide, HSS, ...) picks the group's
+speed column; cermet, ceramic, CBN and PCD have none, so the maker's preset or the user's speed
+is needed; a coating moves no generic number (the maker's preset carries it). With no speed or
+chip from any layer the op is refused, with the fix.
+
+Plastics (forge-material family `plastic`) are group O: not an ISO 513 class, the makers' own
+grouping. Its speed and chip by diameter are Harvey's plastics finisher sheet (acrylic, acetal,
+nylon, PEEK ... unfilled), cited; no Kienzle data is published, so power and torque read `not
+checked`, and no HSS speed (an HSS tool needs the user's speed). Plastics melt: supervise the speed.
+
+**A tool with maker presets** uses them first: `Tool::preset_for_material` takes the maker's row
+that names the part's stock material (its alloy in the maker's text, else its family pattern such
+as 6xxx or C3xxxx; the slowest hardness class among equals), else `Tool::preset_for` the class's
+representative ("<group> <class>"). A preset's fz is the maker's programmed feed at its own
+stated width and depth, so its chip is fz·k(ae/D)·sin κ. The op's class (`Tool::class_for`): a
+slot is slot; clearing, pocketing and facing rough; a contour at a finishing width (≤ 10% D, or
+the tool's finish preset's ae where wider) finish, else rough; the rest general.
+
+**A tool with no maker data** takes the **10th percentile (P10) of its class** from
+kernel/forge-tooling/data/generic.toml (generated from the makers' cited rows by
+verify/feeds-vs-makers, `cargo run -p feeds-vs-makers -- --generic`): a class is material group ×
+material family (the part's forge-material family: N splits aluminium / copper, S titanium /
+nickel) × op class × maker tier (material-specific / general-purpose, an estimate from the
+makers' product lines) × flutes × coating × helix band, written only with ≥ 10 rows from ≥ 2
+makers; where the tool's class has fewer, the lookup opens helix, then tier, coating, flutes, op
+class, and last the family (the note names the class used). A part that names only its group
+gets the whole group (in N, copper's speeds among them). P10, not the median, because the costs are asymmetric: too fast breaks tools, too
+slow only costs time. Speed is the class's P10 speed; the chip is the class's P10 slot chip relative to
+the group's slot chip at the diameter; a rough or finish op's factor is the class's own P10
+op/slot chip ratio (else cutting.toml `[[op_class]]`). The value's `spread` (JSON below) gives the
+class's min / P10 / P25 / median / max so the user can push up knowingly. Carbide only (every maker row
+is); HSS and groups with no class use cutting.toml's group columns. The hold-out per maker (verify/feeds-vs-makers/REPORT.md) gives how often P10 is above a maker's
+own number.
+
+Each value is resolved in layers, each over the one before: `default` → `material` (the
+stock's data, else its group in cutting.toml) → `library` (the tool's `[[tool.preset]]` for the group, with its cite) →
+`user`. Then only two things lower a value, and both are reported with the reason:
+`machine-clamped` (rpm range; max feed, held 1 mm/min under it) and `limited` (the user's own
+limits). A user's value is never changed silently. Formulas (feeds.rs, with sources): chip thinning
+hex = fz sin φ, φ = acos(1 − 2ae/D); the mean chip hm = fz (1 − cos φ)/φ for Kienzle's
+kc = kc1.1 hm^(−mc); Pc = ap ae vf kc / 6e7 kW; Mc = Pc 30e3/(π n) N·m. Contact (feeds::contact): for ap < re (bull re, ball D/2), D_eff = D − 2re + 2√(re² − (re − ap)²) and the axial thinning sin κ = √(1 − (1 − ap/re)²) (a ball: D_eff/D, its width cut at D_eff); a tilted ball D_eff = D sin(min(α + tilt, 90°)), α = acos(1 − 2ap/D). Thinning together is capped at 3×: past it the chip is held under the target.
+
+Checks per op: rpm (a clamp warns), power and torque against the machine's spindle curve at the
+rpm (over: the op is refused, with the numbers), feed against the machine's maximum, the peak chip
+against the tool's own chip (over: warns). Missing data is `not checked`, never a pass: no power
+curve, an rpm outside the curve (no extrapolation), no kc data for the material, no maximum feed,
+no tool data.
+
+Drilling (`drill(..)`: spot and drill) is its own model, forge_tooling::resolve::drilling: `vc:`|`rpm:`,
+`f:` (mm/rev)|`feed:` (mm/min), `peck:` (mm, 0 none), `max_power:`, `max_torque:` on the op. Layers:
+the group's `[[drill]]` row for the drill's substrate (cutting.toml: vc and the feed per rev by
+diameter, each row one maker's cited series held for the substrate: Guhring 5510 carbide and 651
+HSS, OSG EX-SUS-GOLD HSS for N and M) → the drill's own preset (its maker's vc and mm/rev) → the user.
+Sandvik's drilling formulas: n = 1000 vc/(π Dc), vf = fn n, Q = Dc fn vc/4, Pc = fn vc Dc kc/240e3,
+Mc = Pc 30e3/(π n), kc at (fn/z) sin κr. Peck: the user's, else PMPA's schedule (Cribsheet #116: peck past 3–4 D; 3.5 D, 2 D, then 1 D),
+held at its 1 D for every peck from 3 D (one G83 Q; errs slow). A spot drill borrows the twist-drill row at the diameter it cuts
+to (said; no spot data read). Reply: ops[].drilling[] {role, tool, values, derived, checks}. Taps (`drill(.., plan: "auto")` on a threaded hole) run at `tap_vc:`|`tap_rpm:`, else the
+tap's preset, else the group's `[[tap]]` row (OSG A Brand cut-tap tables, List 16505/16515: the low
+end of the slower list; none for S or H), clamped to the machine; the feed is the pitch per
+revolution. Reply rows: role spot | drill | tap.
 
 `leave:` is the radial stock to leave (on walls: each pass's offset grows by it) and
 `leave_axial:` the axial stock (on floors: the op's lowest level, `to:` or a hole's depth, is
@@ -155,6 +273,56 @@ lines with one feed each: on deep_boss 1,040 blocks one-way and 941 two-way (mea
 13.5 mm) against clear's 1,171 (5.5 mm); on deep_open_slot 162 against 389. These are simulations, not machine trials; the planner has
 no block-rate limit.
 
+## Probing
+
+A touch probe is a tool that cuts nothing, and probing ops measure with it.
+
+```text
+p   = probe("renishaw-omp40-2", t: 20, ball: 6, length: 50, stem: 3, body: [(20, 0, 69)])
+z0  = probe_wcs(op1, tool: p, kind: "surface", at: (25, 25, 20), wcs: 54)
+w   = probe_wcs(op1, tool: p, kind: "web", at: (0, 0, 10), size: 86, axis: "x")
+c   = probe_wcs(op1, tool: p, kind: "corner", at: (43, 43, 10), side: (1, 1))
+b   = probe_wcs(op1, tool: p, kind: "bore", at: (0, 0, 8), size: 20)
+chk = inspect(op1, tool: p, at: (43, 0, 10), normal: (1, 0, 0), nominal: 43, tol: 0.05)
+```
+
+- `probe(DEVICE, t:, ball:, length:, stem:, body:)`: the stylus ball's diameter, the stylus
+  length (mounting face to ball centre), the stem's diameter, and the probe body's rings
+  `(r, from, to)` above the mounting face (its envelope, needed to check it). The device's
+  record (kernel/forge-probe) fills these once that library is on this base.
+- `probe_wcs(SETUP, tool:, kind:, at:, ...)`: `surface` (`at` is where the ball's tip meets the
+  surface), `bore`, `boss` (diameter `size:`), `web`, `pocket` (width `size:` across `axis:`),
+  `corner` (`side:` the corner's free side). For the features, `at` is the centre (or corner) at
+  the height the ball's centre probes at. `wcs:` names the work offset the measurement is for.
+- `inspect(SETUP, tool:, at:, normal:, nominal:, tol:)`: one point along its outward normal.
+- Each takes `approach:` (start this far off the surface, default 5), `over:` (how far past the
+  nominal contact the search may go, default 1), `entry:` (the contact window starts this far
+  before the contact, default twice the setup's clearance, at least 0.5), `feed:` (the search,
+  default 100 mm/min) and `link_feed:` (the moves between, default 1000 mm/min).
+
+The approach must exceed `entry` by more than the clearance, so every probe move has a
+checked approach before its window. The window's soundness assumes the control stops within
+`over` of the first trigger: that is the probe's overtravel specification, so `over` must not
+exceed it (the device records give it as `overtravel`). Inside the window the ball is exempt
+against every face, not only the probed one (verify/forge-cam RESUME, H.probe): a second face
+there would give a wrong measurement, not a crash.
+
+Each probe move is certified as its whole search: from its start to `over` past the nominal
+contact, as if the probe never triggered. Every body of the probe keeps the setup's clearance
+from the part and the stock on every move. The one exception is the ball inside the contact
+window, from `entry` before the contact to `over` past it. A probe is never spun. It posts as
+the dialect's cited probe move: G38.2 on linuxcnc and grbl, then a move straight back to where
+the search started. On a control whose probing macros are cited instead (Haas: Renishaw Inspection Plus,
+H-2000-6222), a probe path is written with them: the probe switched on (G65 P9832), every feed
+move a protected positioning move (P9810), each probe move a single-surface measure (P9811, Q
+the overtravel, S the work offset for a `surface` probe with `wcs:`, so `sets_wcs` is true
+there), then switched off (P9833) and Z home, as the macros require. A probe move not along X, Y
+or Z cannot be a single-surface measure and is refused. A control with neither refuses the
+program. The
+reply's op carries `probe`: the kind, what it measures, its points (each surface point and the
+direction of travel), the work offset, `sets_wcs` (false: a G38.2 post leaves the result in
+the control's variables and writes no offset), and the inspection's nominal and tolerance.
+
 ## Libraries
 
 Built in: generic tools, conservative holders, generic machines, generic vises and soft-jaw blanks
@@ -173,6 +341,11 @@ setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, ma
 ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mill|edge_break|bore), setup, status (built|refused),
            tool {id, T, H, type, d, holder, stickout} | null, plan[] (hole plans),
            feeds {rpm, vc, fz, hex, hm, f, power_kw, torque_nm} | null,
+           feeds_speeds {spread {class, rows, makers[], vc {min, p10, p25, median, max}, chip {min, p10, p25, median, max}} | null,
+                    values {vc, rpm, chip, fz, feed, ap, ae, plunge_feed, ramp_feed, lead_in_feed,
+                    min_feed, max_feed: {v, unit, source (default|material|library|user|machine-clamped|limited), note}},
+                    derived {hex, hm, engagement_deg, d_eff, mrr_cm3_min, power_kw, power_pct, torque_nm, torque_pct},
+                    checks[] {what (rpm|power|torque|feed|chip), verdict (pass|warn|fail|not checked), value, limit, unit, why}} | null,
            path {moves, length_cut, length_rapid, time_s},
            certificate {verdict (pass|fail), certified, pairs, cells, least_cutter_distance, against},
            checks[] (failures only) {rule, verdict (fail|undecided), certified, value, limit, unit,

@@ -11,6 +11,7 @@ many and why.
     python3 tools/tooling/gen.py
 """
 import collections
+import glob
 import json
 import os
 import re
@@ -64,7 +65,7 @@ GROUPS = [
     ("M", r"stainless|duplex|austenit"),
     ("K", r"cast iron|grey iron|gray iron|ductile|nodular"),
     ("N", r"alumin|copper|brass|bronze|magnes|zinc|non[- ]?ferrous"),
-    ("O", r"plastic|acrylic|acetal|delrin|nylon|polycarbonate|peek|ptfe|uhmw"),
+    ("O", r"plastic|acrylic|acetal|delrin|nylon|polycarbonate|peek|ptfe|uhmw|cfrp|carbon fiber|graphite|epoxy|laminate"),
     ("P", r"steel|carbon|alloy steel|tool steel|low carbon|medium carbon"),
 ]
 
@@ -316,6 +317,31 @@ def preset(vendor, ty, f, r, x, name, how):
     return dict(name=name, group=g, vc=vc, fz=fz, ap=ap, ae=ae, cite=cite)
 
 
+CROSSCHECK = os.path.join(os.path.dirname(RAW), "crosscheck.toml")
+
+
+def crosscheck():
+    """(conflicts {(vendor, product id): [field]}, agreed {(vendor, product id)}) from
+    tools/tooling/crosscheck.py's output: our own words, no library value."""
+    conf, agree, cur = collections.defaultdict(list), set(), None
+    if os.path.exists(CROSSCHECK):
+        for line in open(CROSSCHECK):
+            line = line.strip()
+            if line in ("[[conflict]]", "[[agree]]"):
+                cur = {"kind": line}
+            elif " = " in line and cur is not None:
+                k, v = line.split(" = ", 1)
+                cur[k] = json.loads(v)
+                if cur["kind"] == "[[conflict]]" and "field" in cur:
+                    conf[(cur["vendor"], cur["product_id"])].append(cur["field"])
+                elif cur["kind"] == "[[agree]]" and "product_id" in cur:
+                    agree.add((cur["vendor"], cur["product_id"]))
+    return conf, agree
+
+
+CONFLICTS, AGREED = crosscheck()
+
+
 def tool(vendor, r, out, skips):
     vals = r["values"]
     ty = TOOL_TYPES.get(r["kind"])
@@ -395,8 +421,16 @@ def tool(vendor, r, out, skips):
         cites.append(pub("helix", r, stated(r, "helix")))
     presets = make_presets(vendor, ty, f, r, skips)
     tid = f"{vendor}-{r['id']}"
+    note = r.get("name", "")[:140]
+    if (vendor, r["id"]) in AGREED:
+        note += "; dimensions cross-checked 2026-11-24 against the maker's own Fusion tool library: they agree"
+    for fld in CONFLICTS.get((vendor, r["id"]), []):
+        cites.append(dict(path=fld, status="conflict", source=r["url"], taken=r.get("taken", TAKEN),
+                          value=next((c["value"] for c in cites if c["path"] == fld), ""),
+                          note="the maker's own Fusion tool library (cross-checked 2026-11-24) disagrees with this "
+                               "catalogue page; the record holds the catalogue's value: verify with the maker"))
     head = dict(id=tid, type=ty, **f, vendor=VENDORS[vendor], product_id=r["id"], real=True,
-                source=r["url"], taken=r.get("taken", TAKEN), note=r.get("name", "")[:140])
+                source=r["url"], taken=r.get("taken", TAKEN), note=note)
     out.lines.append("[[tool]]")
     for k, v in head.items():
         if v is not None and v != "":
@@ -737,42 +771,51 @@ REAL_TOOLS = os.path.join(RAW, "real-tools")
 
 
 def shop_presets(r, kind):
-    """One preset per printed ISO group: the first material the maker prints (its table's lead
-    row; of bracketing diameter columns, the first, the smaller tool's); vc the printed
-    optimum (Sumitomo min-optimum-max) else the range's low end; the feed as printed."""
-    out, seen = [], set()
+    """Per printed ISO group: "<G> general", the first material the maker prints (its table's
+    lead row; of bracketing diameter columns, the first, the smaller tool's), and every row as
+    "<G> general <material>"; vc the printed optimum (Sumitomo min-optimum-max) else the range's
+    low end; the feed as printed."""
+    out, seen, names = [], set(), set()
+
+    def start(c, x):
+        v = x.get("v")
+        if isinstance(v, list) and len(v) == 3 and re.search(r"\d+-\d+-\d+", str(x.get("stated", ""))):
+            return v[1], "the printed optimum (min-optimum-max)"
+        if isinstance(v, list):
+            return min(v), "the low end of the printed range"
+        return v, None
+
     for c in r.get("cutting") or []:
-        g = c.get("iso_group")
+        g = (c.get("iso_group") or "")[:1]  # Guhring's material codes (P1.1.1): their ISO letter
+        g = g if g in GROUP_ORDER else None
         fx = c.get("f") or c.get("fz")
-        if not g or g in seen or not fx:
+        if not g or not fx:
             continue
-        def start(x):
-            v = x.get("v")
-            if isinstance(v, list) and len(v) == 3 and "optimum" in str(c.get("material_stated", "")).lower() + str(r.get("notes", "")).lower():
-                return v[1], None
-            if isinstance(v, list) and len(v) == 3 and re.search(r"\d+-\d+-\d+", str(x.get("stated", ""))):
-                return v[1], "the printed optimum (min-optimum-max)"
-            if isinstance(v, list):
-                return min(v), "the low end of the printed range"
-            return v, None
-        vc, vh = start(c["vc"])
-        fz, fh = start(fx)
+        mat = " ".join(str(c.get("material_stated") or "").split())
+        code = c.get("iso_group") if len(str(c.get("iso_group") or "")) > 1 else ""
+        label = " ".join(x for x in (code, mat.split(";")[0]) if x)[:90]
+        todo = ([(f"{g} general", True)] if g not in seen else []) + ([(f"{g} general {label}", False)] if label else [])
         seen.add(g)
-        name = f"{g} general"
-        basis = [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "low end" in h]
-        notes = ["of the maker's materials for this group, the first printed"]
-        notes += [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "optimum" in h]
-        if kind == "drill":
-            notes.append("fz is the feed per revolution, mm/rev")
-        if re.search(r"column", str(c.get("material_stated", ""))):
-            basis.append("the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed")
-        if re.search(r"\b(SFM|IPR)\b", str(c["vc"].get("stated", "")) + str(fx.get("stated", ""))):
-            notes.append("metric values are exact conversions (SFM x 0.3048, IPR x 25.4)")
-        cite = dict(path=f"preset.{name}", status="estimate" if basis else "published", source=c.get("url") or r["url"],
-                    taken=r.get("taken", TAKEN),
-                    value=f"{c.get('material_stated', '')}; vc {c['vc'].get('stated', '')}; {fx.get('stated', '')}",
-                    basis="; ".join(basis), note="; ".join(notes))
-        out.append(dict(name=name, group=g, vc=vc, fz=fz, cite=cite))
+        vc, vh = start(c, c["vc"])
+        fz, fh = start(c, fx)
+        for name, lead in todo:
+            if name in names:
+                continue
+            names.add(name)
+            basis = [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "low end" in h]
+            notes = (["of the maker's materials for this group, the first printed"] if lead else [])
+            notes += [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "optimum" in h]
+            if kind in ("drill", "reamer", "counterbore"):
+                notes.append("fz is the feed per revolution, mm/rev")
+            if re.search(r"column", mat):
+                basis.append("the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed")
+            if re.search(r"\b(SFM|IPR)\b", str(c["vc"].get("stated", "")) + str(fx.get("stated", ""))):
+                notes.append("metric values are exact conversions (SFM x 0.3048, IPR x 25.4)")
+            cite = dict(path=f"preset.{name}", status="estimate" if basis else "published",
+                        source=c.get("url") or r["url"], taken=r.get("taken", TAKEN),
+                        value=f"{label}; {mat}; vc {c['vc'].get('stated', '')}; {fx.get('stated', '')}",
+                        basis="; ".join(basis), note="; ".join(notes))
+            out.append(dict(name=name, group=g, vc=vc, fz=fz, cite=cite))
     return out
 
 
@@ -803,8 +846,8 @@ def shop(vendor, r, outs, skips):
         base["note"] = (base["note"] + "; grades " + ", ".join(V("grades_available") or [])
                         + "; no preset: the maker prints vc but its feed only as a bar chart (F236)").strip("; ")
         outs["turning"].rec("groove_insert", {"id": rid, **f, **base}, cites)
-    elif k in ("indexable_drill", "drill", "thread_mill"):
-        ty = "thread_mill" if k == "thread_mill" else "drill"
+    elif k in ("indexable_drill", "drill", "thread_mill", "reamer", "counterbore"):
+        ty = {"thread_mill": "thread_mill", "reamer": "reamer", "counterbore": "counterbore"}.get(k, "drill")
         dcon = V("dcon") if V("dcon") is not None else V("dconms")
         dk = "dcon" if V("dcon") is not None else "dconms"
         f = dict(type=ty, dc=V("dc"), dcon=dcon, oal=V("oal") or V("lf"))
@@ -823,9 +866,22 @@ def shop(vendor, r, outs, skips):
             cites += [P("lcf", "lcf"), P("sig", "sig")]
             if isinstance(V("flutes"), (int, float)):
                 f["nof"] = V("flutes"); cites.append(P("nof", "flutes"))
-        else:
+        elif k == "thread_mill":
             f["lcf"], f["tp"], f["nof"] = V("apmx"), V("pitch"), V("flutes")
             cites += [P("lcf", "apmx"), P("tp", "pitch"), P("nof", "flutes")]
+        else:  # reamer, counterbore
+            if V("lcf") is None:
+                skips[f"{k} without a printed cutting length"] += 1
+                return
+            f["lcf"] = V("lcf")
+            cites.append(P("lcf", "lcf"))
+            nk = "nof" if V("nof") is not None else "flutes"
+            if isinstance(V(nk), (int, float)):
+                f["nof"] = V(nk)
+                cites.append(P("nof", nk))
+            extra = [f"{kk} {S(kk)}" for kk in ("tolerance", "pilot_d", "screw", "coolant") if V(kk) is not None]
+            if extra:
+                base["note"] = (base["note"] + "; " + "; ".join(extra)).strip("; ")
         mat = V("material")
         if isinstance(mat, str):
             f["material"] = "carbide" if "carbide" in mat.lower() else ("hss" if "hs" in mat.lower() else mat)
@@ -862,6 +918,114 @@ def shop(vendor, r, outs, skips):
         skips[f"shop kind {k}"] += 1
 
 
+# Maker-published machine-readable libraries (research/cam/tooling/libraries.md), imported with
+# each value cited to the library file and its version. RobbJack only: its licence allows import
+# into CAM systems ("Free to import into CAM/CAD/tool-management systems ...").
+LIBS = os.path.join(os.path.dirname(RAW), "libraries")
+ROBBJACK = dict(
+    file=os.path.join(LIBS, "robbjack", "robbjack-fusion360.tools"),
+    url="https://robbjack.com/data/cam/robbjack-fusion360.tools#v1.1-2026-11-02",
+    version="schema v1.1, generated 2026-11-02 (sha256 75f115ba..., per the maker's manifest)",
+    taken="2026-11-24")
+FUSION_KIND = {"flat end mill": "flat", "ball end mill": "ball", "bull nose end mill": "bull"}
+CLASS_OF = [("slot", r"slotting"), ("finish", r"finishing"), ("rough", r"roughing")]
+
+
+def robbjack(skips):
+    import zipfile
+    lib = ROBBJACK
+    d = json.loads(zipfile.ZipFile(lib["file"]).read("tools.json"))
+    out = Out()
+    src = f"{lib['url']} ({lib['version']})"
+    for t in d["data"]:
+        kind = FUSION_KIND.get(t["type"])
+        if not kind:
+            skips[f"library type {t['type']}"] += 1
+            continue
+        inch = t["unit"].startswith("inch")
+        k = 25.4 if inch else 1.0
+        u = "in" if inch else "mm"
+        g = t["geometry"]
+        cite = lambda path, key: dict(path=path, status="published", source=lib["url"], taken=lib["taken"],
+                                      value=f"{key} {g[key]} {u}")
+        f = dict(type=kind, dc=g["DC"] * k, lcf=g["LCF"] * k, dcon=g["SFDM"] * k, oal=g["OAL"] * k, nof=g["NOF"])
+        cites = [cite("dc", "DC"), cite("lcf", "LCF"), cite("dcon", "SFDM"), cite("oal", "OAL"),
+                 dict(cite("nof", "NOF"), value=f"geometry.NOF {g['NOF']}")]
+        if kind == "bull":
+            if not g.get("RE"):
+                skips["library bull without RE"] += 1
+                continue
+            f["re"] = g["RE"] * k
+            cites.append(cite("re", "RE"))
+        f["material"] = t.get("BMC")
+        cites.append(dict(path="material", status="published", source=lib["url"], taken=lib["taken"],
+                          value=f"BMC {t.get('BMC')}"))
+        rows = []
+        for pr in t.get("start-values", {}).get("presets", []):
+            mat = re.sub(r"\s*\(RobbJack tested\)$", "", pr["name"])
+            grp = group_of(mat)
+            m = re.search(r"values — ([^:]+):", pr.get("description", ""))
+            cls = next((c for c, rx in CLASS_OF if m and re.search(rx, m.group(1))), "general")
+            if not grp or not pr.get("v_c") or not pr.get("f_z"):
+                skips["library preset without an ISO group (wood) or values"] += 1
+                continue
+            vc = pr["v_c"] * (0.3048 if inch else 1.0)
+            ap = pr["stepdown"] * k if pr.get("use-stepdown") else None
+            ae = pr["stepover"] * k if pr.get("use-stepover") else None
+            rows.append(dict(g=grp, cls=cls, vc=vc, fz=pr["f_z"] * k, ap=ap, ae=ae, mat=mat, pr=pr,
+                             c={"material": mat}))
+        presets = []
+        for key in sorted({(x["g"], x["cls"]) for x in rows},
+                          key=lambda kk: (GROUP_ORDER.index(kk[0]), CLASS_ORDER.index(kk[1]))):
+            grp_rows = [x for x in rows if (x["g"], x["cls"]) == key]
+            rep, how = representative(key[0], grp_rows)
+            # a group with one material: its representative is that material, named in the cite;
+            # with several, each also gets "<G> <class> <material>"
+            named = [(x, f"{key[0]} {key[1]} {x['mat']}", None) for x in grp_rows] if len(grp_rows) > 1 else []
+            for x, name, h in [(rep, f"{key[0]} {key[1]}", how)] + named:
+                pr = x["pr"]
+                basis = [f"'{x['mat']}' mapped to ISO 513 group {x['g']} by its name"]
+                if h and not h.startswith("the group's representative"):
+                    basis.append(h)
+                notes = []
+                value = (f"{pr['name']}: v_c {pr['v_c']} {'ft/min' if inch else 'm/min'}, f_z {pr['f_z']} {u}"
+                         + (f", stepdown {pr['stepdown']} {u}" if x["ap"] is not None else "")
+                         + (f", stepover {pr['stepover']} {u}" if x["ae"] is not None else ""))
+                presets.append(dict(name=name, group=x["g"], vc=x["vc"], fz=x["fz"], ap=x["ap"], ae=x["ae"],
+                                    cite=dict(path=f"preset.{name}", status="estimate", source=lib["url"],
+                                              taken=lib["taken"], value=value, basis="; ".join(basis),
+                                              note="; ".join(notes))))
+        head = dict(id=f"robbjack-{t['product-id']}", **f, vendor="RobbJack", product_id=t["product-id"], real=True,
+                    source=t.get("product-link") or lib["url"], taken=lib["taken"],
+                    note=t.get("description", "")[:120])
+        out.lines.append("[[tool]]")
+        for kk, v in head.items():
+            if v is not None and v != "":
+                out.lines.append(f"{kk} = {tv(v) if isinstance(v, (str, bool)) or kk == 'nof' else repr(round(float(v), 6))}")
+        for pr in presets:
+            out.lines.append("[[tool.preset]]")
+            for kk in ("name", "group", "vc", "fz", "ap", "ae"):
+                v = pr.get(kk)
+                if v is not None:
+                    out.lines.append(f"{kk} = {tv(v) if isinstance(v, str) else repr(round(float(v), 6))}")
+        for c in cites + [p["cite"] for p in presets]:
+            out.lines.append("[[tool.cite]]")
+            for kk in ("path", "status", "source", "taken", "value", "basis", "note"):
+                if c.get(kk):
+                    out.lines.append(f"{kk} = {tv(c[kk])}")
+        out.lines.append("")
+    os.makedirs(os.path.join(DATA, "libraries"), exist_ok=True)
+    path = os.path.join(DATA, "libraries", "robbjack.toml")
+    with open(path, "w") as fh:
+        fh.write("# RobbJack: imported from the maker's own Fusion tool library (licence: \"Free to import into\n"
+                 "# CAM/CAD/tool-management systems and to redistribute unmodified with attribution to RobbJack\n"
+                 "# Corporation\"). GENERATED by tools/tooling/gen.py; every value cites the library file\n"
+                 f"# ({lib['version']}). Inch values are converted exactly (in x 25.4, ft/min x 0.3048). Presets:\n"
+                 "# \"<G> <class>\" is the group's representative (FEEDS-SPEEDS' list), its material named in\n"
+                 "# the cite; a group with several materials also has \"<G> <class> <material>\".\n\n")
+        fh.write("\n".join(out.lines))
+
+
 def main():
     report = {}
     for vendor in VENDORS:
@@ -893,10 +1057,11 @@ def main():
             for k, o in outs.items():
                 if len(o.lines) > n0[k]:
                     counts[k] += 1
-        rp = os.path.join(REAL_TOOLS, f"{vendor}.json")
-        for r in (json.load(open(rp))["records"] if os.path.exists(rp) else []):
-            shop(vendor, r, outs, skips)
-            counts["shop tools"] += 1
+        for rp in sorted(glob.glob(os.path.join(REAL_TOOLS, f"{vendor}.json"))
+                         + glob.glob(os.path.join(REAL_TOOLS, f"reamers-{vendor}.json"))):
+            for r in json.load(open(rp))["records"]:
+                shop(vendor, r, outs, skips)
+                counts["shop tools"] += 1
         for k, o in outs.items():
             path = os.path.join(DATA, k, f"{vendor}.toml")
             if o.lines:
@@ -909,6 +1074,9 @@ def main():
             elif os.path.exists(path):
                 os.remove(path)
         report[vendor] = (dict(counts), dict(skips))
+    rs = collections.Counter()
+    robbjack(rs)
+    report["robbjack"] = ({}, dict(rs))
     for v, (c, s) in report.items():
         print(f"{v:10} {c}  skipped: {s}")
 

@@ -60,6 +60,39 @@ theorem clearFace_sound {Z : Set ℝ} {w : ℝ → ℝ} {γ : ℝ → ℝ × ℝ
   rw [← hz]
   exact sdRZ_le_sd hD0 (by rw [ρ_sub_tip]; exact hD s hs _ hfS)
 
+/-- **A clearance from a prism holding the face is the face's** (slab.rs `Prism::hull_wall`: a
+vertical plane whose trim is not its parameter box, checked as the wall over that box). -/
+theorem clearFace_subset {Z : Set ℝ} {w : ℝ → ℝ} {γ : ℝ → ℝ × ℝ} {ζ : ℝ → ℝ} {Zt : Set ℝ}
+    (hζ : HeightsIn ζ Zt) {S : Set (ℝ × ℝ)} {H : Set ℝ} {D lower : ℝ}
+    (h : ClearFace Z w γ Zt S H D lower) {F : Set E3} (hF : F ⊆ prism S H) :
+    ∀ s ∈ I01, ∀ f ∈ F, lower ≤ sd (translate (tip γ ζ s) (hyp Z w)) f :=
+  fun s hs f hf => clearFace_sound hζ h s hs f (hF hf)
+
+/-- **The wall over a vertical plane's parameter box holds the plane's points over it**: the
+point o + p u + q v, u horizontal (u 2 = 0) and v = (0, 0, vz), with p ∈ [p0, p1] and
+q ∈ [q0, q1], has its xy on the segment from o + p0 u to o + p1 u and its height between
+o.z + vz q0 and o.z + vz q1. -/
+theorem wall_hull_mem (o0 o1 o2 u0 u1 vz : ℝ) {p q p0 p1 q0 q1 : ℝ} (hp : p0 ≤ p ∧ p ≤ p1)
+    (hq : q0 ≤ q ∧ q ≤ q1) :
+    ((o0 + p * u0, o1 + p * u1) : ℝ × ℝ) ∈
+        segment ℝ ((o0 + p0 * u0, o1 + p0 * u1) : ℝ × ℝ) (o0 + p1 * u0, o1 + p1 * u1) ∧
+      o2 + vz * q ∈ Set.uIcc (o2 + vz * q0) (o2 + vz * q1) := by
+  constructor
+  · rcases eq_or_lt_of_le (hp.1.trans hp.2) with he | hlt
+    · have e0 : p = p0 := le_antisymm (he ▸ hp.2) hp.1
+      rw [e0]
+      exact left_mem_segment ℝ _ _
+    · refine ⟨(p1 - p) / (p1 - p0), (p - p0) / (p1 - p0), ?_, ?_, ?_, ?_⟩
+      · exact div_nonneg (by linarith) (by linarith)
+      · exact div_nonneg (by linarith) (by linarith)
+      · field_simp; ring
+      · have hne : p1 - p0 ≠ 0 := by linarith
+        ext <;> simp only [Prod.smul_mk, Prod.mk_add_mk, smul_eq_mul] <;> field_simp <;> ring
+  · rw [Set.mem_uIcc]
+    rcases le_total 0 vz with hv | hv
+    · left; constructor <;> nlinarith
+    · right; constructor <;> nlinarith
+
 /-! ### The bodies are connected -/
 
 /-- The axis point at a point's height. -/
