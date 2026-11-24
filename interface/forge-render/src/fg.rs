@@ -998,6 +998,14 @@ impl Worker {
     /// One batch of work: `first` and whatever else waits in `jobs`. False once the session is
     /// gone (its results have nowhere to go, or it was stopped).
     fn step(&mut self, first: Work, jobs: &Receiver<Work>) -> bool {
+        let go_on = self.step_work(first, jobs);
+        // the sketches this step's runs made: freed now (each with a named entity is an Rc cycle,
+        // and a run lets none go: every edit kept its sketches, without bound)
+        crate::plat::release_sketches();
+        go_on
+    }
+
+    fn step_work(&mut self, first: Work, jobs: &Receiver<Work>) -> bool {
         let mut all = vec![first];
         all.extend(jobs.try_iter());
         // only the latest text matters, and the latest drive after it

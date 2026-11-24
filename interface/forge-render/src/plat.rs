@@ -16,6 +16,11 @@ pub const INLINE_JOBS: bool = cfg!(all(target_arch = "wasm32", not(target_featur
 /// browser build right away, before this returns. A job's result goes back through a channel
 /// either way, so the caller reads it the same.
 pub fn spawn(name: &str, f: impl FnOnce() + Send + 'static) {
+    // a job's forge-lang runs' sketches freed as it ends (`release_sketches`: on its own thread)
+    let f = move || {
+        f();
+        release_sketches();
+    };
     #[cfg(not(target_arch = "wasm32"))]
     {
         std::thread::Builder::new()
@@ -274,7 +279,10 @@ pub fn serve<J: Send + 'static>(
     {
         spawn(name, move || {
             while let Ok(j) = rx.recv() {
-                if !f(j, &rx) {
+                let go_on = f(j, &rx);
+                // each job's sketches freed as it ends, not only the thread's last
+                release_sketches();
+                if !go_on {
                     return;
                 }
             }
@@ -306,6 +314,7 @@ impl<J> Server<J> {
             let (rx, f, live) = &mut *r;
             while *live && let Ok(j) = rx.try_recv() {
                 *live = f(j, rx);
+                release_sketches();
             }
             return *live;
         }
@@ -345,5 +354,19 @@ pub fn par_map<T: Sync, R: Send>(items: &[T], threads: usize, f: impl Fn(&T) -> 
     {
         let _ = threads;
         items.iter().map(f).collect()
+    }
+}
+
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`): each lets go of its
+/// names, the cycle through them broken (a sketch with a named entity is an `Rc` cycle: its
+/// `named` holds `Value::Ent`s of itself). A run frees none itself, so the speed gate's builds do
+/// what they did; between builds, never during one, on the thread that ran them. Without it every
+/// run kept its sketches (5.5 KB a run of a small part natively, ~30 KB an edit in the browser).
+pub fn release_sketches() {
+    for x in forge_keep::take_all() {
+        if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {
+            let named = std::mem::take(&mut sk.borrow_mut().named);
+            drop(named);
+        }
     }
 }

@@ -263,6 +263,8 @@ pub fn run(mcp: bool, root: &str, writable: bool) -> ExitCode {
             }
             Err(e) => Some(error(Json::Null, -32700, &e)),
         };
+        // the sketches the request's runs made: freed between requests (a run lets none go)
+        release_sketches();
         if let Some(r) = reply
             && writeln!(out, "{r}").and_then(|_| out.flush()).is_err()
         {
@@ -594,4 +596,18 @@ fn tool(t: &Tool) -> Json {
             ]),
         ),
     ])
+}
+
+/// Frees the sketches forge-lang's runs on this thread kept (`forge_keep`): each lets go of its
+/// names, the cycle through them broken (a sketch with a named entity is an `Rc` cycle: its
+/// `named` holds `Value::Ent`s of itself). A run frees none itself, so the speed gate's builds do
+/// what they did; between builds, never during one, on the thread that ran them. Without it every
+/// run kept its sketches (5.5 KB a run of a small part natively, ~30 KB an edit in the browser).
+fn release_sketches() {
+    for x in forge_keep::take_all() {
+        if let Ok(sk) = x.downcast::<std::cell::RefCell<forge_lang::sketch::Sk>>() {
+            let named = std::mem::take(&mut sk.borrow_mut().named);
+            drop(named);
+        }
+    }
 }

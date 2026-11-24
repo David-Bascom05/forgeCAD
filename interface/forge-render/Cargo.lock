@@ -1238,6 +1238,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-keep"
+version = "0.1.0"
+
+[[package]]
 name = "forge-lang"
 version = "0.1.0"
 dependencies = [
@@ -1252,6 +1256,7 @@ dependencies = [
  "forge-git",
  "forge-harness",
  "forge-history",
+ "forge-keep",
  "forge-material",
  "forge-math",
  "forge-mesh",
@@ -1394,6 +1399,7 @@ dependencies = [
  "forge-git",
  "forge-harness",
  "forge-history",
+ "forge-keep",
  "forge-lang",
  "forge-library",
  "forge-machine",

@@ -3,7 +3,6 @@
 //! (tangency held by the solver, not written as numbers), with exact starting positions.
 
 use crate::error::{EntKind, Error};
-use crate::eval::Value;
 use crate::syntax::Span;
 use forge_math::{Frame, Point2, Point3, Vec2};
 use forge_ops::Profile;
@@ -737,70 +736,27 @@ impl std::fmt::Debug for Sk {
 #[path = "sketch_whole.rs"]
 mod whole;
 
-// A sketch's names hold its own entities, and an entity holds its sketch: kept as they are, every
-// sketch with a named entity was an `Rc` cycle, never freed (each run kept its sketches: memory
-// grew with every edit). In `named` its entities point at a stand-in instead, and get the sketch
-// back when read (`attach`); what reads only their ids (anchors, `sketch_view`) reads them as kept.
-thread_local! {
-    static DETACHED: Rc<std::cell::RefCell<Sk>> =
-        Rc::new(std::cell::RefCell::new(Sk::new(String::new(), Span::default(), Frame::WORLD)));
-}
-
-/// `v` as `named` keeps it: `sk`'s own entities, however deep in lists, tuples, maps and discs,
-/// point at the stand-in.
-pub(crate) fn detach(v: Value, sk: &Rc<std::cell::RefCell<Sk>>) -> Value {
-    DETACHED.with(|d| repoint(v, sk, d))
-}
-
-/// A value of `sk`'s `named`, its entities given `sk` back.
-pub(crate) fn attach(v: &Value, sk: &Rc<std::cell::RefCell<Sk>>) -> Value {
-    DETACHED.with(|d| repoint(v.clone(), d, sk))
-}
-
-/// `v` with the entities of sketch `from` made entities of `to` (unchanged values not rebuilt).
-fn repoint(v: Value, from: &Rc<std::cell::RefCell<Sk>>, to: &Rc<std::cell::RefCell<Sk>>) -> Value {
-    fn has(v: &Value, from: &Rc<std::cell::RefCell<Sk>>) -> bool {
-        match v {
-            Value::Ent(e) => Rc::ptr_eq(&e.sk, from),
-            Value::List(xs) | Value::Tuple(xs) => xs.iter().any(|x| has(x, from)),
-            Value::Map(xs) => xs.iter().any(|x| has(&x.1, from)),
-            Value::Disc(d) => has(&d.0, from),
-            _ => false,
-        }
-    }
-    if !has(&v, from) {
-        return v;
-    }
-    let each = |xs: &[Value]| -> Rc<Vec<Value>> {
-        Rc::new(xs.iter().map(|x| repoint(x.clone(), from, to)).collect())
-    };
-    match v {
-        Value::Ent(mut e) => {
-            e.sk = to.clone();
-            Value::Ent(e)
-        }
-        Value::List(xs) => Value::List(each(&xs)),
-        Value::Tuple(xs) => Value::Tuple(each(&xs)),
-        Value::Map(xs) => Value::Map(Rc::new(
-            xs.iter()
-                .map(|(k, x)| (k.clone(), repoint(x.clone(), from, to)))
-                .collect(),
-        )),
-        Value::Disc(d) => Value::Disc(Rc::new((repoint(d.0.clone(), from, to), d.1.clone()))),
-        v => v,
-    }
-}
-
 #[cfg(test)]
-mod no_cycle {
+mod release {
     use crate::eval::{Eval, Value};
 
-    /// A sketch is freed with the evaluation that made it, its named entities still read
-    /// through it while it lives (`plan.outline`, `plan.bore`, a text's loops): its `named` holds
-    /// no strong way back to it (each sketch with a named entity used to be an `Rc` cycle, kept
-    /// forever: every run and edit of a part kept its sketches).
+    /// The app's release between builds (forge-render's `plat::release_sketches`, the CLI
+    /// server's), done here as they do it.
+    fn release() {
+        for x in forge_keep::take_all() {
+            if let Ok(sk) = x.downcast::<std::cell::RefCell<super::Sk>>() {
+                let named = std::mem::take(&mut sk.borrow_mut().named);
+                drop(named);
+            }
+        }
+    }
+
+    /// A sketch's named entities read through it for as long as its run's values are used
+    /// (`plan.outline`, `plan.bore`, a text's loops), and it is freed once let go: a sketch with
+    /// a named entity is an `Rc` cycle, which outlived its evaluation (every run and edit of a
+    /// part kept its sketches). A run frees none itself; it keeps each (`forge_keep`).
     #[test]
-    fn a_run_frees_its_sketches() {
+    fn kept_sketches_are_freed_when_let_go_and_read_till_then() {
         let src = "sketch plan(on: xy) {
   outline = rect(corner: (0, 0), size: (60, 30))
   bore = circle((15, 15), 3)
@@ -808,6 +764,7 @@ mod no_cycle {
 }
 base = extrude(plan.outline, 6)
 ";
+        release();
         let prog = crate::syntax::parse(src).expect("parses");
         let mut ev = Eval::new(src, Default::default(), true, Default::default());
         ev.run(&prog);
@@ -815,14 +772,13 @@ base = extrude(plan.outline, 6)
         let Some((_, Value::Sketch(sk))) = ev.top_level().into_iter().find(|(n, _)| n == "plan") else {
             panic!("no sketch plan");
         };
-        // read back through the sketch, its entities are the sketch's again
         for name in ["outline", "bore", "word"] {
             let v = sk
                 .borrow()
                 .named
                 .iter()
                 .find(|x| x.0 == name)
-                .map(|x| super::attach(&x.1, &sk));
+                .map(|x| x.1.clone());
             let ents: Vec<_> = match v {
                 Some(Value::Ent(e)) => vec![e],
                 Some(Value::List(xs)) => xs
@@ -842,9 +798,12 @@ base = extrude(plan.outline, 6)
         let gone = std::rc::Rc::downgrade(&sk);
         drop(sk);
         drop(ev);
+        // the cycle: kept till let go
         assert!(
-            gone.upgrade().is_none(),
-            "the sketch outlived its evaluation (a cycle)"
+            gone.upgrade().is_some(),
+            "freed with no release: the cycle is gone?"
         );
+        release();
+        assert!(gone.upgrade().is_none(), "let go, the sketch was not freed");
     }
 }
