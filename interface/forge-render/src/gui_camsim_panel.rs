@@ -328,6 +328,19 @@ pub(crate) const TIMELINE_H: f32 = 78.0;
 pub(crate) const PANEL_W: f32 = 312.0;
 
 impl Shell {
+    /// The part of view `v` the simulation's panel (right) and timeline (bottom) leave free, for
+    /// the workspace's windows to keep inside.
+    pub(crate) fn camsim_free(&self, v: Rect) -> Rect {
+        let Some(st) = self.camsim.as_deref() else {
+            return v;
+        };
+        let panel_w = if st.folded { 36.0 } else { PANEL_W };
+        Rect::from_min_max(
+            v.min,
+            pos2(v.right() - panel_w - 8.0, v.bottom() - TIMELINE_H - 16.0),
+        )
+    }
+
     /// The simulation's timeline and panel, over the view; true if a machining document is open.
     pub fn camsim_ui(&mut self, ctx: &egui::Context) -> bool {
         // the Manufacture tab's: elsewhere the document's other tabs are left alone

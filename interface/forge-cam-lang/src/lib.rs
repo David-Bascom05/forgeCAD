@@ -656,6 +656,8 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
+            "grid",
         ],
     ),
     (
@@ -689,6 +691,8 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
+            "stepover",
         ],
     ),
     (
@@ -723,6 +727,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
         ],
     ),
     (
@@ -760,6 +765,8 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
+            "stepover",
         ],
     ),
     (
@@ -797,6 +804,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
         ],
     ),
     (
@@ -838,6 +846,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
         ],
     ),
     (
@@ -879,6 +888,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
         ],
     ),
     (
@@ -919,6 +929,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
         ],
     ),
     (
@@ -958,6 +969,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
         ],
     ),
     (
@@ -996,6 +1008,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
         ],
     ),
     (
@@ -1033,6 +1046,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_deflection",
             "min_feed",
             "max_feed",
+            "ramp",
         ],
     ),
     ("box", &["margin", "below", "min", "max"]),
@@ -1040,6 +1054,42 @@ pub const ARGS: &[(&str, &[&str])] = &[
     ("tube", &["d", "id", "margin", "below"]),
     ("solid", &["#0"]),
     ("vise", &["#0", "across", "clamp", "parallel", "clearance"]),
+    // 3-axis surfacing (CAM-3AXIS): the common op keys, area/floor/grid, each op's own, the feeds
+    (
+        "rest",
+        &[
+            "#0",
+            "tool",
+            "step",
+            "ramp",
+            "leave",
+            "leave_axial",
+            "stepover",
+            "area",
+            "floor",
+            "grid",
+            "after",
+            "after_leave",
+            "min",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
 ];
 
 /// The arguments `fname` takes (None: not a built-in with a list).

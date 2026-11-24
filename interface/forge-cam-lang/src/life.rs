@@ -233,6 +233,8 @@ pub struct ToolLifeView {
     /// Fraction of the cited life used (1 = the row's wear criterion); None: not estimated.
     pub life_used: Option<f64>,
     pub wear_limit_at: Option<LimitAt>,
+    /// The tool-life row used (its id in life.toml), for `Instance::used`; None: not estimated.
+    pub row: Option<String>,
     /// The cite (or why not estimated).
     pub source: String,
     /// Minutes outside the data's fitted range, and plunge/ramp minutes not sampled.
@@ -322,6 +324,7 @@ pub fn estimate(cam: &Cam, rows: &[Row], limits: &BTreeMap<u32, Limit>) -> LifeR
                 mv: a.mv,
                 minutes: a.minutes,
             }),
+            row: t.life.row.clone(),
             source: t.life.note.clone(),
             outside_minutes: t.life.outside,
             unsampled_minutes: t.unsampled_minutes,

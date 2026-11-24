@@ -1297,6 +1297,9 @@ impl Shell {
             self.file_menu = false;
             self.cube_menu = None;
             self.marking = None;
+        } else if let Some(w) = self.cam.as_mut().filter(|w| w.escape_level()) {
+            // the Manufacture workspace: its dialog, else its floating window
+            w.escape();
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.renaming.is_some()) {
             p.renaming = None;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {

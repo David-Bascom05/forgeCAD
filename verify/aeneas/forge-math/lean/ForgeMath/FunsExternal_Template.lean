@@ -219,6 +219,13 @@ axiom core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all
   core.ops.function.FnMut F T Bool) :
   core.slice.iter.Iter T → F → Result (Bool × (core.slice.iter.Iter T))
 
+/-- [std::f64::{f64}::floor]:
+    Source: '/rustc/library/std/src/num/f64.rs', lines 49:4-49:35
+    Name pattern: [std::f64::{f64}::floor]
+    Visibility: public -/
+@[rust_fun "std::f64::{f64}::floor"]
+axiom std.f64.F64.floor : F64 → Result F64
+
 /-- [std::f64::{f64}::ceil]:
     Source: '/rustc/library/std/src/num/f64.rs', lines 74:4-74:34
     Name pattern: [std::f64::{f64}::ceil]
