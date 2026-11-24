@@ -1490,6 +1490,9 @@ impl Shell {
             self.file_menu = false;
             self.cube_menu = None;
             self.marking = None;
+        // Settings, the modal over everything (not while it takes a key for a command)
+        } else if self.prefs.open && self.prefs.capture.is_none() {
+            self.prefs.open = false;
         } else if let Some(w) = self.cam.as_mut().filter(|w| w.escape_level()) {
             // the Manufacture workspace: its dialog, else its floating window
             w.escape();
@@ -1501,6 +1504,19 @@ impl Shell {
         // the dialogs up over the view, each as its Cancel or × (Esc closed none of them)
         } else if self.content.open {
             self.content.open = false;
+        // the windows over the view that had no Esc (the UI audit): after a feature's dialog
+        } else if self.inspect.browser.is_some() {
+            self.inspect.browser = None;
+        } else if self.capture.settings_open {
+            self.capture.settings_open = false;
+        } else if self.inspect.props.is_some() {
+            self.inspect.props = None;
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.params_open) {
+            p.params_open = false;
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.cutlist_open) {
+            p.cutlist_open = false;
+        } else if let Some(a) = self.fg.as_mut().and_then(|p| p.asm.as_mut()).filter(|a| a.bom_open) {
+            a.bom_open = false;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.occ_edit.is_some()) {
             p.occ_edit = None;
         } else if let Some(t) = self.fg.as_ref().and_then(|p| p.asm.as_ref()?.tool.as_ref()) {
