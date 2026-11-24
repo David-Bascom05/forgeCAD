@@ -98,4 +98,39 @@ theorem quarter_pos_finite (hp : 3 ≤ f.prec) {d four : FP f} (hd : d.isFinite)
   obtain ⟨hfin, hge⟩ := round_ge_two_pow_qmin f (zs := d.abs.sign ^^ four.sign) hlo hhi
   exact ⟨hfin, lt_of_lt_of_le (two_zpow_pos _) hge⟩
 
+/-- **`mul_pos_finite`** (forge-thermo `scaled`'s ellipse, `major * k`, `k = 1 + shrink` with
+`shrink` validated finite in `[-0.5, 0.5]`): `x * y` is finite and positive for `x` finite in
+`[2^(qmin+1), 2^(emax-1)]` and `y` finite in `[1/2, 2]`. -/
+theorem mul_pos_finite {x y : FP f} (hx : x.isFinite) (hy : y.isFinite)
+    (hy1 : (1 : ℚ) / 2 ≤ y.val) (hy2 : y.val ≤ 2) (hxlo : (2 : ℚ) ^ (f.qmin + 1) ≤ x.val)
+    (hxhi : x.val ≤ 2 ^ (f.emax - 1)) :
+    (FP.mul x y).isFinite ∧ 0 < (FP.mul x y).val := by
+  rw [mul_eq_round hx hy]
+  have hq := two_zpow_pos (K := ℚ) f.qmin
+  have h2 : (2 : ℚ) ^ (f.qmin + 1) = 2 ^ f.qmin * 2 := by
+    rw [zpow_add₀ (by norm_num : (2 : ℚ) ≠ 0), zpow_one]
+  have h3 : (2 : ℚ) ^ f.emax = 2 ^ (f.emax - 1) * 2 := by
+    rw [← zpow_add_one₀ (by norm_num : (2 : ℚ) ≠ 0)]; ring_nf
+  have he := two_zpow_pos (K := ℚ) (f.emax - 1)
+  have hlo : (2 : ℚ) ^ f.qmin ≤ x.val * y.val := by nlinarith
+  have hhi : x.val * y.val ≤ 2 ^ f.emax := by nlinarith
+  obtain ⟨hfin, hge⟩ := round_ge_two_pow_qmin f (zs := x.sign ^^ y.sign) hlo hhi
+  exact ⟨hfin, lt_of_lt_of_le (two_zpow_pos _) hge⟩
+
+/-- **`mul_nonneg_finite`** (its `minor * k`): `x * y` is finite and non-negative for `x` finite in
+`[0, 2^(emax-1)]` and `y` finite in `[1/2, 2]`. -/
+theorem mul_nonneg_finite {x y : FP f} (hx : x.isFinite) (hy : y.isFinite)
+    (hy1 : (1 : ℚ) / 2 ≤ y.val) (hy2 : y.val ≤ 2) (hx0 : 0 ≤ x.val)
+    (hxhi : x.val ≤ 2 ^ (f.emax - 1)) :
+    (FP.mul x y).isFinite ∧ 0 ≤ (FP.mul x y).val := by
+  rw [mul_eq_round hx hy]
+  have hnn : 0 ≤ x.val * y.val := mul_nonneg hx0 (by linarith)
+  refine ⟨?_, round_val_nonneg f hnn⟩
+  rcases eq_or_lt_of_le hnn with h0 | hpos
+  · rw [← h0]; simp [round, FP.isFinite]
+  · have h3 : (2 : ℚ) ^ f.emax = 2 ^ (f.emax - 1) * 2 := by
+      rw [← zpow_add_one₀ (by norm_num : (2 : ℚ) ≠ 0)]; ring_nf
+    have he := two_zpow_pos (K := ℚ) (f.emax - 1)
+    exact round_finite_of_le_emax (by rw [abs_of_pos hpos]; nlinarith)
+
 end IEEE754
