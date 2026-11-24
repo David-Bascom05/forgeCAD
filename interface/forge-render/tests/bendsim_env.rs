@@ -295,6 +295,10 @@ fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
     c.yaw = 240f32.to_radians();
     c.pitch = 25f32.to_radians();
     v.nav.jump_to(c);
+    // its fade run through (FADE_AFTER frames, then FADE_FRAMES)
+    for _ in 0..16 {
+        h.step();
+    }
     shot(&mut h, "11-seen-through");
     let n = h.gui.bend.ghosts.len();
     assert!(n > 0, "a flange between the eye and the bend is seen through");
@@ -357,8 +361,8 @@ fn following_keeps_the_handled_part_in_view() {
 }
 
 /// No flicker (David): the eye swept round the second bend through the views where the first
-/// flange crosses in front of it, a frame a step: a body's see-through never jumps; it fades in
-/// and out a step a frame, from and to solid.
+/// flange crosses in front of it, a frame a step: what is seen through in the x-ray window never
+/// jumps; it fades in and out a step a frame.
 #[test]
 fn see_through_fades_and_never_flickers() {
     let Some(mut h) = headless() else { return };
@@ -375,7 +379,15 @@ fn see_through_fades_and_never_flickers() {
         h.step();
     }
     let step = (1.0 - opacity) / forge_render::gui::gui_bendsim::FADE_FRAMES as f32 + 0.01;
-    let mut was: std::collections::HashMap<u32, f32> = Default::default();
+    // as it stands before the sweep (what already fades counts from there)
+    let names = h.gui.bend.drawn_names();
+    let mut was: std::collections::HashMap<String, f32> = h
+        .gui
+        .bend
+        .ghosts
+        .iter()
+        .map(|g| (names[g.placement as usize].clone(), g.rgba[3] as f32 / 255.0))
+        .collect();
     let mut worst = 0f32;
     let mut ghosted = 0usize;
     for i in 0..=80 {
@@ -387,18 +399,24 @@ fn see_through_fades_and_never_flickers() {
             v.nav.jump_to(c);
         }
         h.step();
-        let now: std::collections::HashMap<u32, f32> = h
+        // by the body's name: a placement's index moves as window pieces come and go
+        let names = h.gui.bend.drawn_names();
+        let now: std::collections::HashMap<String, f32> = h
             .gui
             .bend
             .ghosts
             .iter()
-            .map(|g| (g.placement, g.rgba[3] as f32 / 255.0))
+            .map(|g| (names[g.placement as usize].clone(), g.rgba[3] as f32 / 255.0))
             .collect();
-        // solid is alpha 1: a body not listed is solid
-        for k in was.keys().chain(now.keys()) {
+        // a piece kept from one frame to the next fades a step at most; a piece that comes into
+        // the window comes in near solid (it fades in); one that leaves the window has nothing
+        // left in it to jump
+        for (k, b) in &now {
             let a = was.get(k).copied().unwrap_or(1.0);
-            let b = now.get(k).copied().unwrap_or(1.0);
-            worst = worst.max((a - b).abs());
+            worst = worst.max(a - b);
+            if was.contains_key(k) {
+                worst = worst.max(b - a);
+            }
         }
         ghosted = ghosted.max(now.len());
         was = now;
@@ -439,4 +457,72 @@ fn a_narrow_view_gets_a_compact_bar() {
         }
     }
     assert!(h.gui.shell.place("view:axes").is_some(), "the first chips still shown");
+}
+
+/// Bend 2 as a recording sees it (Follow bend on, coordinator's frame strip): at every instant of
+/// its forming the part is a real share of the picture, not a sliver under the ram.
+#[test]
+fn bend_two_followed_shows_the_part() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "strip", "trumpf-trubend-5130", None);
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().follow = true;
+    let mut least = f32::MAX;
+    for (i, t) in [0.2, 0.4, 0.5, 0.6, 0.7, 0.8].into_iter().enumerate() {
+        {
+            let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+            b.step = 1;
+            b.t = t;
+        }
+        for _ in 0..16 {
+            h.step();
+        }
+        shot(&mut h, &format!("15-bend-2-strip-{i}"));
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        let sim = b.sim.as_ref().unwrap();
+        let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
+        let (cam, size) = h.gui.shell.camera.expect("the view's camera");
+        let m = cam.view(size.0, size.1).matrix;
+        let (mut ylo, mut yhi) = (f32::MAX, f32::MIN);
+        for x in sc.bodies(1, t).iter().filter(|x| x.look.is_sheet()) {
+            for p in &x.mesh.pos {
+                let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
+                let y = c(1) / c(3);
+                ylo = ylo.min(y);
+                yhi = yhi.max(y);
+            }
+        }
+        // the part's height on the screen, as a share of the view's (NDC spans 2)
+        least = least.min((yhi.min(1.0) - ylo.max(-1.0)) / 2.0);
+    }
+    assert!(least > 0.2, "the part only {least:.2} of the view's height at some instant");
+}
+
+/// Any part in the way, locally (David): from the Press Overview the press's frame stands
+/// between the eye and bend 2; it is seen through only inside the x-ray window round the bend
+/// (drawn as a ghost piece there and solid round it), not faded whole.
+#[test]
+fn a_press_part_in_the_way_is_seen_through_in_the_window_only() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "xray", "trumpf-trubend-5130", None);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.step = 1;
+        b.t = 0.6;
+    }
+    frame(&mut h, Framing::Overview);
+    for _ in 0..20 {
+        h.step();
+    }
+    let names = h.gui.bend.drawn_names();
+    let pieces: Vec<&String> = names.iter().filter(|n| n.ends_with("#xray")).collect();
+    let press: Vec<&&String> = pieces
+        .iter()
+        .filter(|n| !n.starts_with("part:") && !n.contains("punch:") && !n.contains("die:"))
+        .collect();
+    assert!(!press.is_empty(), "a press part seen through: {pieces:?}");
+    for p in &press {
+        let whole = p.trim_end_matches("#xray");
+        assert!(names.iter().any(|n| n == whole), "{whole} solid round its window piece");
+    }
+    assert!(!h.gui.bend.ghosts.is_empty());
 }
