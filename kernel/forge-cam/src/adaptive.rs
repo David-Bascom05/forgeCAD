@@ -277,7 +277,7 @@ impl Field {
         via: &[[f64; 2]],
     ) {
         const CLEAR: f64 = 0.5;
-        if std::env::var_os("FORGE_HOP").is_some() && cur[2] == target[2] {
+        if std::env::var_os("FORGE_HOP_ADAPTIVE").is_some() && cur[2] == target[2] {
             // the hop: up, over and down along the straight way, every move G1 at the link
             // feed, the tip at each sample (h apart) above the highest material left within
             // r + h of it (the map) by CLEAR: the same disk test as a link at depth, at height
