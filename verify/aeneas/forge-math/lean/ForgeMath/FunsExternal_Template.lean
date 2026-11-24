@@ -26,6 +26,21 @@ open forge_math
 @[rust_fun "core::clone::impls::{core::clone::Clone<f64>}::clone"]
 axiom F64.Insts.CoreCloneClone.clone : F64 → Result F64
 
+/-- [core::cmp::impls::{impl core::cmp::PartialEq<f64> for f64}::eq]:
+    Source: '/rustc/library/core/src/cmp.rs', lines 2185:16-2185:50; this code is generated from a macro invocation at: '/rustc/library/core/src/cmp.rs', lines 2193:4-2195:5
+    Name pattern: [core::cmp::impls::{core::cmp::PartialEq<f64, f64>}::eq]
+    Visibility: public -/
+@[rust_fun "core::cmp::impls::{core::cmp::PartialEq<f64, f64>}::eq"]
+axiom F64.Insts.CoreCmpPartialEqF64.eq : F64 → F64 → Result Bool
+
+/-- [core::cmp::impls::{impl core::cmp::PartialOrd<f64> for f64}::partial_cmp]:
+    Source: '/rustc/library/core/src/cmp.rs', lines 2265:16-2265:71; this code is generated from a macro invocation at: '/rustc/library/core/src/cmp.rs', lines 2299:4-2299:42
+    Name pattern: [core::cmp::impls::{core::cmp::PartialOrd<f64, f64>}::partial_cmp]
+    Visibility: public -/
+@[rust_fun "core::cmp::impls::{core::cmp::PartialOrd<f64, f64>}::partial_cmp"]
+axiom F64.Insts.CoreCmpPartialOrdF64.partial_cmp
+  : F64 → F64 → Result (Option Ordering)
+
 /-- [core::default::{impl core::default::Default for f64}::default]:
     Source: '/rustc/library/core/src/default.rs', lines 157:12-157:30; this code is generated from a macro invocation at: '/rustc/library/core/src/default.rs', lines 185:0-185:67
     Name pattern: [core::default::{core::default::Default<f64>}::default]
@@ -43,6 +58,17 @@ axiom F64.Insts.CoreFmtDebug.fmt
   F64 → core.fmt.Formatter → Result ((core.result.Result Unit
     core.fmt.Error) × core.fmt.Formatter)
 
+/-- [core::iter::traits::iterator::Iterator::sum]:
+    Source: '/rustc/library/core/src/iter/traits/iterator.rs', lines 3689:4-3692:35
+    Name pattern: [core::iter::traits::iterator::Iterator::sum]
+    Visibility: public -/
+@[trait_default, rust_fun "core::iter::traits::iterator::Iterator::sum"]
+axiom core.iter.traits.iterator.Iterator.sum.default
+  {Self : Type _} {S : Type _} {Clause0_Item : Type _} (IteratorInst :
+  core.iter.traits.iterator.Iterator Self Clause0_Item) (accumSumInst :
+  core.iter.traits.accum.Sum S Clause0_Item) :
+  Self → Result S
+
 /-- [core::iter::traits::iterator::Iterator::all]:
     Source: '/rustc/library/core/src/iter/traits/iterator.rs', lines 2840:4-2843:64
     Name pattern: [core::iter::traits::iterator::Iterator::all]
@@ -54,6 +80,17 @@ axiom core.iter.traits.iterator.Iterator.all.default
   (opsfunctionFnMutFTupleClause0_ItemBoolInst : core.ops.function.FnMut F
   Clause0_Item Bool) :
   Self → F → Result (Bool × Self)
+
+/-- [core::iter::traits::accum::{impl core::iter::traits::accum::Sum<&'a f64> for f64}::sum]:
+    Source: '/rustc/library/core/src/iter/traits/accum.rs', lines 184:12-184:63; this code is generated from a macro invocation at: '/rustc/library/core/src/iter/traits/accum.rs', lines 208:0-208:39
+    Name pattern: [core::iter::traits::accum::{core::iter::traits::accum::Sum<f64, &'a f64>}::sum]
+    Visibility: public -/
+@[rust_fun
+  "core::iter::traits::accum::{core::iter::traits::accum::Sum<f64, &'a f64>}::sum"]
+axiom F64.Insts.CoreIterTraitsAccumSumSharedAF64.sum
+  {I : Type _} (iteratorIteratorISharedAF64Inst :
+  core.iter.traits.iterator.Iterator I F64) :
+  I → Result F64
 
 /-- [core::f64::consts::PI]
     Source: '/rustc/library/core/src/num/f64.rs', lines 293:4-293:21
@@ -74,12 +111,26 @@ axiom core.iter.traits.iterator.Iterator.all.default
 @[rust_const "core::f64::consts::FRAC_PI_2"]
 axiom core.f64.consts.FRAC_PI_2 : Result F64
 
+/-- [core::f64::consts::SQRT_2]
+    Source: '/rustc/library/core/src/num/f64.rs', lines 353:4-353:25
+    Name pattern: [core::f64::consts::SQRT_2]
+    Visibility: public -/
+@[rust_const "core::f64::consts::SQRT_2"]
+axiom core.f64.consts.SQRT_2 : Result F64
+
 /-- [core::f64::{f64}::EPSILON]
     Source: '/rustc/library/core/src/num/f64.rs', lines 441:4-441:26
     Name pattern: [core::f64::{f64}::EPSILON]
     Visibility: public -/
 @[rust_const "core::f64::{f64}::EPSILON"]
 axiom core.f64.F64.EPSILON : Result F64
+
+/-- [core::f64::{f64}::MIN_POSITIVE]
+    Source: '/rustc/library/core/src/num/f64.rs', lines 456:4-456:31
+    Name pattern: [core::f64::{f64}::MIN_POSITIVE]
+    Visibility: public -/
+@[rust_const "core::f64::{f64}::MIN_POSITIVE"]
+axiom core.f64.F64.MIN_POSITIVE : Result F64
 
 /-- [core::f64::{f64}::NAN]
     Source: '/rustc/library/core/src/num/f64.rs', lines 516:4-516:22
@@ -164,6 +215,20 @@ axiom core.f64.F64.min : F64 → F64 → Result F64
 @[rust_fun "core::f64::{f64}::to_bits"]
 axiom core.f64.F64.to_bits : F64 → Result Std.U64
 
+/-- [core::f64::{f64}::from_bits]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 1365:4-1365:42
+    Name pattern: [core::f64::{f64}::from_bits]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::from_bits"]
+axiom core.f64.F64.from_bits : Std.U64 → Result F64
+
+/-- [core::f64::{f64}::clamp]:
+    Source: '/rustc/library/core/src/num/f64.rs', lines 1642:4-1642:59
+    Name pattern: [core::f64::{f64}::clamp]
+    Visibility: public -/
+@[rust_fun "core::f64::{f64}::clamp"]
+axiom core.f64.F64.clamp : F64 → F64 → F64 → Result F64
+
 /-- [core::f64::{f64}::abs]:
     Source: '/rustc/library/core/src/num/f64.rs', lines 1744:4-1744:33
     Name pattern: [core::f64::{f64}::abs]
@@ -176,6 +241,27 @@ axiom core.f64.F64.to_bits : F64 → Result Std.U64
     Visibility: public -/
 @[rust_fun "core::num::{i64}::rem_euclid"]
 axiom core.num.I64.rem_euclid : Std.I64 → Std.I64 → Result Std.I64
+
+/-- [core::ops::range::{core::ops::range::RangeInclusive<Idx>}::contains]:
+    Source: '/rustc/library/core/src/ops/range.rs', lines 539:4-542:44
+    Name pattern: [core::ops::range::{core::ops::range::RangeInclusive<@Idx>}::contains]
+    Visibility: public -/
+@[rust_fun
+  "core::ops::range::{core::ops::range::RangeInclusive<@Idx>}::contains"]
+axiom core.ops.range.RangeInclusive.contains
+  {Idx : Type _} {U : Type _} (cmpPartialOrdInst : core.cmp.PartialOrd Idx Idx)
+  (cmpPartialOrdInst1 : core.cmp.PartialOrd Idx U) (cmpPartialOrdInst2 :
+  core.cmp.PartialOrd U Idx) :
+  core.ops.range.RangeInclusive Idx → U → Result Bool
+
+/-- [core::option::{core::option::Option<&'_0 T>}::copied]:
+    Source: '/rustc/library/core/src/option.rs', lines 2135:4-2137:16
+    Name pattern: [core::option::{core::option::Option<&'0 @T>}::copied]
+    Visibility: public -/
+@[rust_fun "core::option::{core::option::Option<&'0 @T>}::copied"]
+axiom core.option.OptionShared0T.copied
+  {T : Type _} (markerCopyInst : core.marker.Copy T) :
+  Option T → Result (Option T)
 
 /-- [core::option::{impl core::ops::try_trait::Try for core::option::Option<T>}::branch]:
     Source: '/rustc/library/core/src/option.rs', lines 2875:4-2875:64
@@ -197,17 +283,6 @@ axiom
   core.option.Option.Insts.CoreOpsTry_traitFromResidualOptionNever.from_residual
   (T : Type _) : Option Never → Result (Option T)
 
-/-- [core::slice::iter::{impl core::iter::traits::collect::IntoIterator<&'a mut T, core::slice::iter::IterMut<'a, T>> for &'a mut [T]}::into_iter]:
-    Source: '/rustc/library/core/src/slice/iter.rs', lines 33:4-33:40
-    Name pattern: [core::slice::iter::{core::iter::traits::collect::IntoIterator<&'a mut [@T], &'a mut @T, core::slice::iter::IterMut<'a, @T>>}::into_iter]
-    Visibility: public -/
-@[rust_fun
-  "core::slice::iter::{core::iter::traits::collect::IntoIterator<&'a mut [@T], &'a mut @T, core::slice::iter::IterMut<'a, @T>>}::into_iter"]
-axiom MutASlice.Insts.CoreIterTraitsCollectIntoIteratorMutATIterMut.into_iter
-  {T : Type _} :
-  Slice T → Result ((core.slice.iter.IterMut T) × (core.slice.iter.IterMut T
-    → Slice T))
-
 /-- [core::slice::iter::{impl core::iter::traits::iterator::Iterator<&'a T> for core::slice::iter::Iter<'a, T>}::all]:
     Source: '/rustc/library/core/src/slice/iter/macros.rs', lines 304:12-307:45; this code is generated from a macro invocation at: '/rustc/library/core/src/slice/iter.rs', lines 140:0-148:2
     Name pattern: [core::slice::iter::{core::iter::traits::iterator::Iterator<core::slice::iter::Iter<'a, @T>, &'a @T>}::all]
@@ -218,6 +293,13 @@ axiom core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all
   {T : Type _} {F : Type _} (opsfunctionFnMutFTupleSharedATBoolInst :
   core.ops.function.FnMut F T Bool) :
   core.slice.iter.Iter T → F → Result (Bool × (core.slice.iter.Iter T))
+
+/-- [core::slice::{[T]}::last]:
+    Source: '/rustc/library/core/src/slice/mod.rs', lines 283:4-283:42
+    Name pattern: [core::slice::{[@T]}::last]
+    Visibility: public -/
+@[rust_fun "core::slice::{[@T]}::last"]
+axiom core.slice.Slice.last {T : Type _} : Slice T → Result (Option T)
 
 /-- [std::f64::{f64}::floor]:
     Source: '/rustc/library/std/src/num/f64.rs', lines 49:4-49:35
@@ -238,40 +320,43 @@ axiom std.f64.F64.floor : F64 → Result F64
     Visibility: public -/
 @[rust_fun "std::f64::{f64}::sqrt"] axiom std.f64.F64.sqrt : F64 → Result F64
 
+/-- [alloc::vec::{alloc::vec::Vec<T>}::reserve]:
+    Source: '/rustc/library/alloc/src/vec/mod.rs', lines 1468:4-1468:48
+    Name pattern: [alloc::vec::{alloc::vec::Vec<@T>}::reserve]
+    Visibility: public -/
+@[rust_fun "alloc::vec::{alloc::vec::Vec<@T>}::reserve"]
+axiom alloc.vec.Vec.reserve
+  {T : Type _} (A : Type _) :
+  alloc.vec.Vec T → Std.Usize → Result (alloc.vec.Vec T)
+
+/-- [alloc::vec::{alloc::vec::Vec<T>}::clear]:
+    Source: '/rustc/library/alloc/src/vec/mod.rs', lines 3103:4-3103:27
+    Name pattern: [alloc::vec::{alloc::vec::Vec<@T>}::clear]
+    Visibility: public -/
+@[rust_fun "alloc::vec::{alloc::vec::Vec<@T>}::clear"]
+axiom alloc.vec.Vec.clear
+  {T : Type _} (A : Type _) : alloc.vec.Vec T → Result (alloc.vec.Vec T)
+
 /-- [forge_math::predicates::cross_big]:
     Source: 'kernel/forge-math/src/predicates.rs', lines 264:0-270:1 -/
 axiom predicates.cross_big : F64 → F64 → F64 → F64 → Result F64
 
-/-- [forge_math::predicates::estimate]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 309:0-317:1 -/
-axiom predicates.estimate : Slice F64 → Result F64
-
-/-- [forge_math::predicates::sum_into]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 321:0-350:1 -/
-axiom predicates.sum_into
-  : Slice F64 → Slice F64 → Slice F64 → Result (Std.Usize × (Slice F64))
-
-/-- [forge_math::predicates::scale_into]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 353:0-382:1 -/
-axiom predicates.scale_into
-  : Slice F64 → F64 → Slice F64 → Result (Std.Usize × (Slice F64))
-
 /-- [forge_math::predicates::exact_diffs]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 391:0-401:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 398:0-411:1 -/
 axiom predicates.exact_diffs
   {N : Std.Usize} : Array (F64 × F64) N → Result (Option (Array F64 N))
 
 /-- [forge_math::predicates::orient2d_big]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 456:0-464:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 466:0-474:1 -/
 axiom predicates.orient2d_big
   : vec.Point2 → vec.Point2 → vec.Point2 → Result F64
 
 /-- [forge_math::predicates::dot3_big]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 552:0-559:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 564:0-571:1 -/
 axiom predicates.dot3_big : vec.Vec3 → vec.Vec3 → Result F64
 
 /-- [forge_math::predicates::incircle]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 667:0-705:1
+    Source: 'kernel/forge-math/src/predicates.rs', lines 679:0-714:1
     Visibility: public -/
 axiom predicates.incircle
   : vec.Point2 → vec.Point2 → vec.Point2 → vec.Point2 → Result F64

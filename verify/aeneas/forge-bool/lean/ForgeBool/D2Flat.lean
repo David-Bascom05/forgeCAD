@@ -15,10 +15,13 @@ curved route (`ssi::searched` and its cache, forge-geom's curved meets) are not 
 stated by continuations: two continuations that agree on those values agree after `m`. It composes
 through `bind` and `if`, so a function's `Only` follows its text.
 
-Not here: F1 for `plane_plane` (each point of both planes within δ of the returned curve). Its
-parallel branch decides Empty/Coincident at `q.frame.origin` with ANGULAR = 1e-11 and LINEAR =
-1e-5, so it holds only where the planes' crossing is within LINEAR/ANGULAR = 1e6 of that origin;
-inside InputSize (|coord| ≤ 1.6e7) the exact reference refutes it (LEDGER D2, TRANSLATE's probe).
+Not here: F1 for two planes (each point of both within δ of the answer). `plane_plane`'s parallel
+branch decides Empty/Coincident at `q.frame.origin` (ANGULAR = 1e-11, LINEAR = 1e-5), which
+holds only where the crossing is within LINEAR/ANGULAR = 1e6 of it; inside InputSize (|coord| ≤
+1.6e7) the exact reference refuted it (B1, research/kernel-audit/tilt-wrong-ok.md). Unless the
+normals are parallel to the bit, `closed_or_flush` now has `nearly_flush` decide such planes again
+over the region (`parallel_in`: the affine gap at the corners). F1 of that rule is open: it needs
+the IEEE error of the corner gaps and of the line's foot.
 -/
 
 open Aeneas Aeneas.Std Result
@@ -69,19 +72,32 @@ theorem plane_plane_only (p q : forge_geom.surface.Plane) :
     Only (· ≠ SurfaceSurface.NotAnalytic) (forge_geom.intersect.plane_plane p q) := by
   unfold forge_geom.intersect.plane_plane
 
-  repeat first
+  repeat' first
     | exact Only.ok (by simp)
     | apply Only.ite
     | apply Only.bind_any; intro _
 
+/-- B1's re-decision over the region, for planes within ANGULAR of parallel (not to the bit):
+Coincident, Empty or a line, or none (`plane_plane`'s answer stands). -/
+theorem parallel_in_only (p q : forge_geom.surface.Plane) (region : forge_math.interval.Box3) :
+    Only (fun o => o = none ∨ ∃ f, o = some f ∧ f ≠ SurfaceSurface.NotAnalytic)
+      (forge_bool.ssi.parallel_in p q region) := by
+  unfold forge_bool.ssi.parallel_in
+  repeat' first
+    | (refine Only.ok ?_; simp)
+    | apply Only.ite
+    | (apply Only.bind_any; intro _)
+    | split
+
 theorem nearly_flush_planes_only (p q : forge_geom.surface.Plane) (region : forge_math.interval.Box3) :
-    Only (fun o => o = none ∨ o = some SurfaceSurface.Coincident)
+    Only (fun o => o = none ∨ ∃ f, o = some f ∧ f ≠ SurfaceSurface.NotAnalytic)
       (forge_bool.ssi.nearly_flush (.Plane p) (.Plane q) region) := by
   unfold forge_bool.ssi.nearly_flush
-  repeat first
-    | exact Only.ok (by simp)
+  repeat' first
+    | exact parallel_in_only p q region
+    | (refine Only.ok ?_; simp)
     | apply Only.ite
-    | apply Only.bind_any; intro _
+    | (apply Only.bind_any; intro _)
 
 theorem spindle_in_planes (p q : forge_geom.surface.Plane) :
     forge_geom.sheet.spindle_in (.Plane p) (.Plane q) = ok false := by
@@ -105,15 +121,16 @@ theorem closed_or_flush_planes_only (p q : forge_geom.surface.Plane) (region : f
   intro r hr
   cases r with
   | NotAnalytic => exact absurd rfl hr
-  | Curves cs =>
+  | _ =>
     simp only [bind_ok, Bool.false_eq_true, ite_false]
-    repeat first
-      | (apply Only.bind (nearly_flush_planes_only p q region); intro o ho
-         rcases ho with rfl | rfl <;> exact Only.ok (by simp))
-      | exact Only.ok (by simp)
+    repeat' first
+      | (refine Only.bind (nearly_flush_planes_only p q region) ?_; intro o ho
+         rcases ho with rfl | ⟨f, rfl, hf⟩ <;>
+           first | exact Only.ok hf | (refine Only.ok ?_; simp_all))
+      | (refine Only.ok ?_; simp)
       | apply Only.ite
-      | apply Only.bind_any; intro _
-  | _ => simp only [bind_ok, Bool.false_eq_true, ite_false]; exact Only.ok (by simp)
+      | (apply Only.bind_any; intro _)
+      | dsimp only
 
 /-- D2 on two planes, the flat route: `surfaces_in` is `closed_or_flush`; the curved search
 (`ssi::searched`, its cache, forge-geom's curved meets: the L4 gaps L4.searched, L4.cached) is

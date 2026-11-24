@@ -23,7 +23,14 @@ any number of axes, I J, R, Q, F, T; canned cycles 81 82 83 84 85 73).
 ## What is not covered (open, not assumed)
 
 - The character level (digits and words to integers): the Rust parser is tested (L6) against
-  forge-post's reader on 240 random programs, four dialects (tests/gcode_vs_post.rs); no proof.
+  forge-post's reader on 60 random programs per dialect, all eleven (tests/gcode_vs_post.rs); no proof.
+- **The dialect shell (gcode.rs `Lex`, `lex_rewrite`), open:** a dialect's extras are rewritten
+  into the Fanuc words the core and this spec cover: the `*` block end, `%`-header lines dropped,
+  G codes that carry no motion (G291, G71, G91.1) dropped, the dwell's word (G4 F / G04 X) to P, a
+  cycle's P in ms to seconds, the T block as T + M6 (and a bare T block's T dropped), an absolute
+  I J centre block turned into incremental I J on the next G02/G03. Tested by L6 only; the Lean
+  spec covers the Fanuc subset, so for siemens, heidenhain, pathpilot, mach3, mach4, centroid-cnc12
+  and masso the posted-program theorem's text level is UNKNOWN.
 - The Rust code is not translated (L4): gcode.rs is related to this model by reading and by the
   differential test, not by Aeneas.
 - Lathe words (T0101, G50, G96/G97), G53, G43/G49 and work offsets: modelled in Rust only (they

@@ -27,8 +27,11 @@ Conditions:
   folded namesake within `tol`.
 * **2** is a theorem (`Bend.iso`, `neutral_radius`), not a check on data: with `ρ` as the kernel
   chooses it the neutral radius is `rn` for every input.
-* **6** (overlap and clash) and **8** (export) are decided by Region.lean's exact rule and
-  BranchBound.lean's certified search on the same inputs.
+* **6** (overlap and clash) is decided by Region.lean's exact rule and BranchBound.lean's
+  certified search on the same inputs.
+* **8** (export) by the one rule (Region.lean `closes`, `closes_of_classes`): each contour's
+  consecutive pieces meet in one vertex class, i.e. within the spread cap `2L` — exact to rounding
+  when no class merges distinct points, within the class's spread when one does.
 
 `tol` is `1e-9` of the part's size, as refold.rs has it: `tol² = 10⁻¹⁸ · max(1, max |v|²)`.
 -/

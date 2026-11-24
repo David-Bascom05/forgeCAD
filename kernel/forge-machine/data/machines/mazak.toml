@@ -892,6 +892,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # ---------------------------------------------------------------------------------------------
 # Mazak VARIAXIS I-700 NEO: 5-axis trunnion, MAZATROL SmoothAi. A tilts the cradle about X
 # (-120..+30 deg) and carries the C table (700 dia, 700 kg). X 635 Y 1092.2 Z 609.6, 18,000 rpm CAT40.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "mazak-variaxis-i-700"
 kind = "table-table"
@@ -1242,6 +1248,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # ---------------------------------------------------------------------------------------------
 # Mazak HCN-5000: HMC, MAZATROL SmoothG, two 500 mm pallets. X 736.6 Y 736.6 Z 812.8, spindle 101.6-838.2
 # above the pallet, 12,000 rpm CAT40 (40% ED 18.5 kW, cont 15 kW, 82 N.m), 40 tools, max work 800 dia x 1000.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "mazak-hcn-5000"
 kind = "vmc4"
@@ -1543,6 +1555,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # Mazak INTEGREX i-200 NEO: mill-turn, B-axis milling head (-30..+210 deg, 12,000 rpm HSK-A63, 40% ED
 # 18.5 kW), main spindle 5,000 rpm 8 in chuck (40% ED 22 kW, cont 15 kW), tailstock; X 533.4 Y 203.2 Z 635,
 # max 609.6 dia x 584.2, 36 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "mazak-integrex-i-200"
 kind = "mill-turn"
@@ -1877,6 +1895,12 @@ basis = "the B head housing (estimate); one box/cylinder from published overall 
 # ---------------------------------------------------------------------------------------------
 # Mazak QUICK TURN 200 (US-built): 2-axis lathe, 8 in chuck, 76.2 mm bar, 5,000 rpm 26 kW (30-min),
 # 12-station turret; X 203.2 Z 558.8, swing 609.6, max 355.6 dia x 508.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "mazak-quick-turn-200"
 kind = "lathe"
@@ -3492,6 +3516,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # ---------------------------------------------------------------------------------------------
 # Mazak HCN-4000: HCN, MAZATROL SmoothG (named in the machine-size row only).
 # X 560 Y 640 Z 640; 12000 rpm BT40 (JP page) / CAT40 (US page); 40 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "mazak-hcn-4000"
 kind = "vmc4"
@@ -3792,6 +3822,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # Mazak HCN-6000: HCN, MAZATROL SmoothG (named in the machine-size row only).
 # X 800 Y 800 Z 800; 10000 rpm BT50 (JP page) / CAT50 (US page); 43 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "mazak-hcn-6000"
 kind = "vmc4"
@@ -4092,6 +4128,12 @@ basis = "the spindle head / ram (estimate); one box/cylinder from published over
 # ---------------------------------------------------------------------------------------------
 # Mazak QUICK TURN 250: QUICK TURN.
 # X 228.6 Z 533.4; 4000 rpm.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "mazak-quick-turn-250"
 kind = "lathe"

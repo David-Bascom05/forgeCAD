@@ -2,8 +2,8 @@
 
 use forge_render::gui::Headless;
 
-const USAGE: &str = "forge-app [PART | file.fg | file.dwg] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch STATEMENT;STATEMENT..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
+const USAGE: &str = "forge-app [PART | file.fg | file.dwg] [--env NAME] [--size WxH] [--times]
+  [--shot FILE.ppm [--scale S] [--light] [--pastel] [--background floor|gradient|solid] [--settings FILE.toml] [--tab N] [--env NAME] [--select NAME] [--click NAME].. [--rclick NAME].. [--wait] [--at X Y] [--sketch STATEMENT;STATEMENT..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   steps, in order: --click NAME --dclick NAME --rclick NAME --wait --type TEXT --key NAME (enter, escape, tab, backspace, or M, Ctrl+Z, F6...)
   --hover X Y (the view's pick there) --clickat X Y --drag X Y X2 Y2 --drag-hold X Y X2 Y2 (not let go) --snap FILE.ppm --save
   --viewnow YAW PITCH --home --zoom F (the camera's distance times F) --wheel X Y DY (scroll there) --new-drawing
@@ -62,6 +62,8 @@ struct Args {
     settings: Option<String>,
     shot: Option<String>,
     tab: usize,
+    /// The environment to open the file in (shell/env: thermoform, bendsim, render, ...).
+    env: Option<String>,
     select: Option<String>,
     /// Clicks by name and waits for the Forge file's builds and checks, in order.
     steps: Vec<Step>,
@@ -90,6 +92,7 @@ fn args() -> Result<Args, String> {
         settings: None,
         shot: None,
         tab: 0,
+        env: None,
         select: None,
         steps: Vec::new(),
         at: None,
@@ -120,6 +123,7 @@ fn args() -> Result<Args, String> {
             "--settings" => a.settings = Some(v()?),
             "--shot" => a.shot = Some(v()?),
             "--tab" => a.tab = v()?.parse().map_err(|_| USAGE)?,
+            "--env" => a.env = Some(v()?),
             "--select" => a.select = Some(v()?),
             "--click" => a.steps.push(Step::Click(v()?)),
             "--rclick" => a.steps.push(Step::RightClick(v()?)),
@@ -501,6 +505,7 @@ fn run() -> Result<(), String> {
     if a.shot.is_none() && !a.bench {
         return forge_render::app::run(
             a.file,
+            a.env,
             (a.size.0 as f64, a.size.1 as f64),
             a.times,
             a.present,
@@ -538,6 +543,13 @@ fn run() -> Result<(), String> {
     }
     // a drawing opens on its first tab: the one asked for after
     h.gui.shell.tab = a.tab;
+    if let Some(e) = &a.env {
+        h.gui.env_asked = Some(e.clone());
+        h.settle();
+        for _ in 0..5 {
+            h.step();
+        }
+    }
     for step in &a.steps {
         let (right, c) = match step {
             Step::Click(c) | Step::DoubleClick(c) => (false, c),

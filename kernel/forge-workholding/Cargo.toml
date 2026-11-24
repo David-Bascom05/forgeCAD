@@ -1,0 +1,22 @@
+[package]
+name = "forge-workholding"
+description = "ForgeCAD workholding: vises, soft jaws, parallels, clamps, plates, zero-point, dovetail, tombstones, vacuum, chucks and collets as bodies posed on the stock, with their checks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-cam-geom = { path = "../forge-cam-geom" }
+forge-math = { path = "../forge-math" }
+forge-tooling = { path = "../forge-tooling" }
+
+[dev-dependencies]
+forge-dirs = { path = "../forge-dirs" }
+forge-lang = { path = "../../interface/forge-lang" }
+forge-mesh = { path = "../forge-mesh" }
+forge-cam = { path = "../forge-cam" }
+forge-post = { path = "../forge-post" }
+
+[lints]
+workspace = true

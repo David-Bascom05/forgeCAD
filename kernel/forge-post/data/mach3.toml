@@ -1,0 +1,229 @@
+# Mach3 Mill: restated from "Using Mach3Mill" Rev 1.84-A2 (machsupport.com); every code is cited
+# below. Mach3 is configured per machine: coolant outputs and the dwell unit are settings, so those
+# are refused rather than guessed.
+[dialect]
+name = "mach3"
+extension = "tap"
+decimals = 4
+feed_decimals = 1
+point = "always"
+program_open = ["({title})"]
+program_close = ["M30"]
+comment = "({text})"
+comment_strip = "()"
+line_numbers = false
+safe_start = ["G17 G21 G40 G49 G80 G90 G94", "G91.1"]
+tool_change = ["T{t} M6"]
+length_comp = "G43 H{h}"
+spindle_cw = "S{rpm} M3"
+spindle_ccw = "S{rpm} M4"
+spindle_stop = "M5"
+wcs = "G{n}"
+wcs_first = 54
+wcs_count = 6
+arc = "ijk"
+retract_home = ["G91 G28 Z0.", "G90"]
+coolant_off = "M9"
+cycle_drill = "G98 G81 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_dwell = "expand"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "G98 G84 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_ream = "G98 G85 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_next = "X{x} Y{y}"
+cycle_cancel = "G80"
+read_g_ignore = [91.1]
+source = "Using Mach3Mill Rev 1.84-A2 (cited per code)"
+taken = "2026-11-23"
+note = "G91.1 states the incremental arc-centre mode (a configuration otherwise); flood/mist coolant and dwell are refused (machine-configured). ASSUMPTION in forge-machine only: a G4 in a mach3 program (never posted by us) is interpreted as Fanuc G4 P milliseconds; the real unit is a Config>Logic setting"
+cite_required = true
+
+[[dialect.cite]]
+key = "program_open"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.5.5 Comments and Messages p10-12; 10.5.2 Subroutine labels p10-10"
+note = "no start code; a comment names the program"
+
+[[dialect.cite]]
+key = "program_close"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.8.1 p10-32/10-33"
+note = "M30"
+
+[[dialect.cite]]
+key = "comment"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.5.5 p10-12"
+note = "( ) on one line, not nested"
+
+[[dialect.cite]]
+key = "line_numbers"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.5 p10-10; 10.5.1 p10-10"
+note = "N optional: not written"
+
+[[dialect.cite]]
+key = "safe_start"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.x p10-20..10-31; 10.5.6 p10-12"
+note = "G17 G21 G40 G49 G80 G90 G94; G91.1 incremental IJ (10.7.26)"
+
+[[dialect.cite]]
+key = "tool_change"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.8.3 p10-33; 10.10.3 p10-35"
+note = "T M6 (M6Start macro, Cycle Start, M6End)"
+
+[[dialect.cite]]
+key = "length_comp"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.14 p10-23"
+note = "G43 H"
+
+[[dialect.cite]]
+key = "spindle_cw"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.8.2 p10-33; 10.10.2 p10-35"
+note = "S M3"
+
+[[dialect.cite]]
+key = "spindle_ccw"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.8.2 p10-33; 10.10.2 p10-35"
+note = "S M4"
+
+[[dialect.cite]]
+key = "spindle_stop"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.8.2 p10-33; 10.10.2 p10-35"
+note = "M5"
+
+[[dialect.cite]]
+key = "wcs"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.18 p10-24"
+note = "G54..G59"
+
+[[dialect.cite]]
+key = "arc"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.3.1/10.7.3.2 p10-17; 10.7.26 p10-30"
+note = "I J incremental under G91.1"
+
+[[dialect.cite]]
+key = "retract_home"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.10 p10-20; 10.7.17 p10-23/10-24"
+note = "G28 with Z only, from G91 Z0: straight up to Z home"
+
+[[dialect.cite]]
+key = "coolant_off"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.8.4 p10-33; 5.3.6.1"
+note = "M9 all off"
+
+[[dialect.cite]]
+key = "cycle_drill"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.24.2 p10-26"
+note = "G81"
+
+[[dialect.cite]]
+key = "cycle_dwell"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.24.3 p10-27"
+note = "posted as moves: the dwell between them is refused (units are a setting)"
+
+[[dialect.cite]]
+key = "cycle_peck"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.24.4 p10-27/10-28"
+note = "posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_chipbreak"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.22 p10-25"
+note = "G73 pull-back is a Settings DRO: posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_tap"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.24.5 p10-28"
+note = "G84 F units/min matched to the pitch (F = pitch x rpm)"
+
+[[dialect.cite]]
+key = "cycle_ream"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.24.6 p10-28"
+note = "G85"
+
+[[dialect.cite]]
+key = "cycle_next"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.24.2 p10-26"
+note = "cycles modal: further holes as X Y"
+
+[[dialect.cite]]
+key = "cycle_cancel"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.23 p10-25"
+note = "G80"
+
+[[dialect.cite]]
+key = "point"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.5.3.1 Number p10-10/10-11"
+note = "written with a point"
+
+[[dialect.cite]]
+key = "decimals"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.5.3.1 p10-11"
+note = "4 decimals written"
+
+[[dialect.cite]]
+key = "read_g_ignore"
+source = "https://www.machsupport.com/ftp/Docs/Mach3Mill_1.84.pdf"
+taken = "2026-11-23"
+where = "Using Mach3Mill (Artsoft; chapter 10 'G and M-code reference'), Rev 1.84-A2 (PDF dated 2006-04); 10.7.x p10-20..10-31; 10.5.6 p10-12"
+note = "G91.1 (arc mode) carries no motion"
+
+[[dialect.cite]]
+key = "coolant_flood"
+status = "refused"
+note = "M7/M8 flood vs mist: the manual contradicts itself and the outputs are user-assigned"
+
+[[dialect.cite]]
+key = "coolant_mist"
+status = "refused"
+note = "M7/M8 flood vs mist: the manual contradicts itself and the outputs are user-assigned"
+
+[[dialect.cite]]
+key = "dwell"
+status = "refused"
+note = "G4 P is seconds or milliseconds by a Config>Logic setting the program cannot see"

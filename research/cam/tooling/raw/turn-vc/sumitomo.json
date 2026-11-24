@@ -1,0 +1,1353 @@
+{
+ "maker": "Sumitomo Electric Hardmetal",
+ "taken": "2026-11-24",
+ "source": "General Catalog 2025-2026 section A \"Insert Grades\" (a.pdf), Chipbreaker and Grade Selection Guide for Turning, Recommended Cutting Conditions tables",
+ "rows": [
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC8115P",
+   "iso_group": "P",
+   "material_stated": "Mild Steel / Low Carbon Steel (SS400, S15C, etc.)",
+   "vc": {
+    "v": [
+     260.0,
+     500.0
+    ],
+    "optimum": 350.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 260-350-500"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.4
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.1-0.25-0.4"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     4.0
+    ],
+    "optimum": 2.5,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-2.5-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=13",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A13), work-material page \"Steel P\"; application \"Continuous\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU, GE\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC8025P",
+   "iso_group": "P",
+   "material_stated": "Mild Steel / Low Carbon Steel (SS400, S15C, etc.)",
+   "vc": {
+    "v": [
+     200.0,
+     320.0
+    ],
+    "optimum": 260.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 200-260-320"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "optimum": 0.35,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.2-0.35-0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     4.0
+    ],
+    "optimum": 2.5,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-2.5-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=13",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A13), work-material page \"Steel P\"; application \"General to Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU, GE\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC8020P",
+   "iso_group": "P",
+   "material_stated": "Medium to High Carbon Steel / Alloy Steel / Hard Steel (S45C, SCM435, SCM440H, etc.)",
+   "vc": {
+    "v": [
+     150.0,
+     290.0
+    ],
+    "optimum": 235.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 150-235-290"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "optimum": 0.35,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.2-0.35-0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     4.0
+    ],
+    "optimum": 2.5,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-2.5-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=13",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A13), work-material page \"Steel P\"; application \"Continuous to General\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU, GE\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC8025P",
+   "iso_group": "P",
+   "material_stated": "Medium to High Carbon Steel / Alloy Steel / Hard Steel (S45C, SCM435, SCM440H, etc.)",
+   "vc": {
+    "v": [
+     130.0,
+     230.0
+    ],
+    "optimum": 165.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 130-165-230"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "optimum": 0.35,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.2-0.35-0.5"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     4.0
+    ],
+    "optimum": 2.5,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-2.5-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=13",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A13), work-material page \"Steel P\"; application \"Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU, GE\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "T1500Z",
+   "iso_group": "P",
+   "material_stated": "Carbon Steel / Alloy Steel (S45C, SCM435, etc.)",
+   "vc": {
+    "v": [
+     100.0,
+     300.0
+    ],
+    "optimum": 200.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 100-200-300"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.15-0.25-0.50"
+   },
+   "ap": {
+    "v": [
+     0.8,
+     4.0
+    ],
+    "optimum": 2.2,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.8-2.2-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=11",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A11), work-material page \"Steel P\"; application \"Medium\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU\", matched to GU records offering this grade; cermet page (A11)"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "T1500Z",
+   "iso_group": "P",
+   "material_stated": "Hard Steel / Alloy Steel (SCM440H, etc.)",
+   "vc": {
+    "v": [
+     50.0,
+     250.0
+    ],
+    "optimum": 150.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 50-150-250"
+   },
+   "f": {
+    "v": [
+     0.15,
+     0.5
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.15-0.25-0.50"
+   },
+   "ap": {
+    "v": [
+     0.8,
+     4.0
+    ],
+    "optimum": 2.2,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.8-2.2-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=11",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A11), work-material page \"Steel P\"; application \"Medium\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU\", matched to GU records offering this grade; cermet page (A11)"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6030M",
+   "iso_group": "M",
+   "material_stated": "Ferritic (SUS405, SUS410L, SUS430, etc.)",
+   "vc": {
+    "v": [
+     140.0,
+     250.0
+    ],
+    "optimum": 170.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 140-170-250"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.4
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.25-0.40"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     4.0
+    ],
+    "optimum": 2.5,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-2.5-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Continuous\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"EG/GU/EX\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6135M",
+   "iso_group": "M",
+   "material_stated": "Ferritic (SUS405, SUS410L, SUS430, etc.)",
+   "vc": {
+    "v": [
+     140.0,
+     200.0
+    ],
+    "optimum": 170.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 140-170-200"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "optimum": 0.35,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.20-0.35-0.50"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     5.0
+    ],
+    "optimum": 3.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-3.0-5.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Light Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU/EH\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6030M",
+   "iso_group": "M",
+   "material_stated": "Martensitic (SUS410, SUS420J2, SUS440C, etc.)",
+   "vc": {
+    "v": [
+     100.0,
+     200.0
+    ],
+    "optimum": 150.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 100-150-200"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.4
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.25-0.40"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     4.0
+    ],
+    "optimum": 2.5,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-2.5-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Continuous\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"EG/GU/EX\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6135M",
+   "iso_group": "M",
+   "material_stated": "Martensitic (SUS410, SUS420J2, SUS440C, etc.)",
+   "vc": {
+    "v": [
+     80.0,
+     180.0
+    ],
+    "optimum": 130.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 80-130-180"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "optimum": 0.35,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.20-0.35-0.50"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     5.0
+    ],
+    "optimum": 3.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-3.0-5.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Light Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU/EH\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6135M",
+   "iso_group": "M",
+   "material_stated": "Austenitic (SUS304, SUS316, SUS321, etc.)",
+   "vc": {
+    "v": [
+     100.0,
+     200.0
+    ],
+    "optimum": 150.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 100-150-200"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.4
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.25-0.40"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     4.0
+    ],
+    "optimum": 2.5,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-2.5-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Continuous\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"EG/GU\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6135M",
+   "iso_group": "M",
+   "material_stated": "Austenitic (SUS304, SUS316, SUS321, etc.)",
+   "vc": {
+    "v": [
+     80.0,
+     180.0
+    ],
+    "optimum": 130.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 80-130-180"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "optimum": 0.35,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.20-0.35-0.50"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     5.0
+    ],
+    "optimum": 3.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-3.0-5.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Light Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU/EH\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6135M",
+   "iso_group": "M",
+   "material_stated": "Duplex (SUS329J1, SUS329J3L, SUS329J4L, etc.)",
+   "vc": {
+    "v": [
+     80.0,
+     160.0
+    ],
+    "optimum": 120.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 80-120-160"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.4
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.25-0.40"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     4.0
+    ],
+    "optimum": 2.5,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-2.5-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Continuous\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"EG/GU\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6135M",
+   "iso_group": "M",
+   "material_stated": "Duplex (SUS329J1, SUS329J3L, SUS329J4L, etc.)",
+   "vc": {
+    "v": [
+     70.0,
+     140.0
+    ],
+    "optimum": 100.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 70-100-140"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "optimum": 0.35,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.20-0.35-0.50"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     5.0
+    ],
+    "optimum": 3.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-3.0-5.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Light Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU/EH\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6030M",
+   "iso_group": "M",
+   "material_stated": "Precipitation Hardened Structure (SUS630, SUS631, SUS632J1, etc.)",
+   "vc": {
+    "v": [
+     70.0,
+     130.0
+    ],
+    "optimum": 90.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 70-90-130"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.4
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.25-0.40"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     4.0
+    ],
+    "optimum": 2.5,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-2.5-4.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Continuous\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"EG/GU/EX\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CCMT 09T304N-GU",
+    "CCMT 09T308N-GU",
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DCMT 11T304N-GU",
+    "DCMT 11T308N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VBMT 160404N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": "GU",
+   "grade": "AC6135M",
+   "iso_group": "M",
+   "material_stated": "Precipitation Hardened Structure (SUS630, SUS631, SUS632J1, etc.)",
+   "vc": {
+    "v": [
+     50.0,
+     120.0
+    ],
+    "optimum": 80.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 50-80-120"
+   },
+   "f": {
+    "v": [
+     0.2,
+     0.5
+    ],
+    "optimum": 0.35,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.20-0.35-0.50"
+   },
+   "ap": {
+    "v": [
+     1.0,
+     5.0
+    ],
+    "optimum": 3.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 1.0-3.0-5.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=14",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A14), work-material page \"Stainless Steel M\"; application \"Light Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; chipbreaker column printed \"GU/EH\", matched to GU records offering this grade"
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": null,
+   "grade": "AC4010K",
+   "iso_group": "K",
+   "material_stated": "Grey Cast Iron (FC250, etc.)",
+   "vc": {
+    "v": [
+     200.0,
+     700.0
+    ],
+    "optimum": 400.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 200-400-700"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.4
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.25-0.40"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     6.0
+    ],
+    "optimum": 2.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.5-2.0-6.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=16",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A16), work-material page \"Cast Iron K\"; application \"Continuous to General\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; this K table has NO chipbreaker column (grade only): matched to GU records whose grade columns carry this grade, not to a printed GU row"
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": null,
+   "grade": "AC4015K",
+   "iso_group": "K",
+   "material_stated": "Grey Cast Iron (FC250, etc.)",
+   "vc": {
+    "v": [
+     180.0,
+     450.0
+    ],
+    "optimum": 300.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 180-300-450"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.5
+    ],
+    "optimum": 0.3,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.30-0.50"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     6.0
+    ],
+    "optimum": 2.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.5-2.0-6.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=16",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A16), work-material page \"Cast Iron K\"; application \"Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; this K table has NO chipbreaker column (grade only): matched to GU records whose grade columns carry this grade, not to a printed GU row"
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": null,
+   "grade": "AC4125K",
+   "iso_group": "K",
+   "material_stated": "Grey Cast Iron (FC250, etc.)",
+   "vc": {
+    "v": [
+     150.0,
+     300.0
+    ],
+    "optimum": 200.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 150-200-300"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.6
+    ],
+    "optimum": 0.3,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.30-0.60"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     6.0
+    ],
+    "optimum": 2.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.5-2.0-6.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=16",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A16), work-material page \"Cast Iron K\"; application \"Heavy Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; this K table has NO chipbreaker column (grade only): matched to GU records whose grade columns carry this grade, not to a printed GU row"
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": null,
+   "grade": "AC4010K",
+   "iso_group": "K",
+   "material_stated": "Ductile Cast Iron (FCD450, etc.)",
+   "vc": {
+    "v": [
+     180.0,
+     450.0
+    ],
+    "optimum": 300.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 180-300-450"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.4
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.25-0.40"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     6.0
+    ],
+    "optimum": 2.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.5-2.0-6.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=16",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A16), work-material page \"Cast Iron K\"; application \"Continuous to General\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; this K table has NO chipbreaker column (grade only): matched to GU records whose grade columns carry this grade, not to a printed GU row"
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": null,
+   "grade": "AC4015K",
+   "iso_group": "K",
+   "material_stated": "Ductile Cast Iron (FCD450, etc.)",
+   "vc": {
+    "v": [
+     160.0,
+     400.0
+    ],
+    "optimum": 250.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 160-250-400"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.5
+    ],
+    "optimum": 0.3,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.30-0.50"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     6.0
+    ],
+    "optimum": 2.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.5-2.0-6.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=16",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A16), work-material page \"Cast Iron K\"; application \"Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; this K table has NO chipbreaker column (grade only): matched to GU records whose grade columns carry this grade, not to a printed GU row"
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": null,
+   "grade": "AC4125K",
+   "iso_group": "K",
+   "material_stated": "Ductile Cast Iron (FCD450, etc.)",
+   "vc": {
+    "v": [
+     120.0,
+     250.0
+    ],
+    "optimum": 170.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 120-170-250"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.6
+    ],
+    "optimum": 0.3,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.30-0.60"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     6.0
+    ],
+    "optimum": 2.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.5-2.0-6.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=16",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A16), work-material page \"Cast Iron K\"; application \"Heavy Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; this K table has NO chipbreaker column (grade only): matched to GU records whose grade columns carry this grade, not to a printed GU row"
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": null,
+   "grade": "AC4010K",
+   "iso_group": "K",
+   "material_stated": "High-strength Ductile Cast Iron (FCD700, etc.)",
+   "vc": {
+    "v": [
+     160.0,
+     400.0
+    ],
+    "optimum": 250.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 160-250-400"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.4
+    ],
+    "optimum": 0.25,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.25-0.40"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     6.0
+    ],
+    "optimum": 2.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.5-2.0-6.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=16",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A16), work-material page \"Cast Iron K\"; application \"Continuous to General\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; this K table has NO chipbreaker column (grade only): matched to GU records whose grade columns carry this grade, not to a printed GU row"
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": null,
+   "grade": "AC4015K",
+   "iso_group": "K",
+   "material_stated": "High-strength Ductile Cast Iron (FCD700, etc.)",
+   "vc": {
+    "v": [
+     140.0,
+     350.0
+    ],
+    "optimum": 200.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 140-200-350"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.5
+    ],
+    "optimum": 0.3,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.30-0.50"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     6.0
+    ],
+    "optimum": 2.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.5-2.0-6.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=16",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A16), work-material page \"Cast Iron K\"; application \"Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; this K table has NO chipbreaker column (grade only): matched to GU records whose grade columns carry this grade, not to a printed GU row"
+  },
+  {
+   "insert_ids": [
+    "CNMG 120404N-GU",
+    "CNMG 120408N-GU",
+    "DNMG 150404N-GU",
+    "DNMG 150408N-GU",
+    "DNMG 150604N-GU",
+    "DNMG 150608N-GU",
+    "TNMG 160404N-GU",
+    "TNMG 160408N-GU",
+    "VNMG 160404N-GU",
+    "VNMG 160408N-GU",
+    "WNMG 080404N-GU",
+    "WNMG 080408N-GU"
+   ],
+   "chipbreaker": null,
+   "grade": "AC4125K",
+   "iso_group": "K",
+   "material_stated": "High-strength Ductile Cast Iron (FCD700, etc.)",
+   "vc": {
+    "v": [
+     80.0,
+     220.0
+    ],
+    "optimum": 150.0,
+    "unit": "m/min",
+    "stated": "Cutting Speed vc (m/min) 80-150-220"
+   },
+   "f": {
+    "v": [
+     0.1,
+     0.6
+    ],
+    "optimum": 0.3,
+    "unit": "mm/rev",
+    "stated": "Feed Rate f (mm/rev) 0.10-0.30-0.60"
+   },
+   "ap": {
+    "v": [
+     0.5,
+     6.0
+    ],
+    "optimum": 2.0,
+    "unit": "mm",
+    "stated": "Depth of Cut ap (mm) 0.5-2.0-6.0"
+   },
+   "url": "https://www.sumitool.com/en/downloads/cutting-tools/general-catalog/assets/pdf/a.pdf#page=16",
+   "note": "Catalogue 2025-2026 section A, \"Recommended Cutting Conditions\" (A16), work-material page \"Cast Iron K\"; application \"Heavy Interrupted\"; values printed as Min.-Optimum-Max., v = [min, max], optimum kept separately; this K table has NO chipbreaker column (grade only): matched to GU records whose grade columns carry this grade, not to a printed GU row"
+  }
+ ],
+ "missing": [
+  {
+   "insert_id": "CCMT 09T304N-GU",
+   "why": "groups with a printed vc: ['M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC6020M', 'AC6040M', 'AC6145M', 'AC8015P', 'AC8035P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "CCMT 09T308N-GU",
+   "why": "groups with a printed vc: ['M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC6020M', 'AC6040M', 'AC6145M', 'AC8015P', 'AC8035P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "CNMG 120404N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'AC9115T', 'AC9125T', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "CNMG 120408N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'AC9115T', 'AC9125T', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "DCMT 11T304N-GU",
+   "why": "groups with a printed vc: ['M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC6020M', 'AC6040M', 'AC6145M', 'AC8015P', 'AC8035P', 'AC9115T', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "DCMT 11T308N-GU",
+   "why": "groups with a printed vc: ['M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC6020M', 'AC6040M', 'AC6145M', 'AC8015P', 'AC8035P', 'AC9115T', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "DNMG 150404N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "DNMG 150408N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "DNMG 150604N-GU",
+   "why": "groups with a printed vc: ['K', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC8015P', 'AC8035P', 'AC820P', 'AC830P']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "DNMG 150608N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "TNMG 160404N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "TNMG 160408N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "VBMT 160404N-GU",
+   "why": "groups with a printed vc: ['M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC6020M', 'AC6040M', 'AC6145M', 'AC8015P', 'AC8035P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "VNMG 160404N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "VNMG 160408N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "WNMG 080404N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  },
+  {
+   "insert_id": "WNMG 080408N-GU",
+   "why": "groups with a printed vc: ['K', 'M', 'P']. No GU (or grade-only) row in section A tables for offered grades ['AC5005S', 'AC5015S', 'AC5025S', 'AC520U', 'AC530U', 'AC6020M', 'AC6040M', 'AC6145M', 'AC630M', 'AC8015P', 'AC8035P', 'AC810P', 'AC820P', 'AC830P', 'T1500A', 'T2500Z']. S (exotic alloy, A18) table lists EF/EX/EG/MU/EM chipbreakers only, not GU; H (A20) and N (A22) tables are CBN/PCD grades. No turning vc tables in section B (b.pdf) itself; section A24 small-lathe table not applied (small-lathe tools)."
+  }
+ ],
+ "blocked": [
+  "www.sumitool.com general-catalog assets/pdf/{n1,n2,b}.pdf: HTTP 502 Bad Gateway (nginx) on 2026-11-24 when trying to fetch section N2 \"References\"; not needed because section A (already downloaded) carries the tables"
+ ]
+}

@@ -1,0 +1,12 @@
+machining
+# Benchmark (verify/forge-cam-quality): clear round the boss, then profile it, with a 10 mm end mill.
+shared tol = 0.01
+
+f    = part("boss.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)
+skim = facing(op1, tool: t1, to: 25, step: 1)
+rough = clear(op1, tool: t1, from: 25, to: 10.2, step: 3, stepover: 4)
+fin  = contour(op1, tool: t1, side: "outside", from: 25, to: 10, step: 15)
+prog = program(op1, post: "fanuc", number: 5005)

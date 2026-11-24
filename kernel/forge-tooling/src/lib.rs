@@ -7,8 +7,17 @@
 //! generic tools, conservative holders, a generic 3-axis machine and per-group cutting data, each
 //! marked "verify with the vendor". Search order for a named library: the project's
 //! `cam/` directory, then the user's, then the built-in set.
+pub mod build;
+pub mod cite;
+pub mod entry;
 pub mod feeds;
+pub mod instances;
+pub mod life;
+pub mod resolve;
 pub mod toml;
+pub mod turning;
+
+pub use cite::{Cite, CiteStatus};
 
 use forge_cam_geom::tool::{self as gtool, Cutter, Shape, ToolError};
 use toml::{Table, num, tables, text};
@@ -162,6 +171,45 @@ pub struct Tool {
     pub taken: String,
     pub note: String,
     pub presets: Vec<Preset>,
+    /// A real maker's product: every value cited (cite.rs).
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+/// Fields a tool may cite beyond the required ones.
+const TOOL_EXTRA: &[&str] = &[
+    "nof", "re", "angle", "sig", "tip_d", "tp", "hand", "material", "coating", "helix", "neck_d", "reach",
+    "preset", "id", "type", "max_rpm",
+];
+
+/// A record's `[[<kind>.preset]]` list (tools and turning inserts).
+pub(crate) fn read_presets(t: &Table, rec: &str) -> Result<Vec<Preset>, LibError> {
+    let mut presets = Vec::new();
+    for p in tables(t, "preset") {
+        presets.push(Preset {
+            name: text(p, "name").unwrap_or("").to_string(),
+            group: text(p, "group")
+                .ok_or_else(|| LibError::Missing {
+                    record: format!("{rec} preset"),
+                    field: "group",
+                    fix: "give `group = \"N\"` (ISO P M K N S H)".into(),
+                })?
+                .to_string(),
+            vc: need(p, rec, "vc")?,
+            fz: need(p, rec, "fz")?,
+            ap: num(p, "ap"),
+            ae: num(p, "ae"),
+        });
+    }
+    Ok(presets)
+}
+
+/// The cite paths a record's presets need: `preset.<name>` (or `preset.<group>`).
+pub(crate) fn preset_paths(presets: &[Preset]) -> Vec<String> {
+    presets
+        .iter()
+        .map(|p| format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name }))
+        .collect()
 }
 
 fn need(t: &Table, rec: &str, k: &'static str) -> Result<f64, LibError> {
@@ -227,25 +275,27 @@ impl Tool {
             Kind::Tap | Kind::ThreadMill => positive(&rec, "tp", need(t, &rec, "tp")?)?,
             _ => num(t, "tp").unwrap_or(0.0),
         };
-        let mut presets = Vec::new();
-        for p in tables(t, "preset") {
-            presets.push(Preset {
-                name: text(p, "name").unwrap_or("").to_string(),
-                group: text(p, "group")
-                    .ok_or_else(|| LibError::Missing {
-                        record: format!("{rec} preset"),
-                        field: "group",
-                        fix: "give `group = \"N\"` (ISO P M K N S H)".into(),
-                    })?
-                    .to_string(),
-                vc: need(p, &rec, "vc")?,
-                fz: need(p, &rec, "fz")?,
-                ap: num(p, "ap"),
-                ae: num(p, "ae"),
-            });
+        let presets = read_presets(t, &rec)?;
+        let mut required: Vec<String> = ["dc", "lcf", "dcon", "oal"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        match kind {
+            Kind::Bull => required.push("re".into()),
+            Kind::Chamfer | Kind::Spot | Kind::Countersink | Kind::Engrave => required.push("angle".into()),
+            Kind::Drill => required.push("sig".into()),
+            Kind::Tap | Kind::ThreadMill => required.push("tp".into()),
+            _ => {}
         }
+        if num(t, "nof").is_some() {
+            required.push("nof".into());
+        }
+        required.extend(preset_paths(&presets));
+        let (real, cites) = cite::read(t, &rec, &required, TOOL_EXTRA)?;
         let s = |k: &str| text(t, k).unwrap_or("").to_string();
         Ok(Tool {
+            real,
+            cites,
             kind,
             dc,
             re,
@@ -281,6 +331,8 @@ impl Tool {
                 angle: self.angle,
                 d: self.dc,
             },
+            // an indexable drill (sig = 180) cuts a flat bottom: its envelope is a flat end
+            Kind::Drill if self.angle >= 180.0 => Cutter::Flat { d: self.dc },
             Kind::Drill => Cutter::Drill {
                 d: self.dc,
                 angle: self.angle,
@@ -310,7 +362,27 @@ pub struct Holder {
     pub max_rpm: f64,
     pub source: String,
     pub note: String,
+    pub vendor: String,
+    pub product_id: String,
+    pub taken: String,
+    /// The collet nut this holder takes (a [[collet_nut]] id), when known.
+    pub nut: Option<String>,
+    /// A real maker's product: every value cited (cite.rs).
+    pub real: bool,
+    pub cites: Vec<Cite>,
 }
+
+/// Fields a holder may cite beyond the required ones.
+const HOLDER_EXTRA: &[&str] = &[
+    "nut",
+    "max_rpm",
+    "balance",
+    "coolant",
+    "nose_d",
+    "id",
+    "pull_stud",
+    "clamp_range",
+];
 
 impl Holder {
     pub fn from_table(t: &Table) -> Result<Holder, LibError> {
@@ -362,7 +434,21 @@ impl Holder {
                 why: "needs two or more rings from z = 0, z never falling".into(),
             });
         }
+        let mut required: Vec<String> = ["interface", "clamp", "gauge_length", "profile"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        if num(t, "max_rpm").is_some() {
+            required.push("max_rpm".into());
+        }
+        let (real, cites) = cite::read(t, &rec, &required, HOLDER_EXTRA)?;
         Ok(Holder {
+            real,
+            cites,
+            vendor: text(t, "vendor").unwrap_or("").to_string(),
+            product_id: text(t, "product_id").unwrap_or("").to_string(),
+            taken: text(t, "taken").unwrap_or("").to_string(),
+            nut: text(t, "nut").map(str::to_string),
             gauge_length: need(t, &rec, "gauge_length")?,
             interface: text(t, "interface").unwrap_or("").to_string(),
             clamp: text(t, "clamp").unwrap_or("").to_string(),
@@ -528,6 +614,215 @@ pub struct Library {
     pub cutting: Vec<feeds::Group>,
     pub vises: Vec<Vise>,
     pub jaw_blanks: Vec<JawBlank>,
+    pub collets: Vec<Collet>,
+    pub collet_nuts: Vec<ColletNut>,
+    pub pull_studs: Vec<PullStud>,
+    pub inserts: Vec<turning::Insert>,
+    pub turn_holders: Vec<turning::TurnHolder>,
+    pub groove_inserts: Vec<turning::GrooveInsert>,
+    pub blades: Vec<turning::Blade>,
+    pub tool_blocks: Vec<turning::ToolBlock>,
+    /// Each record's own table as read: (TOML key, id, table), for `build::derive`.
+    pub sources: Vec<(String, String, Table)>,
+}
+
+/// A tool-side collet (ER, TG, R8, ...): the bore it is named for and the range it clamps.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Collet {
+    pub id: String,
+    /// The collet system: ER11, ER16, ER20, ER25, ER32, ER40, TG100, R8, ...
+    pub system: String,
+    /// Nominal bore, mm.
+    pub bore: f64,
+    /// [min, max] shank diameter it clamps, mm (absent: the bore only).
+    pub clamp: Option<[f64; 2]>,
+    pub length: Option<f64>,
+    pub od: Option<f64>,
+    pub vendor: String,
+    pub product_id: String,
+    pub source: String,
+    pub taken: String,
+    pub note: String,
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+/// A collet nut: its system, outside diameter, length and thread.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ColletNut {
+    pub id: String,
+    pub system: String,
+    pub od: f64,
+    pub length: f64,
+    pub thread: String,
+    pub vendor: String,
+    pub product_id: String,
+    pub source: String,
+    pub taken: String,
+    pub note: String,
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+/// A pull stud (retention knob) for a taper interface.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PullStud {
+    pub id: String,
+    pub interface: String,
+    pub thread: String,
+    pub length: f64,
+    /// The knob's angle as the source states it (degrees), if given.
+    pub angle: Option<f64>,
+    pub coolant: bool,
+    pub vendor: String,
+    pub product_id: String,
+    pub source: String,
+    pub taken: String,
+    pub note: String,
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+fn rec_id(t: &Table, kind: &str) -> Result<String, LibError> {
+    Ok(text(t, "id")
+        .ok_or_else(|| LibError::Missing {
+            record: format!("[[{kind}]]"),
+            field: "id",
+            fix: "give `id = \"...\"`".into(),
+        })?
+        .to_string())
+}
+
+fn s_of(t: &Table, k: &str) -> String {
+    text(t, k).unwrap_or("").to_string()
+}
+
+impl Collet {
+    pub fn from_table(t: &Table) -> Result<Collet, LibError> {
+        let id = rec_id(t, "collet")?;
+        let rec = format!("collet `{id}`");
+        let system = text(t, "system")
+            .ok_or_else(|| LibError::Missing {
+                record: rec.clone(),
+                field: "system",
+                fix: "give `system = \"ER20\"` (ER11 ... ER50, TG, R8, ...)".into(),
+            })?
+            .to_string();
+        let bore = positive(&rec, "bore", need(t, &rec, "bore")?)?;
+        let clamp = match toml::nums(t, "clamp") {
+            Some(v) if v.len() == 2 && v[0] > 0.0 && v[0] <= v[1] => Some([v[0], v[1]]),
+            Some(_) => {
+                return Err(LibError::Bad {
+                    record: rec,
+                    field: "clamp",
+                    why: "is [min, max] mm, 0 < min <= max".into(),
+                });
+            }
+            None => None,
+        };
+        let mut required = vec!["system".to_string(), "bore".to_string()];
+        for (k, v) in [
+            ("clamp", clamp.is_some()),
+            ("length", num(t, "length").is_some()),
+            ("od", num(t, "od").is_some()),
+        ] {
+            if v {
+                required.push(k.into());
+            }
+        }
+        let (real, cites) = cite::read(t, &rec, &required, &["id", "runout", "collapse"])?;
+        Ok(Collet {
+            system,
+            bore,
+            clamp,
+            length: num(t, "length"),
+            od: num(t, "od"),
+            vendor: s_of(t, "vendor"),
+            product_id: s_of(t, "product_id"),
+            source: s_of(t, "source"),
+            taken: s_of(t, "taken"),
+            note: s_of(t, "note"),
+            real,
+            cites,
+            id,
+        })
+    }
+}
+
+impl ColletNut {
+    pub fn from_table(t: &Table) -> Result<ColletNut, LibError> {
+        let id = rec_id(t, "collet_nut")?;
+        let rec = format!("collet nut `{id}`");
+        let system = s_of(t, "system");
+        if system.is_empty() {
+            return Err(LibError::Missing {
+                record: rec,
+                field: "system",
+                fix: "give `system = \"ER20\"`".into(),
+            });
+        }
+        let od = positive(&rec, "od", need(t, &rec, "od")?)?;
+        let length = positive(&rec, "length", need(t, &rec, "length")?)?;
+        let required: Vec<String> = ["system", "od", "length", "thread"]
+            .iter()
+            .filter(|k| **k != "thread" || text(t, "thread").is_some())
+            .map(|s| s.to_string())
+            .collect();
+        let (real, cites) = cite::read(t, &rec, &required, &["id", "thread"])?;
+        Ok(ColletNut {
+            system,
+            od,
+            length,
+            thread: s_of(t, "thread"),
+            vendor: s_of(t, "vendor"),
+            product_id: s_of(t, "product_id"),
+            source: s_of(t, "source"),
+            taken: s_of(t, "taken"),
+            note: s_of(t, "note"),
+            real,
+            cites,
+            id,
+        })
+    }
+}
+
+impl PullStud {
+    pub fn from_table(t: &Table) -> Result<PullStud, LibError> {
+        let id = rec_id(t, "pull_stud")?;
+        let rec = format!("pull stud `{id}`");
+        let interface = s_of(t, "interface");
+        if interface.is_empty() {
+            return Err(LibError::Missing {
+                record: rec,
+                field: "interface",
+                fix: "give `interface = \"CAT40\"` (BT30, BT40, ...)".into(),
+            });
+        }
+        let length = positive(&rec, "length", need(t, &rec, "length")?)?;
+        let mut required: Vec<String> = vec!["interface".into(), "length".into()];
+        if text(t, "thread").is_some() {
+            required.push("thread".into());
+        }
+        if num(t, "angle").is_some() {
+            required.push("angle".into());
+        }
+        let (real, cites) = cite::read(t, &rec, &required, &["id", "coolant"])?;
+        Ok(PullStud {
+            interface,
+            length,
+            thread: s_of(t, "thread"),
+            angle: num(t, "angle"),
+            coolant: toml::boolean(t, "coolant").unwrap_or(false),
+            vendor: s_of(t, "vendor"),
+            product_id: s_of(t, "product_id"),
+            source: s_of(t, "source"),
+            taken: s_of(t, "taken"),
+            note: s_of(t, "note"),
+            real,
+            cites,
+            id,
+        })
+    }
 }
 
 /// A machine vise, generic: two jaws that close along the clamp axis on the stock, and a bed
@@ -621,10 +916,12 @@ impl Library {
                     name: x.id,
                 });
             }
+            self.sources.push(("tool".into(), x.id.clone(), r.clone()));
             self.tools.push(x);
         }
         for r in tables(&t, "holder") {
             let x = Holder::from_table(r)?;
+            self.sources.push(("holder".into(), x.id.clone(), r.clone()));
             if self.holders.iter().any(|o| o.id == x.id) {
                 return Err(LibError::Duplicate {
                     kind: "holder",
@@ -655,6 +952,34 @@ impl Library {
         for r in tables(&t, "jaw_blank") {
             self.jaw_blanks.push(JawBlank::from_table(r)?);
         }
+        macro_rules! unique {
+            ($key:literal, $vec:ident, $ty:ty, $kind:literal) => {
+                for r in tables(&t, $key) {
+                    let x = <$ty>::from_table(r)?;
+                    self.sources.push(($key.into(), x.id.clone(), r.clone()));
+                    if self.$vec.iter().any(|o| o.id == x.id) {
+                        return Err(LibError::Duplicate {
+                            kind: $kind,
+                            name: x.id,
+                        });
+                    }
+                    self.$vec.push(x);
+                }
+            };
+        }
+        unique!("collet", collets, Collet, "collet");
+        unique!("collet_nut", collet_nuts, ColletNut, "collet nut");
+        unique!("pull_stud", pull_studs, PullStud, "pull stud");
+        unique!("insert", inserts, turning::Insert, "insert");
+        unique!("turn_holder", turn_holders, turning::TurnHolder, "turning holder");
+        unique!(
+            "groove_insert",
+            groove_inserts,
+            turning::GrooveInsert,
+            "groove insert"
+        );
+        unique!("blade", blades, turning::Blade, "blade");
+        unique!("tool_block", tool_blocks, turning::ToolBlock, "tool block");
         Ok(())
     }
 
@@ -743,13 +1068,16 @@ fn edit_distance(a: &str, b: &str) -> usize {
     prev[b.len()]
 }
 
-pub const BUILTIN: [(&str, &str); 5] = [
-    ("builtin/fixtures.toml", include_str!("../data/fixtures.toml")),
-    ("builtin/tools.toml", include_str!("../data/tools.toml")),
-    ("builtin/holders.toml", include_str!("../data/holders.toml")),
-    ("builtin/machines.toml", include_str!("../data/machines.toml")),
-    ("builtin/cutting.toml", include_str!("../data/cutting.toml")),
-];
+// BUILTIN: [(file, text)], generated by build.rs: the generic files (fixtures, tools, holders,
+// machines, cutting) first, then every vendor file under data/{tools,holders,collets,turning}/.
+include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
+
+/// The built-in library files, in reading order: (`builtin/<path>`, contents). The generic files
+/// come first, then each vendor file (`builtin/tools/<vendor>.toml`, `builtin/holders/...`,
+/// `builtin/collets/...`, `builtin/turning/...`), so a library builder can group records by file.
+pub fn builtin_files() -> &'static [(&'static str, &'static str)] {
+    BUILTIN
+}
 
 #[cfg(test)]
 mod tests {
@@ -758,7 +1086,7 @@ mod tests {
     #[test]
     fn builtin_reads_and_shapes() {
         let l = Library::builtin();
-        assert!(l.tools.len() >= 15 && l.holders.len() == 3 && l.machines.len() == 2 && l.cutting.len() == 6);
+        assert!(l.tools.len() >= 15 && l.holders.len() >= 3 && l.machines.len() == 2 && l.cutting.len() == 6);
         let m = l.machine("generic-vmc3").unwrap();
         assert_eq!(m.joints.len(), 3);
         assert_eq!(m.power_at(750.0), Some(5.5));

@@ -33,6 +33,7 @@ impl Interval {
             hi: hi.next_up(),
         }
     }
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.lo > self.hi
     }
