@@ -294,7 +294,8 @@ impl Shell {
         );
         let r = egui::Area::new(egui::Id::unique("camsim:timeline"))
             .fixed_pos(bar.min)
-            .order(egui::Order::Foreground)
+            .order(egui::Order::Middle)
+            .fade_in(false)
             .show(ctx, |ui| {
                 ui.set_width(bar.width());
                 ui.set_height(bar.height());
@@ -313,7 +314,8 @@ impl Shell {
         );
         let r = egui::Area::new(egui::Id::unique("camsim:panel"))
             .fixed_pos(pr.min)
-            .order(egui::Order::Foreground)
+            .order(egui::Order::Middle)
+            .fade_in(false)
             .show(ctx, |ui| {
                 ui.set_width(pr.width());
                 ui.set_max_height(pr.height());
@@ -363,6 +365,7 @@ impl Shell {
                 let resp = egui::Area::new(id)
                     .fixed_pos(hit.min)
                     .order(egui::Order::Middle)
+                    .fade_in(false)
                     .show(ctx, |ui| {
                         let (_, r) = ui.allocate_exact_size(hit.size(), Sense::click());
                         r.on_hover_text(&m.text)

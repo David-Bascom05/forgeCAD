@@ -108,3 +108,4 @@ import ForgeCam
 #print axioms ForgeCam.Turn.smear_hull
 #print axioms ForgeCam.Turn.eroded_gap
 #print axioms ForgeCam.Turn.rect_in_convex
+#print axioms ForgeCam.sd_ge_of_halfspace

@@ -209,10 +209,18 @@ impl Shell {
                 let cert = match &w.run {
                     _ if w.running.is_some() => ("generating…".to_string(), t.accent),
                     Some(run) if run.certification == "full" => ("certified".into(), t.success),
-                    Some(run) if run.certification == "except G5" => ("certified except G5".into(), t.warn),
+                    // not a failure: travel (G5) is checked by span only until a setup is placed
+                    Some(run) if run.certification == "except G5" => ("certified · G5 unchecked".into(), t.ink2),
                     Some(_) => ("refused".into(), t.error),
                     None => ("not generated".into(), t.ink2),
                 };
+                if w.run.as_ref().is_some_and(|r| r.certification == "except G5") {
+                    ui.interact(r, ui.scope_id().with("cam-cert"), Sense::hover()).on_hover_text(
+                        "Every op is certified. Machine travel (G5) is checked against each axis's span only: \
+                         a setup is not placed on the machine (`at:`, the work offset in machine coordinates). \
+                         Place it in the setup dialog to check the positions too.",
+                    );
+                }
                 ui.painter().text(
                     pos2(r.left() + 32.0, r.center().y),
                     Align2::LEFT_CENTER,
@@ -774,6 +782,19 @@ fn details(
                     width,
                     t.ink,
                 );
+                let tol = run.and_then(|r| r.setup(&o.setup)).map_or(0.0, |s| s.tol);
+                if l.abs() <= tol + 1e-9 {
+                    // a finishing cut touches the wall it finishes by design: a gouge is below −tol
+                    note(
+                        ui,
+                        &format!(
+                            "0 is the cutter on the wall it finishes, as a finishing pass is meant to be; a gouge would be under −{} mm (the setup's tol).",
+                            num(tol)
+                        ),
+                        width,
+                        t.ink2,
+                    );
+                }
             }
             if o.pairs > 0 {
                 fact(ui, t, "Certified pairs", &o.pairs.to_string(), width, t.ink);
@@ -1081,12 +1102,28 @@ fn op_dialog(
                 d.set(f.arg, val);
             }
             if tab == Tab::Linking {
+                if let Some(su) = w.run.as_ref().and_then(|r| r.setup(&d.setup)) {
+                    heading(ui, t, "Retract and rapids (the setup's)", DLG_W);
+                    fact(ui, t, "Clearance height", &format!("{} mm", num(su.clear_h)), DLG_W, t.ink);
+                    fact(ui, t, "Retract height", &format!("{} mm", num(su.retract_h)), DLG_W, t.ink);
+                    fact(ui, t, "Clearance kept by rapids", &format!("{} mm", num(su.clearance)), DLG_W, t.ink);
+                }
                 note(
                     ui,
-                    "Linking is by retract to the setup's retract height; rapids are certified clear of the part and the in-process stock.",
+                    "Passes link by retract to the retract height, between levels and between regions; every rapid is certified clear of the part and the in-process stock. Lead-in arcs, stay-down links and high-feed linking are not in the language yet.",
                     DLG_W,
                     t.ink2,
                 );
+                ui.horizontal(|ui| {
+                    ui.add_space(146.0);
+                    if button(ui, t, "Setup Heights…", false, "cam:op:setup-heights".into(), places) {
+                        let id = d.setup.clone();
+                        w.command(Cmd::Edit(id));
+                        if let Some(sd) = &mut w.setup_dlg {
+                            sd.tab = 2;
+                        }
+                    }
+                });
             }
             if tab == Tab::Heights
                 && let Some(su) = w.run.as_ref().and_then(|r| r.setup(&d.setup))
@@ -1613,7 +1650,10 @@ fn checks_window(
             };
             let (word, c) = match run.certification.as_str() {
                 "full" => ("Every op certified, every program released", t.success),
-                "except G5" => ("Certified except G5: a setup is not placed (at:)", t.warn),
+                "except G5" => (
+                    "Every op certified; machine travel (G5) checked by span only: a setup is not placed (at:)",
+                    t.ink2,
+                ),
                 _ => ("Refused: an op or program below", t.error),
             };
             note(ui, word, width, c);

@@ -436,8 +436,25 @@ pub struct Ctx {
     pub nodes: Vec<Node>,
     /// How many exact (big-float) evaluations were needed: for tracing the filter's rate.
     pub exact_evals: u64,
-    memo: std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>,
+    memo: Memo,
     keys: Vec<Key>,
+}
+
+/// The node memo: key to node, lookups only. It must never be iterated (a hash map's order is
+/// not a result to depend on), so it offers get, insert and remove and nothing else.
+#[derive(Clone, Debug, Default)]
+struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
+
+impl Memo {
+    fn get(&self, k: &Key) -> Option<&R> {
+        self.0.get(k)
+    }
+    fn insert(&mut self, k: Key, r: R) {
+        self.0.insert(k, r);
+    }
+    fn remove(&mut self, k: &Key) {
+        self.0.remove(k);
+    }
 }
 
 /// A fixed (unseeded) multiplicative hasher for the memo.

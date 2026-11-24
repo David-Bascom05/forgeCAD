@@ -32,12 +32,13 @@ what their absence means.
 | field | | meaning |
 |---|---|---|
 | name | required | unique in its level |
-| kind | required | `vmc3` `vmc4` `table-table` `head-table` `head-head` `lathe` `mill-turn` |
+| kind | required | `vmc3` `vmc4` `table-table` `head-table` `head-head` `lathe` `mill-turn` `hmc` `gantry` (3 linear joints all on the head, a dual-drive gantry axis as one joint, up to two head rotaries) `turn-mill` (a live-turret lathe: X Z, optional Y and C, a turret whose `live` names the milling spindle that drives it; no B head) |
 | control | required | the forge-post dialect its control speaks (machine and control kept apart) |
 | source | required | where the numbers come from; `taken`, `note` optional |
 | clearance | required | least gap (mm) the collision check holds between bodies |
-| length_joint | mills: required | the linear head joint G43 moves (Z); lathes use X/Z offsets instead |
+| length_joint | mills: required | the linear joint G43 moves: a VMC's head Z, or an HMC's table Z (the table moving to the column; its axis is the table's motion for +word, so H acts the same); lathes use X/Z offsets instead |
 | coolants | optional | kinds present: flood mist through air (empty: none declared) |
+| peck_clear, chip_lift | optional | G83's peck clearance and G73's chip-break lift, mm: the control's parameters (Fanuc 5115/5114, Haas settings, Siemens _ZSFR, ...), citable as `machine.peck_clear` / `machine.chip_lift`. Absent: forge-post's 0.5 / 0.2 mm are used and every program with G83/G73 reports them not checked (`sim::unchecked_cycles`) |
 | real | optional | true: a real maker's model; every value must be cited (Provenance). false if absent |
 
 ## `[[machine.joint]]`
@@ -73,9 +74,31 @@ joint that positions this spindle as a C axis).
 `name`, `link`, `stations`, `index_s` (seconds per station), `center`, `index_axis`; optional `live`
 (the milling spindle that drives live tools).
 
+## `[[machine.pallets]]` (at most one)
+
+An automatic pallet changer (an HMC's APC): `count` (≥ 2), `change_s` (seconds per change; may be
+omitted when cited unknown). Optional: `max_kg` (per pallet), `size = [x, y]`, `max_work =
+[diameter, height]`, and `position_joints` / `position` (where M60 sends the machine first, as the
+changer's). On a machine with pallets, M60 swaps the pallet: the timeline marks it and adds its
+time, after the position move (a checked rapid). M60 elsewhere is refused. Kind `hmc` reads as
+`vmc4` (3 linear and a table rotary) and says what the machine is.
+
+## `[[machine.toolpost]]`
+
+A manual tool post (quick-change holders; a Sherline's or a Tormach 8L's post): `name`, `link`,
+`center` (the holder's datum, home pose); optional `change_s` (the operator's swap, seconds; absent:
+0 in `t_min`, reported not checked). A lathe takes it instead of a turret. Any T number; a T that
+changes the tool is a program stop for the swap.
+
 ## `[[machine.changer]]` (at most one)
 
-`pockets`, `change_s` (chip to chip), `max_tool_kg`.
+`pockets`, `change_s` (chip to chip), `max_tool_kg`. Optional: `kind = "manual"` (M6 stops the
+program and the operator swaps the tool: no pockets and no `max_tool_kg`, no pocket check; the
+timeline marks the stop), else automatic. Optional: `position_joints` and `position`,
+where M6 moves the machine by itself before the swap (joint values, e.g. `position_joints = ["Z"]`,
+`position = [0]` for a Haas, whose M06 sends Z to machine zero). The simulation makes that move as
+a rapid with the old tool, timed and collision-checked; without it the move is not simulated and
+every tool change reports `changer.position` not checked.
 
 ## `[[machine.mount]]`
 
@@ -104,17 +127,61 @@ in the record is an error. A path may be cited more than once (sources that agre
 | field | | meaning |
 |---|---|---|
 | path | required | the value, as above |
-| status | required | `published` (the source states it), `estimate` (not published: derived as `basis` says), `unknown` (nothing to derive it from), `conflict` (sources disagree) |
+| status | required | `published` (the source states it), `estimate` (not published: derived as `basis` says), `unknown` (nothing to derive it from), `conflict` (sources disagree), `user` (the user's own measured or entered value; source and taken optional) |
 | source | published, conflict: required | URL or document; restate, never copy |
 | taken | with a source: required | YYYY-MM-DD the source was read |
 | value | optional | the source's statement, restated with its units ("30 in (762 mm)") |
 | basis | estimate, unknown: required | how it was derived, and which way it errs |
 | note | conflict: required | what disagrees and which value the record holds |
 
-The record's number is always usable: an estimate or unknown is the *conservative* value (a larger
-collision envelope, a lower rate or acceleration, a smaller travel), never a silent default.
+**Unknown numbers may be omitted.** A required number (a joint's `range`, `rapid`, `max_feed`; a
+spindle's `rpm`, `max`; a turret's `stations`, `index_s`; the changer's `pockets`, `change_s`,
+`max_tool_kg`; a body's envelope) may be left out if and only if a cite names it with
+`status = "unknown"`; leaving one out otherwise is an error that says so. Structural fields (a
+joint's type, axis, parent, pivot; a mount's link and `at`; a spindle's nose) stay required.
+
+**Never a silent pass on a stand-in.** Every check that needs an omitted value, or one cited
+`unknown` or `estimate`, is reported as *not checked* (`sim::unchecked`; the setup reply's
+`not_checked`, each value once with the first line that needed it), not as OK: overtravel against
+a range, the feed clamp against a max feed, rapid time against a rapid rate, the rpm range, pocket
+and station counts, tool change and index times, and collision of a body with no envelope (left
+out of the check). Time bounds stay sound: an omitted rate is unbounded and an omitted change or
+index time is 0, so `t_min` is still a lower bound. Values given with an `estimate` cite are
+still used (the record's number, chosen conservatively as `basis` says) and the checks against
+them are listed as estimated.
+
+## `[[machine.zone]]`
+
+A region of joint space the control forbids: a stored stroke check (Fanuc stroke limits 2 and 3),
+an interference zone. Machine data like any other, stated in the record and citable as
+`zone.NAME` (often `user`: the values set in the control).
+
+| field | | meaning |
+|---|---|---|
+| name | required | unique |
+| joints | required | the joints it bounds; every other joint is free |
+| min, max | required | per joint, min < max: the zone is the open box min < q < max (its boundary is travel) |
+| note | optional | |
+
+The simulation reports a program entering one (violation `zone`, at the first point found: exact
+on straight moves, by bisection on arcs); the self-collision check below leaves zones out of the
+travel. The generic mill-turn declares the zones that keep its B head off the headstock, chuck and
+sub-spindle.
+
+## Self-collision through travel
+
+A machine's own bodies must not collide anywhere inside the declared travel outside its zones: a
+pose the joints can reach where they do is wrong data (fix the geometry, the travel, or declare
+the zone the control enforces). tests/collide.rs sweeps every built-in: for each pair of bodies, each
+joint that moves one relative to the other through its whole range, with the others at every
+combination of their ends; no Hit and no Near.
 
 ## Structural checks (`MachineDef::validate`)
+
+A `table-table` machine may carry one turning spindle on its table's C (`c_joint` naming a table
+rotary): a mill that also turns, the milling spindle holding the stationary tool; its X is a
+radius.
+
 
 Unique names and letters; the tree is acyclic and rooted at the base; every link named exists;
 every joint lies on some mount's chain, head joints only on tool chains, table joints only on part
@@ -178,10 +245,10 @@ pieces into material, the removal summary, and what is claimed.
 
 | part | what it is |
 |---|---|
-| interpreter (gcode.rs) | words to control events in exact integers; agrees with forge-post's reader on its subset (L6, 60 programs per dialect, every built-in dialect); its Lean spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine, L1) |
+| interpreter (forge-machine-core, gcode.rs) | words to control events in exact integers. The block core (kernel/forge-machine-core: motion, modal words, arcs, canned cycles, G28) is proven, through Aeneas, to be the Lean spec's `step` and, over a program, its `runFrom` (verify/aeneas/forge-machine-core, L4, within 2^29 units); the spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine). The shell (text to words, tools, spindle, offsets) agrees with forge-post's reader on its subset (L6, 240 programs × 4 dialects) |
 | kinematics (kin.rs) | joint values to link placements, dmath rotations (exact at multiples of 90°), and the same over intervals |
 | timing (sim.rs) | `t_min` a lower bound (feed and axis limits; G95 with G96 integrated exactly on lines, the clamp's bound on arcs); `t_stop` exact stops with trapezoidal acceleration, an estimate |
-| collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused) |
+| collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused). A Hit's witness is a point in the base (machine) frame at the segment parameter `s` |
 | removal (removal.rs) | a height map (milling, tool on the part's +Z) or a radius map (turning) at grid nodes, in floating point: rapids into material and tool pieces (shank, holder) into material, with the stock as cut so far |
 
 Native and wasm32 give the same bits (tests/bits.rs).

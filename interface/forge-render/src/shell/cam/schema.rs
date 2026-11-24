@@ -228,10 +228,12 @@ pub fn spec(func: &str) -> Option<&'static OpSpec> {
 }
 
 /// The tabs `s` has fields on, in order.
+/// The tabs `s` shows, in order: those it has fields on, and Linking always (the setup's
+/// retract and rapids apply to every op).
 pub fn tabs(s: &OpSpec) -> Vec<Tab> {
     Tab::ALL
         .into_iter()
-        .filter(|t| s.fields.iter().any(|f| f.tab == *t))
+        .filter(|t| *t == Tab::Linking || s.fields.iter().any(|f| f.tab == *t))
         .collect()
 }
 

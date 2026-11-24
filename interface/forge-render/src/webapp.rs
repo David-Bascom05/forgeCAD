@@ -813,6 +813,13 @@ fn cam_json(g: &Gui) -> Json {
         ("selected", w.selected.clone().map_or(Json::Null, Json::from)),
         ("dirty", w.dirty().into()),
         ("text", w.text.clone().into()),
+        // the op dialog's statement as it stands (what OK would write)
+        (
+            "op_text",
+            w.op_dlg
+                .as_ref()
+                .map_or(Json::Null, |d| crate::shell::cam::CamWs::op_text(d).into()),
+        ),
         (
             "ops",
             Json::Arr(

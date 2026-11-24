@@ -916,6 +916,37 @@ impl CamWs {
     }
 }
 
+/// The machining document of the part at `part_path` (the Environments tab's Enter, from a
+/// part): `<part>_cam.fg` beside it if that is a machining document, else a new one linked to
+/// the part, not yet written (it is dirty until saved). Refused if the file there is not one.
+pub fn open_for(part_path: &str) -> Result<CamWs, String> {
+    let part = std::path::Path::new(part_path);
+    let stem = part
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| format!("{part_path}: not a part file"))?;
+    let file = part
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| format!("{part_path}: not a part file"))?;
+    let doc = part.with_file_name(format!("{stem}_cam.fg"));
+    let path = doc.display().to_string();
+    if let Ok(text) = forge_dirs::fs::read_to_string(&doc) {
+        if !forge_cam_lang::is_machining(&text) {
+            return Err(format!("{path} is there and is not a machining document"));
+        }
+        return Ok(CamWs::open(&path, &text));
+    }
+    let text = format!(
+        "machining\n# {file} machined: add a setup (Setup > New Setup), then its operations.\n\
+         f  = part(\"{file}\", group: \"N\")\nm  = machine(\"generic-vmc3\")\n\
+         t1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\n"
+    );
+    let mut ws = CamWs::open(&path, &text);
+    ws.saved = String::new();
+    Ok(ws)
+}
+
 /// A setup statement's arguments as the dialog edits them.
 pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
     let mut a: Vec<(String, String)> = vec![];
@@ -1036,6 +1067,25 @@ prog = program(op1, post: \"fanuc\", number: 1001)
             "{}",
             w.text
         );
+    }
+
+    #[test]
+    fn open_for_a_part_finds_or_makes_its_machining_document() {
+        let ex = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined/flange.fg");
+        let w = open_for(ex).expect("found");
+        assert!(w.path.ends_with("flange_cam.fg"));
+        assert!(!w.dirty());
+        assert_eq!(w.setups().len(), 1);
+        let ex = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/machined/nameplate.fg"
+        );
+        let w = open_for(ex).expect("made");
+        assert!(w.path.ends_with("nameplate_cam.fg"));
+        assert!(w.dirty(), "new: unsaved");
+        assert!(forge_cam_lang::is_machining(&w.text));
+        assert_eq!(w.stmt("f").and_then(|s| s.pos(0)), Some("\"nameplate.fg\""));
+        assert!(w.part_path().is_some_and(|p| p.ends_with("nameplate.fg")));
     }
 
     #[test]
