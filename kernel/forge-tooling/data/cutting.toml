@@ -658,3 +658,38 @@ source = "verify/feeds-vs-makers (rows.tsv): Harvey and Helical finish vs slot c
 taken = "2026-11-24"
 value = "median 0.750 over 378 pairs (10th-90th 0.517-0.934); Harvey 0.750, Helical 0.716"
 basis = "finish-row chip (fz x radial thinning at its stated ae) over the same tool's slot-row chip, median of the cited rows"
+
+# Elastic data per tool substrate, for the deflection check (feeds::tip_deflection).
+
+[[substrate]]
+name = "carbide"
+real = true
+e_mpa = 618000
+de_ratio = 0.8
+[[substrate.cite]]
+path = "e_mpa"
+status = "estimate"
+source = "CERATIZIT, Round Tool Materials 2024 EN, grade CTU13L, https://cdn.plansee-group.com/is/content/planseemedia/ceratizit/downloads/pdf/ctu13l/EN.pdf"
+taken = "2026-11-24"
+value = "Binder 6.5 m%; Modulus of elasticity 618 GPa"
+basis = "one maker's grade (6.5% Co) held for carbide end mills: E falls as Co rises (a 10% Co grade is near 570 GPa per a non-maker reprint), so a higher-Co tool deflects a little more than this says"
+[[substrate.cite]]
+path = "de_ratio"
+status = "unknown"
+basis = "Kops and Vo, Determination of the equivalent diameter of an end mill based on its compliance, CIRP Annals 39(1):93-96, 1990, DOI 10.1016/S0007-8506(07)61010-5: 'approximately 80% of the cutter diameter for both two- and four-flute end mills', read ONLY as a search-engine snippet of the abstract; the paper itself not read. Flute count and helix move it; unverified"
+
+[[substrate]]
+name = "hss"
+real = true
+e_mpa = 219000
+de_ratio = 0.8
+[[substrate.cite]]
+path = "e_mpa"
+status = "published"
+source = "voestalpine BOHLER, S600 (1.3343 / HS6-5-2C, M2) datasheet, https://www.bohler-edelstahl.com/app/uploads/sites/248/productdb/api/s600_en_gb.pdf"
+taken = "2026-11-24"
+value = "Modulus of elasticity 219 x 10^3 N/mm2 at 20 C (S705 HSS-Co: 224)"
+[[substrate.cite]]
+path = "de_ratio"
+status = "unknown"
+basis = "as for carbide: Kops and Vo 1990 (CIRP Annals 39(1):93-96), 'approximately 80%', read only as a search-engine snippet of the abstract; unverified"
