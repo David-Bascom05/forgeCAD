@@ -306,3 +306,71 @@ fn other_strategies_certify_on_the_dome() {
         .collect();
     assert!(sum.clear, "{bad:?}");
 }
+
+/// The generic certified drop-cutter on the exact faces agrees with the analytic one, and a
+/// pass draped through it certifies.
+#[test]
+fn certdrop_on_the_faces_agrees_and_certifies() {
+    use forge_cam_3d::certdrop::CertDrop;
+    use forge_cam_3d::drop::DropCutter;
+    let tool = ball6();
+    let faces = dome_faces();
+    let cd = CertDrop {
+        cutter: &tool.shape.bodies[0],
+        faces: &faces,
+        leave: 0.0,
+        tol: 1e-4,
+        budget: 20_000,
+        res: 1e-4,
+    };
+    let an = Analytic {
+        r: 3.0,
+        planes: vec![(0.0, [-50.0, -50.0], [50.0, 50.0])],
+        spheres: vec![([0.0, 0.0, -10.0], 30.0)],
+    };
+    for &(x, y) in &[
+        (0.0, 0.0),
+        (10.0, 5.0),
+        (22.0, 3.0),
+        (29.0, -4.0),
+        (31.0, 0.0),
+        (40.0, 40.0),
+    ] {
+        let c = cd.drop(x, y).unwrap();
+        let a = an.drop(x, y).unwrap();
+        assert!(
+            c.lo <= a.hi + 1e-6 && a.lo <= c.hi + 1e-6 && c.width() <= 1e-3,
+            "({x},{y}) cert {c:?} analytic {a:?}"
+        );
+    }
+    // a short draped pass through it (the generic drop needs the branch and bound for every
+    // witness: correct, slow; the exact drop-cutter is the primary), then the certifier
+    use forge_cam_3d::drape::{Drape, drape};
+    let t0 = std::time::Instant::now();
+    let d = Drape {
+        step: 1.0,
+        slack: 0.002,
+        leave: 0.02,
+        zmin: 0.0,
+    };
+    let ps = drape(&cd, &[[18.0, 2.0], [22.0, 2.0]], d).unwrap();
+    assert_eq!(ps.len(), 1);
+    let e = Emit {
+        tool: 0,
+        h: Heights {
+            clear: 40.0,
+            retract: 25.0,
+        },
+        feed: (1500.0, 500.0),
+        rpm: 12000.0,
+        coolant: forge_post::Coolant::Flood,
+    };
+    let p = path::passes(&ps, e);
+    let sum = ops::certify(&p, &tool, &faces, &[], 0.01, 1.0);
+    eprintln!(
+        "certdrop drape: {} moves, generated + certified in {:.1} s",
+        p.moves.len(),
+        t0.elapsed().as_secs_f64()
+    );
+    assert!(sum.clear);
+}

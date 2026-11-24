@@ -10,6 +10,7 @@
 //! stays an Aeneas target.
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
 
+pub mod certdrop;
 pub mod contain;
 pub mod drape;
 pub mod drop;
