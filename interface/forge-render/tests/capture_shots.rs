@@ -14,7 +14,8 @@ fn settled(g: &Gui) -> bool {
 fn at(size: (f32, f32), file: &str, env: EnvId) -> Option<Headless> {
     let mut h = Headless::new(size, 1.0).ok()?;
     h.step();
-    h.gui.open(&format!("{}/../../examples/{file}", env!("CARGO_MANIFEST_DIR")));
+    h.gui
+        .open(&format!("{}/../../examples/{file}", env!("CARGO_MANIFEST_DIR")));
     assert!(h.until(settled), "{file} never built: {}", h.gui.shell.status);
     h.gui.shell.out.push(Action::EnterEnv(env));
     for _ in 0..6 {

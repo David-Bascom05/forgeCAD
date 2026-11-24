@@ -15,8 +15,8 @@
 
 use crate::boolean::{
     BoolError, Cut, CutOn, FaceRef, Imprint, Lost, Op, Piece, R, Seg, Side, Touch, Unhandled, VKey, Walk,
-    branches_meet, crossings_near, edge_split, grown_tols, imprint, lean, local_class, on_edge, overlap,
-    settle, split_face, touches, trim,
+    branches_meet, crossings_near, edge_split, grown_tols, imprint, imprint_tols, lean, local_class, on_edge,
+    overlap, refuse_tolerances_meeting, settle, split_face, touches, trim,
 };
 use crate::classify::{Index, Where};
 use crate::shape::{Member, Shape};
@@ -997,6 +997,7 @@ fn nary_body(
                     SurfaceSurface::Coincident => {
                         out.coplanar.push([(i, fa), (j, fb)]);
                         let both = [a, b];
+                        let made = out.imprints.len();
                         imprint(
                             both,
                             [ia, ib],
@@ -1019,6 +1020,9 @@ fn nary_body(
                             &mut out.imprints,
                             &mut Vec::new(),
                         )?;
+                        if out.imprints.len() > made {
+                            crate::boolean::mark_exact(&mut out.imprints[made..], sa, sb);
+                        }
                         continue;
                     }
                     // where either face is buried there is no curve to find
@@ -1866,7 +1870,7 @@ fn nary_body(
     let mut face_imprints: Vec<Vec<Vec<usize>>> =
         tools.iter().map(|b| vec![Vec::new(); b.faces.len()]).collect();
     for (ii, im) in imprints.iter().enumerate() {
-        face_imprints[im.into_side][im.into.index()].push(ii);
+        face_imprints[im.into_side as usize][im.into.index()].push(ii);
     }
     let mut cut_faces: Vec<Vec<bool>> = tools.iter().map(|b| vec![false; b.faces.len()]).collect();
     for &(sd, e, _) in &by_edge {
@@ -1950,6 +1954,22 @@ fn nary_body(
             }
             let boundary = pieces.walks(side, f);
             jobs.push((side, f, boundary, new_edges));
+        }
+    }
+    // imprinted edges' and their ends' tolerances grown to hold the faces they now bound
+    // (`imprint_tols`; the result is built fresh, so the pieces carry the edges' tolerances)
+    let mut imprint_grown: Vec<(VKey, f64)> = Vec::new();
+    if !imprints.iter().all(|im| im.exact) {
+        let first = grown.len();
+        let of_edge = &pieces.of_edge;
+        let pieces_of = |sd: Side, e: EdgeId| {
+            let (f, n) = of_edge[sd][e.index()];
+            (n > 0).then_some((f as usize, n as usize))
+        };
+        imprint_tols(tools, &imprints, pieces_of, &mut pieces.list, &alias, &mut grown);
+        if grown.len() > first {
+            imprint_grown = grown[first..].to_vec();
+            grown.sort_unstable_by_key(|g| g.0);
         }
     }
     // two tools' faces on one surface crossing a third give the same new edge twice: one copy
@@ -2850,6 +2870,8 @@ fn nary_body(
     let mut old_v: Vec<Vec<Option<VertexId>>> = vec![Vec::new(); n];
     let mut new_v: Vec<Option<VertexId>> = vec![None; points.len()];
     let mut emap: Vec<Option<EdgeId>> = vec![None; list.len()];
+    // edges shorter than the balls at their ends: checked once built (`refuse_short_edges`)
+    let mut short: Vec<EdgeId> = Vec::new();
     for &(ri, flip) in &kept {
         let r = &regs[ri];
         let src = tools[r.side].face(r.face);
@@ -2911,6 +2933,10 @@ fn nary_body(
                         let (v0, v1) = (vertex(&mut out, pc.start), vertex(&mut out, pc.end));
                         let e = out.add_edge(pc.curve.clone(), pc.range, v0, v1, pc.name);
                         out.edges[e.index()].tol = pc.tol;
+                        // (a line's parameter is its length)
+                        if matches!(pc.curve, Curve::Line(_)) && pc.range.width() <= 2.0 * tol::LINEAR {
+                            short.push(e);
+                        }
                         emap[p] = Some(e);
                         e
                     }
@@ -2919,6 +2945,12 @@ fn nary_body(
             }
             out.add_loop(face, &uses);
         }
+    }
+    if !imprint_grown.is_empty() {
+        refuse_tolerances_meeting(&imprint_grown, &list, |p| emap[p].is_some())?;
+    }
+    if !short.is_empty() {
+        refuse_short_edges(&out, &short)?;
     }
     out.rebuild_shells();
     lap(&mut clock, 5);
@@ -2931,6 +2963,35 @@ fn nary_body(
         out.sole_survivors(&survivors);
     }
     Ok(out)
+}
+
+/// Line edges of the result shorter than two tolerances (`short`), refused where `check` would
+/// find them degenerate (ends within LINEAR of each other: two vertices the pass did not merge) or
+/// off a plane they bound by more than their tolerance (a sliver's piece left bounding a face it
+/// crosses). Both came out of the n-ary pass as Oks (research/booleans/drift.md §9); the
+/// sequential boolean refuses or merges there. Cold: only where such an edge was built.
+#[cold]
+#[inline(never)]
+fn refuse_short_edges(out: &Body, short: &[EdgeId]) -> R<()> {
+    for &e in short {
+        let edge = out.edge(e);
+        let (a, b) = (edge.curve.eval(edge.range.lo), edge.curve.eval(edge.range.hi));
+        let refuse = a.distance(b) <= tol::LINEAR
+            || edge
+                .coedges
+                .iter()
+                .any(|&c| match &out.face(out.coedge_face(c)).surface {
+                    forge_geom::Surface::Plane(q) => {
+                        q.signed_distance(a).abs().max(q.signed_distance(b).abs()) > edge.tol.max(tol::LINEAR)
+                    }
+                    _ => false,
+                });
+        if refuse {
+            let at = Point3::new(0.5 * (a.x + b.x), 0.5 * (a.y + b.y), 0.5 * (a.z + b.z));
+            return Err(BoolError::unhandled(Unhandled::TolerancesMeet { at }));
+        }
+    }
+    Ok(())
 }
 
 /// The point where three surfaces meet, by Newton's method from `p` (None where they meet at a

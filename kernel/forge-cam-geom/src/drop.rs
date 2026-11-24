@@ -522,12 +522,24 @@ struct Cell {
 /// column's footprint), or None when no point of the cell is within R. Also which parameter
 /// to split (the one whose derivative times width is largest).
 fn cell_upper(col: &Column, f: &Face, mv: &Move, c: &Cell) -> Option<(f64, usize)> {
-    cell_upper_side(col, f, mv, c, false)
+    cell_upper_side(col, f, mv, c, false, None)
 }
 
 /// `cell_upper`; with `side`, of min(u, R − ρ) (the depth into the column is at most the
 /// radial gap to its side as well as the vertical one to its bottom).
-fn cell_upper_side(col: &Column, f: &Face, mv: &Move, c: &Cell, side: bool) -> Option<(f64, usize)> {
+///
+/// `stop`: a caller that only asks whether the bound is above it (and splits nothing at or
+/// below it) gets, once one of the bounds the minimum is taken of is at or below it, that bound
+/// and no split (`gap_clear`).
+fn cell_upper_side(
+    col: &Column,
+    f: &Face,
+    mv: &Move,
+    c: &Cell,
+    side: bool,
+    stop: Option<f64>,
+) -> Option<(f64, usize)> {
+    let done = |best: f64| matches!(stop, Some(n) if best <= n);
     // natural enclosures and the monotone bound
     let y = f.surf.eval(c.p, c.q);
     let g = mv.at(c.s);
@@ -537,6 +549,9 @@ fn cell_upper_side(col: &Column, f: &Face, mv: &Move, c: &Cell, side: bool) -> O
     let rho = r2.sqrt();
     let bb = col.b(rho)?;
     let mut best = y[2].sub(bb).sub(g[2]).hi;
+    if done(best) {
+        return Some((best, 0));
+    }
     if side {
         let rad = Ival::pt(col.r)
             .sub(Ival {
@@ -547,9 +562,15 @@ fn cell_upper_side(col: &Column, f: &Face, mv: &Move, c: &Cell, side: bool) -> O
         if rad < best {
             best = rad;
         }
+        if done(best) {
+            return Some((best, 0));
+        }
         let sd = col.solid.sd_rz(rho, y[2].sub(g[2]));
         if -sd.lo < best {
             best = -sd.lo;
+        }
+        if done(best) {
+            return Some((best, 0));
         }
     }
     let point = c.p.width() == 0.0 && c.q.width() == 0.0 && c.s.width() == 0.0;
@@ -607,7 +628,8 @@ fn cell_upper_side(col: &Column, f: &Face, mv: &Move, c: &Cell, side: bool) -> O
     let w = [
         diam2(&f.surf.eval(c.p, qc)),
         diam2(&f.surf.eval(pc, c.q)),
-        diam2(&mv.at(c.s)),
+        // (mv.at(c.s))
+        diam2(&g),
     ];
     while k < 3 {
         let sm = grad[k] + 1e-3 * w[k];
@@ -1796,6 +1818,30 @@ pub enum Gap {
 /// untrimmed surface's CL along the piece, by the mean-value form in s); the pieces it cannot
 /// clear go to the branch and bound over the face's parameters and s.
 pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Gap, usize) {
+    gap_search(col, f, mv, limit, res, budget, false)
+}
+
+/// Whether `gap_move` on the same arguments is `Clear`, the same answer, but by a search that
+/// stops once it cannot be: at a cell too small to split (the verdict is then Unknown at best),
+/// or once the cells over the limit still in the heap, each needing a split of two cells, cannot
+/// all be split within the budget. For callers that treat Over and Unknown alike.
+pub fn gap_clear(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> bool {
+    matches!(
+        gap_search(col, f, mv, limit, res, budget, true).0,
+        Gap::Clear { .. }
+    )
+}
+
+/// `gap_move`'s search; `clear_only`: stop at the first sign it cannot end Clear (`gap_clear`).
+fn gap_search(
+    col: &Column,
+    f: &Face,
+    mv: &Move,
+    limit: f64,
+    res: f64,
+    budget: usize,
+    clear_only: bool,
+) -> (Gap, usize) {
     if limit > 0.0 {
         return (Gap::Unknown, 0);
     }
@@ -2040,6 +2086,11 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
     // cells near the limit; a cell too small to split leaves the verdict unknown, but the search
     // goes on for a witness
     let mut heap = Heap { v: Vec::new() };
+    // ("Clear?" only: a cell at or below the limit is dropped whatever its bound, so its bound
+    // stops at the first of its terms that shows it)
+    let stop = if clear_only { Some(need) } else { None };
+    // (the heap's cells over the limit, each of which a Clear verdict must split)
+    let mut over = 0usize;
     let mut i = 0;
     while i < rest.len() {
         let c = Cell {
@@ -2048,7 +2099,10 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
             s: rest[i],
         };
         cells += 1;
-        if let Some((u, kk)) = cell_upper_side(col, f, mv, &c, true) {
+        if let Some((u, kk)) = cell_upper_side(col, f, mv, &c, true, stop) {
+            if u > need {
+                over += 1;
+            }
             heap.push(u, 0, c, kk);
         }
         i += 1;
@@ -2061,7 +2115,9 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
             }
             continue;
         }
-        if cells > budget {
+        over -= 1;
+        // each of the others is popped with at most `budget` cells spent and split into two
+        if cells > budget || (clear_only && cells + 2 * over > budget) {
             return (Gap::Unknown, cells);
         }
         // a real point over the limit: proven over, stop
@@ -2085,6 +2141,9 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
         }
         let img = diam2(&f.surf.eval(c.p, c.q)).max(diam2(&mv.at(c.s)));
         if img <= res || (c.p.width() == 0.0 && c.q.width() == 0.0 && c.s.width() == 0.0) {
+            if clear_only {
+                return (Gap::Unknown, cells);
+            }
             unknown = true;
             continue;
         }
@@ -2095,12 +2154,13 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
             if f.holds(h.p, h.q) == -1 {
                 continue;
             }
-            if let Some((u2, k2)) = cell_upper_side(col, f, mv, &h, true) {
+            if let Some((u2, k2)) = cell_upper_side(col, f, mv, &h, true, stop) {
                 if u2 <= need {
                     if u2 > worst {
                         worst = u2;
                     }
                 } else {
+                    over += 1;
                     heap.push(u2, 0, h, k2);
                 }
             }

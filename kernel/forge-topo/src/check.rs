@@ -1631,3 +1631,47 @@ fn segment_distance(p: Point3, a: Point3, b: Point3) -> f64 {
     };
     (a + ab * t).distance(p)
 }
+
+/// Vertices farther from a plane they bound than the tolerances on record allow: a vertex lies
+/// within its tolerance of each edge's curve ending on it, and an edge within its own of each face
+/// it bounds, so a vertex is within its tolerance and the largest of its edges' on that face of
+/// the face's surface (research/booleans/drift.md). Planes only, where the distance is exact to
+/// rounding; each as (vertex, face, distance, allowed). Not part of `check`, which asks the two
+/// links themselves at sampled points: this is the bound they compose to, asked after every
+/// boolean in debug builds (a slip in the bookkeeping shows at the boolean that made it) and by
+/// the fuzzers.
+#[cold]
+#[inline(never)]
+pub fn vertices_off_planes(body: &Body) -> Vec<(VertexId, FaceId, f64, f64)> {
+    // (vertex, face, the largest tolerance of an edge of that face ending at the vertex)
+    let mut at: Vec<(VertexId, FaceId, f64)> = Vec::new();
+    for e in body.edge_ids() {
+        let edge = body.edge(e);
+        for &c in &edge.coedges {
+            let f = body.coedge_face(c);
+            if matches!(body.face(f).surface, forge_geom::Surface::Plane(_)) {
+                at.push((edge.start, f, edge.tol));
+                at.push((edge.end, f, edge.tol));
+            }
+        }
+    }
+    at.sort_by(|x, y| (x.0, x.1).cmp(&(y.0, y.1)).then(y.2.total_cmp(&x.2)));
+    at.dedup_by(|x, y| x.0 == y.0 && x.1 == y.1);
+    let mut out = Vec::new();
+    for (v, f, etol) in at {
+        let forge_geom::Surface::Plane(q) = &body.face(f).surface else {
+            continue;
+        };
+        let x = body.vertex(v);
+        let d = q.signed_distance(x.point).abs();
+        // (and the distance's own rounding: a few units in the last place of the coordinates)
+        let (p, o) = (x.point, q.frame.origin);
+        let ulps =
+            8.0 * f64::EPSILON * (p.x.abs() + p.y.abs() + p.z.abs() + o.x.abs() + o.y.abs() + o.z.abs());
+        let allowed = x.tol.max(tol::LINEAR) + etol.max(tol::LINEAR) + ulps;
+        if d > allowed {
+            out.push((v, f, d, allowed));
+        }
+    }
+    out
+}
