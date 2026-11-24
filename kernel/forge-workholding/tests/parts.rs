@@ -81,3 +81,37 @@ fn builtin_parts_lie_in_their_envelopes() {
     }
     assert_eq!(n, 4);
 }
+
+/// A vise's parts posed by `Body.part_pose` lie in their bodies as placed, either clamp axis.
+#[test]
+fn posed_parts_lie_in_their_placed_bodies() {
+    let l = Library::builtin();
+    let r = l.get("standin-vise-150").unwrap();
+    let stock = Box3 {
+        min: [10.0, -20.0, 5.0],
+        max: [110.0, 40.0, 85.0],
+    };
+    let mut n = 0;
+    for axis in [0, 1] {
+        let p = mill::vise("v", r, &stock, axis, r.get("jaw_height").unwrap(), None, None).unwrap();
+        for b in &p.bodies {
+            let (Some(f), Some(pose)) = (&b.part, &b.part_pose) else {
+                continue;
+            };
+            let (pts, _) = build(f);
+            let worst = pts
+                .iter()
+                .map(|v| {
+                    let x = pose.point(*v);
+                    b.prims.iter().map(|q| q.outside(x)).fold(f64::INFINITY, f64::min)
+                })
+                .fold(0.0, f64::max);
+            assert!(worst <= 0.01, "axis {axis} {}: a vertex {worst} outside", b.name);
+            n += 1;
+        }
+    }
+    assert_eq!(n, 6);
+    // a conservative envelope (jaw thickness unpublished) carries no part pose
+    let dx6 = mill::vise("v", l.get("kurt-dx6").unwrap(), &stock, 0, 44.07, None, None).unwrap();
+    assert!(dx6.bodies.iter().all(|b| b.part_pose.is_none()));
+}
