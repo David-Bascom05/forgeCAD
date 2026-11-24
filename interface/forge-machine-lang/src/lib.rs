@@ -161,29 +161,250 @@ pub fn library(dir: &Path) -> Result<forge_machine::library::Library, String> {
 }
 
 /// Runs a setup file: the program on the machine, its timeline, collisions and removal.
+/// A dialect's text: a file `NAME.toml` beside the setup wins over a built-in of the same name.
+fn dialect_text(dir: &Path, name: &str) -> Result<String, String> {
+    let dfile = dir.join(format!("{name}.toml"));
+    match std::fs::read_to_string(&dfile) {
+        Ok(s) => Ok(s),
+        Err(_) => forge_machine::gcode::Control::dialect_src(name)
+            .map(str::to_string)
+            .ok_or_else(|| {
+                format!(
+                    "no dialect `{name}` (built in: fanuc haas linuxcnc grbl; or {})",
+                    dfile.display()
+                )
+            }),
+    }
+}
+
+/// A setup of several channels (`[[setup.channel]]`): each channel's program on its own letters,
+/// synchronised at waits, every body checked over every timing the bounds allow
+/// (forge_machine::multi). Reply: `forgecad.machine-multi/1`.
+fn run_channels(dir: &Path, specs: &[forge_machine::setup::SetupSpec]) -> Result<Outcome, String> {
+    use forge_machine::collide::Verdict;
+    use forge_machine::multi::{self, Channel, MultiError};
+    let lib = library(dir)?;
+    let def = lib.get(&specs[0].machine).map_err(|e| e.to_string())?;
+    let mut setups = Vec::new();
+    let mut progs = Vec::new();
+    for sp in specs {
+        let dsrc = dialect_text(dir, &sp.dialect)?;
+        setups.push(
+            sp.build(def, &dsrc)
+                .map_err(|e| format!("channel {}: {e}", sp.channel))?,
+        );
+        let pp = dir.join(&sp.program);
+        progs.push(std::fs::read_to_string(&pp).map_err(|e| format!("{}: {e}", pp.display()))?);
+    }
+    let mut work = Vec::new();
+    for (sp, s) in specs.iter().zip(&setups) {
+        work.extend(sp.work_bodies(s));
+    }
+    let chans: Vec<Channel> = specs
+        .iter()
+        .zip(&setups)
+        .zip(&progs)
+        .map(|((sp, s), p)| Channel {
+            ch: sp.channel,
+            setup: s,
+            program: p,
+        })
+        .collect();
+    let run = match multi::run(def, &chans, &work) {
+        Ok(r) => r,
+        Err(MultiError::Deadlock(stuck)) => {
+            let what: Vec<String> = stuck
+                .iter()
+                .map(|(c, l, w)| format!("channel {c} line {l} waits at M{w}"))
+                .collect();
+            let text = format!("REFUSED: deadlock: {}\n", what.join("; "));
+            let json = format!(
+                "{{\"format\":\"forgecad.machine-multi/1\",\"ok\":false,\"deadlock\":[{}]}}",
+                stuck
+                    .iter()
+                    .map(|(c, l, w)| format!("{{\"channel\":{c},\"line\":{l},\"wait\":{w}}}"))
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+            return Ok(Outcome {
+                ok: false,
+                text,
+                json,
+            });
+        }
+        Err(MultiError::Sim { ch, err }) => return Err(format!("channel {ch}: {err}")),
+        Err(MultiError::TwoChannels(b)) => {
+            return Err(format!(
+                "body `{b}` is moved by joints of two channels: not modelled"
+            ));
+        }
+    };
+    let verdict_json = |v: &Verdict| match v {
+        Verdict::Hit { s, witness } => format!(
+            "\"hit\",\"s\":{},\"at\":[{},{},{}]",
+            jnum(*s),
+            jnum(witness[0]),
+            jnum(witness[1]),
+            jnum(witness[2])
+        ),
+        Verdict::Near { s0, s1, gap_lo } => format!(
+            "\"near\",\"s0\":{},\"s1\":{},\"gap_lo\":{}",
+            jnum(*s0),
+            jnum(*s1),
+            jnum(*gap_lo)
+        ),
+        Verdict::Clear => "\"clear\"".into(),
+    };
+    let ok = run.timelines.iter().all(|tl| tl.violations.is_empty())
+        && run.own.iter().all(|r| r.contacts.is_empty())
+        && run.cross.is_empty();
+    let mut text = format!(
+        "{} channels on {}: {:.1} s at least, {} at most\n",
+        specs.len(),
+        def.name,
+        run.t[0],
+        if run.t[1].is_finite() {
+            format!("{:.1} s", run.t[1])
+        } else {
+            "unbounded".into()
+        }
+    );
+    let mut chans_json = Vec::new();
+    for (k, sp) in specs.iter().enumerate() {
+        let tl = &run.timelines[k];
+        text.push_str(&format!(
+            "channel {} ({}): {} segments, {:.1} s at least alone\n",
+            sp.channel,
+            sp.program,
+            tl.segments.len(),
+            tl.t_min
+        ));
+        for v in &tl.violations {
+            text.push_str(&format!("  violation: {v:?}\n"));
+        }
+        for c in &run.own[k].contacts {
+            text.push_str(&format!(
+                "  line {}: {} / {}: {:?}\n",
+                c.line, c.a, c.b, c.verdict
+            ));
+        }
+        let mut unchecked = forge_machine::sim::unchecked(def, tl);
+        unchecked.extend(forge_machine::sim::unchecked_cycles(def, &progs[k]));
+        for u in &unchecked {
+            text.push_str(&format!("  not checked: {} {} ({})\n", u.path, u.why, u.check));
+        }
+        let own: Vec<String> = run.own[k]
+            .contacts
+            .iter()
+            .map(|c| {
+                format!(
+                    "{{\"line\":{},\"a\":{},\"b\":{},\"verdict\":{}}}",
+                    c.line,
+                    jstr(&c.a),
+                    jstr(&c.b),
+                    verdict_json(&c.verdict)
+                )
+            })
+            .collect();
+        let windows: Vec<String> = run.windows[k]
+            .iter()
+            .map(|w| {
+                format!(
+                    "[{},{}]",
+                    jnum(w[0]),
+                    if w[1].is_finite() {
+                        jnum(w[1])
+                    } else {
+                        "null".into()
+                    }
+                )
+            })
+            .collect();
+        let ucs: Vec<String> = unchecked
+            .iter()
+            .map(|u| {
+                format!(
+                    "{{\"path\":{},\"why\":{},\"check\":{},\"line\":{}}}",
+                    jstr(&u.path),
+                    jstr(u.why),
+                    jstr(u.check),
+                    u.line
+                )
+            })
+            .collect();
+        chans_json.push(format!(
+            "{{\"channel\":{},\"program\":{},\"timeline\":{},\"windows\":[{}],\"collisions\":[{}],\"not_checked\":[{}]}}",
+            sp.channel,
+            jstr(&sp.program),
+            forge_machine::sim::timeline_json(tl),
+            windows.join(","),
+            own.join(","),
+            ucs.join(",")
+        ));
+    }
+    for c in &run.cross {
+        text.push_str(&format!(
+            "channel {} line {} / channel {} line {}: {} / {}: {:?} (some timing within the bounds)\n",
+            c.a_channel, c.a_line, c.b_channel, c.b_line, c.a, c.b, c.verdict
+        ));
+    }
+    for c in &run.conservative {
+        text.push_str(&format!("conservative: {c}\n"));
+    }
+    text.push_str("removal: not modelled for several channels\n");
+    text.push_str(if ok { "ok\n" } else { "REFUSED\n" });
+    let cross: Vec<String> = run
+        .cross
+        .iter()
+        .map(|c| {
+            format!(
+                "{{\"a_channel\":{},\"a_line\":{},\"b_channel\":{},\"b_line\":{},\"a\":{},\"b\":{},\"verdict\":{}}}",
+                c.a_channel,
+                c.a_line,
+                c.b_channel,
+                c.b_line,
+                jstr(&c.a),
+                jstr(&c.b),
+                verdict_json(&c.verdict)
+            )
+        })
+        .collect();
+    let json = format!(
+        "{{\"format\":\"forgecad.machine-multi/1\",\"ok\":{ok},\"machine\":{},\"t\":[{},{}],\"channels\":[{}],\"cross\":[{}],\"conservative\":[{}],\"claims\":{}}}",
+        jstr(&def.name),
+        jnum(run.t[0]),
+        if run.t[1].is_finite() {
+            jnum(run.t[1])
+        } else {
+            "null".into()
+        },
+        chans_json.join(","),
+        cross.join(","),
+        run.conservative
+            .iter()
+            .map(|c| jstr(c))
+            .collect::<Vec<_>>()
+            .join(","),
+        jstr(
+            "Channels synchronised at waits; every move takes between its t_min and its exact-stop time (no upper bound without declared accelerations and rates: such windows are open and listed under conservative). Bodies of two channels are checked over their whole motions with independent timing wherever their windows meet and no shared wait orders them: a Clear holds for every timing within the bounds; a cross contact may need a timing the control would not take. Each channel's own bodies are checked as for one channel. Not modelled: removal, superimposition, synchronised spindles."
+        )
+    );
+    Ok(Outcome { ok, text, json })
+}
+
 pub fn run_setup(path: &Path) -> Result<Outcome, String> {
     use forge_machine::collide::{self, Verdict};
     use forge_machine::removal;
     use forge_machine::setup::{SetupSpec, Stock};
     let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
     let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    if let Some(specs) = SetupSpec::parse_channels(&src).map_err(|e| format!("{}: {e}", path.display()))? {
+        return run_channels(&dir, &specs);
+    }
     let spec = SetupSpec::parse(&src).map_err(|e| format!("{}: {e}", path.display()))?;
     let lib = library(&dir)?;
     let def = lib.get(&spec.machine).map_err(|e| e.to_string())?;
-    // a dialect file beside the setup wins over a built-in of the same name
-    let dfile = dir.join(format!("{}.toml", spec.dialect));
-    let dsrc = match std::fs::read_to_string(&dfile) {
-        Ok(s) => s,
-        Err(_) => forge_machine::gcode::Control::dialect_src(&spec.dialect)
-            .ok_or_else(|| {
-                format!(
-                    "no dialect `{}` (built in: fanuc haas linuxcnc grbl; or {})",
-                    spec.dialect,
-                    dfile.display()
-                )
-            })?
-            .to_string(),
-    };
+    let dsrc = dialect_text(&dir, &spec.dialect)?;
     let setup = spec.build(def, &dsrc).map_err(|e| e.to_string())?;
     let ppath = dir.join(&spec.program);
     let prog = std::fs::read_to_string(&ppath).map_err(|e| format!("{}: {e}", ppath.display()))?;
