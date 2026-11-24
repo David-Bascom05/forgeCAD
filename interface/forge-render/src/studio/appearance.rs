@@ -29,11 +29,17 @@ pub struct Appearance {
 
 impl Appearance {
     pub fn kind_of(&self, key: &str) -> Kind {
-        self.kinds.iter().find(|k| k.0 == key).map_or(Kind::Cited, |k| k.1)
+        self.kinds
+            .iter()
+            .find(|k| k.0 == key)
+            .map_or(Kind::Cited, |k| k.1)
     }
 
     pub fn source_of(&self, key: &str) -> &str {
-        self.sources.iter().find(|s| s.0 == key).map_or(&self.source, |s| &s.1)
+        self.sources
+            .iter()
+            .find(|s| s.0 == key)
+            .map_or(&self.source, |s| &s.1)
     }
 
     /// What the normal 3D view (raster, not traced) can show of it today: a placement's tint, base
@@ -44,7 +50,11 @@ impl Appearance {
     pub fn viewport_tint(&self, colour: Option<[u8; 3]>) -> [f32; 4] {
         let b = self.bsdf_for(colour);
         // glass shows as its tint, a little grey so it reads as a solid
-        let base = if b.transmission > 0.0 { b.base * 0.8 } else { b.base };
+        let base = if b.transmission > 0.0 {
+            b.base * 0.8
+        } else {
+            b.base
+        };
         [base.x, base.y, base.z, pack_tint(b.metal, b.rough, b.coat)]
     }
 
@@ -75,12 +85,20 @@ pub fn unpack_tint(w: f32) -> (f32, Option<f32>, f32) {
         return (w, None, 0.0);
     }
     let k = (w - 2.0).round() as u32;
-    ((k & 1) as f32, Some((k >> 2) as f32 / 1000.0), ((k >> 1) & 1) as f32)
+    (
+        (k & 1) as f32,
+        Some((k >> 2) as f32 / 1000.0),
+        ((k >> 1) & 1) as f32,
+    )
 }
 
 pub fn srgb_to_linear(c: u8) -> f32 {
     let c = c as f32 / 255.0;
-    if c <= 0.04045 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -101,11 +119,21 @@ fn value(s: &str) -> Option<Val> {
         return Some(Val::Bool(s == "true"));
     }
     if let Some(inner) = s.strip_prefix('[').and_then(|t| t.strip_suffix(']')) {
-        let items: Vec<&str> = inner.split(',').map(str::trim).filter(|t| !t.is_empty()).collect();
+        let items: Vec<&str> = inner
+            .split(',')
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .collect();
         if items.iter().all(|t| t.starts_with('"')) {
-            return Some(Val::Strs(items.iter().map(|t| t.trim_matches('"').to_string()).collect()));
+            return Some(Val::Strs(
+                items.iter().map(|t| t.trim_matches('"').to_string()).collect(),
+            ));
         }
-        return items.iter().map(|t| t.parse().ok()).collect::<Option<Vec<f32>>>().map(Val::Nums);
+        return items
+            .iter()
+            .map(|t| t.parse().ok())
+            .collect::<Option<Vec<f32>>>()
+            .map(Val::Nums);
     }
     s.parse().ok().map(Val::Num)
 }
@@ -154,10 +182,32 @@ pub fn parse(src: &str) -> Result<Vec<Appearance>, String> {
 }
 
 const KEYS: [&str; 15] = [
-    "name", "family", "base", "metal", "tint", "rough", "ior", "transmission", "coat", "coat_rough",
-    "part_colour", "materials", "families", "source", "note",
+    "name",
+    "family",
+    "base",
+    "metal",
+    "tint",
+    "rough",
+    "ior",
+    "transmission",
+    "coat",
+    "coat_rough",
+    "part_colour",
+    "materials",
+    "families",
+    "source",
+    "note",
 ];
-const VALUED: [&str; 8] = ["base", "metal", "tint", "rough", "ior", "transmission", "coat", "coat_rough"];
+const VALUED: [&str; 8] = [
+    "base",
+    "metal",
+    "tint",
+    "rough",
+    "ior",
+    "transmission",
+    "coat",
+    "coat_rough",
+];
 
 fn record(at: usize, keys: Vec<(String, Val)>) -> Result<Appearance, String> {
     let get = |k: &str| keys.iter().find(|x| x.0 == k).map(|x| &x.1);
@@ -176,7 +226,9 @@ fn record(at: usize, keys: Vec<(String, Val)>) -> Result<Appearance, String> {
     let rgb = |k: &str, def: V3| -> Result<V3, String> {
         match get(k) {
             None => Ok(def),
-            Some(Val::Nums(v)) if v.len() == 3 && v.iter().all(|x| (0.0..=1.0).contains(x)) => Ok(v3(v[0], v[1], v[2])),
+            Some(Val::Nums(v)) if v.len() == 3 && v.iter().all(|x| (0.0..=1.0).contains(x)) => {
+                Ok(v3(v[0], v[1], v[2]))
+            }
             _ => Err(e(format!("{k} is [r, g, b] in 0..1"))),
         }
     };
@@ -254,10 +306,17 @@ pub fn appearance_for(key: &str) -> Option<&'static Appearance> {
         .find(|a| forge_material::norm(&a.name) == n)
         .or_else(|| {
             let m = forge_material::find(key)?;
-            let names: Vec<String> = std::iter::once(&m.name).chain(&m.aliases).map(|s| forge_material::norm(s)).collect();
+            let names: Vec<String> = std::iter::once(&m.name)
+                .chain(&m.aliases)
+                .map(|s| forge_material::norm(s))
+                .collect();
             library()
                 .iter()
-                .find(|a| a.materials.iter().any(|x| names.contains(&forge_material::norm(x))))
+                .find(|a| {
+                    a.materials
+                        .iter()
+                        .any(|x| names.contains(&forge_material::norm(x)))
+                })
                 .or_else(|| library().iter().find(|a| a.families.contains(&m.family)))
         })
 }
@@ -311,16 +370,28 @@ impl Appearances {
 
     /// A material's default appearance: one naming it, else one naming its family.
     pub fn for_material(&self, m: &forge_material::Material) -> Option<&Appearance> {
-        let names: Vec<String> = std::iter::once(&m.name).chain(&m.aliases).map(|s| forge_material::norm(s)).collect();
+        let names: Vec<String> = std::iter::once(&m.name)
+            .chain(&m.aliases)
+            .map(|s| forge_material::norm(s))
+            .collect();
         self.all()
-            .find(|a| a.materials.iter().any(|x| names.contains(&forge_material::norm(x))))
+            .find(|a| {
+                a.materials
+                    .iter()
+                    .any(|x| names.contains(&forge_material::norm(x)))
+            })
             .or_else(|| self.all().find(|a| a.families.contains(&m.family)))
     }
 
     /// Another environment's look: an appearance id (`tool-steel-ground`, `concrete-floor`; case
     /// and punctuation ignored), or `sheet` / none with a forge-material name for the material's
     /// default; the raster view's tint (`Appearance::viewport_tint`), none if neither is known.
-    pub fn viewport_tint(&self, id: Option<&str>, material: Option<&str>, colour: Option<[u8; 3]>) -> Option<[f32; 4]> {
+    pub fn viewport_tint(
+        &self,
+        id: Option<&str>,
+        material: Option<&str>,
+        colour: Option<[u8; 3]>,
+    ) -> Option<[f32; 4]> {
         let by_id = id.filter(|i| *i != "sheet").and_then(|i| self.find(i));
         let a = by_id.or_else(|| {
             let m = forge_material::find(material?)?;
@@ -331,7 +402,12 @@ impl Appearances {
 
     /// What a part looks like: its own appearance if it names one, else its material's, else
     /// satin plastic in its colour.
-    pub fn resolve(&self, appearance: Option<&str>, material: Option<&forge_material::Material>, colour: Option<[u8; 3]>) -> Bsdf {
+    pub fn resolve(
+        &self,
+        appearance: Option<&str>,
+        material: Option<&forge_material::Material>,
+        colour: Option<[u8; 3]>,
+    ) -> Bsdf {
         let colour = colour.or(material.map(|m| m.colour));
         let a = appearance
             .and_then(|n| self.find(n))
@@ -404,7 +480,12 @@ mod tests {
         let paint = apps.find("paint-machine-gloss").expect("BEND-SIM's frames");
         assert_eq!(paint.viewport_tint(Some([0, 255, 0]))[1], 1.0);
         assert_eq!(unpack_tint(tool.viewport_tint(None)[3]), (1.0, Some(0.18), 0.0));
-        for (m, r, c) in [(0.0, 0.0, 0.0), (1.0, 1.0, 1.0), (0.0, 0.35, 1.0), (1.0, 0.03, 0.0)] {
+        for (m, r, c) in [
+            (0.0, 0.0, 0.0),
+            (1.0, 1.0, 1.0),
+            (0.0, 0.35, 1.0),
+            (1.0, 0.03, 0.0),
+        ] {
             assert_eq!(unpack_tint(pack_tint(m, r, c)), (m, Some(r), c));
         }
         assert_eq!(unpack_tint(0.3), (0.3, None, 0.0), "an old tint is its metalness");
@@ -417,8 +498,16 @@ mod tests {
 
     #[test]
     fn a_bad_record_says_where() {
-        assert!(parse("[[appearance]]\nname = \"x\"\nrough = 2\nsource = \"s\"\n").unwrap_err().contains("rough"));
-        assert!(parse("[[appearance]]\nname = \"x\"\n").unwrap_err().contains("source"));
+        assert!(
+            parse("[[appearance]]\nname = \"x\"\nrough = 2\nsource = \"s\"\n")
+                .unwrap_err()
+                .contains("rough")
+        );
+        assert!(
+            parse("[[appearance]]\nname = \"x\"\n")
+                .unwrap_err()
+                .contains("source")
+        );
         assert!(parse("[[appearance]]\nname = \"x\"\nsource = \"s\"\nkind_bogus = \"cited\"\n").is_err());
         let ok = parse("# mine\n[[appearance]]\nname = \"Mine\" # a comment\nbase = [0.1, 0.2, 0.3]\nsource = \"me\"\nkind_base = \"user\"\n").unwrap();
         assert_eq!(ok[0].bsdf.base, v3(0.1, 0.2, 0.3));

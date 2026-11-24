@@ -38,7 +38,10 @@ fn the_studio_traces_the_view_and_renders_a_file() {
         st.names
     );
     assert_eq!(st.names.len(), 1);
-    assert_ne!(h.gui.shell.view_tex, shaded, "the view shows the tracer's picture");
+    assert_ne!(
+        h.gui.shell.view_tex, shaded,
+        "the view shows the tracer's picture"
+    );
     if let Ok(dir) = std::env::var("STUDIO_SHOTS") {
         for _ in 0..60 {
             h.step();
@@ -86,13 +89,21 @@ fn shots_of_the_environment() {
             }
         };
         h_.step();
-        let asm = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sheetmetal/tray_asm.fg");
+        let asm = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../examples/sheetmetal/tray_asm.fg"
+        );
         h_.gui.open(asm);
         assert!(h_.until(settled), "never built: {}", h_.gui.shell.status);
         h_.gui.shell.enter_env(EnvId::RenderStudio).unwrap();
         h_.step();
         h_.step();
-        let looks = ["Aluminium, bead-blasted", "Steel, black oxide", "Powder coat", "Stainless steel, brushed"];
+        let looks = [
+            "Aluminium, bead-blasted",
+            "Steel, black oxide",
+            "Powder coat",
+            "Stainless steel, brushed",
+        ];
         let st = &mut h_.gui.shell.studio;
         for (k, l) in st.looks.iter_mut().enumerate() {
             *l = Some(looks[k % looks.len()].into());

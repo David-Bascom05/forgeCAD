@@ -36,7 +36,14 @@ struct Fixture {
 fn fixture() -> Fixture {
     let crank = forge_render::load::open("crank", false).unwrap().0;
     let rows = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
-    let built = Built::new(std::slice::from_ref(&crank), &[Instance { part: 0, rows, material: 0 }]);
+    let built = Built::new(
+        std::slice::from_ref(&crank),
+        &[Instance {
+            part: 0,
+            rows,
+            material: 0,
+        }],
+    );
     let b = built.bounds.unwrap();
     let centre = (b.min + b.max) * 0.5;
     let radius = (b.max - b.min).len() * 0.5;
@@ -66,7 +73,10 @@ fn fixture() -> Fixture {
     let settings = Settings {
         ground: Some((b.min.z, 1)),
         env_turn: 0.3,
-        bounces: std::env::var("STUDIO_BOUNCES").ok().and_then(|b| b.parse().ok()).unwrap_or(6),
+        bounces: std::env::var("STUDIO_BOUNCES")
+            .ok()
+            .and_then(|b| b.parse().ok())
+            .unwrap_or(6),
         ..Settings::default()
     };
     Fixture {
@@ -173,7 +183,10 @@ fn the_denoiser_brings_a_few_samples_closer_to_many() {
     let mut t = Tracer::new(&device, &queue, size);
     t.set_scene(&f.built, &f.materials, &f.lut).unwrap();
     t.set_env(&f.env);
-    let settings = Settings { clamp: 16.0, ..f.settings };
+    let settings = Settings {
+        clamp: 16.0,
+        ..f.settings
+    };
     t.step(&f.view, &settings, 1024);
     t.wait();
     let truth = t.read_mean();
@@ -190,7 +203,13 @@ fn the_denoiser_brings_a_few_samples_closer_to_many() {
     let shown = |v: &[[f32; 4]]| cpu::to_rgba8(v, 0.0);
     let (truth, raw, clean) = (shown(&truth), shown(&raw), shown(&clean));
     let rmse = |a: &[u8]| {
-        let s: f64 = a.iter().zip(&truth).enumerate().filter(|(k, _)| k % 4 != 3).map(|(_, (x, y))| (*x as f64 - *y as f64).powi(2)).sum();
+        let s: f64 = a
+            .iter()
+            .zip(&truth)
+            .enumerate()
+            .filter(|(k, _)| k % 4 != 3)
+            .map(|(_, (x, y))| (*x as f64 - *y as f64).powi(2))
+            .sum();
         (s / (a.len() as f64 * 0.75)).sqrt()
     };
     let (r, c) = (rmse(&raw), rmse(&clean));
@@ -208,7 +227,10 @@ fn the_queue_writes_a_turntable_frame_by_frame() {
     let mut q = Queue::default();
     let b = f.built.bounds.unwrap();
     q.push(Job {
-        output: Output::Turntable { stem: "t.png".into(), frames: 3 },
+        output: Output::Turntable {
+            stem: "t.png".into(),
+            frames: 3,
+        },
         size: (32, 24),
         spp: 12,
         denoise: true,
@@ -242,7 +264,10 @@ fn read_png(path: &str) -> ((u32, u32), Vec<u8>) {
     let mut r = d.read_info().unwrap();
     let mut buf = vec![0; r.output_buffer_size().unwrap()];
     let info = r.next_frame(&mut buf).unwrap();
-    ((info.width, info.height), buf[..(info.width * info.height * 4) as usize].to_vec())
+    (
+        (info.width, info.height),
+        buf[..(info.width * info.height * 4) as usize].to_vec(),
+    )
 }
 
 /// The golden scene's picture as the browser makes it: the GPU's mean, tone-mapped on the CPU.

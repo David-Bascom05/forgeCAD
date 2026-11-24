@@ -258,9 +258,16 @@ impl Tracer {
     /// buffer would pass WebGPU's binding limit.
     pub fn set_scene(&mut self, built: &Built, materials: &[Bsdf], lut: &Lut) -> Result<(), String> {
         let (nodes, tris, inst) = built.words();
-        for (what, n) in [("nodes", nodes.len()), ("triangles", tris.len()), ("placements", inst.len())] {
+        for (what, n) in [
+            ("nodes", nodes.len()),
+            ("triangles", tris.len()),
+            ("placements", inst.len()),
+        ] {
             if (n * 4) as u64 > MAX_BINDING {
-                return Err(format!("the scene's {what} need {} MB, past the GPU's 128 MB", (n * 4) >> 20));
+                return Err(format!(
+                    "the scene's {what} need {} MB, past the GPU's 128 MB",
+                    (n * 4) >> 20
+                ));
             }
         }
         let (mats, at) = material_words(materials, lut);
@@ -390,7 +397,12 @@ impl Tracer {
         v.extend([f(view.eye[0]), f(view.eye[1]), f(view.eye[2]), f(view.parallel)]);
         v.extend([f(right[0]), f(right[1]), f(right[2]), 0]);
         v.extend([f(up[0]), f(up[1]), f(up[2]), 0]);
-        v.extend([f(view.forward[0]), f(view.forward[1]), f(view.forward[2]), f(view.aperture)]);
+        v.extend([
+            f(view.forward[0]),
+            f(view.forward[1]),
+            f(view.forward[2]),
+            f(view.aperture),
+        ]);
         v.extend([f(view.focus), f(s.env_turn), f(s.env_strength), f(s.clamp)]);
         v.extend([f(ground_z), f(ground_on), f(ground_mat), f(back_mode)]);
         v.extend([f(back[0]), f(back[1]), f(back[2]), 0]);
@@ -402,7 +414,8 @@ impl Tracer {
         self.group();
         let (w, h) = self.size;
         for _ in 0..n {
-            self.queue.write_buffer(&self.params, 0, &self.params(view, settings));
+            self.queue
+                .write_buffer(&self.params, 0, &self.params(view, settings));
             let mut e = self.device.create_command_encoder(&Default::default());
             {
                 let mut pass = e.begin_compute_pass(&Default::default());
@@ -447,7 +460,11 @@ impl Tracer {
                 ],
             }));
         }
-        let group = if denoise { &self.denoiser.show_group } else { &self.show_group };
+        let group = if denoise {
+            &self.denoiser.show_group
+        } else {
+            &self.show_group
+        };
         let mut e = self.device.create_command_encoder(&Default::default());
         {
             let mut pass = e.begin_compute_pass(&Default::default());
@@ -502,7 +519,16 @@ impl Tracer {
         for k in 0..PASSES as usize {
             let step = if (1..6).contains(&k) { 1u32 << (k - 1) } else { 1 };
             let sigma_c = 4.0f32;
-            let words: [u32; 8] = [w, h, step, self.samples, sigma_c.to_bits(), 64f32.to_bits(), 1.0f32.to_bits(), 0];
+            let words: [u32; 8] = [
+                w,
+                h,
+                step,
+                self.samples,
+                sigma_c.to_bits(),
+                64f32.to_bits(),
+                1.0f32.to_bits(),
+                0,
+            ];
             u[k * SLOT as usize..][..32].copy_from_slice(&bytes(&words));
         }
         self.queue.write_buffer(&dn.uniforms, 0, &u);
@@ -553,7 +579,11 @@ impl Tracer {
         staging.slice(..).map_async(wgpu::MapMode::Read, |_| {});
         self.wait();
         let map = staging.slice(..).get_mapped_range().expect("it was waited for");
-        map.as_chunks::<4>().0.iter().map(|b| f32::from_le_bytes(*b)).collect()
+        map.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect()
     }
 
     /// The running mean, linear RGBA per pixel, without blocking (the browser's way).
@@ -595,10 +625,15 @@ impl Tracer {
         }
         let n = self.samples.max(1) as f32;
         let map = staging.slice(..).get_mapped_range().map_err(|e| e.to_string())?;
-        Ok(map.as_chunks::<16>().0.iter().map(|b| {
-            let f = |k: usize| f32::from_le_bytes(b[k * 4..k * 4 + 4].try_into().unwrap()) / n;
-            [f(0), f(1), f(2), f(3)]
-        }).collect())
+        Ok(map
+            .as_chunks::<16>()
+            .0
+            .iter()
+            .map(|b| {
+                let f = |k: usize| f32::from_le_bytes(b[k * 4..k * 4 + 4].try_into().unwrap()) / n;
+                [f(0), f(1), f(2), f(3)]
+            })
+            .collect())
     }
 
     /// The running mean, linear RGBA per pixel (native only: it waits).
@@ -651,7 +686,10 @@ impl Tracer {
         let ready = std::sync::Arc::new(std::sync::atomic::AtomicU8::new(0));
         let r = ready.clone();
         buffer.slice(..).map_async(wgpu::MapMode::Read, move |res| {
-            r.store(if res.is_ok() { 1 } else { 2 }, std::sync::atomic::Ordering::Release);
+            r.store(
+                if res.is_ok() { 1 } else { 2 },
+                std::sync::atomic::Ordering::Release,
+            );
         });
         Pending {
             buffer,

@@ -10,8 +10,8 @@ pub mod bvh;
 pub mod cpu;
 pub mod env;
 pub mod golden;
-pub mod hdri;
 pub mod gpu;
+pub mod hdri;
 pub mod live;
 pub mod scene;
 #[cfg(not(target_arch = "wasm32"))]

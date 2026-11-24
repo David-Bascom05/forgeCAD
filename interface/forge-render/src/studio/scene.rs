@@ -67,7 +67,8 @@ fn place(r: &Rows, p: V3) -> V3 {
 /// The inverse of an affine 3x4.
 pub fn invert(r: &Rows) -> Rows {
     let m = |i: usize, j: usize| r[i][j] as f64;
-    let det = m(0, 0) * (m(1, 1) * m(2, 2) - m(1, 2) * m(2, 1)) - m(0, 1) * (m(1, 0) * m(2, 2) - m(1, 2) * m(2, 0))
+    let det = m(0, 0) * (m(1, 1) * m(2, 2) - m(1, 2) * m(2, 1))
+        - m(0, 1) * (m(1, 0) * m(2, 2) - m(1, 2) * m(2, 0))
         + m(0, 2) * (m(1, 0) * m(2, 1) - m(1, 1) * m(2, 0));
     let inv_det = if det.abs() < 1e-30 { 0.0 } else { 1.0 / det };
     let mut a = [[0.0f64; 3]; 3];
@@ -97,7 +98,10 @@ pub fn part_triangles(mesh: &PartMesh) -> Vec<([V3; 3], [u32; 3])> {
     let vert = |i: u32| {
         let b = &lod.vertices[i as usize * VERTEX..][..VERTEX];
         let f = |k: usize| f32::from_le_bytes(b[k * 4..k * 4 + 4].try_into().unwrap());
-        (v3(f(0), f(1), f(2)), u32::from_le_bytes(b[12..16].try_into().unwrap()))
+        (
+            v3(f(0), f(1), f(2)),
+            u32::from_le_bytes(b[12..16].try_into().unwrap()),
+        )
     };
     lod.indices
         .as_chunks::<12>()
@@ -267,7 +271,9 @@ impl Built {
             .flat_map(|t| {
                 let b = |v: V3| [v.x.to_bits(), v.y.to_bits(), v.z.to_bits()];
                 let (p, e, f) = (b(t.p0), b(t.e1), b(t.e2));
-                [p[0], p[1], p[2], t.n[0], e[0], e[1], e[2], t.n[1], f[0], f[1], f[2], t.n[2]]
+                [
+                    p[0], p[1], p[2], t.n[0], e[0], e[1], e[2], t.n[1], f[0], f[1], f[2], t.n[2],
+                ]
             })
             .collect();
         if tris.is_empty() {
@@ -280,7 +286,8 @@ impl Built {
                 let r = |k: usize| i.to_local[k].map(f32::to_bits);
                 let (a, b, c) = (r(0), r(1), r(2));
                 [
-                    a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3], c[0], c[1], c[2], c[3], i.root, i.material, 0, 0,
+                    a[0], a[1], a[2], a[3], b[0], b[1], b[2], b[3], c[0], c[1], c[2], c[3], i.root,
+                    i.material, 0, 0,
                 ]
             })
             .collect();
@@ -346,9 +353,21 @@ pub mod tests {
             [[c, -s, 0.0, t[0]], [s, c, 0.0, t[1]], [0.0, 0.0, 1.0, t[2]]]
         };
         let inst = [
-            Instance { part: 0, rows: turn(0.0, [0.0; 3]), material: 0 },
-            Instance { part: 0, rows: turn(0.7, [20.0, 3.0, -2.0]), material: 1 },
-            Instance { part: 0, rows: turn(-1.9, [-6.0, 25.0, 4.0]), material: 2 },
+            Instance {
+                part: 0,
+                rows: turn(0.0, [0.0; 3]),
+                material: 0,
+            },
+            Instance {
+                part: 0,
+                rows: turn(0.7, [20.0, 3.0, -2.0]),
+                material: 1,
+            },
+            Instance {
+                part: 0,
+                rows: turn(-1.9, [-6.0, 25.0, 4.0]),
+                material: 2,
+            },
         ];
         let built = Built::new(&parts, &inst);
         assert_eq!(built.instances.len(), 3);
@@ -370,7 +389,10 @@ pub mod tests {
             let got = built.trace(o, d, f32::INFINITY).map_or(f32::INFINITY, |h| h.t);
             if best.is_finite() {
                 hits += 1;
-                assert!((got - best).abs() < 1e-3 * best.max(1.0), "ray {k}: {got} vs {best}");
+                assert!(
+                    (got - best).abs() < 1e-3 * best.max(1.0),
+                    "ray {k}: {got} vs {best}"
+                );
             } else {
                 assert!(!got.is_finite(), "ray {k}: hit {got} where nothing is");
             }

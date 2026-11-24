@@ -6,10 +6,10 @@ use super::bsdf::{Bsdf, Lut};
 use super::env::{self, Env};
 use super::gpu::Tracer;
 use super::scene::{Built, Instance};
+use super::v3::{V3, v3};
 use super::{Backdrop, Settings, View};
 use crate::camera::Camera;
 use crate::mesh::PartMesh;
-use super::v3::{V3, v3};
 
 /// What to render.
 pub struct Stage {
@@ -22,7 +22,11 @@ impl Stage {
     /// One part, or an assembly (`.fg` with occurrences) exploded `explode` of the way, each
     /// placement given the next of `looks` in turn.
     pub fn open(what: &str, explode: f32, looks: &[Bsdf]) -> Result<Stage, String> {
-        let looks = if looks.is_empty() { vec![Bsdf::default()] } else { looks.to_vec() };
+        let looks = if looks.is_empty() {
+            vec![Bsdf::default()]
+        } else {
+            looks.to_vec()
+        };
         if what.ends_with(".fg")
             && let Ok(mut a) = crate::asmshot::stage(what)
         {
@@ -39,7 +43,10 @@ impl Stage {
                     (part, r, looks[part as usize % looks.len()])
                 })
                 .collect();
-            return Ok(Stage { parts: a.parts, placed });
+            return Ok(Stage {
+                parts: a.parts,
+                placed,
+            });
         }
         let (mesh, _) = crate::load::open(what, false)?;
         let rows = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
@@ -190,7 +197,11 @@ pub fn render(
     t.set_env(env);
     let start = std::time::Instant::now();
     for f in 0..frames.max(1) {
-        let turn = if frames > 1 { f as f32 / frames as f32 * std::f32::consts::TAU } else { 0.0 };
+        let turn = if frames > 1 {
+            f as f32 / frames as f32 * std::f32::consts::TAU
+        } else {
+            0.0
+        };
         let view = view_of(shot, &built, turn);
         t.reset();
         // in batches, so a slow GPU's watchdog never sees one long submission
@@ -232,7 +243,8 @@ pub fn main_args(args: &[String]) -> Result<(), String> {
     let mut explode = 0.0;
     let mut frames = 1;
     let num = |v: Option<&String>, what: &str| -> Result<f32, String> {
-        v.and_then(|s| s.parse().ok()).ok_or(format!("{what} wants a number"))
+        v.and_then(|s| s.parse().ok())
+            .ok_or(format!("{what} wants a number"))
     };
     let apps = Appearances::builtin();
     while let Some(a) = it.next() {
@@ -273,7 +285,8 @@ pub fn main_args(args: &[String]) -> Result<(), String> {
                     Some("env") => Backdrop::Environment,
                     Some("transparent") => Backdrop::Transparent,
                     Some(hex) => {
-                        let v = u32::from_str_radix(hex, 16).map_err(|_| "--backdrop env|transparent|RRGGBB")?;
+                        let v =
+                            u32::from_str_radix(hex, 16).map_err(|_| "--backdrop env|transparent|RRGGBB")?;
                         Backdrop::Colour(crate::viewcube::rgb(v))
                     }
                     None => return Err("--backdrop env|transparent|RRGGBB".into()),

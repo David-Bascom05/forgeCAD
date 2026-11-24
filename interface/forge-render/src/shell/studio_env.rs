@@ -3,10 +3,10 @@
 //! what it writes over the view. The picture itself is the GUI's (`gui_studio.rs`): this holds
 //! what the user chose, and the GUI reads it each frame.
 
+use super::env::EnvId;
 use super::ribbon::{Group, Tool};
 use super::{Action, Shell};
 use crate::studio::appearance::Appearances;
-use super::env::EnvId;
 use egui::{Rect, RichText, Ui};
 
 /// The ribbon's commands (`Action::Env(RenderStudio, c)`).
@@ -23,7 +23,11 @@ pub const RESTART: u16 = 7;
 pub fn lights() -> Vec<String> {
     let mut v = vec!["Studio softbox (drawn)".to_string()];
     for h in crate::studio::hdri::list() {
-        v.push(if h.bundled { format!("{} (bundled)", h.name) } else { h.name });
+        v.push(if h.bundled {
+            format!("{} (bundled)", h.name)
+        } else {
+            h.name
+        });
     }
     v.push("HDRI file".into());
     v
@@ -209,7 +213,11 @@ fn signed(v: f32) -> String {
 /// A heading in the browser.
 fn head(ui: &mut Ui, s: &Shell, text: &str) {
     ui.add_space(8.0);
-    ui.label(RichText::new(text).font(super::theme::semi(13.0)).color(s.theme.ink));
+    ui.label(
+        RichText::new(text)
+            .font(super::theme::semi(13.0))
+            .color(s.theme.ink),
+    );
     ui.add_space(2.0);
 }
 
@@ -232,7 +240,10 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                     .selected_text(&shown)
                     .width(ui.available_width() - 4.0)
                     .show_ui(ui, |ui| {
-                        if ui.selectable_label(st.looks[k].is_none(), "Material's own").clicked() {
+                        if ui
+                            .selectable_label(st.looks[k].is_none(), "Material's own")
+                            .clicked()
+                        {
                             st.looks[k] = None;
                         }
                         let mut family = "";
@@ -242,7 +253,11 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                                 ui.label(RichText::new(family).small().weak());
                             }
                             let on = st.looks[k].as_deref() == Some(a.name.as_str());
-                            if ui.selectable_label(on, &a.name).on_hover_text(&a.source).clicked() {
+                            if ui
+                                .selectable_label(on, &a.name)
+                                .on_hover_text(&a.source)
+                                .clicked()
+                            {
                                 st.looks[k] = Some(a.name.clone());
                             }
                         }
@@ -262,18 +277,25 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                     }
                 })
                 .response
-                .on_hover_text("Poly Haven HDRIs, CC0; all but the bundled one come from tools/fetch-hdri.sh");
+                .on_hover_text(
+                    "Poly Haven HDRIs, CC0; all but the bundled one come from tools/fetch-hdri.sh",
+                );
             if st.light == lights.len() - 1 {
                 ui.horizontal(|ui| {
                     ui.label("File");
-                    ui.text_edit_singleline(&mut st.hdri).on_hover_text("a Radiance .hdr, equirectangular");
+                    ui.text_edit_singleline(&mut st.hdri)
+                        .on_hover_text("a Radiance .hdr, equirectangular");
                 });
             }
             row(ui, format!("Turn {:.0}°", st.turn_deg), |ui| {
                 ui.add(egui::Slider::new(&mut st.turn_deg, -180.0..=180.0).show_value(false));
             });
             row(ui, format!("Strength {:.2}×", st.strength), |ui| {
-                ui.add(egui::Slider::new(&mut st.strength, 0.05..=8.0).logarithmic(true).show_value(false));
+                ui.add(
+                    egui::Slider::new(&mut st.strength, 0.05..=8.0)
+                        .logarithmic(true)
+                        .show_value(false),
+                );
             });
             row(ui, format!("Exposure {} EV", signed(st.exposure)), |ui| {
                 ui.add(egui::Slider::new(&mut st.exposure, -4.0..=4.0).show_value(false));
@@ -286,12 +308,14 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                 } else {
                     "Parallel view: no lens (Camera › Perspective)".into()
                 })
-                    .color(s.theme.ink2),
+                .color(s.theme.ink2),
             );
             row(ui, format!("Aperture f/{:.1}", st.f_number), |ui| {
                 ui.add_enabled(
                     st.depth_of_field,
-                    egui::Slider::new(&mut st.f_number, 1.0..=22.0).logarithmic(true).show_value(false),
+                    egui::Slider::new(&mut st.f_number, 1.0..=22.0)
+                        .logarithmic(true)
+                        .show_value(false),
                 );
             });
             if !st.depth_of_field {
@@ -310,7 +334,11 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                 ui.add(egui::DragValue::new(&mut st.size.1).range(16..=8192));
             });
             row(ui, format!("Samples {}", st.spp), |ui| {
-                ui.add(egui::Slider::new(&mut st.spp, 16..=8192).logarithmic(true).show_value(false));
+                ui.add(
+                    egui::Slider::new(&mut st.spp, 16..=8192)
+                        .logarithmic(true)
+                        .show_value(false),
+                );
             });
             row(ui, format!("Turntable {} frames", st.frames), |ui| {
                 ui.add(egui::Slider::new(&mut st.frames, 4..=360).show_value(false));

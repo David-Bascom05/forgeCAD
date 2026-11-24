@@ -57,7 +57,11 @@ fn lighting(light: usize, hdri: &str) -> Result<Env, String> {
 fn tint_bytes(t: [f32; 4]) -> [u8; 3] {
     let enc = |c: f32| {
         let c = c.clamp(0.0, 1.0);
-        let s = if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 };
+        let s = if c <= 0.0031308 {
+            c * 12.92
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        };
         (s * 255.0).round() as u8
     };
     [enc(t[0]), enc(t[1]), enc(t[2])]
@@ -82,9 +86,11 @@ impl Gui {
         let size = v.size;
         if self.studio.is_none() {
             let live = Live::new(&self.device, &self.queue, size);
-            let tex = self
-                .egui
-                .register_native_texture(&self.device, &live.tracer.picture_view, wgpu::FilterMode::Linear);
+            let tex = self.egui.register_native_texture(
+                &self.device,
+                &live.tracer.picture_view,
+                wgpu::FilterMode::Linear,
+            );
             self.studio = Some(StudioHost {
                 live,
                 queue: Queue::default(),
@@ -135,7 +141,10 @@ impl Gui {
         });
         let key = (
             v.renderer.geometry(),
-            poses_key(&v.scene) ^ material_name.as_deref().map_or(0, |n| n.len() as u64 * 0x9E37_79B9),
+            poses_key(&v.scene)
+                ^ material_name
+                    .as_deref()
+                    .map_or(0, |n| n.len() as u64 * 0x9E37_79B9),
             st.version,
         );
         if host.scene_key != Some(key) {
@@ -159,7 +168,11 @@ impl Gui {
                     rows[k][3] += off[k];
                 }
                 let look = st.looks.get(pl.part as usize).cloned().flatten();
-                let colour = if material.is_some() { None } else { Some(tint_bytes(pl.tint)) };
+                let colour = if material.is_some() {
+                    None
+                } else {
+                    Some(tint_bytes(pl.tint))
+                };
                 let b = lib.resolve(look.as_deref(), material.as_ref(), colour);
                 let m = mats.iter().position(|x| *x == b).unwrap_or_else(|| {
                     mats.push(b);
@@ -171,7 +184,10 @@ impl Gui {
                     material: m as u32,
                 });
             }
-            mats.push(lib.find("Studio floor").map_or_else(Bsdf::default, |a: &Appearance| a.bsdf));
+            mats.push(
+                lib.find("Studio floor")
+                    .map_or_else(Bsdf::default, |a: &Appearance| a.bsdf),
+            );
             let built = Built::new(&parts, &inst);
             if let Err(why) = host.live.set_built(&built, &mats) {
                 status = Some(format!("Render Studio: {why}"));
@@ -272,7 +288,10 @@ impl Gui {
             Progress::Running { job, frame, done, of } => {
                 let frames = host.queue.jobs.get(job).map_or(1, Job::frames);
                 if frames > 1 {
-                    format!("Rendering frame {} of {frames}: {done} of {of} samples", frame + 1)
+                    format!(
+                        "Rendering frame {} of {frames}: {done} of {of} samples",
+                        frame + 1
+                    )
                 } else {
                     format!("Rendering: {done} of {of} samples")
                 }

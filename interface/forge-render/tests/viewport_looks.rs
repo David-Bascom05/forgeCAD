@@ -21,7 +21,15 @@ fn frame(tint: [f32; 4]) -> Option<Vec<u8>> {
     pl.tint = tint;
     let mut scene = Scene::new(&part_info(&parts), vec![pl]);
     let size = (240, 160);
-    let mut r = Renderer::new(device, queue, adapter.get_info(), render::OFFSCREEN, size, &parts, &scene);
+    let mut r = Renderer::new(
+        device,
+        queue,
+        adapter.get_info(),
+        render::OFFSCREEN,
+        size,
+        &parts,
+        &scene,
+    );
     r.style = VisualStyle::Realistic;
     r.set_tints(&scene);
     let target = Offscreen::new(&r.device, size);
@@ -32,7 +40,11 @@ fn frame(tint: [f32; 4]) -> Option<Vec<u8>> {
 }
 
 fn diff(a: &[u8], b: &[u8]) -> f64 {
-    a.iter().zip(b).map(|(x, y)| (*x as f64 - *y as f64).abs()).sum::<f64>() / a.len() as f64
+    a.iter()
+        .zip(b)
+        .map(|(x, y)| (*x as f64 - *y as f64).abs())
+        .sum::<f64>()
+        / a.len() as f64
 }
 
 #[test]
@@ -51,7 +63,11 @@ fn appearances_roughness_shows_and_old_tints_do_not_change() {
     assert_eq!(o1, frame(old).unwrap());
     if let Ok(dir) = std::env::var("LOOK_SHOTS") {
         for (n, px) in [("polished", &a), ("blasted", &b), ("old", &o1)] {
-            let mut e = png::Encoder::new(std::fs::File::create(format!("{dir}/look_{n}.png")).unwrap(), 240, 160);
+            let mut e = png::Encoder::new(
+                std::fs::File::create(format!("{dir}/look_{n}.png")).unwrap(),
+                240,
+                160,
+            );
             e.set_color(png::ColorType::Rgb);
             e.write_header().unwrap().write_image_data(px).unwrap();
         }

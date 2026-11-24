@@ -34,7 +34,15 @@ pub struct Scene<'a> {
 }
 
 /// One sample of one pixel: radiance and alpha.
-pub fn sample(s: &Scene, view: &View, set: &Settings, size: (u32, u32), x: u32, y: u32, index: u32) -> [f32; 4] {
+pub fn sample(
+    s: &Scene,
+    view: &View,
+    set: &Settings,
+    size: (u32, u32),
+    x: u32,
+    y: u32,
+    index: u32,
+) -> [f32; 4] {
     let (w, h) = size;
     let pixel = y * w + x;
     let mut dim = 0u32;
@@ -105,7 +113,11 @@ pub fn sample(s: &Scene, view: &View, set: &Settings, size: (u32, u32), x: u32, 
                     Backdrop::Transparent => alpha = 0.0,
                 }
             } else {
-                let mis = if last_pdf <= 0.0 { 1.0 } else { power(last_pdf, s.env.pdf(d, turn)) };
+                let mis = if last_pdf <= 0.0 {
+                    1.0
+                } else {
+                    power(last_pdf, s.env.pdf(d, turn))
+                };
                 radiance = radiance + (through.times(env_rad(d)) * mis).min(clamp);
             }
             break;
@@ -114,9 +126,17 @@ pub fn sample(s: &Scene, view: &View, set: &Settings, size: (u32, u32), x: u32, 
         let (mut n, mut ng, mut mat) = match hit {
             Some(h) => {
                 let (n, g) = s.built.normals(&h);
-                (n, g, s.materials[s.built.instances[h.instance as usize].material as usize])
+                (
+                    n,
+                    g,
+                    s.materials[s.built.instances[h.instance as usize].material as usize],
+                )
             }
-            None => (v3(0.0, 0.0, 1.0), v3(0.0, 0.0, 1.0), s.materials[set.ground.unwrap().1 as usize]),
+            None => (
+                v3(0.0, 0.0, 1.0),
+                v3(0.0, 0.0, 1.0),
+                s.materials[set.ground.unwrap().1 as usize],
+            ),
         };
         if bounce > 0 {
             mat.rough = mat.rough.max(blur);
@@ -198,11 +218,22 @@ pub fn render(s: &Scene, view: &View, set: &Settings, size: (u32, u32), spp: u32
 pub fn to_rgba8(mean: &[[f32; 4]], ev: f32) -> Vec<u8> {
     let k = 2f32.powf(ev);
     let filmic = |x: f32| ((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14)).clamp(0.0, 1.0);
-    let srgb = |c: f32| if c <= 0.0031308 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 };
+    let srgb = |c: f32| {
+        if c <= 0.0031308 {
+            c * 12.92
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        }
+    };
     mean.iter()
         .flat_map(|p| {
             let c = |v: f32| (srgb(filmic(v.max(0.0) * k)) * 255.0).round().clamp(0.0, 255.0) as u8;
-            [c(p[0]), c(p[1]), c(p[2]), (p[3].clamp(0.0, 1.0) * 255.0).round() as u8]
+            [
+                c(p[0]),
+                c(p[1]),
+                c(p[2]),
+                (p[3].clamp(0.0, 1.0) * 255.0).round() as u8,
+            ]
         })
         .collect()
 }

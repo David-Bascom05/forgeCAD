@@ -22,7 +22,10 @@ pub struct Env {
 pub fn read_hdr(bytes: &[u8]) -> Result<(usize, usize, Vec<[f32; 3]>), String> {
     let mut at = 0;
     let mut line = || -> Result<String, String> {
-        let end = bytes[at..].iter().position(|&b| b == b'\n').ok_or("hdr: header ends early")?;
+        let end = bytes[at..]
+            .iter()
+            .position(|&b| b == b'\n')
+            .ok_or("hdr: header ends early")?;
         let s = String::from_utf8_lossy(&bytes[at..at + end]).into_owned();
         at += end + 1;
         Ok(s)
@@ -56,8 +59,14 @@ pub fn read_hdr(bytes: &[u8]) -> Result<(usize, usize, Vec<[f32; 3]>), String> {
     };
     for y in 0..h {
         let row = &mut rgbe[y * w..(y + 1) * w];
-        let head = [bytes.get(pos).copied(), bytes.get(pos + 1).copied(), bytes.get(pos + 2).copied()];
-        let rle = (8..0x8000).contains(&w) && head == [Some(2), Some(2), head[2]] && head[2].is_some_and(|b| b & 0x80 == 0);
+        let head = [
+            bytes.get(pos).copied(),
+            bytes.get(pos + 1).copied(),
+            bytes.get(pos + 2).copied(),
+        ];
+        let rle = (8..0x8000).contains(&w)
+            && head == [Some(2), Some(2), head[2]]
+            && head[2].is_some_and(|b| b & 0x80 == 0);
         if rle {
             pos += 4;
             for c in 0..4 {
@@ -134,7 +143,11 @@ pub fn studio(w: usize, h: usize, key: f32) -> Vec<[f32; 3]> {
             let mut c = if d.z > 0.0 { wall } else { floor };
             for (axis, across, up, power) in boxes {
                 // the box's frame: across is horizontal, up the rest
-                let side = if axis.z.abs() > 0.99 { v3(1.0, 0.0, 0.0) } else { v3(0.0, 0.0, 1.0).cross(axis).norm() };
+                let side = if axis.z.abs() > 0.99 {
+                    v3(1.0, 0.0, 0.0)
+                } else {
+                    v3(0.0, 0.0, 1.0).cross(axis).norm()
+                };
                 let top = axis.cross(side);
                 let ca = d.dot(axis);
                 if ca <= 0.0 {
@@ -142,7 +155,10 @@ pub fn studio(w: usize, h: usize, key: f32) -> Vec<[f32; 3]> {
                 }
                 let sx = (d.dot(side) / ca).abs();
                 let sy = (d.dot(top) / ca).abs();
-                let (hx, hy) = ((1.0 - across * across).sqrt() / across, (1.0 - up * up).sqrt() / up);
+                let (hx, hy) = (
+                    (1.0 - across * across).sqrt() / across,
+                    (1.0 - up * up).sqrt() / up,
+                );
                 let edge = smooth(1.0, 0.92, (sx / hx).max(sy / hy));
                 c += edge * power * key;
             }
@@ -239,7 +255,11 @@ impl Env {
         let row = self.marginal[y + 1] - self.marginal[y];
         let col = c[x + 1] - c[x];
         let s = (PI * (y as f32 + 0.5) / self.h as f32).sin();
-        (d, rgb, row * col * (self.w * self.h) as f32 / (2.0 * PI * PI * s.max(1e-6)))
+        (
+            d,
+            rgb,
+            row * col * (self.w * self.h) as f32 / (2.0 * PI * PI * s.max(1e-6)),
+        )
     }
 
     /// The GPU's array: the marginal, the conditionals, then the pixels as RGB triples.
@@ -296,7 +316,11 @@ mod tests {
         let m = 100000;
         for k in 0..m {
             let (d, rgb, pdf) = env.sample(rand(2, k, 0, 4), rand(2, k, 1, 4), turn);
-            assert!((pdf - env.pdf(d, turn)).abs() <= 1e-3 * pdf, "{pdf} vs {}", env.pdf(d, turn));
+            assert!(
+                (pdf - env.pdf(d, turn)).abs() <= 1e-3 * pdf,
+                "{pdf} vs {}",
+                env.pdf(d, turn)
+            );
             assert!((rgb - env.radiance(d, turn)).len() < 1e-6);
             imp += (rgb.lum() / pdf) as f64;
         }
