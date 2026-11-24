@@ -39,6 +39,9 @@ pub struct Choice {
     pub sequence: Option<Vec<String>>,
     /// Keep the last step's tools where they pass (a ranked program applied).
     pub keep_tools: bool,
+    /// Lay the program's tools out as stations along the bed (stage bending), each bend at its
+    /// station, all of them on the press.
+    pub stations_auto: bool,
 }
 
 /// The panel's pages.
@@ -159,6 +162,7 @@ impl BendSimUi {
             dies: choice.dies.clone(),
             sequence: choice.sequence.as_ref().map(|s| s.join(",")),
             keep_tools: choice.keep_tools,
+            stage: choice.stations_auto,
             // the ranked alternatives, offered beside the order shown (never applied unasked)
             programs: Some(5),
             ..Ask::default()
@@ -1048,7 +1052,7 @@ pub fn layout_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
             .plan
             .steps
             .iter()
-            .filter(|x| (x.setup.punch, x.setup.die) == (s.punch, s.die))
+            .filter(|x| x.station == Some(k))
             .filter_map(|x| x.force)
             .fold(None, |m: Option<f64>, f| Some(m.map_or(f, |m| m.max(f))));
         let line = match (cap.is_finite(), most) {
@@ -1132,12 +1136,7 @@ pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
         .plan
         .steps
         .iter()
-        .map(|s| {
-            sim.tooling
-                .stations
-                .iter()
-                .position(|x| (x.punch, x.die) == (s.setup.punch, s.setup.die))
-        })
+        .map(|s| s.station)
         .collect();
     let ids: Vec<String> = match &st.doc {
         Some(d) => d.bends.clone(),
@@ -1528,11 +1527,8 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
             flat = Some(names[s.bend].clone());
         }
         head(ui, t, "Tooling");
-        let station = sim
-            .tooling
-            .stations
-            .iter()
-            .position(|x| (x.punch, x.die) == (s.setup.punch, s.setup.die));
+        // the station the simulation worked the step at (the same tools may stand at two)
+        let station = s.station;
         egui::Grid::new("bendsim-sheet-tools")
             .num_columns(2)
             .spacing([12.0, 4.0])

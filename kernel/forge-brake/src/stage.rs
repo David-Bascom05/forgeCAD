@@ -120,9 +120,13 @@ fn pairs(m: &Model, tl: &Tooling, prog: &Program) -> Option<(Vec<Station>, Vec<u
         let b = &m.bends[st.bend];
         let need = (b.len - 2.0 * tl.short_end.unwrap_or(m.t.max(3.0))).max(0.0);
         let room = b.len - 2.0 * tl.clearance;
-        let fits = |x: f64| x >= need && x <= room + 1e-9;
+        // as the simulation picks a step's station (Tooling::station_for): the room is the
+        // tool's own shortest cover where that is longer than the bend allows
+        let fits = |x: f64, own: f64| x >= need && x <= room.max(own) + 1e-9;
         let i = match ps.iter().position(|s| {
-            (s.punch, s.die) == (st.setup.punch, st.setup.die) && fits(s.punch_length) && fits(s.die_length)
+            (s.punch, s.die) == (st.setup.punch, st.setup.die)
+                && fits(s.punch_length, pl)
+                && fits(s.die_length, dl)
         }) {
             Some(i) => i,
             None => {
@@ -216,6 +220,9 @@ pub fn stage(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> Result<Stag
         ..tl.clone()
     };
     let progs = programs(m, &bare, opts, max.max(1));
+    if std::env::var_os("BENDSIM_TRACE").is_some() {
+        eprintln!("stage: {} programs", progs.len());
+    }
     if progs.is_empty() {
         return Err(StageFail::NoProgram(crate::plan(m, &bare, opts)));
     }
@@ -245,6 +252,24 @@ pub fn stage(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> Result<Stag
             // a stated setup is simulated as stated: the search's reasons for it are the program's
             for (st, from) in plan.steps.iter_mut().zip(&prog.plan.steps) {
                 st.rejected = from.rejected.clone();
+            }
+            if std::env::var_os("BENDSIM_TRACE").is_some() {
+                eprintln!(
+                    "stage: program {pi} tight {tight}: {:?} -> {}",
+                    stations
+                        .iter()
+                        .map(|s| (s.punch, s.die, s.y, s.punch_length))
+                        .collect::<Vec<_>>(),
+                    plan.feasible
+                );
+                for b in &plan.blocking {
+                    for c in &b.checks {
+                        eprintln!(
+                            "  bend {} {:?} {:?} {} {:?}",
+                            b.bend, c.rule, c.tool, c.value, c.phase
+                        );
+                    }
+                }
             }
             if !plan.feasible {
                 if attempt.is_none() {

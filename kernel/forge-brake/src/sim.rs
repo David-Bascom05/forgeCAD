@@ -580,14 +580,20 @@ impl<'a> StepCtx<'a> {
         // length by the clearance at each end (flanges standing at the ends stay clear)
         let need = (bj.len - 2.0 * tl.short_end.unwrap_or(t.max(3.0))).max(0.0);
         let room = bj.len - 2.0 * tl.clearance;
-        let station_ix = tl.station_for(setup.punch, setup.die, need, room);
+        let own = (
+            cover_within(&punch.segments, need, room).map(|c| c.0),
+            cover_within(&die.segments, need, room).map(|c| c.0),
+        );
+        let station_ix = if tl.stations.is_empty() {
+            None
+        } else {
+            let r = |c: Option<f64>| c.map_or(room, |c| c.max(room));
+            tl.station_for(setup.punch, setup.die, need, (r(own.0), r(own.1)))
+        };
         let station = station_ix.map(|k| &tl.stations[k]);
         let lengths = match station {
             Some(st) => (Some(st.punch_length), Some(st.die_length)),
-            None => (
-                cover_within(&punch.segments, need, room).map(|c| c.0),
-                cover_within(&die.segments, need, room).map(|c| c.0),
-            ),
+            None => own,
         };
         let oy = station.map_or(0.0, |st| st.y);
         StepCtx {
