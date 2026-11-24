@@ -104,6 +104,17 @@ impl Gui {
         };
         // a setup that turns the part over, or machines another part (soft jaws), is not in the
         // frame the view shows
+        // a lathe setup: in the part's own frame (z the spindle axis), a witness at (ρ, 0, z)
+        if run.process == "turning" {
+            if let Some(l) = &w.focus.locate {
+                let q = [l.at[0] as f32, l.at[1] as f32, l.at[2] as f32];
+                for (list, a) in [(&mut *out, 1.0), (&mut *behind, 0.9)] {
+                    crate::origin::disc(q, px * 9.0, [0.05, 0.06, 0.08, a], cam, size, list);
+                    crate::origin::disc(q, px * 6.0, [0.93, 0.27, 0.22, a], cam, size, list);
+                }
+            }
+            return;
+        }
         let turned = w.stmt(&su.name).is_some_and(|s| s.arg("from").is_some());
         let main = w.parts.first().map(|p| p.file.as_str());
         if turned || main != Some(su.part.as_str()) {

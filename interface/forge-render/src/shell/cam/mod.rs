@@ -45,6 +45,7 @@ pub struct Focus {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ask {
     NewSetup,
+    NewLatheSetup,
     NewOp(&'static str),
     Generate,
     PostProcess,
@@ -63,6 +64,7 @@ impl From<Ask> for Cmd {
     fn from(a: Ask) -> Cmd {
         match a {
             Ask::NewSetup => Cmd::NewSetup,
+            Ask::NewLatheSetup => Cmd::NewLatheSetup,
             Ask::NewOp(f) => Cmd::NewOp(f),
             Ask::Generate => Cmd::Generate,
             Ask::PostProcess => Cmd::PostProcess,
@@ -83,6 +85,8 @@ impl From<Ask> for Cmd {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
     NewSetup,
+    /// A lathe setup (turning).
+    NewLatheSetup,
     /// A new op of this built-in in the setup in focus.
     NewOp(&'static str),
     /// Statement `id`'s dialog.
@@ -119,9 +123,11 @@ pub struct SetupDlg {
     pub name: String,
     pub tab: usize,
     /// keyword → text: machine, origin, tol, clearance, at, fixture, from, stock_kind, margin,
-    /// min, max
+    /// min, max; a lathe's: machine, bar, front, chuck, at, offsets, tol, clearance
     pub args: Vec<(String, String)>,
     pub error: Option<String>,
+    /// A lathe setup (`lathe_setup`, forge-turn-lang).
+    pub lathe: bool,
 }
 
 /// An op dialog's state.
@@ -480,6 +486,7 @@ impl CamWs {
     pub fn command(&mut self, c: Cmd) {
         match c {
             Cmd::NewSetup => self.setup_dlg = Some(self.new_setup_dlg()),
+            Cmd::NewLatheSetup => self.setup_dlg = Some(self.new_lathe_dlg()),
             Cmd::NewOp(func) => match self.setup_now() {
                 Some(su) => self.op_dlg = Some(self.new_op_dlg(func, &su)),
                 None => self.said = Some("make a setup first: Setup ▸ New Setup".into()),
@@ -616,7 +623,15 @@ impl CamWs {
                     name: id.to_string(),
                     ..Default::default()
                 };
-                d.args = setup_args(&s);
+                d.lathe = s.func == "lathe_setup";
+                d.args = if d.lathe {
+                    s.args
+                        .iter()
+                        .filter_map(|a| a.key.clone().map(|k| (k, a.text.clone())))
+                        .collect()
+                } else {
+                    setup_args(&s)
+                };
                 self.setup_dlg = Some(d);
             }
             Role::Op(func) => {
@@ -667,14 +682,48 @@ impl CamWs {
                 ("origin".into(), "\"top-center\"".into()),
             ],
             error: None,
+            lathe: false,
+        }
+    }
+
+    /// Whether the document is a turning one (its setups are lathe setups).
+    pub fn turning(&self) -> bool {
+        self.stmts.iter().any(|s| s.func == "lathe_setup")
+    }
+
+    fn new_lathe_dlg(&self) -> SetupDlg {
+        let name = doc::free_name(&self.stmts, &format!("op{}", self.setups().len() + 1));
+        let chuck = self.stmts.iter().find(|s| s.func == "chuck").map_or_else(
+            || "chuck(face: -70, grip: 30, jaw: 15)".to_string(),
+            |s| s.name.clone(),
+        );
+        SetupDlg {
+            id: None,
+            name,
+            tab: 0,
+            args: vec![
+                ("machine".into(), "\"generic-lathe\"".into()),
+                ("bar".into(), "32".into()),
+                ("front".into(), "2".into()),
+                ("chuck".into(), chuck),
+            ],
+            error: None,
+            lathe: true,
         }
     }
 
     fn new_op_dlg(&self, func: &str, setup: &str) -> OpDlg {
         let spec = schema::spec(func);
         let base = match func {
-            "facing" => "face",
+            "facing" | "turn_face" => "face",
             "edge_break" => "chamfer",
+            "turn_rough" => "rough",
+            "turn_finish" => "finish",
+            "bore_rough" => "bore",
+            "turn_groove" => "groove",
+            "turn_thread" => "thread",
+            "part_off" => "cut",
+            "turn_drill" => "drilling",
             f => f,
         };
         let name = doc::free_name(&self.stmts, base);
@@ -686,7 +735,13 @@ impl CamWs {
                 .iter()
                 .rev()
                 .find_map(|s| s.arg("tool").map(str::to_string))
-                .or_else(|| self.tools().first().map(|s| s.name.clone()));
+                .or_else(|| {
+                    let lathe = schema::is_turning_op(func);
+                    self.tools()
+                        .iter()
+                        .find(|s| (s.func == "lathe_tool") == lathe)
+                        .map(|s| s.name.clone())
+                });
             if let Some(t) = tool {
                 args.push(("tool".into(), t));
             }
@@ -753,27 +808,10 @@ impl CamWs {
                 let geo_now = get(&d.args, "#1");
                 let geo_was = get(&d.was, "#1");
                 if geo_now.is_empty() != geo_was.is_empty() {
-                    let t = self.text.clone();
-                    let r = doc::apply(
-                        &t,
-                        &Edit::Add {
-                            before: Some(id.clone()),
-                            text: Self::op_text(&OpDlg {
-                                name: "cam_new_".into(),
-                                ..d.clone()
-                            }),
-                        },
-                    )
-                    .and_then(|t| doc::apply(&t, &Edit::Delete { id: id.clone() }))
-                    .and_then(|t| {
-                        doc::apply(
-                            &t,
-                            &Edit::Rename {
-                                from: "cam_new_".into(),
-                                to: id.clone(),
-                            },
-                        )
-                    })?;
+                    // the statement's call written again in place (`ReplaceFeature`)
+                    let full = Self::op_text(d);
+                    let call = full.split_once(" = ").map_or(full.as_str(), |x| x.1).to_string();
+                    let r = doc::replace_call(&self.text, id, &call)?;
                     self.set_text(r);
                 } else {
                     for k in &keys {
@@ -826,22 +864,50 @@ impl CamWs {
                 parts.push(format!("{k}: {v}"));
             }
         }
-        format!("{} = setup({})", d.name, parts.join(", "))
+        let func = if d.lathe { "lathe_setup" } else { "setup" };
+        format!("{} = {func}({})", d.name, parts.join(", "))
     }
 
     pub fn setup_ok(&mut self, d: &SetupDlg) -> Result<(), String> {
         let text = self.setup_text(d);
         match &d.id {
             None => {
+                let mut text = text;
+                let mut es = vec![];
+                // a lathe setup's chuck written as a statement of its own (`chuck(..)` is the
+                // language's value there, not a call a setup argument may hold)
+                if d.lathe
+                    && let Some(c) = Self::setup_kw(d)
+                        .iter()
+                        .find(|(k, v)| *k == "chuck" && v.starts_with("chuck("))
+                        .map(|x| x.1.clone())
+                {
+                    let jaws = doc::free_name(&self.stmts, "jaws");
+                    es.push(Edit::Add {
+                        before: None,
+                        text: format!("{jaws} = {c}"),
+                    });
+                    text = text.replacen(&c, &jaws, 1);
+                }
                 // at the end, so it reads what is above it
-                self.edits(&[Edit::Add { before: None, text }])?;
+                es.push(Edit::Add { before: None, text });
                 // and a program for it, so its ops are posted and certified
-                let n = doc::free_name(&self.stmts, &format!("prog{}", self.setups().len()));
-                let num = 1000 + self.setups().len();
-                self.edits(&[Edit::Add {
+                let n = doc::free_name(&self.stmts, &format!("prog{}", self.setups().len() + 1));
+                let num = if d.lathe {
+                    1 + self.setups().len()
+                } else {
+                    1001 + self.setups().len()
+                };
+                let (func, post) = if d.lathe {
+                    ("lathe_program", "fanuc-lathe")
+                } else {
+                    ("program", "fanuc")
+                };
+                es.push(Edit::Add {
                     before: None,
-                    text: format!("{n} = program({}, post: \"fanuc\", number: {num})", d.name),
-                }])?;
+                    text: format!("{n} = {func}({}, post: \"{post}\", number: {num})", d.name),
+                });
+                self.edits(&es)?;
                 self.select(&d.name);
                 Ok(())
             }
@@ -890,6 +956,9 @@ impl CamWs {
                 .map(|a| a.1.trim().to_string())
                 .unwrap_or_default()
         };
+        if d.lathe {
+            return LATHE_KW.iter().map(|k| (*k, get(k))).collect();
+        }
         let stock = match get("stock_kind").as_str() {
             "box" => format!("box(min: {}, max: {})", get("min"), get("max")),
             "from" => String::new(),
@@ -945,6 +1014,35 @@ pub fn open_for(part_path: &str) -> Result<CamWs, String> {
     let mut ws = CamWs::open(&path, &text);
     ws.saved = String::new();
     Ok(ws)
+}
+
+/// A lathe setup's keywords, in the order they are written (docs/cam-turning.md).
+pub const LATHE_KW: [&str; 8] = [
+    "bar",
+    "front",
+    "chuck",
+    "machine",
+    "at",
+    "offsets",
+    "tol",
+    "clearance",
+];
+
+/// The lathes the built-in library holds (forge-turn's machines-lathe.toml).
+pub fn lathes() -> Vec<String> {
+    let mut out = vec![];
+    let mut in_machine = false;
+    for l in forge_turn::machine::BUILTIN.lines() {
+        let l = l.trim();
+        if l.starts_with("[[") {
+            in_machine = l == "[[machine]]";
+        } else if in_machine && let Some(v) = l.strip_prefix("name") {
+            let v = v.trim_start().trim_start_matches('=').trim().trim_matches('"');
+            out.push(v.to_string());
+            in_machine = false;
+        }
+    }
+    out
 }
 
 /// A setup statement's arguments as the dialog edits them.
@@ -1086,6 +1184,59 @@ prog = program(op1, post: \"fanuc\", number: 1001)
         assert!(forge_cam_lang::is_machining(&w.text));
         assert_eq!(w.stmt("f").and_then(|s| s.pos(0)), Some("\"nameplate.fg\""));
         assert!(w.part_path().is_some_and(|p| p.ends_with("nameplate.fg")));
+    }
+
+    #[test]
+    fn a_lathe_setup_and_its_ops_are_written_as_turning_statements() {
+        let text = "machining\nf  = part(\"shaft.fg\")\nt1 = lathe_tool(\"od-rough-cnmg\", t: 1)\n";
+        let mut w = CamWs::open("/nowhere/shaft_turn.fg", text);
+        w.auto = false;
+        assert!(!w.turning());
+        w.command(Cmd::NewLatheSetup);
+        let mut d = w.setup_dlg.take().unwrap();
+        assert!(d.lathe);
+        d.args.push(("at".into(), "100".into()));
+        w.setup_ok(&d).expect("added");
+        assert!(w.turning());
+        assert!(
+            w.text.contains("jaws = chuck(face: -70, grip: 30, jaw: 15)\n"),
+            "{}",
+            w.text
+        );
+        assert!(
+            w.text.contains(
+                "op1 = lathe_setup(f, bar: 32, front: 2, chuck: jaws, machine: \"generic-lathe\", at: 100)"
+            ),
+            "{}",
+            w.text
+        );
+        assert!(
+            w.text
+                .contains("prog1 = lathe_program(op1, post: \"fanuc-lathe\", number: 1)"),
+            "{}",
+            w.text
+        );
+        assert!(forge_turn_lang::is_turning(&w.text));
+        w.command(Cmd::NewOp("turn_rough"));
+        let mut o = w.op_dlg.take().unwrap();
+        assert_eq!(o.get("tool"), "t1", "a lathe tool");
+        o.set("leave", "0.3".into());
+        o.set("step", "2".into());
+        w.op_ok(&o).expect("added");
+        assert!(
+            w.text
+                .contains("rough = turn_rough(op1, tool: t1, leave: 0.3, step: 2)\nprog1"),
+            "{}",
+            w.text
+        );
+        // the setup edited in place: the bar
+        w.command(Cmd::Edit("op1".into()));
+        let mut d = w.setup_dlg.take().unwrap();
+        assert!(d.lathe);
+        d.args.iter_mut().find(|a| a.0 == "bar").unwrap().1 = "36".into();
+        w.setup_ok(&d).expect("edited");
+        assert!(w.text.contains("lathe_setup(f, bar: 36, front: 2"), "{}", w.text);
+        assert!(lathes().contains(&"generic-lathe".to_string()));
     }
 
     #[test]

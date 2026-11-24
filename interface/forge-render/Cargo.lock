@@ -1313,6 +1313,8 @@ dependencies = [
  "forge-thermo",
  "forge-tooling",
  "forge-topo",
+ "forge-turn",
+ "forge-turn-lang",
  "forge-vendor",
  "js-sys",
  "keyring-core",
@@ -1393,6 +1395,29 @@ version = "0.1.0"
 dependencies = [
  "forge-geom",
  "forge-math",
+]
+
+[[package]]
+name = "forge-turn"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-turn-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam-geom",
+ "forge-dirs",
+ "forge-lang",
+ "forge-turn",
 ]
 
 [[package]]

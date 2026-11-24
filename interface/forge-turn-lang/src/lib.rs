@@ -207,7 +207,7 @@ impl TurnCam {
             "part" => {
                 let file = text(a, "#0", None)?;
                 let path = dir.join(&file);
-                let src = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let src = forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
                 if !run.ok() {
                     return Err(format!(

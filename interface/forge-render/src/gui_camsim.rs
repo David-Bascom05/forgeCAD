@@ -61,6 +61,12 @@ impl Gui {
         }
         let Some(w) = &self.shell.cam else { return };
         // the workspace has a run of text the simulation is not of: simulate it
+        // a turning document is not a milling run (its removal comes later, through this
+        // interface): no simulation of it
+        if forge_turn_lang::is_turning(&w.text) {
+            self.shell.camsim = None;
+            return;
+        }
         if let Some(run) = &w.run {
             // keyed by the text and what its run came to: the same text run again with the
             // files it reads now there (a browser page's arrive after it opens) is simulated again
