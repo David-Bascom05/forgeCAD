@@ -135,6 +135,25 @@ def core.iter.traits.iterator.Iterator.all.default {Self F Item : Type _}
     Self → F → Result (Bool × Self) :=
   fun it f => loop (core.iter.traits.iterator.Iterator.allStep inst fm) (it, f)
 
+/-- One step of `Iterator::any`'s default method: `all`'s, with the stop on the first `true`. -/
+def core.iter.traits.iterator.Iterator.anyStep {Self F Item : Type _}
+    (inst : core.iter.traits.iterator.Iterator Self Item)
+    (fm : core.ops.function.FnMut F Item Bool)
+    (st : Self × F) : Result (ControlFlow (Self × F) (Bool × Self)) := do
+  let (x, it) ← inst.next st.1
+  match x with
+  | none => ok (done (false, it))
+  | some x =>
+    let (b, f) ← fm.call_mut st.2 x
+    if b then ok (done (true, it)) else ok (cont (it, f))
+
+/-- `Iterator::any`'s default method, over the iterator's own `next` (Aeneas's `loop`). -/
+def core.iter.traits.iterator.Iterator.any.default {Self F Item : Type _}
+    (inst : core.iter.traits.iterator.Iterator Self Item)
+    (fm : core.ops.function.FnMut F Item Bool) :
+    Self → F → Result (Bool × Self) :=
+  fun it f => loop (core.iter.traits.iterator.Iterator.anyStep inst fm) (it, f)
+
 /-- `f64::next_up`, std's body over the bits (`library/core/src/num/f64.rs`). -/
 def core.f64.F64.next_up (x : F64) : Result F64 :=
   let bits := IEEE754.FP.toBits x

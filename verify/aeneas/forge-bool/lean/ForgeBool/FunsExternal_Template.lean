@@ -220,7 +220,7 @@ axiom forge_math.frame.Frame.impl.z
   : forge_math.frame.Frame → Result forge_math.vec.UnitVec3
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::grow]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 339:4-339:38
+    Source: 'kernel/forge-math/src/interval.rs', lines 340:4-340:38
     Name pattern: [forge_math::interval::{forge_math::interval::Box3}::grow]
     Visibility: public -/
 @[rust_fun "forge_math::interval::{forge_math::interval::Box3}::grow"]
@@ -228,7 +228,7 @@ axiom forge_math.interval.Box3.grow
   : forge_math.interval.Box3 → F64 → Result forge_math.interval.Box3
 
 /-- [forge_math::interval::{forge_math::interval::Box3}::center]:
-    Source: 'kernel/forge-math/src/interval.rs', lines 346:4-346:34
+    Source: 'kernel/forge-math/src/interval.rs', lines 347:4-347:34
     Name pattern: [forge_math::interval::{forge_math::interval::Box3}::center]
     Visibility: public -/
 @[rust_fun "forge_math::interval::{forge_math::interval::Box3}::center"]

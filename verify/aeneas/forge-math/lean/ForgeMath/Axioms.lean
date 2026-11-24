@@ -4,6 +4,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 import Lean
 import ForgeMath.Refine
 import ForgeMath.Predicates
+import ForgeMath.Estimate
 
 /-!
 # Only the standard axioms
@@ -32,3 +33,4 @@ elab "#standard_axioms " ids:ident* : command => do
   ForgeMath.CROSS_BOUND_eq ForgeMath.CCW_BOUND_eq
   ForgeMath.cross_sign_of_fast ForgeMath.cross_sign_fast
   ForgeMath.orient2d_of_fast ForgeMath.orient2d_fast
+  ForgeMath.slice_sum ForgeMath.estimate_eq
