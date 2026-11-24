@@ -4,9 +4,9 @@
 //! linked or overridden, and what the export says (its refusal with fixes, warnings, notes).
 //! The host (gui_robot.rs) reads `q` and moves the parts; nothing here edits a document yet.
 
-use super::Shell;
-use super::placed::Placed;
-use super::theme::{medium, mono, sans};
+use crate::shell::Shell;
+use crate::shell::placed::Placed;
+use crate::shell::theme::{medium, mono, sans};
 use egui::{RichText, Ui, pos2, vec2};
 use forge_lang::robot::Edit;
 use forge_lang::urdf::{Conflict, Exported, RobotView, UrdfError, ViewJoint};
@@ -29,6 +29,40 @@ pub enum RobotAct {
     Undo,
     /// The URDF written beside the robot document.
     Export,
+}
+
+/// A change to the robot's tree, on the selected link or joint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TreeOp {
+    MakeRoot,
+    Drop,
+    Merge,
+    Freeze,
+    Frame,
+    Hull,
+}
+
+impl TreeOp {
+    pub fn label(self) -> &'static str {
+        match self {
+            TreeOp::MakeRoot => "Make root",
+            TreeOp::Drop => "Drop",
+            TreeOp::Merge => "Merge into parent",
+            TreeOp::Freeze => "Freeze here",
+            TreeOp::Frame => "Add frame",
+            TreeOp::Hull => "Collision: hull",
+        }
+    }
+    pub fn tip(self) -> &'static str {
+        match self {
+            TreeOp::MakeRoot => "the tree hung from this link",
+            TreeOp::Drop => "out of the robot: no visual, collision or mass",
+            TreeOp::Merge => "one link with its parent (across a fixed joint)",
+            TreeOp::Freeze => "a fixed joint in the robot, at its value now",
+            TreeOp::Frame => "a tool or sensor frame on this link",
+            TreeOp::Hull => "its collision the convex hull of its meshes",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -68,6 +102,8 @@ pub struct RobotPanel {
     pub draft: BTreeMap<String, f64>,
     /// The last thing the host did, said.
     pub said: String,
+    /// The environment's browser drew the tree this frame.
+    pub side_drawn: bool,
     /// The 3D view's overlays: joint frames and axes, centres of mass.
     pub show_axes: bool,
     pub show_com: bool,
@@ -81,6 +117,8 @@ impl RobotPanel {
             open: true,
             show_axes: true,
             show_com: true,
+            // the export runs when the host first sees it
+            stale: true,
             ..RobotPanel::default()
         }
     }
@@ -190,6 +228,102 @@ impl RobotPanel {
         }));
     }
 
+    /// The edit a tree operation is on the selection, or why it can't be.
+    pub fn tree_edit(&self, op: TreeOp) -> Result<Edit, String> {
+        let view = self.view.as_ref().ok_or("the robot is not built yet")?;
+        if op == TreeOp::Freeze {
+            let Some(Sel::Joint(n)) = &self.sel else {
+                return Err("select a joint".into());
+            };
+            let j = view.joints.iter().find(|j| j.name == *n).ok_or("no such joint")?;
+            if j.position.len() != 1 || j.mimic.is_some() {
+                return Err("a moving joint of one value".into());
+            }
+            if j.of != j.name || self.source.is_none() {
+                return Err("a source joint of one freedom".into());
+            }
+            let v = self.value(j);
+            let at = if j.kind == "prismatic" {
+                format!("{}", (v * 1000.0 * 1e6).round() / 1e6)
+            } else {
+                format!("{}deg", (v.to_degrees() * 1e6).round() / 1e6)
+            };
+            return Ok(Edit::Add {
+                text: format!("freeze(src.{}, at: {at})", j.of),
+            });
+        }
+        let Some(Sel::Link(n)) = &self.sel else {
+            return Err("select a link".into());
+        };
+        let l = view.links.iter().find(|l| l.name == *n).ok_or("no such link")?;
+        let target = self.link_target(l);
+        let up = view.joints.iter().find(|j| j.child == l.name);
+        let has_kids = view.joints.iter().any(|j| j.parent == l.name);
+        Ok(match op {
+            TreeOp::MakeRoot => {
+                if self.source.is_none() || l.bodies.is_empty() {
+                    return Err("a link of the source".into());
+                }
+                if view.root == l.name {
+                    return Err("it is the root".into());
+                }
+                Edit::Put {
+                    call: "root".into(),
+                    text: format!("root({target})"),
+                }
+            }
+            TreeOp::Drop => {
+                if view.root == l.name || has_kids {
+                    return Err("a leaf, not the root".into());
+                }
+                Edit::Add {
+                    text: format!("drop({target})"),
+                }
+            }
+            TreeOp::Merge => {
+                let j = up.ok_or("the root has no parent")?;
+                if j.kind != "fixed" {
+                    return Err("the joint above moves: freeze it first".into());
+                }
+                let parent = view
+                    .links
+                    .iter()
+                    .find(|x| x.name == j.parent)
+                    .ok_or("no parent")?;
+                Edit::Add {
+                    text: format!("merge({}, {target})", self.link_target(parent)),
+                }
+            }
+            TreeOp::Hull => Edit::Add {
+                text: format!("collision({target}, hull)"),
+            },
+            TreeOp::Frame => {
+                let name = (0..)
+                    .map(|k| {
+                        if k == 0 {
+                            "tool".to_string()
+                        } else {
+                            format!("tool{k}")
+                        }
+                    })
+                    .find(|n| !view.links.iter().any(|x| x.name == *n))
+                    .unwrap_or_default();
+                Edit::Add {
+                    text: format!("{name} = frame(on: {target}, at: pose())"),
+                }
+            }
+            TreeOp::Freeze => unreachable!(),
+        })
+    }
+
+    /// How the document names a link: `src.B` by a source instance it holds, else its name.
+    pub fn link_target(&self, l: &forge_lang::urdf::ViewLink) -> String {
+        match l.bodies.first() {
+            Some(b) if self.source.is_some() => format!("src.{b}"),
+            _ => format!("\"{}\"", l.name),
+        }
+    }
+
     fn overridden(&self, what: &str, field: &str) -> Option<&str> {
         self.overrides
             .iter()
@@ -203,7 +337,37 @@ fn mm(x: f64) -> String {
 }
 
 impl Shell {
-    pub(super) fn robot_window(&mut self, ctx: &egui::Context) {
+    /// The environment's browser: the robot's tree. True: drawn (the panel then leaves it out).
+    /// Called by the Environments framework's adapter (ui/environments).
+    #[allow(dead_code)]
+    pub(in crate::shell) fn robot_side(&mut self, ui: &mut Ui, r: egui::Rect) -> bool {
+        let Some(mut p) = self.robot.take() else {
+            return false;
+        };
+        let t = self.theme;
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink(8.0)));
+        let title = if p.name.is_empty() {
+            "Robot".to_string()
+        } else {
+            p.name.clone()
+        };
+        child.label(RichText::new(title).font(medium(13.0)).color(t.ink));
+        if let Some(view) = p.view.clone() {
+            egui::ScrollArea::vertical()
+                .id_salt("robot-side")
+                .show(&mut child, |ui| {
+                    Self::robot_tree(ui, &t, &mut p, &view);
+                });
+        } else {
+            child.label(RichText::new("building…").font(sans(12.0)).color(t.ink2));
+        }
+        p.side_drawn = true;
+        self.robot = Some(p);
+        true
+    }
+
+    /// The environment's panel, once a frame (its tree too, unless the browser has it).
+    pub(in crate::shell) fn robot_ui(&mut self, ctx: &egui::Context) {
         let Some(mut p) = self.robot.take() else { return };
         if !p.open {
             self.robot = Some(p);
@@ -225,15 +389,15 @@ impl Shell {
             .default_pos(pos2(v.right() - w - 24.0, v.top() + 16.0))
             .min_width(w)
             .max_width(w)
-            .frame(super::fgasm::dialog_frame(&t))
-            .constrain_to(super::dialog_area(ctx))
+            .frame(crate::shell::fgasm::dialog_frame(&t))
+            .constrain_to(crate::shell::dialog_area(ctx))
             .show_placed(ctx, &mut places, |ui, places| {
                 let title = if p.name.is_empty() {
                     "Robot".to_string()
                 } else {
                     format!("Robot · {}", p.name)
                 };
-                close = super::fgasm::dialog_head(ui, &t, "assembly", &title, "robot", places);
+                close = crate::shell::fgasm::dialog_head(ui, &t, "jrevolute", &title, "robot", places);
                 if let Some(s) = &p.source {
                     ui.label(
                         RichText::new(format!("linked to {s}"))
@@ -329,7 +493,9 @@ impl Shell {
                     .auto_shrink([false, true])
                     .max_height((v.height() - 120.0).max(240.0))
                     .show(ui, |ui| {
-                        Self::robot_tree(ui, &t, &mut p, &view);
+                        if !p.side_drawn {
+                            Self::robot_tree(ui, &t, &mut p, &view);
+                        }
                         ui.add_space(6.0);
                         Self::robot_sliders(ui, &t, &mut p, &view);
                         ui.add_space(6.0);
@@ -357,32 +523,45 @@ impl Shell {
             p.open = false;
         }
         self.places.extend(places);
+        p.side_drawn = false;
         self.robot = Some(p);
     }
 
-    fn robot_tree(ui: &mut Ui, t: &super::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
+    fn robot_tree(ui: &mut Ui, t: &crate::shell::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
         ui.label(RichText::new("Links and joints").font(medium(12.0)).color(t.ink));
-        // depth first from the root, joints in document order
+        // depth first from the root: each joint, then the subtree it carries (document order)
+        enum Item {
+            Link(String, usize),
+            Joint(usize, usize),
+        }
         let mut rows: Vec<(usize, Sel, String)> = vec![];
-        let mut stack = vec![(view.root.clone(), 0usize)];
-        while let Some((link, d)) = stack.pop() {
-            let l = view.links.iter().find(|l| l.name == link);
-            let tag = match l {
-                Some(l) if l.dummy => " (massless)".to_string(),
-                Some(l) => l.mass.map_or(String::new(), |m| format!("  {m:.3} kg")),
-                None => String::new(),
-            };
-            rows.push((d, Sel::Link(link.clone()), format!("{link}{tag}")));
-            for j in view.joints.iter().filter(|j| j.parent == link).rev() {
-                stack.push((j.child.clone(), d + 2));
-            }
-            for j in view.joints.iter().filter(|j| j.parent == link) {
-                let k = if j.mimic.is_some() {
-                    format!("{} · mimic", j.kind)
-                } else {
-                    j.kind.to_string()
-                };
-                rows.push((d + 1, Sel::Joint(j.name.clone()), format!("· {} ({k})", j.name)));
+        let mut stack = vec![Item::Link(view.root.clone(), 0)];
+        while let Some(it) = stack.pop() {
+            match it {
+                Item::Link(link, d) => {
+                    let tag = match view.links.iter().find(|l| l.name == link) {
+                        Some(l) if l.dummy => " (massless)".to_string(),
+                        Some(l) => l.mass.map_or(String::new(), |m| format!("  {m:.3} kg")),
+                        None => String::new(),
+                    };
+                    rows.push((d, Sel::Link(link.clone()), format!("{link}{tag}")));
+                    let kids: Vec<usize> = (0..view.joints.len())
+                        .filter(|&k| view.joints[k].parent == link)
+                        .collect();
+                    for &k in kids.iter().rev() {
+                        stack.push(Item::Joint(k, d + 1));
+                    }
+                }
+                Item::Joint(k, d) => {
+                    let j = &view.joints[k];
+                    let kind = if j.mimic.is_some() {
+                        format!("{} · mimic", j.kind)
+                    } else {
+                        j.kind.to_string()
+                    };
+                    rows.push((d, Sel::Joint(j.name.clone()), format!("· {} ({kind})", j.name)));
+                    stack.push(Item::Link(j.child.clone(), d + 1));
+                }
             }
         }
         for (d, sel, text) in rows {
@@ -397,7 +576,7 @@ impl Shell {
         }
     }
 
-    fn robot_sliders(ui: &mut Ui, t: &super::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
+    fn robot_sliders(ui: &mut Ui, t: &crate::shell::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
         ui.horizontal(|ui| {
             ui.label(RichText::new("Drive").font(medium(12.0)).color(t.ink));
             if ui.small_button("Export pose").clicked() {
@@ -437,7 +616,7 @@ impl Shell {
             });
     }
 
-    fn robot_detail(ui: &mut Ui, t: &super::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
+    fn robot_detail(ui: &mut Ui, t: &crate::shell::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
         let mark = |ui: &mut Ui, linked: Option<&str>| {
             if let Some(l) = linked {
                 let was = if l.is_empty() {
@@ -566,6 +745,15 @@ impl Shell {
                             }
                         });
                     }
+                }
+                // fixed at its value now: a freeze, the robot's own (merging across it needs one)
+                if let Ok(e) = p.tree_edit(TreeOp::Freeze)
+                    && ui
+                        .button(TreeOp::Freeze.label())
+                        .on_hover_text(TreeOp::Freeze.tip())
+                        .clicked()
+                {
+                    p.out.push(RobotAct::Edit(e));
                 }
                 // what URDF adds: actuation and dynamics, the robot's own
                 ui.add_space(4.0);
@@ -719,6 +907,7 @@ impl Shell {
                         }));
                     }
                 });
+                Self::link_actions(ui, p, view, &l);
             }
             None => {
                 ui.label(
@@ -728,5 +917,32 @@ impl Shell {
                 );
             }
         }
+    }
+
+    /// The selected link's place in the tree, changed: made the root, dropped, merged into its
+    /// parent (across a fixed joint only), a frame hung on it, its collision made its hull.
+    fn link_actions(ui: &mut Ui, p: &mut RobotPanel, _view: &RobotView, _l: &forge_lang::urdf::ViewLink) {
+        ui.add_space(4.0);
+        ui.horizontal_wrapped(|ui| {
+            for op in [
+                TreeOp::MakeRoot,
+                TreeOp::Drop,
+                TreeOp::Merge,
+                TreeOp::Hull,
+                TreeOp::Frame,
+            ] {
+                let e = p.tree_edit(op);
+                let r = ui.add_enabled(e.is_ok(), egui::Button::new(op.label()));
+                let r = match &e {
+                    Ok(_) => r.on_hover_text(op.tip()),
+                    Err(why) => r.on_disabled_hover_text(why.as_str()),
+                };
+                if r.clicked()
+                    && let Ok(e) = e
+                {
+                    p.out.push(RobotAct::Edit(e));
+                }
+            }
+        });
     }
 }

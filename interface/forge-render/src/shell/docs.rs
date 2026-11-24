@@ -58,7 +58,7 @@ per_doc!(
         drawing: Option<super::drawing::DrawingEnv>,
         new_drawing: Option<super::drawing::NewDrawing>,
         dwgdoc: Option<super::dwgdoc::DwgDoc>,
-        robot: Option<super::robot_ui::RobotPanel>,
+        robot: Option<super::robot::RobotPanel>,
     ],
     app [
         theme, view, out, view_rect, places, cube_menu, cube_menu_fresh, cube_region, marking, window_box,

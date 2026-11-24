@@ -512,6 +512,20 @@ impl Reader<'_> {
     }
 }
 
+/// Names a robot document's values are read as before any binding (`hull`, `none`): binding one
+/// would be shadowed silently, so it is refused.
+pub const RESERVED: [&str; 2] = ["hull", "none"];
+
+fn reserved(name: &str) -> Result<(), String> {
+    if RESERVED.contains(&name) {
+        return Err(format!(
+            "ReservedName: `{name}` is a robot document's own word ({}); bind another name",
+            RESERVED.join(", ")
+        ));
+    }
+    Ok(())
+}
+
 /// Reads a robot document: every statement, or every statement's error.
 pub fn read(src: &str, dir: Option<&Path>) -> Result<Robot, Vec<RobotError>> {
     let prog = syntax::parse(src).map_err(|e| {
@@ -535,10 +549,12 @@ pub fn read(src: &str, dir: Option<&Path>) -> Result<Robot, Vec<RobotError>> {
         let res: Result<(), String> = (|| {
             match &st.kind {
                 StmtKind::Shared { name, value } => {
+                    reserved(name)?;
                     let v = rd.eval(value, &env)?;
                     env.insert(name.clone(), v);
                 }
                 StmtKind::Assign { name, value } => {
+                    reserved(name)?;
                     let v = match &value.kind {
                         ExprKind::Call(f, args) => match &f.kind {
                             ExprKind::Name(fname) => {
@@ -865,6 +881,9 @@ pub enum Edit {
     Add { text: String },
     /// The statement on this line taken out.
     Remove { line: usize },
+    /// The document's one `call(..)` statement (as `root(..)`, `collisions(..)`) replaced by
+    /// `text`, or `text` added where it has none.
+    Put { call: String, text: String },
 }
 
 /// The document's statements as calls: (statement span, call name, its arguments).
@@ -912,6 +931,21 @@ pub fn edit(src: &str, e: &Edit) -> Result<String, String> {
             s.push('\n');
             s
         }
+        Edit::Put { call, text } => match cs.iter().find(|c| c.1 == *call) {
+            Some(c) => {
+                let (a, b) = line_span(src, c.0.span.lo as usize);
+                format!("{}{}\n{}", &src[..a], text.trim_end(), &src[b..])
+            }
+            None => {
+                let mut s = src.to_string();
+                if !s.ends_with('\n') {
+                    s.push('\n');
+                }
+                s.push_str(text.trim_end());
+                s.push('\n');
+                s
+            }
+        },
         Edit::Remove { line } => {
             let c = on_line(*line)?;
             let (a, b) = line_span(src, c.0.span.lo as usize);

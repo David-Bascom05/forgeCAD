@@ -5,7 +5,7 @@
 //! (research/export/urdf-ui/); without an adapter the test says so and stops.
 
 use forge_render::gui::{Gui, Headless};
-use forge_render::shell::robot_ui::Sel;
+use forge_render::shell::robot::Sel;
 use std::path::{Path, PathBuf};
 
 const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
@@ -47,9 +47,9 @@ fn shot(h: &mut Headless, name: &str) {
 }
 
 /// The robot example's folder copied (the app writes beside a file it opens).
-fn copy() -> PathBuf {
+fn copy(tag: &str) -> PathBuf {
     let src = Path::new(EXAMPLES).join("robot");
-    let dir = std::env::temp_dir().join(format!("fg-robot-ui-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("fg-robot-ui-{}-{tag}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     for e in std::fs::read_dir(&src).unwrap().flatten() {
         if e.path().is_file() {
@@ -81,7 +81,7 @@ fn a_robot_opens_with_its_panel_and_its_joints_move_the_parts() {
     };
     let mut h = h;
     h.step();
-    let file = copy();
+    let file = copy("open");
     h.gui.open(file.to_str().unwrap());
     settle(&mut h);
     let p = h.gui.shell.robot.as_ref().expect("the robot panel");
@@ -147,7 +147,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         return;
     };
     h.step();
-    let file = copy();
+    let file = copy("edits");
     let source = file.parent().unwrap().join("arm2.fg");
     h.gui.open(file.to_str().unwrap());
     settle(&mut h);
@@ -196,7 +196,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         .as_mut()
         .unwrap()
         .out
-        .push(forge_render::shell::robot_ui::RobotAct::Undo);
+        .push(forge_render::shell::robot::RobotAct::Undo);
     settle_panel(&mut h);
     let said = h.gui.shell.robot.as_ref().unwrap().said.clone();
     assert!(
@@ -221,7 +221,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         .as_mut()
         .unwrap()
         .out
-        .push(forge_render::shell::robot_ui::RobotAct::Edit(
+        .push(forge_render::shell::robot::RobotAct::Edit(
             forge_lang::robot::Edit::Set {
                 line: Some(c.line),
                 call: String::new(),
@@ -261,7 +261,7 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         .as_mut()
         .unwrap()
         .out
-        .push(forge_render::shell::robot_ui::RobotAct::Assembly {
+        .push(forge_render::shell::robot::RobotAct::Assembly {
             joint: "elbow".into(),
             arg: "limit".into(),
             text: "(-100deg, 100deg)".into(),
@@ -297,8 +297,91 @@ fn the_panel_edits_the_robot_document_and_the_source() {
         .as_mut()
         .unwrap()
         .out
-        .push(forge_render::shell::robot_ui::RobotAct::Export);
+        .push(forge_render::shell::robot::RobotAct::Export);
     settle_panel(&mut h);
     let out = file.parent().unwrap().join("arm2_robot_urdf/arm2_robot.urdf");
     assert!(out.is_file(), "{}", h.gui.shell.robot.as_ref().unwrap().said);
+}
+
+#[test]
+fn the_tree_is_edited_from_the_panel() {
+    use forge_lang::robot::Edit;
+    use forge_render::shell::robot::RobotAct;
+    let Ok(mut h) = Headless::new((1600.0, 1000.0), 1.0) else {
+        eprintln!("skipped: no adapter");
+        return;
+    };
+    h.step();
+    let file = copy("tree");
+    h.gui.open(file.to_str().unwrap());
+    settle(&mut h);
+    let ask = |h: &mut Headless, e: Edit| {
+        h.gui.shell.robot.as_mut().unwrap().out.push(RobotAct::Edit(e));
+        settle_panel(h);
+        let p = h.gui.shell.robot.as_ref().unwrap();
+        assert!(p.error.is_none(), "{:?}", p.error);
+    };
+    // the elbow frozen where the panel has it (-60deg), then the forearm merged into the upper arm
+    ask(
+        &mut h,
+        Edit::Add {
+            text: "freeze(src.elbow, at: -60deg)".into(),
+        },
+    );
+    let v = h.gui.shell.robot.as_ref().unwrap().view.clone().unwrap();
+    assert_eq!(v.joints.iter().find(|j| j.name == "elbow").unwrap().kind, "fixed");
+    ask(
+        &mut h,
+        Edit::Add {
+            text: "merge(src.upper, forearm)".into(),
+        },
+    );
+    let v = h.gui.shell.robot.as_ref().unwrap().view.clone().unwrap();
+    assert!(v.links.iter().all(|l| l.name != "forearm"));
+    let upper = v.links.iter().find(|l| l.name == "upper").unwrap();
+    assert!(upper.bodies.contains(&"fore".to_string()) && upper.bodies.contains(&"finger".to_string()));
+    // the upper arm the root, a frame on it, its collision its hull
+    ask(
+        &mut h,
+        Edit::Put {
+            call: "root".into(),
+            text: "root(src.upper)".into(),
+        },
+    );
+    ask(
+        &mut h,
+        Edit::Add {
+            text: "cam = frame(on: src.upper, at: pose(at: (60, 0, 20)))".into(),
+        },
+    );
+    ask(
+        &mut h,
+        Edit::Add {
+            text: "collision(src.upper, hull)".into(),
+        },
+    );
+    let p = h.gui.shell.robot.as_ref().unwrap();
+    let v = p.view.as_ref().unwrap();
+    assert_eq!(v.root, "upper");
+    assert!(v.joints.iter().any(|j| j.child == "cam" && j.parent == "upper"));
+    let text = robot_text(&file);
+    assert!(
+        text.contains("root(src.upper)") && text.contains("merge(src.upper, forearm)"),
+        "{text}"
+    );
+    // the parts still where the robot's kinematics puts them
+    let placed = v.occurrences(&v.place(&p.q));
+    let f = placed.iter().find(|x| x.0 == "fore").expect("fore").1;
+    let want = forge_render::fg::rows_of(&f);
+    for _ in 0..4 {
+        h.step();
+    }
+    let got = rows(&h, "fore");
+    for i in 0..3 {
+        for j in 0..4 {
+            assert!((got[i][j] - want[i][j]).abs() < 1e-3);
+        }
+    }
+    h.gui.shell.robot.as_mut().unwrap().sel = Some(Sel::Link("upper".into()));
+    shot(&mut h, "06-robot-tree-edited");
 }

@@ -556,5 +556,66 @@ fn edits_set_and_reset_overrides_in_the_text() {
             }
         )
         .is_err()
+    ); // one root: put replaces it
+    let r1 = edit(
+        &s3,
+        &Edit::Put {
+            call: "root".into(),
+            text: "root(src.upper)".into(),
+        },
+    )
+    .expect("put");
+    let r2 = edit(
+        &r1,
+        &Edit::Put {
+            call: "root".into(),
+            text: "root(src.fore)".into(),
+        },
+    )
+    .expect("put again");
+    assert_eq!(r2.matches("root(").count(), 1);
+    assert_eq!(
+        robot::read(&r2, None).expect("reads").root.as_deref(),
+        Some("fore")
     );
+}
+
+#[test]
+fn a_merged_link_is_still_found_by_its_old_name() {
+    let (_, e) = export(
+        "forearm = link(src.fore)
+freeze(src.elbow, at: -60deg)
+merge(src.upper, forearm)
+tip = frame(on: forearm, at: pose(at: (144, 0, 5)))
+",
+    );
+    let (e, robot) = ok("alias", e);
+    let tip = robot
+        .all("joint")
+        .find(|j| j.attr("name") == "tip_joint")
+        .expect("the frame's joint");
+    assert_eq!(tip.kid("parent").expect("parent").attr("link"), "upper");
+    assert!(e.view.links.iter().all(|l| l.name != "forearm"));
+}
+
+#[test]
+fn a_reserved_name_is_not_bound() {
+    for text in [
+        "robot\nnone = 3\n",
+        "robot\nshared hull = 2\n",
+        "robot\nsrc = source(none)\nhull = link()\n",
+    ] {
+        let e = robot::read(text, None).expect_err("refused");
+        assert!(
+            e.iter().any(|x| x.message.starts_with("ReservedName")),
+            "{text}: {e:?}"
+        );
+    }
+    // the words themselves still mean what they mean
+    let r = robot::read(
+        "robot\nsrc = source(none)\na = link()\ncollision(a, hull)\n",
+        None,
+    )
+    .expect("reads");
+    assert_eq!(r.geometry[0].spec, robot::GeoSpec::Hull);
 }

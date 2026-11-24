@@ -851,6 +851,10 @@ struct Model {
     points: BTreeMap<String, Vec<Point3>>,
     transmissions: Vec<(String, String, f64, Option<String>)>,
     root: String,
+    /// A link merged into another, by its old name: the link it is now part of.
+    aliases: BTreeMap<String, String>,
+    /// Joints a merge or a drop took out, by their URDF and source names, and why.
+    gone: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1144,6 +1148,8 @@ fn part(
         joints: vec![],
         points: BTreeMap::from([(mesh_name, pts)]),
         transmissions: vec![],
+        aliases: BTreeMap::new(),
+        gone: BTreeMap::new(),
     })
 }
 
@@ -1547,6 +1553,8 @@ fn assembly(run: &Run, asm: &crate::asm::AsmOut, o: &Options, ex: &mut Exported)
         joints: wj,
         points,
         transmissions: vec![],
+        aliases: BTreeMap::new(),
+        gone: BTreeMap::new(),
     })
 }
 
@@ -2002,10 +2010,20 @@ fn link_of(m: &Model, t: &Target) -> Result<usize, UrdfError> {
                 have.join(" ")
             ))
         }),
-        Target::Name(n) => m.links.iter().position(|l| l.name == *n).ok_or_else(|| {
-            let have: Vec<&str> = m.links.iter().map(|l| l.name.as_str()).collect();
-            UrdfError::Robot(format!("no link {n} (links: {})", have.join(" ")))
-        }),
+        Target::Name(n) => {
+            // a merged link by its old name: the one it is part of now
+            let mut n = n.clone();
+            for _ in 0..m.aliases.len() {
+                match m.aliases.get(&n) {
+                    Some(to) if !m.links.iter().any(|l| l.name == n) => n = to.clone(),
+                    _ => break,
+                }
+            }
+            m.links.iter().position(|l| l.name == n).ok_or_else(|| {
+                let have: Vec<&str> = m.links.iter().map(|l| l.name.as_str()).collect();
+                UrdfError::Robot(format!("no link {n} (links: {})", have.join(" ")))
+            })
+        }
     }
 }
 
@@ -2148,6 +2166,9 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
                 )));
             }
             let (pn, cn, t) = (j.parent.clone(), j.child.clone(), j.origin);
+            let why = format!("merged away (merge of {cn} into {pn})");
+            m.gone.insert(j.name.clone(), why.clone());
+            m.gone.insert(j.of.clone(), why);
             m.joints.remove(jk);
             let ci = m.links.iter().position(|l| l.name == cn).expect("the child");
             let c = m.links.remove(ci);
@@ -2171,6 +2192,7 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
                 j.parent = pn.clone();
                 j.origin = t.compose(&j.origin);
             }
+            m.aliases.insert(cn.clone(), pn.clone());
             // merged under the parent's name, unless the one named first was the child
             if cn == an {
                 let pi = m.links.iter().position(|l| l.name == pn).expect("the parent");
@@ -2186,6 +2208,8 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
                 if m.root == pn {
                     m.root = an.clone();
                 }
+                m.aliases.insert(pn.clone(), an.clone());
+                m.aliases.remove(&an);
             }
         }
     }
@@ -2231,6 +2255,9 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
             {
                 return Err(UrdfError::Robot(format!("drop({name}): joint {jn} is mimicked")));
             }
+            let why = format!("dropped with {name}");
+            m.gone.insert(m.joints[jk].of.clone(), why.clone());
+            m.gone.insert(jn, why);
             m.joints.remove(jk);
         }
         m.links.remove(k);
@@ -2512,9 +2539,50 @@ fn apply(m: &mut Model, r: &Robot, o: &mut Options, ex: &mut Exported) -> Result
     }
     // joints
     for ov in &r.joints {
-        let k = joint_of(m, &ov.joint)?;
+        let k = match joint_of(m, &ov.joint) {
+            Ok(k) => k,
+            Err(e) => {
+                let name = match &ov.joint {
+                    Target::Source(x) | Target::Name(x) => x,
+                };
+                match m.gone.get(name) {
+                    Some(why) => {
+                        ex.warnings.push(format!(
+                            "line {}: joint {name} was {why}, so its override does nothing (remove it)",
+                            ov.line
+                        ));
+                        continue;
+                    }
+                    None => return Err(e),
+                }
+            }
+        };
         let what = format!("joint({})", m.joints[k].name);
         let j = &mut m.joints[k];
+        // a fixed joint (frozen, or made fixed) has no motion: its motion's overrides say nothing
+        if j.kind == "fixed" && ov.kind.is_none() {
+            let moot: Vec<&str> = [
+                ("axis", ov.axis.is_some()),
+                ("limit", ov.limit.is_some()),
+                ("effort", ov.effort.is_some()),
+                ("velocity", ov.velocity.is_some()),
+                ("damping", ov.damping.is_some()),
+                ("friction", ov.friction.is_some()),
+            ]
+            .iter()
+            .filter(|x| x.1)
+            .map(|x| x.0)
+            .collect();
+            if !moot.is_empty() {
+                ex.warnings.push(format!(
+                    "line {}: {what} is fixed, so its {} override{} nothing (remove it, or unfreeze the joint)",
+                    ov.line,
+                    moot.join(", "),
+                    if moot.len() == 1 { " does" } else { "s do" }
+                ));
+            }
+            continue;
+        }
         if let Some(kind) = &ov.kind {
             let kind: &'static str = match kind.as_str() {
                 "revolute" => "revolute",
@@ -2841,6 +2909,8 @@ fn unlinked(r: &Robot, o: &mut Options, ex: &mut Exported) -> Result<Model, Urdf
         joints,
         points: BTreeMap::new(),
         transmissions: vec![],
+        aliases: BTreeMap::new(),
+        gone: BTreeMap::new(),
     })
 }
 
