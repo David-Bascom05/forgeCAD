@@ -983,3 +983,28 @@ fn grbl_tool_changes_stand_at_the_clearance_height() {
         );
     }
 }
+
+/// 3-axis surfacing in the document: the mould core (spheres, cylinders and tori, some lowered
+/// as supersets) roughed by z-level and finished by parallel passes and a pencil pass, every
+/// move certified on the posted path, G1–G6; without the roughing the finishing is refused (its
+/// shank meets stock nobody removed).
+#[test]
+fn the_mould_core_is_surfaced_and_certified() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let head = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01, at: (-200, -150, -250))\n";
+    let rough = "rough = zlevel(op1, tool: t1, leave: 0.5, down: 3, stepover: 4, area: (-45, -35, 45, 35), grid: 1)\n";
+    let fin = "fin = parallel(op1, tool: t2, stepover: 4, area: (-30, -24, 30, 24))\ncorner = pencil(op1, tool: t2, area: (-30, -24, 30, 24), grid: 1)\n";
+    let prog = "prog = program(op1, post: \"fanuc\", number: 1002)\n";
+    let cam = forge_cam_lang::run(&format!("{head}{rough}{fin}{prog}"), &dir);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    assert!(cam.ops.iter().all(|o| o.status == "built" && o.pairs > 0));
+    assert_eq!(cam.certification(), "full");
+    let cam = forge_cam_lang::run(&format!("{head}{fin}{prog}"), &dir);
+    assert!(!cam.ok);
+    assert!(cam.ops.iter().any(|o| o.status == "refused"));
+}

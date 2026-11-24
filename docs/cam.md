@@ -67,6 +67,12 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `engrave(SETUP, PART.SKETCH, tool:, depth:, step:, from:)` | the tool's tip along the sketch's lines, arcs and circles (not construction), on a plane facing +z, in levels down to `depth` below it. The groove must be in the model (G1 is checked against the part, never a blanket tolerance); the stock records each line's and circle's band of the tip's radius as cleared (a V tool clears more, so G4 may list the rest of the groove) |
 | `thread_mill(SETUP, PART.HOLE, tool:, length:)` | a hole's recorded thread (`thread:`, or `screw:` with `fit: "tap"`), the model not carrying it: declares a cosmetic thread Δ per place (the ring from the bore to the major diameter over `length`, default the depth less two pitches), listed in the op's `removals`, and is certified against P ∖ Δ (never a blanket tolerance). Down the bore, in to the radius, up a helix of the pitch (G3: right hand), out |
 | `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`) |
+| `zlevel(SETUP, tool:, leave:, from:, to:, down:, stepover:, area:, grid:)` | 3-axis roughing, offset clearing (not adaptive): at each level from `from` (the stock's top) down to `to`, `down` apart (and at the part's own top), the tool centres the drop-cutter leaves free on a CL grid `grid` apart, cleared by passes `stepover` apart (at most the tool's radius) from that region's boundary; `area: (x0, y0, x1, y1)` bounds the tool centres. Its flat bottom's sweep is recorded in the in-process stock |
+| `parallel(SETUP, tool:, stepover:, angle:, step:, leave:, area:, floor:)` | 3-axis finishing: zig-zag rows `stepover` apart at `angle` degrees, each dropped onto the part (samples at most `step` apart, split until each move is proven) |
+| `waterline(SETUP, tool:, from:, to:, down:, area:, grid:)` | constant-z contours where the tool's reach crosses each level (marching squares on a CL grid, each crossing by certified bisection) |
+| `pencil(SETUP, tool:, area:, grid:, kink:)` | along the CL surface's creases (where the tool touches two faces): concave corners and fillets smaller than the tool |
+| `scallop(SETUP, tool:, stepover:, area:, grid:)` | passes `stepover` apart measured along the part (level sets of the distance over the CL surface from the area's edge) |
+| `rest(SETUP, tool:, after: TOOL, min:, stepover:, step:, area:, grid:)` | parallel rows only where `after` (a larger earlier tool) left more than `min` (default 0.05) |
 | `program(SETUP, post:, number:)` | `fanuc`, `haas`, `linuxcnc`, `grbl` (default: the machine's control) |
 
 `ramp: DEG` (over 0, at most 30) enters each pass by a helix of half the tool's radius at that angle,
@@ -127,9 +133,18 @@ The `scope` line is the contract's honesty: cutting physics, the machine's fidel
 leftover (G4) are not claimed in this phase. The in-process stock used for G2 and G3 is the box
 minus what each op provably cleared (kernel/forge-cam/src/stock.rs), so it contains the true one.
 
+3-axis surfacing (research/cam/phase3.md): a part outside the 2.5D lowering (spheres; cylinders,
+cones and tori of any axis or trimmed by other curves) is lowered with those faces as supersets
+(the whole sphere or torus): sound for every check, stricter, and a concave such face may refuse
+an op. Each surfacing move is certified by the tool's column (drop.rs): its signed distance to the
+part over the move, by closed forms for planes, vertical walls, spheres, cylinders with a
+horizontal axis and tori about a vertical axis, else by branch and bound. G4 (leftover) is not
+computed for such parts (`leftover.computed: false`). examples/machined/mold_core_cam.fg: z-level
+roughing, parallel, waterline, pencil and rest on a filleted core, every move certified.
+
 ## What this phase covers
 
 2.5D on parts whose faces are planes, and cylinders, cones and tori about z (others are refused by kind, typed):
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
-adaptive clearing (patents first), 3-axis surfacing, 3+2, turning, 5-axis; chamfer mills,
+adaptive clearing (patents first), 3+2, turning, 5-axis; chamfer mills,
 threads modelled as helicoidal faces (`thread(hole:)`): the lowering refuses them, so a modelled thread is milled as a declared Δ only when the model records it instead.

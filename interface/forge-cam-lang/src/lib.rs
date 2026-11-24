@@ -777,8 +777,14 @@ impl Cam {
                     ));
                 }
                 let body = run.body.ok_or("the part has no body")?;
-                let faces = forge_cam::lower::lower(&body)
-                    .map_err(|e| format!("the part is outside this phase's CAM domain: {e:?}"))?;
+                // the 2.5D lowering; a part outside it (spheres, revolved faces trimmed by other
+                // curves) is lowered for 3-axis surfacing, those faces as supersets
+                let faces = match forge_cam::lower::lower(&body) {
+                    Ok(f) => f,
+                    Err(e) => forge_cam::lower3d::lower_surfacing(&body)
+                        .map(|x| x.0)
+                        .map_err(|_| format!("the part is outside this phase's CAM domain: {e:?}"))?,
+                };
                 let mut lo = [f64::INFINITY; 3];
                 let mut hi = [f64::NEG_INFINITY; 3];
                 for fc in &faces {
@@ -947,7 +953,9 @@ impl Cam {
                 Ok(V::Setup(self.setups.len() - 1))
             }
             "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "slot" | "thread_mill"
-            | "edge_break" => self.op(name, f, a),
+            | "edge_break" | "parallel" | "waterline" | "zlevel" | "pencil" | "scallop" | "rest" => {
+                self.op(name, f, a)
+            }
             "soft_jaw" => self.soft_jaw(name, a),
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
@@ -971,7 +979,7 @@ impl Cam {
                 Ok(V::Num(0.0))
             }
             _ => Err(format!(
-                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, engrave, thread_mill, edge_break, program, box)"
+                "`{f}` is not a machining built-in (part, machine, tool, setup, facing, contour, pocket, drill, engrave, thread_mill, edge_break, parallel, waterline, zlevel, pencil, scallop, rest, program, box)"
             )),
         }
     }
@@ -2081,6 +2089,12 @@ impl Cam {
                 "slot" => "slot",
                 "thread_mill" => "thread_mill",
                 "edge_break" => "edge_break",
+                "parallel" => "parallel",
+                "waterline" => "waterline",
+                "zlevel" => "zlevel",
+                "pencil" => "pencil",
+                "scallop" => "scallop",
+                "rest" => "rest",
                 _ => "drill",
             },
             setup: su,
@@ -2138,6 +2152,9 @@ impl Cam {
                 match kind {
                     "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, false, &mut voids),
                     "slot" => self.engrave(su, a, t, ti, h, (vf, vp), step, true, &mut voids),
+                    "parallel" | "waterline" | "zlevel" | "pencil" | "scallop" | "rest" => {
+                        self.surfacing(su, kind, a, ti, h, (vf, vp), &mut voids)
+                    }
                     "thread_mill" => self.thread_mill(su, a, t, ti, h, (vf, vp), &mut out, &mut voids),
                     "edge_break" => self.edge_break(su, a, t, ti, h, (vf, vp), &mut out),
                     "facing" => {
@@ -2401,6 +2418,139 @@ impl Cam {
         }
         self.ops.push(out);
         Ok(V::Op(self.ops.len() - 1))
+    }
+
+    /// 3-axis surfacing (forge_cam::surf): the drop-cutter over the part's faces; every path is
+    /// certified afterwards by the column route. Only z-level roughing records what it cleared
+    /// in the in-process stock (a flat bottom over the free region, down to each level); the
+    /// finishing ops leave the stock as it was (it then contains the true stock: sound, and a
+    /// later op may be refused where the stock it meets is already gone).
+    #[allow(clippy::too_many_arguments)]
+    fn surfacing(
+        &self,
+        su: usize,
+        kind: &str,
+        a: &BTreeMap<String, V>,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        voids: &mut Vec<(Option<Region>, f64)>,
+    ) -> Result<Vec<OpPath>, String> {
+        use forge_cam::surf::{self, Surfacer};
+        let s = &self.setups[su];
+        let part = &self.parts[s.part];
+        let t = &self.tools[ti];
+        let d = t.tool.dc;
+        let body = t
+            .shape
+            .bodies
+            .iter()
+            .find(|b| b.part == forge_cam_geom::tool::Part::Cutter)
+            .ok_or("the tool has no cutter")?;
+        let leave = get_num(a, "leave", Some(0.0))?;
+        let floor = get_num(a, "floor", Some(part.bbox.0[2]))?;
+        let sf = Surfacer::new(&part.faces, body, leave, s.tol, floor).map_err(|e| format!("{e:?}"))?;
+        let area = match a.get("area") {
+            None => [part.bbox.0[0], part.bbox.0[1], part.bbox.1[0], part.bbox.1[1]],
+            Some(V::Tuple(v)) if v.len() == 4 => {
+                let mut r = [0.0; 4];
+                for (i, x) in v.iter().enumerate() {
+                    match x {
+                        V::Num(n) => r[i] = *n,
+                        _ => return Err("area: (x0, y0, x1, y1), tool centres".into()),
+                    }
+                }
+                r
+            }
+            Some(_) => return Err("area: (x0, y0, x1, y1), tool centres".into()),
+        };
+        let c = ops::Cut {
+            tool: t,
+            tidx: ti,
+            h,
+            feed,
+        };
+        let grid = get_num(a, "grid", Some(0.25 * d))?;
+        let e = |x: forge_cam::ops::OpError| format!("{x:?}");
+        let p = match kind {
+            "parallel" => surf::parallel(
+                &sf,
+                c,
+                area,
+                get_num(a, "stepover", Some(0.1 * d))?,
+                get_num(a, "angle", Some(0.0))?,
+                get_num(a, "step", Some(0.5))?,
+            )
+            .map_err(e)?,
+            "waterline" => {
+                let top = get_num(a, "from", Some(part.bbox.1[2]))?;
+                let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
+                let zs = ops::levels(top, bottom, get_num(a, "down", Some(1.0))?);
+                surf::waterline(&sf, c, area, &zs, grid).map_err(e)?
+            }
+            "zlevel" => {
+                let top = get_num(a, "from", Some(s.stock.max[2]))?;
+                let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
+                let (p, vs) = surf::zlevel_voids(
+                    &sf,
+                    c,
+                    area,
+                    top,
+                    bottom,
+                    get_num(a, "down", Some(0.5 * d))?,
+                    get_num(a, "stepover", Some(0.4 * d))?,
+                    grid,
+                )
+                .map_err(e)?;
+                for (r, z) in vs {
+                    voids.push((Some(r), z));
+                }
+                p
+            }
+            "pencil" => surf::pencil(
+                &sf,
+                c,
+                area,
+                get_num(a, "grid", Some(0.1 * d))?,
+                get_num(a, "kink", Some(0.02))?,
+            )
+            .map_err(e)?,
+            "scallop" => {
+                surf::scallop(&sf, c, area, get_num(a, "stepover", Some(0.1 * d))?, grid).map_err(e)?
+            }
+            _ => {
+                let bj = match a.get("after") {
+                    Some(V::Tool(j)) => *j,
+                    _ => return Err("rest(SETUP, tool:, after: EARLIER_TOOL, ..)".into()),
+                };
+                let bb = self.tools[bj]
+                    .shape
+                    .bodies
+                    .iter()
+                    .find(|b| b.part == forge_cam_geom::tool::Part::Cutter)
+                    .ok_or("the earlier tool has no cutter")?;
+                let before = Surfacer::new(
+                    &part.faces,
+                    bb,
+                    get_num(a, "after_leave", Some(0.0))?,
+                    s.tol,
+                    floor,
+                )
+                .map_err(|x| format!("{x:?}"))?;
+                surf::rest(
+                    &sf,
+                    &before,
+                    c,
+                    area,
+                    get_num(a, "stepover", Some(0.1 * d))?,
+                    get_num(a, "step", Some(0.5))?,
+                    grid,
+                    get_num(a, "min", Some(0.05))?,
+                )
+                .map_err(e)?
+            }
+        };
+        Ok(vec![p])
     }
 
     /// The hole plan from the feature: spot, then drill (peck past 3 D), then tap if threaded.
@@ -3564,7 +3714,11 @@ impl Cam {
                 None => (vec![support_face(&s.stock)], 0.0),
             };
             let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
-            let mut sum = ops::certify_fixtured(
+            let surfacing = matches!(
+                self.ops[oi].kind,
+                "parallel" | "waterline" | "zlevel" | "pencil" | "scallop" | "rest"
+            );
+            let mut sum = ops::certify_with(
                 &posted,
                 &tool,
                 target,
@@ -3573,6 +3727,7 @@ impl Cam {
                 fclear,
                 s.tol,
                 s.clearance,
+                surfacing,
             );
             if let Some(f) = &s.fixture {
                 for c in &mut sum.checks {

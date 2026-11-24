@@ -22,6 +22,7 @@ pub mod big;
 pub mod boolean;
 pub mod check;
 pub mod contact;
+pub mod drop;
 pub mod dual;
 pub mod ival;
 pub mod offset;
