@@ -2338,8 +2338,8 @@ impl Cam {
     /// (forge_cam::engage::schedule_samples, TOOLPATH-QUALITY's measurement on the in-process
     /// stock): the resolved chip held through radial thinning, then the feed (only the feed)
     /// lowered so the sample's power and torque stay within the user's max_power/max_torque and
-    /// the spindle's power at the rpm (P ∝ fz^(1 − mc): exact). Samples are joined only when
-    /// both sit at the same clamp, never by engagement band; no abrasion term
+    /// the spindle's power at the rpm (P ∝ fz^(1 − mc): exact). Every sample is posted as its
+    /// own move (never joined); no abrasion term
     /// (fto-adaptive.md D). The paths' geometry is unchanged; they are posted and certified after.
     fn feeds_from_engagement(
         &mut self,
@@ -2513,19 +2513,15 @@ impl Cam {
                         moves.push(*mv);
                         continue;
                     }
-                    let mut i = start;
-                    while i < k {
-                        let mut j = i;
-                        while j + 1 < k && feed[j + 1].1 && feed[i].1 && feed[j + 1].0 == feed[i].0 {
-                            j += 1;
-                        }
-                        let (end, f) = (samples[j].end, feed[i].0);
+                    // every fixed-length sample is its own move: no joins of any kind (the post
+                    // does not repeat an F word equal to the one before)
+                    for i in start..k {
+                        let (end, f) = (samples[i].end, feed[i].0);
                         moves.push(match *mv {
                             PMove::Line { phase, .. } => PMove::Line { to: end, f, phase },
                             PMove::Arc { c, cw, .. } => PMove::Arc { to: end, c, cw, f },
                             other => other,
                         });
-                        i = j + 1;
                     }
                 }
                 OpPath {
