@@ -283,19 +283,31 @@ pub struct Engage {
 /// Points round the front half of the edge (θ in [−90°, 90°]), 1° apart.
 pub const N_EDGE: usize = 181;
 
+/// The sine and cosine of θ at each of `engage`'s edge points, computed once by the same
+/// expressions `engage` evaluated at every call, so the same numbers.
+fn edge() -> &'static [(f64, f64); N_EDGE] {
+    static EDGE: std::sync::OnceLock<[(f64, f64); N_EDGE]> = std::sync::OnceLock::new();
+    EDGE.get_or_init(|| {
+        let step = std::f64::consts::PI / (N_EDGE - 1) as f64;
+        let mut t = [(0.0, 0.0); N_EDGE];
+        for (k, x) in t.iter_mut().enumerate() {
+            let th = -std::f64::consts::FRAC_PI_2 + k as f64 * step;
+            *x = forge_math::dmath::sin_cos(th);
+        }
+        t
+    })
+}
+
 /// The engagement at tip c moving along xy direction u (unit), the side edge read at radius
 /// r − 3h/4 (a cell whose centre is within r of an earlier pass has every point within r + h/√2
 /// of it: a wall cut to exactly r reads as cut): a point is material if the map there is
 /// above the tip by more than `eps`.
 pub fn engage(m: &HeightMap, c: [f64; 3], u: [f64; 2], r: f64, eps: f64) -> Engage {
     let rr = (r - 0.75 * m.h).max(0.25 * r);
-    let step = std::f64::consts::PI / (N_EDGE - 1) as f64;
     let deg = 180.0 / (N_EDGE - 1) as f64;
     let mut e = Engage::default();
     let (mut n, mut sum_cos) = (0usize, 0.0);
-    for k in 0..N_EDGE {
-        let th = -std::f64::consts::FRAC_PI_2 + k as f64 * step;
-        let (s, co) = forge_math::dmath::sin_cos(th);
+    for (k, &(s, co)) in edge().iter().enumerate() {
         // u turned by θ (+ = left, counter-clockwise)
         let dx = u[0] * co - u[1] * s;
         let dy = u[0] * s + u[1] * co;
