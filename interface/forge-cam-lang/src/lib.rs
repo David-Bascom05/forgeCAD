@@ -1892,6 +1892,26 @@ fn step_down(a: &BTreeMap<String, V>, default: f64) -> Result<f64, String> {
     }
 }
 
+/// The smallest arc radius a fitter may use at feed `f` (mm/min) on `machine`: a control holds an
+/// arc of radius r to √(a r) (centripetal acceleration) and (j r²)^(1/3) (jerk), so below the
+/// radius where those reach the feed lines are kept, which blend at the feed (a, j: the machine
+/// record's slowest linear axis, else the jerk-limited planner's default assumption set; ×1.5).
+fn arc_min_r(machine: &str, f: f64) -> f64 {
+    let sc = forge_machine::lookahead::SCurve::default();
+    let acc = forge_machine::library::builtin_named(machine)
+        .and_then(|m| {
+            m.joints
+                .iter()
+                .filter(|j| matches!(j.ty, forge_machine::def::JointType::Linear))
+                .map(|j| j.accel.unwrap_or(sc.accel[0]))
+                .reduce(f64::min)
+        })
+        .unwrap_or(sc.accel[0]);
+    let v = f / 60.0;
+    let r = (v * v / acc).max((v * v * v / sc.jerk[0]).sqrt());
+    if r.is_finite() { (1.5 * r).max(0.05) } else { 0.05 }
+}
+
 fn get_num(m: &BTreeMap<String, V>, k: &str, default: Option<f64>) -> Result<f64, String> {
     match m.get(k) {
         Some(V::Num(x)) => Ok(*x),
@@ -5752,8 +5772,13 @@ impl Cam {
         if fit_tol > 0.5 * tol {
             return Err(format!("fit: at most half the setup's tol ({} mm)", 0.5 * tol));
         }
+        // no arc that the machine must slow down for (`arc_min_r`)
+        let arc_min_r = arc_min_r(&s.machine, feed.0);
         // curved xy patterns chorded well within the fit's tolerance, so arcs fit their points
         let pattern_sag = if fit_tol > 0.0 { 0.2 * fit_tol } else { tol };
+        // the spiral's chords: fine whether fitted or not (a coarse spiral loses its ends to
+        // the area's edge, clipped by chord, and covers less), and within the default fit's fifth
+        let spiral_sag = pattern_sag.min(0.05 * tol);
         // the spacing along the surface from the cusp, at the slope that bounds the op's passes
         let cusp_at = |deg: f64| -> Result<Option<(f64, f64, Ival, Ival)>, String> {
             match a.get("cusp") {
@@ -5859,7 +5884,7 @@ impl Cam {
                         "in" => true,
                         _ => return Err("direction: \"in\" or \"out\"".into()),
                     };
-                    strategy::spiral_sag(&dc, centre, r0, r1, so, inward, pattern_sag, dr, &within)
+                    strategy::spiral_sag(&dc, centre, r0, r1, so, inward, spiral_sag, dr, &within)
                 } else {
                     strategy::radial(&dc, centre, r0.max(0.5 * so), r1, so, dr, &within)
                 };
@@ -6092,7 +6117,10 @@ impl Cam {
             },
             em,
             (fit_tol > 0.0).then_some(link::FitRule {
-                fit: forge_cam::fit::Fit::arcs(fit_tol),
+                fit: forge_cam::fit::Fit {
+                    min_r: arc_min_r,
+                    ..forge_cam::fit::Fit::arcs(fit_tol)
+                },
                 slack: 0.5 * tol,
             }),
         );

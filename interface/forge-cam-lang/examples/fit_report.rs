@@ -160,6 +160,18 @@ fn run(op: &str, dir: &std::path::Path) -> Run {
                 (t, fast)
             };
             (t, fast) = tally(&mr.tl.seg_scurve);
+            if std::env::var("DIAG").is_ok() {
+                let mut by = std::collections::BTreeMap::new();
+                for (g, ts) in mr.tl.segments.iter().zip(&mr.tl.seg_scurve) {
+                    if g.tool == Some(2) {
+                        let e = by.entry(format!("{:?}", g.kind)).or_insert((0usize, 0.0, 0.0));
+                        e.0 += 1;
+                        e.1 += g.t_min;
+                        e.2 += ts;
+                    }
+                }
+                eprintln!("  DIAG (count, t_min, t_scurve) by kind: {by:?}");
+            }
             let mut sc = forge_machine::lookahead::SCurve::for_machine(&mr.def);
             sc.block_cycle = Some(BLOCK_CYCLE);
             let (per, _) = forge_machine::lookahead::plan_scurve(&mr.def, &mr.tl, &sc);

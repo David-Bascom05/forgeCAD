@@ -80,9 +80,9 @@ Three runs of each op: unfitted (`fit: 0`), fitted with the cusp budget (fit 0.0
 | steep_shallow | 0 | 13701 | 0.835 | 237455 | 760.9 | 79% | 0.3461 / 0.3461 | | |
 | steep_shallow | cusp 0.0005 | 6322 | 1.880 | 136802 | 792.2 | 77% | 0.3374 / 0.3374 | 13257 points as 5141 lines | 0.00000 |
 | steep_shallow | tol 0.0025 | 5711 | 2.003 | 124980 | 756.8 | 77% | 0.3461 / 0.3461 | 12903 points as 4423 lines and 143 arcs | 0.00247 |
-| spiral | 0 | 1115 | 0.751 | 24686 | 50.9 | 89% | 0.4895 | | |
+| spiral | 0 | 4956 | 0.176 | 108671 | 54.9 | 84% | 0.4895 | | |
 | spiral | cusp 0.0005 | 253 | 3.578 | 9263 | 55.2 | 87% | 0.4771 | 11284 points as 8 lines and 187 arcs | 0.00050 |
-| spiral | tol 0.0025 | 183 | 4.829 | 6524 | 53.8 | 87% | 0.4895 | 4900 points as 7 lines and 120 arcs | 0.00249 |
+| spiral | tol 0.0025 | 230 | 3.834 | 7434 | 53.9 | 87% | 0.4895 | 4900 points as 61 lines and 113 arcs | 0.00249 |
 | radial | 0 | 807 | 2.135 | 17817 | 108.9 | 34% | 0.4895 | | |
 | radial | cusp 0.0005 | 415 | 4.290 | 9292 | 111.9 | 71% | 0.4771 | 614 points as 198 lines | 0.00000 |
 | radial | tol 0.0025 | 407 | 4.244 | 9144 | 108.9 | 71% | 0.4895 | 593 points as 193 lines | 0.00000 |
@@ -105,24 +105,31 @@ The 2 ms block-cycle column moved by at most 1 s and is left out here (`fit_repo
 
 ## Findings
 
-- **With the tolerance budget the stepover is the plain op's, and cycle time is within −2% to
-  +0.4%.** The exception is spiral (+5.7%); see the last point.
+- **With the tolerance budget the stepover is the plain op's, and the fitted path is no slower,
+  like for like.** Times move from −2.0% to +0.4%.
+  - The spiral is chorded at `tol`/20 whether fitted or not. A coarse spiral, clipped to the area
+    chord by chord, loses its ends and covers less: 29 passes and 752 mm against 35 and 778 mm.
+    An earlier "+5.7%" was that difference in coverage, not the fitter.
+  - ramping's +0.4% is a longer path: its fitted contour follows the walls within `fit`/5, while
+    the plain contour cuts corners by up to `tol` (`t_min` 213.2 → 215.0 s). The planner's overhead
+    over `t_min` drops (12.6 → 11.6 s), so the fit itself makes it faster.
+- **No arc the machine must slow for.** A control holds an arc of radius r to √(a r) (centripetal
+  acceleration) and (j r²)^(1/3) (jerk). The fitter's smallest radius is 1.5 × the radius where
+  those reach the op's feed (`arc_min_r`, with a and j from the machine record or the planner's
+  default assumption set); below it, lines are kept, which the planner blends at the feed.
 - **Blocks and program size fall sharply** wherever a pass is straight in xy or lies in one
   plane:
-  - flat: 22× fewer blocks, 20× smaller program;
+  - spiral: 21× fewer blocks, 15× smaller program;
+  - flat: 22× fewer blocks, 20× smaller;
   - scallop: 9.7× fewer blocks, 7.8× smaller;
-  - spiral: 6.1× fewer blocks, 3.8× smaller, mostly arcs;
   - pencil: 3.4× fewer blocks;
   - ramping: 2.8× fewer blocks, 2.2× smaller;
   - steep_shallow: 2.4× fewer blocks, 1.9× smaller.
 - **Where they don't:** rest's short passes over concave fillets barely merge.
-- **Time does not drop under this planner model.** At these feeds (about 6 to 16 mm/s) a 0.4 mm
-  block still lasts 25 ms or more: well above any block cycle, and the planner blends the shallow
-  corners at full speed. The gain in time would come from feeds high enough that block
-  processing or corner blending limits speed.
+- **Time does not drop much under this planner model.** At these feeds (about 6 to 16 mm/s) a
+  0.4 mm block still lasts 25 ms or more, and the planner blends the shallow corners at full speed.
+  The gain in time would come from feeds high enough that block processing or corner blending
+  limits speed.
 - **"≥90% F" is a per-block average, so it penalises long blocks.** A long block that includes
-  its own acceleration ramps can average under 90% while cruising most of its length. That is
-  why flat drops from 81% to 74% while its time falls. Total time is the better measure.
-- **Arcs on tiny radii are slower than chords there.** Near the spiral's centre the planner holds
-  an arc to its centripetal acceleration, while it blends the chords' corners within its
-  tolerance (spiral +5.7%).
+  its own acceleration ramps can average under 90% while cruising most of its length. Total time
+  is the better measure.
