@@ -1,0 +1,249 @@
+# Tormach PathPilot (mill): restated from Tormach's openly published G-code and machine-code pages
+# (tormach.com) and the PathPilot post processor guidelines (knowledgebase.tormach.com); every code
+# is cited below. Values were read through a page summariser: verify against the pages.
+[dialect]
+name = "pathpilot"
+extension = "nc"
+decimals = 4
+feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
+point = "always"
+program_open = ["({title})"]
+program_close = ["M30"]
+comment = "({text})"
+comment_strip = "()"
+line_numbers = false
+safe_start = ["G17 {units} G40 G49 G80 G90 G94"]
+tool_change = ["T{t} M06 G43 H{h}"]
+spindle_cw = "S{rpm} M03"
+spindle_ccw = "S{rpm} M04"
+spindle_stop = "M05"
+wcs = "G{n}"
+wcs_first = 54
+wcs_count = 6
+arc = "ijk"
+coolant_flood = "M08"
+coolant_mist = "M07"
+coolant_off = "M09"
+dwell = "G04 P{s}"
+cycle_drill = "G98 G81 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_dwell = "G98 G82 X{x} Y{y} Z{z} R{r} P{s} F{f}"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "refuse"
+cycle_ream = "G98 G85 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_next = "X{x} Y{y}"
+cycle_cancel = "G80"
+source = "Tormach PathPilot G-code reference pages and post guidelines (cited per code)"
+taken = "2026-11-23"
+note = "no % marks (the guidelines say so); G43 H on the tool-change line; arcs in the default incremental centre mode (G91.1)"
+cite_required = true
+
+[[dialect.cite]]
+key = "program_open"
+source = "https://knowledgebase.tormach.com/8l/pathpilot-post-processor-guidelines"
+taken = "2026-11-23"
+where = "Tormach Knowledge Base: PathPilot Post Processor Guidelines, web page, undated (covers Mill/Router, Lathe, Plasma); Miscellaneous / M98-M99 entries"
+note = "no start code; no % at the start or end"
+
+[[dialect.cite]]
+key = "program_close"
+source = "https://tormach.com/machine-codes/program-stop-and-program-end-m00-m01-m02-and-m30"
+taken = "2026-11-23"
+where = "Tormach: Program Stop and Program End (M00, M01, M02, M30), web; whole page; also S3 Miscellaneous"
+note = "M30 end and rewind"
+
+[[dialect.cite]]
+key = "comment"
+source = "https://tormach.com/machine-codes/about-g-code-programming-language"
+taken = "2026-11-23"
+where = "Tormach: About G-Code Programming Language, web; Comments paragraph"
+note = "( ) comments"
+
+[[dialect.cite]]
+key = "line_numbers"
+source = "https://tormach.com/g-code-formatting-reference"
+taken = "2026-11-23"
+where = "Tormach: G-Code Formatting Reference (PathPilot machine code library), web page, undated; Line Numbers"
+note = "N optional: not written"
+
+[[dialect.cite]]
+key = "safe_start"
+source = "https://tormach.com/supported-g-codes-reference"
+taken = "2026-11-23"
+where = "Tormach: Supported G-Codes Reference, web page, undated; G-code list"
+note = "G17 G21 G40 G49 G80 G90 G94 all supported"
+
+[[dialect.cite]]
+key = "tool_change"
+source = "https://knowledgebase.tormach.com/8l/pathpilot-post-processor-guidelines"
+taken = "2026-11-23"
+where = "Tormach Knowledge Base: PathPilot Post Processor Guidelines, web page, undated (covers Mill/Router, Lathe, Plasma); Mill/Router section; M6 and G43 entries"
+note = "T M06 with G43 H on the tool-change line"
+
+[[dialect.cite]]
+key = "spindle_cw"
+source = "https://tormach.com/machine-codes"
+taken = "2026-11-23"
+where = "Tormach: Machine Codes (index of G/M code articles), web; M-code links"
+note = "S M03"
+
+[[dialect.cite]]
+key = "spindle_ccw"
+source = "https://tormach.com/machine-codes"
+taken = "2026-11-23"
+where = "Tormach: Machine Codes (index of G/M code articles), web; M-code links"
+note = "S M04"
+
+[[dialect.cite]]
+key = "spindle_stop"
+source = "https://tormach.com/machine-codes"
+taken = "2026-11-23"
+where = "Tormach: Machine Codes (index of G/M code articles), web; M-code links"
+note = "M05"
+
+[[dialect.cite]]
+key = "wcs"
+source = "https://tormach.com/machine-codes/select-work-offset-coordinate-system-g54-to-g59-3"
+taken = "2026-11-23"
+where = "Tormach: Select Work Offset Coordinate System (G54 to G59.3), web; whole page"
+note = "G54..G59"
+
+[[dialect.cite]]
+key = "arc"
+source = "https://tormach.com/machine-codes/arc-distance-mode-g90-1-and-g91-1"
+taken = "2026-11-23"
+where = "Tormach: Arc Distance Mode (G90.1 and G91.1), web; whole page"
+note = "G02/G03 I J incremental from the start (G91.1 default)"
+
+[[dialect.cite]]
+key = "coolant_flood"
+source = "https://tormach.com/machine-codes/coolant-control-m07-m08-and-m09"
+taken = "2026-11-23"
+where = "Tormach: Coolant Control (M07, M08, M09), web; whole page"
+note = "M08 flood"
+
+[[dialect.cite]]
+key = "coolant_mist"
+source = "https://tormach.com/machine-codes/coolant-control-m07-m08-and-m09"
+taken = "2026-11-23"
+where = "Tormach: Coolant Control (M07, M08, M09), web; whole page"
+note = "M07 mist"
+
+[[dialect.cite]]
+key = "coolant_off"
+source = "https://tormach.com/machine-codes/coolant-control-m07-m08-and-m09"
+taken = "2026-11-23"
+where = "Tormach: Coolant Control (M07, M08, M09), web; whole page"
+note = "M09"
+
+[[dialect.cite]]
+key = "dwell"
+source = "https://tormach.com/machine-codes/dwell-g04"
+taken = "2026-11-23"
+where = "Tormach: Dwell (G04), web; whole page"
+note = "G04 P seconds"
+
+[[dialect.cite]]
+key = "cycle_drill"
+source = "https://tormach.com/machine-codes/canned-cycles-reference"
+taken = "2026-11-23"
+where = "Tormach: Canned Cycles Reference, web; general rules"
+note = "G81"
+
+[[dialect.cite]]
+key = "cycle_dwell"
+source = "https://tormach.com/machine-codes/simple-drilling-cycle-g82"
+taken = "2026-11-23"
+where = "Tormach: Simple Drilling Cycle (G82), web; whole page"
+note = "G82 P seconds"
+
+[[dialect.cite]]
+key = "cycle_peck"
+source = "https://tormach.com/machine-codes/peck-drilling-cycle-g83"
+taken = "2026-11-23"
+where = "Tormach: Peck Drilling Cycle (G83), web; whole page"
+note = "posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_chipbreak"
+source = "https://tormach.com/machine-codes/high-speed-peck-drill-g73"
+taken = "2026-11-23"
+where = "Tormach: High Speed Peck Drill (G73), web; whole page"
+note = "G73 retracts a fixed 0.010 in: posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_ream"
+source = "https://tormach.com/machine-codes/boring-cycle-g85"
+taken = "2026-11-23"
+where = "Tormach: Boring Cycle (G85), web; whole page"
+note = "G85 feed in, feed out"
+
+[[dialect.cite]]
+key = "cycle_next"
+source = "https://tormach.com/machine-codes/canned-cycles-reference"
+taken = "2026-11-23"
+where = "Tormach: Canned Cycles Reference, web; general rules"
+note = "cycles modal: further holes as X Y"
+
+[[dialect.cite]]
+key = "cycle_cancel"
+source = "https://knowledgebase.tormach.com/8l/pathpilot-post-processor-guidelines"
+taken = "2026-11-23"
+where = "Tormach Knowledge Base: PathPilot Post Processor Guidelines, web page, undated (covers Mill/Router, Lathe, Plasma); G80 entry"
+note = "G80"
+
+[[dialect.cite]]
+key = "point"
+source = "https://tormach.com/g-code-formatting-reference"
+taken = "2026-11-23"
+where = "Tormach: G-Code Formatting Reference (PathPilot machine code library), web page, undated; Number format"
+note = "number with optional point: written with one"
+
+[[dialect.cite]]
+key = "decimals"
+source = "https://tormach.com/g-code-formatting-reference"
+taken = "2026-11-23"
+where = "Tormach: G-Code Formatting Reference (PathPilot machine code library), web page, undated; Number format"
+note = "17 significant figures kept; 4 decimals written"
+
+[[dialect.cite]]
+key = "cycle_tap"
+status = "refused"
+note = "G84 dwells 0.5 s per 1000 rpm at the bottom when P is left out, and whether P0 is accepted is not stated: refused"
+
+[[dialect.cite]]
+key = "retract_home"
+status = "refused"
+note = "G28 goes to a user-stored position (G28.1), not a fixed home: refused (end with a rapid to clearance)"
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://tormach.com/supported-g-codes-reference"
+taken = "2026-11-23"
+where = "Tormach: Supported G-Codes Reference, web page, undated; G-code list"
+note = "G21 (the safe start's)"
+
+[[dialect.cite]]
+key = "units_inch"
+source = "https://tormach.com/machine-codes/length-units-g20-and-g21"
+taken = "2026-11-24"
+where = "Tormach: LENGTH UNITS (G20 AND G21), web page, undated; whole page"
+note = "To set length units to inches, program: G20; near the beginning of a program, before any motion"
+
+[[dialect.cite]]
+key = "inch_decimals"
+source = "https://tormach.com/g-code-formatting-reference"
+taken = "2026-11-23"
+where = "Tormach: G-Code Formatting Reference (PathPilot machine code library), web page, undated; Number format"
+note = "the number format reads decimals (inch increment not stated): 4 written, 0.0001 in"
+
+[[dialect.cite]]
+key = "inch_feed_decimals"
+source = "https://tormach.com/g-code-formatting-reference"
+taken = "2026-11-23"
+where = "Tormach: G-Code Formatting Reference (PathPilot machine code library), web page, undated; Number format"
+note = "the number format reads decimals (inch feed increment not stated): 2 written"

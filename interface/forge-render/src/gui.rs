@@ -24,12 +24,16 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
+#[path = "gui_bendsim.rs"]
+pub mod gui_bendsim;
 #[path = "gui_cam.rs"]
 mod gui_cam;
 #[path = "gui_camsim.rs"]
 pub mod gui_camsim;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
+#[path = "gui_env.rs"]
+mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
 #[path = "gui_fgmarks.rs"]
@@ -42,10 +46,14 @@ pub mod gui_machine;
 pub mod gui_markup;
 #[path = "gui_overlay.rs"]
 mod gui_overlay;
+#[path = "gui_robot.rs"]
+pub mod gui_robot;
 #[path = "gui_sheet.rs"]
 mod gui_sheet;
 #[path = "gui_speech.rs"]
 pub mod gui_speech;
+#[path = "gui_studio.rs"]
+mod gui_studio;
 #[path = "gui_thermo.rs"]
 mod gui_thermo;
 #[path = "gui_versions.rs"]
@@ -168,7 +176,12 @@ fn window_chosen(v: &mut View, ids: &crate::render::ViewIds, ask: &WindowAsk) ->
 }
 
 pub struct Gui {
+    /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
+    studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
+    pub bend: gui_bendsim::BendView,
+    /// An environment asked by name (a deep link, `--env`): entered once the document built.
+    pub env_asked: Option<String>,
     /// The Machine Builder's scene (`gui_machine.rs`).
     pub mach: gui_machine::MachHost,
     pub ctx: egui::Context,
@@ -330,7 +343,10 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            studio: None,
             vers: Default::default(),
+            bend: Default::default(),
+            env_asked: None,
             mach: Default::default(),
             agent: Default::default(),
             apps: Default::default(),
@@ -457,6 +473,12 @@ impl Gui {
                 }
             }
             return true;
+        }
+        // a robot document: its source with the Robot panel
+        if path.ends_with(".fg")
+            && forge_dirs::fs::read_to_string(path).is_ok_and(|s| forge_lang::robot::is_robot(&s))
+        {
+            return self.open_robot(path);
         }
         // a machining document opens in the Manufacture workspace, over its part
         if path.ends_with(".fg")
@@ -972,6 +994,18 @@ impl Gui {
                     s.set_toggle(g, !s.toggle(g));
                     continue;
                 }
+                Action::EnterEnv(id) => {
+                    self.env_enter(id);
+                    continue;
+                }
+                Action::ExitEnv => {
+                    self.env_exit();
+                    continue;
+                }
+                Action::Env(id, c) => {
+                    self.shell.env_command(id, c);
+                    continue;
+                }
                 a => a,
             };
             if let Action::PartColours(on) = a {
@@ -981,6 +1015,7 @@ impl Gui {
             }
             match a {
                 Action::MachineBuilder => self.machine_toggle(),
+                Action::Machine(c) => self.machine_cmd(c),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
                     let v = &mut self.shell.versions;
@@ -1353,10 +1388,15 @@ impl Gui {
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
+        self.env_frame();
+        self.bendsim_frame();
         self.machine_frame();
         self.fg_hole_guess();
         self.fg_preview();
         if self.explode_tick() {
+            animating = true;
+        }
+        if self.robot_tick() {
             animating = true;
         }
         self.body_eye();
@@ -1547,11 +1587,17 @@ impl Gui {
                     selected: true,
                     second: false,
                 }));
+                // the bend simulation's bodies are not the design's: none of its marks
+                if self.bend.showing() {
+                    m.clear();
+                }
                 m
             };
             // the build's flags on the faces of what they're of; Compare's colours over them
             let flagged;
-            let colours: &[crate::render::FaceColour] = if self.vers.colours.is_empty() {
+            let colours: &[crate::render::FaceColour] = if self.bend.showing() {
+                &[]
+            } else if self.vers.colours.is_empty() {
                 flagged = self.fg_marks_was.1.clone();
                 &flagged
             } else {
@@ -1561,7 +1607,11 @@ impl Gui {
                 hud: None,
                 cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
                 face_colours: colours,
-                face_ghosts: &self.vers.ghosts,
+                face_ghosts: if self.bend.showing() {
+                    &self.bend.ghosts
+                } else {
+                    &self.vers.ghosts
+                },
                 marks: &marks,
                 world: &world,
                 behind: &behind,
@@ -1584,6 +1634,7 @@ impl Gui {
             v.dirty = false;
             times.view_drawn = true;
         }
+        let studio_busy = self.studio_frame();
         times.view = now_ms() - t1;
 
         let t2 = now_ms();
@@ -1651,7 +1702,10 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        let again_in = if animating
+            || studio_busy
+            || self.mark_held.is_some()
+            || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {
@@ -2417,6 +2471,7 @@ impl Gui {
                 self.fg_asm = Some((a.occ.clone(), a.placed.clone()));
                 self.fg_asm_boxes = a.boxes.clone();
                 self.explode.stale();
+                Self::robot_solved(&mut self.shell.robot);
                 asm_moved = true;
                 // which part is placed where changed: the view made again, the camera kept
                 if let Some(all) = &a.restage {

@@ -1,0 +1,47 @@
+# Holes in a plate for CAM's drill plan (forge-cam-lang tests/holes.rs): two blind 5 mm holes,
+# `flat` with a flat floor (no drill point modelled) and `pointed` with a 118 deg drill point; an
+# M6 clearance hole counterbored (`cbh`) and one countersunk (`csk`); a 10 H7 pin hole (`pin`),
+# reamed.
+shared L = 40
+shared W = 30
+shared t = 10
+param flat.d = 5
+param flat.depth = 6
+param pointed.d = 5
+param pointed.depth = 6
+param pointed.tip = 118deg
+shared xa = 12
+shared xb = 28
+shared yc = 6
+param cbh.d = 6.6
+param cbh.depth = 8
+param cbh.cd = 11
+param cbh.cdepth = 4
+param csk.d = 6.6
+param csk.cd = 9
+param csk.ang = 90deg
+shared xp = 20
+shared yp = 24
+param pin.d = 10
+param pin.depth = 6
+param pin.tip = 118deg
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+sketch top(on: plate.end) {
+  a = pt(xa, W / 2)
+  b = pt(xb, W / 2)
+  c = pt(xa, yc)
+  e = pt(xb, yc)
+  f = pt(xp, yp)
+}
+flat = hole(at: top.a, d: d, depth: depth)
+pointed = hole(at: top.b, d: d, depth: depth, point: tip)
+cbh = hole(at: top.c, d: d, depth: depth, cbore: (cd, cdepth))
+csk = hole(at: top.e, d: d, depth: thru, csink: (cd, ang))
+pin = hole(at: top.f, d: d, depth: depth, point: tip, fit: "H7")
+
+expect valid
+expect bodies = 1

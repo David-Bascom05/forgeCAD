@@ -1,0 +1,268 @@
+# SINUMERIK 840D sl (ISO Dialect mode, G291), milling: restated from Siemens' openly published
+# "Programming Manual ISO Milling" 04.2007 (6FC5398-7BP10-0BA0) and "Fundamentals" 03/2013
+# (6FC5398-1BP40-3BA1); every code is cited below. The 2007 ISO manual's validity list names the
+# 840D sl (SW 1.4), not the 828D: verify on an 828D. Machine-data-dependent behaviour is noted.
+[dialect]
+name = "siemens"
+extension = "mpf"
+decimals = 3
+feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
+point = "always"
+program_open = ["G291", "({title})"]
+program_close = ["M30"]
+comment = "({text})"
+comment_strip = "();"
+line_numbers = true
+line_start = 10
+line_step = 10
+safe_start = ["{units}", "G90 G94 G17 G40 G49 G80"]
+tool_change = ["T{t} M6"]
+length_comp = "G00 G43 H{h}"
+spindle_cw = "S{rpm} M03"
+spindle_ccw = "S{rpm} M04"
+spindle_stop = "M05"
+wcs = "G{n}"
+wcs_first = 54
+wcs_count = 6
+arc = "ijk"
+retract_home = ["G91 G28 Z0.", "G90"]
+coolant_flood = "M08"
+coolant_off = "M09"
+dwell = "G04 X{s}"
+cycle_drill = "G98 G81 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_dwell = "G98 G82 X{x} Y{y} Z{z} R{r} P{ms} F{f}"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "G98 G84 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_ream = "G98 G85 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_next = "X{x} Y{y}"
+cycle_cancel = "G80"
+read_g_ignore = [291]
+cite_required = true
+source = "Siemens SINUMERIK Programming Manual ISO Milling 04.2007; Fundamentals 03/2013 (cited per code)"
+taken = "2026-11-23"
+note = "posted with a decimal point on every coordinate: without one the value depends on MD 10884; G84's F is a feed (G94) unless $MC_EXTERN_FUNCTION_MASK bit 8 makes it the pitch"
+
+[[dialect.cite]]
+key = "program_open"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "1.1.3 p. 1-12; 3.2.2 p. 3-60"
+note = "G291 alone in the first block selects ISO Dialect mode (unless machine data boots in it); a comment names the program"
+
+[[dialect.cite]]
+key = "program_close"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "3.6.3 pp. 3-87..3-88"
+note = "M30 end of tape"
+
+[[dialect.cite]]
+key = "comment"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "1.1.7 p. 1-15"
+note = "( ) comments; ; to end of line also accepted"
+
+[[dialect.cite]]
+key = "line_numbers"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "examples 1.1.7 p. 1-15, 4.1.15 p. 4-129"
+note = "N words allowed"
+
+[[dialect.cite]]
+key = "safe_start"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "G21 3.2.2 p. 3-60; G90 3.2.1 p. 3-59; G94 1.2.4 p. 1-21; G17 p. 2-27; G40 3.5.3 p. 3-76; G49 3.5.2 p. 3-74; G80 4.1.14 p. 4-127"
+note = "G21 in its own block at the start; G71/G70 are native Siemens, not ISO"
+
+[[dialect.cite]]
+key = "tool_change"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "3.6.2 p. 3-87; example 4.1.15 p. 4-129"
+note = "T.. M6 (the T function is machine-builder defined)"
+
+[[dialect.cite]]
+key = "length_comp"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "3.5.1-3.5.2 pp. 3-73..3-74"
+note = "G43 H, only in G00/G01 mode: written with G00"
+
+[[dialect.cite]]
+key = "spindle_cw"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "3.6.1 p. 3-86; Table 3-16 p. 3-90"
+note = "S (5 digits) M03"
+
+[[dialect.cite]]
+key = "spindle_ccw"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "3.6.1 p. 3-86; Table 3-16 p. 3-90"
+note = "S M04"
+
+[[dialect.cite]]
+key = "spindle_stop"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "Table 3-16 p. 3-90"
+note = "M05"
+
+[[dialect.cite]]
+key = "wcs"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "3.1.4 p. 3-45"
+note = "G54..G59 (G54 P1..P100 extended: not used)"
+
+[[dialect.cite]]
+key = "arc"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "2.1.3 pp. 2-26..2-29; 2.1.4 p. 2-32"
+note = "G02/G03 with I J incremental from the start; helical with Z"
+
+[[dialect.cite]]
+key = "retract_home"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "2.2.1 p. 2-34; example 4.1.4 p. 4-104"
+note = "G28 G91 to the reference point via an intermediate point"
+
+[[dialect.cite]]
+key = "coolant_flood"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "Table 3-16 p. 3-90"
+note = "M08 (machine-builder defined)"
+
+[[dialect.cite]]
+key = "coolant_off"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "Table 3-16 p. 3-90"
+note = "M09"
+
+[[dialect.cite]]
+key = "dwell"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "3.3.1 p. 3-67"
+note = "G04 X seconds, alone in its block (G94)"
+
+[[dialect.cite]]
+key = "cycle_drill"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "4.1.4 pp. 4-103..4-104"
+note = "G81 X Y Z R F"
+
+[[dialect.cite]]
+key = "cycle_dwell"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "4.1.5 pp. 4-105..4-106"
+note = "G82 P dwell in ms (the manual's example P1000 = 1 s)"
+
+[[dialect.cite]]
+key = "cycle_peck"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "4.1.6 pp. 4-107..4-108"
+note = "G83 exists (Q incremental peck), but its re-approach distance is GUD _ZSFR[10]: posted as moves so the simulated path is the machine's"
+
+[[dialect.cite]]
+key = "cycle_chipbreak"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "4.1.2 p. 4-98"
+note = "G73 exists, but its retract is GUD _ZSFR[1] (0 means 1 mm): posted as moves so the simulated path is the machine's"
+
+[[dialect.cite]]
+key = "cycle_tap"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "4.1.11 pp. 4-118..4-120"
+note = "G84 F = feed mm/min under G94 (lead = F/S); rigid vs floating by GUD _ZSFI[1]"
+
+[[dialect.cite]]
+key = "cycle_ream"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "4.1.7 p. 4-109"
+note = "G85 feed in and out"
+
+[[dialect.cite]]
+key = "cycle_next"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "4.1.4 p. 4-104"
+note = "the cycle is modal: further holes as X Y"
+
+[[dialect.cite]]
+key = "cycle_cancel"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "4.1.14 p. 4-127"
+note = "G80"
+
+[[dialect.cite]]
+key = "point"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "1.1.6 pp. 1-13..1-14 Table 1-1"
+note = "with a decimal point the value is mm whatever MD 10884 says"
+
+[[dialect.cite]]
+key = "decimals"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "Table 1-1 p. 1-13"
+note = "IS-B: 0.001 mm"
+
+[[dialect.cite]]
+key = "read_g_ignore"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "1.1.3 p. 1-12"
+note = "G291 selects the mode, no motion"
+
+# Not in the open manual (refused by the post): mist coolant (M07?) and through-spindle coolant are
+# machine-builder M codes the ISO manual does not list.
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-23"
+where = "G21 3.2.2 p. 3-60; G90 3.2.1 p. 3-59; G94 1.2.4 p. 1-21; G17 p. 2-27; G40 3.5.3 p. 3-76; G49 3.5.2 p. 3-74; G80 4.1.14 p. 4-127"
+note = "G21 (the safe start's)"
+
+[[dialect.cite]]
+key = "units_inch"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-24"
+where = "3.2.2 Table 3-4 p. 3-60"
+note = "G20 Input in inch system, G21 in mm system (group 06), in a block without other commands at the beginning of a program"
+
+[[dialect.cite]]
+key = "inch_decimals"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-24"
+where = "Table 1-1 p. 1-13"
+note = "IS-B: linear axis inch 0.0001"
+
+[[dialect.cite]]
+key = "inch_feed_decimals"
+source = "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf"
+taken = "2026-11-24"
+where = "Table 1-1 p. 1-13"
+note = "IS-B: F feed G94 inch 0.01"

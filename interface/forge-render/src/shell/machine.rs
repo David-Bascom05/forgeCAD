@@ -18,6 +18,7 @@ use forge_machine::def::{
 use forge_machine_builder::catalog::{self, Catalog, Level};
 use forge_machine_builder::check::{self, CheckReport, EnvelopeCheck, Travel};
 use forge_machine_builder::make::{self, Copied, Template};
+use forge_machine_builder::models::{self, Model, Outside};
 use std::path::PathBuf;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,6 +98,34 @@ pub struct MachineUi {
     pub today: String,
     /// The Bodies tab's file to attach (a path).
     pub file_in: String,
+    /// The library list's search.
+    pub filter: String,
+    /// Hosted by the Machine Builder environment: the library is drawn in its browser
+    /// (`Shell::machine_side`), not in a floating panel.
+    pub in_env: bool,
+    /// A library preview's ghost labels where they are on the screen (the host's, each frame).
+    pub view_labels: Vec<(egui::Pos2, String)>,
+    /// A long tool's section and dimensions, drawn to scale beside the view.
+    pub inset: Option<crate::library_mesh::Inset>,
+    /// Which library the workspace edits: "machine", or a tooling kind ("tool", "holder", ...).
+    pub lib: &'static str,
+    /// The tooling tab's state, while a tooling kind is chosen.
+    pub tooling: Option<super::machine_tooling::ToolingUi>,
+    /// The workholding tab's state, while it is chosen.
+    pub workholding: Option<super::machine_workholding::WorkholdingUi>,
+    /// The press-brake tab's state (punch, die or press), while one is chosen.
+    pub brake: Option<super::machine_brake::BrakeUi>,
+    /// The tooling record last shown (its text): the host is told when it changes.
+    tooling_seen: String,
+    /// Models the user attached to this machine (their own files, kept in their library:
+    /// forge_machine_builder::models), and each one's check against its body's envelope.
+    pub models: Vec<Model>,
+    pub model_checks: Vec<Result<Outside, String>>,
+    /// The chosen body's envelope boxes on the screen (8 corners each, bit 0 x, 1 y, 2 z) while
+    /// its model is drawn in its place, and where the model is farthest outside it (the host's,
+    /// each frame).
+    pub envelope_px: Vec<[egui::Pos2; 8]>,
+    pub out_px: Option<(egui::Pos2, f64)>,
 }
 
 fn today() -> String {
@@ -144,6 +173,19 @@ impl MachineUi {
             pick: 0,
             today: today(),
             file_in: String::new(),
+            filter: String::new(),
+            in_env: false,
+            view_labels: Vec::new(),
+            inset: None,
+            lib: "machine",
+            tooling: None,
+            workholding: None,
+            brake: None,
+            tooling_seen: String::new(),
+            models: Vec::new(),
+            model_checks: Vec::new(),
+            envelope_px: Vec::new(),
+            out_px: None,
         };
         if let Some(e) = m.cat.entries.first() {
             let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
@@ -167,7 +209,121 @@ impl MachineUi {
         self.report = None;
         self.pick = 0;
         self.fit += 1;
+        self.models = self
+            .models_dir()
+            .map(|d| models::load_in(&d))
+            .transpose()
+            .unwrap_or_else(|e| {
+                self.message = e;
+                None
+            })
+            .unwrap_or_default();
+        self.check_models();
         self.edited(true);
+    }
+
+    /// The folder this machine's attached models are kept in (the user's library).
+    pub fn models_dir(&self) -> Option<PathBuf> {
+        Some(models::dir_in(self.user.as_ref()?, &self.def.as_ref()?.name))
+    }
+
+    /// A model's triangles in its file's coordinates.
+    pub fn model_tris(&self, m: &Model) -> Result<std::sync::Arc<crate::machine_mesh::Tris>, String> {
+        let d = self
+            .models_dir()
+            .ok_or("no folder for your library on this system")?;
+        crate::machine_model::file_tris(&d.join(&m.file))
+    }
+
+    /// Each model against its body's envelope (a whole-machine model is not checked).
+    pub fn check_models(&mut self) {
+        let Some(d) = &self.def else {
+            self.model_checks.clear();
+            return;
+        };
+        self.model_checks = self
+            .models
+            .iter()
+            .map(|m| {
+                let t = self.model_tris(m)?;
+                Ok(
+                    match m
+                        .body
+                        .as_ref()
+                        .and_then(|b| d.bodies.iter().find(|x| &x.name == b))
+                    {
+                        Some(b) => {
+                            models::outside(&b.prims, crate::machine_model::placed_points(&t, m).into_iter())
+                        }
+                        None => Outside::default(),
+                    },
+                )
+            })
+            .collect();
+    }
+
+    /// After the models changed: written to the user's library, checked, redrawn.
+    pub fn models_changed(&mut self) {
+        match self.models_dir() {
+            Some(dir) => {
+                if let Err(e) = models::save_in(&dir, &self.models) {
+                    self.message = e;
+                }
+            }
+            None => {
+                self.message = "no folder for your library on this system: the models are not kept".into()
+            }
+        }
+        self.check_models();
+        self.geom += 1;
+    }
+
+    /// Attaches the file at `path` to `body` (None: the whole machine), placed on its envelope
+    /// (or on the machine's bounds), with inch or metre units when its size says so.
+    pub fn attach_model(&mut self, body: Option<String>, path: &str) -> Result<String, String> {
+        let def = self.def.as_ref().ok_or("no machine")?;
+        let dir = self
+            .models_dir()
+            .ok_or("no folder for your library on this system")?;
+        let path = std::path::Path::new(path.trim());
+        let target = match &body {
+            Some(b) => {
+                let b = def.bodies.iter().find(|x| &x.name == b).ok_or("no such body")?;
+                models::prims_bounds(&b.prims)
+            }
+            None => models::bounds(
+                def.bodies
+                    .iter()
+                    .filter_map(|b| models::prims_bounds(&b.prims))
+                    .flat_map(|(lo, hi)| [lo, hi]),
+            ),
+        }
+        .ok_or("the body has no envelope to place the model on")?;
+        let file = models::copy_in(&dir, path, &self.models)?;
+        let mut m = Model::new(body.clone(), file.clone());
+        let t = match crate::machine_model::file_tris(&dir.join(&file)) {
+            Ok(t) => t,
+            Err(e) => {
+                let _ = forge_dirs::fs::remove_file(dir.join(&file));
+                return Err(e);
+            }
+        };
+        let mut said = String::new();
+        if let Some(own) = models::bounds(t.pos.iter().copied())
+            && let Some(s) = models::guess_scale(own, target)
+        {
+            m.scale = s;
+            said = format!(
+                "; its size reads as {}, so its units are set to {} (change Units if not)",
+                if s == 25.4 { "inches" } else { "metres" },
+                if s == 25.4 { "in" } else { "m" }
+            );
+        }
+        m.sit_on(&t.pos, target);
+        self.models.push(m);
+        self.models_changed();
+        let on = body.map_or("the whole machine".to_string(), |b| format!("`{b}`"));
+        Ok(format!("{file} attached to {on}, placed on its envelope{said}"))
     }
 
     /// After any edit: the refusal, the live verdicts, and what the host must redo.
@@ -183,7 +339,9 @@ impl MachineUi {
             self.q = d.joints.iter().map(|j| j.home).collect();
         }
         for (q, j) in self.q.iter_mut().zip(&d.joints) {
-            *q = q.clamp(j.range[0].min(j.range[1]), j.range[1].max(j.range[0]));
+            if let Some(r) = j.range {
+                *q = q.clamp(r[0].min(r[1]), r[1].max(r[0]));
+            }
         }
         if geometry {
             self.geom += 1;
@@ -398,6 +556,7 @@ fn badge(t: &Theme, d: &MachineDef, path: &str, own: bool) -> (String, Color32) 
             CiteStatus::Published => ("published".into(), t.accent),
             CiteStatus::Estimate => ("estimate".into(), t.warn),
             CiteStatus::Conflict => ("conflict".into(), t.error),
+            CiteStatus::User => ("user".into(), t.success),
         },
     }
 }
@@ -415,6 +574,13 @@ struct Touch {
     attach: Option<String>,
     fit: bool,
     detach: bool,
+    /// Bodies tab, models: attach a file to a body (None: the whole machine); the models were
+    /// edited; drop one; place one on its envelope again; fit its body's envelope to it.
+    attach_model: Option<(Option<String>, String)>,
+    models: bool,
+    drop_model: Option<usize>,
+    replace_model: Option<usize>,
+    fit_to_model: Option<usize>,
 }
 
 struct Ctx<'a> {
@@ -436,14 +602,28 @@ fn label_w(ui: &mut Ui, t: &Theme, s: &str) {
 
 /// The provenance chip and the "?" (mark unknown) of a value.
 fn chip(ui: &mut Ui, c: &Ctx, path: &str, touch: &mut Touch) {
-    let (w, col) = badge(c.t, c.cites, path, c.own);
-    ui.label(RichText::new(w).font(sans(10.0)).color(col))
-        .on_hover_text(path);
-    if ui
-        .small_button("?")
-        .on_hover_text("I don't know this value: mark it UNKNOWN")
-        .clicked()
-    {
+    let (w, _) = badge(c.t, c.cites, path, c.own);
+    let detail = c
+        .cites
+        .cites
+        .iter()
+        .filter(|x| x.path == path)
+        .map(|x| {
+            [
+                x.source.as_str(),
+                x.taken.as_str(),
+                x.basis.as_str(),
+                x.note.as_str(),
+            ]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let detail = format!("{path}\n{detail}");
+    if super::lib_form::chip(ui, c.t, super::lib_form::Prov::of(Some(&w)), detail.trim(), true) {
         touch.unknown.push(path.to_string());
         touch.any = true;
     }
@@ -461,6 +641,112 @@ fn num_row(ui: &mut Ui, c: &Ctx, name: &str, path: &str, v: &mut f64, speed: f64
         }
         chip(ui, c, path, touch);
     });
+}
+
+/// An optional number (F1): known, shown and edited with its provenance and "?" to make it
+/// UNKNOWN (no value, cited unknown); UNKNOWN, said so with "set" to give it.
+#[allow(clippy::too_many_arguments)]
+fn opt_num_row(
+    ui: &mut Ui,
+    c: &Ctx,
+    name: &str,
+    path: &str,
+    v: &mut Option<f64>,
+    dflt: f64,
+    speed: f64,
+    touch: &mut Touch,
+) {
+    ui.horizontal(|ui| {
+        label_w(ui, c.t, name);
+        match v {
+            Some(x) => {
+                if ui
+                    .add(egui::DragValue::new(x).speed(speed).max_decimals(4))
+                    .changed()
+                {
+                    touch.edited.push(path.to_string());
+                    touch.any = true;
+                }
+                let (w, col) = badge(c.t, c.cites, path, c.own);
+                ui.label(RichText::new(w).font(sans(10.0)).color(col))
+                    .on_hover_text(path);
+                if ui
+                    .small_button("?")
+                    .on_hover_text("I don't know this value: make it UNKNOWN")
+                    .clicked()
+                {
+                    *v = None;
+                    touch.unknown.push(path.to_string());
+                    touch.any = true;
+                }
+            }
+            None => {
+                ui.label(RichText::new("UNKNOWN").font(sans(11.0)).color(c.t.error))
+                    .on_hover_text(format!("{path}: no value; checks against it say \"not checked\""));
+                if ui
+                    .small_button("set")
+                    .on_hover_text("enter this value (yours)")
+                    .clicked()
+                {
+                    *v = Some(dflt);
+                    touch.edited.push(path.to_string());
+                    touch.any = true;
+                    touch.geometry = true;
+                }
+            }
+        }
+    });
+}
+
+#[allow(clippy::too_many_arguments)]
+fn opt_vec_row<const N: usize>(
+    ui: &mut Ui,
+    c: &Ctx,
+    name: &str,
+    path: &str,
+    v: &mut Option<[f64; N]>,
+    dflt: [f64; N],
+    speed: f64,
+    touch: &mut Touch,
+) {
+    match v {
+        Some(x) => {
+            let mut gone = false;
+            ui.horizontal(|ui| {
+                vec_row(ui, c, name, path, x, speed, touch);
+                if ui
+                    .small_button("unknown")
+                    .on_hover_text("I don't know this value: make it UNKNOWN")
+                    .clicked()
+                {
+                    gone = true;
+                }
+            });
+            if gone {
+                *v = None;
+                touch.unknown.push(path.to_string());
+                touch.any = true;
+                touch.geometry = true;
+            }
+        }
+        None => {
+            ui.horizontal(|ui| {
+                label_w(ui, c.t, name);
+                ui.label(RichText::new("UNKNOWN").font(sans(11.0)).color(c.t.error))
+                    .on_hover_text(format!("{path}: no value; checks against it say \"not checked\""));
+                if ui
+                    .small_button("set")
+                    .on_hover_text("enter this value (yours)")
+                    .clicked()
+                {
+                    *v = Some(dflt);
+                    touch.edited.push(path.to_string());
+                    touch.any = true;
+                    touch.geometry = true;
+                }
+            });
+        }
+    }
 }
 
 fn vec_row<const N: usize>(
@@ -634,10 +920,295 @@ fn rename_joint(d: &mut MachineDef, from: &str, to: &str) {
     }
 }
 
+/// The Machine Builder's commands, as its ribbon groups and the environment send them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MachineCmd {
+    /// A new machine from the chosen template, under the name in the panel.
+    FromTemplate,
+    /// A clone of the machine in the editor, under the name in the panel.
+    Clone,
+    Save,
+    /// The travel check.
+    Check,
+    /// Every joint at home.
+    Home,
+    Close,
+}
+
+/// The Machine Builder's ribbon groups (its environment's tab; research/ui/environments.md §5):
+/// Library (new, derive, save), Check, and for machines Motion. Exit is the environment's own
+/// Finish button.
+pub(in crate::shell) fn groups(s: &Shell) -> Vec<super::ribbon::Group> {
+    use super::ribbon::{Group, Tool};
+    let Some(m) = s.machine.as_ref() else {
+        return Vec::new();
+    };
+    let tool = |name, icon, cmd, on: bool| Tool {
+        name,
+        icon,
+        action: on.then_some(super::Action::Machine(cmd)),
+        on: false,
+    };
+    let group = |name, big: Vec<Tool>| Group {
+        name,
+        big,
+        small: vec![],
+        icons: vec![],
+    };
+    let (has, valid) = m.record_state();
+    let templates = m.lib == "machine" || super::machine_brake::is_brake(m.lib);
+    let mut v = vec![
+        group(
+            "Library",
+            vec![
+                tool("New from Template", "new", MachineCmd::FromTemplate, templates),
+                tool("Derive Copy", "copy", MachineCmd::Clone, has),
+                tool("Save", "save", MachineCmd::Save, valid && m.dirty()),
+            ],
+        ),
+        group("Check", vec![tool("Check", "check", MachineCmd::Check, valid)]),
+    ];
+    if m.lib == "machine" {
+        v.push(group(
+            "Motion",
+            vec![tool("Home Axes", "home", MachineCmd::Home, valid)],
+        ));
+    }
+    v
+}
+
+/// The status bar's line: where the user is and what is chosen.
+pub fn status_line(m: &MachineUi) -> String {
+    let kind = lib_title(m.lib);
+    let rec = m.record_name().unwrap_or_else(|| "nothing chosen".into());
+    let unsaved = if m.dirty() { " · not saved" } else { "" };
+    format!("Machine Builder · {kind} · {rec}{unsaved}")
+}
+
+fn lib_title(w: &str) -> &'static str {
+    if w == "machine" {
+        "Machines"
+    } else if w == "workholding" {
+        "Workholding"
+    } else if let Some((_, t)) = forge_brake_builder::KINDS.iter().find(|(k, _)| *k == w) {
+        t
+    } else {
+        forge_tooling_builder::KINDS
+            .iter()
+            .find(|(k, _, _)| *k == w)
+            .map_or("Library", |(_, _, t)| *t)
+    }
+}
+
+impl MachineUi {
+    /// (a record is chosen, it reads as valid).
+    pub fn record_state(&self) -> (bool, bool) {
+        match self.lib {
+            "machine" => (self.def.is_some(), self.def.is_some() && self.problem.is_none()),
+            "workholding" => {
+                let c = self.workholding.as_ref().is_some_and(|w| w.cur.is_some());
+                (c, c)
+            }
+            w if super::machine_brake::is_brake(w) => self.brake.as_ref().map_or((false, false), |b| {
+                (b.cur.is_some(), b.cur.is_some() && b.problem.is_none())
+            }),
+            _ => self.tooling.as_ref().map_or((false, false), |t| {
+                (t.cur.is_some(), t.cur.is_some() && t.problem.is_none())
+            }),
+        }
+    }
+
+    /// Edited since it was read or saved.
+    pub fn dirty(&self) -> bool {
+        match self.lib {
+            "machine" => self.changed,
+            "workholding" => self.workholding.as_ref().is_some_and(|w| w.changed),
+            w if super::machine_brake::is_brake(w) => self.brake.as_ref().is_some_and(|b| b.changed),
+            _ => self.tooling.as_ref().is_some_and(|t| t.changed),
+        }
+    }
+
+    /// The chosen record's display name.
+    pub fn record_name(&self) -> Option<String> {
+        match self.lib {
+            "machine" => self.def.as_ref().map(|d| d.name.clone()),
+            "workholding" => self.workholding.as_ref()?.cur.as_ref().map(|r| r.name.clone()),
+            w if super::machine_brake::is_brake(w) => self.brake.as_ref()?.cur.as_ref().map(|r| r.id.clone()),
+            _ => self.tooling.as_ref()?.cur.as_ref().map(|r| r.id.clone()),
+        }
+    }
+
+    /// Chooses a record of the library being edited, by its id (a machine by its name).
+    pub fn pick_record(&mut self, id: &str) -> Result<(), String> {
+        let missing = || format!("no `{id}` in {}", lib_title(self.lib));
+        match self.lib {
+            "machine" => {
+                let e = self.cat.get(id).ok_or_else(missing)?;
+                let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
+                self.load(d, Some((l, f)), Vec::new());
+            }
+            "workholding" => {
+                let w = self.workholding.as_mut().ok_or_else(missing)?;
+                let e = w
+                    .entries
+                    .iter()
+                    .find(|e| e.def.name == id)
+                    .cloned()
+                    .ok_or_else(missing)?;
+                w.pick(e);
+            }
+            x if super::machine_brake::is_brake(x) => {
+                let b = self.brake.as_mut().ok_or_else(missing)?;
+                let e = b
+                    .entries
+                    .iter()
+                    .find(|e| e.def.id == id)
+                    .cloned()
+                    .ok_or_else(missing)?;
+                b.pick(e);
+            }
+            _ => {
+                let t = self.tooling.as_mut().ok_or_else(missing)?;
+                let e = t
+                    .entries
+                    .iter()
+                    .find(|e| e.def.id == id)
+                    .cloned()
+                    .ok_or_else(missing)?;
+                t.pick(e);
+            }
+        }
+        Ok(())
+    }
+
+    /// A ribbon command, for the library being edited.
+    pub fn command(&mut self, c: MachineCmd) {
+        let project = self.project.clone();
+        let level = self.level;
+        match self.lib {
+            "machine" => match c {
+                MachineCmd::FromTemplate => self.make_template(),
+                MachineCmd::Clone => self.make_clone(),
+                MachineCmd::Save => self.save(),
+                MachineCmd::Check => self.run_check(),
+                MachineCmd::Home => {
+                    if let Some(d) = &self.def {
+                        self.q = d.joints.iter().map(|j| j.home).collect();
+                        self.jogged();
+                    }
+                }
+                MachineCmd::Close => {}
+            },
+            "workholding" => {
+                if let Some(w) = &mut self.workholding {
+                    match c {
+                        MachineCmd::Clone => w.derive(),
+                        MachineCmd::Save => w.save(level, project.as_deref()),
+                        MachineCmd::Check => w.check(),
+                        _ => {}
+                    }
+                }
+            }
+            x if super::machine_brake::is_brake(x) => {
+                if let Some(b) = &mut self.brake {
+                    match c {
+                        MachineCmd::FromTemplate => b.from_template(),
+                        MachineCmd::Clone => b.derive(),
+                        MachineCmd::Save => b.save(level, project.as_deref()),
+                        MachineCmd::Check => b.check(),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {
+                if let Some(t) = &mut self.tooling {
+                    match c {
+                        MachineCmd::Clone => t.derive(project.as_deref()),
+                        MachineCmd::Save => t.save(level, project.as_deref()),
+                        MachineCmd::Check => t.check(project.as_deref()),
+                        _ => {}
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl Shell {
+    /// The environment's browser: the machine library (search, by level and vendor), new and save.
+    pub fn machine_side(&mut self, ui: &mut Ui, r: egui::Rect) {
+        let Some(mut st) = self.machine.take() else { return };
+        let t = self.theme;
+        let mut places = vec![("env:machine-builder:browser".to_string(), r)];
+        ui.scope_builder(egui::UiBuilder::new().max_rect(r.shrink2(vec2(8.0, 6.0))), |ui| {
+            lib_choice(ui, &mut st, &mut places);
+            ui.add_space(4.0);
+            if st.lib == "machine" {
+                library(ui, &t, &mut st, &mut places);
+            } else if st.lib == "workholding" {
+                workholding_library(ui, &t, &mut st, &mut places);
+            } else if super::machine_brake::is_brake(st.lib) {
+                brake_library(ui, &t, &mut st, &mut places);
+            } else {
+                tooling_library(ui, &t, &mut st, &mut places);
+            }
+        });
+        self.places.extend(places);
+        self.machine = Some(st);
+    }
+
+    /// The environment's properties panel: the chosen record's sheet (and its checks).
+    pub fn machine_props(&mut self, ui: &mut Ui, r: egui::Rect) {
+        let Some(mut st) = self.machine.take() else { return };
+        super::lib_form::set_doc_units(self.units);
+        let t = self.theme;
+        let mut places = Vec::new();
+        ui.scope_builder(
+            egui::UiBuilder::new().max_rect(r.shrink2(vec2(10.0, 8.0))),
+            |ui| {
+                if st.lib == "machine" {
+                    editor(ui, &t, &mut st, &mut places, true);
+                } else if let Some(tu) = &mut st.tooling {
+                    super::machine_tooling::editor(ui, &t, tu)
+                } else if let Some(w) = &mut st.workholding {
+                    super::machine_workholding::editor(ui, &t, w)
+                } else if let Some(b) = &mut st.brake {
+                    super::machine_brake::editor(ui, &t, b)
+                }
+            },
+        );
+        self.places.extend(places);
+        self.machine = Some(st);
+    }
+
     /// The workspace's panels, while it is open.
     pub fn machine_ui(&mut self, ctx: &egui::Context) {
         let Some(mut st) = self.machine.take() else { return };
+        // the tooling record changed: the host draws it again
+        let shown = match (&st.tooling, &st.workholding, &st.brake) {
+            (Some(tu), _, _) => Some(format!("{:?}", tu.cur.as_ref().map(|r| &r.typed))),
+            (None, Some(w), _) => Some(format!("{:?}", w.cur.as_ref().map(|r| (&r.name, &r.vals)))),
+            (None, None, Some(b)) => Some(format!("{:?}", b.cur.as_ref().map(|r| (&r.id, &r.table)))),
+            _ => None,
+        };
+        if let Some(k) = shown
+            && k != st.tooling_seen
+        {
+            // another record (not an edit of this one): the view fits it
+            let id = |x: &str| {
+                x.split("id: \"")
+                    .nth(1)
+                    .or_else(|| x.split("((\"").nth(1))
+                    .and_then(|r| r.split('"').next())
+                    .map(str::to_string)
+            };
+            if id(&k) != id(&st.tooling_seen) {
+                st.fit += 1;
+            }
+            st.tooling_seen = k;
+            st.geom += 1;
+            st.pose += 1;
+        }
         if st.cat_gen != catalog::generation() {
             st.reload_catalog();
         }
@@ -645,29 +1216,52 @@ impl Shell {
         let v = self.view_rect;
         let mut close = false;
         let mut places: Vec<(String, egui::Rect)> = Vec::new();
-        // the library
-        egui::Window::new("Machines")
-            .id(egui::Id::unique("machine:library"))
-            .title_bar(false)
-            .resizable(false)
-            .collapsible(false)
-            .fixed_pos(pos2(v.left() + 8.0, v.top() + 8.0))
-            .fixed_size(vec2(250.0, (v.height() - 140.0).max(200.0)))
-            .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("Machine Builder").font(semi(14.0)).color(t.ink));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        let r = ui.button("Close");
-                        places.push(("machine:close".into(), r.rect));
-                        if r.clicked() {
-                            close = true;
-                        }
+        // in its environment: the library is the browser, the sheet the properties panel; only
+        // a machine's jog bar stays over the view (its transport)
+        if self.env == Some(super::env::EnvId::MachineBuilder) {
+            if st.lib != "machine" {
+                overlay(ctx, &t, &st, v);
+            } else {
+                envelope_overlay(ctx, &t, &st, v);
+            }
+            // a machine's jog is the sheet's Motion section (nothing floats over the view, §1)
+            self.places.extend(places);
+            self.machine = Some(st);
+            return;
+        }
+        if !st.in_env {
+            egui::Window::new("Machines")
+                .id(egui::Id::unique("machine:library"))
+                .title_bar(false)
+                .resizable(false)
+                .collapsible(false)
+                .fixed_pos(pos2(v.left() + 8.0, v.top() + 8.0))
+                .fixed_size(vec2(250.0, (v.height() - 140.0).max(200.0)))
+                .frame(super::theme::panel_frame(&t))
+                .show(ctx, |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("Machine Builder").font(semi(14.0)).color(t.ink));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            let r = ui.button("Close");
+                            places.push(("machine:close".into(), r.rect));
+                            if r.clicked() {
+                                close = true;
+                            }
+                        });
                     });
+                    ui.add_space(4.0);
+                    lib_choice(ui, &mut st, &mut places);
+                    if st.lib == "machine" {
+                        library(ui, &t, &mut st, &mut places);
+                    } else if st.lib == "workholding" {
+                        workholding_library(ui, &t, &mut st, &mut places);
+                    } else if super::machine_brake::is_brake(st.lib) {
+                        brake_library(ui, &t, &mut st, &mut places);
+                    } else {
+                        tooling_library(ui, &t, &mut st, &mut places);
+                    }
                 });
-                ui.add_space(4.0);
-                library(ui, &t, &mut st, &mut places);
-            });
+        }
         // the editor
         egui::Window::new("Machine editor")
             .id(egui::Id::unique("machine:editor"))
@@ -677,7 +1271,17 @@ impl Shell {
             .fixed_pos(pos2(v.right() - 438.0, v.top() + 8.0))
             .fixed_size(vec2(430.0, (v.height() - 140.0).max(200.0)))
             .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| editor(ui, &t, &mut st, &mut places));
+            .show(ctx, |ui| {
+                if st.lib == "machine" {
+                    editor(ui, &t, &mut st, &mut places, false)
+                } else if let Some(tu) = &mut st.tooling {
+                    super::machine_tooling::editor(ui, &t, tu)
+                } else if let Some(w) = &mut st.workholding {
+                    super::machine_workholding::editor(ui, &t, w)
+                } else if let Some(b) = &mut st.brake {
+                    super::machine_brake::editor(ui, &t, b)
+                }
+            });
         // the jog bar
         egui::Window::new("Jog")
             .id(egui::Id::unique("machine:jog"))
@@ -687,7 +1291,17 @@ impl Shell {
             .fixed_pos(pos2(v.left() + 8.0, v.bottom() - 124.0))
             .fixed_size(vec2((v.width() - 16.0).max(200.0), 108.0))
             .frame(super::theme::panel_frame(&t))
-            .show(ctx, |ui| jog(ui, &t, &mut st, &mut places));
+            .show(ctx, |ui| {
+                if st.lib == "machine" {
+                    jog(ui, &t, &mut st, &mut places)
+                } else if st.lib == "workholding" {
+                    workholding_bar(ui, &t, &mut st, &mut places)
+                } else if super::machine_brake::is_brake(st.lib) {
+                    brake_bar(ui, &t, &mut st, &mut places)
+                } else {
+                    tooling_bar(ui, &t, &mut st, &mut places)
+                }
+            });
         self.places.extend(places);
         if close {
             self.status = "Machine Builder closed".into();
@@ -697,48 +1311,296 @@ impl Shell {
     }
 }
 
+/// The library the workspace edits: machines, or one of forge-tooling's kinds.
+fn lib_choice(ui: &mut Ui, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let title = |w: &str| {
+        if w == "machine" {
+            "Machines"
+        } else if w == "workholding" {
+            "Workholding"
+        } else if let Some((_, t)) = forge_brake_builder::KINDS.iter().find(|(k, _)| *k == w) {
+            t
+        } else {
+            forge_tooling_builder::KINDS
+                .iter()
+                .find(|(k, _, _)| *k == w)
+                .map_or("?", |(_, _, t)| *t)
+        }
+    };
+    let mut want = st.lib;
+    let r = egui::ComboBox::from_id_salt("machine:lib")
+        .selected_text(title(st.lib))
+        .width(ui.available_width() - 8.0)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut want, "machine", "Machines");
+            for (w, _, t) in forge_tooling_builder::KINDS {
+                ui.selectable_value(&mut want, *w, *t);
+            }
+            ui.selectable_value(&mut want, "workholding", "Workholding");
+            for (w, t) in forge_brake_builder::KINDS {
+                ui.selectable_value(&mut want, *w, *t);
+            }
+        });
+    places.push(("machine:lib".into(), r.response.rect));
+    if want != st.lib {
+        st.set_lib(want);
+    }
+}
+
+impl MachineUi {
+    /// Switches the library edited: "machine" or a tooling kind.
+    pub fn set_lib(&mut self, word: &'static str) {
+        self.lib = word;
+        let brake = super::machine_brake::is_brake(word);
+        self.tooling = (word != "machine" && word != "workholding" && !brake)
+            .then(|| super::machine_tooling::ToolingUi::new(word, self.project.as_deref()));
+        self.brake = brake.then(|| super::machine_brake::BrakeUi::new(word, self.project.as_deref()));
+        self.workholding = (word == "workholding")
+            .then(|| super::machine_workholding::WorkholdingUi::new(self.project.as_deref()));
+        self.tooling_seen.clear();
+        self.geom += 1;
+        self.pose += 1;
+        self.fit += 1;
+    }
+}
+
+fn tooling_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(tu) = &mut st.tooling else { return };
+    super::machine_tooling::library(ui, t, tu, project.as_deref(), places);
+    ui.separator();
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Save to");
+        ui.selectable_value(&mut st.level, Level::User, "User");
+        ui.add_enabled_ui(st.project.is_some(), |ui| {
+            ui.selectable_value(&mut st.level, Level::Project, "Project");
+        });
+    });
+    let Some(tu) = &mut st.tooling else { return };
+    let r = ui.add_enabled(
+        tu.cur.is_some(),
+        egui::Button::new(if tu.changed { "Save *" } else { "Save" }),
+    );
+    places.push(("tooling:save".into(), r.rect));
+    if r.clicked() {
+        tu.save(st.level, project.as_deref());
+    }
+    if !tu.message.is_empty() {
+        ui.label(RichText::new(&tu.message).font(sans(11.0)).color(t.ink2));
+    }
+}
+
+impl MachineUi {
+    /// The preview of the chosen library record, built from its own dimensions (None:
+    /// machines, drawn from their bodies).
+    pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
+        use crate::library_mesh as lm;
+        let none = || {
+            let mut p = lm::Preview::default();
+            p.ghosts.push(lm::Ghost {
+                bounds: Some(([-20.0; 3], [20.0; 3])),
+                edges: Vec::new(),
+                at: [20.0, 0.0, 20.0],
+                label: "no geometry to draw".into(),
+            });
+            p
+        };
+        Some(match self.lib {
+            "machine" => return None,
+            w if super::machine_brake::is_brake(w) => self
+                .brake
+                .as_ref()
+                .and_then(|b| b.library_preview())
+                .unwrap_or_else(none),
+            "workholding" => self
+                .workholding
+                .as_ref()
+                .and_then(|w| w.library_preview())
+                .unwrap_or_else(none),
+            _ => self
+                .tooling
+                .as_ref()
+                .and_then(|t| t.library_preview())
+                .unwrap_or_else(none),
+        })
+    }
+
+    /// The preview's solid bodies (tests, thumbnails).
+    pub fn preview_bodies(&self) -> Option<Vec<crate::machine_mesh::Tris>> {
+        self.library_preview()
+            .map(|p| p.parts.into_iter().map(|(t, _)| t).collect())
+    }
+}
+
+fn workholding_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(w) = &mut st.workholding else { return };
+    super::machine_workholding::library(ui, t, w, project.as_deref(), places);
+    ui.separator();
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Save to");
+        ui.selectable_value(&mut st.level, Level::User, "User");
+        ui.add_enabled_ui(st.project.is_some(), |ui| {
+            ui.selectable_value(&mut st.level, Level::Project, "Project");
+        });
+    });
+    let Some(w) = &mut st.workholding else { return };
+    let r = ui.add_enabled(
+        w.cur.is_some(),
+        egui::Button::new(if w.changed { "Save *" } else { "Save" }),
+    );
+    places.push(("workholding:save".into(), r.rect));
+    if r.clicked() {
+        w.save(st.level, project.as_deref());
+    }
+    if !w.message.is_empty() {
+        ui.label(RichText::new(&w.message).font(sans(11.0)).color(t.ink2));
+    }
+}
+
+fn workholding_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let Some(w) = &mut st.workholding else { return };
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
+        let r = ui.add_enabled(w.cur.is_some(), egui::Button::new("Check"));
+        places.push(("workholding:check".into(), r.rect));
+        if r.clicked() {
+            w.check();
+        }
+        ui.label(RichText::new(&w.message).font(sans(11.0)).color(t.ink2));
+    });
+    ui.label(small(
+        t,
+        "The preview places the record as its check does (a mill device on a reference stock, a lathe device about +z from the chuck face).",
+    ));
+}
+
+fn tooling_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(tu) = &mut st.tooling else { return };
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
+        let r = ui.add_enabled(
+            tu.cur.is_some() && tu.problem.is_none(),
+            egui::Button::new("Check"),
+        );
+        places.push(("tooling:check".into(), r.rect));
+        if r.clicked() {
+            tu.check(project.as_deref());
+        }
+        let (txt, col) = match (&tu.problem, tu.findings.is_empty()) {
+            (Some(p), _) => (format!("refused: {p}"), t.error),
+            (None, false) => (
+                format!("{} problems (see the editor)", tu.findings.len()),
+                t.error,
+            ),
+            (None, true) => (tu.message.clone(), t.ink2),
+        };
+        ui.label(RichText::new(txt).font(sans(11.0)).color(col));
+    });
+    ui.label(small(
+        t,
+        "The preview is the record's turned outline about its axis (z from the tip or nose); inserts and turning holders have none yet.",
+    ));
+}
+
+/// An entry's group in the list: its vendor (`builtin/<vendor>.toml`) or its file's name.
+fn group_of(e: &catalog::Entry) -> String {
+    std::path::Path::new(&e.file)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("?")
+        .to_string()
+}
+
 fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    ui.horizontal(|ui| {
+        let r = ui.add(
+            egui::TextEdit::singleline(&mut st.filter)
+                .hint_text("search: name, kind, control, vendor")
+                .desired_width(ui.available_width()),
+        );
+        places.push(("machine:search".into(), r.rect));
+    });
     let mut chosen = None;
     egui::ScrollArea::vertical()
         .id_salt("machine:list")
         .max_height((ui.available_height() - 230.0).max(80.0))
         .show(ui, |ui| {
+            let want = st.filter.trim().to_lowercase();
+            let matches = |e: &catalog::Entry| {
+                want.is_empty()
+                    || [
+                        e.def.name.as_str(),
+                        e.def.kind.name(),
+                        e.def.control.as_str(),
+                        group_of(e).as_str(),
+                    ]
+                    .iter()
+                    .any(|x| x.to_lowercase().contains(&want))
+            };
+            super::lib_form::empty_levels(ui, t, st.cat.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
-                let here: Vec<_> = st.cat.entries.iter().filter(|e| e.level == lv).collect();
-                ui.label(
-                    RichText::new(lv.name().to_uppercase())
-                        .font(semi(10.0))
-                        .color(t.ink2),
-                );
+                let here: Vec<_> = st
+                    .cat
+                    .entries
+                    .iter()
+                    .filter(|e| e.level == lv && matches(e))
+                    .collect();
                 if here.is_empty() {
-                    ui.label(small(
-                        t,
-                        match lv {
-                            Level::Project if st.project.is_none() => "  (no part open: no project folder)",
-                            _ => "  none",
-                        },
-                    ));
+                    continue;
                 }
-                for e in here {
-                    let on = st.def.as_ref().is_some_and(|d| d.name == e.def.name)
-                        && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level);
-                    let mut txt = format!("{}  ·  {}", e.def.name, e.def.kind.name());
-                    if !e.hides.is_empty() {
-                        txt.push_str("  (hides ");
-                        txt.push_str(
-                            &e.hides
-                                .iter()
-                                .map(|(l, _)| l.name())
-                                .collect::<Vec<_>>()
-                                .join(", "),
-                        );
-                        txt.push(')');
-                    }
-                    let r = ui.selectable_label(on, RichText::new(txt).font(sans(12.0)));
-                    places.push((format!("machine:pick:{}", e.def.name), r.rect));
-                    if r.clicked() {
-                        chosen = Some((e.def.clone(), e.level, e.file.clone()));
-                    }
+                super::lib_form::level_head(ui, t, lv.name(), here.len());
+                // by vendor (a built-in file) or by file (the user's, the project's)
+                let mut groups: Vec<String> = here.iter().map(|e| group_of(e)).collect();
+                groups.dedup();
+                for g in groups {
+                    let inner: Vec<_> = here.iter().filter(|e| group_of(e) == g).collect();
+                    let picked = inner.iter().any(|e| {
+                        st.def.as_ref().is_some_and(|d| d.name == e.def.name)
+                            && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level)
+                    });
+                    egui::CollapsingHeader::new(
+                        RichText::new(format!("{g} ({})", inner.len())).font(sans(11.0)),
+                    )
+                    .id_salt(("machine:group", lv.name(), g.as_str()))
+                    .default_open(picked || !want.is_empty() || inner.len() <= 6)
+                    .show(ui, |ui| {
+                        for e in inner {
+                            let on = st.def.as_ref().is_some_and(|d| d.name == e.def.name)
+                                && st.origin.as_ref().is_some_and(|(l, _)| *l == e.level);
+                            let mut txt = format!("{}  ·  {}", e.def.name, e.def.kind.name());
+                            if e.def.real {
+                                txt.push_str("  · real");
+                            }
+                            if !e.hides.is_empty() {
+                                txt.push_str("  (hides ");
+                                txt.push_str(
+                                    &e.hides
+                                        .iter()
+                                        .map(|(l, _)| l.name())
+                                        .collect::<Vec<_>>()
+                                        .join(", "),
+                                );
+                                txt.push(')');
+                            }
+                            let r = ui
+                                .horizontal(|ui| {
+                                    super::lib_form::thumb(
+                                        ui,
+                                        t,
+                                        &super::lib_form::machine_thumb(&e.def),
+                                        26.0,
+                                    );
+                                    ui.selectable_label(on, RichText::new(txt).font(sans(12.0)))
+                                })
+                                .inner;
+                            places.push((format!("machine:pick:{}", e.def.name), r.rect));
+                            if r.clicked() {
+                                chosen = Some((e.def.clone(), e.level, e.file.clone()));
+                            }
+                        }
+                    });
                 }
             }
             for (l, f, e) in &st.cat.errors {
@@ -826,7 +1688,9 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
     }
 }
 
-fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+/// The machine's sheet; `docked`: in the environment's properties panel, where the jog is its
+/// Motion section (the floating workspace has its jog bar instead).
+fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>, docked: bool) {
     let Some(d) = st.def.clone() else {
         ui.label(small(t, "No machine: pick one, or make one from a template"));
         return;
@@ -857,16 +1721,28 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             );
         }
     }
-    ui.horizontal_wrapped(|ui| {
-        for tab in Tab::ALL {
-            let r = ui.selectable_label(st.tab == tab, RichText::new(tab.name()).font(sans(12.0)));
-            places.push((format!("machine:tab:{}", tab.name()), r.rect));
-            if r.clicked() {
-                st.tab = tab;
-                st.pick = 0;
-            }
-        }
-    });
+    if docked {
+        egui::CollapsingHeader::new(RichText::new("MOTION").font(semi(10.5)).color(t.ink2))
+            .id_salt("machine:motion")
+            .default_open(true)
+            .show(ui, |ui| motion(ui, t, st, places));
+    }
+    // one line at any width: the strip scrolls sideways rather than wrapping
+    egui::ScrollArea::horizontal()
+        .id_salt("machine:tabs")
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                for tab in Tab::ALL {
+                    let r = ui.selectable_label(st.tab == tab, RichText::new(tab.name()).font(sans(12.0)));
+                    places.push((format!("machine:tab:{}", tab.name()), r.rect));
+                    if r.clicked() {
+                        st.tab = tab;
+                        st.pick = 0;
+                    }
+                }
+            });
+        });
     ui.separator();
     let own = matches!(st.origin, Some((Level::User | Level::Project, _)) | None);
     let mut d2 = d.clone();
@@ -880,7 +1756,14 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             Tab::Spindles => tab_spindles(ui, &c, &mut d2, &mut st.pick, &mut touch),
             Tab::Changer => tab_changer(ui, &c, &mut d2, &mut touch),
             Tab::Mounts => tab_mounts(ui, &c, &mut d2, &mut st.pick, &mut touch),
-            Tab::Bodies => tab_bodies(ui, &c, &mut d2, &mut st.pick, &mut st.file_in, &mut touch),
+            Tab::Bodies => {
+                let ms = ModelsCtx {
+                    models: &mut st.models,
+                    checks: &st.model_checks,
+                    kept: st.user.is_some(),
+                };
+                tab_bodies(ui, &c, &mut d2, &mut st.pick, &mut st.file_in, ms, &mut touch)
+            }
             Tab::Check => tab_check(ui, t, st.report.as_ref(), &d, &st.q),
         });
     // a body's geometry from a file: beside the saved machine
@@ -892,8 +1775,14 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             _ => None,
         };
         let b = st.pick;
+        let not_part = touch
+            .attach
+            .as_ref()
+            .is_some_and(|f| !f.trim().to_ascii_lowercase().ends_with(".fg"));
         let got = if b >= d2.bodies.len() {
             Err("no body chosen".to_string())
+        } else if not_part {
+            Err("a maker's STEP, IGES or STL file is attached as the body's Model (below): kept in your own library, never beside the machine in a project".into())
         } else if touch.detach {
             d2.bodies[b].part = None;
             Ok(format!(
@@ -925,6 +1814,68 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             Err(e) => st.message = e,
         }
     }
+    if let Some((body, f)) = touch.attach_model.take() {
+        let saved_def = st.def.replace(d2.clone());
+        st.message = st.attach_model(body, &f).unwrap_or_else(|e| e);
+        st.def = saved_def;
+    }
+    if let Some(i) = touch.drop_model.filter(|i| *i < st.models.len()) {
+        let m = st.models.remove(i);
+        st.message = format!("{} removed (and its copy in your library)", m.file);
+        st.models_changed();
+    }
+    if let Some(i) = touch.replace_model.filter(|i| *i < st.models.len()) {
+        let m = st.models[i].clone();
+        let target = match &m.body {
+            Some(b) => d2
+                .bodies
+                .iter()
+                .find(|x| &x.name == b)
+                .and_then(|b| models::prims_bounds(&b.prims)),
+            None => models::bounds(
+                d2.bodies
+                    .iter()
+                    .filter_map(|b| models::prims_bounds(&b.prims))
+                    .flat_map(|(lo, hi)| [lo, hi]),
+            ),
+        };
+        if let (Some(target), Ok(t)) = (target, st.model_tris(&m)) {
+            st.models[i].sit_on(&t.pos, target);
+            st.message = format!("{} placed on its envelope again", m.file);
+        }
+        st.models_changed();
+    } else if touch.models {
+        st.models_changed();
+    }
+    if let Some(i) = touch.fit_to_model.filter(|i| *i < st.models.len()) {
+        let m = st.models[i].clone();
+        let at = m
+            .body
+            .as_ref()
+            .and_then(|b| d2.bodies.iter().position(|x| &x.name == b));
+        match (at, st.model_tris(&m)) {
+            (Some(b), Ok(t)) => {
+                if let Some((lo, hi)) =
+                    models::bounds(crate::machine_model::placed_points(&t, &m).into_iter())
+                {
+                    d2.bodies[b].prims = vec![super::machine_parts::fitted(lo, hi)];
+                    st.message = format!(
+                        "`{}`: envelope = the model's bounds + {} mm ({:.1} x {:.1} x {:.1}); a box: it covers more than the model where the model is not boxy",
+                        d2.bodies[b].name,
+                        super::machine_parts::FIT_MARGIN,
+                        hi[0] - lo[0],
+                        hi[1] - lo[1],
+                        hi[2] - lo[2]
+                    );
+                    touch.edited.push(format!("body.{}", d2.bodies[b].name));
+                    touch.any = true;
+                    touch.geometry = true;
+                }
+            }
+            (_, Err(e)) => st.message = e,
+            (None, _) => st.message = "a whole-machine model has no envelope of its own".into(),
+        }
+    }
     if touch.any {
         for p in &touch.edited {
             d2.cites.retain(|c| &c.path != p);
@@ -945,10 +1896,13 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
         st.changed = true;
         st.report = None;
         st.edited(touch.geometry || !touch.edited.is_empty());
+        if touch.geometry {
+            st.check_models();
+        }
     }
 }
 
-const KINDS: [(&str, Kind); 7] = Kind::ALL;
+const KINDS: [(&str, Kind); Kind::ALL.len()] = Kind::ALL;
 
 fn tab_machine(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, touch: &mut Touch) {
     let t = c.t;
@@ -1049,7 +2003,7 @@ fn tab_joints(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
                 let txt = format!(
                     "{}{} {} ({}, {})",
                     "    ".repeat(depth),
-                    "└",
+                    "-",
                     j.name,
                     if j.ty == JointType::Linear {
                         "linear"
@@ -1090,16 +2044,17 @@ fn tab_joints(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
                 ty: JointType::Linear,
                 axis: [1.0, 0.0, 0.0],
                 pivot: [0.0; 3],
-                range: [-100.0, 100.0],
+                range: Some([-100.0, 100.0]),
                 home: 0.0,
-                rapid: 1000.0,
-                max_feed: 1000.0,
+                rapid: Some(1000.0),
+                max_feed: Some(1000.0),
                 accel: None,
                 cyclic: false,
                 tcp: false,
                 preference: 0,
                 reset: Reset::Never,
                 diameter: false,
+                reference: None,
             });
             for f in ["range", "rapid", "max_feed"] {
                 touch.unknown.push(format!("joint.{name}.{f}"));
@@ -1179,23 +2134,42 @@ fn tab_joints(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
     if jj.ty == JointType::Rotary {
         vec_row(ui, c, "Pivot", &p("pivot"), &mut jj.pivot, 1.0, touch);
     }
-    vec_row(ui, c, "Range", &p("range"), &mut jj.range, 1.0, touch);
+    opt_vec_row(
+        ui,
+        c,
+        "Range",
+        &p("range"),
+        &mut jj.range,
+        [-100.0, 100.0],
+        1.0,
+        touch,
+    );
     num_row(ui, c, "Home", &p("home"), &mut jj.home, 1.0, touch);
     let u = if jj.ty == JointType::Linear {
         "mm/min"
     } else {
         "deg/min"
     };
-    num_row(
+    opt_num_row(
         ui,
         c,
         &format!("Rapid {u}"),
         &p("rapid"),
         &mut jj.rapid,
+        1000.0,
         10.0,
         touch,
     );
-    num_row(ui, c, "Max feed", &p("max_feed"), &mut jj.max_feed, 10.0, touch);
+    opt_num_row(
+        ui,
+        c,
+        "Max feed",
+        &p("max_feed"),
+        &mut jj.max_feed,
+        1000.0,
+        10.0,
+        touch,
+    );
     ui.horizontal(|ui| {
         label_w(ui, t, "Accel");
         let mut has = jj.accel.is_some();
@@ -1270,8 +2244,8 @@ fn tab_spindles(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touc
     );
     vec_row(ui, c, "Axis", &pa, &mut s.axis, 0.01, touch);
     vec_row(ui, c, "Nose", &pn, &mut s.nose, 1.0, touch);
-    vec_row(ui, c, "rpm", &pr, &mut s.rpm, 10.0, touch);
-    vec_row(ui, c, "Max", &pm, &mut s.max, 1.0, touch);
+    opt_vec_row(ui, c, "rpm", &pr, &mut s.rpm, [100.0, 10000.0], 10.0, touch);
+    opt_vec_row(ui, c, "Max", &pm, &mut s.max, [100.0, 20.0], 1.0, touch);
     ui.label(small(
         t,
         "Max: [tool length, diameter] (milling) or [swing, part length] (turning)",
@@ -1323,10 +2297,13 @@ fn tab_changer(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, touch: &mut Touch) {
     let t = c.t;
     let mut has = d.changer.is_some();
     if ui.checkbox(&mut has, "Tool changer").changed() {
+        // a new changer's numbers are UNKNOWN until the user gives them
         d.changer = has.then_some(Changer {
-            pockets: 1,
-            change_s: 1.0,
-            max_tool_kg: 1.0,
+            manual: false,
+            pockets: None,
+            change_s: None,
+            max_tool_kg: None,
+            position: Vec::new(),
         });
         if has {
             for f in ["pockets", "change_s", "max_tool_kg"] {
@@ -1338,31 +2315,34 @@ fn tab_changer(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, touch: &mut Touch) {
         touch.any = true;
     }
     if let Some(ch) = &mut d.changer {
-        let mut p = ch.pockets as f64;
-        num_row(ui, c, "Pockets", "changer.pockets", &mut p, 1.0, touch);
-        ch.pockets = p.max(1.0).round() as u32;
-        num_row(
+        ui.checkbox(&mut ch.manual, "manual (the operator changes tools at M6)");
+        let mut p = ch.pockets.map(|p| p as f64);
+        opt_num_row(ui, c, "Pockets", "changer.pockets", &mut p, 12.0, 1.0, touch);
+        ch.pockets = p.map(|p| p.max(1.0).round() as u32);
+        opt_num_row(
             ui,
             c,
             "Change s",
             "changer.change_s",
             &mut ch.change_s,
+            3.0,
             0.1,
             touch,
         );
-        num_row(
+        opt_num_row(
             ui,
             c,
             "Max tool kg",
             "changer.max_tool_kg",
             &mut ch.max_tool_kg,
+            5.0,
             0.1,
             touch,
         );
-        ui.label(small(
-            t,
-            "Tool-change (M06) position: not in the format yet (request F3)",
-        ));
+        if !ch.position.is_empty() {
+            let pos: Vec<String> = ch.position.iter().map(|(j, v)| format!("{j}={v}")).collect();
+            ui.label(small(t, format!("Tool-change position: {}", pos.join(" "))));
+        }
     } else {
         ui.label(small(t, "None: tools are changed by hand"));
     }
@@ -1374,10 +2354,10 @@ fn tab_changer(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, touch: &mut Touch) {
                 .color(t.ink),
         );
         let p = |f: &str| format!("turret.{}.{f}", tu.name);
-        let mut s = tu.stations as f64;
-        num_row(ui, c, "Stations", &p("stations"), &mut s, 1.0, touch);
-        tu.stations = s.max(1.0).round() as u32;
-        num_row(ui, c, "Index s", &p("index_s"), &mut tu.index_s, 0.05, touch);
+        let mut s = tu.stations.map(|s| s as f64);
+        opt_num_row(ui, c, "Stations", &p("stations"), &mut s, 8.0, 1.0, touch);
+        tu.stations = s.map(|s| s.max(1.0).round() as u32);
+        opt_num_row(ui, c, "Index s", &p("index_s"), &mut tu.index_s, 0.5, 0.05, touch);
         vec_row(ui, c, "Center", &p("center"), &mut tu.center, 1.0, touch);
     }
 }
@@ -1416,12 +2396,164 @@ fn tab_mounts(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
     ));
 }
 
+/// The Bodies tab's view of the attached models.
+struct ModelsCtx<'a> {
+    models: &'a mut Vec<Model>,
+    checks: &'a [Result<Outside, String>],
+    /// The user's library has a folder here (models are kept in it).
+    kept: bool,
+}
+
+/// A model file to attach, from the platform's picker (every format forgecad reads, and the
+/// ones it does not so it can say what to send instead).
+fn pick_model() -> Option<String> {
+    let mut exts: Vec<&str> = models::Format::EXTS.to_vec();
+    exts.extend(["x_t", "x_b"]);
+    crate::plat::pick_file(
+        Some("A model of this body (STEP, IGES or STL)"),
+        "STEP, IGES or STL",
+        &exts,
+    )
+}
+
+/// One attached model's rows: units, turn, move, and how it sits in the envelope.
+fn model_rows(
+    ui: &mut Ui,
+    t: &Theme,
+    i: usize,
+    m: &mut Model,
+    check: Option<&Result<Outside, String>>,
+    touch: &mut Touch,
+) {
+    let mut ch = false;
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Model");
+        ui.add(egui::Label::new(RichText::new(&m.file).font(sans(12.0)).color(t.ink)).truncate()).on_hover_text(
+            "Your own copy, kept in your library (not in the project): the body is drawn as this model; collisions are still found on the envelope.",
+        );
+        ui.add_space(6.0);
+        if ui.small_button("Remove").clicked() {
+            touch.drop_model = Some(i);
+        }
+    });
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Source");
+        ch |= ui
+            .add(
+                egui::TextEdit::singleline(&mut m.from)
+                    .hint_text("URL or note")
+                    .desired_width(200.0),
+            )
+            .on_hover_text(
+                "Where you got the file (the maker's page, your own drawing): kept with it for your notes",
+            )
+            .lost_focus();
+    });
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Units");
+        for (w, s) in [("mm", 1.0), ("in", 25.4), ("m", 1000.0)] {
+            if ui.selectable_label(m.scale == s, w).clicked() && m.scale != s {
+                m.scale = s;
+                touch.replace_model = Some(i);
+            }
+        }
+    });
+    // one row per axis: the angle, and a quarter turn that re-places it on the envelope
+    for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+        ui.horizontal(|ui| {
+            label_w(ui, t, &format!("Turn {a}"));
+            ch |= ui
+                .add_sized(
+                    [80.0, 20.0],
+                    egui::DragValue::new(&mut m.rotate[k])
+                        .speed(1.0)
+                        .suffix("°")
+                        .max_decimals(2),
+                )
+                .changed();
+            if ui
+                .button("+90°")
+                .on_hover_text(format!(
+                    "a quarter turn about {a}, then placed on the envelope again"
+                ))
+                .clicked()
+            {
+                m.rotate[k] = (m.rotate[k] + 90.0) % 360.0;
+                touch.replace_model = Some(i);
+            }
+        });
+    }
+    for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+        ui.horizontal(|ui| {
+            label_w(ui, t, &format!("Move {a}"));
+            ch |= super::lib_form::num_edit_in(ui, &mut m.offset[k], "mm", "", Some(110.0));
+        });
+    }
+    ui.horizontal(|ui| {
+        label_w(ui, t, "");
+        if ui
+            .small_button("Place on envelope")
+            .on_hover_text("centred over the body's envelope, its bottom on the envelope's bottom")
+            .clicked()
+        {
+            touch.replace_model = Some(i);
+        }
+    });
+    if m.body.is_none() {
+        ui.label(small(
+            t,
+            "Drawn as one piece on the base: it does not move with the axes. For moving parts, attach a model to each body.",
+        ));
+    }
+    match check {
+        Some(Ok(o)) if m.body.is_some() && o.out == 0 => {
+            ui.label(
+                RichText::new(format!(
+                    "Inside the collision envelope ({} points checked)",
+                    o.points
+                ))
+                .font(sans(11.0))
+                .color(t.success),
+            );
+        }
+        Some(Ok(o)) if m.body.is_some() => {
+            ui.label(
+                RichText::new(format!(
+                    "Sticks out of the collision envelope by up to {:.1} mm ({} of {} points). Collisions there are not found.",
+                    o.worst, o.out, o.points
+                ))
+                .font(sans(11.0))
+                .color(t.warn),
+            )
+            .on_hover_text(format!(
+                "farthest out at ({:.1}, {:.1}, {:.1}) in the machine's frame at home",
+                o.at[0], o.at[1], o.at[2]
+            ));
+            if ui
+                .button("Fit envelope to model")
+                .on_hover_text("the body's envelope becomes one box around the model")
+                .clicked()
+            {
+                touch.fit_to_model = Some(i);
+            }
+        }
+        Some(Err(e)) => {
+            ui.label(RichText::new(e).font(sans(11.0)).color(t.error));
+        }
+        _ => {}
+    }
+    if ch {
+        touch.models = true;
+    }
+}
+
 fn tab_bodies(
     ui: &mut Ui,
     c: &Ctx,
     d: &mut MachineDef,
     pick: &mut usize,
     file_in: &mut String,
+    ms: ModelsCtx,
     touch: &mut Touch,
 ) {
     let t = c.t;
@@ -1445,6 +2577,8 @@ fn tab_bodies(
                 }],
                 part: None,
                 ignore: Vec::new(),
+                clearance: None,
+                passes_stock: false,
             });
             touch.unknown.push(format!("body.{n}"));
             *pick = d.bodies.len() - 1;
@@ -1452,6 +2586,24 @@ fn tab_bodies(
             touch.geometry = true;
         }
     });
+    // the whole machine's model, if any, or the button to attach one
+    let whole: Vec<usize> = (0..ms.models.len())
+        .filter(|&i| ms.models[i].body.is_none())
+        .collect();
+    for &i in &whole {
+        model_rows(ui, t, i, &mut ms.models[i], ms.checks.get(i), touch);
+    }
+    if whole.is_empty()
+        && ui
+            .add_enabled(ms.kept, egui::Button::new("Attach a model of the whole machine…"))
+            .on_hover_text("your own STEP, IGES or STL of the machine, drawn as one piece; kept in your library, never in the project")
+            .on_disabled_hover_text("no folder for your library on this system")
+            .clicked()
+        && let Some(f) = pick_model()
+    {
+        touch.attach_model = Some((None, f));
+    }
+    ui.separator();
     let links: Vec<String> = std::iter::once("base".to_string())
         .chain(d.joints.iter().map(|j| j.name.clone()))
         .collect();
@@ -1464,6 +2616,18 @@ fn tab_bodies(
     link_row(ui, t, "Link", "machine:b-link", &mut b.link, &links, touch);
     ui.horizontal(|ui| {
         label_w(ui, t, "Envelope");
+        // its size first (the boxes' and cylinders' bounds), then where it comes from
+        if let Some((lo, hi)) = models::prims_bounds(&b.prims) {
+            let doc = super::lib_form::doc_units();
+            let per = forge_units::lookup(doc).map_or(1.0, |(_, top, bottom)| top / bottom);
+            let d = |k: usize| forge_units::trim(((hi[k] - lo[k]) / per * 100.0).round() / 100.0);
+            ui.label(
+                RichText::new(format!("{} × {} × {} {doc}", d(0), d(1), d(2)))
+                    .font(sans(12.0))
+                    .color(t.ink),
+            )
+            .on_hover_text("the envelope's bounds (x × y × z): collisions are found on it");
+        }
         chip(ui, c, &path, touch);
     });
     ui.horizontal(|ui| {
@@ -1475,19 +2639,38 @@ fn tab_bodies(
                 .unwrap_or_else(|| "none (the envelope is the body)".into()),
         ));
     });
+    // the model drawn as this body (the user's own file)
+    let bname = b.name.clone();
+    match ms
+        .models
+        .iter()
+        .position(|m| m.body.as_deref() == Some(bname.as_str()))
+    {
+        Some(i) => model_rows(ui, t, i, &mut ms.models[i], ms.checks.get(i), touch),
+        None => {
+            ui.horizontal(|ui| {
+                label_w(ui, t, "Model");
+                if ui
+                    .add_enabled(ms.kept, egui::Button::new("Attach model…"))
+                    .on_hover_text("your own STEP, IGES or STL of this body (the maker's, say): drawn in its place, placed on its envelope; kept in your library, never in the project")
+                    .on_disabled_hover_text("no folder for your library on this system")
+                    .clicked()
+                    && let Some(f) = pick_model()
+                {
+                    touch.attach_model = Some((Some(bname.clone()), f));
+                }
+            });
+        }
+    }
     ui.horizontal(|ui| {
-        label_w(ui, t, "Geometry");
+        label_w(ui, t, "Part file");
         ui.add(
             egui::TextEdit::singleline(file_in)
-                .hint_text(".fg, .step or .stl path")
+                .hint_text("a forgecad .fg part")
                 .desired_width(170.0),
         );
         if ui.button("Browse").clicked()
-            && let Some(f) = crate::plat::pick_file(
-                Some("A body's geometry"),
-                "Part, STEP or mesh",
-                &["fg", "step", "stp", "stl"],
-            )
+            && let Some(f) = crate::plat::pick_file(Some("A body's part"), "forgecad part", &["fg"])
         {
             *file_in = f;
         }
@@ -1514,60 +2697,124 @@ fn tab_bodies(
     });
     let mut del = None;
     let mut ch = false;
-    for (i, p) in b.prims.iter_mut().enumerate() {
-        ui.horizontal(|ui| {
-            match p {
-                Prim::Box { min, max } => {
-                    ui.label(small(t, "box min"));
-                    for x in min.iter_mut() {
-                        ch |= ui.add(egui::DragValue::new(x).speed(1.0)).changed();
+    let mut add: Option<Prim> = None;
+    egui::CollapsingHeader::new(RichText::new("Envelope (advanced)").font(sans(12.0)))
+        .id_salt(("machine:envelope", *pick))
+        .default_open(false)
+        .show(ui, |ui| {
+            for (i, p) in b.prims.iter_mut().enumerate() {
+                match p {
+                    Prim::Box { min, max } => {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("Box {}", i + 1))
+                                    .font(semi(11.0))
+                                    .color(t.ink),
+                            );
+                            if super::ux::icon_button(ui, t, "delete", "Remove this box", false).clicked() {
+                                del = Some(i);
+                            }
+                        });
+                        for (w, v) in [("Min", min), ("Max", max)] {
+                            for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                                ui.horizontal(|ui| {
+                                    label_w(ui, t, &format!("{w} {a}"));
+                                    ch |= super::lib_form::num_edit_in(ui, &mut v[k], "mm", "", Some(110.0));
+                                });
+                            }
+                        }
                     }
-                    ui.label(small(t, "max"));
-                    for x in max.iter_mut() {
-                        ch |= ui.add(egui::DragValue::new(x).speed(1.0)).changed();
+                    Prim::Cyl { base, axis, r, h } => {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("Cylinder {}", i + 1))
+                                    .font(semi(11.0))
+                                    .color(t.ink),
+                            );
+                            if super::ux::icon_button(ui, t, "delete", "Remove this cylinder", false)
+                                .clicked()
+                            {
+                                del = Some(i);
+                            }
+                        });
+                        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, &format!("Base {a}"));
+                                ch |= super::lib_form::num_edit_in(ui, &mut base[k], "mm", "", Some(110.0));
+                            });
+                        }
+                        ui.horizontal(|ui| {
+                            label_w(ui, t, "Axis");
+                            for x in axis.iter_mut() {
+                                ch |= ui
+                                    .add_sized(
+                                        [52.0, 20.0],
+                                        egui::DragValue::new(x).speed(0.01).max_decimals(3),
+                                    )
+                                    .changed();
+                            }
+                        });
+                        for (w, v) in [("Radius", r), ("Height", h)] {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, w);
+                                ch |= super::lib_form::num_edit_in(ui, v, "mm", "", Some(110.0));
+                            });
+                        }
+                    }
+                    Prim::OBox { o, axes, size } => {
+                        // an oriented box (a fixture's angled block): its corner and sides edited;
+                        // its axes shown, set in the record (they must stay orthonormal)
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("Oriented box {}", i + 1))
+                                    .font(semi(11.0))
+                                    .color(t.ink),
+                            );
+                            if super::ux::icon_button(ui, t, "delete", "Remove this box", false).clicked() {
+                                del = Some(i);
+                            }
+                        });
+                        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, &format!("Corner {a}"));
+                                ch |= super::lib_form::num_edit_in(ui, &mut o[k], "mm", "", Some(110.0));
+                            });
+                        }
+                        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, &format!("Side {a}"));
+                                ch |= super::lib_form::num_edit_in(ui, &mut size[k], "mm", "", Some(110.0));
+                            });
+                        }
+                        ui.label(small(t, format!("Axes {axes:?} (set in the record)")));
                     }
                 }
-                Prim::Cyl { base, axis, r, h } => {
-                    ui.label(small(t, "cyl base"));
-                    for x in base.iter_mut() {
-                        ch |= ui.add(egui::DragValue::new(x).speed(1.0)).changed();
-                    }
-                    ui.label(small(t, "axis"));
-                    for x in axis.iter_mut() {
-                        ch |= ui.add(egui::DragValue::new(x).speed(0.01)).changed();
-                    }
-                    ui.label(small(t, "r h"));
-                    ch |= ui.add(egui::DragValue::new(r).speed(1.0)).changed();
-                    ch |= ui.add(egui::DragValue::new(h).speed(1.0)).changed();
+            }
+            ui.horizontal(|ui| {
+                if ui.button("+ Add box").clicked() {
+                    add = Some(Prim::Box {
+                        min: [-50.0; 3],
+                        max: [50.0; 3],
+                    });
                 }
-            }
-            if ui.small_button("x").clicked() {
-                del = Some(i);
-            }
+                if ui.button("+ Add cylinder").clicked() {
+                    add = Some(Prim::Cyl {
+                        base: [0.0; 3],
+                        axis: [0.0, 0.0, 1.0],
+                        r: 50.0,
+                        h: 100.0,
+                    });
+                }
+            });
         });
-    }
     if let Some(i) = del {
         b.prims.remove(i);
         ch = true;
     }
-    ui.horizontal(|ui| {
-        if ui.button("+ box").clicked() {
-            b.prims.push(Prim::Box {
-                min: [-50.0; 3],
-                max: [50.0; 3],
-            });
-            ch = true;
-        }
-        if ui.button("+ cylinder").clicked() {
-            b.prims.push(Prim::Cyl {
-                base: [0.0; 3],
-                axis: [0.0, 0.0, 1.0],
-                r: 50.0,
-                h: 100.0,
-            });
-            ch = true;
-        }
-    });
+    if let Some(p) = add {
+        b.prims.push(p);
+        ch = true;
+    }
     // boxes before cylinders: the reader's order
     if ch {
         b.prims.sort_by_key(|p| matches!(p, Prim::Cyl { .. }));
@@ -1744,7 +2991,15 @@ fn jog(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egu
             if i >= st.q.len() {
                 break;
             }
-            let (lo, hi) = (j.range[0].min(j.range[1]), j.range[0].max(j.range[1]));
+            let Some(r) = j.range else {
+                ui.label(
+                    RichText::new(format!("{}: travel UNKNOWN", j.name))
+                        .font(sans(11.0))
+                        .color(t.error),
+                );
+                continue;
+            };
+            let (lo, hi) = (r[0].min(r[1]), r[0].max(r[1]));
             ui.label(RichText::new(&j.name).font(semi(12.0)).color(t.ink));
             let u = if j.ty == JointType::Linear { " mm" } else { "°" };
             // a copy: the slider rounds what it shows, and only a move by the user may change q
@@ -1760,5 +3015,262 @@ fn jog(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egu
     });
     if moved {
         st.jogged();
+    }
+}
+
+/// The docked sheet's Motion section: Home and Check travel, what touches at this pose, then a
+/// row per joint (its name, a slider over its range, the value with its unit).
+fn motion(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let Some(d) = st.def.clone() else { return };
+    let mut moved = false;
+    ui.horizontal(|ui| {
+        let r = ui.button("Home");
+        places.push(("machine:home".into(), r.rect));
+        if r.clicked() {
+            st.q = d.joints.iter().map(|j| j.home).collect();
+            moved = true;
+        }
+        let r = ui.add_enabled(st.problem.is_none(), egui::Button::new("Check travel"));
+        places.push(("machine:check".into(), r.rect));
+        if r.clicked() {
+            st.run_check();
+        }
+    });
+    let (line, col) = if st.problem.is_some() {
+        ("fix the definition to jog and check".to_string(), t.error)
+    } else if st.live.is_empty() {
+        ("No contact at this pose".to_string(), t.success)
+    } else {
+        let s: Vec<String> = st
+            .live
+            .iter()
+            .map(|(a, b, hit)| format!("{a} / {b} {}", if *hit { "touch" } else { "near" }))
+            .collect();
+        (format!("Contact: {}", s.join(", ")), t.error)
+    };
+    ui.label(RichText::new(line).font(sans(11.0)).color(col));
+    let w = (ui.available_width() - 84.0 - 16.0).max(120.0);
+    for (i, j) in d.joints.iter().enumerate() {
+        if i >= st.q.len() {
+            break;
+        }
+        let Some(r) = j.range else {
+            ui.horizontal(|ui| {
+                label_w(ui, t, &j.name);
+                ui.label(RichText::new("travel UNKNOWN").font(sans(11.0)).color(t.error));
+            });
+            continue;
+        };
+        let (lo, hi) = (r[0].min(r[1]), r[0].max(r[1]));
+        ui.horizontal(|ui| {
+            label_w(ui, t, &j.name);
+            ui.spacing_mut().slider_width = (w - 90.0).max(60.0);
+            let u = if j.ty == JointType::Linear { " mm" } else { "°" };
+            // a copy: the slider rounds what it shows, and only a move by the user may change q
+            let mut x = st.q[i];
+            let r = ui.add(egui::Slider::new(&mut x, lo..=hi).suffix(u).max_decimals(3));
+            places.push((format!("machine:jog:{}", j.name), r.rect));
+            if r.changed() && (r.dragged() || r.has_focus() || r.clicked()) {
+                st.q[i] = x;
+                moved = true;
+            }
+        });
+    }
+    if moved {
+        st.jogged();
+    }
+}
+
+fn brake_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let project = st.project.clone();
+    let Some(b) = &mut st.brake else { return };
+    super::machine_brake::library(ui, t, b, project.as_deref(), places);
+    ui.separator();
+    ui.horizontal(|ui| {
+        label_w(ui, t, "Save to");
+        ui.selectable_value(&mut st.level, Level::User, "User");
+        ui.add_enabled_ui(st.project.is_some(), |ui| {
+            ui.selectable_value(&mut st.level, Level::Project, "Project");
+        });
+    });
+    let Some(b) = &mut st.brake else { return };
+    let r = ui.add_enabled(
+        b.cur.is_some(),
+        egui::Button::new(if b.changed { "Save *" } else { "Save" }),
+    );
+    places.push(("brake:save".into(), r.rect));
+    if r.clicked() {
+        b.save(st.level, project.as_deref());
+    }
+    if !b.message.is_empty() {
+        ui.label(RichText::new(&b.message).font(sans(11.0)).color(t.ink2));
+    }
+}
+
+fn brake_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let Some(b) = &mut st.brake else { return };
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Checks").font(semi(12.0)).color(t.ink));
+        let r = ui.add_enabled(b.cur.is_some() && b.problem.is_none(), egui::Button::new("Check"));
+        places.push(("brake:check".into(), r.rect));
+        if r.clicked() {
+            b.check();
+        }
+        let (txt, col) = match &b.problem {
+            Some(p) => (format!("refused: {p}"), t.error),
+            None => (b.message.clone(), t.ink2),
+        };
+        ui.label(RichText::new(txt).font(sans(11.0)).color(col));
+    });
+    ui.label(small(
+        t,
+        "The preview is the record's exact section (forge-brake's) drawn along the bed (over its longest segment, at most four times the section's size); a press: its ram, bed and housing as blocks. Amber: stand-in values for unknown ones.",
+    ));
+}
+
+/// Over a machine's view, while the chosen body is drawn as the user's model: its collision
+/// envelope dashed on top (the model would hide it), and where the model is farthest outside it.
+fn envelope_overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
+    if st.envelope_px.is_empty() {
+        return;
+    }
+    let p = ctx
+        .layer_painter(egui::LayerId::new(
+            egui::Order::Foreground,
+            egui::Id::unique("machine:envelope"),
+        ))
+        .with_clip_rect(v);
+    let col = if st.out_px.is_some() { t.warn } else { t.ink2 };
+    let stroke = egui::Stroke::new(1.5, col);
+    for c in &st.envelope_px {
+        for a in 0..8usize {
+            for bit in [1usize, 2, 4] {
+                if a & bit == 0 {
+                    p.extend(egui::Shape::dashed_line(&[c[a], c[a | bit]], stroke, 6.0, 4.0));
+                }
+            }
+        }
+    }
+    if let Some((at, d)) = st.out_px {
+        p.circle_filled(at, 4.5, t.warn);
+        let text = format!("{d:.1} mm outside the envelope");
+        let g = p.layout_no_wrap(text, sans(11.0), t.ink);
+        let r = egui::Rect::from_min_size(
+            at + vec2(10.0, -g.size().y / 2.0 - 3.0),
+            g.size() + vec2(10.0, 6.0),
+        );
+        p.rect_filled(r, 3.0, t.raised);
+        p.rect_stroke(r, 3.0, egui::Stroke::new(1.0, t.warn), egui::StrokeKind::Inside);
+        p.galley(r.min + vec2(5.0, 3.0), g, t.ink);
+    }
+}
+
+/// Over the view of a library record: the ghosts' labels (what the record does not give), and a
+/// long tool's section to scale with its dimensions (docs/ux/STANDARD.md §4).
+fn overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
+    let p = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::unique("machine:overlay"),
+    ));
+    let p = p.with_clip_rect(v);
+    // the labels in two columns at the view's sides (the side nearer each one's anchor),
+    // stacked down from their anchors so none overlaps another, each with a leader to its anchor
+    let inset_top = st
+        .inset
+        .as_ref()
+        .map(|_| v.bottom() - (v.width().min(v.height()) / 3.0).clamp(140.0, 220.0) - 24.0);
+    let wrap = (v.width() * 0.26).clamp(150.0, 260.0);
+    let mut sides: [Vec<(egui::Pos2, &String)>; 2] = [Vec::new(), Vec::new()];
+    for (at, words) in st.view_labels.iter().filter(|(_, w)| !w.is_empty()) {
+        sides[usize::from(at.x > v.center().x)].push((*at, words));
+    }
+    for (side, list) in sides.iter_mut().enumerate() {
+        list.sort_by(|a, b| a.0.y.total_cmp(&b.0.y));
+        let mut next = v.top() + 44.0;
+        for (at, words) in list.iter() {
+            let g = p.layout(words.to_string(), sans(11.0), t.ink, wrap);
+            let size = g.size() + vec2(12.0, 8.0);
+            let mut y = at.y.max(next) - size.y / 2.0;
+            y = y.max(next);
+            let bottom = if side == 0 {
+                inset_top.unwrap_or(v.bottom() - 12.0)
+            } else {
+                v.bottom() - 12.0
+            };
+            y = y.min(bottom - size.y);
+            let x = if side == 0 {
+                v.left() + 12.0
+            } else {
+                v.right() - 12.0 - size.x
+            };
+            let box_ = egui::Rect::from_min_size(pos2(x, y), size);
+            next = box_.bottom() + 6.0;
+            let foot = if side == 0 {
+                box_.right_center()
+            } else {
+                box_.left_center()
+            };
+            p.line_segment([*at, foot], egui::Stroke::new(1.0, t.ink2.gamma_multiply(0.8)));
+            p.circle_filled(*at, 2.5, t.ink2);
+            p.rect_filled(box_, 4.0, t.surface.gamma_multiply(0.94));
+            p.rect_stroke(
+                box_,
+                4.0,
+                egui::Stroke::new(1.0, t.line),
+                egui::StrokeKind::Inside,
+            );
+            p.galley(box_.min + vec2(6.0, 4.0), g, t.ink);
+        }
+    }
+    if let Some((outline, dims)) = &st.inset {
+        // a corner of the view: a third of its shorter side, 140 to 220 px
+        let side = (v.width().min(v.height()) / 3.0).clamp(140.0, 220.0);
+        let r = egui::Rect::from_min_size(pos2(v.left() + 12.0, v.bottom() - side - 12.0), vec2(side, side));
+        p.rect_filled(r, 6.0, t.surface.gamma_multiply(0.95));
+        p.rect_stroke(r, 6.0, egui::Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
+        p.text(
+            r.min + vec2(10.0, 8.0),
+            egui::Align2::LEFT_TOP,
+            "Section (to scale)",
+            semi(11.0),
+            t.ink,
+        );
+        let area = egui::Rect::from_min_max(
+            r.min + vec2(10.0, 28.0),
+            pos2(r.max.x - 10.0, r.max.y - 18.0 - 15.0 * dims.len() as f32),
+        );
+        let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        for q in outline {
+            lo = [lo[0].min(q[0]), lo[1].min(q[1])];
+            hi = [hi[0].max(q[0]), hi[1].max(q[1])];
+        }
+        if lo[0].is_finite() {
+            let s = (area.width() as f64 / (hi[0] - lo[0]).max(1e-9))
+                .min(area.height() as f64 / (hi[1] - lo[1]).max(1e-9));
+            let c = area.center();
+            let mid = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
+            let pts: Vec<egui::Pos2> = outline
+                .iter()
+                .map(|q| {
+                    pos2(
+                        c.x + ((q[0] - mid[0]) * s) as f32,
+                        c.y - ((q[1] - mid[1]) * s) as f32,
+                    )
+                })
+                .collect();
+            p.add(egui::Shape::closed_line(pts, egui::Stroke::new(1.5, t.ink)));
+        }
+        for (k, (l, val)) in dims.iter().enumerate() {
+            p.text(
+                pos2(
+                    r.left() + 10.0,
+                    r.bottom() - 10.0 - 15.0 * (dims.len() - 1 - k) as f32,
+                ),
+                egui::Align2::LEFT_BOTTOM,
+                format!("{l}  {val}"),
+                sans(11.0),
+                if val == "unknown" { t.error } else { t.ink2 },
+            );
+        }
     }
 }

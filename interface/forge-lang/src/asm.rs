@@ -3299,7 +3299,7 @@ pub struct AsmOut {
     /// The document's wire harnesses, routed on the solved assembly.
     pub harnesses: Vec<crate::harness::HarnessOut>,
     /// With `Options::kin`: the bodies, joints and relations as solved, for an export.
-    pub kin: Option<crate::urdf::Kin>,
+    pub kin: Option<crate::kin::Kin>,
 }
 
 /// A part or subassembly occurrence, as a browser lists it.
@@ -4538,7 +4538,7 @@ pub fn finish(
     }
     if opts.kin {
         let name = |m: &BTreeMap<u64, (String, Span)>, id: u64| m.get(&id).map(|x| x.0.clone());
-        out.kin = Some(crate::urdf::kin_of(
+        out.kin = Some(crate::kin::kin_of(
             live_asm,
             sol,
             &**checker.parts(),

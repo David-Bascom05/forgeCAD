@@ -51,6 +51,24 @@ Expect about 2 min with the Mathlib cache. Post.lean's `step` takes about 45 s.
   B_{r+m} as computed, m = 1e-6, contains the opening (F ⊖ B_r) ⊕ B_r. Not in Lean (hyp). It
   bears only on the label "tool radius", never on G1–G6.
 
+- **H.contact (contact.rs, contact_rev.rs: the closed-form clearance, CAM-3D-FINISH / CURVED-SITES,
+  2026-11-24).** Open in Lean; reviewed by CAM-CORE and CURVED-SITES (no counterexample), tested
+  differentially against the branch and bound and against dense sampling. The steps to prove:
+  (1) sd_K ≤ sd_B for a body B inside a capsule K (outside K by distance monotonicity; inside B
+  by the inscribed ball), with sd_K = dist(core) − ρ; (2) the shell step: distance to a point or
+  a line is 1-Lipschitz, so a set whose distances lie in [d_min, d_max] is at least
+  max(d_min − s_hi, s_lo − d_max, 0) from a shell of radii [s_lo, s_hi]; (3) the tangent-plane
+  lower bound of a convex quadratic over a box (minimum at a corner); (4) the full surface bounds
+  the trimmed patch below (Clear only). Dist2.lean has the metric pieces. Non-finite or
+  overflowing data is refused in the code (no Clear), tested.
+- **H.probe (a probe move's contact window).** In a `PMove::Probe`'s window (Phase::Touch) the
+  stylus ball is exempt against every part and stock face, not only the one probed: a second
+  face (a corner, a wall beside a web) meeting the ball there is certified, though the trigger
+  would come from it (a wrong measurement, not a crash; every other body keeps the clearance).
+  Tightening (CAM-CORE): in the window, hold the ball to the clearance from every face but those
+  whose contact normal opposes the move (n·u < −cos θ). Also assumed: the control stops within
+  `over` of the first trigger (the probe's overtravel spec). Not in Lean (hyp).
+
 ## The vise code (3e8a91d, 0a4c189): done
 
 ForgeCam/Vise.lean adds 7 theorems (41 in all).
@@ -150,6 +168,22 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
     2e-16, on the unaccounted ends), now Undecided; refused either way. Digest re-pinned
     (native = wasm32-wasip1: 0x18f7a4235d47008e).
 
+- **H.post-dialects (open, 2026-11-23, posts/dialects).** `round_trip`/`G6` (Post.lean) model the
+  Fanuc-template printer and reader on the motion subset. Not modelled, so tested only (forge-post
+  `every_dialect_round_trips` and the per-dialect tests, all 11 dialects): the data-driven reader
+  extras (`;` end-of-line comments, the `*` block end, %-header lines, read_g_ignore / read_g_skip
+  incl. decimal G, read_words), the dwell word from the template (G4 F seconds), `sign = always`,
+  `g_digits`, `arc = centre_abs` (an absolute I J block, then G02/G03), `tool_word` (the T block is
+  the tool change), multi-line spindle templates. G6 for the dialects that use them (siemens,
+  heidenhain, pathpilot, mach3, mach4, centroid-cnc12, masso) is UNKNOWN in Lean.
+- The torus about a vertical axis (shadow.rs `Kind::Torus`, CAM-CORE 2026-11-24): the same
+  bound as the cone. `torus_radius` (= `cone_radius` with the radius big + r cos φ) gives the
+  face point's distance from the axis, `axis_gap` the horizontal gap, `cone_factor` the
+  |c x + s y| enclosure. Its cos φ and sin φ over a cell of q are the rational map's interval
+  enclosures (L5). A posted arc whose centre is ε off the axis (rounded words) is covered by the
+  path's own distance range from the axis (`arc_far`, `arc_near`), which already holds every
+  instant within r ± ε.
+
 ## Still to do when asked
 
 1. Done: `dist_region` and the point-in-trim test (Trim.lean).
@@ -167,3 +201,52 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
 2. An executable ℚ(√d) form of the arc candidates, if the L6 tests want one.
 3. Not yet asked for: the character level of G-code (digits and templates), canned-cycle
    expansion in the G6 model, L5 for the checker's intervals, and L4 (Aeneas).
+
+## Proven (LANG-PROOFS for TOOLPATH-QUALITY, 2026-11-24): dropping pocket pass loops (H.dropLoop)
+
+`ops::pocket_in` (cam/quality) leaves out an outer loop L of pass k (stepover s ≤ r) when
+(L ⊕ B_r) ∩ S ⊆ Rₖ₊₁ ⊕ B_r, decided by exact booleans at run time (S the stock's box, Rₖ₊₁ =
+{depth ≥ r + (k+1)s}). `ForgeCam/PocketDrop.lean`:
+
+- `passes_cover_from m`: if r + m·s ≤ depth p and dist q p ≤ r, some pass j ≥ m has a point
+  within r of q (proved directly: q at least that deep takes the level above it towards its
+  nearest outside point, as `passes_cover` does; a shallower q takes level r + m·s towards p).
+- `drop_cover`: for any sets dropped from any passes (`drops k`), if every dropped point's band
+  within S lies in Rₖ₊₁ ⊕ B_r (the run-time test, closed balls), every point of the opening
+  R ∘ B_r inside S is within r of a kept point. Induction on the passes between the covering one
+  and the deepest within reach (depth is 1-Lipschitz: a pass within r of q has j·s ≤ depth q).
+
+H.dropLoop is a theorem now, about the exact sets; that the run-time booleans decide the
+inclusion on the exact offsets (arcs, not polylines) is the op's own claim, checked where it runs.
+
+## 3-axis surfacing (Drop.lean, CAM-3AXIS, 2026-11-24): done
+
+The checker of drop.rs (the tool's column, research/cam/phase3.md). 10 theorems, standard axioms.
+- `sd_antitone`, `column_compl_nonempty`, `sd_body_ge_of_column`: a nonempty body inside the
+  column is at least as far from every point as the column, so the column's proven gap holds for
+  the cutter and a shank no wider than it (ops::certify_with).
+- `sd_column_ge_vertical`, `sd_column_ge_radial`: the depth caps gap_move takes.
+- `drop_clear`: a tip above the drop's upper bound keeps the column off the face.
+- `ring_rho_ge`, `ring_bound`, `line_rho_ge`, `line_bound`: spheres, horizontal cylinders and tori
+  about a vertical axis reduce to the vertical plane through the tool's axis (b monotone).
+
+Open: the 1D closed forms' candidates (`disk_drop`, `bowl_drop`, `plane_support`, and `conj`'s
+maximiser ρ* and bound B(λ) for Concave.lean, all L6-tested) contain the
+maximum; the sphere bound S − sd(centre) for a convex column (supporting half-space); each
+cutter lies in its column (`Column::of`, L6-tested); the z-map's soundness; L5.
+
+## A dome cylinder's exact move bound (Concave.lean, CAM-3AXIS, 2026-11-24): done
+
+drop.rs `cyl_chord`, `section`, `Column::sq_convex` (research/cam/phase3.md). 12 theorems, standard
+axioms.
+- `disk_conj`, `disk_conj_at`: √(r² − e²) − λe ≤ r√(1 + λ²), attained at e* = −λr/√(1 + λ²).
+- `top_concave`, `neg_profile_concave`: the disk's top and −b(|u|) (b convex, non-decreasing) are
+  concave, so the cylinder's CL across its axis (their sup-convolution) is.
+- `end_of_outside`, `move_clear_of_outside`, `move_le_unconstrained`: along a line move, a
+  maximiser beyond an end makes that end decide; else the unconstrained maximum bounds it.
+- `end_rho_ge`, `section_mono`, `ball_section`: past the face's end by a, the column's section a
+  off its axis (a ball's is a ball).
+- `superadd`, `profile_superadd`: h = b ∘ √ convex gives b(√(u² + a²)) ≥ b(|u|) + b(a) − b(0).
+
+Open: that `conj` finds the profile's maximiser ρ* and B(λ) (the enumeration over pieces; L6-tested
+in tests/drop_vs_sampling.rs), and L5.

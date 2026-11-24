@@ -19,6 +19,7 @@ cargo build --release --locked --bin forge-parity
 NO_MESHES=1 THREADS=$THREADED sh web/build.sh "$out"
 node web/tests/e2e.cjs "$out"
 node web/tests/idle.cjs "$out"
+node web/tests/cam.cjs "$out"
 node web/tests/nopanic.cjs "$out"
 node web/tests/shade.cjs "$out"
 node web/tests/history.cjs "$out"

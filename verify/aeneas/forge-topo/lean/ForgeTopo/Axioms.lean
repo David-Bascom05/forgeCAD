@@ -3,6 +3,7 @@ import ForgeTopo.Links
 import ForgeTopo.ShellFaces
 import ForgeTopo.Edges
 import ForgeTopo.Euler
+import ForgeTopo.Fans
 
 /-! The refinement theorems rest on the standard axioms only: the build fails otherwise. -/
 
@@ -23,3 +24,6 @@ import ForgeTopo.Euler
 
 /-- info: 'forge_topo.shell_euler_refines' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms forge_topo.shell_euler_refines
+
+/-- info: 'forge_topo.fans_refines' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms forge_topo.fans_refines

@@ -732,6 +732,17 @@ impl Nav {
         true
     }
 
+    /// Straight to `to`, no transition.
+    pub fn jump_to(&mut self, to: Camera) {
+        self.transition = None;
+        self.camera = to;
+    }
+
+    /// Where the camera is going: a transition's end, else where it is.
+    pub fn heading_to(&self) -> Camera {
+        self.transition.as_ref().map_or(self.camera, |t| t.to)
+    }
+
     /// Starts a smooth move to a view; any mouse press or wheel stops it where it is.
     pub fn go_to(&mut self, to: Camera) {
         self.transition = Some(Transition {
@@ -754,6 +765,12 @@ impl Nav {
         to.target = center;
         to.fit_to(radius, self.size.0, self.size.1);
         self.go_to(to);
+    }
+
+    /// Cut to a view (no move from the one before): a subject framed on entering.
+    pub fn cut_to(&mut self, c: Camera) {
+        self.transition = None;
+        self.camera = c;
     }
 
     /// The opening view of everything.

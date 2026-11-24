@@ -51,6 +51,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bend-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-brake",
+ "forge-dirs",
+ "forge-lang",
+]
+
+[[package]]
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
@@ -71,8 +81,19 @@ name = "forge-brake"
 version = "0.1.0"
 dependencies = [
  "forge-math",
+ "forge-mesh",
  "forge-ops",
  "forge-sheet",
+ "forge-vendor",
+]
+
+[[package]]
+name = "forge-brake-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-brake",
+ "forge-library",
+ "forge-vendor",
 ]
 
 [[package]]
@@ -85,6 +106,18 @@ dependencies = [
  "forge-post",
  "forge-tooling",
  "forge-topo",
+]
+
+[[package]]
+name = "forge-cam-3d"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
 ]
 
 [[package]]
@@ -105,15 +138,34 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-cam",
+ "forge-cam-3d",
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
+ "forge-library",
  "forge-machine",
+ "forge-material",
  "forge-math",
  "forge-model",
  "forge-post",
  "forge-sketch",
  "forge-tooling",
+]
+
+[[package]]
+name = "forge-cam-quality"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-cam-lang",
+ "forge-lang",
+ "forge-machine",
+ "forge-math",
+ "forge-mesh",
+ "forge-post",
+ "forge-tooling",
+ "forge-turn-lang",
 ]
 
 [[package]]
@@ -135,6 +187,8 @@ name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-bend-lang",
+ "forge-cam-import",
  "forge-cam-lang",
  "forge-dirs",
  "forge-geom",
@@ -148,8 +202,11 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-step",
+ "forge-tooling-builder",
  "forge-topo",
  "forge-turn-lang",
+ "forge-urdf",
+ "forge-workholding-builder",
 ]
 
 [[package]]
@@ -318,9 +375,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-library"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+]
+
+[[package]]
 name = "forge-machine"
 version = "0.1.0"
 dependencies = [
+ "forge-machine-core",
  "forge-math",
  "forge-post",
  "forge-tooling",
@@ -331,11 +396,16 @@ name = "forge-machine-builder"
 version = "0.1.0"
 dependencies = [
  "forge-dirs",
+ "forge-library",
  "forge-machine",
  "forge-machine-lang",
  "forge-math",
  "forge-tooling",
 ]
+
+[[package]]
+name = "forge-machine-core"
+version = "0.1.0"
 
 [[package]]
 name = "forge-machine-lang"
@@ -431,6 +501,22 @@ version = "0.1.0"
 dependencies = [
  "forge-cam-geom",
  "forge-tooling",
+]
+
+[[package]]
+name = "forge-probe"
+version = "0.1.0"
+dependencies = [
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-probe-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-library",
+ "forge-machine",
+ "forge-probe",
 ]
 
 [[package]]
@@ -550,6 +636,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-tooling-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-topo"
 version = "0.1.0"
 dependencies = [
@@ -583,6 +679,7 @@ version = "0.1.0"
 dependencies = [
  "forge-cam-geom",
  "forge-geom",
+ "forge-machine",
  "forge-math",
  "forge-ops",
  "forge-post",
@@ -596,13 +693,28 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-cam-geom",
+ "forge-dirs",
  "forge-lang",
+ "forge-tooling",
  "forge-turn",
 ]
 
 [[package]]
 name = "forge-units"
 version = "0.1.0"
+
+[[package]]
+name = "forge-urdf"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-asm",
+ "forge-lang",
+ "forge-material",
+ "forge-math",
+ "forge-mesh",
+ "forge-topo",
+]
 
 [[package]]
 name = "forge-vendor"
@@ -619,6 +731,29 @@ version = "0.1.0"
 dependencies = [
  "forge-math",
  "forge-ops",
+]
+
+[[package]]
+name = "forge-workholding"
+version = "0.1.0"
+dependencies = [
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-dirs",
+ "forge-lang",
+ "forge-math",
+ "forge-mesh",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-workholding-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-workholding",
 ]
 
 [[package]]

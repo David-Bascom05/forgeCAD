@@ -10,6 +10,10 @@
 use forge_geom::Surface;
 use forge_mesh::{Quality, tessellate};
 use forge_model::adversarial::{canonical, degenerate_parts, families};
+
+// coverage group 5's families (one source, in the exact-fuzz crate)
+#[path = "../../../verify/forge-exact/fuzz/src/apexfam.rs"]
+mod apexfam;
 use forge_model::{Part, fillets, suite};
 
 fn corpus() -> Vec<(String, Part)> {
@@ -20,7 +24,7 @@ fn corpus() -> Vec<(String, Part)> {
     for s in 1..=12u64 {
         parts.push((format!("fuzz {s}"), suite::fuzz(s, 80)));
     }
-    for (fam, g) in families() {
+    for (fam, g) in families().into_iter().chain(apexfam::families()) {
         for s in 0..4 {
             parts.push((format!("{fam}/{s}"), canonical(&g(s))));
         }

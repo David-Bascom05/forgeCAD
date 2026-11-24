@@ -5,6 +5,10 @@ name = "linuxcnc"
 extension = "ngc"
 decimals = 4
 feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
 point = "never"
 program_open = ["%", "({title})"]
 program_close = ["M2", "%"]
@@ -13,7 +17,7 @@ comment_strip = "()"
 line_numbers = false
 line_start = 10
 line_step = 10
-safe_start = ["G17 G21 G40 G49 G80 G90 G94", "G64 P0.01"]
+safe_start = ["G17 {units} G40 G49 G80 G90 G94", "G64 P0.01"]
 tool_change = ["T{t} M6"]
 length_comp = "G43 H{h}"
 spindle_cw = "S{rpm} M3"
@@ -39,3 +43,65 @@ cycle_cancel = "G80"
 source = "forgecad, restated from NIST RS274NGC v3 and the LinuxCNC G-code reference"
 taken = "2026-11-23"
 note = "verify with your configuration"
+# cutter radius compensation (G41/G42 D = the tool number whose tool-table DIAMETER is the
+# offset; in wear mode that entry holds 2 x the wear, not the tool's size: the op's reply says so).
+# The reference pages do not state the corner behaviour; LinuxCNC's interpreter does, in its own
+# documented source (cited below, release v2.9.9): an arc about an outside corner, the entry move
+# ending perpendicular to itself, turns within 0.05 rad joined straight
+comp_left = "G41 D{d}"
+comp_right = "G42 D{d}"
+comp_off = "G40"
+comp_corner = "arc"
+comp_entry = "perpendicular"
+comp_corner_tolerance = 0.05
+# probe (skip) move: straight probe toward the point, error if it is reached untriggered
+probe_move = "G38.2 X{x} Y{y} Z{z} F{f}"
+
+[[dialect.cite]]
+key = "comp_left"
+source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
+taken = "2026-11-24"
+where = "LinuxCNC G-code reference, 26. G41, G42 Cutter Compensation"
+note = "\"G41 <D-> (left of programmed path)\"; \"D - tool number\"; \"The lead in move must be at least as long as the tool radius. The lead in move can be a rapid move.\" (verified against the live page by CAM-MACHINE, 2026-11-24)"
+
+[[dialect.cite]]
+key = "comp_right"
+source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
+taken = "2026-11-24"
+where = "LinuxCNC G-code reference, 26. G41, G42 Cutter Compensation"
+note = "\"G42 <D-> (right of programmed path)\"; \"D - tool number\" (verified against the live page by CAM-MACHINE, 2026-11-24)"
+
+[[dialect.cite]]
+key = "comp_off"
+source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
+taken = "2026-11-24"
+where = "LinuxCNC G-code reference, 25. G40 Compensation Off; tool-compensation.html 4.1.2 Programming Entry Moves"
+note = "§25: \"If tool compensation was on the next move must be a linear move and longer than the tool diameter.\" §4.1.2: \"The minimum length is the cutter radius.\" (verified against the live pages, 2026-11-24)"
+
+[[dialect.cite]]
+key = "comp_corner"
+source = "https://github.com/LinuxCNC/linuxcnc/blob/v2.9.9/src/emc/rs274ngc/interp_convert.cc"
+taken = "2026-11-24"
+where = "LinuxCNC v2.9.9 (tag 770865c5), src/emc/rs274ngc/interp_convert.cc: convert_straight_comp2 (its documentation: '3. If there is a convex corner, insert an arc to go around the corner'; the arc about the last programmed point, radius the cutter radius; on G0 a straight traverse instead) and convert_arc_comp2 ('an arc to go around a convex corner'); a concave corner: the previous move's end moved back to where the tool meets both (line to line: radius / tan(half the corner)); the manual (tool-compensation.html 4) says only that an outside corner's move goes 'to the end point of the compensated cut line' and an inside one 'will stop short', and its Figure 4 draws the arcs"
+note = "read and restated by CAM-MACHINE (master @65f74679 the same but for type refactors); not tested on a control"
+
+[[dialect.cite]]
+key = "comp_entry"
+source = "https://github.com/LinuxCNC/linuxcnc/blob/v2.9.9/src/emc/rs274ngc/interp_convert.cc"
+taken = "2026-11-24"
+where = "LinuxCNC v2.9.9, interp_convert.cc: convert_straight_comp1 (the first move under compensation: its end displaced by the radius perpendicular to the move's own direction, to the side; an error unless the move is longer than the radius); convert_cutter_compensation_off (G40: the last compensated move ends where it stands; the next move must be straight, from there to the programmed point)"
+note = "unlike SINUMERIK NORM, perpendicular to the entry move, not to the next block: the entry and the first contour block meet at a corner, handled as any other. The manual's G40 note that the move after it must exceed the tool diameter is not checked in this file"
+
+[[dialect.cite]]
+key = "comp_corner_tolerance"
+source = "https://github.com/LinuxCNC/linuxcnc/blob/v2.9.9/src/emc/rs274ngc/interp_internal.hh"
+taken = "2026-11-24"
+where = "LinuxCNC v2.9.9, interp_internal.hh: #define TOLERANCE_CONCAVE_CORNER 0.05 (radians), used by convert_straight_comp2 / convert_arc_comp2: a turn within it gets neither an arc nor a trim"
+note = "the comment in interp_convert.cc says 0.01 radian; the constant is 0.05 in v2.9.9 and master"
+
+[[dialect.cite]]
+key = "probe_move"
+source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
+taken = "2026-11-24"
+where = "LinuxCNC G-code reference, G38.n Straight Probe"
+note = "G38.2: probe toward workpiece, stop on contact, signal error if failure; the axis words define the destination, at least one is used; the controlled point moves in a straight line at the current feed rate; #5061-#5069 hold the trip point in the current work coordinates and #5070 is 1 on success (read by PROBING, 2026-11-24)"

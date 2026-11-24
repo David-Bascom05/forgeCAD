@@ -2,6 +2,7 @@
 // storage.js. Served by `forgecad web DIR`, the project is DIR on that machine; served as static
 // files, it is kept in this browser (OPFS, else IndexedDB), with import and export.
 //   ?open=PATH       the project file to open first
+//   ?env=NAME        the environment to open it in (thermoform, bendsim, render, ...: shell/env)
 //   ?project=NAME    the browser-kept project (default "default")
 //   ?token=T         `forgecad web`'s token, when it was started with one (kept for the tab)
 //   ?storage=memory  nothing kept (tests)
@@ -153,6 +154,32 @@ if (store) {
 window.forge_pick = openDialog;
 // File > Export STL / 3MF / OBJ: the file the app made, to the browser's downloads
 window.forge_download = (name, bytes) => download(name, new Blob([bytes]));
+// Files the app exports (NC programs, a setup sheet): the browser's save picker where it has one
+// (and the page may use it: a save needs the user's click, so it falls back when refused), else a
+// download; several go in one zip. window.forge_exported says what was saved last.
+window.forge_export = async (json) => {
+  const { name, files } = JSON.parse(json);
+  const enc = new TextEncoder();
+  const one = files.length === 1;
+  const fname = one ? files[0].path : name;
+  const blob = one
+    ? new Blob([enc.encode(files[0].text)], { type: "text/plain" })
+    : zip(files.map((f) => ({ path: f.path, bytes: enc.encode(f.text) })));
+  if (window.showSaveFilePicker && !window.FORGE_DOWNLOAD_ONLY) {
+    try {
+      const h = await window.showSaveFilePicker({ suggestedName: fname });
+      const w = await h.createWritable();
+      await w.write(blob);
+      await w.close();
+      window.forge_exported = h.name;
+      return;
+    } catch (e) {
+      if (e.name === "AbortError") return;
+    }
+  }
+  download(fname, blob);
+  window.forge_exported = fname;
+};
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
   if (n) fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);
@@ -162,7 +189,10 @@ const asked = q.get("open");
 // (hundreds of them took a round trip each before it showed)
 await Promise.all([home?.load(), asked && mirror?.loadOne(cleanPath(asked))]);
 // ?noapp: the files and the kernel only, no canvas (the parity test)
-if (!q.has("noapp")) fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
+if (!q.has("noapp")) {
+  fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
+  if (q.get("env")) fc.app_env(q.get("env"));
+}
 say("started");
 const loaded = (async () => {
   await mirror?.load();

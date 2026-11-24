@@ -1,0 +1,6919 @@
+{
+ "vendor": "YG-1",
+ "blocked": [],
+ "records": [
+  {
+   "kind": "drill",
+   "id": "DH423030",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 3.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 3.0 / Decimal .1181"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 6 (no unit printed)"
+    },
+    "lcf": {
+     "v": 20.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 20 (no unit printed)"
+    },
+    "oal": {
+     "v": 62.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 62 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 13000,
+      "unit": "rpm",
+      "stated": "N 13000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 11000,
+      "unit": "rpm",
+      "stated": "N 11000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 21000,
+      "unit": "rpm",
+      "stated": "N 21000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 14000,
+      "unit": "rpm",
+      "stated": "N 14000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423040",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 4.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 4.0 / Decimal .1575"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 6 (no unit printed)"
+    },
+    "lcf": {
+     "v": 24.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 24 (no unit printed)"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 66 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 9500,
+      "unit": "rpm",
+      "stated": "N 9500 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 8400,
+      "unit": "rpm",
+      "stated": "N 8400 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 16000,
+      "unit": "rpm",
+      "stated": "N 16000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 10500,
+      "unit": "rpm",
+      "stated": "N 10500 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423050",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 5.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 5.0 / Decimal .1969"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 6 (no unit printed)"
+    },
+    "lcf": {
+     "v": 28.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 28 (no unit printed)"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 66 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 7600,
+      "unit": "rpm",
+      "stated": "N 7600 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 6700,
+      "unit": "rpm",
+      "stated": "N 6700 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 13000,
+      "unit": "rpm",
+      "stated": "N 13000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 8300,
+      "unit": "rpm",
+      "stated": "N 8300 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423060",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 6.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 6.0 / Decimal .2362"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 6 (no unit printed)"
+    },
+    "lcf": {
+     "v": 28.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 28 (no unit printed)"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 66 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 6400,
+      "unit": "rpm",
+      "stated": "N 6400 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 5600,
+      "unit": "rpm",
+      "stated": "N 5600 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 11000,
+      "unit": "rpm",
+      "stated": "N 11000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 6900,
+      "unit": "rpm",
+      "stated": "N 6900 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423016F",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 6.350 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 6.350 / Fractional 1/4 / Decimal .2500"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 34.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 34 (no unit printed)"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 79 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423006L",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 6.527 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.527,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 6.527 / Letter F / Decimal .2570"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 34.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 34 (no unit printed)"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 79 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423068",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 6.8 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.8,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 6.8 / Decimal .2677"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 34.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 34 (no unit printed)"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 79 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423020F",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 7.938 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.938,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 7.938 / Fractional 5/16 / Decimal .3125"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 41.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 41 (no unit printed)"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 79 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423080",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 8.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 8.0 / Decimal .3150"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 41.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 41 (no unit printed)"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 79 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 4800,
+      "unit": "rpm",
+      "stated": "N 4800 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 4200,
+      "unit": "rpm",
+      "stated": "N 4200 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 8000,
+      "unit": "rpm",
+      "stated": "N 8000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 5200,
+      "unit": "rpm",
+      "stated": "N 5200 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423085",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 8.5 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.5,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 8.5 / Decimal .3346"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 10 (no unit printed)"
+    },
+    "lcf": {
+     "v": 47.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 47 (no unit printed)"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 89 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423024F",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 9.525 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 9.525 / Fractional 3/8 / Decimal .3750"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 10 (no unit printed)"
+    },
+    "lcf": {
+     "v": 47.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 47 (no unit printed)"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 89 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423100",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 10.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 10.0 / Decimal .3937"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 10 (no unit printed)"
+    },
+    "lcf": {
+     "v": 47.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 47 (no unit printed)"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 89 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 3800,
+      "unit": "rpm",
+      "stated": "N 3800 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 3350,
+      "unit": "rpm",
+      "stated": "N 3350 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 6400,
+      "unit": "rpm",
+      "stated": "N 6400 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 4150,
+      "unit": "rpm",
+      "stated": "N 4150 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423102",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 10.2 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.2,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 10.2 / Decimal .4016"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 12 (no unit printed)"
+    },
+    "lcf": {
+     "v": 55.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 55 (no unit printed)"
+    },
+    "oal": {
+     "v": 102.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 102 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH423120",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) STUB DH423 SERIES, 12.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=624",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 12.0 / Decimal .4724"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 12 (no unit printed)"
+    },
+    "lcf": {
+     "v": 55.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 55 (no unit printed)"
+    },
+    "oal": {
+     "v": 102.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 102 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/11.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 3200,
+      "unit": "rpm",
+      "stated": "N 3200 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 2800,
+      "unit": "rpm",
+      "stated": "N 2800 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 5300,
+      "unit": "rpm",
+      "stated": "N 5300 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 3450,
+      "unit": "rpm",
+      "stated": "N 3450 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424030",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 3.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 3.0 / Decimal .1181"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 6 (no unit printed)"
+    },
+    "lcf": {
+     "v": 28.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 28 (no unit printed)"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 66 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 13000,
+      "unit": "rpm",
+      "stated": "N 13000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 11000,
+      "unit": "rpm",
+      "stated": "N 11000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 21000,
+      "unit": "rpm",
+      "stated": "N 21000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 14000,
+      "unit": "rpm",
+      "stated": "N 14000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424040",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 4.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 4.0 / Decimal .1575"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 6 (no unit printed)"
+    },
+    "lcf": {
+     "v": 36.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 36 (no unit printed)"
+    },
+    "oal": {
+     "v": 74.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 74 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 9500,
+      "unit": "rpm",
+      "stated": "N 9500 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 8400,
+      "unit": "rpm",
+      "stated": "N 8400 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 16000,
+      "unit": "rpm",
+      "stated": "N 16000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 10500,
+      "unit": "rpm",
+      "stated": "N 10500 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424050",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 5.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 5.0 / Decimal .1969"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 6 (no unit printed)"
+    },
+    "lcf": {
+     "v": 44.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 44 (no unit printed)"
+    },
+    "oal": {
+     "v": 82.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 82 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 7600,
+      "unit": "rpm",
+      "stated": "N 7600 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 6700,
+      "unit": "rpm",
+      "stated": "N 6700 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 13000,
+      "unit": "rpm",
+      "stated": "N 13000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 8300,
+      "unit": "rpm",
+      "stated": "N 8300 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424060",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 6.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 6.0 / Decimal .2362"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 6 (no unit printed)"
+    },
+    "lcf": {
+     "v": 44.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 44 (no unit printed)"
+    },
+    "oal": {
+     "v": 82.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 82 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 6400,
+      "unit": "rpm",
+      "stated": "N 6400 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 5600,
+      "unit": "rpm",
+      "stated": "N 5600 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 11000,
+      "unit": "rpm",
+      "stated": "N 11000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 6900,
+      "unit": "rpm",
+      "stated": "N 6900 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424016F",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 6.35 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 6.35 / Fractional 1/4 / Decimal .2500"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 53.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 53 (no unit printed)"
+    },
+    "oal": {
+     "v": 91.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 91 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424006L",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 6.527 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.527,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 6.527 / Letter F / Decimal .2570"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 53.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 53 (no unit printed)"
+    },
+    "oal": {
+     "v": 91.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 91 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424068",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 6.8 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.8,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 6.8 / Decimal .2677"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 53.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 53 (no unit printed)"
+    },
+    "oal": {
+     "v": 91.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 91 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424020F",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 7.938 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.938,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 7.938 / Fractional 5/16 / Decimal .3125"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 53.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 53 (no unit printed)"
+    },
+    "oal": {
+     "v": 91.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 91 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424080",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 8.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 8.0 / Decimal .3150"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 8 (no unit printed)"
+    },
+    "lcf": {
+     "v": 53.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 53 (no unit printed)"
+    },
+    "oal": {
+     "v": 91.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 91 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 4800,
+      "unit": "rpm",
+      "stated": "N 4800 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 4200,
+      "unit": "rpm",
+      "stated": "N 4200 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 8000,
+      "unit": "rpm",
+      "stated": "N 8000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 5200,
+      "unit": "rpm",
+      "stated": "N 5200 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424085",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 8.5 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.5,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 8.5 / Decimal .3346"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 10 (no unit printed)"
+    },
+    "lcf": {
+     "v": 61.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 61 (no unit printed)"
+    },
+    "oal": {
+     "v": 103.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 103 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424024F",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 9.525 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 9.525 / Fractional 3/8 / Decimal .3750"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 10 (no unit printed)"
+    },
+    "lcf": {
+     "v": 61.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 61 (no unit printed)"
+    },
+    "oal": {
+     "v": 103.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 103 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424100",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 10.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 10.0 / Decimal .3937"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 10 (no unit printed)"
+    },
+    "lcf": {
+     "v": 61.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 61 (no unit printed)"
+    },
+    "oal": {
+     "v": 103.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 103 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 3800,
+      "unit": "rpm",
+      "stated": "N 3800 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 3350,
+      "unit": "rpm",
+      "stated": "N 3350 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 6400,
+      "unit": "rpm",
+      "stated": "N 6400 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 4150,
+      "unit": "rpm",
+      "stated": "N 4150 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424102",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 10.2 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.2,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 10.2 / Decimal .4016"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 12 (no unit printed)"
+    },
+    "lcf": {
+     "v": 71.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 71 (no unit printed)"
+    },
+    "oal": {
+     "v": 118.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 118 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH424120",
+   "name": "SOLID CARBIDE DREAM DRILLS-GENERAL (without COOLANT HOLES) LONG DH424 SERIES, 12.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=625",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Drill Diameter D1 Metric 12.0 / Decimal .4724"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 12 (no unit printed)"
+    },
+    "lcf": {
+     "v": 71.0,
+     "unit": "unstated",
+     "stated": "Flute Length L1 71 (no unit printed)"
+    },
+    "oal": {
+     "v": 118.0,
+     "unit": "unstated",
+     "stated": "Overall Length L2 118 (no unit printed)"
+    },
+    "coating": {
+     "v": "TiAIN",
+     "unit": "text",
+     "stated": "column header \"TiAIN\" above the EDP column (as printed)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "SOLID CARBIDE (series title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6537",
+     "unit": "text",
+     "stated": "DIN 6537 icon (https://www.yg1usa.com/itemimage/13.jpg)"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "m7",
+     "unit": "text",
+     "stated": "m7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "(without COOLANT HOLES)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 3200,
+      "unit": "rpm",
+      "stated": "N 3200 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 2800,
+      "unit": "rpm",
+      "stated": "N 2800 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 5300,
+      "unit": "rpm",
+      "stated": "N 5300 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 3450,
+      "unit": "rpm",
+      "stated": "N 3450 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH424(5xD) : Feed 85%\" -- fn shown is the table value before that reduction"
+    }
+   ],
+   "unknown": [
+    "nof",
+    "helix"
+   ],
+   "notes": "Length/shank columns carry no unit on the page."
+  },
+  {
+   "kind": "drill",
+   "id": "DH404030",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 3.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 3.0 / Inch 0.1181"
+    },
+    "lcf": {
+     "v": 16.0,
+     "unit": "unstated",
+     "stated": "Flute Length 16 (no unit printed)"
+    },
+    "oal": {
+     "v": 46.0,
+     "unit": "unstated",
+     "stated": "Overall Length 46 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 13000,
+      "unit": "rpm",
+      "stated": "N 13000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 11000,
+      "unit": "rpm",
+      "stated": "N 11000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 21000,
+      "unit": "rpm",
+      "stated": "N 21000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.13,
+      "unit": "mm/rev",
+      "stated": "S 0.13 (S= feed rate (mm/rev.)) at Metric(mm) 3.0"
+     },
+     "n": {
+      "v": 14000,
+      "unit": "rpm",
+      "stated": "N 14000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DH404040",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 4.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 4.0 / Inch 0.1575"
+    },
+    "lcf": {
+     "v": 22.0,
+     "unit": "unstated",
+     "stated": "Flute Length 22 (no unit printed)"
+    },
+    "oal": {
+     "v": 55.0,
+     "unit": "unstated",
+     "stated": "Overall Length 55 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 9500,
+      "unit": "rpm",
+      "stated": "N 9500 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 8400,
+      "unit": "rpm",
+      "stated": "N 8400 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 16000,
+      "unit": "rpm",
+      "stated": "N 16000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.14,
+      "unit": "mm/rev",
+      "stated": "S 0.14 (S= feed rate (mm/rev.)) at Metric(mm) 4.0"
+     },
+     "n": {
+      "v": 10500,
+      "unit": "rpm",
+      "stated": "N 10500 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DH404050",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 5.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 5.0 / Inch 0.1969"
+    },
+    "lcf": {
+     "v": 26.0,
+     "unit": "unstated",
+     "stated": "Flute Length 26 (no unit printed)"
+    },
+    "oal": {
+     "v": 62.0,
+     "unit": "unstated",
+     "stated": "Overall Length 62 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 7600,
+      "unit": "rpm",
+      "stated": "N 7600 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 6700,
+      "unit": "rpm",
+      "stated": "N 6700 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 13000,
+      "unit": "rpm",
+      "stated": "N 13000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.15,
+      "unit": "mm/rev",
+      "stated": "S 0.15 (S= feed rate (mm/rev.)) at Metric(mm) 5.0"
+     },
+     "n": {
+      "v": 8300,
+      "unit": "rpm",
+      "stated": "N 8300 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DH404060",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 6.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 6.0 / Inch 0.2362"
+    },
+    "lcf": {
+     "v": 28.0,
+     "unit": "unstated",
+     "stated": "Flute Length 28 (no unit printed)"
+    },
+    "oal": {
+     "v": 66.0,
+     "unit": "unstated",
+     "stated": "Overall Length 66 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 6400,
+      "unit": "rpm",
+      "stated": "N 6400 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 5600,
+      "unit": "rpm",
+      "stated": "N 5600 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 11000,
+      "unit": "rpm",
+      "stated": "N 11000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.17,
+      "unit": "mm/rev",
+      "stated": "S 0.17 (S= feed rate (mm/rev.)) at Metric(mm) 6.0"
+     },
+     "n": {
+      "v": 6900,
+      "unit": "rpm",
+      "stated": "N 6900 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DH404068",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 6.8 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.8,
+     "unit": "mm",
+     "stated": "Diameter Metric 6.8 / Inch 0.2677"
+    },
+    "lcf": {
+     "v": 34.0,
+     "unit": "unstated",
+     "stated": "Flute Length 34 (no unit printed)"
+    },
+    "oal": {
+     "v": 74.0,
+     "unit": "unstated",
+     "stated": "Overall Length 74 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DH404080",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 8.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 8.0 / Inch 0.3150"
+    },
+    "lcf": {
+     "v": 37.0,
+     "unit": "unstated",
+     "stated": "Flute Length 37 (no unit printed)"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "unstated",
+     "stated": "Overall Length 79 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 4800,
+      "unit": "rpm",
+      "stated": "N 4800 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 4200,
+      "unit": "rpm",
+      "stated": "N 4200 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 8000,
+      "unit": "rpm",
+      "stated": "N 8000 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.21,
+      "unit": "mm/rev",
+      "stated": "S 0.21 (S= feed rate (mm/rev.)) at Metric(mm) 8.0"
+     },
+     "n": {
+      "v": 5200,
+      "unit": "rpm",
+      "stated": "N 5200 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DH404085",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 8.5 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.5,
+     "unit": "mm",
+     "stated": "Diameter Metric 8.5 / Inch 0.3346"
+    },
+    "lcf": {
+     "v": 37.0,
+     "unit": "unstated",
+     "stated": "Flute Length 37 (no unit printed)"
+    },
+    "oal": {
+     "v": 79.0,
+     "unit": "unstated",
+     "stated": "Overall Length 79 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DH404100",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 10.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 10.0 / Inch 0.3937"
+    },
+    "lcf": {
+     "v": 43.0,
+     "unit": "unstated",
+     "stated": "Flute Length 43 (no unit printed)"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "unstated",
+     "stated": "Overall Length 89 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 3800,
+      "unit": "rpm",
+      "stated": "N 3800 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 3350,
+      "unit": "rpm",
+      "stated": "N 3350 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 6400,
+      "unit": "rpm",
+      "stated": "N 6400 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.25,
+      "unit": "mm/rev",
+      "stated": "S 0.25 (S= feed rate (mm/rev.)) at Metric(mm) 10.0"
+     },
+     "n": {
+      "v": 4150,
+      "unit": "rpm",
+      "stated": "N 4150 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DH404102",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 10.2 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.2,
+     "unit": "mm",
+     "stated": "Diameter Metric 10.2 / Inch 0.4016"
+    },
+    "lcf": {
+     "v": 43.0,
+     "unit": "unstated",
+     "stated": "Flute Length 43 (no unit printed)"
+    },
+    "oal": {
+     "v": 89.0,
+     "unit": "unstated",
+     "stated": "Overall Length 89 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DH404120",
+   "name": "CARBIDE DRILL SHORT SERIES without COOLANT HOLES (3xD)- DH404 SERIES - (Metric), 12.0 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=11&sub_sub_id=20",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 12.0 / Inch 0.4724"
+    },
+    "lcf": {
+     "v": 51.0,
+     "unit": "unstated",
+     "stated": "Flute Length 51 (no unit printed)"
+    },
+    "oal": {
+     "v": 102.0,
+     "unit": "unstated",
+     "stated": "Overall Length 102 (no unit printed)"
+    },
+    "material": {
+     "v": "carbide",
+     "unit": "text",
+     "stated": "CARBIDE DRILL SHORT SERIES (title); \"MG\" icon"
+    },
+    "sig": {
+     "v": 140,
+     "unit": "deg",
+     "stated": "140° icon (https://www.yg1usa.com/itemimage/drill/50-2.jpg)"
+    },
+    "standard": {
+     "v": "DIN 6539",
+     "unit": "text",
+     "stated": "DIN 6539 icon"
+    },
+    "shank_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "h6 icon"
+    },
+    "dc_tol": {
+     "v": "h7",
+     "unit": "text",
+     "stated": "h7 icon"
+    },
+    "coolant": {
+     "v": "without coolant holes",
+     "unit": "text",
+     "stated": "without COOLANT HOLES (3xD)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P",
+     "material_stated": "NON-ALLOY STEELS < HRc 20",
+     "vc": {
+      "v": [
+       39.62,
+       121.92
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 130 ~ 400 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 3200,
+      "unit": "rpm",
+      "stated": "N 3200 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "P",
+     "material_stated": "ALLOY STEELS > HRc 20",
+     "vc": {
+      "v": [
+       35.05,
+       103.63
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 115 ~ 340 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 2800,
+      "unit": "rpm",
+      "stated": "N 2800 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "SOFT GREY CAST IRON < 240 BHN",
+     "vc": {
+      "v": [
+       67.06,
+       198.12
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 220 ~ 650 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 5300,
+      "unit": "rpm",
+      "stated": "N 5300 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    },
+    {
+     "iso_group": "K",
+     "material_stated": "HARD GREY CAST IRON < 300 BHN",
+     "vc": {
+      "v": [
+       45.72,
+       131.06
+      ],
+      "unit": "m/min",
+      "stated": "DRILLING SPEED(SFM) 150 ~ 430 ft/min"
+     },
+     "fn_or_fz": {
+      "v": 0.27,
+      "unit": "mm/rev",
+      "stated": "S 0.27 (S= feed rate (mm/rev.)) at Metric(mm) 12.0"
+     },
+     "n": {
+      "v": 3450,
+      "unit": "rpm",
+      "stated": "N 3450 (N = R.P.M)"
+     },
+     "url": "https://www.yg1usa.com/feature/speed_data.asp?img=dh423&name=TECHNICAL%20INFORMATION%20AND%20COOLANT%20RECOMMENDATIONS (image https://www.yg1usa.com/itemimage/dh423.jpg)",
+     "note": "Source: \"DH404(3xD), DH423(3xD) : Feed 100%\""
+    }
+   ],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating",
+    "helix"
+   ]
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195030",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 3 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 3 / Inch 0.1181"
+    },
+    "lcf": {
+     "v": 33.0,
+     "unit": "unstated",
+     "stated": "Flute Length 33 (no unit printed)"
+    },
+    "oal": {
+     "v": 61.0,
+     "unit": "unstated",
+     "stated": "Overall Length 61 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195040",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 4 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 4 / Inch 0.1575"
+    },
+    "lcf": {
+     "v": 43.0,
+     "unit": "unstated",
+     "stated": "Flute Length 43 (no unit printed)"
+    },
+    "oal": {
+     "v": 75.0,
+     "unit": "unstated",
+     "stated": "Overall Length 75 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195050",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 5 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 5 / Inch 0.1969"
+    },
+    "lcf": {
+     "v": 52.0,
+     "unit": "unstated",
+     "stated": "Flute Length 52 (no unit printed)"
+    },
+    "oal": {
+     "v": 86.0,
+     "unit": "unstated",
+     "stated": "Overall Length 86 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195060",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 6 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 6 / Inch 0.2362"
+    },
+    "lcf": {
+     "v": 57.0,
+     "unit": "unstated",
+     "stated": "Flute Length 57 (no unit printed)"
+    },
+    "oal": {
+     "v": 93.0,
+     "unit": "unstated",
+     "stated": "Overall Length 93 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195068",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 6.8 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.8,
+     "unit": "mm",
+     "stated": "Diameter Metric 6.8 / Inch 0.2677"
+    },
+    "lcf": {
+     "v": 69.0,
+     "unit": "unstated",
+     "stated": "Flute Length 69 (no unit printed)"
+    },
+    "oal": {
+     "v": 109.0,
+     "unit": "unstated",
+     "stated": "Overall Length 109 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195080",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 8 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 8 / Inch 0.3150"
+    },
+    "lcf": {
+     "v": 75.0,
+     "unit": "unstated",
+     "stated": "Flute Length 75 (no unit printed)"
+    },
+    "oal": {
+     "v": 117.0,
+     "unit": "unstated",
+     "stated": "Overall Length 117 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195085",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 8.5 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 8.5,
+     "unit": "mm",
+     "stated": "Diameter Metric 8.5 / Inch 0.3346"
+    },
+    "lcf": {
+     "v": 75.0,
+     "unit": "unstated",
+     "stated": "Flute Length 75 (no unit printed)"
+    },
+    "oal": {
+     "v": 117.0,
+     "unit": "unstated",
+     "stated": "Overall Length 117 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195100",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 10 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 10 / Inch 0.3937"
+    },
+    "lcf": {
+     "v": 87.0,
+     "unit": "unstated",
+     "stated": "Flute Length 87 (no unit printed)"
+    },
+    "oal": {
+     "v": 133.0,
+     "unit": "unstated",
+     "stated": "Overall Length 133 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195102",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 10.2 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 10.2,
+     "unit": "mm",
+     "stated": "Diameter Metric 10.2 / Inch 0.4016"
+    },
+    "lcf": {
+     "v": 87.0,
+     "unit": "unstated",
+     "stated": "Flute Length 87 (no unit printed)"
+    },
+    "oal": {
+     "v": 133.0,
+     "unit": "unstated",
+     "stated": "Overall Length 133 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "DLGP195120",
+   "name": "HSS-Co5% STRAIGHT SHANK JOBBER LEGTH - METRIC DLGP195, 12 mm",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=451",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Diameter Metric 12 / Inch 0.4724"
+    },
+    "lcf": {
+     "v": 101.0,
+     "unit": "unstated",
+     "stated": "Flute Length 101 (no unit printed)"
+    },
+    "oal": {
+     "v": 151.0,
+     "unit": "unstated",
+     "stated": "Overall Length 151 (no unit printed)"
+    },
+    "material": {
+     "v": "HSS-Co5%",
+     "unit": "text",
+     "stated": "HSS-Co5% (title); \"HSS Co5\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1.6mm: Normal point, 1.6mm& over: Split point) (https://www.yg1usa.com/itemimage/drill/133-2.jpg)"
+    },
+    "helix": {
+     "v": 33,
+     "unit": "deg",
+     "stated": "≈33° icon"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working area",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working area"
+    },
+    "standard": {
+     "v": "DIN 338",
+     "unit": "text",
+     "stated": "DIN 338 icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof"
+   ],
+   "notes": "Listed under the GOLD-P DRILLS category, but the page image states TiN coating on working area."
+  },
+  {
+   "kind": "drill",
+   "id": "D1GP182016",
+   "name": "HSS(M) STRAIGHT SHANK JOBBER LENGTH, GOLD-P COATED D1GP182, 1/4",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=415",
+   "taken": "2026-11-23",
+   "values": {
+    "material": {
+     "v": "HSS(M)",
+     "unit": "text",
+     "stated": "HSS(M) (title); \"HSS\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1/16: Normal point, 1/16 & over: Split point) (https://www.yg1usa.com/itemimage/drill/124-2.jpg)"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "≈30° icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon / \"OD h8\" column"
+    },
+    "dc": {
+     "v": 0.25,
+     "unit": "unstated",
+     "stated": "Fractional Size 1/4 / Decimal Equivalent 0.25000 (no unit printed; \"(ANSI)\")"
+    },
+    "size_designation": {
+     "v": "1/4",
+     "unit": "text",
+     "stated": "Fractional Size 1/4"
+    },
+    "lcf": {
+     "v": "2 3/4",
+     "unit": "unstated",
+     "stated": "LOC 2 3/4 (no unit printed)"
+    },
+    "oal": {
+     "v": "4",
+     "unit": "unstated",
+     "stated": "OAL 4 (no unit printed)"
+    },
+    "coating": {
+     "v": "Gold-P coated",
+     "unit": "text",
+     "stated": "Gold-P Coated (table heading); image: \"Bright body, TiN coating on working part over. TiN coating on flute length\""
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "standard"
+   ],
+   "notes": "Fraction/letter sizes and LOC/OAL printed without units; mm not derived. Coating wording differs between table heading (Gold-P) and image (TiN)."
+  },
+  {
+   "kind": "drill",
+   "id": "D1GP182020",
+   "name": "HSS(M) STRAIGHT SHANK JOBBER LENGTH, GOLD-P COATED D1GP182, 5/16",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=415",
+   "taken": "2026-11-23",
+   "values": {
+    "material": {
+     "v": "HSS(M)",
+     "unit": "text",
+     "stated": "HSS(M) (title); \"HSS\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1/16: Normal point, 1/16 & over: Split point) (https://www.yg1usa.com/itemimage/drill/124-2.jpg)"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "≈30° icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon / \"OD h8\" column"
+    },
+    "dc": {
+     "v": 0.3125,
+     "unit": "unstated",
+     "stated": "Fractional Size 5/16 / Decimal Equivalent 0.31250 (no unit printed; \"(ANSI)\")"
+    },
+    "size_designation": {
+     "v": "5/16",
+     "unit": "text",
+     "stated": "Fractional Size 5/16"
+    },
+    "lcf": {
+     "v": "3 3/16",
+     "unit": "unstated",
+     "stated": "LOC 3 3/16 (no unit printed)"
+    },
+    "oal": {
+     "v": "4 1/2",
+     "unit": "unstated",
+     "stated": "OAL 4 1/2 (no unit printed)"
+    },
+    "coating": {
+     "v": "Gold-P coated",
+     "unit": "text",
+     "stated": "Gold-P Coated (table heading); image: \"Bright body, TiN coating on working part over. TiN coating on flute length\""
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "standard"
+   ],
+   "notes": "Fraction/letter sizes and LOC/OAL printed without units; mm not derived. Coating wording differs between table heading (Gold-P) and image (TiN)."
+  },
+  {
+   "kind": "drill",
+   "id": "D1GP182024",
+   "name": "HSS(M) STRAIGHT SHANK JOBBER LENGTH, GOLD-P COATED D1GP182, 3/8",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=415",
+   "taken": "2026-11-23",
+   "values": {
+    "material": {
+     "v": "HSS(M)",
+     "unit": "text",
+     "stated": "HSS(M) (title); \"HSS\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1/16: Normal point, 1/16 & over: Split point) (https://www.yg1usa.com/itemimage/drill/124-2.jpg)"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "≈30° icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon / \"OD h8\" column"
+    },
+    "dc": {
+     "v": 0.375,
+     "unit": "unstated",
+     "stated": "Fractional Size 3/8 / Decimal Equivalent 0.37500 (no unit printed; \"(ANSI)\")"
+    },
+    "size_designation": {
+     "v": "3/8",
+     "unit": "text",
+     "stated": "Fractional Size 3/8"
+    },
+    "lcf": {
+     "v": "3 5/8",
+     "unit": "unstated",
+     "stated": "LOC 3 5/8 (no unit printed)"
+    },
+    "oal": {
+     "v": "5",
+     "unit": "unstated",
+     "stated": "OAL 5 (no unit printed)"
+    },
+    "coating": {
+     "v": "Gold-P coated",
+     "unit": "text",
+     "stated": "Gold-P Coated (table heading); image: \"Bright body, TiN coating on working part over. TiN coating on flute length\""
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "standard"
+   ],
+   "notes": "Fraction/letter sizes and LOC/OAL printed without units; mm not derived. Coating wording differs between table heading (Gold-P) and image (TiN)."
+  },
+  {
+   "kind": "drill",
+   "id": "D1GP139106",
+   "name": "HSS(M) STRAIGHT SHANK JOBBER LENGTH, Letter Size / Gold-P Coated (ANSI), F",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=415",
+   "taken": "2026-11-23",
+   "values": {
+    "material": {
+     "v": "HSS(M)",
+     "unit": "text",
+     "stated": "HSS(M) (title); \"HSS\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135° (under 1/16: Normal point, 1/16 & over: Split point) (https://www.yg1usa.com/itemimage/drill/124-2.jpg)"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "≈30° icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon / \"OD h8\" column"
+    },
+    "dc": {
+     "v": 0.257,
+     "unit": "unstated",
+     "stated": "Letter Size F / OD h8 .2570 (no unit printed; \"(ANSI)\")"
+    },
+    "size_designation": {
+     "v": "F",
+     "unit": "text",
+     "stated": "Letter Size F"
+    },
+    "lcf": {
+     "v": "2 7/8",
+     "unit": "unstated",
+     "stated": "LOC 2 7/8 (no unit printed)"
+    },
+    "oal": {
+     "v": "4 1/8",
+     "unit": "unstated",
+     "stated": "OAL 4 1/8 (no unit printed)"
+    },
+    "coating": {
+     "v": "Gold-P coated",
+     "unit": "text",
+     "stated": "Gold-P Coated (table heading); image: \"Bright body, TiN coating on working part over. TiN coating on flute length\""
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "standard"
+   ],
+   "notes": "Fraction/letter sizes and LOC/OAL printed without units; mm not derived. Coating wording differs between table heading (Gold-P) and image (TiN)."
+  },
+  {
+   "kind": "drill",
+   "id": "D1GP138250",
+   "name": "HSS(M) STRAIGHT SHANK JOBBER LENGTH - WIRE GUAGE D1GP138, #7",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=13&sub_sub_id=416",
+   "taken": "2026-11-23",
+   "values": {
+    "material": {
+     "v": "HSS(M)",
+     "unit": "text",
+     "stated": "HSS(M) (title); \"HSS\" icon"
+    },
+    "sig": {
+     "v": 135,
+     "unit": "deg",
+     "stated": "Point Angle : 135°: Split point (Wire gauge size #1~#52: Split point); icons show both 135° and 118°"
+    },
+    "helix": {
+     "v": 30,
+     "unit": "deg",
+     "stated": "≈30° icon"
+    },
+    "dc_tol": {
+     "v": "h8",
+     "unit": "text",
+     "stated": "h8 icon / \"OD h8\" column"
+    },
+    "dc": {
+     "v": 0.201,
+     "unit": "unstated",
+     "stated": "Wire 7 / Diameter 0.2010 (no unit printed)"
+    },
+    "size_designation": {
+     "v": "#7",
+     "unit": "text",
+     "stated": "Wire 7"
+    },
+    "lcf": {
+     "v": "2 7/16",
+     "unit": "unstated",
+     "stated": "LOC 2 7/16 (no unit printed)"
+    },
+    "oal": {
+     "v": "3 5/8",
+     "unit": "unstated",
+     "stated": "OAL 3 5/8 (no unit printed)"
+    },
+    "coating": {
+     "v": "Bright body, TiN coating on working part",
+     "unit": "text",
+     "stated": "Surface treatment : Bright body, TiN coating on working part"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "standard"
+   ]
+  },
+  {
+   "kind": "spot",
+   "id": "0161L",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 90 DEGREE, 1/4",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=353",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "DIAMETER inch 1/4"
+    },
+    "lcf": {
+     "v": 16.9926,
+     "unit": "mm",
+     "stated": "FLUTE LENGTH inch 0.669"
+    },
+    "oal": {
+     "v": 70.104,
+     "unit": "mm",
+     "stated": "OVERALL LENGTH inch 2.76"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "NC Spotting Drills, 8% Cobalt HSS, 90 Degrees"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 / 8% Cobalt HSS"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ],
+   "notes": "Fractional \"1/4\" etc. are under a column headed \"DIAMETER inch\"; mm = fraction x 25.4."
+  },
+  {
+   "kind": "spot",
+   "id": "0201L",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 90 DEGREE, 5/16",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=353",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.9375,
+     "unit": "mm",
+     "stated": "DIAMETER inch 5/16"
+    },
+    "lcf": {
+     "v": 24.9936,
+     "unit": "mm",
+     "stated": "FLUTE LENGTH inch 0.984"
+    },
+    "oal": {
+     "v": 78.994,
+     "unit": "mm",
+     "stated": "OVERALL LENGTH inch 3.11"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "NC Spotting Drills, 8% Cobalt HSS, 90 Degrees"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 / 8% Cobalt HSS"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ],
+   "notes": "Fractional \"1/4\" etc. are under a column headed \"DIAMETER inch\"; mm = fraction x 25.4."
+  },
+  {
+   "kind": "spot",
+   "id": "0241L",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 90 DEGREE, 3/8",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=353",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "DIAMETER inch 3/8"
+    },
+    "lcf": {
+     "v": 21.0058,
+     "unit": "mm",
+     "stated": "FLUTE LENGTH inch 0.827"
+    },
+    "oal": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "OVERALL LENGTH inch 3.50"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "NC Spotting Drills, 8% Cobalt HSS, 90 Degrees"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 / 8% Cobalt HSS"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ],
+   "notes": "Fractional \"1/4\" etc. are under a column headed \"DIAMETER inch\"; mm = fraction x 25.4."
+  },
+  {
+   "kind": "spot",
+   "id": "0321L",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 90 DEGREE, 1/2",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=353",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "DIAMETER inch 1/2"
+    },
+    "lcf": {
+     "v": 24.9936,
+     "unit": "mm",
+     "stated": "FLUTE LENGTH inch 0.984"
+    },
+    "oal": {
+     "v": 102.108,
+     "unit": "mm",
+     "stated": "OVERALL LENGTH inch 4.02"
+    },
+    "sig": {
+     "v": 90,
+     "unit": "deg",
+     "stated": "NC Spotting Drills, 8% Cobalt HSS, 90 Degrees"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 / 8% Cobalt HSS"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ],
+   "notes": "Fractional \"1/4\" etc. are under a column headed \"DIAMETER inch\"; mm = fraction x 25.4."
+  },
+  {
+   "kind": "spot",
+   "id": "2161L",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 120 DEGREE, 1/4",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=353",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "DIAMETER inch 1/4"
+    },
+    "lcf": {
+     "v": 16.9926,
+     "unit": "mm",
+     "stated": "FLUTE LENGTH inch 0.669"
+    },
+    "oal": {
+     "v": 70.104,
+     "unit": "mm",
+     "stated": "OVERALL LENGTH inch 2.76"
+    },
+    "sig": {
+     "v": 120,
+     "unit": "deg",
+     "stated": "NC Spotting Drills, 8% Cobalt HSS, 120 Degrees"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 / 8% Cobalt HSS"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ],
+   "notes": "Fractional \"1/4\" etc. are under a column headed \"DIAMETER inch\"; mm = fraction x 25.4."
+  },
+  {
+   "kind": "spot",
+   "id": "2201L",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 120 DEGREE, 5/16",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=353",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 7.9375,
+     "unit": "mm",
+     "stated": "DIAMETER inch 5/16"
+    },
+    "lcf": {
+     "v": 24.9936,
+     "unit": "mm",
+     "stated": "FLUTE LENGTH inch 0.984"
+    },
+    "oal": {
+     "v": 78.994,
+     "unit": "mm",
+     "stated": "OVERALL LENGTH inch 3.11"
+    },
+    "sig": {
+     "v": 120,
+     "unit": "deg",
+     "stated": "NC Spotting Drills, 8% Cobalt HSS, 120 Degrees"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 / 8% Cobalt HSS"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ],
+   "notes": "Fractional \"1/4\" etc. are under a column headed \"DIAMETER inch\"; mm = fraction x 25.4."
+  },
+  {
+   "kind": "spot",
+   "id": "2241L",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 120 DEGREE, 3/8",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=353",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 9.525,
+     "unit": "mm",
+     "stated": "DIAMETER inch 3/8"
+    },
+    "lcf": {
+     "v": 21.0058,
+     "unit": "mm",
+     "stated": "FLUTE LENGTH inch 0.827"
+    },
+    "oal": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "OVERALL LENGTH inch 3.50"
+    },
+    "sig": {
+     "v": 120,
+     "unit": "deg",
+     "stated": "NC Spotting Drills, 8% Cobalt HSS, 120 Degrees"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 / 8% Cobalt HSS"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ],
+   "notes": "Fractional \"1/4\" etc. are under a column headed \"DIAMETER inch\"; mm = fraction x 25.4."
+  },
+  {
+   "kind": "spot",
+   "id": "2321L",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 120 DEGREE, 1/2",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=353",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": 12.7,
+     "unit": "mm",
+     "stated": "DIAMETER inch 1/2"
+    },
+    "lcf": {
+     "v": 24.9936,
+     "unit": "mm",
+     "stated": "FLUTE LENGTH inch 0.984"
+    },
+    "oal": {
+     "v": 102.108,
+     "unit": "mm",
+     "stated": "OVERALL LENGTH inch 4.02"
+    },
+    "sig": {
+     "v": 120,
+     "unit": "deg",
+     "stated": "NC Spotting Drills, 8% Cobalt HSS, 120 Degrees"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 / 8% Cobalt HSS"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ],
+   "notes": "Fractional \"1/4\" etc. are under a column headed \"DIAMETER inch\"; mm = fraction x 25.4."
+  },
+  {
+   "kind": "spot",
+   "id": "D2393016",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 82 DEGREE & 142 DEGREE, 1/4 x 82˚",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=2534",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": "1/4",
+     "unit": "unstated",
+     "stated": "OD 1/4 (no unit printed)"
+    },
+    "lcf": {
+     "v": 0.669,
+     "unit": "unstated",
+     "stated": "FL 0.669 (no unit printed)"
+    },
+    "oal": {
+     "v": 2.76,
+     "unit": "unstated",
+     "stated": "OAL 2.76 (no unit printed)"
+    },
+    "sig": {
+     "v": 82,
+     "unit": "deg",
+     "stated": "Angle 82˚"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 (title)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ]
+  },
+  {
+   "kind": "spot",
+   "id": "D2394016",
+   "name": "HSSCo8, NC-SPOTTING DRILLS 82 DEGREE & 142 DEGREE, 1/4 x 142˚",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=1&cat_id=2&sub_id=14&sub_sub_id=2534",
+   "taken": "2026-11-23",
+   "values": {
+    "dc": {
+     "v": "1/4",
+     "unit": "unstated",
+     "stated": "OD 1/4 (no unit printed)"
+    },
+    "lcf": {
+     "v": 0.669,
+     "unit": "unstated",
+     "stated": "FL 0.669 (no unit printed)"
+    },
+    "oal": {
+     "v": 2.76,
+     "unit": "unstated",
+     "stated": "OAL 2.76 (no unit printed)"
+    },
+    "sig": {
+     "v": 142,
+     "unit": "deg",
+     "stated": "Angle 142˚"
+    },
+    "material": {
+     "v": "HSSCo8",
+     "unit": "text",
+     "stated": "HSSCo8 (title)"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "dcon",
+    "nof",
+    "coating"
+   ]
+  },
+  {
+   "kind": "tap",
+   "id": "L7315",
+   "name": "Spiral Point Tap Plug Style for General Purpose - L7 / L8 / L9 SERIES, M6 1.0",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-32&cat_id=3&sub_id=23&sub_sub_id=292",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6x1.0",
+     "unit": "text",
+     "stated": "Size M6 / Pitch 1.0"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Limit D5"
+    },
+    "oal": {
+     "v": 2.5,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.500 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.626,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.626 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.0,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.000 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.255,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.255 (no unit printed)"
+    },
+    "square": {
+     "v": 0.191,
+     "unit": "unstated",
+     "stated": "Square Size K 0.191 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.31,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.310 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Bright: L7315; TiCN: L8315; Hardslick: L9315",
+     "unit": "text",
+     "stated": "EDP No. columns Bright / TiCN / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for General Purpose",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for General Purpose - L7 / L8 / L9 SERIES"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "Pitch P 1.0"
+    },
+    "material": {
+     "v": "HSS-E",
+     "unit": "text",
+     "stated": "HSS-E icon (https://www.yg1usa.com/itemimage/tap/3_23_292.jpg)"
+    },
+    "chamfer": {
+     "v": "4P~5P",
+     "unit": "text",
+     "stated": "4P~5P icon"
+    },
+    "thread_depth": {
+     "v": "3.0xD",
+     "unit": "text",
+     "stated": "Thread Depth / Hole Type 3.0xD"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "60° (thread profile drawing)"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "L7365",
+   "name": "Spiral Point Tap Plug Style for General Purpose - L7 / L8 / L9 SERIES, M8 1.25",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-32&cat_id=3&sub_id=23&sub_sub_id=292",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M8x1.25",
+     "unit": "text",
+     "stated": "Size M8 / Pitch 1.25"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Limit D5"
+    },
+    "oal": {
+     "v": 2.72,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.720 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.689,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.689 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.126,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.126 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.318,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.318 (no unit printed)"
+    },
+    "square": {
+     "v": 0.238,
+     "unit": "unstated",
+     "stated": "Square Size K 0.238 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.38,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.380 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Bright: L7365; TiCN: L8365; Hardslick: L9365",
+     "unit": "text",
+     "stated": "EDP No. columns Bright / TiCN / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for General Purpose",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for General Purpose - L7 / L8 / L9 SERIES"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "Pitch P 1.25"
+    },
+    "material": {
+     "v": "HSS-E",
+     "unit": "text",
+     "stated": "HSS-E icon (https://www.yg1usa.com/itemimage/tap/3_23_292.jpg)"
+    },
+    "chamfer": {
+     "v": "4P~5P",
+     "unit": "text",
+     "stated": "4P~5P icon"
+    },
+    "thread_depth": {
+     "v": "3.0xD",
+     "unit": "text",
+     "stated": "Thread Depth / Hole Type 3.0xD"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "60° (thread profile drawing)"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "L7426",
+   "name": "Spiral Point Tap Plug Style for General Purpose - L7 / L8 / L9 SERIES, M10 1.5",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-32&cat_id=3&sub_id=23&sub_sub_id=292",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10x1.5",
+     "unit": "text",
+     "stated": "Size M10 / Pitch 1.5"
+    },
+    "limit": {
+     "v": "D6",
+     "unit": "text",
+     "stated": "Limit D6"
+    },
+    "oal": {
+     "v": 2.937,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.937 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.748,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.748 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.252,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.252 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.381,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.381 (no unit printed)"
+    },
+    "square": {
+     "v": 0.286,
+     "unit": "unstated",
+     "stated": "Square Size K 0.286 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.44,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.440 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Bright: L7426; TiCN: L8426; Hardslick: L9426",
+     "unit": "text",
+     "stated": "EDP No. columns Bright / TiCN / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for General Purpose",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for General Purpose - L7 / L8 / L9 SERIES"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "Pitch P 1.5"
+    },
+    "material": {
+     "v": "HSS-E",
+     "unit": "text",
+     "stated": "HSS-E icon (https://www.yg1usa.com/itemimage/tap/3_23_292.jpg)"
+    },
+    "chamfer": {
+     "v": "4P~5P",
+     "unit": "text",
+     "stated": "4P~5P icon"
+    },
+    "thread_depth": {
+     "v": "3.0xD",
+     "unit": "text",
+     "stated": "Thread Depth / Hole Type 3.0xD"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "60° (thread profile drawing)"
+    }
+   },
+   "cutting": [],
+   "unknown": [],
+   "notes": "Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "IB315",
+   "name": "Spiral Point Tap Plug Style for Steels - IB / IC SERIES, M6 1.0",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-32&cat_id=3&sub_id=23&sub_sub_id=291",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M6x1.0",
+     "unit": "text",
+     "stated": "Size M6 / Pitch 1.0"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Limit D5"
+    },
+    "oal": {
+     "v": 2.5,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.500 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.591,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.591 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.0,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.000 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.255,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.255 (no unit printed)"
+    },
+    "square": {
+     "v": 0.191,
+     "unit": "unstated",
+     "stated": "Square Size K 0.191 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.31,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.310 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Steam Oxide: IB315; Hardslick: IC315",
+     "unit": "text",
+     "stated": "EDP No. columns Steam Oxide / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for Steels",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for Steels - IB / IC SERIES"
+    },
+    "tp": {
+     "v": 1.0,
+     "unit": "mm",
+     "stated": "Pitch P 1.0"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "material"
+   ],
+   "notes": "Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "IB365",
+   "name": "Spiral Point Tap Plug Style for Steels - IB / IC SERIES, M8 1.25",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-32&cat_id=3&sub_id=23&sub_sub_id=291",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M8x1.25",
+     "unit": "text",
+     "stated": "Size M8 / Pitch 1.25"
+    },
+    "limit": {
+     "v": "D5",
+     "unit": "text",
+     "stated": "Limit D5"
+    },
+    "oal": {
+     "v": 2.72,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.720 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.669,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.669 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.126,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.126 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.318,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.318 (no unit printed)"
+    },
+    "square": {
+     "v": 0.238,
+     "unit": "unstated",
+     "stated": "Square Size K 0.238 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.38,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.380 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Steam Oxide: IB365; Hardslick: IC365",
+     "unit": "text",
+     "stated": "EDP No. columns Steam Oxide / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for Steels",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for Steels - IB / IC SERIES"
+    },
+    "tp": {
+     "v": 1.25,
+     "unit": "mm",
+     "stated": "Pitch P 1.25"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "material"
+   ],
+   "notes": "Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "IB426",
+   "name": "Spiral Point Tap Plug Style for Steels - IB / IC SERIES, M10 1.5",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-32&cat_id=3&sub_id=23&sub_sub_id=291",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "M10x1.5",
+     "unit": "text",
+     "stated": "Size M10 / Pitch 1.5"
+    },
+    "limit": {
+     "v": "D6",
+     "unit": "text",
+     "stated": "Limit D6"
+    },
+    "oal": {
+     "v": 2.937,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.937 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.748,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.748 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.252,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.252 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.381,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.381 (no unit printed)"
+    },
+    "square": {
+     "v": 0.286,
+     "unit": "unstated",
+     "stated": "Square Size K 0.286 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.44,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.440 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Steam Oxide: IB426; Hardslick: IC426",
+     "unit": "text",
+     "stated": "EDP No. columns Steam Oxide / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for Steels",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for Steels - IB / IC SERIES"
+    },
+    "tp": {
+     "v": 1.5,
+     "unit": "mm",
+     "stated": "Pitch P 1.5"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "material"
+   ],
+   "notes": "Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "L3403",
+   "name": "Spiral Point Tap Plug Style for General Purpose - L3 / L4 / L5 SERIES, 1/4 20UNC",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-34&cat_id=3&sub_id=17&sub_sub_id=268",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "1/4-20UNC",
+     "unit": "text",
+     "stated": "Size 1/4 / T.P.I 20UNC"
+    },
+    "limit": {
+     "v": "H3",
+     "unit": "text",
+     "stated": "Limit H3"
+    },
+    "oal": {
+     "v": 2.5,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.500 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.626,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.626 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.0,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.000 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.255,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.255 (no unit printed)"
+    },
+    "square": {
+     "v": 0.191,
+     "unit": "unstated",
+     "stated": "Square Size K 0.191 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.31,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.310 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Bright: L3403; TiN: L4403; Hardslick: L5403",
+     "unit": "text",
+     "stated": "EDP No. columns Bright / TiN / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for General Purpose",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for General Purpose - L3 / L4 / L5 SERIES"
+    },
+    "material": {
+     "v": "HSS-E",
+     "unit": "text",
+     "stated": "HSS-E icon (https://www.yg1usa.com/itemimage/tap/3_17_268.jpg)"
+    },
+    "chamfer": {
+     "v": "4P~5P",
+     "unit": "text",
+     "stated": "4P~5P icon"
+    },
+    "thread_depth": {
+     "v": "3.0xD",
+     "unit": "text",
+     "stated": "Thread Depth / Hole Type 3.0xD"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "60° (thread profile drawing)"
+    },
+    "shank_form": {
+     "v": "DIN Length-ANSI Shank",
+     "unit": "text",
+     "stated": "DIN Length-ANSI Shank"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "tp"
+   ],
+   "notes": "T.P.I given; pitch in mm not derived. Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "L3443",
+   "name": "Spiral Point Tap Plug Style for General Purpose - L3 / L4 / L5 SERIES, 5/16 18UNC",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-34&cat_id=3&sub_id=17&sub_sub_id=268",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "5/16-18UNC",
+     "unit": "text",
+     "stated": "Size 5/16 / T.P.I 18UNC"
+    },
+    "limit": {
+     "v": "H3",
+     "unit": "text",
+     "stated": "Limit H3"
+    },
+    "oal": {
+     "v": 2.72,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.720 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.689,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.689 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.126,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.126 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.318,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.318 (no unit printed)"
+    },
+    "square": {
+     "v": 0.238,
+     "unit": "unstated",
+     "stated": "Square Size K 0.238 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.38,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.380 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Bright: L3443; TiN: L4443; Hardslick: L5443",
+     "unit": "text",
+     "stated": "EDP No. columns Bright / TiN / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for General Purpose",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for General Purpose - L3 / L4 / L5 SERIES"
+    },
+    "material": {
+     "v": "HSS-E",
+     "unit": "text",
+     "stated": "HSS-E icon (https://www.yg1usa.com/itemimage/tap/3_17_268.jpg)"
+    },
+    "chamfer": {
+     "v": "4P~5P",
+     "unit": "text",
+     "stated": "4P~5P icon"
+    },
+    "thread_depth": {
+     "v": "3.0xD",
+     "unit": "text",
+     "stated": "Thread Depth / Hole Type 3.0xD"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "60° (thread profile drawing)"
+    },
+    "shank_form": {
+     "v": "DIN Length-ANSI Shank",
+     "unit": "text",
+     "stated": "DIN Length-ANSI Shank"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "tp"
+   ],
+   "notes": "T.P.I given; pitch in mm not derived. Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "L3483",
+   "name": "Spiral Point Tap Plug Style for General Purpose - L3 / L4 / L5 SERIES, 3/8 16UNC",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-34&cat_id=3&sub_id=17&sub_sub_id=268",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "3/8-16UNC",
+     "unit": "text",
+     "stated": "Size 3/8 / T.P.I 16UNC"
+    },
+    "limit": {
+     "v": "H3",
+     "unit": "text",
+     "stated": "Limit H3"
+    },
+    "oal": {
+     "v": 2.937,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.937 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.748,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.748 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.252,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.252 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.381,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.381 (no unit printed)"
+    },
+    "square": {
+     "v": 0.286,
+     "unit": "unstated",
+     "stated": "Square Size K 0.286 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.44,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.440 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Bright: L3483; TiN: L4483; Hardslick: L5483",
+     "unit": "text",
+     "stated": "EDP No. columns Bright / TiN / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for General Purpose",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for General Purpose - L3 / L4 / L5 SERIES"
+    },
+    "material": {
+     "v": "HSS-E",
+     "unit": "text",
+     "stated": "HSS-E icon (https://www.yg1usa.com/itemimage/tap/3_17_268.jpg)"
+    },
+    "chamfer": {
+     "v": "4P~5P",
+     "unit": "text",
+     "stated": "4P~5P icon"
+    },
+    "thread_depth": {
+     "v": "3.0xD",
+     "unit": "text",
+     "stated": "Thread Depth / Hole Type 3.0xD"
+    },
+    "thread_angle": {
+     "v": 60,
+     "unit": "deg",
+     "stated": "60° (thread profile drawing)"
+    },
+    "shank_form": {
+     "v": "DIN Length-ANSI Shank",
+     "unit": "text",
+     "stated": "DIN Length-ANSI Shank"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "tp"
+   ],
+   "notes": "T.P.I given; pitch in mm not derived. Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "M4405",
+   "name": "Spiral Point Tap Plug Style for Steels up to HRc25 ~ 45 - M4 / M5 / M6 / M7 SERIES, 1/4 20UNC",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-34&cat_id=3&sub_id=17&sub_sub_id=262",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "1/4-20UNC",
+     "unit": "text",
+     "stated": "Size 1/4 / T.P.I 20UNC"
+    },
+    "limit": {
+     "v": "H5",
+     "unit": "text",
+     "stated": "Limit H5"
+    },
+    "oal": {
+     "v": 2.5,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.500 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.591,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.591 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.0,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.000 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.255,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.255 (no unit printed)"
+    },
+    "square": {
+     "v": 0.191,
+     "unit": "unstated",
+     "stated": "Square Size K 0.191 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.31,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.310 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Steam Oxide: M4405; Bright: M5405; TiCN: M6405; Hardslick: M7405",
+     "unit": "text",
+     "stated": "EDP No. columns Steam Oxide / Bright / TiCN / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for Steels up to HRc25 ~ 45",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for Steels up to HRc25 ~ 45 - M4 / M5 / M6 / M7 SERIES"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "tp",
+    "material"
+   ],
+   "notes": "T.P.I given; pitch in mm not derived. Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "M4445",
+   "name": "Spiral Point Tap Plug Style for Steels up to HRc25 ~ 45 - M4 / M5 / M6 / M7 SERIES, 5/16 18UNC",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-34&cat_id=3&sub_id=17&sub_sub_id=262",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "5/16-18UNC",
+     "unit": "text",
+     "stated": "Size 5/16 / T.P.I 18UNC"
+    },
+    "limit": {
+     "v": "H5",
+     "unit": "text",
+     "stated": "Limit H5"
+    },
+    "oal": {
+     "v": 2.72,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.720 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.669,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.669 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.126,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.126 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.318,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.318 (no unit printed)"
+    },
+    "square": {
+     "v": 0.238,
+     "unit": "unstated",
+     "stated": "Square Size K 0.238 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.38,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.380 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Steam Oxide: M4445; Bright: M5445; TiCN: M6445; Hardslick: M7445",
+     "unit": "text",
+     "stated": "EDP No. columns Steam Oxide / Bright / TiCN / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for Steels up to HRc25 ~ 45",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for Steels up to HRc25 ~ 45 - M4 / M5 / M6 / M7 SERIES"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "tp",
+    "material"
+   ],
+   "notes": "T.P.I given; pitch in mm not derived. Length/diameter columns carry no unit on the page."
+  },
+  {
+   "kind": "tap",
+   "id": "M4485",
+   "name": "Spiral Point Tap Plug Style for Steels up to HRc25 ~ 45 - M4 / M5 / M6 / M7 SERIES, 3/8 16UNC",
+   "url": "https://www.yg1usa.com/feature/item_view.asp?disp=2-34&cat_id=3&sub_id=17&sub_sub_id=262",
+   "taken": "2026-11-23",
+   "values": {
+    "thread": {
+     "v": "3/8-16UNC",
+     "unit": "text",
+     "stated": "Size 3/8 / T.P.I 16UNC"
+    },
+    "limit": {
+     "v": "H5",
+     "unit": "text",
+     "stated": "Limit H5"
+    },
+    "oal": {
+     "v": 2.937,
+     "unit": "unstated",
+     "stated": "Overall Length L2 2.937 (no unit printed)"
+    },
+    "thread_length": {
+     "v": 0.748,
+     "unit": "unstated",
+     "stated": "Thread Length L1 0.748 (no unit printed)"
+    },
+    "neck_length": {
+     "v": 1.252,
+     "unit": "unstated",
+     "stated": "Neck Length L3 1.252 (no unit printed)"
+    },
+    "dcon": {
+     "v": 0.381,
+     "unit": "unstated",
+     "stated": "Shank Diameter D2 0.381 (no unit printed)"
+    },
+    "square": {
+     "v": 0.286,
+     "unit": "unstated",
+     "stated": "Square Size K 0.286 (no unit printed)"
+    },
+    "square_length": {
+     "v": 0.44,
+     "unit": "unstated",
+     "stated": "Square Length KI 0.440 (no unit printed)"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "No. of Flute 3"
+    },
+    "coating": {
+     "v": "Steam Oxide: M4485; Bright: M5485; TiCN: M6485; Hardslick: M7485",
+     "unit": "text",
+     "stated": "EDP No. columns Steam Oxide / Bright / TiCN / Hardslick"
+    },
+    "tap_style": {
+     "v": "Spiral Point Tap Plug Style for Steels up to HRc25 ~ 45",
+     "unit": "text",
+     "stated": "Spiral Point Tap Plug Style for Steels up to HRc25 ~ 45 - M4 / M5 / M6 / M7 SERIES"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "tp",
+    "material"
+   ],
+   "notes": "T.P.I given; pitch in mm not derived. Length/diameter columns carry no unit on the page."
+  }
+ ],
+ "notes": [
+  "yg1usa.com item pages print most length/diameter columns with no unit; those values keep unit \"unstated\" and were not converted.",
+  "Cutting data exists only for the DH404/DH423/DH424 carbide drills (speed-data image); the tap recommendation image (tap/tap_rec2.jpg) is keyed to catalogue page numbers (T-28..T-41), not to these series, so it was not attached."
+ ]
+}

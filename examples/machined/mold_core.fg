@@ -1,0 +1,20 @@
+# A mould core: a block with every convex edge rounded on a plate, its foot filleted. Horizontal
+# and vertical cylinders, sphere corners and tori: the faces 3-axis surfacing works on.
+shared w = 80
+shared d = 60
+shared t = 10
+shared bw = 40
+shared bd = 28
+shared bh = 16
+param round.r = 5
+param foot.r = 3
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (w, d))
+}
+plate = extrude(plan, t)
+sketch top(on: plate.end) {
+  outline = rect(center: (0, 0), size: (bw, bd))
+}
+block = extrude(top.outline, bh)
+round = fillet(edges(of: block, crease: "convex"), r)
+foot = fillet(edges(between: (plate, block)), r)

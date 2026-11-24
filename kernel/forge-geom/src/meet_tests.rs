@@ -305,3 +305,63 @@ fn thin_torus_on_a_wide_cylinder_both_loops() {
     let mut worst = 0.0;
     check(&c, &t, &res, 0.5 * region.diagonal() / 64.0, &mut worst).unwrap();
 }
+
+/// fuzz_keep seed 33, feature 72: a rod 57.8 in radius kept through a ring torus 6.6 by 1.2. The
+/// walk round one loop came back to a point 5e-10 from its first, and the loop kept both: a closing
+/// link of nothing, where the curve's speed fell to 3.5e-10 (0.2 elsewhere). A piece's mid there
+/// gave the boolean a tangent of noise, the lean of a region the wrong sign, and a classification
+/// that contradicted its neighbour's (Internal(InconsistentClassification)).
+#[test]
+fn closed_loops_have_no_link_of_nothing() {
+    let t = Surface::Torus(Torus {
+        frame: Frame::from_axes(
+            Point3::new(109.91745700353877, 58.99420509978757, 23.82286340569159),
+            Vec3::new(1.0, -0.0, 0.0),
+            Vec3::new(0.0, -1.0, -0.0),
+            Vec3::new(0.0, 0.0, -1.0),
+        )
+        .unwrap(),
+        major: 6.6179520084548855,
+        minor: 1.2449487326050606,
+    });
+    let c = Surface::Cylinder(Cylinder {
+        frame: Frame::WORLD.with_origin(Point3::new(
+            57.59035496778853,
+            42.90033752958833,
+            -24.223983633929485,
+        )),
+        radius: 57.79539718387872,
+    });
+    let region = Box3 {
+        x: forge_math::Interval::new(102.05454626247882, 115.3857721516673),
+        y: forge_math::Interval::new(51.13129435872762, 66.85711584084751),
+        z: forge_math::Interval::new(15.959952664631643, 31.685774146751534),
+    };
+    for (a, b) in [(&t, &c), (&c, &t)] {
+        let res = intersect(a, b, region).expect("a closed form");
+        let SurfaceSurface::Curves(cs) = &res else {
+            panic!("curves, not {res:?}")
+        };
+        assert_eq!(cs.len(), 2, "{res:?}");
+        for (k, _) in cs {
+            let d = k.domain();
+            let speeds: Vec<f64> = (0..4000)
+                .map(|i| k.deriv(d.lo + (d.hi - d.lo) * i as f64 / 4000.0).d1.length())
+                .collect();
+            let (lo, hi) = speeds
+                .iter()
+                .fold((f64::INFINITY, 0.0f64), |m, &v| (m.0.min(v), m.1.max(v)));
+            // (a link of nothing gives a speed of rounding: 3.5e-10 of 0.2 here before the fix. A
+            // short link the walk keeps where the curve turns, a thousandth of the step, still gives
+            // a tangent, and is the meet's own rule)
+            assert!(lo > 1e-6 * hi, "speed {lo:e} of {hi:e}");
+            if let Curve::Intersection(ic) = k {
+                let n = ic.pts.len();
+                for i in 0..n {
+                    let g = ic.pts[i].distance(ic.pts[(i + 1) % n]);
+                    assert!(g > forge_math::tol::LINEAR, "link {i} of {n}: {g:e}");
+                }
+            }
+        }
+    }
+}

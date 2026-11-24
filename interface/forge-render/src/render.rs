@@ -419,6 +419,8 @@ struct Timer {
 pub struct Renderer {
     /// Counts each change to the geometry drawn: a pick asked of other geometry is no answer.
     geometry: u64,
+    /// The parts' finest meshes, kept for the Render Studio's tracer (`studio/`).
+    pub cpu_parts: std::sync::Arc<Vec<PartMesh>>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub adapter: wgpu::AdapterInfo,
@@ -643,6 +645,20 @@ pub async fn open_device(
         .await
         .map_err(|e| format!("no device: {e}"))?;
     Ok((device, queue, adapter))
+}
+
+/// Each part's finest level alone: what the Render Studio traces.
+fn finest(parts: &[PartMesh]) -> std::sync::Arc<Vec<PartMesh>> {
+    std::sync::Arc::new(
+        parts
+            .iter()
+            .map(|p| PartMesh {
+                center: p.center,
+                radius: p.radius,
+                lods: p.lods.first().cloned().into_iter().collect(),
+            })
+            .collect(),
+    )
 }
 
 /// A parts' meshes on the GPU.
@@ -1491,6 +1507,7 @@ impl Renderer {
         });
         Renderer {
             geometry: 0,
+            cpu_parts: finest(parts),
             device,
             queue,
             adapter,
@@ -1595,6 +1612,7 @@ impl Renderer {
     /// New meshes for the parts, the same parts in the same places.
     pub fn set_parts(&mut self, parts: &[PartMesh]) {
         self.geometry += 1;
+        self.cpu_parts = finest(parts);
         let g = geometry(&self.device, &self.queue, parts);
         let layout = &self.bind_layout;
         let all = |globals| [globals, &self.placements, &g.segments, &self.tints];
@@ -2357,7 +2375,10 @@ impl Renderer {
         let live = self.live_part();
         for (k, m) in marks.iter().take(MARKS).enumerate() {
             let k = k as u32;
-            let part = scene.placements[m.placement as usize].part;
+            let Some(pl) = scene.placements.get(m.placement as usize) else {
+                continue;
+            };
+            let part = pl.part;
             let Some(lod) = scene.lod_on_screen(m.placement) else {
                 continue;
             };
@@ -2395,7 +2416,10 @@ impl Renderer {
             pass.set_pipeline(pipeline);
             for (k, m) in marks.iter().take(MARKS).enumerate() {
                 let k = k as u32;
-                let part = scene.placements[m.placement as usize].part;
+                let Some(pl) = scene.placements.get(m.placement as usize) else {
+                    continue;
+                };
+                let part = pl.part;
                 let Some(lod) = scene.lod_on_screen(m.placement) else {
                     continue;
                 };

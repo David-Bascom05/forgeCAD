@@ -1,0 +1,3976 @@
+{
+ "maker": "Guhring",
+ "records": [
+  {
+   "kind": "reamer",
+   "id": "9016860030000",
+   "name": "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 3.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8",
+   "url_item": "https://webshop.guehring.de/en/000009016860030000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "d1 mm 3.000 (catalogue p.8); webshop 'Nominal diameter 3.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.008,
+     "unit": "mm",
+     "stated": "Upper dimension 0.008 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.003,
+     "unit": "mm",
+     "stated": "Lower dimension 0.003 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l4 mm 12.00 (catalogue p.8); 'Cutting edge length 12.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "l2 mm 40.00 (catalogue p.8; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 68.0,
+     "unit": "mm",
+     "stated": "l1 mm 68.00 (catalogue p.8); 'Total length 68.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 4.000 (catalogue p.8); 'Shank diameter 4.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 2.4,
+     "unit": "mm",
+     "stated": "Neck diameter 2.40 mm (webshop)"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "cutting-edge column 4 (catalogue p.8); 'Number of cutting edges 4' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.8)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.61,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.61 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "nanoA",
+     "unit": "text",
+     "stated": "Surface finish nano-A (catalogue p.8); 'Surface nanoA' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.1,
+      "max": 0.2
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P1.1.1",
+     "material_stated": "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.50038,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0197"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.3",
+     "material_stated": "Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.50038,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0197"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.5",
+     "material_stated": "Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB",
+     "vc": {
+      "v": 161.544,
+      "unit": "m/min",
+      "stated": "SFM 530"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.50038,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0197"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.1",
+     "material_stated": "Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.44958,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0177"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.2",
+     "material_stated": "Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.44958,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0177"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for aluminium (N groups): rows N1.1.1-N3.1.3 are blank for series 1675/1676/1685/1686 on p.26 (see series 7286 for aluminium)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 3.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Feeds in the catalogue are per reamer diameter column; series 1685 is the blind-hole twin (HR 500 S) with identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9016860040000",
+   "name": "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 4.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8",
+   "url_item": "https://webshop.guehring.de/en/000009016860040000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "d1 mm 4.000 (catalogue p.8); webshop 'Nominal diameter 4.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.01,
+     "unit": "mm",
+     "stated": "Upper dimension 0.010 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.005,
+     "unit": "mm",
+     "stated": "Lower dimension 0.005 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l4 mm 12.00 (catalogue p.8); 'Cutting edge length 12.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "l2 mm 40.00 (catalogue p.8; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 68.0,
+     "unit": "mm",
+     "stated": "l1 mm 68.00 (catalogue p.8); 'Total length 68.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 4.000 (catalogue p.8); 'Shank diameter 4.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Neck diameter 3.00 mm (webshop)"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "cutting-edge column 4 (catalogue p.8); 'Number of cutting edges 4' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.8)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.61,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.61 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "nanoA",
+     "unit": "text",
+     "stated": "Surface finish nano-A (catalogue p.8); 'Surface nanoA' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.1,
+      "max": 0.2
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P1.1.1",
+     "material_stated": "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.65024,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0256"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.3",
+     "material_stated": "Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.65024,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0256"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.5",
+     "material_stated": "Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB",
+     "vc": {
+      "v": 161.544,
+      "unit": "m/min",
+      "stated": "SFM 530"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.65024,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0256"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.1",
+     "material_stated": "Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.59944,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0236"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.2",
+     "material_stated": "Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 0.59944,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0236"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for aluminium (N groups): rows N1.1.1-N3.1.3 are blank for series 1675/1676/1685/1686 on p.26 (see series 7286 for aluminium)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 4.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Feeds in the catalogue are per reamer diameter column; series 1685 is the blind-hole twin (HR 500 S) with identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9016860050000",
+   "name": "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 5.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8",
+   "url_item": "https://webshop.guehring.de/en/000009016860050000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "d1 mm 5.000 (catalogue p.8); webshop 'Nominal diameter 5.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.01,
+     "unit": "mm",
+     "stated": "Upper dimension 0.010 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.005,
+     "unit": "mm",
+     "stated": "Lower dimension 0.005 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l4 mm 12.00 (catalogue p.8); 'Cutting edge length 12.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "l2 mm 40.00 (catalogue p.8; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 76.0,
+     "unit": "mm",
+     "stated": "l1 mm 76.00 (catalogue p.8); 'Total length 76.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 6.000 (catalogue p.8); 'Shank diameter 6.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Neck diameter 4.00 mm (webshop)"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "cutting-edge column 4 (catalogue p.8); 'Number of cutting edges 4' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.8)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.61,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.61 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "nanoA",
+     "unit": "text",
+     "stated": "Surface finish nano-A (catalogue p.8); 'Surface nanoA' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.1,
+      "max": 0.2
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P1.1.1",
+     "material_stated": "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f_unknown": "table 'HR 500 - High-performance reamers (Series 1675, 1676, 1685, 1686)' prints feed columns only for Ø 2, 3, 4, 6, 8, 10, 12, 14, 16, 20 mm; no Ø 5 mm column (not interpolated)",
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.3",
+     "material_stated": "Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f_unknown": "table 'HR 500 - High-performance reamers (Series 1675, 1676, 1685, 1686)' prints feed columns only for Ø 2, 3, 4, 6, 8, 10, 12, 14, 16, 20 mm; no Ø 5 mm column (not interpolated)",
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.5",
+     "material_stated": "Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB",
+     "vc": {
+      "v": 161.544,
+      "unit": "m/min",
+      "stated": "SFM 530"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f_unknown": "table 'HR 500 - High-performance reamers (Series 1675, 1676, 1685, 1686)' prints feed columns only for Ø 2, 3, 4, 6, 8, 10, 12, 14, 16, 20 mm; no Ø 5 mm column (not interpolated)",
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.1",
+     "material_stated": "Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f_unknown": "table 'HR 500 - High-performance reamers (Series 1675, 1676, 1685, 1686)' prints feed columns only for Ø 2, 3, 4, 6, 8, 10, 12, 14, 16, 20 mm; no Ø 5 mm column (not interpolated)",
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.2",
+     "material_stated": "Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f_unknown": "table 'HR 500 - High-performance reamers (Series 1675, 1676, 1685, 1686)' prints feed columns only for Ø 2, 3, 4, 6, 8, 10, 12, 14, 16, 20 mm; no Ø 5 mm column (not interpolated)",
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "f (feed) for Ø 5 mm: not printed (columns Ø 4 and Ø 6 only)",
+    "cutting data for aluminium (N groups): rows N1.1.1-N3.1.3 are blank for series 1675/1676/1685/1686 on p.26 (see series 7286 for aluminium)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 5.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Feeds in the catalogue are per reamer diameter column; series 1685 is the blind-hole twin (HR 500 S) with identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9016860060000",
+   "name": "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 6.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8",
+   "url_item": "https://webshop.guehring.de/en/000009016860060000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d1 mm 6.000 (catalogue p.8); webshop 'Nominal diameter 6.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.01,
+     "unit": "mm",
+     "stated": "Upper dimension 0.010 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.005,
+     "unit": "mm",
+     "stated": "Lower dimension 0.005 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l4 mm 12.00 (catalogue p.8); 'Cutting edge length 12.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "l2 mm 40.00 (catalogue p.8; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 76.0,
+     "unit": "mm",
+     "stated": "l1 mm 76.00 (catalogue p.8); 'Total length 76.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 6.000 (catalogue p.8); 'Shank diameter 6.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 4.5,
+     "unit": "mm",
+     "stated": "Neck diameter 4.50 mm (webshop)"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "cutting-edge column 4 (catalogue p.8); 'Number of cutting edges 4' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.8)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.61,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.61 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "nanoA",
+     "unit": "text",
+     "stated": "Surface finish nano-A (catalogue p.8); 'Surface nanoA' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.1,
+      "max": 0.2
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+    },
+    "flute_length_webshop": {
+     "v": 21.0,
+     "unit": "mm",
+     "stated": "Flute length 21.00 mm (webshop)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P1.1.1",
+     "material_stated": "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.19888,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0472"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.3",
+     "material_stated": "Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.19888,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0472"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.5",
+     "material_stated": "Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB",
+     "vc": {
+      "v": 161.544,
+      "unit": "m/min",
+      "stated": "SFM 530"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.19888,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0472"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.1",
+     "material_stated": "Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.15062,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0453"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.2",
+     "material_stated": "Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.15062,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0453"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for aluminium (N groups): rows N1.1.1-N3.1.3 are blank for series 1675/1676/1685/1686 on p.26 (see series 7286 for aluminium)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 6.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Feeds in the catalogue are per reamer diameter column; series 1685 is the blind-hole twin (HR 500 S) with identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9016860080000",
+   "name": "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 8.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8",
+   "url_item": "https://webshop.guehring.de/en/000009016860080000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d1 mm 8.000 (catalogue p.8); webshop 'Nominal diameter 8.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.012,
+     "unit": "mm",
+     "stated": "Upper dimension 0.012 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.006,
+     "unit": "mm",
+     "stated": "Lower dimension 0.006 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "l4 mm 16.00 (catalogue p.8); 'Cutting edge length 16.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 65.0,
+     "unit": "mm",
+     "stated": "l2 mm 65.00 (catalogue p.8; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 101.0,
+     "unit": "mm",
+     "stated": "l1 mm 101.00 (catalogue p.8); 'Total length 101.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 8.000 (catalogue p.8); 'Shank diameter 8.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Neck diameter 6.00 mm (webshop)"
+    },
+    "nof": {
+     "v": 6,
+     "unit": "count",
+     "stated": "cutting-edge column 6 (catalogue p.8); 'Number of cutting edges 6' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.8)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 1.21,
+     "unit": "mm",
+     "stated": "Chamfer lead 1.21 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "nanoA",
+     "unit": "text",
+     "stated": "Surface finish nano-A (catalogue p.8); 'Surface nanoA' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": 0.2,
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+    },
+    "flute_length_webshop": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "Flute length 16.00 mm (webshop)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P1.1.1",
+     "material_stated": "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.5494,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0610"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.3",
+     "material_stated": "Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.5494,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0610"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.5",
+     "material_stated": "Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB",
+     "vc": {
+      "v": 161.544,
+      "unit": "m/min",
+      "stated": "SFM 530"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.5494,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0610"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.1",
+     "material_stated": "Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.45034,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0571"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.2",
+     "material_stated": "Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.45034,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0571"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for aluminium (N groups): rows N1.1.1-N3.1.3 are blank for series 1675/1676/1685/1686 on p.26 (see series 7286 for aluminium)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 8.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Feeds in the catalogue are per reamer diameter column; series 1685 is the blind-hole twin (HR 500 S) with identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9016860100000",
+   "name": "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 10.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8",
+   "url_item": "https://webshop.guehring.de/en/000009016860100000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d1 mm 10.000 (catalogue p.8); webshop 'Nominal diameter 10.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.012,
+     "unit": "mm",
+     "stated": "Upper dimension 0.012 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.006,
+     "unit": "mm",
+     "stated": "Lower dimension 0.006 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "l4 mm 19.00 (catalogue p.8); 'Cutting edge length 19.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "l2 mm 61.00 (catalogue p.8; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 101.0,
+     "unit": "mm",
+     "stated": "l1 mm 101.00 (catalogue p.8); 'Total length 101.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 10.000 (catalogue p.8); 'Shank diameter 10.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Neck diameter 8.00 mm (webshop)"
+    },
+    "nof": {
+     "v": 6,
+     "unit": "count",
+     "stated": "cutting-edge column 6 (catalogue p.8); 'Number of cutting edges 6' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.8)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.95,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.95 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "nanoA",
+     "unit": "text",
+     "stated": "Surface finish nano-A (catalogue p.8); 'Surface nanoA' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": 0.2,
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+    },
+    "flute_length_webshop": {
+     "v": 30.0,
+     "unit": "mm",
+     "stated": "Flute length 30.00 mm (webshop)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P1.1.1",
+     "material_stated": "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.89992,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0748"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.3",
+     "material_stated": "Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.89992,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0748"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "P1.1.5",
+     "material_stated": "Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB",
+     "vc": {
+      "v": 161.544,
+      "unit": "m/min",
+      "stated": "SFM 530"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.89992,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0748"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.1",
+     "material_stated": "Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.75006,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0689"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "P2.1.2",
+     "material_stated": "Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.75006,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0689"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for aluminium (N groups): rows N1.1.1-N3.1.3 are blank for series 1675/1676/1685/1686 on p.26 (see series 7286 for aluminium)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 10.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Feeds in the catalogue are per reamer diameter column; series 1685 is the blind-hole twin (HR 500 S) with identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9016860120000",
+   "name": "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 12.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8",
+   "url_item": "https://webshop.guehring.de/en/000009016860120000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d1 mm 12.000 (catalogue p.8); webshop 'Nominal diameter 12.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.015,
+     "unit": "mm",
+     "stated": "Upper dimension 0.015 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.009,
+     "unit": "mm",
+     "stated": "Lower dimension 0.009 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "l4 mm 19.00 (catalogue p.8); 'Cutting edge length 19.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 85.0,
+     "unit": "mm",
+     "stated": "l2 mm 85.00 (catalogue p.8; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 130.0,
+     "unit": "mm",
+     "stated": "l1 mm 130.00 (catalogue p.8); 'Total length 130.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 12.000 (catalogue p.8); 'Shank diameter 12.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 9.5,
+     "unit": "mm",
+     "stated": "Neck diameter 9.50 mm (webshop)"
+    },
+    "nof": {
+     "v": 6,
+     "unit": "count",
+     "stated": "cutting-edge column 6 (catalogue p.8); 'Number of cutting edges 6' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.8)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 1.3,
+     "unit": "mm",
+     "stated": "Chamfer lead 1.30 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "nanoA",
+     "unit": "text",
+     "stated": "Surface finish nano-A (catalogue p.8); 'Surface nanoA' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.2,
+      "max": 0.3
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+    },
+    "flute_length_webshop": {
+     "v": 31.0,
+     "unit": "mm",
+     "stated": "Flute length 31.00 mm (webshop)"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "P1.1.1",
+     "material_stated": "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 2.04978,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0807"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.2,
+       "max": 0.3
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+     }
+    },
+    {
+     "iso_group": "P1.1.3",
+     "material_stated": "Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 2.04978,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0807"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.2,
+       "max": 0.3
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+     }
+    },
+    {
+     "iso_group": "P1.1.5",
+     "material_stated": "Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB",
+     "vc": {
+      "v": 161.544,
+      "unit": "m/min",
+      "stated": "SFM 530"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 2.04978,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0807"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.2,
+       "max": 0.3
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+     }
+    },
+    {
+     "iso_group": "P2.1.1",
+     "material_stated": "Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.89992,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0748"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.2,
+       "max": 0.3
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+     }
+    },
+    {
+     "iso_group": "P2.1.2",
+     "material_stated": "Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB",
+     "vc": {
+      "v": 179.832,
+      "unit": "m/min",
+      "stated": "SFM 590"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26",
+     "f": {
+      "v": 1.89992,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0748"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.2,
+       "max": 0.3
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for aluminium (N groups): rows N1.1.1-N3.1.3 are blank for series 1675/1676/1685/1686 on p.26 (see series 7286 for aluminium)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 12.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Feeds in the catalogue are per reamer diameter column; series 1685 is the blind-hole twin (HR 500 S) with identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9072860030000",
+   "name": "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 3.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14",
+   "url_item": "https://webshop.guehring.de/en/000009072860030000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "d1 mm 3.000 (catalogue p.14); webshop 'Nominal diameter 3.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.008,
+     "unit": "mm",
+     "stated": "Upper dimension 0.008 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.003,
+     "unit": "mm",
+     "stated": "Lower dimension 0.003 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l4 mm 12.00 (catalogue p.14); 'Cutting edge length 12.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "l2 mm 40.00 (catalogue p.14; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 68.0,
+     "unit": "mm",
+     "stated": "l1 mm 68.00 (catalogue p.14); 'Total length 68.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 4.000 (catalogue p.14); 'Shank diameter 4.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 2.4,
+     "unit": "mm",
+     "stated": "Neck diameter 2.40 mm (webshop)"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "cutting-edge column 4 (catalogue p.14); 'Number of cutting edges 4' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.14)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.61,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.61 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 Alu D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "Carbo+",
+     "unit": "text",
+     "stated": "Surface finish Cb+ (Carbo+) (catalogue p.14); 'Surface Carbo+' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.1,
+      "max": 0.2
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "N1.1.1",
+     "material_stated": "Wrought Aluminum Alloys, Non-Hardened, 60 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 0.55118,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N1.1.2",
+     "material_stated": "Wrought Aluminum Alloys, Hardened, 100 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 0.55118,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.1",
+     "material_stated": "Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 0.55118,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.2",
+     "material_stated": "Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB",
+     "vc": {
+      "v": 195.072,
+      "unit": "m/min",
+      "stated": "SFM 640"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 0.55118,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for steel (P groups): rows are blank for series 7285/7286 on p.29 (see series 1686 for steel)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 3.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Series 7286 replaces 1679; 7285 (Alu S, blind hole) has identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9072860040000",
+   "name": "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 4.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14",
+   "url_item": "https://webshop.guehring.de/en/000009072860040000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "d1 mm 4.000 (catalogue p.14); webshop 'Nominal diameter 4.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.01,
+     "unit": "mm",
+     "stated": "Upper dimension 0.010 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.005,
+     "unit": "mm",
+     "stated": "Lower dimension 0.005 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l4 mm 12.00 (catalogue p.14); 'Cutting edge length 12.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "l2 mm 40.00 (catalogue p.14; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 68.0,
+     "unit": "mm",
+     "stated": "l1 mm 68.00 (catalogue p.14); 'Total length 68.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 4.000 (catalogue p.14); 'Shank diameter 4.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 3.0,
+     "unit": "mm",
+     "stated": "Neck diameter 3.00 mm (webshop)"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "cutting-edge column 4 (catalogue p.14); 'Number of cutting edges 4' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.14)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.61,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.61 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 Alu D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "Carbo+",
+     "unit": "text",
+     "stated": "Surface finish Cb+ (Carbo+) (catalogue p.14); 'Surface Carbo+' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.1,
+      "max": 0.2
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "N1.1.1",
+     "material_stated": "Wrought Aluminum Alloys, Non-Hardened, 60 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 0.7493,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N1.1.2",
+     "material_stated": "Wrought Aluminum Alloys, Hardened, 100 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 0.7493,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.1",
+     "material_stated": "Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 0.7493,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.2",
+     "material_stated": "Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB",
+     "vc": {
+      "v": 195.072,
+      "unit": "m/min",
+      "stated": "SFM 640"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 0.7493,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for steel (P groups): rows are blank for series 7285/7286 on p.29 (see series 1686 for steel)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 4.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Series 7286 replaces 1679; 7285 (Alu S, blind hole) has identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9072860050000",
+   "name": "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 5.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14",
+   "url_item": "https://webshop.guehring.de/en/000009072860050000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "d1 mm 5.000 (catalogue p.14); webshop 'Nominal diameter 5.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.01,
+     "unit": "mm",
+     "stated": "Upper dimension 0.010 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.005,
+     "unit": "mm",
+     "stated": "Lower dimension 0.005 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l4 mm 12.00 (catalogue p.14); 'Cutting edge length 12.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "l2 mm 40.00 (catalogue p.14; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 76.0,
+     "unit": "mm",
+     "stated": "l1 mm 76.00 (catalogue p.14); 'Total length 76.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 6.000 (catalogue p.14); 'Shank diameter 6.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Neck diameter 4.00 mm (webshop)"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "cutting-edge column 4 (catalogue p.14); 'Number of cutting edges 4' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.14)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.61,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.61 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 Alu D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "Carbo+",
+     "unit": "text",
+     "stated": "Surface finish Cb+ (Carbo+) (catalogue p.14); 'Surface Carbo+' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.1,
+      "max": 0.2
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "N1.1.1",
+     "material_stated": "Wrought Aluminum Alloys, Non-Hardened, 60 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f_unknown": "table 'HR 500 AL - High-performance reamers (Series 7285, 7286)' prints feed columns only for Ø 2, 3, 4, 6, 8, 10, 12, 14, 16, 20 mm; no Ø 5 mm column (not interpolated)",
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N1.1.2",
+     "material_stated": "Wrought Aluminum Alloys, Hardened, 100 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f_unknown": "table 'HR 500 AL - High-performance reamers (Series 7285, 7286)' prints feed columns only for Ø 2, 3, 4, 6, 8, 10, 12, 14, 16, 20 mm; no Ø 5 mm column (not interpolated)",
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.1",
+     "material_stated": "Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f_unknown": "table 'HR 500 AL - High-performance reamers (Series 7285, 7286)' prints feed columns only for Ø 2, 3, 4, 6, 8, 10, 12, 14, 16, 20 mm; no Ø 5 mm column (not interpolated)",
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.2",
+     "material_stated": "Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB",
+     "vc": {
+      "v": 195.072,
+      "unit": "m/min",
+      "stated": "SFM 640"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f_unknown": "table 'HR 500 AL - High-performance reamers (Series 7285, 7286)' prints feed columns only for Ø 2, 3, 4, 6, 8, 10, 12, 14, 16, 20 mm; no Ø 5 mm column (not interpolated)",
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "f (feed) for Ø 5 mm: not printed (columns Ø 4 and Ø 6 only)",
+    "cutting data for steel (P groups): rows are blank for series 7285/7286 on p.29 (see series 1686 for steel)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 5.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Series 7286 replaces 1679; 7285 (Alu S, blind hole) has identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9072860060000",
+   "name": "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 6.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14",
+   "url_item": "https://webshop.guehring.de/en/000009072860060000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d1 mm 6.000 (catalogue p.14); webshop 'Nominal diameter 6.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.01,
+     "unit": "mm",
+     "stated": "Upper dimension 0.010 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.005,
+     "unit": "mm",
+     "stated": "Lower dimension 0.005 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "l4 mm 12.00 (catalogue p.14); 'Cutting edge length 12.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 40.0,
+     "unit": "mm",
+     "stated": "l2 mm 40.00 (catalogue p.14; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 76.0,
+     "unit": "mm",
+     "stated": "l1 mm 76.00 (catalogue p.14); 'Total length 76.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 6.000 (catalogue p.14); 'Shank diameter 6.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 4.5,
+     "unit": "mm",
+     "stated": "Neck diameter 4.50 mm (webshop)"
+    },
+    "nof": {
+     "v": 4,
+     "unit": "count",
+     "stated": "cutting-edge column 4 (catalogue p.14); 'Number of cutting edges 4' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.14)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.61,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.61 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 Alu D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "Carbo+",
+     "unit": "text",
+     "stated": "Surface finish Cb+ (Carbo+) (catalogue p.14); 'Surface Carbo+' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.1,
+      "max": 0.2
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "N1.1.1",
+     "material_stated": "Wrought Aluminum Alloys, Non-Hardened, 60 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 1.34874,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N1.1.2",
+     "material_stated": "Wrought Aluminum Alloys, Hardened, 100 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 1.34874,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.1",
+     "material_stated": "Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 1.34874,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.2",
+     "material_stated": "Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB",
+     "vc": {
+      "v": 195.072,
+      "unit": "m/min",
+      "stated": "SFM 640"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 1.34874,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.1,
+       "max": 0.2
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø6: Ø 0.1 - 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for steel (P groups): rows are blank for series 7285/7286 on p.29 (see series 1686 for steel)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 6.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Series 7286 replaces 1679; 7285 (Alu S, blind hole) has identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9072860080000",
+   "name": "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 8.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14",
+   "url_item": "https://webshop.guehring.de/en/000009072860080000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d1 mm 8.000 (catalogue p.14); webshop 'Nominal diameter 8.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.012,
+     "unit": "mm",
+     "stated": "Upper dimension 0.012 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.006,
+     "unit": "mm",
+     "stated": "Lower dimension 0.006 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 16.0,
+     "unit": "mm",
+     "stated": "l4 mm 16.00 (catalogue p.14); 'Cutting edge length 16.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 65.0,
+     "unit": "mm",
+     "stated": "l2 mm 65.00 (catalogue p.14; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 101.0,
+     "unit": "mm",
+     "stated": "l1 mm 101.00 (catalogue p.14); 'Total length 101.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 8.000 (catalogue p.14); 'Shank diameter 8.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Neck diameter 6.00 mm (webshop)"
+    },
+    "nof": {
+     "v": 6,
+     "unit": "count",
+     "stated": "cutting-edge column 6 (catalogue p.14); 'Number of cutting edges 6' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.14)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.95,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.95 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 Alu D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "Carbo+",
+     "unit": "text",
+     "stated": "Surface finish Cb+ (Carbo+) (catalogue p.14); 'Surface Carbo+' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": 0.2,
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "N1.1.1",
+     "material_stated": "Wrought Aluminum Alloys, Non-Hardened, 60 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 1.75006,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "N1.1.2",
+     "material_stated": "Wrought Aluminum Alloys, Hardened, 100 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 1.75006,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.1",
+     "material_stated": "Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 1.75006,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.2",
+     "material_stated": "Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB",
+     "vc": {
+      "v": 195.072,
+      "unit": "m/min",
+      "stated": "SFM 640"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 1.75006,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for steel (P groups): rows are blank for series 7285/7286 on p.29 (see series 1686 for steel)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 8.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Series 7286 replaces 1679; 7285 (Alu S, blind hole) has identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9072860100000",
+   "name": "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 10.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14",
+   "url_item": "https://webshop.guehring.de/en/000009072860100000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d1 mm 10.000 (catalogue p.14); webshop 'Nominal diameter 10.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.012,
+     "unit": "mm",
+     "stated": "Upper dimension 0.012 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.006,
+     "unit": "mm",
+     "stated": "Lower dimension 0.006 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "l4 mm 19.00 (catalogue p.14); 'Cutting edge length 19.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 61.0,
+     "unit": "mm",
+     "stated": "l2 mm 61.00 (catalogue p.14; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 101.0,
+     "unit": "mm",
+     "stated": "l1 mm 101.00 (catalogue p.14); 'Total length 101.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 10.000 (catalogue p.14); 'Shank diameter 10.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Neck diameter 8.00 mm (webshop)"
+    },
+    "nof": {
+     "v": 6,
+     "unit": "count",
+     "stated": "cutting-edge column 6 (catalogue p.14); 'Number of cutting edges 6' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.14)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 0.95,
+     "unit": "mm",
+     "stated": "Chamfer lead 0.95 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 Alu D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "Carbo+",
+     "unit": "text",
+     "stated": "Surface finish Cb+ (Carbo+) (catalogue p.14); 'Surface Carbo+' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": 0.2,
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "N1.1.1",
+     "material_stated": "Wrought Aluminum Alloys, Non-Hardened, 60 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 2.14884,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "N1.1.2",
+     "material_stated": "Wrought Aluminum Alloys, Hardened, 100 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 2.14884,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.1",
+     "material_stated": "Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 2.14884,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    },
+    {
+     "iso_group": "N2.1.2",
+     "material_stated": "Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB",
+     "vc": {
+      "v": 195.072,
+      "unit": "m/min",
+      "stated": "SFM 640"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 2.14884,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+     },
+     "allowance": {
+      "v": 0.2,
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø10: Ø 0.2"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for steel (P groups): rows are blank for series 7285/7286 on p.29 (see series 1686 for steel)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 10.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Series 7286 replaces 1679; 7285 (Alu S, blind hole) has identical dims."
+  },
+  {
+   "kind": "reamer",
+   "id": "9072860120000",
+   "name": "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 12.000 mm H7",
+   "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14",
+   "url_item": "https://webshop.guehring.de/en/000009072860120000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d1 mm 12.000 (catalogue p.14); webshop 'Nominal diameter 12.000 mm'"
+    },
+    "dc_tol_upper": {
+     "v": 0.015,
+     "unit": "mm",
+     "stated": "Upper dimension 0.015 mm (webshop)"
+    },
+    "dc_tol_lower": {
+     "v": 0.009,
+     "unit": "mm",
+     "stated": "Lower dimension 0.009 mm (webshop)"
+    },
+    "tolerance": {
+     "v": "H7",
+     "unit": "text",
+     "stated": "H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop)"
+    },
+    "lcf": {
+     "v": 19.0,
+     "unit": "mm",
+     "stated": "l4 mm 19.00 (catalogue p.14); 'Cutting edge length 19.00 mm' (webshop)"
+    },
+    "l2": {
+     "v": 85.0,
+     "unit": "mm",
+     "stated": "l2 mm 85.00 (catalogue p.14; drawing dimension, not named in the catalogue)"
+    },
+    "oal": {
+     "v": 130.0,
+     "unit": "mm",
+     "stated": "l1 mm 130.00 (catalogue p.14); 'Total length 130.00 mm' (webshop)"
+    },
+    "dcon": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "d2 h6 mm 12.000 (catalogue p.14); 'Shank diameter 12.00 mm' (webshop)"
+    },
+    "dcon_tol": {
+     "v": "h6",
+     "unit": "text",
+     "stated": "d2 h6"
+    },
+    "shank_form": {
+     "v": "HA",
+     "unit": "text",
+     "stated": "HA pictogram (catalogue); 'Type of machine interface HA' (webshop)"
+    },
+    "neck_d": {
+     "v": 9.5,
+     "unit": "mm",
+     "stated": "Neck diameter 9.50 mm (webshop)"
+    },
+    "nof": {
+     "v": 6,
+     "unit": "count",
+     "stated": "cutting-edge column 6 (catalogue p.14); 'Number of cutting edges 6' (webshop)"
+    },
+    "helix": {
+     "v": "straight-fluted",
+     "unit": "text",
+     "stated": "Helix angle pictogram 'straight-fluted' (catalogue p.2 legend, shown on p.14)"
+    },
+    "spacing": {
+     "v": "extremely unequal",
+     "unit": "text",
+     "stated": "EU pictogram: 'extremely unequal' spacing (catalogue p.2 legend)"
+    },
+    "chamfer_lead": {
+     "v": 1.3,
+     "unit": "mm",
+     "stated": "Chamfer lead 1.30 mm (webshop)"
+    },
+    "chamfer_angle": {
+     "v": 30.0,
+     "unit": "deg",
+     "stated": "Chamfer angle 30 ° (webshop)"
+    },
+    "hole_type": {
+     "v": "through hole",
+     "unit": "text",
+     "stated": "'HR 500 Alu D' = Through hole (D) (catalogue p.2); 'Hole type Through-hole' (webshop)"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "R pictogram right hand; 'Cutting direction Right-hand' (webshop)"
+    },
+    "coolant": {
+     "v": "without internal cooling; groove on shank",
+     "unit": "text",
+     "stated": "'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+    },
+    "material": {
+     "v": "solid carbide",
+     "unit": "text",
+     "stated": "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+    },
+    "coating": {
+     "v": "Carbo+",
+     "unit": "text",
+     "stated": "Surface finish Cb+ (Carbo+) (catalogue p.14); 'Surface Carbo+' (webshop)"
+    },
+    "standard": {
+     "v": "Guhring standard",
+     "unit": "text",
+     "stated": "G pictogram 'to Guhring standard'; 'Standard Company std.' (webshop)"
+    },
+    "stock_allowance": {
+     "v": {
+      "min": 0.2,
+      "max": 0.3
+     },
+     "unit": "mm (on diameter)",
+     "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+    }
+   },
+   "cutting": [
+    {
+     "iso_group": "N1.1.1",
+     "material_stated": "Wrought Aluminum Alloys, Non-Hardened, 60 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 2.30124,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.2,
+       "max": 0.3
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+     }
+    },
+    {
+     "iso_group": "N1.1.2",
+     "material_stated": "Wrought Aluminum Alloys, Hardened, 100 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 2.30124,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.2,
+       "max": 0.3
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+     }
+    },
+    {
+     "iso_group": "N2.1.1",
+     "material_stated": "Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB",
+     "vc": {
+      "v": 260.604,
+      "unit": "m/min",
+      "stated": "SFM 855"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 2.30124,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.2,
+       "max": 0.3
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+     }
+    },
+    {
+     "iso_group": "N2.1.2",
+     "material_stated": "Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB",
+     "vc": {
+      "v": 195.072,
+      "unit": "m/min",
+      "stated": "SFM 640"
+     },
+     "url": "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29",
+     "f": {
+      "v": 2.30124,
+      "unit": "mm/rev",
+      "stated": "Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+     },
+     "allowance": {
+      "v": {
+       "min": 0.2,
+       "max": 0.3
+      },
+      "unit": "mm (on diameter)",
+      "stated": "Recommended stock allowance, in mm, all materials, up to Ø16: Ø 0.2 - 0.3"
+     }
+    }
+   ],
+   "unknown": [
+    "cutting data for steel (P groups): rows are blank for series 7285/7286 on p.29 (see series 1686 for steel)",
+    "helix angle in degrees: only 'straight-fluted' pictogram printed"
+   ],
+   "notes": "Catalogue: 'HR 500 High-Performance Reamers - 11/26 Catalog' (Guhring, Inc., Item #400148839), listed at https://guhring.com/Catalogs/CatalogSelected/179?v=3. Code no. 12.000. Allowance from catalogue p.5 (https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=5), 'Optimal diameters of pre-drilled holes'. Coolant: the catalogue shows the 'Internal cooling' pictogram row on the page header, but the maker's webshop item says 'Without internal cooling' with 'Nut am Schaft' (groove on shank); webshop value recorded. Webshop 'Flute length' differs from l2/l4 and is inconsistent across sizes; kept as separate key. Series 7286 replaces 1679; 7285 (Alu S, blind hole) has identical dims."
+  },
+  {
+   "kind": "counterbore",
+   "id": "9003240060000",
+   "name": "Counterbore with pilots for fine tolerances/Nominal diameter: 6.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN",
+   "url": "https://webshop.guehring.de/en/000009003240060000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Nominal diameter 6.000 mm"
+    },
+    "screw": {
+     "v": "M3",
+     "unit": "text",
+     "stated": "DIN 4000-81 property C13 = 'M 3' in maker's XML_4000 file 9003240060000_prop.xml"
+    },
+    "pilot_d": {
+     "v": 3.2,
+     "unit": "mm",
+     "stated": "DIN 4000-81 property G32 = '3,200' in maker's XML_4000 file 9003240060000_prop.xml (property code only, no label in file)"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'with fixed pilot • for through-holes' (webshop series page https://webshop.guehring.de/en/324); DIN 373; item name 'HSS S-FLACHSENKER ... DIN 373RN FEIN Z'"
+    },
+    "pilot_grade": {
+     "v": "fine (through hole)",
+     "unit": "text",
+     "stated": "'Counterbore with pilots for fine tolerances'"
+    },
+    "lcf": {
+     "v": 14.0,
+     "unit": "mm",
+     "stated": "Cutting edge length 14.00 mm"
+    },
+    "flute_length": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "Flute length 26.00 mm"
+    },
+    "oal": {
+     "v": 71.0,
+     "unit": "mm",
+     "stated": "Total length 71.00 mm"
+    },
+    "dcon": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Shank diameter 5.00 mm"
+    },
+    "neck_d": {
+     "v": 4.6,
+     "unit": "mm",
+     "stated": "Neck diameter 4.60 mm"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of cutting edges 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Countersink angle 180 °"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Cutting direction Right-hand"
+    },
+    "coolant": {
+     "v": "none",
+     "unit": "text",
+     "stated": "Cooling type Without internal cooling"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Cutting material HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "Standard: DIN 373"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting data (vc, f): not printed on the item page (only a JS 'Cutting Data Calculator', not used)",
+    "pilot length: not printed",
+    "pilot_d and screw size are not shown on the HTML item page; they come from the maker's DIN 4000 XML download, whose property codes (G32, C13) carry no labels in the file"
+   ],
+   "notes": "Guhring catalogue no. 324 6.000. XML_4000 file downloaded from the item page's Downloads (DIN 4000 characteristics). G32 values (3.2/4.3/5.3/6.4/8.4/10.5/13.0 across the series) match RUKO's printed pilot Ø for DIN 373 fine grade and the DIN 74 d1 'fein' column; other unlabelled codes in the file: B6=26,000, C4=31,500, D3=27,00, D4=37,500, G34=3,150. Navigator 2013 (guehring.com) lists 324 as 'Counterbores with fixed pilots, for fine tolerances, HSS, DIN 373'."
+  },
+  {
+   "kind": "counterbore",
+   "id": "9003240080000",
+   "name": "Counterbore with pilots for fine tolerances/Nominal diameter: 8.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN",
+   "url": "https://webshop.guehring.de/en/000009003240080000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Nominal diameter 8.000 mm"
+    },
+    "screw": {
+     "v": "M4",
+     "unit": "text",
+     "stated": "DIN 4000-81 property C13 = 'M 4' in maker's XML_4000 file 9003240080000_prop.xml"
+    },
+    "pilot_d": {
+     "v": 4.3,
+     "unit": "mm",
+     "stated": "DIN 4000-81 property G32 = '4,300' in maker's XML_4000 file 9003240080000_prop.xml (property code only, no label in file)"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'with fixed pilot • for through-holes' (webshop series page https://webshop.guehring.de/en/324); DIN 373; item name 'HSS S-FLACHSENKER ... DIN 373RN FEIN Z'"
+    },
+    "pilot_grade": {
+     "v": "fine (through hole)",
+     "unit": "text",
+     "stated": "'Counterbore with pilots for fine tolerances'"
+    },
+    "lcf": {
+     "v": 14.0,
+     "unit": "mm",
+     "stated": "Cutting edge length 14.00 mm"
+    },
+    "flute_length": {
+     "v": 26.0,
+     "unit": "mm",
+     "stated": "Flute length 26.00 mm"
+    },
+    "oal": {
+     "v": 71.0,
+     "unit": "mm",
+     "stated": "Total length 71.00 mm"
+    },
+    "dcon": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Shank diameter 5.00 mm"
+    },
+    "neck_d": {
+     "v": 4.6,
+     "unit": "mm",
+     "stated": "Neck diameter 4.60 mm"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of cutting edges 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Countersink angle 180 °"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Cutting direction Right-hand"
+    },
+    "coolant": {
+     "v": "none",
+     "unit": "text",
+     "stated": "Cooling type Without internal cooling"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Cutting material HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "Standard: DIN 373"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting data (vc, f): not printed on the item page (only a JS 'Cutting Data Calculator', not used)",
+    "pilot length: not printed",
+    "pilot_d and screw size are not shown on the HTML item page; they come from the maker's DIN 4000 XML download, whose property codes (G32, C13) carry no labels in the file"
+   ],
+   "notes": "Guhring catalogue no. 324 8.000. XML_4000 file downloaded from the item page's Downloads (DIN 4000 characteristics). G32 values (3.2/4.3/5.3/6.4/8.4/10.5/13.0 across the series) match RUKO's printed pilot Ø for DIN 373 fine grade and the DIN 74 d1 'fein' column; other unlabelled codes in the file: B6=26,000, C4=31,500, D3=28,00, D4=47,500, G34=5,000. Navigator 2013 (guehring.com) lists 324 as 'Counterbores with fixed pilots, for fine tolerances, HSS, DIN 373'."
+  },
+  {
+   "kind": "counterbore",
+   "id": "9003240100000",
+   "name": "Counterbore with pilots for fine tolerances/Nominal diameter: 10.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN",
+   "url": "https://webshop.guehring.de/en/000009003240100000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Nominal diameter 10.000 mm"
+    },
+    "screw": {
+     "v": "M5",
+     "unit": "text",
+     "stated": "DIN 4000-81 property C13 = 'M 5' in maker's XML_4000 file 9003240100000_prop.xml"
+    },
+    "pilot_d": {
+     "v": 5.3,
+     "unit": "mm",
+     "stated": "DIN 4000-81 property G32 = '5,300' in maker's XML_4000 file 9003240100000_prop.xml (property code only, no label in file)"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'with fixed pilot • for through-holes' (webshop series page https://webshop.guehring.de/en/324); DIN 373; item name 'HSS S-FLACHSENKER ... DIN 373RN FEIN Z'"
+    },
+    "pilot_grade": {
+     "v": "fine (through hole)",
+     "unit": "text",
+     "stated": "'Counterbore with pilots for fine tolerances'"
+    },
+    "lcf": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "Cutting edge length 18.00 mm"
+    },
+    "flute_length": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "Flute length 35.00 mm"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "Total length 80.00 mm"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank diameter 8.00 mm"
+    },
+    "neck_d": {
+     "v": 7.5,
+     "unit": "mm",
+     "stated": "Neck diameter 7.50 mm"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of cutting edges 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Countersink angle 180 °"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Cutting direction Right-hand"
+    },
+    "coolant": {
+     "v": "none",
+     "unit": "text",
+     "stated": "Cooling type Without internal cooling"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Cutting material HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "Standard: DIN 373"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting data (vc, f): not printed on the item page (only a JS 'Cutting Data Calculator', not used)",
+    "pilot length: not printed",
+    "pilot_d and screw size are not shown on the HTML item page; they come from the maker's DIN 4000 XML download, whose property codes (G32, C13) carry no labels in the file"
+   ],
+   "notes": "Guhring catalogue no. 324 10.000. XML_4000 file downloaded from the item page's Downloads (DIN 4000 characteristics). G32 values (3.2/4.3/5.3/6.4/8.4/10.5/13.0 across the series) match RUKO's printed pilot Ø for DIN 373 fine grade and the DIN 74 d1 'fein' column; other unlabelled codes in the file: B6=35,000, C4=35,500, D3=29,00, D4=56,000, G34=6,300. Navigator 2013 (guehring.com) lists 324 as 'Counterbores with fixed pilots, for fine tolerances, HSS, DIN 373'."
+  },
+  {
+   "kind": "counterbore",
+   "id": "9003240110000",
+   "name": "Counterbore with pilots for fine tolerances/Nominal diameter: 11.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN",
+   "url": "https://webshop.guehring.de/en/000009003240110000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "Nominal diameter 11.000 mm"
+    },
+    "screw": {
+     "v": "M6",
+     "unit": "text",
+     "stated": "DIN 4000-81 property C13 = 'M 6' in maker's XML_4000 file 9003240110000_prop.xml"
+    },
+    "pilot_d": {
+     "v": 6.4,
+     "unit": "mm",
+     "stated": "DIN 4000-81 property G32 = '6,400' in maker's XML_4000 file 9003240110000_prop.xml (property code only, no label in file)"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'with fixed pilot • for through-holes' (webshop series page https://webshop.guehring.de/en/324); DIN 373; item name 'HSS S-FLACHSENKER ... DIN 373RN FEIN Z'"
+    },
+    "pilot_grade": {
+     "v": "fine (through hole)",
+     "unit": "text",
+     "stated": "'Counterbore with pilots for fine tolerances'"
+    },
+    "lcf": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "Cutting edge length 18.00 mm"
+    },
+    "flute_length": {
+     "v": 35.0,
+     "unit": "mm",
+     "stated": "Flute length 35.00 mm"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "Total length 80.00 mm"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Shank diameter 8.00 mm"
+    },
+    "neck_d": {
+     "v": 7.5,
+     "unit": "mm",
+     "stated": "Neck diameter 7.50 mm"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of cutting edges 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Countersink angle 180 °"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Cutting direction Right-hand"
+    },
+    "coolant": {
+     "v": "none",
+     "unit": "text",
+     "stated": "Cooling type Without internal cooling"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Cutting material HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "Standard: DIN 373"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting data (vc, f): not printed on the item page (only a JS 'Cutting Data Calculator', not used)",
+    "pilot length: not printed",
+    "pilot_d and screw size are not shown on the HTML item page; they come from the maker's DIN 4000 XML download, whose property codes (G32, C13) carry no labels in the file"
+   ],
+   "notes": "Guhring catalogue no. 324 11.000. XML_4000 file downloaded from the item page's Downloads (DIN 4000 characteristics). G32 values (3.2/4.3/5.3/6.4/8.4/10.5/13.0 across the series) match RUKO's printed pilot Ø for DIN 373 fine grade and the DIN 74 d1 'fein' column; other unlabelled codes in the file: B6=35,000, C4=35,500, D3=29,00, D4=63,000, G34=6,300. Navigator 2013 (guehring.com) lists 324 as 'Counterbores with fixed pilots, for fine tolerances, HSS, DIN 373'."
+  },
+  {
+   "kind": "counterbore",
+   "id": "9003240150000",
+   "name": "Counterbore with pilots for fine tolerances/Nominal diameter: 15.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN",
+   "url": "https://webshop.guehring.de/en/000009003240150000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "Nominal diameter 15.000 mm"
+    },
+    "screw": {
+     "v": "M8",
+     "unit": "text",
+     "stated": "DIN 4000-81 property C13 = 'M 8' in maker's XML_4000 file 9003240150000_prop.xml"
+    },
+    "pilot_d": {
+     "v": 8.4,
+     "unit": "mm",
+     "stated": "DIN 4000-81 property G32 = '8,400' in maker's XML_4000 file 9003240150000_prop.xml (property code only, no label in file)"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'with fixed pilot • for through-holes' (webshop series page https://webshop.guehring.de/en/324); DIN 373; item name 'HSS S-FLACHSENKER ... DIN 373RN FEIN Z'"
+    },
+    "pilot_grade": {
+     "v": "fine (through hole)",
+     "unit": "text",
+     "stated": "'Counterbore with pilots for fine tolerances'"
+    },
+    "lcf": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "Cutting edge length 22.00 mm"
+    },
+    "flute_length": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "Flute length 43.00 mm"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "Total length 100.00 mm"
+    },
+    "dcon": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "Shank diameter 12.50 mm"
+    },
+    "neck_d": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Neck diameter 12.00 mm"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of cutting edges 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Countersink angle 180 °"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Cutting direction Right-hand"
+    },
+    "coolant": {
+     "v": "none",
+     "unit": "text",
+     "stated": "Cooling type Without internal cooling"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Cutting material HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "Standard: DIN 373"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting data (vc, f): not printed on the item page (only a JS 'Cutting Data Calculator', not used)",
+    "pilot length: not printed",
+    "pilot_d and screw size are not shown on the HTML item page; they come from the maker's DIN 4000 XML download, whose property codes (G32, C13) carry no labels in the file"
+   ],
+   "notes": "Guhring catalogue no. 324 15.000. XML_4000 file downloaded from the item page's Downloads (DIN 4000 characteristics). G32 values (3.2/4.3/5.3/6.4/8.4/10.5/13.0 across the series) match RUKO's printed pilot Ø for DIN 373 fine grade and the DIN 74 d1 'fein' column; other unlabelled codes in the file: B6=43,000, C4=40,000, D3=30,00, D4=80,000, G34=8,000. Navigator 2013 (guehring.com) lists 324 as 'Counterbores with fixed pilots, for fine tolerances, HSS, DIN 373'."
+  },
+  {
+   "kind": "counterbore",
+   "id": "9003240180000",
+   "name": "Counterbore with pilots for fine tolerances/Nominal diameter: 18.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN",
+   "url": "https://webshop.guehring.de/en/000009003240180000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "Nominal diameter 18.000 mm"
+    },
+    "screw": {
+     "v": "M10",
+     "unit": "text",
+     "stated": "DIN 4000-81 property C13 = 'M 10' in maker's XML_4000 file 9003240180000_prop.xml"
+    },
+    "pilot_d": {
+     "v": 10.5,
+     "unit": "mm",
+     "stated": "DIN 4000-81 property G32 = '10,500' in maker's XML_4000 file 9003240180000_prop.xml (property code only, no label in file)"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'with fixed pilot • for through-holes' (webshop series page https://webshop.guehring.de/en/324); DIN 373; item name 'HSS S-FLACHSENKER ... DIN 373RN FEIN Z'"
+    },
+    "pilot_grade": {
+     "v": "fine (through hole)",
+     "unit": "text",
+     "stated": "'Counterbore with pilots for fine tolerances'"
+    },
+    "lcf": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "Cutting edge length 22.00 mm"
+    },
+    "flute_length": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "Flute length 43.00 mm"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "Total length 100.00 mm"
+    },
+    "dcon": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "Shank diameter 12.50 mm"
+    },
+    "neck_d": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Neck diameter 12.00 mm"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of cutting edges 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Countersink angle 180 °"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Cutting direction Right-hand"
+    },
+    "coolant": {
+     "v": "none",
+     "unit": "text",
+     "stated": "Cooling type Without internal cooling"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Cutting material HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "Standard: DIN 373"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting data (vc, f): not printed on the item page (only a JS 'Cutting Data Calculator', not used)",
+    "pilot length: not printed",
+    "pilot_d and screw size are not shown on the HTML item page; they come from the maker's DIN 4000 XML download, whose property codes (G32, C13) carry no labels in the file"
+   ],
+   "notes": "Guhring catalogue no. 324 18.000. XML_4000 file downloaded from the item page's Downloads (DIN 4000 characteristics). G32 values (3.2/4.3/5.3/6.4/8.4/10.5/13.0 across the series) match RUKO's printed pilot Ø for DIN 373 fine grade and the DIN 74 d1 'fein' column; other unlabelled codes in the file: B6=43,000, C4=40,000, D3=30,00, D4=95,000, G34=10,000. Navigator 2013 (guehring.com) lists 324 as 'Counterbores with fixed pilots, for fine tolerances, HSS, DIN 373'."
+  },
+  {
+   "kind": "counterbore",
+   "id": "9003240200000",
+   "name": "Counterbore with pilots for fine tolerances/Nominal diameter: 20.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN",
+   "url": "https://webshop.guehring.de/en/000009003240200000",
+   "taken": "2026-11-24",
+   "values": {
+    "dc": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Nominal diameter 20.000 mm"
+    },
+    "screw": {
+     "v": "M12",
+     "unit": "text",
+     "stated": "DIN 4000-81 property C13 = 'M 12' in maker's XML_4000 file 9003240200000_prop.xml"
+    },
+    "pilot_d": {
+     "v": 13.0,
+     "unit": "mm",
+     "stated": "DIN 4000-81 property G32 = '13,000' in maker's XML_4000 file 9003240200000_prop.xml (property code only, no label in file)"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'with fixed pilot • for through-holes' (webshop series page https://webshop.guehring.de/en/324); DIN 373; item name 'HSS S-FLACHSENKER ... DIN 373RN FEIN Z'"
+    },
+    "pilot_grade": {
+     "v": "fine (through hole)",
+     "unit": "text",
+     "stated": "'Counterbore with pilots for fine tolerances'"
+    },
+    "lcf": {
+     "v": 22.0,
+     "unit": "mm",
+     "stated": "Cutting edge length 22.00 mm"
+    },
+    "flute_length": {
+     "v": 43.0,
+     "unit": "mm",
+     "stated": "Flute length 43.00 mm"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "Total length 100.00 mm"
+    },
+    "dcon": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "Shank diameter 12.50 mm"
+    },
+    "neck_d": {
+     "v": 12.0,
+     "unit": "mm",
+     "stated": "Neck diameter 12.00 mm"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Number of cutting edges 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Countersink angle 180 °"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Cutting direction Right-hand"
+    },
+    "coolant": {
+     "v": "none",
+     "unit": "text",
+     "stated": "Cooling type Without internal cooling"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Cutting material HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Surface TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "Standard: DIN 373"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting data (vc, f): not printed on the item page (only a JS 'Cutting Data Calculator', not used)",
+    "pilot length: not printed",
+    "pilot_d and screw size are not shown on the HTML item page; they come from the maker's DIN 4000 XML download, whose property codes (G32, C13) carry no labels in the file"
+   ],
+   "notes": "Guhring catalogue no. 324 20.000. XML_4000 file downloaded from the item page's Downloads (DIN 4000 characteristics). G32 values (3.2/4.3/5.3/6.4/8.4/10.5/13.0 across the series) match RUKO's printed pilot Ø for DIN 373 fine grade and the DIN 74 d1 'fein' column; other unlabelled codes in the file: B6=43,000, C4=40,000, D3=30,00, D4=106,000, G34=12,500. Navigator 2013 (guehring.com) lists 324 as 'Counterbores with fixed pilots, for fine tolerances, HSS, DIN 373'."
+  }
+ ],
+ "blocked": [
+  "webnavigator.guehring.de/en/tools/<EDP>: JavaScript-only app (API at api.guehring.de not used)",
+  "webshop.guehring.de: series/grouped pages (e.g. /en/324) load the variant table by JavaScript; item pages used instead",
+  "guehring.com general catalogue PDF with counterbore dimension tables: not found on maker downloads page (JS-loaded list); Navigator 2013 PDF is a summary without dimensions"
+ ]
+}

@@ -246,6 +246,36 @@ p90 74229×, slowest check 307 s. Far over §5's estimate: the checker is all-pa
 rationals with no spatial index and runs three frames. It runs where §5 says (tests, fuzzers, CI,
 an on-demand command), never on the build path.
 
+`certify suite --mutate` and `certify families more plane_plane notched lang --mutate` on 9880fd4a
+(this checker as merged; release; two runs, both exit 0):
+
+| run | accepted | rejected | out of scope | face-dropped mutants | op-changed mutants |
+|---|---|---|---|---|---|
+| suite | 244 | 0 | 0 | 488 rejected | 488 rejected |
+| families, more, plane_plane, notched, lang | 1524 | 0 | 785 | 2976 rejected | 3045 rejected, 3 accepted |
+
+Out of scope in the second run: 342 the kernel refused, 267 an edge not straight, 131 the n-ary
+boolean, 45 a vertex not one point of the planes (and the edge) round it. FLAT-SITES attributed and
+measured those 45 (on main 4846170a, the same totals). They come from coincident_walls 22, lang 17,
+and one each from loft_ends, coplanar_stack, near_tolerance/20, degen_plane_plane, and
+plane_plane/diamond_corners_on_edges Add and Keep. Every result is valid (forge_topo::check). In 44 of
+them every vertex lies within 3.7e-12 of each face plane and straight-edge line round it (most within
+1e-15 to 6e-14; the worst, lang/10 boolean 2 inter, is 8.4e-13 from a plane and 3.7e-12 from a line).
+near_tolerance/20 boolean 4 union's worst vertex is 9.99999999962e-6 from a plane and 6.7e-6 from an
+edge line: at most δ = LINEAR = 1e-5, as that family is built to be. So all 45 are tolerance merges
+(the snapped planes have no single point) with the kernel's vertex within δ of every carrier, and
+none is a crossing snapped beyond δ. This covers validity and the vertex/edge half of Faithful only:
+the region half and exact `denote` equality are not covered here. The exact reference judges most of
+these families as agreeing, and near_tolerance mostly as ambiguous.
+
+The 3 accepted mutants are all A op A on equal solids, where union and intersection are the same
+point set (equivalent mutants, not a checker that accepts a wrong certificate):
+`plane_plane/identical/Add` (union claimed as Intersect), `plane_plane/identical/Keep` (inter
+claimed as Union), and `degen_plane_plane/5`. The last is seed 5 of `degenerate("plane", "plane")`:
+tool `5 % 15` = index 5 of `degen_tools("plane", "plane")`, `identical` (the base block,
+(-20,-20,-20) 40×40×20), with op `DEGEN_OPS[(5 / 15) % 3]` = Add (n = 15 tools)
+(kernel/forge-model/src/adversarial.rs).
+
 **Next steps, for resuming** (stopped here by the owner's priorities):
 1. Instrument the n-ary boolean (`nary_with`: its regions as pieces), so its 134 booleans and the
    n-ary lost-face family are certified instead of counted out of scope.

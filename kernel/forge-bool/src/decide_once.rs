@@ -1622,7 +1622,10 @@ fn sliver(cls: &Classes, b: &Built, out: &core::Body) -> Option<Point3> {
             *count.entry(u).or_default() += 1;
             *count.entry(v).or_default() += 1;
         }
-        let ends: Vec<u32> = count.iter().filter(|(_, n)| **n == 1).map(|(v, _)| *v).collect();
+        // (sorted: the map's order is its random seed's, and the midpoint below is not symmetric in
+        // its ends to the bit; it is the refusal's `at`)
+        let mut ends: Vec<u32> = count.iter().filter(|(_, n)| **n == 1).map(|(v, _)| *v).collect();
+        ends.sort_unstable();
         if ends.len() == 2 && pt(ends[0]).distance(pt(ends[1])) < l {
             let (p, q) = (pt(ends[0]), pt(ends[1]));
             return Some(p + (q - p) * 0.5);

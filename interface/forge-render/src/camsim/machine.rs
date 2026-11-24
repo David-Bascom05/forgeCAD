@@ -84,13 +84,29 @@ impl MachineView {
                 continue;
             };
             let arc = match &s.path {
-                Path::Arc { .. } => (|| {
-                    // three distinct points (a whole turn starts and ends at one), then the
-                    // sweep by unwrapping the angle along it, a quarter of the way at a time
+                Path::Arc {
+                    a: ja, b: jb, c: jc, ..
+                } => (|| {
+                    // the machine's centre in the part's frame (the arc's two joints are linear
+                    // axes, so the tip at the centre's joint values is the centre; else three
+                    // points' circle); the radius from the start's to the end's, as the machine
+                    // blends it; the sweep by unwrapping the angle along it, an eighth at a time
                     let p: Vec<[f64; 3]> = (0..=8)
                         .map(|k| run.tip(&s.at(k as f64 / 8.0), t))
                         .collect::<Option<_>>()?;
-                    let (c, r) = circle3(p[2], p[4], p[6])?;
+                    let linear = |j: usize| run.def.joints[j].ty == forge_machine::def::JointType::Linear;
+                    let c = if linear(*ja) && linear(*jb) {
+                        let mut q = s.at(0.0);
+                        q[*ja] = jc[0];
+                        q[*jb] = jc[1];
+                        let o = run.tip(&q, t)?;
+                        [o[0], o[1]]
+                    } else {
+                        circle3(p[2], p[4], p[6])?.0
+                    };
+                    let rad = |q: [f64; 3]| ((q[0] - c[0]).powi(2) + (q[1] - c[1]).powi(2)).sqrt();
+                    let r = rad(p[0]);
+                    let dr = rad(p[8]) - r;
                     let ang = |q: [f64; 3]| dmath::atan2(q[1] - c[1], q[0] - c[0]);
                     let a0 = ang(p[0]);
                     let mut sweep = 0.0;
@@ -107,7 +123,7 @@ impl MachineView {
                         sweep += d;
                         prev = x;
                     }
-                    Some(ArcOf { c, r, a0, sweep })
+                    Some(ArcOf { c, r, dr, a0, sweep })
                 })(),
                 Path::Line => None,
             };
@@ -318,6 +334,10 @@ impl MachineView {
                     *line,
                     format!("line {line}: T{t} beyond the changer's {max} pockets"),
                 ),
+                Violation::Zone { line, zone, .. } => (
+                    *line,
+                    format!("line {line}: enters the machine's forbidden zone `{zone}`"),
+                ),
             };
             let Some(i) = at_line(line) else { continue };
             let t = segs[i].t0;
@@ -453,6 +473,27 @@ fn prim(m: &Rigid, p: &Prim, c: [f32; 3], out: &mut Vec<WorldVert>) {
                 [0.0, -1.0, 0.0],
                 out,
             );
+        }
+        Prim::OBox { o, axes, size } => {
+            // corners o + Σ f_k size_k axes_k (f_k 0 or 1); each face's normal ± its axis,
+            // its corners counter-clockwise seen from outside (as the Box faces above)
+            let v = |f: [u8; 3]| Prim::obox_at(&o, &axes, &size, f.map(f64::from));
+            let neg = |a: [f64; 3]| a.map(|x| -x);
+            for (k, i, j) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)] {
+                let at = |side: u8, a: u8, b: u8| {
+                    let mut f = [0u8; 3];
+                    f[k] = side;
+                    f[i] = a;
+                    f[j] = b;
+                    v(f)
+                };
+                quad([at(1, 0, 0), at(1, 1, 0), at(1, 1, 1), at(1, 0, 1)], axes[k], out);
+                quad(
+                    [at(0, 0, 0), at(0, 0, 1), at(0, 1, 1), at(0, 1, 0)],
+                    neg(axes[k]),
+                    out,
+                );
+            }
         }
         Prim::Cyl { base, axis, r, h } => {
             // a frame about the axis

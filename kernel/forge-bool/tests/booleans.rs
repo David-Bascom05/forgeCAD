@@ -216,10 +216,10 @@ fn check_honours_vertex_tolerance() {
     let mut moved = good.clone();
     moved.vertices[0].point.x += 3e-5;
     assert!(!check(&moved).is_empty());
-    moved.vertices[0].tol = 4e-5;
+    moved.grow_vertex_tol(forge_topo::VertexId(0), 4e-5);
     valid(&moved);
     // a ball reaching halfway along an edge is no longer a tolerance
-    moved.vertices[0].tol = 6.0;
+    moved.grow_vertex_tol(forge_topo::VertexId(0), 6.0);
     assert!(
         check(&moved)
             .iter()
@@ -669,5 +669,63 @@ fn bends_tangent_on_one_flat_touch() {
         let common =
             boolean(&bracket, &post, Op::Intersect, 3).unwrap_or_else(|e| panic!("dip {dip}: {e:?}"));
         assert!(volume(&common).abs() < 1e-6, "dip {dip}: {}", volume(&common));
+    }
+}
+
+/// B2 (research/kernel-audit/tilt-wrong-ok.md): a box and a prism under its y = 0 wall whose top
+/// wall runs from y = -1.2e-5 to 1.2e-5 over the length, crossing the box's wall at x = L/2 at
+/// 2.4e-5/L rad. Between the walls lies a wedge 1.2e-5 thick at x = L (1.2·LINEAR): every op is a
+/// valid solid of the exact volume (once an invalid body for intersect and false ZeroThickness
+/// refusals for union and subtract: the prism's bottom edge was not imprinted into the box's
+/// coplanar bottom, its samples all within LINEAR of the box's edge).
+#[test]
+fn tilted_wedge_thinner_than_two_tolerances() {
+    let prism = |pts: &[(f64, f64)], feature: u64| {
+        let n = pts.len();
+        let segs = (0..n)
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % n]);
+                (
+                    Segment::Line {
+                        a: Point2::new(a.0, a.1),
+                        b: Point2::new(b.0, b.1),
+                    },
+                    feature * 10 + i as u64,
+                )
+            })
+            .collect();
+        extrude(
+            &Profile {
+                plane: Frame::WORLD,
+                loops: vec![ProfileLoop::new(segs)],
+            },
+            10.0,
+            feature,
+        )
+        .unwrap()
+    };
+    for l in [1e3, 1e5, 1e6, 2e6] {
+        let a = prism(&[(0.0, 0.0), (l, 0.0), (l, 10.0), (0.0, 10.0)], 1);
+        let b = prism(&[(0.0, -10.0), (l, -10.0), (l, 1.2e-5), (0.0, -1.2e-5)], 2);
+        // the wedge: a triangle L/2 long and 1.2e-5 wide at its end, 10 high
+        let wedge = 3e-5 * l;
+        for (op, want) in [
+            (Op::Intersect, wedge),
+            (Op::Union, 200.0 * l - wedge),
+            (Op::Subtract, 100.0 * l - wedge),
+        ] {
+            let r = boolean(&a, &b, op, 9).unwrap_or_else(|e| panic!("L {l} {op:?}: {e:?}"));
+            valid(&r);
+            let open = tessellate(&r, &Quality::default()).unwrap().open_edges();
+            assert!(open.is_empty(), "L {l} {op:?}: {} open mesh edges", open.len());
+            // (the volume with its error bound: the wedge's own is tiny beside its coordinates)
+            let m = forge_topo::mass::mass(&r).unwrap();
+            let slack = m.err[0] + 1e-9 * want;
+            assert!(
+                (m.volume - want).abs() <= slack,
+                "L {l} {op:?}: {} want {want}",
+                m.volume
+            );
+        }
     }
 }

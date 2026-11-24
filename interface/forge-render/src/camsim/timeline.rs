@@ -36,6 +36,8 @@ impl Kind {
             Phase::Plunge => Kind::Plunge,
             Phase::Link => Kind::Link,
             Phase::Rapid => Kind::Rapid,
+            // a probe's search shows as a link until CAM-SIM gives it its own look
+            Phase::Probe | Phase::Touch => Kind::Link,
         }
     }
 }
@@ -45,6 +47,10 @@ impl Kind {
 pub struct ArcOf {
     pub c: [f64; 2],
     pub r: f64,
+    /// The end's radius less the start's: a posted arc's ends, rounded to the control's
+    /// resolution, sit at radii a little apart; the radius goes from one to the other along
+    /// the sweep (as a control blends them), so the piece ends where the move says.
+    pub dr: f64,
     /// Start angle and signed sweep, radians.
     pub a0: f64,
     pub sweep: f64,
@@ -84,7 +90,8 @@ impl Seg {
             ],
             Some(ar) => {
                 let t = ar.a0 + ar.sweep * u;
-                [ar.c[0] + ar.r * dmath::cos(t), ar.c[1] + ar.r * dmath::sin(t), z]
+                let r = ar.r + ar.dr * u;
+                [ar.c[0] + r * dmath::cos(t), ar.c[1] + r * dmath::sin(t), z]
             }
         }
     }
@@ -178,6 +185,15 @@ pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64
                 put(segs, i, Kind::of(phase), at, to, None, f, &mut t);
                 at = to;
             }
+            // a probe move: its search to the nominal contact, and its back-off when it has one
+            PMove::Probe { to, f, back, .. } => {
+                put(segs, i, Kind::Link, at, to, None, f, &mut t);
+                if back {
+                    put(segs, i, Kind::Link, to, at, None, f, &mut t);
+                } else {
+                    at = to;
+                }
+            }
             PMove::Arc { to, c, cw, f } => {
                 let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
                 let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
@@ -196,6 +212,7 @@ pub fn push_path(op: u32, path: u32, p: &OpPath, segs: &mut Vec<Seg>, mut t: f64
                 let arc = ArcOf {
                     c,
                     r,
+                    dr: ((to[0] - c[0]).powi(2) + (to[1] - c[1]).powi(2)).sqrt() - r,
                     a0,
                     sweep: a1 - a0,
                 };
