@@ -553,6 +553,40 @@ fn a_turning_document_docks_its_section_and_windows_take_turns() {
         h.step();
     }
     assert!(h.gui.shell.camsim.is_none(), "no milling simulation of a lathe document");
+    // the Section window covers the view's bottom right: the part framed in what it leaves
+    // (UX-LEAD), not small behind it
+    {
+        let w = h.gui.shell.cam.as_ref().unwrap();
+        let sec = w.section_at.expect("the Section window open");
+        assert!(w.view_side != [0.0, 0.0], "framed around the Section window");
+        let vr = h.gui.shell.view_rect;
+        let cam = w.framed.expect("framed");
+        // the subject as the re-frame takes it: the shown box, else the scene's bounds
+        let scene = &h.gui.view.as_ref().unwrap().scene;
+        let b = match scene.shown_box() {
+            Some((lo, hi)) => forge_render::frame::Bounds::new(lo, hi),
+            None => {
+                let (c, r) = scene.bounds();
+                forge_render::frame::Bounds::new([c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r])
+            }
+        };
+        let px: Vec<(f32, f32)> = b
+            .corners()
+            .iter()
+            .filter_map(|c| cam.pixel_of(*c, vr.width() as u32, vr.height() as u32))
+            .map(|(x, y)| (vr.left() + x, vr.top() + y))
+            .collect();
+        let part = egui::Rect::from_points(&px.iter().map(|p| egui::pos2(p.0, p.1)).collect::<Vec<_>>());
+        let free = if w.view_side[0] > 0.0 {
+            egui::Rect::from_min_max(vr.min, egui::pos2(vr.right() - w.view_side[0], vr.bottom() - w.view_cover))
+        } else {
+            egui::Rect::from_min_max(vr.min, egui::pos2(vr.right(), vr.bottom() - w.view_cover - w.view_side[1]))
+        };
+        assert!(!part.shrink(2.0).intersects(sec), "the part {part:?} behind the Section window {sec:?}");
+        let fill = (part.width() / free.width()).max(part.height() / free.height());
+        assert!(fill > 0.55, "the part fills {fill:.2} of what is left");
+    }
+    shot(&mut h, "cam-turn-section-framed");
     assert!(h.click("tool:NC Programs"));
     h.step();
     h.step();

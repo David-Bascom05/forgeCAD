@@ -327,6 +327,10 @@ pub struct CamWs {
     pub view_w: f32,
     /// The view's bottom the panels cover (the timeline, Document Text) when last framed.
     pub view_cover: f32,
+    /// The turning Section window where it was drawn last frame (it covers the view's bottom
+    /// right), and the right and bottom insets it was framed around.
+    pub section_at: Option<egui::Rect>,
+    pub view_side: [f32; 2],
     pub framed: Option<crate::camera::Camera>,
     pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
@@ -397,6 +401,8 @@ impl CamWs {
             sim_tab: false,
             view_w: 0.0,
             view_cover: 0.0,
+            section_at: None,
+            view_side: [0.0, 0.0],
             framed: None,
             prog_field: None,
         };

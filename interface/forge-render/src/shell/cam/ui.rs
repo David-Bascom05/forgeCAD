@@ -552,6 +552,8 @@ impl Shell {
                         &format!("cam:tool:{}", s.name),
                         &mut places,
                     );
+                    // the library's key on hover (§5: words on the row, the id behind them)
+                    let resp = (resp.0, resp.1.on_hover_text(tool_key(s)));
                     if resp.1.double_clicked() {
                         cmds.push(Cmd::ToolLibrary);
                     }
@@ -651,8 +653,11 @@ impl Shell {
         if w.text_open {
             blocks.extend(text_window(ctx, &t, v, &mut w, &mut places));
         }
+        // the Section window's rect, for the view framed around it (Gui::cam_reframe)
+        w.section_at = None;
         if w.turning() && w.turnview.open {
-            blocks.extend(section_window(ctx, &t, v, &mut w, &mut places));
+            w.section_at = section_window(ctx, &t, v, &mut w, &mut places);
+            blocks.extend(w.section_at);
         }
         // docked only in a frame whose properties column set it (it draws before this)
         w.dock = None;
@@ -3962,7 +3967,45 @@ fn tool_words(w: &CamWs, s: &super::doc::Stmt) -> String {
     let t = s.arg("t").unwrap_or("?");
     match w.lib.tools.iter().find(|x| x.id == id) {
         Some(x) => format!("T{t} · {} Ø{}", kind_words(x.kind), num(x.dc)),
-        None => format!("T{t} · {id}"),
+        // a lathe tool: from the built-in turning library's record
+        None => match forge_turn::insert::builtin(&id) {
+            Ok(x) => format!("T{t} · {}", lathe_tool_words(&x)),
+            Err(_) => format!("T{t} · {id}"),
+        },
+    }
+}
+
+/// A tool statement's library key, for the row's hover: `od-rough-cnmg`.
+fn tool_key(s: &super::doc::Stmt) -> String {
+    s.pos(0).map(super::doc::unquote).unwrap_or_else(|| s.name.clone())
+}
+
+/// A lathe tool in words, from its record's fields: "OD turning · CNMG 12", "Thread 60°",
+/// "Part-off 3 mm", "Drill Ø8". (Rough or finish is how an op uses a tool, not the tool's.)
+pub fn lathe_tool_words(x: &forge_turn::insert::TurnTool) -> String {
+    use forge_turn::insert::Kind;
+    match x.kind {
+        Kind::Turn => format!("OD turning \u{b7} {}", insert_short(&x.code)),
+        Kind::Bore => format!("Boring bar \u{b7} {}", insert_short(&x.code)),
+        Kind::Groove => format!("Groove {} mm", num(x.width)),
+        Kind::Part => format!("Part-off {} mm", num(x.width)),
+        Kind::IdGroove => format!("ID groove {} mm", num(x.width)),
+        // the kinds' profile (forge-turn: a 60° thread insert)
+        Kind::Thread => "Thread 60\u{b0}".to_string(),
+        Kind::IdThread => "ID thread 60\u{b0}".to_string(),
+        // a drill keeps its diameter as its width (forge-turn drill_tool)
+        Kind::Drill => format!("Drill \u{d8}{}", num(x.width)),
+    }
+}
+
+/// An ISO 1832 insert code as a machinist says it: its shape, clearance, tolerance and type,
+/// then its size ("CNMG120408" → "CNMG 12"); a code of another form whole.
+fn insert_short(code: &str) -> String {
+    let b = code.as_bytes();
+    if b.len() >= 6 && b[..4].iter().all(u8::is_ascii_alphabetic) && b[4..6].iter().all(u8::is_ascii_digit) {
+        format!("{} {}", &code[..4], &code[4..6])
+    } else {
+        code.to_string()
     }
 }
 
@@ -4178,6 +4221,17 @@ mod tests {
 
     /// The simulation's header says a certified run as the chip does: no raw certification
     /// string ("full except G4 (leftover not computed)"), the code on the hover's first line.
+    /// A lathe tool reads in words from its record, never its key (UX-LEAD).
+    #[test]
+    fn lathe_tools_read_in_words() {
+        let w = |id: &str| super::lathe_tool_words(&forge_turn::insert::builtin(id).unwrap());
+        assert_eq!(w("od-rough-cnmg"), "OD turning \u{b7} CNMG 12");
+        assert_eq!(w("thread-60"), "Thread 60\u{b0}");
+        assert_eq!(w("part-3"), "Part-off 3 mm");
+        assert_eq!(w("drill-8"), "Drill \u{d8}8");
+        assert_eq!(super::insert_short("not-iso"), "not-iso");
+    }
+
     #[test]
     fn the_simulations_header_reads_as_the_chip() {
         assert_eq!(super::certified_words("full"), ("Certified".to_string(), None, false));
