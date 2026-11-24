@@ -284,17 +284,18 @@ fn parity_arguments_the_dialogs_write_generate() {
     let cam = forge_cam_lang::run(&src, ex);
     let op = cam.ops.iter().find(|o| o.name == "prof").expect("prof");
     assert!(op.refusal.is_none(), "{:?}", op.refusal);
-    // the parity fields are offered only on the ops that take them
-    for s in forge_render::shell::cam::schema::OPS {
-        for f in s.fields {
-            if f.arg == "direction" || f.arg.starts_with("finish") || f.arg == "spring" {
-                assert_eq!(s.func, "contour", "{} offers {}", s.func, f.arg);
-            }
-            if f.arg == "leave_axial" {
-                assert!(["facing", "clear", "contour", "pocket"].contains(&s.func), "{}", s.func);
-            }
-        }
+    // CAM-2D-FINISH's: leads and tabs on the contour, and Bore in place of the pocket
+    let lead = prof.replacen("step: 4", "step: 4, lead: \"arc\", tabs: 4, tab_height: 1", 1);
+    let bore = src.lines().find(|l| l.starts_with("bore")).unwrap().to_string();
+    let src2 = src
+        .replace(&new, &lead)
+        .replace(&bore, "bore = bore(op1, f.bore_h, tool: t1, finish_leave: 0.2, spring: 1)");
+    let cam = forge_cam_lang::run(&src2, ex);
+    for n in ["prof", "bore"] {
+        let op = cam.ops.iter().find(|o| o.name == n).expect(n);
+        assert!(op.refusal.is_none(), "{n}: {:?}", op.refusal);
     }
+    // which op offers which field: every_dialog_field_is_an_argument_the_language_takes (ARGS)
 }
 
 /// Every milling form offers only arguments the language takes (forge-cam-lang's ARGS: any other
