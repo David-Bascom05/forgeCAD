@@ -13,9 +13,9 @@
 //! Sources compiled only behind a cargo feature that no shipped build turns on (`GATED`) are
 //! scanned only when this test is built with that feature: the default run covers the shipped
 //! kernel, and `cargo test -p forge-model --test hidden_inputs --features decide_once` covers
-//! the decide-once boolean too. That second run may fail for now (its sources are not all
-//! reviewed yet), but it is required to pass before `decide_once` is ever turned on by default
-//! or in any build that ships: `gated_files_are_gated` keeps the list honest.
+//! the decide-once boolean too (its sources reviewed, with forge-bool-core's). It is required to
+//! pass before `decide_once` is ever turned on by default or in any build that ships:
+//! `gated_files_are_gated` keeps the list honest.
 
 #[path = "support/cfg_test_items.rs"]
 mod cfg_test_items;

@@ -139,17 +139,17 @@ structure interval.Interval where
   hi : F64
 
 /-- [forge_math::interval::{forge_math::interval::Interval}::atan2::{closure#1}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 134:16-134:32 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 135:16-135:32 -/
 @[reducible]
 def interval.Interval.atan2.closure_1 := Unit
 
 /-- [forge_math::interval::{forge_math::interval::Interval}::atan2::{closure}]
-    Source: 'kernel/forge-math/src/interval.rs', lines 128:57-128:74 -/
+    Source: 'kernel/forge-math/src/interval.rs', lines 129:57-129:74 -/
 @[reducible]
 def interval.Interval.atan2.closure := Unit
 
 /-- [forge_math::interval::Box3]
-    Source: 'kernel/forge-math/src/interval.rs', lines 291:0-295:1
+    Source: 'kernel/forge-math/src/interval.rs', lines 292:0-296:1
     Visibility: public -/
 structure interval.Box3 where
   x : interval.Interval
@@ -157,7 +157,7 @@ structure interval.Box3 where
   z : interval.Interval
 
 /-- [forge_math::interval::Box2]
-    Source: 'kernel/forge-math/src/interval.rs', lines 357:0-360:1
+    Source: 'kernel/forge-math/src/interval.rs', lines 358:0-361:1
     Visibility: public -/
 structure interval.Box2 where
   u : interval.Interval

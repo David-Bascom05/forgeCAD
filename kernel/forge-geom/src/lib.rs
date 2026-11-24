@@ -19,6 +19,7 @@ pub mod isolate;
 pub mod loftmeet;
 pub mod meet;
 mod meet_gen;
+pub mod node;
 pub mod ruled;
 pub mod screw;
 pub mod sheet;

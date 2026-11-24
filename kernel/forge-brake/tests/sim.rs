@@ -474,3 +474,42 @@ fn clearances_just_pass_and_just_fail() {
     let c = selfc(&t);
     assert!(!c.pass && c.part.is_some() && c.other.is_some(), "{c:?}");
 }
+
+#[test]
+fn programs_are_feasible_and_ranked() {
+    // a return lip on one side, a plain flange on the other, and a third along the end
+    let (mut s, base) = sheet(2.0, 2.0, 60.0, 200.0);
+    let (f1, _) = s.flange(base, 1, deg(90.0), 40.0).unwrap();
+    s.flange(f1, 1, deg(90.0), 15.0).unwrap();
+    s.flange(base, 3, deg(90.0), 40.0).unwrap();
+    let m = forge_brake::Model::new(&s).unwrap();
+    let tl = forge_brake::library::std_eu();
+    let ps = forge_brake::programs(&m, &tl, &forge_brake::Options::default(), 5);
+    assert!(!ps.is_empty());
+    for w in ps.windows(2) {
+        assert!(w[0].key() <= w[1].key());
+    }
+    for p in &ps {
+        assert!(p.plan.feasible && p.plan.steps.iter().all(|s| s.pass()));
+        let mut seq = p.plan.sequence.clone();
+        seq.sort_unstable();
+        assert_eq!(seq, (0..m.bends.len()).collect::<Vec<_>>());
+        // the program simulated as given, tools kept, passes again
+        let again = forge_brake::simulate(
+            &m,
+            &tl,
+            &p.plan.sequence,
+            &forge_brake::Options {
+                keep_tools: true,
+                ..Default::default()
+            },
+        );
+        assert!(again.feasible);
+    }
+    eprintln!(
+        "{:?}",
+        ps.iter()
+            .map(|p| (p.plan.sequence.clone(), p.key()))
+            .collect::<Vec<_>>()
+    );
+}

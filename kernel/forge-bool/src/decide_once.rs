@@ -186,8 +186,8 @@ impl Uf {
 fn plainly_apart(a: &In, b: &In, k: f64) -> bool {
     let l = lin();
     let f = |p: &DyPlane| {
-        let n = [p.n.x.to_f64(), p.n.y.to_f64(), p.n.z.to_f64()];
-        (n, p.c.to_f64())
+        let n = [p.n.x.to_f64_near(), p.n.y.to_f64_near(), p.n.z.to_f64_near()];
+        (n, p.c.to_f64_near())
     };
     let (na, ca) = f(&a.plane);
     let (nb, cb) = f(&b.plane);
@@ -426,7 +426,7 @@ fn classes(snapped: &[DyPlane], reps: &[usize], near: &[bool]) -> Classes {
             of_face.push(NONE);
             continue;
         }
-        let n = [p.n.x.to_f64(), p.n.y.to_f64(), p.n.z.to_f64()];
+        let n = [p.n.x.to_f64_near(), p.n.y.to_f64_near(), p.n.z.to_f64_near()];
         let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
         // canonical sense: first nonzero component positive
         let sg = if n[0] != 0.0 {
@@ -441,7 +441,7 @@ fn classes(snapped: &[DyPlane], reps: &[usize], near: &[bool]) -> Classes {
             q(n[0]),
             q(n[1]),
             q(n[2]),
-            (p.c.to_f64() * sg / len * 1e3).round() as i64,
+            (p.c.to_f64_near() * sg / len * 1e3).round() as i64,
         );
         let mut found = None;
         'look: for d0 in -1..=1 {
@@ -555,7 +555,7 @@ fn region(bodies: &[&Body], fs: &[In], snapped: &[DyPlane], rule: &Rule) -> Regi
         let mut clash = false;
         'check: for (i, f) in fs.iter().enumerate() {
             let p = &snapped[i];
-            let nf = [p.n.x.to_f64(), p.n.y.to_f64(), p.n.z.to_f64()];
+            let nf = [p.n.x.to_f64_near(), p.n.y.to_f64_near(), p.n.z.to_f64_near()];
             for a in 0..3 {
                 if nf[(a + 1) % 3] == 0.0 && nf[(a + 2) % 3] == 0.0 {
                     for x in [lo[a], hi[a]] {
@@ -679,8 +679,8 @@ struct PlaneF {
 
 fn plane_f(p: &DyPlane) -> PlaneF {
     PlaneF {
-        n: [p.n.x.to_f64(), p.n.y.to_f64(), p.n.z.to_f64()],
-        c: p.c.to_f64(),
+        n: [p.n.x.to_f64_near(), p.n.y.to_f64_near(), p.n.z.to_f64_near()],
+        c: p.c.to_f64_near(),
     }
 }
 
@@ -1622,7 +1622,10 @@ fn sliver(cls: &Classes, b: &Built, out: &core::Body) -> Option<Point3> {
             *count.entry(u).or_default() += 1;
             *count.entry(v).or_default() += 1;
         }
-        let ends: Vec<u32> = count.iter().filter(|(_, n)| **n == 1).map(|(v, _)| *v).collect();
+        // (sorted: the map's order is its random seed's, and the midpoint below is not symmetric in
+        // its ends to the bit; it is the refusal's `at`)
+        let mut ends: Vec<u32> = count.iter().filter(|(_, n)| **n == 1).map(|(v, _)| *v).collect();
+        ends.sort_unstable();
         if ends.len() == 2 && pt(ends[0]).distance(pt(ends[1])) < l {
             let (p, q) = (pt(ends[0]), pt(ends[1]));
             return Some(p + (q - p) * 0.5);

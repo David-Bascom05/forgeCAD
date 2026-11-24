@@ -2541,10 +2541,14 @@ pub fn bezier_parabola(p0: Point3, q: Point3, p1: Point3) -> Option<(Curve, Inte
     let l = tv.length();
     let x = a.normalize()?;
     let frame = Frame::from_zx(v, x.cross(tv).normalize()?, a)?;
-    let par = crate::curve::Parabola {
-        frame,
-        focal: l * l / (4.0 * al),
-    };
+    // (a focal length that underflows, a vertex tangent near 1e-161 over a wide parabola, or
+    // overflows makes no parabola: refused, as H.curveOK asks it finite and not zero; LEDGER
+    // H.curveOK.conic)
+    let focal = l * l / (4.0 * al);
+    if !(focal.is_finite() && focal != 0.0) {
+        return None;
+    }
+    let par = crate::curve::Parabola { frame, focal };
     Some((Curve::Parabola(par), Interval::new(-s0 * l, (1.0 - s0) * l)))
 }
 
@@ -3178,6 +3182,29 @@ impl Scalar for J {
 mod tests {
     use super::*;
     use crate::curve::Circle;
+
+    /// A Bezier whose focal length underflows to zero makes no parabola: refused
+    /// (H.curveOK.conic; `Parabola::new` asserts it non-zero). The vertex tangent is 1e-161 long,
+    /// its square a subnormal (so its frame is made), and over 4 |a| = 400 that rounds to 0.
+    #[test]
+    fn a_parabola_whose_focal_length_underflows_is_refused() {
+        let (p0, q, p1) = (
+            Point3::new(0.0, 0.0, 0.0),
+            Point3::new(0.0, 5e-162, 0.0),
+            Point3::new(100.0, 1e-161, 0.0),
+        );
+        assert!(bezier_parabola(p0, q, p1).is_none());
+        // and one of ordinary size still makes one
+        let (p0, q, p1) = (
+            Point3::new(0.0, 0.0, 0.0),
+            Point3::new(0.5, 1.0, 0.0),
+            Point3::new(1.0, 0.0, 0.0),
+        );
+        assert!(matches!(
+            bezier_parabola(p0, q, p1),
+            Some((Curve::Parabola(_), _))
+        ));
+    }
     use crate::testing::rand_frame;
     use forge_math::rng::Rng;
 
