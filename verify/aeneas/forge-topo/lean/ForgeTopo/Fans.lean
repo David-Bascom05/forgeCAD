@@ -1609,28 +1609,24 @@ theorem vpre_le (b : Body) (A : List Nat) (w : Nat) : vpre b A w ≤ A.length :=
   rw [vpre_eq]; exact List.length_filter_le _ _
 
 theorem prefix_spec (hsmall : (allUses b).length < Usize.max) (nv : Usize) (hnv : nv.val = b.nv)
-    (off atv : alloc.vec.Vec Usize) (hI : CountInv b (allUses b) off) (hat : atv.val.length = b.nv) :
-    topo_fans.fans_loop1 nv off atv 0#usize ⦃ r =>
-      r.1.val.length = b.nv + 1 ∧ r.2.val.length = b.nv ∧
-      (∀ w ≤ b.nv, (r.1.val[w]!).val = vpre b (allUses b) w) ∧
-      (∀ w < b.nv, (r.2.val[w]!).val = vpre b (allUses b) w) ⦄ := by
+    (off : alloc.vec.Vec Usize) (hI : CountInv b (allUses b) off) :
+    topo_fans.fans_loop1 nv off 0#usize ⦃ r =>
+      r.val.length = b.nv + 1 ∧ (∀ w ≤ b.nv, (r.val[w]!).val = vpre b (allUses b) w) ⦄ := by
   set A := allUses b
   obtain ⟨hol, ho0, hos⟩ := hI
   unfold topo_fans.fans_loop1
-  apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Usize × alloc.vec.Vec Usize × Usize) => nv.val - y.2.2.val)
-    (fun y => y.2.2.val ≤ nv.val ∧ y.1.val.length = b.nv + 1 ∧ y.2.1.val.length = b.nv ∧
-      (∀ w ≤ y.2.2.val, (y.1.val[w]!).val = vpre b A w) ∧
-      (∀ w, y.2.2.val ≤ w → w < b.nv → (y.1.val[w + 1]!).val = cntQ b A w) ∧
-      (∀ w < y.2.2.val, (y.2.1.val[w]!).val = vpre b A w))
-  · rintro ⟨o, a, v⟩ ⟨hle, hol', hal, hpre, hcnt, hat'⟩
-    simp only at hle hol' hal hpre hcnt hat' ⊢
+  apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Usize × Usize) => nv.val - y.2.val)
+    (fun y => y.2.val ≤ nv.val ∧ y.1.val.length = b.nv + 1 ∧
+      (∀ w ≤ y.2.val, (y.1.val[w]!).val = vpre b A w) ∧
+      (∀ w, y.2.val ≤ w → w < b.nv → (y.1.val[w + 1]!).val = cntQ b A w))
+  · rintro ⟨o, v⟩ ⟨hle, hol', hpre, hcnt⟩
+    simp only at hle hol' hpre hcnt ⊢
     unfold topo_fans.fans_loop1.body
     split
     · rename_i hlt
       have hlt' : v.val < nv.val := by scalar_tac
       step as ⟨x, hx⟩
       have hxv : x.val = vpre b A v.val := by rw [hx, ← getElem!_pos o.val v.val (by omega)]; exact hpre v.val (le_refl _)
-      step as ⟨y0, backa, hy0, hbacka⟩
       step with usize_add_wspec v 1#usize (succ_le_max v nv hlt') as ⟨v1, hv1⟩
       have hv1v : v1.val = v.val + 1 := by rw [hv1]; exact succ_val v nv hlt'
       step as ⟨z, backo, hz, hbacko⟩
@@ -1641,28 +1637,22 @@ theorem prefix_spec (hsmall : (allUses b).length < Usize.max) (nv : Usize) (hnv 
       step with usize_add_wspec z x hsum as ⟨z1, hz1⟩
       have hz1v : z1.val = vpre b A (v.val + 1) := by
         rw [hz1, add_val z x (lt_size_of_le_max _ hsum), hzv, hxv, vpre_succ]; omega
-      rw [hv1v, hbacko, hbacka]
+      rw [hv1v, hbacko]
       have hs1 : (o.set v1 z1).val = o.val.set v1.val z1 := by simp
-      have hs2 : (a.set v x).val = a.val.set v.val x := by simp
-      refine ⟨by omega, by rw [hs1]; simp [hol'], by rw [hs2]; simp [hal], fun w hw => ?_, fun w hw1 hw2 => ?_,
-        fun w hw => ?_, by omega⟩
+      refine ⟨by omega, by rw [hs1]; simp [hol'], fun w hw => ?_, fun w hw1 hw2 => ?_, by omega⟩
       · rw [hs1, getElem!_set _ _ _ _ (by omega), hv1v]
         split
         · rename_i h; subst h; exact hz1v
         · exact hpre w (by omega)
       · rw [hs1, getElem!_set _ _ _ _ (by omega), hv1v, if_neg (by omega)]; exact hcnt w (by omega) hw2
-      · rw [hs2, getElem!_set _ _ _ _ (by omega)]
-        split
-        · rename_i h; subst h; exact hxv
-        · exact hat' w (by omega)
     · rename_i hlt
       have hv : v.val = nv.val := by scalar_tac
       simp only [WP.spec_ok]
-      rw [hv, hnv] at hpre hat'
-      exact ⟨hol', hal, hpre, hat'⟩
+      rw [hv, hnv] at hpre
+      exact ⟨hol', hpre⟩
   · have h0 : (0#usize).val = 0 := rfl
     simp only [h0]
-    refine ⟨by omega, hol, hat, fun w hw => ?_, fun w _ hw => hos w hw, fun w hw => by omega⟩
+    refine ⟨by omega, hol, fun w hw => ?_, fun w _ hw => hos w hw⟩
     have : w = 0 := by omega
     subst this; rw [ho0]; simp [vpre]
 
@@ -1681,7 +1671,7 @@ theorem cntQ_sub (b : Body) {Q A : List Nat} (h : List.Sublist Q A) (w : Nat) : 
 
 /-- What the placing loop has done after the coedges `Q`. -/
 def PlaceInv (b : Body) (A Q : List Nat) (atv items : List Usize) : Prop :=
-  atv.length = b.nv ∧ items.length = A.length ∧
+  atv.length = b.nv + 1 ∧ items.length = A.length ∧
   (∀ w < b.nv, (atv[w]!).val = vpre b A w + cntQ b Q w) ∧
   (∀ w < b.nv, ∀ j < cntQ b Q w, (items[vpre b A w + j]!).val = (Q.filter fun c => b.start c == w)[j]!)
 
@@ -1929,6 +1919,13 @@ theorem vertices_spec {S : Type} (FS : topo_fans.FanSink S) (P : S → List Prob
   · have h0 : (0#usize).val = 0 := rfl
     simp [h0]
 
+theorem clone_usize_spec (v : alloc.vec.Vec Usize) :
+    alloc.vec.CloneVec.clone core.clone.CloneUsize v ⦃ r => r.val = v.val ⦄ := by
+  unfold alloc.vec.CloneVec.clone
+  apply WP.spec_bind (Slice.clone_spec (fun x _ => rfl))
+  intro s' hs'
+  simp only [WP.spec_ok]; rw [← hs']
+
 /-- The sizes `fans` allocates fit `usize`: the vertex count plus one, and all edge uses. -/
 def FansSmall (b : Body) : Prop := b.nv < Usize.max ∧ (allUses b).length < Usize.max
 
@@ -1958,16 +1955,17 @@ theorem fans_refines {S : Type} (FS : topo_fans.FanSink S) (P : S → List Probl
     refine ⟨by rw [hoff]; simp [hnv1v], by rw [hoff, getElem!_pos _ 0 (by simp [hnv1v])]; simp, fun w hw => ?_⟩
     rw [hoff, getElem!_pos _ (w + 1) (by simp [hnv1v]; omega)]; simp [cntQ]
   step with count_all_spec FI t R H W hsmall ne hne off hI as ⟨off1, hI1⟩
-  step as ⟨atv, hatv, hatv2⟩
-  step with prefix_spec hsmall nv hnv off1 atv hI1 (by rw [hatv]; simp [hnv]) as ⟨off2, at1, ho2l, ha1l, ho2, ha1⟩
+  step with prefix_spec hsmall nv hnv off1 hI1 as ⟨off2, ho2l, ho2⟩
+  step with clone_usize_spec off2 as ⟨atv, hatv⟩
   step as ⟨tot, htot⟩
   have htotv : tot.val = (allUses b).length := by
     rw [htot, ← getElem!_pos off2.val nv.val (by omega), hnv, ho2 b.nv (le_refl _), hnvA]
   step as ⟨items, hitems, hitems2⟩
-  have hP : PlaceInv b (allUses b) [] at1.val items.val := by
-    refine ⟨ha1l, by rw [hitems]; simp [htotv], fun w hw => by rw [ha1 w hw]; simp [cntQ], fun w _ j hj => ?_⟩
+  have hP : PlaceInv b (allUses b) [] atv.val items.val := by
+    rw [hatv]
+    refine ⟨ho2l, by rw [hitems]; simp [htotv], fun w hw => by rw [ho2 w (by omega)]; simp [cntQ], fun w _ j hj => ?_⟩
     simp [cntQ] at hj
-  step with place_all_spec FI t R H W hsmall hnvA ne hne at1 items hP as ⟨items1, hil, hit⟩
+  step with place_all_spec FI t R H W hsmall hnvA ne hne atv items hP as ⟨items1, hil, hit⟩
   exact vertices_spec FI t FS P hS R H W hC hnvA nv hnv off2 items1 ho2l ho2 hil hit out _
 
 end sort

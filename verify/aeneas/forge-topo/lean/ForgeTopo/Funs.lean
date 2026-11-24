@@ -1613,45 +1613,39 @@ def topo_fans.fans_loop0
     (off, e)
 
 /-- [forge_topo::topo_fans::fans]: loop body 2:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 261:4-265:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 260:4-263:5
     Visibility: public -/
 @[rust_loop_body]
 def topo_fans.fans_loop1.body
-  (nv : Std.Usize) (off : alloc.vec.Vec Std.Usize)
-  («at» : alloc.vec.Vec Std.Usize) (v : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec Std.Usize)
-    × Std.Usize) ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec Std.Usize)))
+  (nv : Std.Usize) (off : alloc.vec.Vec Std.Usize) (v : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize) (alloc.vec.Vec
+    Std.Usize))
   := do
   if v < nv
   then
     let i ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize) off
         v
-    let (_, index_mut_back) ←
-      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.Usize)
-        «at» v
     let i1 ← v + 1#usize
-    let (i2, index_mut_back1) ←
+    let (i2, index_mut_back) ←
       alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.Usize)
         off i1
     let i3 ← i2 + i
-    let off1 := index_mut_back1 i3
-    let at1 := index_mut_back i
-    ok (cont (off1, at1, i1))
-  else ok (done (off, «at»))
+    let off1 := index_mut_back i3
+    ok (cont (off1, i1))
+  else ok (done off)
 
 /-- [forge_topo::topo_fans::fans]: loop 2:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 261:4-265:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 260:4-263:5
     Visibility: public -/
 @[rust_loop]
 def topo_fans.fans_loop1
-  (nv : Std.Usize) (off : alloc.vec.Vec Std.Usize)
-  («at» : alloc.vec.Vec Std.Usize) (v : Std.Usize) :
-  Result ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec Std.Usize))
+  (nv : Std.Usize) (off : alloc.vec.Vec Std.Usize) (v : Std.Usize) :
+  Result (alloc.vec.Vec Std.Usize)
   := do
   loop
-    (fun (off1, at1, v1) => topo_fans.fans_loop1.body nv off1 at1 v1)
-    (off, «at», v)
+    (fun (off1, v1) => topo_fans.fans_loop1.body nv off1 v1)
+    (off, v)
 
 /-- [forge_topo::topo_fans::fans]: loop body 4:
     Source: 'kernel/forge-topo/src/topo_fans.rs', lines 271:8-277:9
@@ -1792,13 +1786,13 @@ def topo_fans.fans
   let i ← nv + 1#usize
   let off ← alloc.vec.from_elem core.clone.CloneUsize 0#usize i
   let off1 ← topo_fans.fans_loop0 FanTopoInst t ne off 0#usize
-  let «at» ← alloc.vec.from_elem core.clone.CloneUsize 0#usize nv
-  let (off2, at1) ← topo_fans.fans_loop1 nv off1 «at» 0#usize
+  let off2 ← topo_fans.fans_loop1 nv off1 0#usize
+  let «at» ← alloc.vec.CloneVec.clone core.clone.CloneUsize off2
   let i1 ←
     alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize) off2
       nv
   let items ← alloc.vec.from_elem core.clone.CloneUsize 0#usize i1
-  let items1 ← topo_fans.fans_loop2 FanTopoInst t ne at1 items 0#usize
+  let items1 ← topo_fans.fans_loop2 FanTopoInst t ne «at» items 0#usize
   topo_fans.fans_loop3 FanTopoInst FanSinkInst t out nv off2 items1
     (alloc.vec.Vec.new Std.Usize) 0#usize
 

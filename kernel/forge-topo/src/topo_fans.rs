@@ -256,13 +256,13 @@ pub fn fans<T: FanTopo, S: FanSink>(t: &T, out: &mut S) {
         }
         e += 1;
     }
-    let mut at: Vec<usize> = vec![0; nv];
     let mut v = 0;
     while v < nv {
-        at[v] = off[v];
         off[v + 1] += off[v];
         v += 1;
     }
+    // where each vertex's next coedge goes
+    let mut at: Vec<usize> = off.clone();
     let mut items: Vec<usize> = vec![0; off[nv]];
     let mut e = 0;
     while e < ne {
