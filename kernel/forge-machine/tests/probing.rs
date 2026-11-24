@@ -155,7 +155,13 @@ fn the_simulation_sweeps_a_skip_to_its_end_and_counts_no_time_for_it() {
     let k = tl
         .marks
         .iter()
-        .position(|m| m.what == Happening::Skip { code: 310 })
+        .position(|m| {
+            m.what
+                == Happening::Skip {
+                    code: 310,
+                    stop: None,
+                }
+        })
         .unwrap();
     let ln = tl.marks[k].line;
     let seg = tl.segments.iter().find(|sg| sg.line == ln).unwrap();
@@ -166,5 +172,49 @@ fn the_simulation_sweeps_a_skip_to_its_end_and_counts_no_time_for_it() {
     assert!((seg.q0[z] - seg.q1[z] - 15.0).abs() < 1e-9);
     let un = sim::unchecked(&m, &tl);
     assert!(un.iter().any(|u| u.path == "skip.end" && u.line == ln));
-    assert!(sim::timeline_json(&tl).contains("\"skip\",\"g\":\"G31\""));
+    assert!(sim::timeline_json(&tl).contains("\"skip\",\"g\":\"G31\",\"stop\":null"));
+}
+
+#[test]
+fn the_trigger_is_the_balls_first_contact_with_the_stock_as_cut() {
+    use forge_machine::removal;
+    let m = builtin().remove(0);
+    let mut c = Control::for_dialect(&m, "fanuc", 1).unwrap();
+    c.skip = vec![310];
+    let mut s = Setup::new(&m, c).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -300.0])];
+    s.tools = vec![SimTool {
+        t: 1,
+        name: "probe".into(),
+        tip: [0.0, 0.0, -100.0],
+        body: vec![(3.0, 0.0, 50.0), (20.0, 50.0, 100.0)],
+        cut: Cut::Probe { r: 3.0 },
+    }];
+    s.h = vec![(1, 100.0)];
+    // the words are 200 mm below the part frame here: stock top at part z 200 (word Z0); the
+    // probe comes down at (0, 0) from Z5 toward Z-10: it triggers at Z0
+    let prog = "G90 G17 G21\nT1 M06\nG54\nG43 H1\nG0 X0. Y0. Z5.\nG31 Z-10. F200.\nG0 Z5.\nG1 Z-2. F100.\n";
+    let tl = sim::simulate(prog, &s).unwrap();
+    let r = removal::mill(&s, &tl, [-20.0, -20.0, 180.0], [20.0, 20.0, 200.0], 0.5).unwrap();
+    assert_eq!(r.triggers.len(), 1, "{:?}", r.triggers);
+    let tr = &r.triggers[0];
+    assert!((tr.tip[2] - 200.0).abs() < 1e-6, "{tr:?}");
+    assert!((tr.s - 5.0 / 15.0).abs() < 1e-6, "{tr:?}");
+    // nothing removed by the probe
+    assert!(r.removed.iter().all(|v| *v == 0.0));
+    // taken to the segment's end, the retract starts inside the stock: a contact on it too
+    assert_eq!(r.probe_hits.len(), 2);
+    // settled: the retract starts at the trigger; only the plain feed into the stock afterwards
+    // is a probe crash, 2 mm deep
+    let text = prog;
+    let (tl, r) = removal::mill_probing(&s, text, [-20.0, -20.0, 180.0], [20.0, 20.0, 200.0], 0.5).unwrap();
+    assert!(
+        tl.marks.iter().any(
+            |m| matches!(m.what, Happening::Skip { stop: Some(u), .. } if (u - 5.0 / 15.0).abs() < 1e-6)
+        )
+    );
+    assert!(sim::unchecked(&m, &tl).iter().all(|u| u.path != "skip.end"));
+    assert_eq!(r.triggers.len(), 1);
+    assert_eq!(r.probe_hits.len(), 1, "{:?}", r.probe_hits);
+    assert!((r.probe_hits[0].depth - 2.0).abs() < 1e-6, "{:?}", r.probe_hits);
 }

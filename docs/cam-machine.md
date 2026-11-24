@@ -254,7 +254,7 @@ pieces into material, the removal summary, and what is claimed.
 | kinematics (kin.rs) | joint values to link placements, dmath rotations (exact at multiples of 90°), and the same over intervals |
 | timing (sim.rs) | `t_min` a lower bound (feed and axis limits; G95 with G96 integrated exactly on lines, the clamp's bound on arcs); `t_stop` exact stops with trapezoidal acceleration, an estimate |
 | collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused). A Hit's witness is a point in the base (machine) frame at the segment parameter `s` |
-| removal (removal.rs) | a height map (milling, tool on the part's +Z) or a radius map (turning) at grid nodes, in floating point: rapids into material and tool pieces (shank, holder) into material, with the stock as cut so far |
+| removal (removal.rs) | a height map (milling, tool on the part's +Z) or a radius map (turning) at grid nodes, in floating point: rapids into material and tool pieces (shank, holder) into material, with the stock as cut so far. A touch probe (`probe = r`) removes nothing: on a skip move its ball's first contact with the stock as cut is the trigger (`triggers`: line, path parameter, ball tip, node; none = it ran to its end without contact, which a probe alarms on), on any other move a contact is a crash (`probe_hits`) |
 
 Native and wasm32 give the same bits (tests/bits.rs).
 
@@ -430,7 +430,8 @@ z = -500
 t = 1
 tip = [0, 0, -100]         # gauge point to tip, home pose
 body = [5, 0, 30, 20, 30, 100]   # (radius, from, to) from the tip; the first is the cutting part
-mill = [5, 0]              # radius, corner (or nose = [rn, dr, dz] for an insert)
+mill = [5, 0]              # radius, corner (or nose = [rn, dr, dz] for an insert, or probe = r:
+                           # a touch probe's ball radius: it removes nothing)
 h = 100                    # its length register (mills)
 
 [[setup.geo]]              # lathe offset registers, per letter (T0101 → n = 1)

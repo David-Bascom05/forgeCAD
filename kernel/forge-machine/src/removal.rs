@@ -64,6 +64,21 @@ pub struct HolderHit {
     pub at: V3,
 }
 
+/// Where a skip (probe) move's stylus ball first meets the stock as cut so far: the trigger.
+/// Simulation-level (floating point at the nodes, like the removal): the stop the machine makes,
+/// not a proof of it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Trigger {
+    pub line: usize,
+    pub segment: usize,
+    /// The path parameter of the first contact, 0..=1.
+    pub s: f64,
+    /// The ball's tip (lowest point) at the contact, part frame.
+    pub tip: V3,
+    /// The stock node touched, part frame (its height as cut).
+    pub at: V3,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct HeightMap {
     pub x0: f64,
@@ -98,6 +113,11 @@ pub struct MillResult {
     pub removed: Vec<f64>,
     /// Seconds (t_min) of feed moves that removed nothing.
     pub air_feed_s: f64,
+    /// Each skip move's trigger with a probe in the spindle (none: it ran to its end without
+    /// touching the stock: a probe would alarm "no contact" there).
+    pub triggers: Vec<Trigger>,
+    /// A probe's stylus into the stock on a move that is not a skip move: a crash.
+    pub probe_hits: Vec<RapidCut>,
 }
 
 /// The cutter's lower surface height above its tip at distance d from its axis (None outside).
@@ -175,6 +195,30 @@ fn convex_min(f: &dyn Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
 }
 
 /// Least of f over [0, 1] for any continuous f: dense samples, then a local refinement.
+/// The least u in [0, 1] with f(u) <= level, f(0) > level allowed: 256 samples, then bisection
+/// of the first bracket to 1e-12 (0 if already at or under the level at the start).
+fn first_contact(f: &dyn Fn(f64) -> f64, level: f64) -> f64 {
+    if f(0.0) <= level {
+        return 0.0;
+    }
+    let n = 256;
+    let mut prev = 0.0;
+    for k in 1..=n {
+        let u = k as f64 / n as f64;
+        if f(u) <= level {
+            let (mut a, mut b) = (prev, u);
+            while b - a > 1e-12 {
+                let m = 0.5 * (a + b);
+                if f(m) <= level { b = m } else { a = m }
+            }
+            return b;
+        }
+        prev = u;
+    }
+    // between samples only: the least sample's neighbourhood
+    1.0
+}
+
 fn sampled_min(f: &dyn Fn(f64) -> f64, n: usize) -> f64 {
     let mut best = f64::INFINITY;
     let mut at = 0.0;
@@ -382,13 +426,23 @@ pub fn mill_with(
     };
     let mut rapid_cuts = Vec::new();
     let mut holder_hits = Vec::new();
+    let mut triggers = Vec::new();
+    let mut probe_hits = Vec::new();
+    // the lines whose segment is a skip move (sim marks it)
+    let skip_lines: Vec<usize> = tl
+        .marks
+        .iter()
+        .filter(|m| matches!(m.what, crate::sim::Happening::Skip { .. }))
+        .map(|m| m.line)
+        .collect();
     let mut removed = vec![0.0; tl.segments.len()];
     let mut air = 0.0;
     for (si, seg) in tl.segments.iter().enumerate() {
         let Some(t) = seg.tool else { continue };
         let tool = s.tool(t).ok_or(RemovalError::NoTool { line: seg.line, t })?;
-        let (r, corner) = match tool.cut {
-            Cut::Mill { r, corner } => (r, corner),
+        let (r, corner, probe) = match tool.cut {
+            Cut::Mill { r, corner } => (r, corner, false),
+            Cut::Probe { r } => (r, r, true),
             Cut::Nose { .. } => {
                 return Err(RemovalError::Shape {
                     line: seg.line,
@@ -396,6 +450,10 @@ pub fn mill_with(
                 });
             }
         };
+        let skip = probe && skip_lines.contains(&seg.line);
+        // a probe's earliest contact on this move: (s, node)
+        let mut first: Option<(f64, V3)> = None;
+        let mut probe_hit: Option<(f64, V3)> = None;
         let p = tip_path(s, seg, t, form)?;
         let (a, b) = (p(0.0), p(1.0));
         // the cells under the move's box, grown by r
@@ -510,7 +568,20 @@ pub fn mill_with(
                         sampled_min(&env, n)
                     }
                 };
-                let new = low.max(map.bottom);
+                if probe {
+                    // the ball removes nothing: a contact triggers (skip) or crashes (otherwise)
+                    if low < cur - 1e-6 {
+                        if skip {
+                            let u = first_contact(&env, cur);
+                            if first.is_none_or(|(f, _)| u < f) {
+                                first = Some((u, [x, y, cur]));
+                            }
+                        } else if probe_hit.is_none_or(|(d, _)| cur - low > d) {
+                            probe_hit = Some((cur - low, [x, y, low]));
+                        }
+                    }
+                }
+                let new = if probe { cur } else { low.max(map.bottom) };
                 // each non-cutting piece: a flat-bottomed cylinder `from` above the tip
                 let after = new.min(cur);
                 // no piece above the cutter can reach below the move's lowest tip + its `from`:
@@ -555,6 +626,23 @@ pub fn mill_with(
         }
         removed[si] = vol;
         holder_hits.extend(holder);
+        if let Some((u, at)) = first {
+            triggers.push(Trigger {
+                line: seg.line,
+                segment: si,
+                s: u,
+                tip: p(u),
+                at,
+            });
+        }
+        if let Some((depth, at)) = probe_hit {
+            probe_hits.push(RapidCut {
+                line: seg.line,
+                segment: si,
+                depth,
+                at,
+            });
+        }
         if vol == 0.0 && seg.kind != SegKind::Rapid {
             air += seg.t_min;
         }
@@ -573,7 +661,46 @@ pub fn mill_with(
         holder_hits,
         removed,
         air_feed_s: air,
+        triggers,
+        probe_hits,
     })
+}
+
+/// The posted text through the simulation and the milling map with its skip moves settled: each
+/// pass's triggers become the next pass's `skip_stops` (so the moves after a skip start at its
+/// trigger) until they no longer change: at most one pass more than there are skip moves (a
+/// pass can only change the moves after the earliest skip whose stop changed).
+pub fn mill_probing(
+    s: &Setup,
+    text: &str,
+    min: V3,
+    max: V3,
+    step: f64,
+) -> Result<(Timeline, MillResult), String> {
+    let mut su = s.clone();
+    let mut prev: Option<Vec<(usize, f64)>> = None;
+    let mut passes = usize::MAX;
+    let mut k = 0;
+    while k <= passes {
+        k += 1;
+        let tl = crate::sim::simulate(text, &su).map_err(|e| format!("{e:?}"))?;
+        if passes == usize::MAX {
+            passes = tl
+                .marks
+                .iter()
+                .filter(|m| matches!(m.what, crate::sim::Happening::Skip { .. }))
+                .count()
+                + 1;
+        }
+        let r = mill(&su, &tl, min, max, step).map_err(|e| format!("{e:?}"))?;
+        let stops: Vec<(usize, f64)> = r.triggers.iter().map(|t| (t.line, t.s)).collect();
+        if prev.as_ref() == Some(&stops) || stops.is_empty() {
+            return Ok((tl, r));
+        }
+        prev = Some(stops.clone());
+        su.skip_stops = stops;
+    }
+    Err("the skip moves' triggers did not settle".into())
 }
 
 /// A turned stock's outer radius along z.
@@ -637,6 +764,12 @@ pub fn turn(
                 return Err(RemovalError::Shape {
                     line: seg.line,
                     why: "a milling cutter on a turning map".into(),
+                });
+            }
+            Cut::Probe { .. } => {
+                return Err(RemovalError::Shape {
+                    line: seg.line,
+                    why: "a touch probe on a turning map (lathe probing is not modelled)".into(),
                 });
             }
         };

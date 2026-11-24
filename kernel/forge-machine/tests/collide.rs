@@ -341,6 +341,7 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                     feed_combined: true,
                     start: home.clone(),
                     start_tool: None,
+                    skip_stops: Vec::new(),
                 };
                 for seg in segs {
                     let tl = sim::Timeline {

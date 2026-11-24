@@ -44,6 +44,10 @@ pub enum Cut {
     /// A turning insert's nose: radius rn, its centre at the programmed tip plus `centre`
     /// (radial, axial) in the part's (r, z) plane.
     Nose { rn: f64, centre: [f64; 2] },
+    /// A touch probe's stylus ball of radius r (the tip is the ball's lowest point): it removes
+    /// nothing. On a skip move its first contact with the stock as cut is the trigger; on any
+    /// other move a contact is a crash (removal::MillResult::probe_hits).
+    Probe { r: f64 },
 }
 
 /// The affine tip's start tip and its (joint, column) pairs (`Setup::tip_columns`).
@@ -75,6 +79,9 @@ pub struct Setup<'a> {
     pub start: Vec<f64>,
     /// The tool in the spindle (or the turret station) at the start.
     pub start_tool: Option<u32>,
+    /// Where skip moves stop: (line, path parameter), from a removal pass's triggers
+    /// (`removal::mill_probing`). A skip move with no entry is taken to its end.
+    pub skip_stops: Vec<(usize, f64)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -146,6 +153,7 @@ impl<'a> Setup<'a> {
             feed_combined: true,
             start: def.joints.iter().map(|j| j.home).collect(),
             start_tool: None,
+            skip_stops: Vec::new(),
             control,
         })
     }
@@ -426,11 +434,13 @@ pub enum Happening {
         n: u32,
     },
     /// A skip (probe) move starts (G38.2–.5 / G31, `code` in tenths): the segment after this mark
-    /// is swept to its programmed end, but the machine stops where the probe triggers, which the
-    /// simulation does not know: its time counts 0 in `t_min`, and the moves after it start from
-    /// the segment's end (reported by `unchecked` as `skip.end`).
+    /// is swept to its programmed end (collision, removal), but the machine stops where the probe
+    /// triggers: its time counts 0 in `t_min`, and the moves after it start from `stop`, the
+    /// path parameter the setup's `skip_stops` gives (a removal pass's trigger), or from the
+    /// segment's end when none is known (reported by `unchecked` as `skip.end`).
     Skip {
         code: u16,
+        stop: Option<f64>,
     },
 }
 
@@ -610,7 +620,12 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             }
             Ev::Skip { to, f, code } => {
                 let q1 = to_q(to, &q, &wcs, &toff);
-                mark(&mut tl, t, Happening::Skip { code: *code });
+                let stop = s
+                    .skip_stops
+                    .iter()
+                    .find(|(l, _)| *l == ln)
+                    .map(|(_, u)| u.clamp(0.0, 1.0));
+                mark(&mut tl, t, Happening::Skip { code: *code, stop });
                 let mut seg = feed_seg(
                     s,
                     ln,
@@ -626,10 +641,15 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     tool,
                     &mut tl,
                 )?;
-                // it may trigger at once: 0 is the lower bound; the estimate runs to the end
+                // it may trigger at once: 0 is the lower bound; the estimate runs to the stop
                 seg.t_min = 0.0;
+                seg.t_stop *= stop.unwrap_or(1.0);
+                let q_end = match stop {
+                    Some(u) => seg.at(u),
+                    None => q1,
+                };
                 push_seg(&mut tl, &mut t, &mut t_est, seg);
-                q = q1;
+                q = q_end;
             }
             Ev::Feed { to, f, mode } => {
                 let q1 = to_q(to, &q, &wcs, &toff);
@@ -1505,10 +1525,14 @@ pub fn timeline_json(tl: &Timeline) -> String {
             Happening::End => "\"end\"".into(),
             Happening::PalletChange { seconds } => format!("\"pallet\",\"seconds\":{}", num(*seconds)),
             Happening::Wait { n } => format!("\"wait\",\"n\":{n}"),
-            Happening::Skip { code } => match code % 10 {
-                0 => format!("\"skip\",\"g\":\"G{}\"", code / 10),
-                d => format!("\"skip\",\"g\":\"G{}.{d}\"", code / 10),
-            },
+            Happening::Skip { code, stop } => {
+                let g = match code % 10 {
+                    0 => format!("G{}", code / 10),
+                    d => format!("G{}.{d}", code / 10),
+                };
+                let stop = stop.map_or("null".to_string(), num);
+                format!("\"skip\",\"g\":\"{g}\",\"stop\":{stop}")
+            }
         };
         o.push_str(&format!(
             "{{\"line\":{},\"at\":{},\"what\":{what}}}",
@@ -1698,7 +1722,9 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
                 }
             }
             // where a skip move stops is not known here: the moves after it start from its end
-            Happening::Skip { .. } => note("skip.end".into(), false, m.line, "moves after a skip move"),
+            Happening::Skip { stop: None, .. } => {
+                note("skip.end".into(), false, m.line, "moves after a skip move")
+            }
             _ => {}
         }
     }

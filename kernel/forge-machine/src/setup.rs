@@ -210,6 +210,10 @@ impl SetupSpec {
                 return Err(format!("{rec}: `body` must be (radius > 0, from < to) triples"));
             }
             let cut = match (nums(t, "mill"), nums(t, "nose")) {
+                // a touch probe: `probe = r`, its stylus ball's radius
+                (None, None) if num(t, "probe").is_some_and(|r| r > 0.0 && r.is_finite()) => Cut::Probe {
+                    r: num(t, "probe").unwrap_or(0.0),
+                },
                 (Some(m), None) if m.len() == 2 && m[0] > 0.0 && (0.0..=m[0]).contains(&m[1]) => Cut::Mill {
                     r: m[0],
                     corner: m[1],
@@ -220,7 +224,7 @@ impl SetupSpec {
                 },
                 _ => {
                     return Err(format!(
-                        "{rec}: give one of `mill = [r, corner]` (0 ≤ corner ≤ r) or `nose = [rn, dr, dz]`"
+                        "{rec}: give one of `mill = [r, corner]` (0 ≤ corner ≤ r), `nose = [rn, dr, dz]` or `probe = r` (a touch probe's ball radius)"
                     ));
                 }
             };
