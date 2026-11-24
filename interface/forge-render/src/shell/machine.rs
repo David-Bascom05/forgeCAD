@@ -971,10 +971,38 @@ pub(in crate::shell) fn groups(s: &Shell) -> Vec<super::ribbon::Group> {
     if m.lib == "machine" {
         v.push(group(
             "Motion",
-            vec![tool("Home Axes", "home", MachineCmd::Home, valid)],
+            vec![tool("Home Axes", "home", MachineCmd::Home, valid && !m.at_home())],
         ));
     }
     v
+}
+
+/// Why one of the Machine Builder's tools is off (its tooltip's "Off: ..."), in words.
+pub fn why_off(m: &MachineUi, name: &str) -> Option<String> {
+    let (has, valid) = m.record_state();
+    let what = if m.lib == "machine" { "machine" } else { "record" };
+    let pick = if m.lib == "machine" {
+        "Open or make a machine first: pick one in the library, or New from Template".to_string()
+    } else {
+        format!(
+            "Pick a {} in the library first",
+            lib_title(m.lib).to_lowercase().trim_end_matches('s')
+        )
+    };
+    Some(match name {
+        "New from Template" => {
+            "Templates are for machines and press-brake tooling; derive a copy of a record instead".into()
+        }
+        "Derive Copy" | "Home Axes" | "Check" | "Save" if !has => pick,
+        "Home Axes" | "Check" | "Save" if !valid => {
+            format!("The {what} is refused as it stands: fix what the sheet says first")
+        }
+        "Save" => "Nothing to save: no change since it was read or saved".into(),
+        "Home Axes" if m.at_home() => {
+            "The axes are at home already: jog one in Motion, then Home brings it back".into()
+        }
+        _ => return None,
+    })
 }
 
 /// The status bar's line: where the user is and what is chosen.
@@ -1016,6 +1044,17 @@ impl MachineUi {
                 (t.cur.is_some(), t.cur.is_some() && t.problem.is_none())
             }),
         }
+    }
+
+    /// Every joint at its home value (Home Axes would change nothing).
+    pub fn at_home(&self) -> bool {
+        self.def.as_ref().is_none_or(|d| {
+            d.joints.len() == self.q.len()
+                && d.joints
+                    .iter()
+                    .zip(&self.q)
+                    .all(|(j, q)| (j.home - q).abs() < 1e-9)
+        })
     }
 
     /// Edited since it was read or saved.
@@ -3282,5 +3321,56 @@ fn overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
                 if val == "unknown" { t.error } else { t.ink2 },
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod off_tests {
+    use super::*;
+
+    fn home_on(m: MachineUi) -> bool {
+        let sh = Shell {
+            machine: Some(m),
+            ..Shell::default()
+        };
+        groups(&sh)
+            .iter()
+            .flat_map(|g| g.big.iter())
+            .any(|t| t.name == "Home Axes" && t.action.is_some())
+    }
+
+    /// With no machine loaded, Home Axes and the record's tools say why they are off (the button
+    /// audit found Home Axes silent); a loaded valid machine's Home Axes is on.
+    #[test]
+    fn the_builders_tools_say_why_they_are_off() {
+        let mut m = MachineUi::new(None);
+        m.def = None;
+        m.problem = None;
+        let w = why_off(&m, "Home Axes").unwrap();
+        assert!(w.starts_with("Open or make a machine first"), "{w}");
+        assert!(!home_on(m));
+        let mut m = MachineUi::new(None);
+        m.load(
+            forge_machine::library::builtin_named("generic-vmc3").unwrap(),
+            None,
+            Vec::new(),
+        );
+        assert!(m.problem.is_none(), "{:?}", m.problem);
+        assert!(why_off(&m, "Save").unwrap().starts_with("Nothing to save"));
+        // at home already: off, saying so (a click would change nothing)
+        assert!(
+            why_off(&m, "Home Axes")
+                .unwrap()
+                .starts_with("The axes are at home already")
+        );
+        let mut jogged = MachineUi::new(None);
+        jogged.load(
+            forge_machine::library::builtin_named("generic-vmc3").unwrap(),
+            None,
+            Vec::new(),
+        );
+        assert!(!home_on(m));
+        jogged.q[0] += 10.0;
+        assert!(home_on(jogged));
     }
 }
