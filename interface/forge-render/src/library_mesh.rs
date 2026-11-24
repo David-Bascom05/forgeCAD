@@ -92,13 +92,14 @@ pub struct Preview {
 }
 
 impl Preview {
-    /// Bounds of everything drawn, solid or ghost.
+    /// Bounds of everything drawn, solid or ghost (the floor, which is context, left out).
     pub fn bounds(&self) -> Option<([f64; 3], [f64; 3])> {
         let mut lo = [f64::INFINITY; 3];
         let mut hi = [f64::NEG_INFINITY; 3];
         let pts = self
             .parts
             .iter()
+            .filter(|(_, l)| *l != Look::Floor)
             .flat_map(|(t, _)| t.pos.iter())
             .chain(self.ghosts.iter().flat_map(|g| g.edges.iter().flatten()))
             .chain(
