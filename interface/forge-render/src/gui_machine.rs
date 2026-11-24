@@ -31,160 +31,43 @@ fn oct(n: [f32; 3]) -> [i16; 2] {
     [(x * 32767.0).round() as i16, (y * 32767.0).round() as i16]
 }
 
-#[derive(Default)]
-struct Build {
-    pos: Vec<[f32; 3]>,
-    nrm: Vec<[f32; 3]>,
-    tri: Vec<[u32; 3]>,
-    faces: Vec<FaceRange>,
-    /// Edge polylines: drawn as the part's edges (and a WebGPU binding is never empty).
-    edges: Vec<Vec<[f32; 3]>>,
-}
-
-impl Build {
-    fn quad(&mut self, p: [[f32; 3]; 4], n: [f32; 3]) {
-        let b = self.pos.len() as u32;
-        self.pos.extend_from_slice(&p);
-        self.nrm.extend_from_slice(&[n; 4]);
-        self.tri.push([b, b + 1, b + 2]);
-        self.tri.push([b, b + 2, b + 3]);
-    }
-    fn face(&mut self, first_tri: usize, first_vertex: usize) {
-        let k = self.faces.len() as u32;
-        self.faces.push(FaceRange {
-            face: k,
-            first_tri: first_tri as u32,
-            tris: (self.tri.len() - first_tri) as u32,
-            first_vertex: first_vertex as u32,
-            vertices: (self.pos.len() - first_vertex) as u32,
-        });
-    }
-}
-
-fn f3(a: [f64; 3]) -> [f32; 3] {
-    [a[0] as f32, a[1] as f32, a[2] as f32]
-}
-
-fn add_prim(b: &mut Build, p: &Prim) {
-    let (t0, v0) = (b.tri.len(), b.pos.len());
-    match p {
-        Prim::Box { min, max } => {
-            let (l, h) = (f3(*min), f3(*max));
-            let c = |i: usize| {
-                [
-                    if i & 1 == 0 { l[0] } else { h[0] },
-                    if i & 2 == 0 { l[1] } else { h[1] },
-                    if i & 4 == 0 { l[2] } else { h[2] },
-                ]
-            };
-            // each face counter-clockwise seen from outside
-            b.quad([c(0), c(2), c(3), c(1)], [0.0, 0.0, -1.0]);
-            b.quad([c(4), c(5), c(7), c(6)], [0.0, 0.0, 1.0]);
-            b.quad([c(0), c(1), c(5), c(4)], [0.0, -1.0, 0.0]);
-            b.quad([c(2), c(6), c(7), c(3)], [0.0, 1.0, 0.0]);
-            b.quad([c(0), c(4), c(6), c(2)], [-1.0, 0.0, 0.0]);
-            b.quad([c(1), c(3), c(7), c(5)], [1.0, 0.0, 0.0]);
-            for (i, j) in [
-                (0, 1),
-                (2, 3),
-                (4, 5),
-                (6, 7),
-                (0, 2),
-                (1, 3),
-                (4, 6),
-                (5, 7),
-                (0, 4),
-                (1, 5),
-                (2, 6),
-                (3, 7),
-            ] {
-                b.edges.push(vec![c(i), c(j)]);
-            }
-        }
-        Prim::Cyl { base, axis, r, h } => {
-            let a = kin::scale(*axis, 1.0 / kin::norm(*axis));
-            let u0 = if a[0].abs() < 0.9 {
-                [1.0, 0.0, 0.0]
-            } else {
-                [0.0, 1.0, 0.0]
-            };
-            let u = kin::cross(a, u0);
-            let u = kin::scale(u, 1.0 / kin::norm(u));
-            let w = kin::cross(a, u);
-            const N: usize = 48;
-            let at = |k: usize, z: f64| {
-                let th = 2.0 * std::f64::consts::PI * (k % N) as f64 / N as f64;
-                let d = {
-                    let (sn, cs) = forge_math::dmath::sin_cos(th);
-                    kin::add(kin::scale(u, cs), kin::scale(w, sn))
-                };
-                (
-                    f3(kin::add(kin::add(*base, kin::scale(d, *r)), kin::scale(a, z))),
-                    f3(d),
-                )
-            };
-            for k in 0..N {
-                let (p0, n0) = at(k, 0.0);
-                let (p1, n1) = at(k + 1, 0.0);
-                let (q0, _) = at(k, *h);
-                let (q1, _) = at(k + 1, *h);
-                let bi = b.pos.len() as u32;
-                b.pos.extend_from_slice(&[p0, p1, q1, q0]);
-                b.nrm.extend_from_slice(&[n0, n1, n1, n0]);
-                b.tri.push([bi, bi + 1, bi + 2]);
-                b.tri.push([bi, bi + 2, bi + 3]);
-            }
-            for z in [0.0, *h] {
-                b.edges.push((0..=N).map(|k| at(k, z).0).collect());
-            }
-            for (z, s) in [(0.0, -1.0), (*h, 1.0)] {
-                let n = f3(kin::scale(a, s));
-                let c = b.pos.len() as u32;
-                b.pos.push(f3(kin::add(*base, kin::scale(a, z))));
-                b.nrm.push(n);
-                for k in 0..N {
-                    b.pos.push(at(k, z).0);
-                    b.nrm.push(n);
-                }
-                for k in 0..N as u32 {
-                    let (i, j) = (c + 1 + k, c + 1 + (k + 1) % N as u32);
-                    b.tri.push(if s > 0.0 { [c, i, j] } else { [c, j, i] });
-                }
-            }
-        }
-    }
-    b.face(t0, v0);
-}
-
-/// A body's primitives as a mesh, in the base frame at home.
-pub fn body_mesh(prims: &[Prim]) -> PartMesh {
-    let mut b = Build::default();
-    for p in prims {
-        add_prim(&mut b, p);
-    }
+/// A body's triangles (machine_mesh: its part, or its primitives) as a mesh, base frame at home.
+pub fn body_mesh(t: &crate::machine_mesh::Tris) -> PartMesh {
     let mut lod = Lod {
         chord: 0.05,
         ..Lod::default()
     };
-    for (p, n) in b.pos.iter().zip(&b.nrm) {
-        for v in p {
+    let f = |p: [f64; 3]| [p[0] as f32, p[1] as f32, p[2] as f32];
+    for (p, n) in t.pos.iter().zip(&t.nrm) {
+        for v in f(*p) {
             lod.vertices.extend_from_slice(&v.to_le_bytes());
         }
-        let o = oct(*n);
+        let o = oct(f(*n));
         lod.vertices.extend_from_slice(&o[0].to_le_bytes());
         lod.vertices.extend_from_slice(&o[1].to_le_bytes());
     }
-    for t in &b.tri {
-        for v in t {
+    for tri in &t.tri {
+        for v in tri {
             lod.indices.extend_from_slice(&v.to_le_bytes());
         }
     }
-    lod.faces = b.faces;
-    for (e, poly) in b.edges.iter().enumerate() {
+    lod.faces = t
+        .patches
+        .iter()
+        .enumerate()
+        .map(|(k, &(t0, nt, v0, nv))| FaceRange {
+            face: k as u32,
+            first_tri: t0,
+            tris: nt,
+            first_vertex: v0,
+            vertices: nv,
+        })
+        .collect();
+    for (e, poly) in t.edges.iter().enumerate() {
         let first = (lod.segments.len() / crate::mesh::SEGMENT) as u32;
         for w in poly.windows(2) {
             for (p, n) in [(w[0], [crate::mesh::ALWAYS, 0]), (w[1], [0, 0])] {
-                for v in p {
+                for v in f(p) {
                     lod.segments.extend_from_slice(&v.to_le_bytes());
                 }
                 lod.segments.extend_from_slice(&n[0].to_le_bytes());
@@ -197,23 +80,27 @@ pub fn body_mesh(prims: &[Prim]) -> PartMesh {
             count: poly.len() as u32 - 1,
             start: 0,
             end: 0,
-            start_at: poly[0],
-            end_at: poly[poly.len() - 1],
+            start_at: f(poly[0]),
+            end_at: f(poly[poly.len() - 1]),
         });
     }
     lod.fins = (lod.segments.len() / crate::mesh::SEGMENT) as u32;
     let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
-    for p in &b.pos {
+    for p in &t.pos {
+        let p = f(*p);
         for k in 0..3 {
             lo[k] = lo[k].min(p[k]);
             hi[k] = hi[k].max(p[k]);
         }
     }
     let center = [0, 1, 2].map(|k| (lo[k] + hi[k]) * 0.5);
-    let radius = b
+    let radius = t
         .pos
         .iter()
-        .map(|p| (0..3).map(|k| (p[k] - center[k]).powi(2)).sum::<f32>())
+        .map(|p| {
+            let p = f(*p);
+            (0..3).map(|k| (p[k] - center[k]).powi(2)).sum::<f32>()
+        })
         .fold(0.0f32, f32::max)
         .sqrt();
     PartMesh {
@@ -281,7 +168,28 @@ impl Gui {
         if m.geom != self.mach.geom {
             self.mach.geom = m.geom;
             self.mach.pose = 0;
-            let mut meshes: Vec<PartMesh> = def.bodies.iter().map(|b| body_mesh(&b.prims)).collect();
+            // a user's or project's machine: its parts are beside its file; a built-in's are embedded
+            let dir = match &m.origin {
+                Some((forge_machine_builder::catalog::Level::Builtin, _)) => None,
+                Some((_, f)) => std::path::Path::new(f).parent().map(|p| p.to_path_buf()),
+                None => None,
+            };
+            let unsaved_parts = m.parts.clone();
+            let mut meshes: Vec<PartMesh> = def
+                .bodies
+                .iter()
+                .map(|b| {
+                    // a made machine's parts not saved yet: from the texts it carries
+                    if m.origin.is_none()
+                        && let Some(p) = &b.part
+                        && let Some((_, src)) = unsaved_parts.iter().find(|(r, _)| r == p)
+                        && let Ok(t) = crate::machine_mesh::part_tris(src, None)
+                    {
+                        return body_mesh(&t);
+                    }
+                    body_mesh(&crate::machine_mesh::body_tris(&def, b, dir.as_deref()))
+                })
+                .collect();
             self.mach.bodies = def
                 .bodies
                 .iter()
@@ -289,10 +197,10 @@ impl Gui {
                 .collect();
             if meshes.is_empty() {
                 // a scene needs a part: an empty mesh at the origin
-                meshes.push(body_mesh(&[Prim::Box {
+                meshes.push(body_mesh(&crate::machine_mesh::prims_tris(&[Prim::Box {
                     min: [-0.001; 3],
                     max: [0.001; 3],
-                }]));
+                }])));
             }
             let info = crate::render::part_info(&meshes);
             let placements: Vec<Placement> = (0..meshes.len())
