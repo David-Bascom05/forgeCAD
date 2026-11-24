@@ -64,7 +64,7 @@ elab "#standard_axioms " ids:ident* : command => do
   Sheet.Region.inLoop_lines Sheet.Region.owner_unique Sheet.Region.owner_spec
   -- the bend simulator's branch and bound
   Sheet.BB.Encl.comp Sheet.BB.Ival.addOut_mem Sheet.BB.lipschitz_lower Sheet.BB.search_sound
-  Sheet.BB.certify_sound
+  Sheet.BB.certify_sound Sheet.BB.clear_past_limit
   -- L3: the kernel's joint decisions
   Sheet.Build.decide_ok_iff Sheet.Build.setback_pos_iff Sheet.Build.toBend_physical
   Sheet.Build.accepted_bend Sheet.Build.build_refold

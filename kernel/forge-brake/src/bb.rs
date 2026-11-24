@@ -7,7 +7,8 @@
 //! cell is cleared when that bound reaches the limit, and that clears its whole stretch of the
 //! motion: nothing between samples is skipped. A witness (a real point of the piece at a real
 //! instant) under the limit is a proven violation. Cells are split until one of the two holds or
-//! they are smaller than the resolution, where the bound is within it of the truth.
+//! they are smaller than the resolution, where the bound is within it of the truth: a search whose
+//! least bound ends within the resolution under the limit, with no violation found, is `Near`.
 use forge_math::Interval;
 use std::cmp::Ordering;
 use std::collections::BinaryHeap;
@@ -61,9 +62,14 @@ pub trait Problem {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Verdict {
-    /// Proven: the distance is at least `lower` >= limit - res at every point of the piece at every
+    /// Proven: the distance is at least `lower` >= limit at every point of the piece at every
     /// instant of the motion; `upper` is at least a real point's distance.
     Clear { lower: f64, upper: f64 },
+    /// Proven within the resolution, not past the limit: the distance is at least `lower`, with
+    /// limit - res <= lower < limit, at every point of the piece at every instant of the motion,
+    /// and no point was found under the limit. A caller warns of it (not a pass, not a hit);
+    /// `upper` is at least a real point's distance.
+    Near { lower: f64, upper: f64 },
     /// Proven: a real point of the piece, at a real instant (parameters `q`, image `at`), whose
     /// distance is at most `d` < limit (the error budget included).
     Hit { d: f64, q: [f64; 4], at: [f64; 3] },
@@ -185,25 +191,11 @@ fn search<P: Problem>(
         // has it, each leaf settled to within the resolution (else a leaf no witness decided
         // would be called clear)
         if measure && lb >= limit && *spent > budget / 10 {
-            let lower = lower.min(lb);
-            if lower >= limit - res {
-                return Verdict::Clear {
-                    lower,
-                    upper: upper.max(lower),
-                };
-            }
-            return Verdict::Undecided { lower };
+            return settle(lower.min(lb), upper, limit, res);
         }
         if *spent > budget {
-            lower = lower.min(lb);
-            // what is left is proven clear of the limit: a pass, measured less finely
-            if lower >= limit - res {
-                return Verdict::Clear {
-                    lower,
-                    upper: upper.max(lower),
-                };
-            }
-            return Verdict::Undecided { lower };
+            // what is left is proven clear of the limit: settled as far as it was measured
+            return settle(lower.min(lb), upper, limit, res);
         }
         if let Some(q) = pb.witness(&cell) {
             let at = pb.image(q);
@@ -231,10 +223,21 @@ fn search<P: Problem>(
             }
         }
     }
-    // every cell is settled: clear only if each was proven to within the resolution, else
-    // undecided (a leaf under it with no witness below the limit decides nothing)
-    if lower >= limit - res {
+    // every cell is settled
+    settle(lower, upper, limit, res)
+}
+
+/// The verdict on a search that found no point under the limit, from what it proved: clear only
+/// past the limit, near within the resolution of it, else undecided (a leaf under the resolution
+/// with no witness below the limit decides nothing).
+fn settle(lower: f64, upper: f64, limit: f64, res: f64) -> Verdict {
+    if lower >= limit {
         Verdict::Clear {
+            lower,
+            upper: upper.max(lower),
+        }
+    } else if lower >= limit - res {
+        Verdict::Near {
             lower,
             upper: upper.max(lower),
         }
@@ -334,7 +337,7 @@ mod tests {
     fn just_inside_and_just_outside_the_limit() {
         // the true least distance is 1 - s1: limit 0.5, resolution 1e-4
         match certify(&Seg1, &[root(0.498)], 0.5, 1e-4, 1_000_000, false) {
-            Verdict::Clear { lower, .. } => assert!((0.5 - 1e-4..=0.502).contains(&lower), "{lower}"),
+            Verdict::Clear { lower, .. } => assert!((0.5..=0.502).contains(&lower), "{lower}"),
             v => panic!("{v:?}"),
         }
         match certify(&Seg1, &[root(0.502)], 0.5, 1e-4, 1_000_000, false) {
@@ -404,6 +407,35 @@ mod tests {
             certify(&Blind, &[root(0.0)], 0.5, 0.01, 5, true),
             Verdict::Clear { .. }
         ));
+    }
+
+    #[test]
+    fn within_the_resolution_is_near_never_clear() {
+        // the true least distance 1 - 0.5003 = 0.4997: under the limit 0.5 by less than the
+        // resolution 1e-3, and nothing can name a point below it: near, with the bound proven
+        match certify(&Blind, &[root(0.5003)], 0.5, 1e-3, 1_000_000, false) {
+            Verdict::Near { lower, upper } => {
+                assert!((0.5 - 1e-3..0.5).contains(&lower) && lower <= 0.4997 + 1e-9, "{lower}");
+                assert!(upper >= lower, "{upper}");
+            }
+            v => panic!("{v:?}"),
+        }
+        // measured, and out of budget: the same rule at every exit
+        assert!(matches!(
+            certify(&Blind, &[root(0.5003)], 0.5, 1e-3, 1_000_000, true),
+            Verdict::Near { .. }
+        ));
+        // a clear verdict is past the limit, always
+        for (s1, res, budget, measure) in [
+            (0.3, 1e-3, 1_000_000, false),
+            (0.498, 1e-4, 1_000_000, false),
+            (0.4999, 1e-3, 1_000_000, true),
+            (0.3, 1e-3, 5, true),
+        ] {
+            if let Verdict::Clear { lower, .. } = certify(&Blind, &[root(s1)], 0.5, res, budget, measure) {
+                assert!(lower >= 0.5, "{s1}: {lower}");
+            }
+        }
     }
 
     #[test]
