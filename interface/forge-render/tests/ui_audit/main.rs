@@ -524,9 +524,15 @@ fn click_tool(h: &mut Headless, group: &str, tool: &str) -> bool {
     if h.gui.shell.place(&format!("tool:{tool}")).is_some() && click_place(h, &format!("tool:{tool}")) {
         return true;
     }
-    if click_place(h, &format!("ribbon:group:{group}")) {
+    // folded: its group's menu, opened (a click may close one left open, so twice at most)
+    for _ in 0..2 {
+        if !click_place(h, &format!("ribbon:group:{group}")) {
+            return false;
+        }
         step(h);
-        return click_place(h, &format!("tool:{tool}"));
+        if h.gui.shell.place(&format!("tool:{tool}")).is_some() {
+            return click_place(h, &format!("tool:{tool}"));
+        }
     }
     false
 }
