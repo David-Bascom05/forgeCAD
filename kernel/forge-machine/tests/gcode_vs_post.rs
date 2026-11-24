@@ -145,6 +145,7 @@ fn random_program(r: &mut Lcg, dialect: &str) -> Program {
                     },
                 });
                 recs.push(Rec::ProbeOn(false));
+                recs.push(Rec::Home);
                 p = [p[0], p[1], 25.0];
                 recs.push(Rec::Rapid(p));
             }

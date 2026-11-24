@@ -479,6 +479,10 @@ pub struct State {
     pub comment_tool: Option<u32>,
     /// The protected positioning macro's feed: modal to that macro only (Inspection Plus O9810).
     pub protected_f: Option<Q>,
+    /// The probe is switched on (a probing macro's `probe_on`): no tool change until it is off.
+    pub probe_on: bool,
+    /// The probe was switched off and the G28 reference return its macro requires has not come.
+    pub probe_off_pending: bool,
 }
 
 impl State {
@@ -500,6 +504,8 @@ impl State {
             centre: None,
             comment_tool: None,
             protected_f: None,
+            probe_on: false,
+            probe_off_pending: false,
         }
     }
 }
@@ -1015,6 +1021,24 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         axis[i] = coord(*l)?;
     }
     let any_axis = axis.iter().any(|a| a.is_some());
+    // the probe switch macros' rules (Renishaw H-2000-6222 p. 9-23): the probe is off before a
+    // tool change, and the move after switching it off is a G28 reference return
+    if st.probe_on && (ms.contains(&6) || (c.lathe && get('T').is_some())) {
+        return Err(ge(
+            ln,
+            "a tool change while the probe is on: switch it off first (G65 P9833)",
+        ));
+    }
+    if st.probe_off_pending && any_axis {
+        if has_g(28) {
+            st.probe_off_pending = false;
+        } else {
+            return Err(ge(
+                ln,
+                "a move after the probe is switched off that is not a G28 reference return (the off macro moves Z; Renishaw H-2000-6222 p. 9-23)",
+            ));
+        }
+    }
     let absolute = if has_g(91) {
         Some(false)
     } else if has_g(90) {
@@ -1094,6 +1118,8 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
         let zi = c.idx('Z');
         match mac {
             Macro::On | Macro::Off => {
+                st.probe_on = mac == Macro::On;
+                st.probe_off_pending = mac == Macro::Off;
                 push(out, Ev::ProbeSwitch(mac == Macro::On));
                 if let Some(z) = zi {
                     st.core.pos[z] = None;

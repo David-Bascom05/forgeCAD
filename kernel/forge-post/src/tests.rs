@@ -865,9 +865,28 @@ fn haas_writes_the_inspection_plus_macros_and_reads_them_back() {
                 f: 3000.0,
             },
             Rec::ProbeOn(false),
+            Rec::Home,
             Rec::Rapid([0.0, 0.0, 100.0]),
         ],
     };
+    // the off macro's rules: a home return next, no tool change while on
+    let mut no_home = p.clone();
+    no_home.recs.retain(|r| *r != Rec::Home);
+    let mut change = p.clone();
+    change.recs.insert(
+        4,
+        Rec::ToolChange {
+            t: 1,
+            h: 1,
+            name: "x".into(),
+        },
+    );
+    for (bad, want) in [(no_home, "not a home return"), (change, "tool change while")] {
+        match quantize(&bad, &Dialect::get("haas").unwrap()) {
+            Err(PostError::Unsupported { what, .. }) => assert!(what.contains(want), "{what}"),
+            other => panic!("{other:?}"),
+        }
+    }
     let d = Dialect::get("haas").unwrap();
     let q = quantize(&p, &d).unwrap();
     let (txt, back) = round_trip(&q, &d).unwrap();
@@ -885,9 +904,9 @@ fn haas_writes_the_inspection_plus_macros_and_reads_them_back() {
         q: 10000,
         wcs: Some(54)
     }));
-    // after the probe is switched off, Z is written again
+    // after the probe is switched off, Z goes home
     let after = txt.lines().skip_while(|l| !l.contains("P9833")).nth(1).unwrap();
-    assert!(after.contains('Z'), "{after}");
+    assert!(after.contains("G28"), "{after}");
     // a control with no cited macros refuses each
     let f = Dialect::get("fanuc").unwrap();
     let qf = quantize(&p, &f).unwrap();

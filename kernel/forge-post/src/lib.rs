@@ -778,6 +778,51 @@ pub fn digits(q: Q, k: u32, point: Point) -> String {
 /// (no arc, rapid, Z-only move or cycle in between: comments may be); while it is on, no tool
 /// change, cycle, dwell or machine-home move; and it is off when the program ends.
 /// Conservative: G1 only, where LinuxCNC also allows a rapid lead-in and a G0 after G40.
+/// The probe switch macros' rules (Renishaw H-2000-6222, p. 9-23, O9833): the probe is
+/// switched off before a tool change, and the motion record after switching it off is a home
+/// return (its macro moves Z: "the G28 reference return must be done following this macro").
+fn probe_rules(p: &Program) -> Result<(), PostError> {
+    let mut on = false;
+    let mut off_pending = false;
+    for r in &p.recs {
+        let motion = matches!(
+            r,
+            Rec::Rapid(_)
+                | Rec::Line(..)
+                | Rec::Arc { .. }
+                | Rec::Cycle { .. }
+                | Rec::Probe { .. }
+                | Rec::ProbeProtected { .. }
+                | Rec::ProbeSurface { .. }
+        );
+        match r {
+            Rec::ProbeOn(true) => {
+                on = true;
+                off_pending = false;
+            }
+            Rec::ProbeOn(false) => {
+                on = false;
+                off_pending = true;
+            }
+            Rec::Home => off_pending = false,
+            Rec::ToolChange { .. } if on => {
+                return Err(PostError::Unsupported {
+                    what: "a tool change while the probe is on".into(),
+                    fix: "switch the probe off first (Renishaw H-2000-6222 p. 9-23)".into(),
+                });
+            }
+            _ if motion && off_pending => {
+                return Err(PostError::Unsupported {
+                    what: "a move after the probe is switched off that is not a home return".into(),
+                    fix: "turn the probe off, then return Z home (Renishaw H-2000-6222 p. 9-23)".into(),
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
 fn comp_rules(p: &Program) -> Result<(), PostError> {
     let bad = |what: &str| {
         PostError::Unsupported {
@@ -848,6 +893,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
     // where the tool is, as the program states it (an arc's start)
     let mut at: Option<[f64; 3]> = None;
     comp_rules(p)?;
+    probe_rules(p)?;
     for r in &p.recs {
         let from = at;
         match r {

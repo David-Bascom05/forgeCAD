@@ -264,7 +264,21 @@ fn inspection_plus_macros_are_read_and_simulated() {
     }];
     s.h = vec![(20, 100.0)];
     // probe on; protected move down to Z5; measure Z toward Z0 with 4 mm search; then up
-    let prog = "G90 G17 G21\nT20 M06\nG54\nG43 H20\nG0 X0. Y0. Z50.\nG65 P9832\nG0 Z50.\nG65 P9810 Z5. F3000.\nG65 P9811 Z0. Q4.\nG65 P9810 Z50.\nG65 P9833\n";
+    let prog = "G90 G17 G21\nT20 M06\nG54\nG43 H20\nG0 X0. Y0. Z50.\nG65 P9832\nG0 Z50.\nG65 P9810 Z5. F3000.\nG65 P9811 Z0. Q4.\nG65 P9810 Z50.\nG65 P9833\nG91 G28 Z0.\nG90\n";
+    // the off macro's rules: a G28 next, and no tool change while on
+    for (bad, want) in [
+        (
+            "G90 G0 X0. Y0. Z50.\nG65 P9832\nG65 P9833\nG0 Z60.\n",
+            "not a G28",
+        ),
+        (
+            "G90 G0 X0. Y0. Z50.\nG65 P9832\nT2 M06\n",
+            "tool change while the probe is on",
+        ),
+    ] {
+        let e = gcode::run(bad, &c).unwrap_err();
+        assert!(e.what.contains(want), "{bad}: {e:?}");
+    }
     let (bs, _) = gcode::run(prog, &c).unwrap();
     assert!(
         bs.iter()
