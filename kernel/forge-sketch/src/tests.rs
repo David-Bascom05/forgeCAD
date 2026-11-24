@@ -532,3 +532,28 @@ fn many_independent_circles_analyse_quickly() {
     assert_eq!(a.dof, 0);
     assert_eq!(a.fully_constrained.len(), 800);
 }
+
+/// A slot whose top arc runs the long way, so it dips into the slot and comes back up to its corner
+/// 2° off the side line (the scale-programs session's classify-near-tangent.fg, from 8 DeepCAD
+/// parts): the arc crosses the side 0.77 below the corner and meets it again there, a lobe 0.005
+/// wide. The outline's chords sag past it, and the loop went on as simple; the solid's face crossed
+/// itself, and a later join found it classified both ways. The exact crossing is the refusal.
+#[test]
+fn an_arc_crossing_its_side_just_short_of_their_corner_crosses_itself() {
+    let mut s = Sketch::new(Frame::WORLD);
+    let a = s.add_point(p(-20.0, 3.0));
+    let b = s.add_point(p(-10.5, 65.0));
+    let c = s.add_point(p(10.5, 65.0));
+    let d = s.add_point(p(20.0, 3.0));
+    let top = s.add_point(p(0.0, 63.0));
+    let bottom = s.add_point(p(0.0, 0.0));
+    s.add_line(a, b).unwrap();
+    s.add_arc(top, b, c, true).unwrap();
+    s.add_line(c, d).unwrap();
+    s.add_arc(bottom, d, a, true).unwrap();
+    assert!(
+        matches!(profiles(&s), Err(ExtractError::SelfIntersection { .. })),
+        "{:?}",
+        profiles(&s).map(|p| p.len())
+    );
+}

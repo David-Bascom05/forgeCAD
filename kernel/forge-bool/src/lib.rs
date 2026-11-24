@@ -11,6 +11,7 @@ macro_rules! decided {
     };
 }
 
+mod apex;
 /// This crate's Cargo features and whether this build has each: a result cache keyed by the
 /// sources alone would hand one build's answers to a build with other features
 /// (forge-lang's `store::key` folds them in).

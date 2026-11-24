@@ -75,7 +75,11 @@ pub fn loop_samples(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) 
         first.push(pts.len());
         let co = body.coedge(c);
         let e = body.edge(co.edge);
-        for i in 0..n {
+        // (a coedge starts at its vertex, which the one before ends at: drawn there, the two meet;
+        // drawn from each curve's end, within tolerance of it, the loop can zigzag across itself
+        // where it turns back, as at a hairpin's tip)
+        pts.push(body.vertex(body.coedge_start(c)).point);
+        for i in 1..n {
             let k = if co.forward { i } else { n - i };
             let t = (e.range.lo + e.range.width() * (k as f64 / n as f64)).min(e.range.hi);
             pts.push(e.curve.eval(t));
@@ -175,8 +179,13 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
         let i = (start + k) % n;
         if singular[i] {
             let before = prev.expect("loop starts at a regular sample");
-            // (a spindle torus's v is periodic: the pole is where the run has got to)
-            let y = unwrap_in(&domain, raw[i], before).y;
+            // (a spindle torus's v is periodic: the pole is where the run has got to; a sphere's
+            // sample within tolerance of its axis is at its pole, drawn there on the pole's line,
+            // so a jump in u at it runs along the edge of the parameter plane)
+            let y = match surface {
+                forge_geom::Surface::Sphere(_) => dmath::FRAC_PI_2.copysign(raw[i].y),
+                _ => unwrap_in(&domain, raw[i], before).y,
+            };
             runs.last_mut()
                 .expect("at least one run")
                 .push((Point2::new(before.x, y), i));
@@ -205,7 +214,11 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
     {
         let want_ccw = f.same_sense;
         let count = 3usize.pow(runs.len() as u32 - 1);
-        let mut best_score = f64::INFINITY;
+        // the least area; where shifts leave it as it is (a run whose two ends are on one pole's
+        // line moves along it at no cost in area: equal to rounding), the shortest walk along the
+        // singular lines, as a loop's walk there covers no stretch of one twice
+        let mut best_score = (f64::INFINITY, f64::INFINITY);
+        let on_pole = |a: Point2, b: Point2| a.y == b.y && surface.singular(a) && surface.singular(b);
         for combo in 0..count {
             let mut c = combo;
             let mut pts: Vec<(Point2, usize)> = runs[0].clone();
@@ -220,8 +233,16 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
             pts.extend(tail.iter().copied());
             let poly: Vec<Point2> = pts.iter().map(|q| q.0).collect();
             let area = signed_area(&poly);
-            if (area > 0.0) == want_ccw && area.abs() < best_score {
-                best_score = area.abs();
+            let walk: f64 = (0..poly.len())
+                .map(|k| (poly[k], poly[(k + 1) % poly.len()]))
+                .filter(|&(a, b)| on_pole(a, b))
+                .map(|(a, b)| (b.x - a.x).abs())
+                .sum();
+            let tie = 1e-9 * area.abs();
+            let better =
+                area.abs() < best_score.0 - tie || (area.abs() <= best_score.0 + tie && walk < best_score.1);
+            if (area > 0.0) == want_ccw && better {
+                best_score = (area.abs(), walk);
                 best = pts;
             }
         }

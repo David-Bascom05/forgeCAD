@@ -532,7 +532,8 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         // a tangent joint solved to ~1e-9 mm still splits into two roots up to sqrt(2 r delta) apart
         let near = 1e-6 + (2.0 * radius(&shapes[i]).max(radius(&shapes[j])) * 1e-8).sqrt();
         let same = all[i].2 == all[j].2;
-        let bad = match hits(&shapes[i], &shapes[j]) {
+        let hit = hits(&shapes[i], &shapes[j]);
+        let bad = match &hit {
             Hit::Overlap => true,
             Hit::Points(ps) => ps.iter().any(|p| {
                 !shared.iter().any(|q| q.distance(*p) <= near)
@@ -542,7 +543,23 @@ fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
         if !bad {
             continue;
         }
-        if same {
+        // two curves of one loop that cross at an angle away from their ends and part by more
+        // than tolerance before they meet again at their shared end make the loop cross itself,
+        // however small the lobe between (a sampled outline's chords can pass a lobe narrower
+        // than their sag). One that only meets itself (a touch), or whose lobe is within
+        // tolerance (a knife edge's sides, a hair off tangent), is asked of the loop's outline
+        let crossing = || match &hit {
+            Hit::Points(ps) => ps.iter().any(|p| {
+                !shared.iter().any(|q| q.distance(*p) <= near)
+                    && crosses(&shapes[i], &shapes[j], *p, &ends, near)
+                    && shared.iter().any(|&q| {
+                        apart(&shapes[i], &shapes[j], *p, q).max(apart(&shapes[j], &shapes[i], *p, q))
+                            > tol::LINEAR
+                    })
+            }),
+            Hit::Overlap => false,
+        };
+        if same && !crossing() {
             meets_itself[all[i].2].get_or_insert((all[i].1, all[j].1));
         } else {
             return Err(ExtractError::SelfIntersection {
@@ -647,6 +664,49 @@ fn crosses(a: &Shape, b: &Shape, p: Point2, ends: &[Point2; 4], near: f64) -> bo
     match (direction(a, p), direction(b, p)) {
         (Some(u), Some(v)) => u.cross(v).abs() > 1e-3,
         _ => false,
+    }
+}
+
+/// How far shape `a`, between two of its points `p` and `q`, gets from shape `b`: from the point of
+/// `a` halfway between them.
+fn apart(a: &Shape, b: &Shape, p: Point2, q: Point2) -> f64 {
+    let m = match a {
+        Shape::Line(..) => p.lerp(q, 0.5),
+        Shape::Arc { c, r, start, .. } => {
+            let at = |x: Point2| dmath::wrap_tau(dmath::atan2(x.y - c.y, x.x - c.x) - start);
+            let w = *start + 0.5 * (at(p) + at(q));
+            let (sn, cs) = dmath::sin_cos(w);
+            Point2::new(c.x + r * cs, c.y + r * sn)
+        }
+        Shape::Curve(e) => {
+            let c = &e.c;
+            let t = |x: Point2| c.closest(forge_math::Point3::new(x.x, x.y, 0.0), c.domain());
+            let m = c.deriv(0.5 * (t(p) + t(q))).p;
+            Point2::new(m.x, m.y)
+        }
+    };
+    match b {
+        Shape::Line(u, v) => {
+            let d = *v - *u;
+            let k = ((m - *u).dot(d) / d.dot(d)).clamp(0.0, 1.0);
+            m.distance(*u + d * k)
+        }
+        Shape::Arc { c, r, start, sweep } => {
+            if on_arc(*c, *start, *sweep, m) {
+                (m.distance(*c) - r).abs()
+            } else {
+                let end = |w: f64| {
+                    let (sn, cs) = dmath::sin_cos(w);
+                    Point2::new(c.x + r * cs, c.y + r * sn)
+                };
+                m.distance(end(*start)).min(m.distance(end(start + sweep)))
+            }
+        }
+        Shape::Curve(e) => {
+            let c = &e.c;
+            let x = forge_math::Point3::new(m.x, m.y, 0.0);
+            c.deriv(c.closest(x, c.domain())).p.distance(x)
+        }
     }
 }
 
