@@ -2178,34 +2178,34 @@ helical	31497	S	finish	TITANIUM ALLOY (Ti 3Al-2.5V, Ti 6Al-4V, Ti 10V-2Fe-3Al), 
 helical	31497	S	slot	TITANIUM ALLOY (Ti 3Al-2.5V, Ti 6Al-4V, Ti 10V-2Fe-3Al), 36 - 50 HRC	12.700	1.0929	0.8585	on S slot	1.1250	1.0667
 helical	31497	S	rough	TITANIUM ALLOY (Ti 3Al-2.5V, Ti 6Al-4V, Ti 10V-2Fe-3Al), 36 - 50 HRC	3.810	1.0929	0.5404	on S rough	1.1250	1.1750
 helical	31497	S	finish	TITANIUM ALLOY (Ti 3Al-2.5V, Ti 6Al-4V, Ti 10V-2Fe-3Al), 36 - 50 HRC	0.635	1.0929	1.4069	on S finish	1.1250	0.9419
-lakeshore	LC204018	N	milling (general)	Aluminums	-	0.8752	1.2694	on N general	0.6250	0.6087
-lakeshore	LC204018	N	milling (general)	Aluminums	-	0.8752	1.0068	on N general	0.6250	0.4828
-lakeshore	LC204018	N	milling (general)	Aluminum Cast	-	1.0372	1.3903	on N general	0.7407	0.6667
-lakeshore	LC204018	N	milling (general)	Aluminum Cast	-	1.0372	1.1230	on N general	0.7407	0.5385
-lakeshore	LC204018	N	milling (general)	Brass	-	1.7503	1.3903	on N general	1.2500	0.6667
-lakeshore	LC204018	N	milling (general)	Brass	-	1.7503	1.1230	on N general	1.2500	0.5385
-lakeshore	LC204018	N	milling (general)	Bronze	-	2.1542	1.5367	on N general	1.5385	0.7368
-lakeshore	LC204018	N	milling (general)	Bronze	-	2.1542	1.3903	on N general	1.5385	0.6667
-lakeshore	LC204018	K	milling (general)	Cast Irons - Soft	-	0.8399	1.1419	on K general	0.6000	0.7143
-lakeshore	LC204018	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6149	on K general	0.6000	0.3846
-lakeshore	LC204018	K	milling (general)	Cast Irons - Medium	-	1.0499	1.7763	on K general	0.7500	1.1111
-lakeshore	LC204018	K	milling (general)	Cast Irons - Medium	-	1.0499	1.0658	on K general	0.7500	0.6667
-lakeshore	LC204018	N	milling (general)	Copper	-	1.0002	1.3903	on N general	0.7143	0.6667
-lakeshore	LC204018	N	milling (general)	Copper	-	1.0002	1.1230	on N general	0.7143	0.5385
+lakeshore	LC204018	N	milling (general)	Aluminums	-	0.8752	1.2694	on N general	0.6250	0.7826
+lakeshore	LC204018	N	milling (general)	Aluminums	-	0.8752	1.0068	on N general	0.6250	0.6207
+lakeshore	LC204018	N	milling (general)	Aluminum Cast	-	1.0372	1.3903	on N general	0.7407	0.8571
+lakeshore	LC204018	N	milling (general)	Aluminum Cast	-	1.0372	1.1230	on N general	0.7407	0.6923
+lakeshore	LC204018	N	milling (general)	Brass	-	1.7503	1.3903	on N general	1.2500	0.8571
+lakeshore	LC204018	N	milling (general)	Brass	-	1.7503	1.1230	on N general	1.2500	0.6923
+lakeshore	LC204018	N	milling (general)	Bronze	-	2.1542	1.5367	on N general	1.5385	0.9474
+lakeshore	LC204018	N	milling (general)	Bronze	-	2.1542	1.3903	on N general	1.5385	0.8571
+lakeshore	LC204018	K	milling (general)	Cast Irons - Soft	-	0.8399	1.1419	on K general	0.6000	0.8571
+lakeshore	LC204018	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6149	on K general	0.6000	0.4615
+lakeshore	LC204018	K	milling (general)	Cast Irons - Medium	-	1.0499	1.7763	on K general	0.7500	1.3333
+lakeshore	LC204018	K	milling (general)	Cast Irons - Medium	-	1.0499	1.0658	on K general	0.7500	0.8000
+lakeshore	LC204018	N	milling (general)	Copper	-	1.0002	1.3903	on N general	0.7143	0.8571
+lakeshore	LC204018	N	milling (general)	Copper	-	1.0002	1.1230	on N general	0.7143	0.6923
 lakeshore	LC204018	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8881	on S general	0.5000	1.1111
 lakeshore	LC204018	S	milling (general)	Monel & High Nickel Steel	-	0.8743	-	on S general	0.5000	-
-lakeshore	LC204018	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7378	on M general	0.8333	0.7692
-lakeshore	LC204018	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5995	on M general	0.8333	0.6250
-lakeshore	LC204018	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.1990	on M general	1.0000	1.2500
-lakeshore	LC204018	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.8720	on M general	1.0000	0.9091
-lakeshore	LC204018	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.8000
-lakeshore	LC204018	P	milling (general)	Steels - Low Carbon	-	0.7332	0.3000	on P general	0.6667	0.5333
-lakeshore	LC204018	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6000	on P general	0.8333	1.0667
-lakeshore	LC204018	P	milling (general)	Steels - Med Carbon	-	0.9164	0.3750	on P general	0.8333	0.6667
-lakeshore	LC204018	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	1.2308
-lakeshore	LC204018	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.4500	on P general	1.0000	0.8000
-lakeshore	LC204018	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6429	on P general	0.9091	1.1429
-lakeshore	LC204018	P	milling (general)	Steels - Tool Steel	-	0.9998	0.4500	on P general	0.9091	0.8000
+lakeshore	LC204018	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7378	on M general	0.8333	0.9231
+lakeshore	LC204018	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5995	on M general	0.8333	0.7500
+lakeshore	LC204018	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.1990	on M general	1.0000	1.5000
+lakeshore	LC204018	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.8720	on M general	1.0000	1.0909
+lakeshore	LC204018	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	1.0000
+lakeshore	LC204018	P	milling (general)	Steels - Low Carbon	-	0.7332	0.3000	on P general	0.6667	0.6667
+lakeshore	LC204018	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6000	on P general	0.8333	1.3333
+lakeshore	LC204018	P	milling (general)	Steels - Med Carbon	-	0.9164	0.3750	on P general	0.8333	0.8333
+lakeshore	LC204018	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	1.5385
+lakeshore	LC204018	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.4500	on P general	1.0000	1.0000
+lakeshore	LC204018	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6429	on P general	0.9091	1.4286
+lakeshore	LC204018	P	milling (general)	Steels - Tool Steel	-	0.9998	0.4500	on P general	0.9091	1.0000
 lakeshore	LC204018	S	milling (general)	Titanium - Soft	-	0.9993	0.5709	on S general	0.5714	0.7143
 lakeshore	LC204018	S	milling (general)	Titanium - Soft	-	0.9993	0.5329	on S general	0.5714	0.6667
 lakeshore	LC204018	S	milling (general)	Titanium - Hard	-	1.1658	0.7267	on S general	0.6667	0.9091
@@ -2226,38 +2226,38 @@ lakeshore	LC204316	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997
 lakeshore	LC204316	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6499	on P general	0.9091	1.0000
 lakeshore	LC204316	S	milling (general)	Titanium - Soft	-	0.9993	0.7302	on S general	0.5714	0.6667
 lakeshore	LC204316	S	milling (general)	Titanium - Hard	-	1.1658	0.8426	on S general	0.6667	0.7692
-lakeshore	LC204014	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	0.6207
-lakeshore	LC204014	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.3273
-lakeshore	LC204014	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	0.6923
-lakeshore	LC204014	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.3273
-lakeshore	LC204014	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	0.6923
-lakeshore	LC204014	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.4000
-lakeshore	LC204014	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	0.8571
-lakeshore	LC204014	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.4865
-lakeshore	LC204014	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.4615
-lakeshore	LC204014	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.3000
-lakeshore	LC204014	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	0.8000
-lakeshore	LC204014	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.4000
-lakeshore	LC204014	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	0.6923
-lakeshore	LC204014	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.4000
+lakeshore	LC204014	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	1.0345
+lakeshore	LC204014	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.5455
+lakeshore	LC204014	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	1.1538
+lakeshore	LC204014	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.5455
+lakeshore	LC204014	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	1.1538
+lakeshore	LC204014	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.6667
+lakeshore	LC204014	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	1.4286
+lakeshore	LC204014	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.8108
+lakeshore	LC204014	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.9231
+lakeshore	LC204014	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.6000
+lakeshore	LC204014	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	1.6000
+lakeshore	LC204014	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.8000
+lakeshore	LC204014	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	1.1538
+lakeshore	LC204014	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.6667
 lakeshore	LC204014	S	milling (general)	Monel & High Nickel Steel	-	0.8743	-	on S general	0.5000	-
-lakeshore	LC204014	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.4762
-lakeshore	LC204014	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	0.7500
-lakeshore	LC204014	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.5217
-lakeshore	LC204014	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.0909
-lakeshore	LC204014	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.6667
-lakeshore	LC204014	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.6667
-lakeshore	LC204014	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.5000
-lakeshore	LC204014	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	0.8333
-lakeshore	LC204014	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.5714
-lakeshore	LC204014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.0000
-lakeshore	LC204014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.7692
-lakeshore	LC204014	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.0000
-lakeshore	LC204014	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.6667
-lakeshore	LC204014	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	0.6667
-lakeshore	LC204014	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.4348
-lakeshore	LC204014	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	0.7692
-lakeshore	LC204014	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.5263
+lakeshore	LC204014	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.7619
+lakeshore	LC204014	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	1.0000
+lakeshore	LC204014	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.6957
+lakeshore	LC204014	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.4545
+lakeshore	LC204014	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.8889
+lakeshore	LC204014	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.8000
+lakeshore	LC204014	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.6000
+lakeshore	LC204014	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	1.0000
+lakeshore	LC204014	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.6857
+lakeshore	LC204014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.2000
+lakeshore	LC204014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.9231
+lakeshore	LC204014	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.2000
+lakeshore	LC204014	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.8000
+lakeshore	LC204014	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	1.0667
+lakeshore	LC204014	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.6957
+lakeshore	LC204014	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	1.2308
+lakeshore	LC204014	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.8421
 lakeshore	1500516	N	milling (general)	Aluminums	-	0.8752	1.4418	on N general	0.6250	0.5455
 lakeshore	1500516	N	milling (general)	Aluminum Cast	-	1.0372	1.4418	on N general	0.7407	0.5455
 lakeshore	1500516	N	milling (general)	Brass	-	1.7503	1.7622	on N general	1.2500	0.6667
@@ -2274,194 +2274,194 @@ lakeshore	1500516	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	
 lakeshore	1500516	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7333	on P general	0.9091	0.8000
 lakeshore	1500516	S	milling (general)	Titanium - Soft	-	0.9993	0.7337	on S general	0.5714	0.6957
 lakeshore	1500516	S	milling (general)	Titanium - Hard	-	1.1658	0.8881	on S general	0.6667	0.8421
-lakeshore	LC204038	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.5455
-lakeshore	LC204038	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.4286
-lakeshore	LC204038	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.5455
-lakeshore	LC204038	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.4286
-lakeshore	LC204038	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	0.6667
-lakeshore	LC204038	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.5000
-lakeshore	LC204038	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	0.8108
-lakeshore	LC204038	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	0.6250
-lakeshore	LC204038	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	0.6000
-lakeshore	LC204038	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.4000
-lakeshore	LC204038	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	0.8000
-lakeshore	LC204038	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.5333
-lakeshore	LC204038	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	0.6667
-lakeshore	LC204038	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.5000
-lakeshore	LC204038	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.7619
-lakeshore	LC204038	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.5333
-lakeshore	LC204038	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.6957
-lakeshore	LC204038	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.5333
-lakeshore	LC204038	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	0.8889
-lakeshore	LC204038	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.6400
-lakeshore	LC204038	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	0.6000
-lakeshore	LC204038	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.4000
-lakeshore	LC204038	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	0.6857
-lakeshore	LC204038	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.4800
-lakeshore	LC204038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	0.9231
-lakeshore	LC204038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	0.8000
-lakeshore	LC204038	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	0.8000
-lakeshore	LC204038	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	0.6486
-lakeshore	LC204038	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.6957
-lakeshore	LC204038	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.5333
-lakeshore	LC204038	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	0.8421
-lakeshore	LC204038	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.6400
-lakeshore	LC204012	N	milling (general)	Aluminums	-	0.8752	1.8486	on N general	0.6250	0.7143
-lakeshore	LC204012	N	milling (general)	Aluminums	-	0.8752	1.1252	on N general	0.6250	0.4348
-lakeshore	LC204012	N	milling (general)	Aluminum Cast	-	1.0372	1.8486	on N general	0.7407	0.7143
-lakeshore	LC204012	N	milling (general)	Aluminum Cast	-	1.0372	1.1252	on N general	0.7407	0.4348
-lakeshore	LC204012	N	milling (general)	Brass	-	1.7503	2.1567	on N general	1.2500	0.8333
-lakeshore	LC204012	N	milling (general)	Brass	-	1.7503	1.7254	on N general	1.2500	0.6667
-lakeshore	LC204012	N	milling (general)	Bronze	-	2.1542	2.6959	on N general	1.5385	1.0417
-lakeshore	LC204012	N	milling (general)	Bronze	-	2.1542	2.1567	on N general	1.5385	0.8333
-lakeshore	LC204012	K	milling (general)	Cast Irons - Soft	-	0.8399	0.8585	on K general	0.6000	0.6667
-lakeshore	LC204012	K	milling (general)	Cast Irons - Soft	-	0.8399	0.5724	on K general	0.6000	0.4444
-lakeshore	LC204012	K	milling (general)	Cast Irons - Medium	-	1.0499	1.1447	on K general	0.7500	0.8889
-lakeshore	LC204012	K	milling (general)	Cast Irons - Medium	-	1.0499	0.7359	on K general	0.7500	0.5714
-lakeshore	LC204012	N	milling (general)	Copper	-	1.0002	2.1567	on N general	0.7143	0.8333
-lakeshore	LC204012	N	milling (general)	Copper	-	1.0002	1.6175	on N general	0.7143	0.6250
-lakeshore	LC204012	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8585	on S general	0.5000	0.6667
-lakeshore	LC204012	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.5724	on S general	0.5000	0.4444
-lakeshore	LC204012	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0303	on M general	0.8333	0.6667
-lakeshore	LC204012	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5329	on M general	0.8333	0.3448
-lakeshore	LC204012	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.2363	on M general	1.0000	0.8000
-lakeshore	LC204012	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.6308	on M general	1.0000	0.4082
-lakeshore	LC204012	P	milling (general)	Steels - Low Carbon	-	0.7332	0.5667	on P general	0.6667	0.6667
-lakeshore	LC204012	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4533	on P general	0.6667	0.5333
-lakeshore	LC204012	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6800	on P general	0.8333	0.8000
-lakeshore	LC204012	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5667	on P general	0.8333	0.6667
-lakeshore	LC204012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.1333	on P general	1.0000	1.3333
-lakeshore	LC204012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.7556	on P general	1.0000	0.8889
-lakeshore	LC204012	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9189	on P general	0.9091	1.0811
-lakeshore	LC204012	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6415	on P general	0.9091	0.7547
-lakeshore	LC204012	S	milling (general)	Titanium - Soft	-	0.9993	0.8585	on S general	0.5714	0.6667
-lakeshore	LC204012	S	milling (general)	Titanium - Soft	-	0.9993	0.4683	on S general	0.5714	0.3636
-lakeshore	LC204012	S	milling (general)	Titanium - Hard	-	1.1658	1.0303	on S general	0.6667	0.8000
-lakeshore	LC204012	S	milling (general)	Titanium - Hard	-	1.1658	0.5854	on S general	0.6667	0.4545
-lakeshore	LC205014	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	0.6207
-lakeshore	LC205014	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.3273
-lakeshore	LC205014	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	0.6923
-lakeshore	LC205014	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.3273
-lakeshore	LC205014	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	0.6923
-lakeshore	LC205014	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.4000
-lakeshore	LC205014	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	0.8571
-lakeshore	LC205014	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.4865
-lakeshore	LC205014	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.4615
-lakeshore	LC205014	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.3000
-lakeshore	LC205014	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	0.8000
-lakeshore	LC205014	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.4000
-lakeshore	LC205014	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	0.6923
-lakeshore	LC205014	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.4000
+lakeshore	LC204038	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.9091
+lakeshore	LC204038	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.7143
+lakeshore	LC204038	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.9091
+lakeshore	LC204038	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.7143
+lakeshore	LC204038	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	1.1111
+lakeshore	LC204038	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.8333
+lakeshore	LC204038	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	1.3514
+lakeshore	LC204038	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	1.0417
+lakeshore	LC204038	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	1.0000
+lakeshore	LC204038	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.6667
+lakeshore	LC204038	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	1.3333
+lakeshore	LC204038	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.8889
+lakeshore	LC204038	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	1.1111
+lakeshore	LC204038	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.8333
+lakeshore	LC204038	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.9524
+lakeshore	LC204038	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.6667
+lakeshore	LC204038	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.8696
+lakeshore	LC204038	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.6667
+lakeshore	LC204038	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	1.1111
+lakeshore	LC204038	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.8000
+lakeshore	LC204038	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	1.0000
+lakeshore	LC204038	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.6667
+lakeshore	LC204038	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	1.1429
+lakeshore	LC204038	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.8000
+lakeshore	LC204038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	1.5385
+lakeshore	LC204038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	1.3333
+lakeshore	LC204038	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	1.3333
+lakeshore	LC204038	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	1.0811
+lakeshore	LC204038	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.8696
+lakeshore	LC204038	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.6667
+lakeshore	LC204038	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	1.0526
+lakeshore	LC204038	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.8000
+lakeshore	LC204012	N	milling (general)	Aluminums	-	0.8752	1.8486	on N general	0.6250	1.0000
+lakeshore	LC204012	N	milling (general)	Aluminums	-	0.8752	1.1252	on N general	0.6250	0.6087
+lakeshore	LC204012	N	milling (general)	Aluminum Cast	-	1.0372	1.8486	on N general	0.7407	1.0000
+lakeshore	LC204012	N	milling (general)	Aluminum Cast	-	1.0372	1.1252	on N general	0.7407	0.6087
+lakeshore	LC204012	N	milling (general)	Brass	-	1.7503	2.1567	on N general	1.2500	1.1667
+lakeshore	LC204012	N	milling (general)	Brass	-	1.7503	1.7254	on N general	1.2500	0.9333
+lakeshore	LC204012	N	milling (general)	Bronze	-	2.1542	2.6959	on N general	1.5385	1.4583
+lakeshore	LC204012	N	milling (general)	Bronze	-	2.1542	2.1567	on N general	1.5385	1.1667
+lakeshore	LC204012	K	milling (general)	Cast Irons - Soft	-	0.8399	0.8585	on K general	0.6000	1.0000
+lakeshore	LC204012	K	milling (general)	Cast Irons - Soft	-	0.8399	0.5724	on K general	0.6000	0.6667
+lakeshore	LC204012	K	milling (general)	Cast Irons - Medium	-	1.0499	1.1447	on K general	0.7500	1.3333
+lakeshore	LC204012	K	milling (general)	Cast Irons - Medium	-	1.0499	0.7359	on K general	0.7500	0.8571
+lakeshore	LC204012	N	milling (general)	Copper	-	1.0002	2.1567	on N general	0.7143	1.1667
+lakeshore	LC204012	N	milling (general)	Copper	-	1.0002	1.6175	on N general	0.7143	0.8750
+lakeshore	LC204012	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8585	on S general	0.5000	1.0000
+lakeshore	LC204012	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.5724	on S general	0.5000	0.6667
+lakeshore	LC204012	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0303	on M general	0.8333	1.2000
+lakeshore	LC204012	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5329	on M general	0.8333	0.6207
+lakeshore	LC204012	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.2363	on M general	1.0000	1.4400
+lakeshore	LC204012	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.6308	on M general	1.0000	0.7347
+lakeshore	LC204012	P	milling (general)	Steels - Low Carbon	-	0.7332	0.5667	on P general	0.6667	0.8333
+lakeshore	LC204012	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4533	on P general	0.6667	0.6667
+lakeshore	LC204012	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6800	on P general	0.8333	1.0000
+lakeshore	LC204012	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5667	on P general	0.8333	0.8333
+lakeshore	LC204012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.1333	on P general	1.0000	1.6667
+lakeshore	LC204012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.7556	on P general	1.0000	1.1111
+lakeshore	LC204012	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9189	on P general	0.9091	1.3514
+lakeshore	LC204012	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6415	on P general	0.9091	0.9434
+lakeshore	LC204012	S	milling (general)	Titanium - Soft	-	0.9993	0.8585	on S general	0.5714	1.0000
+lakeshore	LC204012	S	milling (general)	Titanium - Soft	-	0.9993	0.4683	on S general	0.5714	0.5455
+lakeshore	LC204012	S	milling (general)	Titanium - Hard	-	1.1658	1.0303	on S general	0.6667	1.2000
+lakeshore	LC204012	S	milling (general)	Titanium - Hard	-	1.1658	0.5854	on S general	0.6667	0.6818
+lakeshore	LC205014	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	1.0345
+lakeshore	LC205014	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.5455
+lakeshore	LC205014	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	1.1538
+lakeshore	LC205014	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.5455
+lakeshore	LC205014	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	1.1538
+lakeshore	LC205014	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.6667
+lakeshore	LC205014	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	1.4286
+lakeshore	LC205014	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.8108
+lakeshore	LC205014	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.9231
+lakeshore	LC205014	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.6000
+lakeshore	LC205014	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	1.6000
+lakeshore	LC205014	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.8000
+lakeshore	LC205014	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	1.1538
+lakeshore	LC205014	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.6667
 lakeshore	LC205014	S	milling (general)	Monel & High Nickel Steel	-	0.8743	-	on S general	0.5000	-
-lakeshore	LC205014	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.4762
-lakeshore	LC205014	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	0.7500
-lakeshore	LC205014	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.5217
-lakeshore	LC205014	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.0909
-lakeshore	LC205014	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.6667
-lakeshore	LC205014	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.6667
-lakeshore	LC205014	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.5000
-lakeshore	LC205014	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	0.8333
-lakeshore	LC205014	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.5714
-lakeshore	LC205014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.0000
-lakeshore	LC205014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.7692
-lakeshore	LC205014	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.0000
-lakeshore	LC205014	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.6667
-lakeshore	LC205014	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	0.6667
-lakeshore	LC205014	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.4348
-lakeshore	LC205014	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	0.7692
-lakeshore	LC205014	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.5263
-lakeshore	LC205038	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.5455
-lakeshore	LC205038	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.4286
-lakeshore	LC205038	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.5455
-lakeshore	LC205038	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.4286
-lakeshore	LC205038	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	0.6667
-lakeshore	LC205038	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.5000
-lakeshore	LC205038	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	0.8108
-lakeshore	LC205038	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	0.6250
-lakeshore	LC205038	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	0.6000
-lakeshore	LC205038	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.4000
-lakeshore	LC205038	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	0.8000
-lakeshore	LC205038	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.5333
-lakeshore	LC205038	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	0.6667
-lakeshore	LC205038	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.5000
-lakeshore	LC205038	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.7619
-lakeshore	LC205038	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.5333
-lakeshore	LC205038	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.6957
-lakeshore	LC205038	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.5333
-lakeshore	LC205038	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	0.8889
-lakeshore	LC205038	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.6400
-lakeshore	LC205038	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	0.6000
-lakeshore	LC205038	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.4000
-lakeshore	LC205038	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	0.6857
-lakeshore	LC205038	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.4800
-lakeshore	LC205038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	0.9231
-lakeshore	LC205038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	0.8000
-lakeshore	LC205038	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	0.8000
-lakeshore	LC205038	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	0.6486
-lakeshore	LC205038	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.6957
-lakeshore	LC205038	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.5333
-lakeshore	LC205038	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	0.8421
-lakeshore	LC205038	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.6400
-lakeshore	LC205012	N	milling (general)	Aluminums	-	0.8752	1.8486	on N general	0.6250	0.7143
-lakeshore	LC205012	N	milling (general)	Aluminums	-	0.8752	1.1252	on N general	0.6250	0.4348
-lakeshore	LC205012	N	milling (general)	Aluminum Cast	-	1.0372	1.8486	on N general	0.7407	0.7143
-lakeshore	LC205012	N	milling (general)	Aluminum Cast	-	1.0372	1.1252	on N general	0.7407	0.4348
-lakeshore	LC205012	N	milling (general)	Brass	-	1.7503	2.1567	on N general	1.2500	0.8333
-lakeshore	LC205012	N	milling (general)	Brass	-	1.7503	1.7254	on N general	1.2500	0.6667
-lakeshore	LC205012	N	milling (general)	Bronze	-	2.1542	2.6959	on N general	1.5385	1.0417
-lakeshore	LC205012	N	milling (general)	Bronze	-	2.1542	2.1567	on N general	1.5385	0.8333
-lakeshore	LC205012	K	milling (general)	Cast Irons - Soft	-	0.8399	0.8585	on K general	0.6000	0.6667
-lakeshore	LC205012	K	milling (general)	Cast Irons - Soft	-	0.8399	0.5724	on K general	0.6000	0.4444
-lakeshore	LC205012	K	milling (general)	Cast Irons - Medium	-	1.0499	1.1447	on K general	0.7500	0.8889
-lakeshore	LC205012	K	milling (general)	Cast Irons - Medium	-	1.0499	0.7359	on K general	0.7500	0.5714
-lakeshore	LC205012	N	milling (general)	Copper	-	1.0002	2.1567	on N general	0.7143	0.8333
-lakeshore	LC205012	N	milling (general)	Copper	-	1.0002	1.6175	on N general	0.7143	0.6250
-lakeshore	LC205012	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8585	on S general	0.5000	0.6667
-lakeshore	LC205012	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.5724	on S general	0.5000	0.4444
-lakeshore	LC205012	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0303	on M general	0.8333	0.6667
-lakeshore	LC205012	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5329	on M general	0.8333	0.3448
-lakeshore	LC205012	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.2363	on M general	1.0000	0.8000
-lakeshore	LC205012	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.6308	on M general	1.0000	0.4082
-lakeshore	LC205012	P	milling (general)	Steels - Low Carbon	-	0.7332	0.5667	on P general	0.6667	0.6667
-lakeshore	LC205012	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4533	on P general	0.6667	0.5333
-lakeshore	LC205012	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6800	on P general	0.8333	0.8000
-lakeshore	LC205012	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5667	on P general	0.8333	0.6667
-lakeshore	LC205012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.1333	on P general	1.0000	1.3333
-lakeshore	LC205012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.7556	on P general	1.0000	0.8889
-lakeshore	LC205012	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9189	on P general	0.9091	1.0811
-lakeshore	LC205012	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6415	on P general	0.9091	0.7547
-lakeshore	LC205012	S	milling (general)	Titanium - Soft	-	0.9993	0.8585	on S general	0.5714	0.6667
-lakeshore	LC205012	S	milling (general)	Titanium - Soft	-	0.9993	0.4683	on S general	0.5714	0.3636
-lakeshore	LC205012	S	milling (general)	Titanium - Hard	-	1.1658	1.0303	on S general	0.6667	0.8000
-lakeshore	LC205012	S	milling (general)	Titanium - Hard	-	1.1658	0.5854	on S general	0.6667	0.4545
-lakeshore	LC206018X	N	milling (general)	Aluminums	-	0.8752	1.2694	on N general	0.6250	0.6087
-lakeshore	LC206018X	N	milling (general)	Aluminums	-	0.8752	1.0068	on N general	0.6250	0.4828
-lakeshore	LC206018X	N	milling (general)	Aluminum Cast	-	1.0372	1.3903	on N general	0.7407	0.6667
-lakeshore	LC206018X	N	milling (general)	Aluminum Cast	-	1.0372	1.1230	on N general	0.7407	0.5385
-lakeshore	LC206018X	N	milling (general)	Brass	-	1.7503	1.3903	on N general	1.2500	0.6667
-lakeshore	LC206018X	N	milling (general)	Brass	-	1.7503	1.1230	on N general	1.2500	0.5385
-lakeshore	LC206018X	N	milling (general)	Bronze	-	2.1542	1.5367	on N general	1.5385	0.7368
-lakeshore	LC206018X	N	milling (general)	Bronze	-	2.1542	1.3903	on N general	1.5385	0.6667
-lakeshore	LC206018X	K	milling (general)	Cast Irons - Soft	-	0.8399	1.1419	on K general	0.6000	0.7143
-lakeshore	LC206018X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6149	on K general	0.6000	0.3846
-lakeshore	LC206018X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.7763	on K general	0.7500	1.1111
-lakeshore	LC206018X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.0658	on K general	0.7500	0.6667
-lakeshore	LC206018X	N	milling (general)	Copper	-	1.0002	1.3903	on N general	0.7143	0.6667
-lakeshore	LC206018X	N	milling (general)	Copper	-	1.0002	1.1230	on N general	0.7143	0.5385
+lakeshore	LC205014	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.7619
+lakeshore	LC205014	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	1.0000
+lakeshore	LC205014	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.6957
+lakeshore	LC205014	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.4545
+lakeshore	LC205014	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.8889
+lakeshore	LC205014	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.8000
+lakeshore	LC205014	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.6000
+lakeshore	LC205014	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	1.0000
+lakeshore	LC205014	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.6857
+lakeshore	LC205014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.2000
+lakeshore	LC205014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.9231
+lakeshore	LC205014	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.2000
+lakeshore	LC205014	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.8000
+lakeshore	LC205014	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	1.0667
+lakeshore	LC205014	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.6957
+lakeshore	LC205014	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	1.2308
+lakeshore	LC205014	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.8421
+lakeshore	LC205038	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.9091
+lakeshore	LC205038	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.7143
+lakeshore	LC205038	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.9091
+lakeshore	LC205038	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.7143
+lakeshore	LC205038	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	1.1111
+lakeshore	LC205038	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.8333
+lakeshore	LC205038	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	1.3514
+lakeshore	LC205038	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	1.0417
+lakeshore	LC205038	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	1.0000
+lakeshore	LC205038	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.6667
+lakeshore	LC205038	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	1.3333
+lakeshore	LC205038	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.8889
+lakeshore	LC205038	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	1.1111
+lakeshore	LC205038	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.8333
+lakeshore	LC205038	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.9524
+lakeshore	LC205038	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.6667
+lakeshore	LC205038	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.8696
+lakeshore	LC205038	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.6667
+lakeshore	LC205038	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	1.1111
+lakeshore	LC205038	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.8000
+lakeshore	LC205038	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	1.0000
+lakeshore	LC205038	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.6667
+lakeshore	LC205038	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	1.1429
+lakeshore	LC205038	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.8000
+lakeshore	LC205038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	1.5385
+lakeshore	LC205038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	1.3333
+lakeshore	LC205038	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	1.3333
+lakeshore	LC205038	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	1.0811
+lakeshore	LC205038	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.8696
+lakeshore	LC205038	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.6667
+lakeshore	LC205038	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	1.0526
+lakeshore	LC205038	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.8000
+lakeshore	LC205012	N	milling (general)	Aluminums	-	0.8752	1.8486	on N general	0.6250	1.0000
+lakeshore	LC205012	N	milling (general)	Aluminums	-	0.8752	1.1252	on N general	0.6250	0.6087
+lakeshore	LC205012	N	milling (general)	Aluminum Cast	-	1.0372	1.8486	on N general	0.7407	1.0000
+lakeshore	LC205012	N	milling (general)	Aluminum Cast	-	1.0372	1.1252	on N general	0.7407	0.6087
+lakeshore	LC205012	N	milling (general)	Brass	-	1.7503	2.1567	on N general	1.2500	1.1667
+lakeshore	LC205012	N	milling (general)	Brass	-	1.7503	1.7254	on N general	1.2500	0.9333
+lakeshore	LC205012	N	milling (general)	Bronze	-	2.1542	2.6959	on N general	1.5385	1.4583
+lakeshore	LC205012	N	milling (general)	Bronze	-	2.1542	2.1567	on N general	1.5385	1.1667
+lakeshore	LC205012	K	milling (general)	Cast Irons - Soft	-	0.8399	0.8585	on K general	0.6000	1.0000
+lakeshore	LC205012	K	milling (general)	Cast Irons - Soft	-	0.8399	0.5724	on K general	0.6000	0.6667
+lakeshore	LC205012	K	milling (general)	Cast Irons - Medium	-	1.0499	1.1447	on K general	0.7500	1.3333
+lakeshore	LC205012	K	milling (general)	Cast Irons - Medium	-	1.0499	0.7359	on K general	0.7500	0.8571
+lakeshore	LC205012	N	milling (general)	Copper	-	1.0002	2.1567	on N general	0.7143	1.1667
+lakeshore	LC205012	N	milling (general)	Copper	-	1.0002	1.6175	on N general	0.7143	0.8750
+lakeshore	LC205012	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8585	on S general	0.5000	1.0000
+lakeshore	LC205012	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.5724	on S general	0.5000	0.6667
+lakeshore	LC205012	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0303	on M general	0.8333	1.2000
+lakeshore	LC205012	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5329	on M general	0.8333	0.6207
+lakeshore	LC205012	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.2363	on M general	1.0000	1.4400
+lakeshore	LC205012	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.6308	on M general	1.0000	0.7347
+lakeshore	LC205012	P	milling (general)	Steels - Low Carbon	-	0.7332	0.5667	on P general	0.6667	0.8333
+lakeshore	LC205012	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4533	on P general	0.6667	0.6667
+lakeshore	LC205012	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6800	on P general	0.8333	1.0000
+lakeshore	LC205012	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5667	on P general	0.8333	0.8333
+lakeshore	LC205012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.1333	on P general	1.0000	1.6667
+lakeshore	LC205012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.7556	on P general	1.0000	1.1111
+lakeshore	LC205012	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9189	on P general	0.9091	1.3514
+lakeshore	LC205012	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6415	on P general	0.9091	0.9434
+lakeshore	LC205012	S	milling (general)	Titanium - Soft	-	0.9993	0.8585	on S general	0.5714	1.0000
+lakeshore	LC205012	S	milling (general)	Titanium - Soft	-	0.9993	0.4683	on S general	0.5714	0.5455
+lakeshore	LC205012	S	milling (general)	Titanium - Hard	-	1.1658	1.0303	on S general	0.6667	1.2000
+lakeshore	LC205012	S	milling (general)	Titanium - Hard	-	1.1658	0.5854	on S general	0.6667	0.6818
+lakeshore	LC206018X	N	milling (general)	Aluminums	-	0.8752	1.2694	on N general	0.6250	0.7826
+lakeshore	LC206018X	N	milling (general)	Aluminums	-	0.8752	1.0068	on N general	0.6250	0.6207
+lakeshore	LC206018X	N	milling (general)	Aluminum Cast	-	1.0372	1.3903	on N general	0.7407	0.8571
+lakeshore	LC206018X	N	milling (general)	Aluminum Cast	-	1.0372	1.1230	on N general	0.7407	0.6923
+lakeshore	LC206018X	N	milling (general)	Brass	-	1.7503	1.3903	on N general	1.2500	0.8571
+lakeshore	LC206018X	N	milling (general)	Brass	-	1.7503	1.1230	on N general	1.2500	0.6923
+lakeshore	LC206018X	N	milling (general)	Bronze	-	2.1542	1.5367	on N general	1.5385	0.9474
+lakeshore	LC206018X	N	milling (general)	Bronze	-	2.1542	1.3903	on N general	1.5385	0.8571
+lakeshore	LC206018X	K	milling (general)	Cast Irons - Soft	-	0.8399	1.1419	on K general	0.6000	0.8571
+lakeshore	LC206018X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6149	on K general	0.6000	0.4615
+lakeshore	LC206018X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.7763	on K general	0.7500	1.3333
+lakeshore	LC206018X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.0658	on K general	0.7500	0.8000
+lakeshore	LC206018X	N	milling (general)	Copper	-	1.0002	1.3903	on N general	0.7143	0.8571
+lakeshore	LC206018X	N	milling (general)	Copper	-	1.0002	1.1230	on N general	0.7143	0.6923
 lakeshore	LC206018X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8881	on S general	0.5000	1.1111
 lakeshore	LC206018X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	-	on S general	0.5000	-
-lakeshore	LC206018X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7378	on M general	0.8333	0.7692
-lakeshore	LC206018X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5995	on M general	0.8333	0.6250
-lakeshore	LC206018X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.1990	on M general	1.0000	1.2500
-lakeshore	LC206018X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.8720	on M general	1.0000	0.9091
-lakeshore	LC206018X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.8000
-lakeshore	LC206018X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.3000	on P general	0.6667	0.5333
-lakeshore	LC206018X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6000	on P general	0.8333	1.0667
-lakeshore	LC206018X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.3750	on P general	0.8333	0.6667
-lakeshore	LC206018X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	1.2308
-lakeshore	LC206018X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.4500	on P general	1.0000	0.8000
-lakeshore	LC206018X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6429	on P general	0.9091	1.1429
-lakeshore	LC206018X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.4500	on P general	0.9091	0.8000
+lakeshore	LC206018X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7378	on M general	0.8333	0.9231
+lakeshore	LC206018X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5995	on M general	0.8333	0.7500
+lakeshore	LC206018X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.1990	on M general	1.0000	1.5000
+lakeshore	LC206018X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.8720	on M general	1.0000	1.0909
+lakeshore	LC206018X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	1.0000
+lakeshore	LC206018X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.3000	on P general	0.6667	0.6667
+lakeshore	LC206018X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6000	on P general	0.8333	1.3333
+lakeshore	LC206018X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.3750	on P general	0.8333	0.8333
+lakeshore	LC206018X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	1.5385
+lakeshore	LC206018X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.4500	on P general	1.0000	1.0000
+lakeshore	LC206018X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6429	on P general	0.9091	1.4286
+lakeshore	LC206018X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.4500	on P general	0.9091	1.0000
 lakeshore	LC206018X	S	milling (general)	Titanium - Soft	-	0.9993	0.5709	on S general	0.5714	0.7143
 lakeshore	LC206018X	S	milling (general)	Titanium - Soft	-	0.9993	0.5329	on S general	0.5714	0.6667
 lakeshore	LC206018X	S	milling (general)	Titanium - Hard	-	1.1658	0.7267	on S general	0.6667	0.9091
@@ -2482,102 +2482,102 @@ lakeshore	LC206316X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.099
 lakeshore	LC206316X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6499	on P general	0.9091	1.0000
 lakeshore	LC206316X	S	milling (general)	Titanium - Soft	-	0.9993	0.7302	on S general	0.5714	0.6667
 lakeshore	LC206316X	S	milling (general)	Titanium - Hard	-	1.1658	0.8426	on S general	0.6667	0.7692
-lakeshore	LC206014X	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	0.6207
-lakeshore	LC206014X	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.3273
-lakeshore	LC206014X	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	0.6923
-lakeshore	LC206014X	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.3273
-lakeshore	LC206014X	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	0.6923
-lakeshore	LC206014X	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.4000
-lakeshore	LC206014X	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	0.8571
-lakeshore	LC206014X	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.4865
-lakeshore	LC206014X	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.4615
-lakeshore	LC206014X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.3000
-lakeshore	LC206014X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	0.8000
-lakeshore	LC206014X	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.4000
-lakeshore	LC206014X	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	0.6923
-lakeshore	LC206014X	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.4000
+lakeshore	LC206014X	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	1.0345
+lakeshore	LC206014X	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.5455
+lakeshore	LC206014X	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	1.1538
+lakeshore	LC206014X	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.5455
+lakeshore	LC206014X	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	1.1538
+lakeshore	LC206014X	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.6667
+lakeshore	LC206014X	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	1.4286
+lakeshore	LC206014X	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.8108
+lakeshore	LC206014X	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.9231
+lakeshore	LC206014X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.6000
+lakeshore	LC206014X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	1.6000
+lakeshore	LC206014X	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.8000
+lakeshore	LC206014X	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	1.1538
+lakeshore	LC206014X	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.6667
 lakeshore	LC206014X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	-	on S general	0.5000	-
-lakeshore	LC206014X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.4762
-lakeshore	LC206014X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	0.7500
-lakeshore	LC206014X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.5217
-lakeshore	LC206014X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.0909
-lakeshore	LC206014X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.6667
-lakeshore	LC206014X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.6667
-lakeshore	LC206014X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.5000
-lakeshore	LC206014X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	0.8333
-lakeshore	LC206014X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.5714
-lakeshore	LC206014X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.0000
-lakeshore	LC206014X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.7692
-lakeshore	LC206014X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.0000
-lakeshore	LC206014X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.6667
-lakeshore	LC206014X	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	0.6667
-lakeshore	LC206014X	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.4348
-lakeshore	LC206014X	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	0.7692
-lakeshore	LC206014X	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.5263
-lakeshore	LC206038X	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.5455
-lakeshore	LC206038X	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.4286
-lakeshore	LC206038X	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.5455
-lakeshore	LC206038X	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.4286
-lakeshore	LC206038X	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	0.6667
-lakeshore	LC206038X	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.5000
-lakeshore	LC206038X	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	0.8108
-lakeshore	LC206038X	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	0.6250
-lakeshore	LC206038X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	0.6000
-lakeshore	LC206038X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.4000
-lakeshore	LC206038X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	0.8000
-lakeshore	LC206038X	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.5333
-lakeshore	LC206038X	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	0.6667
-lakeshore	LC206038X	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.5000
-lakeshore	LC206038X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.7619
-lakeshore	LC206038X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.5333
-lakeshore	LC206038X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.6957
-lakeshore	LC206038X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.5333
-lakeshore	LC206038X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	0.8889
-lakeshore	LC206038X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.6400
-lakeshore	LC206038X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	0.6000
-lakeshore	LC206038X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.4000
-lakeshore	LC206038X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	0.6857
-lakeshore	LC206038X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.4800
-lakeshore	LC206038X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	0.9231
-lakeshore	LC206038X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	0.8000
-lakeshore	LC206038X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	0.8000
-lakeshore	LC206038X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	0.6486
-lakeshore	LC206038X	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.6957
-lakeshore	LC206038X	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.5333
-lakeshore	LC206038X	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	0.8421
-lakeshore	LC206038X	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.6400
-lakeshore	LC206012X	N	milling (general)	Aluminums	-	0.8752	1.8486	on N general	0.6250	0.7143
-lakeshore	LC206012X	N	milling (general)	Aluminums	-	0.8752	1.1252	on N general	0.6250	0.4348
-lakeshore	LC206012X	N	milling (general)	Aluminum Cast	-	1.0372	1.8486	on N general	0.7407	0.7143
-lakeshore	LC206012X	N	milling (general)	Aluminum Cast	-	1.0372	1.1252	on N general	0.7407	0.4348
-lakeshore	LC206012X	N	milling (general)	Brass	-	1.7503	2.1567	on N general	1.2500	0.8333
-lakeshore	LC206012X	N	milling (general)	Brass	-	1.7503	1.7254	on N general	1.2500	0.6667
-lakeshore	LC206012X	N	milling (general)	Bronze	-	2.1542	2.6959	on N general	1.5385	1.0417
-lakeshore	LC206012X	N	milling (general)	Bronze	-	2.1542	2.1567	on N general	1.5385	0.8333
-lakeshore	LC206012X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.8585	on K general	0.6000	0.6667
-lakeshore	LC206012X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.5724	on K general	0.6000	0.4444
-lakeshore	LC206012X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.1447	on K general	0.7500	0.8889
-lakeshore	LC206012X	K	milling (general)	Cast Irons - Medium	-	1.0499	0.7359	on K general	0.7500	0.5714
-lakeshore	LC206012X	N	milling (general)	Copper	-	1.0002	2.1567	on N general	0.7143	0.8333
-lakeshore	LC206012X	N	milling (general)	Copper	-	1.0002	1.6175	on N general	0.7143	0.6250
-lakeshore	LC206012X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8585	on S general	0.5000	0.6667
-lakeshore	LC206012X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.5724	on S general	0.5000	0.4444
-lakeshore	LC206012X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0303	on M general	0.8333	0.6667
-lakeshore	LC206012X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5329	on M general	0.8333	0.3448
-lakeshore	LC206012X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.2363	on M general	1.0000	0.8000
-lakeshore	LC206012X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.6308	on M general	1.0000	0.4082
-lakeshore	LC206012X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.5667	on P general	0.6667	0.6667
-lakeshore	LC206012X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4533	on P general	0.6667	0.5333
-lakeshore	LC206012X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6800	on P general	0.8333	0.8000
-lakeshore	LC206012X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5667	on P general	0.8333	0.6667
-lakeshore	LC206012X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.1333	on P general	1.0000	1.3333
-lakeshore	LC206012X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.7556	on P general	1.0000	0.8889
-lakeshore	LC206012X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9189	on P general	0.9091	1.0811
-lakeshore	LC206012X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6415	on P general	0.9091	0.7547
-lakeshore	LC206012X	S	milling (general)	Titanium - Soft	-	0.9993	0.8585	on S general	0.5714	0.6667
-lakeshore	LC206012X	S	milling (general)	Titanium - Soft	-	0.9993	0.4683	on S general	0.5714	0.3636
-lakeshore	LC206012X	S	milling (general)	Titanium - Hard	-	1.1658	1.0303	on S general	0.6667	0.8000
-lakeshore	LC206012X	S	milling (general)	Titanium - Hard	-	1.1658	0.5854	on S general	0.6667	0.4545
+lakeshore	LC206014X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.7619
+lakeshore	LC206014X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	1.0000
+lakeshore	LC206014X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.6957
+lakeshore	LC206014X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.4545
+lakeshore	LC206014X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.8889
+lakeshore	LC206014X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.8000
+lakeshore	LC206014X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.6000
+lakeshore	LC206014X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	1.0000
+lakeshore	LC206014X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.6857
+lakeshore	LC206014X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.2000
+lakeshore	LC206014X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.9231
+lakeshore	LC206014X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.2000
+lakeshore	LC206014X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.8000
+lakeshore	LC206014X	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	1.0667
+lakeshore	LC206014X	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.6957
+lakeshore	LC206014X	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	1.2308
+lakeshore	LC206014X	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.8421
+lakeshore	LC206038X	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.9091
+lakeshore	LC206038X	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.7143
+lakeshore	LC206038X	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.9091
+lakeshore	LC206038X	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.7143
+lakeshore	LC206038X	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	1.1111
+lakeshore	LC206038X	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.8333
+lakeshore	LC206038X	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	1.3514
+lakeshore	LC206038X	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	1.0417
+lakeshore	LC206038X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	1.0000
+lakeshore	LC206038X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.6667
+lakeshore	LC206038X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	1.3333
+lakeshore	LC206038X	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.8889
+lakeshore	LC206038X	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	1.1111
+lakeshore	LC206038X	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.8333
+lakeshore	LC206038X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.9524
+lakeshore	LC206038X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.6667
+lakeshore	LC206038X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.8696
+lakeshore	LC206038X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.6667
+lakeshore	LC206038X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	1.1111
+lakeshore	LC206038X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.8000
+lakeshore	LC206038X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	1.0000
+lakeshore	LC206038X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.6667
+lakeshore	LC206038X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	1.1429
+lakeshore	LC206038X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.8000
+lakeshore	LC206038X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	1.5385
+lakeshore	LC206038X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	1.3333
+lakeshore	LC206038X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	1.3333
+lakeshore	LC206038X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	1.0811
+lakeshore	LC206038X	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.8696
+lakeshore	LC206038X	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.6667
+lakeshore	LC206038X	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	1.0526
+lakeshore	LC206038X	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.8000
+lakeshore	LC206012X	N	milling (general)	Aluminums	-	0.8752	1.8486	on N general	0.6250	1.0000
+lakeshore	LC206012X	N	milling (general)	Aluminums	-	0.8752	1.1252	on N general	0.6250	0.6087
+lakeshore	LC206012X	N	milling (general)	Aluminum Cast	-	1.0372	1.8486	on N general	0.7407	1.0000
+lakeshore	LC206012X	N	milling (general)	Aluminum Cast	-	1.0372	1.1252	on N general	0.7407	0.6087
+lakeshore	LC206012X	N	milling (general)	Brass	-	1.7503	2.1567	on N general	1.2500	1.1667
+lakeshore	LC206012X	N	milling (general)	Brass	-	1.7503	1.7254	on N general	1.2500	0.9333
+lakeshore	LC206012X	N	milling (general)	Bronze	-	2.1542	2.6959	on N general	1.5385	1.4583
+lakeshore	LC206012X	N	milling (general)	Bronze	-	2.1542	2.1567	on N general	1.5385	1.1667
+lakeshore	LC206012X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.8585	on K general	0.6000	1.0000
+lakeshore	LC206012X	K	milling (general)	Cast Irons - Soft	-	0.8399	0.5724	on K general	0.6000	0.6667
+lakeshore	LC206012X	K	milling (general)	Cast Irons - Medium	-	1.0499	1.1447	on K general	0.7500	1.3333
+lakeshore	LC206012X	K	milling (general)	Cast Irons - Medium	-	1.0499	0.7359	on K general	0.7500	0.8571
+lakeshore	LC206012X	N	milling (general)	Copper	-	1.0002	2.1567	on N general	0.7143	1.1667
+lakeshore	LC206012X	N	milling (general)	Copper	-	1.0002	1.6175	on N general	0.7143	0.8750
+lakeshore	LC206012X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8585	on S general	0.5000	1.0000
+lakeshore	LC206012X	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.5724	on S general	0.5000	0.6667
+lakeshore	LC206012X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0303	on M general	0.8333	1.2000
+lakeshore	LC206012X	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5329	on M general	0.8333	0.6207
+lakeshore	LC206012X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.2363	on M general	1.0000	1.4400
+lakeshore	LC206012X	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.6308	on M general	1.0000	0.7347
+lakeshore	LC206012X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.5667	on P general	0.6667	0.8333
+lakeshore	LC206012X	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4533	on P general	0.6667	0.6667
+lakeshore	LC206012X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6800	on P general	0.8333	1.0000
+lakeshore	LC206012X	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5667	on P general	0.8333	0.8333
+lakeshore	LC206012X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.1333	on P general	1.0000	1.6667
+lakeshore	LC206012X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.7556	on P general	1.0000	1.1111
+lakeshore	LC206012X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9189	on P general	0.9091	1.3514
+lakeshore	LC206012X	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6415	on P general	0.9091	0.9434
+lakeshore	LC206012X	S	milling (general)	Titanium - Soft	-	0.9993	0.8585	on S general	0.5714	1.0000
+lakeshore	LC206012X	S	milling (general)	Titanium - Soft	-	0.9993	0.4683	on S general	0.5714	0.5455
+lakeshore	LC206012X	S	milling (general)	Titanium - Hard	-	1.1658	1.0303	on S general	0.6667	1.2000
+lakeshore	LC206012X	S	milling (general)	Titanium - Hard	-	1.1658	0.5854	on S general	0.6667	0.6818
 lakeshore	170MET030	N	milling (general)	Aluminums	-	0.8752	1.1995	on N general	0.6250	0.6087
 lakeshore	170MET030	N	milling (general)	Aluminum Cast	-	1.0372	1.3137	on N general	0.7407	0.6667
 lakeshore	170MET030	N	milling (general)	Brass	-	1.7503	1.3137	on N general	1.2500	0.6667
@@ -2674,454 +2674,454 @@ lakeshore	170MET120	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.099
 lakeshore	170MET120	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8712	on P general	0.9091	1.0811
 lakeshore	170MET120	S	milling (general)	Titanium - Soft	-	0.9993	0.8150	on S general	0.5714	0.6667
 lakeshore	170MET120	S	milling (general)	Titanium - Hard	-	1.1658	0.9780	on S general	0.6667	0.8000
-lakeshore	LC221018	N	milling (general)	Aluminums	-	1.1669	1.2694	on N general	0.5000	0.6087
-lakeshore	LC221018	N	milling (general)	Aluminums	-	1.1669	1.0068	on N general	0.5000	0.4828
-lakeshore	LC221018	N	milling (general)	Aluminum Cast	-	1.4003	1.3903	on N general	0.6000	0.6667
-lakeshore	LC221018	N	milling (general)	Aluminum Cast	-	1.4003	1.1230	on N general	0.6000	0.5385
-lakeshore	LC221018	N	milling (general)	Brass	-	2.5459	1.3903	on N general	1.0909	0.6667
-lakeshore	LC221018	N	milling (general)	Brass	-	2.5459	1.1230	on N general	1.0909	0.5385
-lakeshore	LC221018	N	milling (general)	Bronze	-	2.8005	1.5367	on N general	1.2000	0.7368
-lakeshore	LC221018	N	milling (general)	Bronze	-	2.8005	1.3903	on N general	1.2000	0.6667
-lakeshore	LC221018	K	milling (general)	Cast Irons - Soft	-	0.9544	1.1419	on K general	0.5454	0.7143
-lakeshore	LC221018	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6149	on K general	0.5454	0.3846
-lakeshore	LC221018	K	milling (general)	Cast Irons - Medium	-	1.2726	1.7763	on K general	0.7273	1.1111
-lakeshore	LC221018	K	milling (general)	Cast Irons - Medium	-	1.2726	1.0658	on K general	0.7273	0.6667
-lakeshore	LC221018	N	milling (general)	Copper	-	1.3336	1.3903	on N general	0.5714	0.6667
-lakeshore	LC221018	N	milling (general)	Copper	-	1.3336	1.1230	on N general	0.5714	0.5385
+lakeshore	LC221018	N	milling (general)	Aluminums	-	1.1669	1.2694	on N general	0.5000	0.7826
+lakeshore	LC221018	N	milling (general)	Aluminums	-	1.1669	1.0068	on N general	0.5000	0.6207
+lakeshore	LC221018	N	milling (general)	Aluminum Cast	-	1.4003	1.3903	on N general	0.6000	0.8571
+lakeshore	LC221018	N	milling (general)	Aluminum Cast	-	1.4003	1.1230	on N general	0.6000	0.6923
+lakeshore	LC221018	N	milling (general)	Brass	-	2.5459	1.3903	on N general	1.0909	0.8571
+lakeshore	LC221018	N	milling (general)	Brass	-	2.5459	1.1230	on N general	1.0909	0.6923
+lakeshore	LC221018	N	milling (general)	Bronze	-	2.8005	1.5367	on N general	1.2000	0.9474
+lakeshore	LC221018	N	milling (general)	Bronze	-	2.8005	1.3903	on N general	1.2000	0.8571
+lakeshore	LC221018	K	milling (general)	Cast Irons - Soft	-	0.9544	1.1419	on K general	0.5454	0.8571
+lakeshore	LC221018	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6149	on K general	0.5454	0.4615
+lakeshore	LC221018	K	milling (general)	Cast Irons - Medium	-	1.2726	1.7763	on K general	0.7273	1.3333
+lakeshore	LC221018	K	milling (general)	Cast Irons - Medium	-	1.2726	1.0658	on K general	0.7273	0.8000
+lakeshore	LC221018	N	milling (general)	Copper	-	1.3336	1.3903	on N general	0.5714	0.8571
+lakeshore	LC221018	N	milling (general)	Copper	-	1.3336	1.1230	on N general	0.5714	0.6923
 lakeshore	LC221018	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.8881	on S general	0.5600	1.1111
 lakeshore	LC221018	S	milling (general)	Monel & High Nickel Steel	-	1.3990	-	on S general	0.5600	-
-lakeshore	LC221018	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7378	on M general	0.7500	0.7692
-lakeshore	LC221018	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.5995	on M general	0.7500	0.6250
-lakeshore	LC221018	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.1990	on M general	1.0000	1.2500
-lakeshore	LC221018	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.8720	on M general	1.0000	0.9091
-lakeshore	LC221018	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4500	on P general	0.6000	0.8000
-lakeshore	LC221018	P	milling (general)	Steels - Low Carbon	-	1.0997	0.3000	on P general	0.6000	0.5333
-lakeshore	LC221018	P	milling (general)	Steels - Med Carbon	-	1.3092	0.6000	on P general	0.7143	1.0667
-lakeshore	LC221018	P	milling (general)	Steels - Med Carbon	-	1.3092	0.3750	on P general	0.7143	0.6667
-lakeshore	LC221018	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.6923	on P general	1.0715	1.2308
-lakeshore	LC221018	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.4500	on P general	1.0715	0.8000
-lakeshore	LC221018	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6429	on P general	0.9091	1.1429
-lakeshore	LC221018	P	milling (general)	Steels - Tool Steel	-	1.6663	0.4500	on P general	0.9091	0.8000
+lakeshore	LC221018	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7378	on M general	0.7500	0.9231
+lakeshore	LC221018	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.5995	on M general	0.7500	0.7500
+lakeshore	LC221018	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.1990	on M general	1.0000	1.5000
+lakeshore	LC221018	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.8720	on M general	1.0000	1.0909
+lakeshore	LC221018	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4500	on P general	0.6000	1.0000
+lakeshore	LC221018	P	milling (general)	Steels - Low Carbon	-	1.0997	0.3000	on P general	0.6000	0.6667
+lakeshore	LC221018	P	milling (general)	Steels - Med Carbon	-	1.3092	0.6000	on P general	0.7143	1.3333
+lakeshore	LC221018	P	milling (general)	Steels - Med Carbon	-	1.3092	0.3750	on P general	0.7143	0.8333
+lakeshore	LC221018	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.6923	on P general	1.0715	1.5385
+lakeshore	LC221018	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.4500	on P general	1.0715	1.0000
+lakeshore	LC221018	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6429	on P general	0.9091	1.4286
+lakeshore	LC221018	P	milling (general)	Steels - Tool Steel	-	1.6663	0.4500	on P general	0.9091	1.0000
 lakeshore	LC221018	S	milling (general)	Titanium - Soft	-	1.2953	0.5709	on S general	0.5185	0.7143
 lakeshore	LC221018	S	milling (general)	Titanium - Soft	-	1.2953	0.5329	on S general	0.5185	0.6667
 lakeshore	LC221018	S	milling (general)	Titanium - Hard	-	1.5207	0.7267	on S general	0.6087	0.9091
 lakeshore	LC221018	S	milling (general)	Titanium - Hard	-	1.5207	0.6149	on S general	0.6087	0.7692
-lakeshore	LC221014	N	milling (general)	Aluminums	-	1.1669	2.1241	on N general	0.5000	0.6207
-lakeshore	LC221014	N	milling (general)	Aluminums	-	1.1669	1.1200	on N general	0.5000	0.3273
-lakeshore	LC221014	N	milling (general)	Aluminum Cast	-	1.4003	2.3692	on N general	0.6000	0.6923
-lakeshore	LC221014	N	milling (general)	Aluminum Cast	-	1.4003	1.1200	on N general	0.6000	0.3273
-lakeshore	LC221014	N	milling (general)	Brass	-	2.5459	2.3692	on N general	1.0909	0.6923
-lakeshore	LC221014	N	milling (general)	Brass	-	2.5459	1.3689	on N general	1.0909	0.4000
-lakeshore	LC221014	N	milling (general)	Bronze	-	2.8005	2.9333	on N general	1.2000	0.8571
-lakeshore	LC221014	N	milling (general)	Bronze	-	2.8005	1.6648	on N general	1.2000	0.4865
-lakeshore	LC221014	K	milling (general)	Cast Irons - Soft	-	0.9544	1.0703	on K general	0.5454	0.4615
-lakeshore	LC221014	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6957	on K general	0.5454	0.3000
-lakeshore	LC221014	K	milling (general)	Cast Irons - Medium	-	1.2726	1.8552	on K general	0.7273	0.8000
-lakeshore	LC221014	K	milling (general)	Cast Irons - Medium	-	1.2726	0.9276	on K general	0.7273	0.4000
-lakeshore	LC221014	N	milling (general)	Copper	-	1.3336	2.3692	on N general	0.5714	0.6923
-lakeshore	LC221014	N	milling (general)	Copper	-	1.3336	1.3689	on N general	0.5714	0.4000
+lakeshore	LC221014	N	milling (general)	Aluminums	-	1.1669	2.1241	on N general	0.5000	1.0345
+lakeshore	LC221014	N	milling (general)	Aluminums	-	1.1669	1.1200	on N general	0.5000	0.5455
+lakeshore	LC221014	N	milling (general)	Aluminum Cast	-	1.4003	2.3692	on N general	0.6000	1.1538
+lakeshore	LC221014	N	milling (general)	Aluminum Cast	-	1.4003	1.1200	on N general	0.6000	0.5455
+lakeshore	LC221014	N	milling (general)	Brass	-	2.5459	2.3692	on N general	1.0909	1.1538
+lakeshore	LC221014	N	milling (general)	Brass	-	2.5459	1.3689	on N general	1.0909	0.6667
+lakeshore	LC221014	N	milling (general)	Bronze	-	2.8005	2.9333	on N general	1.2000	1.4286
+lakeshore	LC221014	N	milling (general)	Bronze	-	2.8005	1.6648	on N general	1.2000	0.8108
+lakeshore	LC221014	K	milling (general)	Cast Irons - Soft	-	0.9544	1.0703	on K general	0.5454	0.9231
+lakeshore	LC221014	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6957	on K general	0.5454	0.6000
+lakeshore	LC221014	K	milling (general)	Cast Irons - Medium	-	1.2726	1.8552	on K general	0.7273	1.6000
+lakeshore	LC221014	K	milling (general)	Cast Irons - Medium	-	1.2726	0.9276	on K general	0.7273	0.8000
+lakeshore	LC221014	N	milling (general)	Copper	-	1.3336	2.3692	on N general	0.5714	1.1538
+lakeshore	LC221014	N	milling (general)	Copper	-	1.3336	1.3689	on N general	0.5714	0.6667
 lakeshore	LC221014	S	milling (general)	Monel & High Nickel Steel	-	1.3990	-	on S general	0.5600	-
-lakeshore	LC221014	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.6626	on S general	0.5600	0.4762
-lakeshore	LC221014	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0436	on M general	0.7500	0.7500
-lakeshore	LC221014	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7260	on M general	0.7500	0.5217
-lakeshore	LC221014	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.5179	on M general	1.0000	1.0909
-lakeshore	LC221014	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.9276	on M general	1.0000	0.6667
-lakeshore	LC221014	P	milling (general)	Steels - Low Carbon	-	1.0997	0.6000	on P general	0.6000	0.6667
-lakeshore	LC221014	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4500	on P general	0.6000	0.5000
-lakeshore	LC221014	P	milling (general)	Steels - Med Carbon	-	1.3092	0.7500	on P general	0.7143	0.8333
-lakeshore	LC221014	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5143	on P general	0.7143	0.5714
-lakeshore	LC221014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.9000	on P general	1.0715	1.0000
-lakeshore	LC221014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.6923	on P general	1.0715	0.7692
-lakeshore	LC221014	P	milling (general)	Steels - Tool Steel	-	1.6663	0.9000	on P general	0.9091	1.0000
-lakeshore	LC221014	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6000	on P general	0.9091	0.6667
-lakeshore	LC221014	S	milling (general)	Titanium - Soft	-	1.2953	0.9276	on S general	0.5185	0.6667
-lakeshore	LC221014	S	milling (general)	Titanium - Soft	-	1.2953	0.6050	on S general	0.5185	0.4348
-lakeshore	LC221014	S	milling (general)	Titanium - Hard	-	1.5207	1.0703	on S general	0.6087	0.7692
-lakeshore	LC221014	S	milling (general)	Titanium - Hard	-	1.5207	0.7323	on S general	0.6087	0.5263
-lakeshore	1800038	N	milling (general)	Aluminums	-	1.1669	1.7636	on N general	0.5000	0.5455
-lakeshore	1800038	N	milling (general)	Aluminums	-	1.1669	1.3857	on N general	0.5000	0.4286
-lakeshore	1800038	N	milling (general)	Aluminum Cast	-	1.4003	1.7636	on N general	0.6000	0.5455
-lakeshore	1800038	N	milling (general)	Aluminum Cast	-	1.4003	1.3857	on N general	0.6000	0.4286
-lakeshore	1800038	N	milling (general)	Brass	-	2.5459	2.1556	on N general	1.0909	0.6667
-lakeshore	1800038	N	milling (general)	Brass	-	2.5459	1.6167	on N general	1.0909	0.5000
-lakeshore	1800038	N	milling (general)	Bronze	-	2.8005	2.6216	on N general	1.2000	0.8108
-lakeshore	1800038	N	milling (general)	Bronze	-	2.8005	2.0208	on N general	1.2000	0.6250
-lakeshore	1800038	K	milling (general)	Cast Irons - Soft	-	0.9544	0.9918	on K general	0.5454	0.6000
-lakeshore	1800038	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6612	on K general	0.5454	0.4000
-lakeshore	1800038	K	milling (general)	Cast Irons - Medium	-	1.2726	1.3224	on K general	0.7273	0.8000
-lakeshore	1800038	K	milling (general)	Cast Irons - Medium	-	1.2726	0.8816	on K general	0.7273	0.5333
-lakeshore	1800038	N	milling (general)	Copper	-	1.3336	2.1556	on N general	0.5714	0.6667
-lakeshore	1800038	N	milling (general)	Copper	-	1.3336	1.6167	on N general	0.5714	0.5000
-lakeshore	1800038	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.9445	on S general	0.5600	0.7619
-lakeshore	1800038	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.6612	on S general	0.5600	0.5333
-lakeshore	1800038	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0349	on M general	0.7500	0.6957
-lakeshore	1800038	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7934	on M general	0.7500	0.5333
-lakeshore	1800038	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.3224	on M general	1.0000	0.8889
-lakeshore	1800038	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.9521	on M general	1.0000	0.6400
-lakeshore	1800038	P	milling (general)	Steels - Low Carbon	-	1.0997	0.6500	on P general	0.6000	0.6000
-lakeshore	1800038	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4333	on P general	0.6000	0.4000
-lakeshore	1800038	P	milling (general)	Steels - Med Carbon	-	1.3092	0.7429	on P general	0.7143	0.6857
-lakeshore	1800038	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5200	on P general	0.7143	0.4800
-lakeshore	1800038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	1.0000	on P general	1.0715	0.9231
-lakeshore	1800038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.8667	on P general	1.0715	0.8000
-lakeshore	1800038	P	milling (general)	Steels - Tool Steel	-	1.6663	0.8667	on P general	0.9091	0.8000
-lakeshore	1800038	P	milling (general)	Steels - Tool Steel	-	1.6663	0.7027	on P general	0.9091	0.6486
-lakeshore	1800038	S	milling (general)	Titanium - Soft	-	1.2953	0.8624	on S general	0.5185	0.6957
-lakeshore	1800038	S	milling (general)	Titanium - Soft	-	1.2953	0.6612	on S general	0.5185	0.5333
-lakeshore	1800038	S	milling (general)	Titanium - Hard	-	1.5207	1.0440	on S general	0.6087	0.8421
-lakeshore	1800038	S	milling (general)	Titanium - Hard	-	1.5207	0.7934	on S general	0.6087	0.6400
-lakeshore	1800012	N	milling (general)	Aluminums	-	1.1669	1.8486	on N general	0.5000	0.7143
-lakeshore	1800012	N	milling (general)	Aluminums	-	1.1669	1.1252	on N general	0.5000	0.4348
-lakeshore	1800012	N	milling (general)	Aluminum Cast	-	1.4003	1.8486	on N general	0.6000	0.7143
-lakeshore	1800012	N	milling (general)	Aluminum Cast	-	1.4003	1.1252	on N general	0.6000	0.4348
-lakeshore	1800012	N	milling (general)	Brass	-	2.5459	2.1567	on N general	1.0909	0.8333
-lakeshore	1800012	N	milling (general)	Brass	-	2.5459	1.7254	on N general	1.0909	0.6667
-lakeshore	1800012	N	milling (general)	Bronze	-	2.8005	2.6959	on N general	1.2000	1.0417
-lakeshore	1800012	N	milling (general)	Bronze	-	2.8005	2.1567	on N general	1.2000	0.8333
-lakeshore	1800012	K	milling (general)	Cast Irons - Soft	-	0.9544	0.8585	on K general	0.5454	0.6667
-lakeshore	1800012	K	milling (general)	Cast Irons - Soft	-	0.9544	0.5724	on K general	0.5454	0.4444
-lakeshore	1800012	K	milling (general)	Cast Irons - Medium	-	1.2726	1.1447	on K general	0.7273	0.8889
-lakeshore	1800012	K	milling (general)	Cast Irons - Medium	-	1.2726	0.7359	on K general	0.7273	0.5714
-lakeshore	1800012	N	milling (general)	Copper	-	1.3336	2.1567	on N general	0.5714	0.8333
-lakeshore	1800012	N	milling (general)	Copper	-	1.3336	1.6175	on N general	0.5714	0.6250
-lakeshore	1800012	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.8585	on S general	0.5600	0.6667
-lakeshore	1800012	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.5724	on S general	0.5600	0.4444
-lakeshore	1800012	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0303	on M general	0.7500	0.6667
-lakeshore	1800012	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.5329	on M general	0.7500	0.3448
-lakeshore	1800012	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.2363	on M general	1.0000	0.8000
-lakeshore	1800012	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.6308	on M general	1.0000	0.4082
-lakeshore	1800012	P	milling (general)	Steels - Low Carbon	-	1.0997	0.5667	on P general	0.6000	0.6667
-lakeshore	1800012	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4533	on P general	0.6000	0.5333
-lakeshore	1800012	P	milling (general)	Steels - Med Carbon	-	1.3092	0.6800	on P general	0.7143	0.8000
-lakeshore	1800012	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5667	on P general	0.7143	0.6667
-lakeshore	1800012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	1.1333	on P general	1.0715	1.3333
-lakeshore	1800012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.7556	on P general	1.0715	0.8889
-lakeshore	1800012	P	milling (general)	Steels - Tool Steel	-	1.6663	0.9189	on P general	0.9091	1.0811
-lakeshore	1800012	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6415	on P general	0.9091	0.7547
-lakeshore	1800012	S	milling (general)	Titanium - Soft	-	1.2953	0.8585	on S general	0.5185	0.6667
-lakeshore	1800012	S	milling (general)	Titanium - Soft	-	1.2953	0.4683	on S general	0.5185	0.3636
-lakeshore	1800012	S	milling (general)	Titanium - Hard	-	1.5207	1.0303	on S general	0.6087	0.8000
-lakeshore	1800012	S	milling (general)	Titanium - Hard	-	1.5207	0.5854	on S general	0.6087	0.4545
-lakeshore	LC223018X	N	milling (general)	Aluminums	-	1.1669	1.2694	on N general	0.5000	0.6087
-lakeshore	LC223018X	N	milling (general)	Aluminums	-	1.1669	1.0068	on N general	0.5000	0.4828
-lakeshore	LC223018X	N	milling (general)	Aluminum Cast	-	1.4003	1.3903	on N general	0.6000	0.6667
-lakeshore	LC223018X	N	milling (general)	Aluminum Cast	-	1.4003	1.1230	on N general	0.6000	0.5385
-lakeshore	LC223018X	N	milling (general)	Brass	-	2.5459	1.3903	on N general	1.0909	0.6667
-lakeshore	LC223018X	N	milling (general)	Brass	-	2.5459	1.1230	on N general	1.0909	0.5385
-lakeshore	LC223018X	N	milling (general)	Bronze	-	2.8005	1.5367	on N general	1.2000	0.7368
-lakeshore	LC223018X	N	milling (general)	Bronze	-	2.8005	1.3903	on N general	1.2000	0.6667
-lakeshore	LC223018X	K	milling (general)	Cast Irons - Soft	-	0.9544	1.1419	on K general	0.5454	0.7143
-lakeshore	LC223018X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6149	on K general	0.5454	0.3846
-lakeshore	LC223018X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.7763	on K general	0.7273	1.1111
-lakeshore	LC223018X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.0658	on K general	0.7273	0.6667
-lakeshore	LC223018X	N	milling (general)	Copper	-	1.3336	1.3903	on N general	0.5714	0.6667
-lakeshore	LC223018X	N	milling (general)	Copper	-	1.3336	1.1230	on N general	0.5714	0.5385
+lakeshore	LC221014	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.6626	on S general	0.5600	0.7619
+lakeshore	LC221014	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0436	on M general	0.7500	1.0000
+lakeshore	LC221014	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7260	on M general	0.7500	0.6957
+lakeshore	LC221014	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.5179	on M general	1.0000	1.4545
+lakeshore	LC221014	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.9276	on M general	1.0000	0.8889
+lakeshore	LC221014	P	milling (general)	Steels - Low Carbon	-	1.0997	0.6000	on P general	0.6000	0.8000
+lakeshore	LC221014	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4500	on P general	0.6000	0.6000
+lakeshore	LC221014	P	milling (general)	Steels - Med Carbon	-	1.3092	0.7500	on P general	0.7143	1.0000
+lakeshore	LC221014	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5143	on P general	0.7143	0.6857
+lakeshore	LC221014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.9000	on P general	1.0715	1.2000
+lakeshore	LC221014	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.6923	on P general	1.0715	0.9231
+lakeshore	LC221014	P	milling (general)	Steels - Tool Steel	-	1.6663	0.9000	on P general	0.9091	1.2000
+lakeshore	LC221014	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6000	on P general	0.9091	0.8000
+lakeshore	LC221014	S	milling (general)	Titanium - Soft	-	1.2953	0.9276	on S general	0.5185	1.0667
+lakeshore	LC221014	S	milling (general)	Titanium - Soft	-	1.2953	0.6050	on S general	0.5185	0.6957
+lakeshore	LC221014	S	milling (general)	Titanium - Hard	-	1.5207	1.0703	on S general	0.6087	1.2308
+lakeshore	LC221014	S	milling (general)	Titanium - Hard	-	1.5207	0.7323	on S general	0.6087	0.8421
+lakeshore	1800038	N	milling (general)	Aluminums	-	1.1669	1.7636	on N general	0.5000	0.9091
+lakeshore	1800038	N	milling (general)	Aluminums	-	1.1669	1.3857	on N general	0.5000	0.7143
+lakeshore	1800038	N	milling (general)	Aluminum Cast	-	1.4003	1.7636	on N general	0.6000	0.9091
+lakeshore	1800038	N	milling (general)	Aluminum Cast	-	1.4003	1.3857	on N general	0.6000	0.7143
+lakeshore	1800038	N	milling (general)	Brass	-	2.5459	2.1556	on N general	1.0909	1.1111
+lakeshore	1800038	N	milling (general)	Brass	-	2.5459	1.6167	on N general	1.0909	0.8333
+lakeshore	1800038	N	milling (general)	Bronze	-	2.8005	2.6216	on N general	1.2000	1.3514
+lakeshore	1800038	N	milling (general)	Bronze	-	2.8005	2.0208	on N general	1.2000	1.0417
+lakeshore	1800038	K	milling (general)	Cast Irons - Soft	-	0.9544	0.9918	on K general	0.5454	1.0000
+lakeshore	1800038	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6612	on K general	0.5454	0.6667
+lakeshore	1800038	K	milling (general)	Cast Irons - Medium	-	1.2726	1.3224	on K general	0.7273	1.3333
+lakeshore	1800038	K	milling (general)	Cast Irons - Medium	-	1.2726	0.8816	on K general	0.7273	0.8889
+lakeshore	1800038	N	milling (general)	Copper	-	1.3336	2.1556	on N general	0.5714	1.1111
+lakeshore	1800038	N	milling (general)	Copper	-	1.3336	1.6167	on N general	0.5714	0.8333
+lakeshore	1800038	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.9445	on S general	0.5600	0.9524
+lakeshore	1800038	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.6612	on S general	0.5600	0.6667
+lakeshore	1800038	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0349	on M general	0.7500	0.8696
+lakeshore	1800038	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7934	on M general	0.7500	0.6667
+lakeshore	1800038	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.3224	on M general	1.0000	1.1111
+lakeshore	1800038	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.9521	on M general	1.0000	0.8000
+lakeshore	1800038	P	milling (general)	Steels - Low Carbon	-	1.0997	0.6500	on P general	0.6000	1.0000
+lakeshore	1800038	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4333	on P general	0.6000	0.6667
+lakeshore	1800038	P	milling (general)	Steels - Med Carbon	-	1.3092	0.7429	on P general	0.7143	1.1429
+lakeshore	1800038	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5200	on P general	0.7143	0.8000
+lakeshore	1800038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	1.0000	on P general	1.0715	1.5385
+lakeshore	1800038	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.8667	on P general	1.0715	1.3333
+lakeshore	1800038	P	milling (general)	Steels - Tool Steel	-	1.6663	0.8667	on P general	0.9091	1.3333
+lakeshore	1800038	P	milling (general)	Steels - Tool Steel	-	1.6663	0.7027	on P general	0.9091	1.0811
+lakeshore	1800038	S	milling (general)	Titanium - Soft	-	1.2953	0.8624	on S general	0.5185	0.8696
+lakeshore	1800038	S	milling (general)	Titanium - Soft	-	1.2953	0.6612	on S general	0.5185	0.6667
+lakeshore	1800038	S	milling (general)	Titanium - Hard	-	1.5207	1.0440	on S general	0.6087	1.0526
+lakeshore	1800038	S	milling (general)	Titanium - Hard	-	1.5207	0.7934	on S general	0.6087	0.8000
+lakeshore	1800012	N	milling (general)	Aluminums	-	1.1669	1.8486	on N general	0.5000	1.0000
+lakeshore	1800012	N	milling (general)	Aluminums	-	1.1669	1.1252	on N general	0.5000	0.6087
+lakeshore	1800012	N	milling (general)	Aluminum Cast	-	1.4003	1.8486	on N general	0.6000	1.0000
+lakeshore	1800012	N	milling (general)	Aluminum Cast	-	1.4003	1.1252	on N general	0.6000	0.6087
+lakeshore	1800012	N	milling (general)	Brass	-	2.5459	2.1567	on N general	1.0909	1.1667
+lakeshore	1800012	N	milling (general)	Brass	-	2.5459	1.7254	on N general	1.0909	0.9333
+lakeshore	1800012	N	milling (general)	Bronze	-	2.8005	2.6959	on N general	1.2000	1.4583
+lakeshore	1800012	N	milling (general)	Bronze	-	2.8005	2.1567	on N general	1.2000	1.1667
+lakeshore	1800012	K	milling (general)	Cast Irons - Soft	-	0.9544	0.8585	on K general	0.5454	1.0000
+lakeshore	1800012	K	milling (general)	Cast Irons - Soft	-	0.9544	0.5724	on K general	0.5454	0.6667
+lakeshore	1800012	K	milling (general)	Cast Irons - Medium	-	1.2726	1.1447	on K general	0.7273	1.3333
+lakeshore	1800012	K	milling (general)	Cast Irons - Medium	-	1.2726	0.7359	on K general	0.7273	0.8571
+lakeshore	1800012	N	milling (general)	Copper	-	1.3336	2.1567	on N general	0.5714	1.1667
+lakeshore	1800012	N	milling (general)	Copper	-	1.3336	1.6175	on N general	0.5714	0.8750
+lakeshore	1800012	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.8585	on S general	0.5600	1.0000
+lakeshore	1800012	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.5724	on S general	0.5600	0.6667
+lakeshore	1800012	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0303	on M general	0.7500	1.2000
+lakeshore	1800012	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.5329	on M general	0.7500	0.6207
+lakeshore	1800012	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.2363	on M general	1.0000	1.4400
+lakeshore	1800012	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.6308	on M general	1.0000	0.7347
+lakeshore	1800012	P	milling (general)	Steels - Low Carbon	-	1.0997	0.5667	on P general	0.6000	0.8333
+lakeshore	1800012	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4533	on P general	0.6000	0.6667
+lakeshore	1800012	P	milling (general)	Steels - Med Carbon	-	1.3092	0.6800	on P general	0.7143	1.0000
+lakeshore	1800012	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5667	on P general	0.7143	0.8333
+lakeshore	1800012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	1.1333	on P general	1.0715	1.6667
+lakeshore	1800012	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.7556	on P general	1.0715	1.1111
+lakeshore	1800012	P	milling (general)	Steels - Tool Steel	-	1.6663	0.9189	on P general	0.9091	1.3514
+lakeshore	1800012	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6415	on P general	0.9091	0.9434
+lakeshore	1800012	S	milling (general)	Titanium - Soft	-	1.2953	0.8585	on S general	0.5185	1.0000
+lakeshore	1800012	S	milling (general)	Titanium - Soft	-	1.2953	0.4683	on S general	0.5185	0.5455
+lakeshore	1800012	S	milling (general)	Titanium - Hard	-	1.5207	1.0303	on S general	0.6087	1.2000
+lakeshore	1800012	S	milling (general)	Titanium - Hard	-	1.5207	0.5854	on S general	0.6087	0.6818
+lakeshore	LC223018X	N	milling (general)	Aluminums	-	1.1669	1.2694	on N general	0.5000	0.7826
+lakeshore	LC223018X	N	milling (general)	Aluminums	-	1.1669	1.0068	on N general	0.5000	0.6207
+lakeshore	LC223018X	N	milling (general)	Aluminum Cast	-	1.4003	1.3903	on N general	0.6000	0.8571
+lakeshore	LC223018X	N	milling (general)	Aluminum Cast	-	1.4003	1.1230	on N general	0.6000	0.6923
+lakeshore	LC223018X	N	milling (general)	Brass	-	2.5459	1.3903	on N general	1.0909	0.8571
+lakeshore	LC223018X	N	milling (general)	Brass	-	2.5459	1.1230	on N general	1.0909	0.6923
+lakeshore	LC223018X	N	milling (general)	Bronze	-	2.8005	1.5367	on N general	1.2000	0.9474
+lakeshore	LC223018X	N	milling (general)	Bronze	-	2.8005	1.3903	on N general	1.2000	0.8571
+lakeshore	LC223018X	K	milling (general)	Cast Irons - Soft	-	0.9544	1.1419	on K general	0.5454	0.8571
+lakeshore	LC223018X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6149	on K general	0.5454	0.4615
+lakeshore	LC223018X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.7763	on K general	0.7273	1.3333
+lakeshore	LC223018X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.0658	on K general	0.7273	0.8000
+lakeshore	LC223018X	N	milling (general)	Copper	-	1.3336	1.3903	on N general	0.5714	0.8571
+lakeshore	LC223018X	N	milling (general)	Copper	-	1.3336	1.1230	on N general	0.5714	0.6923
 lakeshore	LC223018X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.8881	on S general	0.5600	1.1111
 lakeshore	LC223018X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	-	on S general	0.5600	-
-lakeshore	LC223018X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7378	on M general	0.7500	0.7692
-lakeshore	LC223018X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.5995	on M general	0.7500	0.6250
-lakeshore	LC223018X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.1990	on M general	1.0000	1.2500
-lakeshore	LC223018X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.8720	on M general	1.0000	0.9091
-lakeshore	LC223018X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4500	on P general	0.6000	0.8000
-lakeshore	LC223018X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.3000	on P general	0.6000	0.5333
-lakeshore	LC223018X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.6000	on P general	0.7143	1.0667
-lakeshore	LC223018X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.3750	on P general	0.7143	0.6667
-lakeshore	LC223018X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.6923	on P general	1.0715	1.2308
-lakeshore	LC223018X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.4500	on P general	1.0715	0.8000
-lakeshore	LC223018X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6429	on P general	0.9091	1.1429
-lakeshore	LC223018X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.4500	on P general	0.9091	0.8000
+lakeshore	LC223018X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7378	on M general	0.7500	0.9231
+lakeshore	LC223018X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.5995	on M general	0.7500	0.7500
+lakeshore	LC223018X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.1990	on M general	1.0000	1.5000
+lakeshore	LC223018X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.8720	on M general	1.0000	1.0909
+lakeshore	LC223018X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4500	on P general	0.6000	1.0000
+lakeshore	LC223018X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.3000	on P general	0.6000	0.6667
+lakeshore	LC223018X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.6000	on P general	0.7143	1.3333
+lakeshore	LC223018X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.3750	on P general	0.7143	0.8333
+lakeshore	LC223018X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.6923	on P general	1.0715	1.5385
+lakeshore	LC223018X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.4500	on P general	1.0715	1.0000
+lakeshore	LC223018X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6429	on P general	0.9091	1.4286
+lakeshore	LC223018X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.4500	on P general	0.9091	1.0000
 lakeshore	LC223018X	S	milling (general)	Titanium - Soft	-	1.2953	0.5709	on S general	0.5185	0.7143
 lakeshore	LC223018X	S	milling (general)	Titanium - Soft	-	1.2953	0.5329	on S general	0.5185	0.6667
 lakeshore	LC223018X	S	milling (general)	Titanium - Hard	-	1.5207	0.7267	on S general	0.6087	0.9091
 lakeshore	LC223018X	S	milling (general)	Titanium - Hard	-	1.5207	0.6149	on S general	0.6087	0.7692
-lakeshore	LC223014X	N	milling (general)	Aluminums	-	1.1669	2.1241	on N general	0.5000	0.6207
-lakeshore	LC223014X	N	milling (general)	Aluminums	-	1.1669	1.1200	on N general	0.5000	0.3273
-lakeshore	LC223014X	N	milling (general)	Aluminum Cast	-	1.4003	2.3692	on N general	0.6000	0.6923
-lakeshore	LC223014X	N	milling (general)	Aluminum Cast	-	1.4003	1.1200	on N general	0.6000	0.3273
-lakeshore	LC223014X	N	milling (general)	Brass	-	2.5459	2.3692	on N general	1.0909	0.6923
-lakeshore	LC223014X	N	milling (general)	Brass	-	2.5459	1.3689	on N general	1.0909	0.4000
-lakeshore	LC223014X	N	milling (general)	Bronze	-	2.8005	2.9333	on N general	1.2000	0.8571
-lakeshore	LC223014X	N	milling (general)	Bronze	-	2.8005	1.6648	on N general	1.2000	0.4865
-lakeshore	LC223014X	K	milling (general)	Cast Irons - Soft	-	0.9544	1.0703	on K general	0.5454	0.4615
-lakeshore	LC223014X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6957	on K general	0.5454	0.3000
-lakeshore	LC223014X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.8552	on K general	0.7273	0.8000
-lakeshore	LC223014X	K	milling (general)	Cast Irons - Medium	-	1.2726	0.9276	on K general	0.7273	0.4000
-lakeshore	LC223014X	N	milling (general)	Copper	-	1.3336	2.3692	on N general	0.5714	0.6923
-lakeshore	LC223014X	N	milling (general)	Copper	-	1.3336	1.3689	on N general	0.5714	0.4000
+lakeshore	LC223014X	N	milling (general)	Aluminums	-	1.1669	2.1241	on N general	0.5000	1.0345
+lakeshore	LC223014X	N	milling (general)	Aluminums	-	1.1669	1.1200	on N general	0.5000	0.5455
+lakeshore	LC223014X	N	milling (general)	Aluminum Cast	-	1.4003	2.3692	on N general	0.6000	1.1538
+lakeshore	LC223014X	N	milling (general)	Aluminum Cast	-	1.4003	1.1200	on N general	0.6000	0.5455
+lakeshore	LC223014X	N	milling (general)	Brass	-	2.5459	2.3692	on N general	1.0909	1.1538
+lakeshore	LC223014X	N	milling (general)	Brass	-	2.5459	1.3689	on N general	1.0909	0.6667
+lakeshore	LC223014X	N	milling (general)	Bronze	-	2.8005	2.9333	on N general	1.2000	1.4286
+lakeshore	LC223014X	N	milling (general)	Bronze	-	2.8005	1.6648	on N general	1.2000	0.8108
+lakeshore	LC223014X	K	milling (general)	Cast Irons - Soft	-	0.9544	1.0703	on K general	0.5454	0.9231
+lakeshore	LC223014X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6957	on K general	0.5454	0.6000
+lakeshore	LC223014X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.8552	on K general	0.7273	1.6000
+lakeshore	LC223014X	K	milling (general)	Cast Irons - Medium	-	1.2726	0.9276	on K general	0.7273	0.8000
+lakeshore	LC223014X	N	milling (general)	Copper	-	1.3336	2.3692	on N general	0.5714	1.1538
+lakeshore	LC223014X	N	milling (general)	Copper	-	1.3336	1.3689	on N general	0.5714	0.6667
 lakeshore	LC223014X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	-	on S general	0.5600	-
-lakeshore	LC223014X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.6626	on S general	0.5600	0.4762
-lakeshore	LC223014X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0436	on M general	0.7500	0.7500
-lakeshore	LC223014X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7260	on M general	0.7500	0.5217
-lakeshore	LC223014X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.5179	on M general	1.0000	1.0909
-lakeshore	LC223014X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.9276	on M general	1.0000	0.6667
-lakeshore	LC223014X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.6000	on P general	0.6000	0.6667
-lakeshore	LC223014X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4500	on P general	0.6000	0.5000
-lakeshore	LC223014X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.7500	on P general	0.7143	0.8333
-lakeshore	LC223014X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5143	on P general	0.7143	0.5714
-lakeshore	LC223014X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.9000	on P general	1.0715	1.0000
-lakeshore	LC223014X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.6923	on P general	1.0715	0.7692
-lakeshore	LC223014X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.9000	on P general	0.9091	1.0000
-lakeshore	LC223014X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6000	on P general	0.9091	0.6667
-lakeshore	LC223014X	S	milling (general)	Titanium - Soft	-	1.2953	0.9276	on S general	0.5185	0.6667
-lakeshore	LC223014X	S	milling (general)	Titanium - Soft	-	1.2953	0.6050	on S general	0.5185	0.4348
-lakeshore	LC223014X	S	milling (general)	Titanium - Hard	-	1.5207	1.0703	on S general	0.6087	0.7692
-lakeshore	LC223014X	S	milling (general)	Titanium - Hard	-	1.5207	0.7323	on S general	0.6087	0.5263
-lakeshore	LC223038X	N	milling (general)	Aluminums	-	1.1669	1.7636	on N general	0.5000	0.5455
-lakeshore	LC223038X	N	milling (general)	Aluminums	-	1.1669	1.3857	on N general	0.5000	0.4286
-lakeshore	LC223038X	N	milling (general)	Aluminum Cast	-	1.4003	1.7636	on N general	0.6000	0.5455
-lakeshore	LC223038X	N	milling (general)	Aluminum Cast	-	1.4003	1.3857	on N general	0.6000	0.4286
-lakeshore	LC223038X	N	milling (general)	Brass	-	2.5459	2.1556	on N general	1.0909	0.6667
-lakeshore	LC223038X	N	milling (general)	Brass	-	2.5459	1.6167	on N general	1.0909	0.5000
-lakeshore	LC223038X	N	milling (general)	Bronze	-	2.8005	2.6216	on N general	1.2000	0.8108
-lakeshore	LC223038X	N	milling (general)	Bronze	-	2.8005	2.0208	on N general	1.2000	0.6250
-lakeshore	LC223038X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.9918	on K general	0.5454	0.6000
-lakeshore	LC223038X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6612	on K general	0.5454	0.4000
-lakeshore	LC223038X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.3224	on K general	0.7273	0.8000
-lakeshore	LC223038X	K	milling (general)	Cast Irons - Medium	-	1.2726	0.8816	on K general	0.7273	0.5333
-lakeshore	LC223038X	N	milling (general)	Copper	-	1.3336	2.1556	on N general	0.5714	0.6667
-lakeshore	LC223038X	N	milling (general)	Copper	-	1.3336	1.6167	on N general	0.5714	0.5000
-lakeshore	LC223038X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.9445	on S general	0.5600	0.7619
-lakeshore	LC223038X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.6612	on S general	0.5600	0.5333
-lakeshore	LC223038X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0349	on M general	0.7500	0.6957
-lakeshore	LC223038X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7934	on M general	0.7500	0.5333
-lakeshore	LC223038X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.3224	on M general	1.0000	0.8889
-lakeshore	LC223038X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.9521	on M general	1.0000	0.6400
-lakeshore	LC223038X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.6500	on P general	0.6000	0.6000
-lakeshore	LC223038X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4333	on P general	0.6000	0.4000
-lakeshore	LC223038X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.7429	on P general	0.7143	0.6857
-lakeshore	LC223038X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5200	on P general	0.7143	0.4800
-lakeshore	LC223038X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	1.0000	on P general	1.0715	0.9231
-lakeshore	LC223038X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.8667	on P general	1.0715	0.8000
-lakeshore	LC223038X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.8667	on P general	0.9091	0.8000
-lakeshore	LC223038X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.7027	on P general	0.9091	0.6486
-lakeshore	LC223038X	S	milling (general)	Titanium - Soft	-	1.2953	0.8624	on S general	0.5185	0.6957
-lakeshore	LC223038X	S	milling (general)	Titanium - Soft	-	1.2953	0.6612	on S general	0.5185	0.5333
-lakeshore	LC223038X	S	milling (general)	Titanium - Hard	-	1.5207	1.0440	on S general	0.6087	0.8421
-lakeshore	LC223038X	S	milling (general)	Titanium - Hard	-	1.5207	0.7934	on S general	0.6087	0.6400
-lakeshore	LC223012X	N	milling (general)	Aluminums	-	1.1669	1.8486	on N general	0.5000	0.7143
-lakeshore	LC223012X	N	milling (general)	Aluminums	-	1.1669	1.1252	on N general	0.5000	0.4348
-lakeshore	LC223012X	N	milling (general)	Aluminum Cast	-	1.4003	1.8486	on N general	0.6000	0.7143
-lakeshore	LC223012X	N	milling (general)	Aluminum Cast	-	1.4003	1.1252	on N general	0.6000	0.4348
-lakeshore	LC223012X	N	milling (general)	Brass	-	2.5459	2.1567	on N general	1.0909	0.8333
-lakeshore	LC223012X	N	milling (general)	Brass	-	2.5459	1.7254	on N general	1.0909	0.6667
-lakeshore	LC223012X	N	milling (general)	Bronze	-	2.8005	2.6959	on N general	1.2000	1.0417
-lakeshore	LC223012X	N	milling (general)	Bronze	-	2.8005	2.1567	on N general	1.2000	0.8333
-lakeshore	LC223012X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.8585	on K general	0.5454	0.6667
-lakeshore	LC223012X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.5724	on K general	0.5454	0.4444
-lakeshore	LC223012X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.1447	on K general	0.7273	0.8889
-lakeshore	LC223012X	K	milling (general)	Cast Irons - Medium	-	1.2726	0.7359	on K general	0.7273	0.5714
-lakeshore	LC223012X	N	milling (general)	Copper	-	1.3336	2.1567	on N general	0.5714	0.8333
-lakeshore	LC223012X	N	milling (general)	Copper	-	1.3336	1.6175	on N general	0.5714	0.6250
-lakeshore	LC223012X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.8585	on S general	0.5600	0.6667
-lakeshore	LC223012X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.5724	on S general	0.5600	0.4444
-lakeshore	LC223012X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0303	on M general	0.7500	0.6667
-lakeshore	LC223012X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.5329	on M general	0.7500	0.3448
-lakeshore	LC223012X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.2363	on M general	1.0000	0.8000
-lakeshore	LC223012X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.6308	on M general	1.0000	0.4082
-lakeshore	LC223012X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.5667	on P general	0.6000	0.6667
-lakeshore	LC223012X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4533	on P general	0.6000	0.5333
-lakeshore	LC223012X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.6800	on P general	0.7143	0.8000
-lakeshore	LC223012X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5667	on P general	0.7143	0.6667
-lakeshore	LC223012X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	1.1333	on P general	1.0715	1.3333
-lakeshore	LC223012X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.7556	on P general	1.0715	0.8889
-lakeshore	LC223012X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.9189	on P general	0.9091	1.0811
-lakeshore	LC223012X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6415	on P general	0.9091	0.7547
-lakeshore	LC223012X	S	milling (general)	Titanium - Soft	-	1.2953	0.8585	on S general	0.5185	0.6667
-lakeshore	LC223012X	S	milling (general)	Titanium - Soft	-	1.2953	0.4683	on S general	0.5185	0.3636
-lakeshore	LC223012X	S	milling (general)	Titanium - Hard	-	1.5207	1.0303	on S general	0.6087	0.8000
-lakeshore	LC223012X	S	milling (general)	Titanium - Hard	-	1.5207	0.5854	on S general	0.6087	0.4545
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.2694	on N general	0.6250	0.6087
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.0068	on N general	0.6250	0.4828
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.3903	on N general	0.7407	0.6667
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.1230	on N general	0.7407	0.5385
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.3903	on N general	1.2500	0.6667
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.1230	on N general	1.2500	0.5385
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	1.5367	on N general	1.5385	0.7368
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	1.3903	on N general	1.5385	0.6667
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	1.1419	on K general	0.6000	0.7143
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6149	on K general	0.6000	0.3846
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.7763	on K general	0.7500	1.1111
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.0658	on K general	0.7500	0.6667
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.3903	on N general	0.7143	0.6667
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.1230	on N general	0.7143	0.5385
+lakeshore	LC223014X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.6626	on S general	0.5600	0.7619
+lakeshore	LC223014X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0436	on M general	0.7500	1.0000
+lakeshore	LC223014X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7260	on M general	0.7500	0.6957
+lakeshore	LC223014X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.5179	on M general	1.0000	1.4545
+lakeshore	LC223014X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.9276	on M general	1.0000	0.8889
+lakeshore	LC223014X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.6000	on P general	0.6000	0.8000
+lakeshore	LC223014X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4500	on P general	0.6000	0.6000
+lakeshore	LC223014X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.7500	on P general	0.7143	1.0000
+lakeshore	LC223014X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5143	on P general	0.7143	0.6857
+lakeshore	LC223014X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.9000	on P general	1.0715	1.2000
+lakeshore	LC223014X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.6923	on P general	1.0715	0.9231
+lakeshore	LC223014X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.9000	on P general	0.9091	1.2000
+lakeshore	LC223014X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6000	on P general	0.9091	0.8000
+lakeshore	LC223014X	S	milling (general)	Titanium - Soft	-	1.2953	0.9276	on S general	0.5185	1.0667
+lakeshore	LC223014X	S	milling (general)	Titanium - Soft	-	1.2953	0.6050	on S general	0.5185	0.6957
+lakeshore	LC223014X	S	milling (general)	Titanium - Hard	-	1.5207	1.0703	on S general	0.6087	1.2308
+lakeshore	LC223014X	S	milling (general)	Titanium - Hard	-	1.5207	0.7323	on S general	0.6087	0.8421
+lakeshore	LC223038X	N	milling (general)	Aluminums	-	1.1669	1.7636	on N general	0.5000	0.9091
+lakeshore	LC223038X	N	milling (general)	Aluminums	-	1.1669	1.3857	on N general	0.5000	0.7143
+lakeshore	LC223038X	N	milling (general)	Aluminum Cast	-	1.4003	1.7636	on N general	0.6000	0.9091
+lakeshore	LC223038X	N	milling (general)	Aluminum Cast	-	1.4003	1.3857	on N general	0.6000	0.7143
+lakeshore	LC223038X	N	milling (general)	Brass	-	2.5459	2.1556	on N general	1.0909	1.1111
+lakeshore	LC223038X	N	milling (general)	Brass	-	2.5459	1.6167	on N general	1.0909	0.8333
+lakeshore	LC223038X	N	milling (general)	Bronze	-	2.8005	2.6216	on N general	1.2000	1.3514
+lakeshore	LC223038X	N	milling (general)	Bronze	-	2.8005	2.0208	on N general	1.2000	1.0417
+lakeshore	LC223038X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.9918	on K general	0.5454	1.0000
+lakeshore	LC223038X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.6612	on K general	0.5454	0.6667
+lakeshore	LC223038X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.3224	on K general	0.7273	1.3333
+lakeshore	LC223038X	K	milling (general)	Cast Irons - Medium	-	1.2726	0.8816	on K general	0.7273	0.8889
+lakeshore	LC223038X	N	milling (general)	Copper	-	1.3336	2.1556	on N general	0.5714	1.1111
+lakeshore	LC223038X	N	milling (general)	Copper	-	1.3336	1.6167	on N general	0.5714	0.8333
+lakeshore	LC223038X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.9445	on S general	0.5600	0.9524
+lakeshore	LC223038X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.6612	on S general	0.5600	0.6667
+lakeshore	LC223038X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0349	on M general	0.7500	0.8696
+lakeshore	LC223038X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.7934	on M general	0.7500	0.6667
+lakeshore	LC223038X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.3224	on M general	1.0000	1.1111
+lakeshore	LC223038X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.9521	on M general	1.0000	0.8000
+lakeshore	LC223038X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.6500	on P general	0.6000	1.0000
+lakeshore	LC223038X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4333	on P general	0.6000	0.6667
+lakeshore	LC223038X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.7429	on P general	0.7143	1.1429
+lakeshore	LC223038X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5200	on P general	0.7143	0.8000
+lakeshore	LC223038X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	1.0000	on P general	1.0715	1.5385
+lakeshore	LC223038X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.8667	on P general	1.0715	1.3333
+lakeshore	LC223038X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.8667	on P general	0.9091	1.3333
+lakeshore	LC223038X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.7027	on P general	0.9091	1.0811
+lakeshore	LC223038X	S	milling (general)	Titanium - Soft	-	1.2953	0.8624	on S general	0.5185	0.8696
+lakeshore	LC223038X	S	milling (general)	Titanium - Soft	-	1.2953	0.6612	on S general	0.5185	0.6667
+lakeshore	LC223038X	S	milling (general)	Titanium - Hard	-	1.5207	1.0440	on S general	0.6087	1.0526
+lakeshore	LC223038X	S	milling (general)	Titanium - Hard	-	1.5207	0.7934	on S general	0.6087	0.8000
+lakeshore	LC223012X	N	milling (general)	Aluminums	-	1.1669	1.8486	on N general	0.5000	1.0000
+lakeshore	LC223012X	N	milling (general)	Aluminums	-	1.1669	1.1252	on N general	0.5000	0.6087
+lakeshore	LC223012X	N	milling (general)	Aluminum Cast	-	1.4003	1.8486	on N general	0.6000	1.0000
+lakeshore	LC223012X	N	milling (general)	Aluminum Cast	-	1.4003	1.1252	on N general	0.6000	0.6087
+lakeshore	LC223012X	N	milling (general)	Brass	-	2.5459	2.1567	on N general	1.0909	1.1667
+lakeshore	LC223012X	N	milling (general)	Brass	-	2.5459	1.7254	on N general	1.0909	0.9333
+lakeshore	LC223012X	N	milling (general)	Bronze	-	2.8005	2.6959	on N general	1.2000	1.4583
+lakeshore	LC223012X	N	milling (general)	Bronze	-	2.8005	2.1567	on N general	1.2000	1.1667
+lakeshore	LC223012X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.8585	on K general	0.5454	1.0000
+lakeshore	LC223012X	K	milling (general)	Cast Irons - Soft	-	0.9544	0.5724	on K general	0.5454	0.6667
+lakeshore	LC223012X	K	milling (general)	Cast Irons - Medium	-	1.2726	1.1447	on K general	0.7273	1.3333
+lakeshore	LC223012X	K	milling (general)	Cast Irons - Medium	-	1.2726	0.7359	on K general	0.7273	0.8571
+lakeshore	LC223012X	N	milling (general)	Copper	-	1.3336	2.1567	on N general	0.5714	1.1667
+lakeshore	LC223012X	N	milling (general)	Copper	-	1.3336	1.6175	on N general	0.5714	0.8750
+lakeshore	LC223012X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.8585	on S general	0.5600	1.0000
+lakeshore	LC223012X	S	milling (general)	Monel & High Nickel Steel	-	1.3990	0.5724	on S general	0.5600	0.6667
+lakeshore	LC223012X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	1.0303	on M general	0.7500	1.2000
+lakeshore	LC223012X	M	milling (general)	Stainless Stl (Soft)	-	1.2500	0.5329	on M general	0.7500	0.6207
+lakeshore	LC223012X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	1.2363	on M general	1.0000	1.4400
+lakeshore	LC223012X	M	milling (general)	Stainless Stl (Hard)	-	1.6667	0.6308	on M general	1.0000	0.7347
+lakeshore	LC223012X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.5667	on P general	0.6000	0.8333
+lakeshore	LC223012X	P	milling (general)	Steels - Low Carbon	-	1.0997	0.4533	on P general	0.6000	0.6667
+lakeshore	LC223012X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.6800	on P general	0.7143	1.0000
+lakeshore	LC223012X	P	milling (general)	Steels - Med Carbon	-	1.3092	0.5667	on P general	0.7143	0.8333
+lakeshore	LC223012X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	1.1333	on P general	1.0715	1.6667
+lakeshore	LC223012X	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.9639	0.7556	on P general	1.0715	1.1111
+lakeshore	LC223012X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.9189	on P general	0.9091	1.3514
+lakeshore	LC223012X	P	milling (general)	Steels - Tool Steel	-	1.6663	0.6415	on P general	0.9091	0.9434
+lakeshore	LC223012X	S	milling (general)	Titanium - Soft	-	1.2953	0.8585	on S general	0.5185	1.0000
+lakeshore	LC223012X	S	milling (general)	Titanium - Soft	-	1.2953	0.4683	on S general	0.5185	0.5455
+lakeshore	LC223012X	S	milling (general)	Titanium - Hard	-	1.5207	1.0303	on S general	0.6087	1.2000
+lakeshore	LC223012X	S	milling (general)	Titanium - Hard	-	1.5207	0.5854	on S general	0.6087	0.6818
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.2694	on N general	0.6250	0.7826
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.0068	on N general	0.6250	0.6207
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.3903	on N general	0.7407	0.8571
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.1230	on N general	0.7407	0.6923
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.3903	on N general	1.2500	0.8571
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.1230	on N general	1.2500	0.6923
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	1.5367	on N general	1.5385	0.9474
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	1.3903	on N general	1.5385	0.8571
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	1.1419	on K general	0.6000	0.8571
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6149	on K general	0.6000	0.4615
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.7763	on K general	0.7500	1.3333
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.0658	on K general	0.7500	0.8000
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.3903	on N general	0.7143	0.8571
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.1230	on N general	0.7143	0.6923
 lakeshore	18-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8881	on S general	0.5000	1.1111
 lakeshore	18-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	-	on S general	0.5000	-
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7378	on M general	0.8333	0.7692
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5995	on M general	0.8333	0.6250
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.1990	on M general	1.0000	1.2500
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.8720	on M general	1.0000	0.9091
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.8000
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.3000	on P general	0.6667	0.5333
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6000	on P general	0.8333	1.0667
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.3750	on P general	0.8333	0.6667
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	1.2308
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.4500	on P general	1.0000	0.8000
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6429	on P general	0.9091	1.1429
-lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.4500	on P general	0.9091	0.8000
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7378	on M general	0.8333	0.9231
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5995	on M general	0.8333	0.7500
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.1990	on M general	1.0000	1.5000
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.8720	on M general	1.0000	1.0909
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	1.0000
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.3000	on P general	0.6667	0.6667
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6000	on P general	0.8333	1.3333
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.3750	on P general	0.8333	0.8333
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	1.5385
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.4500	on P general	1.0000	1.0000
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6429	on P general	0.9091	1.4286
+lakeshore	18-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.4500	on P general	0.9091	1.0000
 lakeshore	18-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.5709	on S general	0.5714	0.7143
 lakeshore	18-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.5329	on S general	0.5714	0.6667
 lakeshore	18-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.7267	on S general	0.6667	0.9091
 lakeshore	18-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.6149	on S general	0.6667	0.7692
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	0.6207
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.3273
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	0.6923
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.3273
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	0.6923
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.4000
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	0.8571
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.4865
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.4615
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.3000
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	0.8000
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.4000
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	0.6923
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.4000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	1.0345
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.5455
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	1.1538
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.5455
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	1.1538
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.6667
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	1.4286
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.8108
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.9231
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.6000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	1.6000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.8000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	1.1538
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.6667
 lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	-	on S general	0.5000	-
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.4762
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	0.7500
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.5217
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.0909
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.6667
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.6667
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.5000
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	0.8333
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.5714
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.0000
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.7692
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.0000
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.6667
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	0.6667
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.4348
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	0.7692
-lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.5263
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.5455
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.4286
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.5455
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.4286
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	0.6667
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.5000
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	0.8108
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	0.6250
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	0.6000
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.4000
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	0.8000
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.5333
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	0.6667
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.5000
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.7619
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.5333
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.6957
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.5333
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	0.8889
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.6400
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	0.6000
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.4000
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	0.6857
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.4800
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	0.9231
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	0.8000
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	0.8000
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	0.6486
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.6957
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.5333
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	0.8421
-lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.6400
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.8486	on N general	0.6250	0.7143
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.1252	on N general	0.6250	0.4348
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.8486	on N general	0.7407	0.7143
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.1252	on N general	0.7407	0.4348
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	2.1567	on N general	1.2500	0.8333
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.7254	on N general	1.2500	0.6667
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.6959	on N general	1.5385	1.0417
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.1567	on N general	1.5385	0.8333
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.8585	on K general	0.6000	0.6667
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.5724	on K general	0.6000	0.4444
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.1447	on K general	0.7500	0.8889
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.7359	on K general	0.7500	0.5714
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	2.1567	on N general	0.7143	0.8333
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.6175	on N general	0.7143	0.6250
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8585	on S general	0.5000	0.6667
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.5724	on S general	0.5000	0.4444
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0303	on M general	0.8333	0.6667
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5329	on M general	0.8333	0.3448
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.2363	on M general	1.0000	0.8000
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.6308	on M general	1.0000	0.4082
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.5667	on P general	0.6667	0.6667
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4533	on P general	0.6667	0.5333
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6800	on P general	0.8333	0.8000
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5667	on P general	0.8333	0.6667
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.1333	on P general	1.0000	1.3333
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.7556	on P general	1.0000	0.8889
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9189	on P general	0.9091	1.0811
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6415	on P general	0.9091	0.7547
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.8585	on S general	0.5714	0.6667
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.4683	on S general	0.5714	0.3636
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0303	on S general	0.6667	0.8000
-lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.5854	on S general	0.6667	0.4545
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	0.6207
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.3273
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	0.6923
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.3273
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	0.6923
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.4000
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	0.8571
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.4865
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.4615
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.3000
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	0.8000
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.4000
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	0.6923
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.4000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.7619
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	1.0000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.6957
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.4545
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.8889
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.8000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.6000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	1.0000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.6857
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.2000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.9231
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.2000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.8000
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	1.0667
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.6957
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	1.2308
+lakeshore	14-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.8421
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.9091
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.7143
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.9091
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.7143
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	1.1111
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.8333
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	1.3514
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	1.0417
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	1.0000
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.6667
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	1.3333
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.8889
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	1.1111
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.8333
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.9524
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.6667
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.8696
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.6667
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	1.1111
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.8000
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	1.0000
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.6667
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	1.1429
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.8000
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	1.5385
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	1.3333
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	1.3333
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	1.0811
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.8696
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.6667
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	1.0526
+lakeshore	38-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.8000
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.8486	on N general	0.6250	1.0000
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminums	-	0.8752	1.1252	on N general	0.6250	0.6087
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.8486	on N general	0.7407	1.0000
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.1252	on N general	0.7407	0.6087
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	2.1567	on N general	1.2500	1.1667
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Brass	-	1.7503	1.7254	on N general	1.2500	0.9333
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.6959	on N general	1.5385	1.4583
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Bronze	-	2.1542	2.1567	on N general	1.5385	1.1667
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.8585	on K general	0.6000	1.0000
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.5724	on K general	0.6000	0.6667
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.1447	on K general	0.7500	1.3333
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.7359	on K general	0.7500	0.8571
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	2.1567	on N general	0.7143	1.1667
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	N	milling (general)	Copper	-	1.0002	1.6175	on N general	0.7143	0.8750
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.8585	on S general	0.5000	1.0000
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.5724	on S general	0.5000	0.6667
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0303	on M general	0.8333	1.2000
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.5329	on M general	0.8333	0.6207
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.2363	on M general	1.0000	1.4400
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.6308	on M general	1.0000	0.7347
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.5667	on P general	0.6667	0.8333
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4533	on P general	0.6667	0.6667
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.6800	on P general	0.8333	1.0000
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5667	on P general	0.8333	0.8333
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.1333	on P general	1.0000	1.6667
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.7556	on P general	1.0000	1.1111
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9189	on P general	0.9091	1.3514
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6415	on P general	0.9091	0.9434
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.8585	on S general	0.5714	1.0000
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.4683	on S general	0.5714	0.5455
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0303	on S general	0.6667	1.2000
+lakeshore	12-4fluteendmill-cornerradius-altin#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.5854	on S general	0.6667	0.6818
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminums	-	0.8752	2.1241	on N general	0.6250	1.0345
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminums	-	0.8752	1.1200	on N general	0.6250	0.5455
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminum Cast	-	1.0372	2.3692	on N general	0.7407	1.1538
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.1200	on N general	0.7407	0.5455
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Brass	-	1.7503	2.3692	on N general	1.2500	1.1538
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Brass	-	1.7503	1.3689	on N general	1.2500	0.6667
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Bronze	-	2.1542	2.9333	on N general	1.5385	1.4286
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Bronze	-	2.1542	1.6648	on N general	1.5385	0.8108
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	1.0703	on K general	0.6000	0.9231
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6957	on K general	0.6000	0.6000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.8552	on K general	0.7500	1.6000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.9276	on K general	0.7500	0.8000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Copper	-	1.0002	2.3692	on N general	0.7143	1.1538
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Copper	-	1.0002	1.3689	on N general	0.7143	0.6667
 lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	-	on S general	0.5000	-
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.4762
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	0.7500
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.5217
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.0909
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.6667
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.6667
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.5000
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	0.8333
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.5714
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.0000
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.7692
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.0000
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.6667
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	0.6667
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.4348
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	0.7692
-lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.5263
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.5455
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.4286
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.5455
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.4286
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	0.6667
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.5000
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	0.8108
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	0.6250
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	0.6000
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.4000
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	0.8000
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.5333
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	0.6667
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.5000
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.7619
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.5333
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.6957
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.5333
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	0.8889
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.6400
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	0.6000
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.4000
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	0.6857
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.4800
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	0.9231
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	0.8000
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	0.8000
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	0.6486
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.6957
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.5333
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	0.8421
-lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.6400
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6626	on S general	0.5000	0.7619
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0436	on M general	0.8333	1.0000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7260	on M general	0.8333	0.6957
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.5179	on M general	1.0000	1.4545
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9276	on M general	1.0000	0.8889
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6000	on P general	0.6667	0.8000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4500	on P general	0.6667	0.6000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7500	on P general	0.8333	1.0000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5143	on P general	0.8333	0.6857
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.9000	on P general	1.0000	1.2000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.6923	on P general	1.0000	0.9231
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.9000	on P general	0.9091	1.2000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.6000	on P general	0.9091	0.8000
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.9276	on S general	0.5714	1.0667
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.6050	on S general	0.5714	0.6957
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0703	on S general	0.6667	1.2308
+lakeshore	14-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.7323	on S general	0.6667	0.8421
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminums	-	0.8752	1.7636	on N general	0.6250	0.9091
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminums	-	0.8752	1.3857	on N general	0.6250	0.7143
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.7636	on N general	0.7407	0.9091
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Aluminum Cast	-	1.0372	1.3857	on N general	0.7407	0.7143
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Brass	-	1.7503	2.1556	on N general	1.2500	1.1111
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Brass	-	1.7503	1.6167	on N general	1.2500	0.8333
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Bronze	-	2.1542	2.6216	on N general	1.5385	1.3514
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Bronze	-	2.1542	2.0208	on N general	1.5385	1.0417
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.9918	on K general	0.6000	1.0000
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Soft	-	0.8399	0.6612	on K general	0.6000	0.6667
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	1.3224	on K general	0.7500	1.3333
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	K	milling (general)	Cast Irons - Medium	-	1.0499	0.8816	on K general	0.7500	0.8889
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Copper	-	1.0002	2.1556	on N general	0.7143	1.1111
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	N	milling (general)	Copper	-	1.0002	1.6167	on N general	0.7143	0.8333
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.9445	on S general	0.5000	0.9524
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Monel & High Nickel Steel	-	0.8743	0.6612	on S general	0.5000	0.6667
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	1.0349	on M general	0.8333	0.8696
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Soft)	-	0.8333	0.7934	on M general	0.8333	0.6667
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	1.3224	on M general	1.0000	1.1111
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	M	milling (general)	Stainless Stl (Hard)	-	1.0000	0.9521	on M general	1.0000	0.8000
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.6500	on P general	0.6667	1.0000
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Low Carbon	-	0.7332	0.4333	on P general	0.6667	0.6667
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.7429	on P general	0.8333	1.1429
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Med Carbon	-	0.9164	0.5200	on P general	0.8333	0.8000
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	1.0000	on P general	1.0000	1.5385
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - High Tensile (25-45 Rc)	-	1.0997	0.8667	on P general	1.0000	1.3333
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.8667	on P general	0.9091	1.3333
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	P	milling (general)	Steels - Tool Steel	-	0.9998	0.7027	on P general	0.9091	1.0811
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.8624	on S general	0.5714	0.8696
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Soft	-	0.9993	0.6612	on S general	0.5714	0.6667
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Hard	-	1.1658	1.0440	on S general	0.6667	1.0526
+lakeshore	38-2fluteendmill-cornerradius-ticn#R.030	S	milling (general)	Titanium - Hard	-	1.1658	0.7934	on S general	0.6667	0.8000
 lakeshore	jobberlength-altincoated-fractionalcarbidedrills#1/8	N	drill	Aluminum	-	1.0003	-	on -	-	-
 lakeshore	jobberlength-altincoated-fractionalcarbidedrills#1/8	N	drill	Aluminum > 10%	-	1.8005	-	on -	-	-
 lakeshore	jobberlength-altincoated-fractionalcarbidedrills#1/8	N	drill	Brass	-	1.2861	-	on -	-	-
