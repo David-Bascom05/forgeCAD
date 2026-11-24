@@ -132,5 +132,5 @@ Cutting data: per ISO group (P M K N S H) `vc`, `fz` by diameter, `kc1_1`, `mc`,
 
 ## 9. Not in this phase
 
-Adaptive/constant-engagement clearing (patents.md: counsel first), 3-axis surfacing, 3+2,
+Adaptive/constant-engagement clearing, 3-axis surfacing, 3+2,
 turning, 5-axis: design only.
