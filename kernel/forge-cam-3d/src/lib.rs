@@ -13,6 +13,7 @@
 pub mod contain;
 pub mod drape;
 pub mod drop;
+pub mod geodesic;
 pub mod link;
 pub mod path;
 pub mod pattern;
