@@ -66,7 +66,7 @@ stock box, not from the earlier setup's result.
 
 Changes (cam/quality): stay-down linking between pocket/clear passes (greedy ready-innermost
 order, links tested exactly against the tool-centre region); feeds from engagement
-(forge_cam::engage, GE US 5,828,574-style, expired); honest planned ae for base feeds; contours
+(forge_cam::engage, GE US 5,828,574-style, expired 2017-05-19); honest planned ae for base feeds; contours
 climb and cut each loop through its levels; feeds held ≥ D/2 per move.
 
 Still to do: comparison against an open-source reference (pending the licence verdict); air in
