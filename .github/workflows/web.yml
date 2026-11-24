@@ -7,6 +7,8 @@
 #   wasm     the page: wasm32 release build + wasm-bindgen  forge-render's workspace; the
 #            default build and the threaded artifact (THREADS=only) at once, put together after
 #   clippy   the wasm32 build stays warning-free
+#   gpu      forge-render's own tests (cargo test) on lavapipe, a software Vulkan GPU, so the
+#            renderer's and the Render Studio's GPU tests run instead of skipping
 #   browser  for the default build and for the threaded artifact (THREADED=1, which adds
 #            responsive.cjs): e2e on one runner, and parity on every bench part and example in
 #            three shards that between them test each file once (PARITY_SHARD in parity.cjs)
@@ -135,6 +137,29 @@ jobs:
       - run: cargo clippy --lib --locked --target wasm32-unknown-unknown -- ${{ github.event_name != 'push' && '-D warnings' || '' }}
         if: ${{ github.event_name != 'push' || steps.rust.outputs.cache-hit != 'true' }}
 
+  gpu:
+    if: github.event_name != 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: interface/forge-render
+    steps:
+      - uses: actions/checkout@v4
+      - name: toolchain (rust-toolchain.toml)
+        run: rustup show
+      # lavapipe: wgpu finds it as a Vulkan adapter, no GPU needed
+      - name: software Vulkan
+        run: sudo apt-get update -q && sudo apt-get install -y -q mesa-vulkan-drivers
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: interface/forge-render -> target
+          key: gpu-tests
+          save-if: ${{ github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+      - run: cargo test --release --locked --no-fail-fast
+        env:
+          CARGO_PROFILE_RELEASE_DEBUG: 0
+
   browser:
     needs: [cli, parity, wasm]
     if: github.event_name != 'push'
@@ -207,7 +232,7 @@ jobs:
   # the one check a pull request waits on, as before the split: every job above passed
   web:
     name: web
-    needs: [cli, parity, wasm, clippy, browser]
+    needs: [cli, parity, wasm, clippy, gpu, browser]
     if: ${{ always() && github.event_name != 'push' }}
     runs-on: ubuntu-latest
     steps:
