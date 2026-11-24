@@ -353,6 +353,63 @@ pub fn at_sample(
     feeds::at_contact(group, &cut, fz, rpm, ct, d_radial)
 }
 
+/// The cut over an arbitrary engaged arc [θlo, θhi] (radians, measured from the normal to the
+/// feed direction, as forge-cam's Engage spans: a pocket wall, an island, a part-cleared floor),
+/// at depth `ap`: the peak chip hex = fz sin κ max cos θ over the span, the mean chip
+/// hm = fz sin κ (sin θhi − sin θlo)/(θhi − θlo), the width across the travel
+/// r (sin θhi − sin θlo), and from them Kienzle's power Pc = ap · width · vf · kc(hm) / 6e7 and
+/// torque. For a span that starts at the cutter's edge it is `at_sample` exactly.
+#[allow(clippy::too_many_arguments)]
+pub fn at_arc(
+    group: &Group,
+    tool: &ToolData,
+    rpm: f64,
+    fz: f64,
+    th_lo: f64,
+    th_hi: f64,
+    ap: f64,
+    tilt: f64,
+) -> feeds::Feeds {
+    let d = tool.d;
+    let re = if tool.ball { 0.5 * d } else { tool.re };
+    let ct = feeds::contact(d, re, ap, tilt);
+    let d_radial = if re >= 0.5 * d { ct.d_eff } else { d };
+    let r = 0.5 * d_radial;
+    let (lo, hi) = (th_lo.min(th_hi), th_lo.max(th_hi));
+    let (slo, shi) = (forge_math::dmath::sin(lo), forge_math::dmath::sin(hi));
+    let cos_max = if lo <= 0.0 && hi >= 0.0 {
+        1.0
+    } else {
+        forge_math::dmath::cos(lo).max(forge_math::dmath::cos(hi))
+    };
+    let span = hi - lo;
+    let mean_cos = if span > 1e-12 { (shi - slo) / span } else { cos_max };
+    let hex = fz * ct.sin_kappa * cos_max;
+    let hm = fz * ct.sin_kappa * mean_cos;
+    let width = r * (shi - slo);
+    let vf = fz * rpm * tool.flutes.max(1) as f64;
+    let kc = group.kc1_1 * forge_math::dmath::powf(hm.max(1e-4), -group.mc);
+    let power = ap * width * vf * kc / 6.0e7;
+    let torque = if rpm > 0.0 {
+        power * 30.0e3 / (PI * rpm)
+    } else {
+        0.0
+    };
+    feeds::Feeds {
+        rpm,
+        vc: rpm * PI * ct.d_eff / 1000.0,
+        fz,
+        hex,
+        hm,
+        phi: span,
+        vf,
+        power,
+        torque,
+        d_eff: ct.d_eff,
+        rpm_limited: false,
+    }
+}
+
 /// A maker's preset states the feed per tooth it programs at its own width and depth (Harvey,
 /// Helical and Lakeshore print IPT per op at a stated RDOC and ADOC), so its chip is that feed
 /// thinned at that engagement: hex = fz · k(ae/D) · sin κ(ap). A preset with no width is read as
@@ -2880,5 +2937,42 @@ mod tests {
                 .iter()
                 .any(|c| c.what == "allowance" && c.verdict == Verdict::NotChecked)
         );
+    }
+
+    /// An arc from the cutter's edge is `at_sample`'s cut (side cut ae = 3 of D 10: θ from
+    /// asin(1 − 2·0.3) to 90°); a full slot is θ −90°..90° (hex = fz, hm = 2fz/π); a span inside
+    /// the arc (an island) has the same peak chip where it contains the normal and less width.
+    #[test]
+    fn at_arc_matches_at_sample_from_the_edge() {
+        let g = group();
+        let t = ToolData {
+            d: 10.0,
+            flutes: 3,
+            ball: false,
+            re: 0.0,
+            substrate: Substrate::Carbide,
+            coating: "",
+            beam: None,
+            class: None,
+            preset: None,
+            generic: None,
+        };
+        let half = 0.5 * PI;
+        let lo = forge_math::dmath::asin(1.0 - 2.0 * 0.3);
+        let a = at_arc(&g, &t, 5000.0, 0.05, lo, half, 6.0, 0.0);
+        let s = at_sample(&g, &t, 5000.0, 0.05, 3.0, 6.0, 0.0);
+        for (x, y) in [
+            (a.hex, s.hex),
+            (a.hm, s.hm),
+            (a.power, s.power),
+            (a.torque, s.torque),
+            (a.phi, s.phi),
+        ] {
+            assert!((x - y).abs() < 1e-9 * y.abs().max(1.0), "{x} {y}");
+        }
+        let slot = at_arc(&g, &t, 5000.0, 0.05, -half, half, 6.0, 0.0);
+        assert!((slot.hex - 0.05).abs() < 1e-12 && (slot.hm - 0.1 / PI).abs() < 1e-12);
+        let island = at_arc(&g, &t, 5000.0, 0.05, -0.2, 0.3, 6.0, 0.0);
+        assert!(island.hex == 0.05 && island.power < slot.power);
     }
 }
