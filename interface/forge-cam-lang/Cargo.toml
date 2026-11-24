@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# the filesystem a browser page has too (its in-memory tree)
+forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-lang = { path = "../forge-lang" }
 forge-agent = { path = "../forge-agent" }
 forge-cam = { path = "../../kernel/forge-cam" }
@@ -16,9 +18,6 @@ forge-post = { path = "../../kernel/forge-post" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
-
-[dev-dependencies]
-forge-dirs = { path = "../../kernel/forge-dirs" }
 
 [lints]
 workspace = true
