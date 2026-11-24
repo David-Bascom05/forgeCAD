@@ -1291,3 +1291,23 @@ fn taps_run_at_a_resolved_speed() {
     let (_, _, r) = d.drilled.iter().find(|(role, ..)| *role == "tap").unwrap();
     assert_eq!((r.rpm.v, r.rpm.source), (400.0, Source::User));
 }
+
+/// A bare call after the header did nothing and reported nothing (LANG-PROOFS): it is refused,
+/// with the named form as the fix.
+#[test]
+fn a_bare_operation_is_refused_with_its_named_form() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let cam = forge_cam_lang::run(&doc("facing(op1, tool: t1, to: 14, step: 1)\n"), &dir);
+    assert!(!cam.ok);
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("line 7") && e.contains("an operation needs a name: `facing1 = facing(..)`")),
+        "{:?}",
+        cam.errors
+    );
+    // the named form is taken
+    let cam = forge_cam_lang::run(&doc("face1 = facing(op1, tool: t1, to: 14, step: 1)\n"), &dir);
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    assert_eq!(cam.ops.len(), 1);
+}

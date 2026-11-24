@@ -748,7 +748,17 @@ pub fn run(src: &str, dir: &Path) -> Cam {
                     }
                     env.insert(name.clone(), v);
                 }
-                StmtKind::Expr(_) => {}
+                // a bare statement after the header did nothing and said nothing: every
+                // statement of a machining document names what it makes
+                StmtKind::Expr(e) => {
+                    return Err(match &e.kind {
+                        ExprKind::Call(f, _) => match &f.kind {
+                            ExprKind::Name(n) => format!("an operation needs a name: `{n}1 = {n}(..)`"),
+                            _ => "a statement needs a name: `NAME = ..`".into(),
+                        },
+                        _ => "a statement needs a name: `NAME = ..`".into(),
+                    });
+                }
                 _ => return Err("a statement a machining document does not take".into()),
             }
             Ok(())
@@ -2368,10 +2378,18 @@ impl Cam {
             fz: r.chip.v,
             flutes: t.tool.nof.max(1) as f64,
             rpm: r.rpm.v,
+            // the user's ceiling, else the machine's (held FEED_MARGIN under it)
             f_max,
+            // the user's floor (none by default)
+            f_min: if r.min_feed.source == resolve::Source::User {
+                r.min_feed.v
+            } else {
+                0.0
+            },
             cap: feeds::THIN_CAP,
             cell,
-            window: 0.5 * t.tool.dc,
+            // samples of one diameter, fixed by length (fto-adaptive.md D)
+            sample: t.tool.dc,
         };
         let mut map = HeightMap::of_stock(&s.ip, cell);
         paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()
@@ -2726,7 +2744,26 @@ impl Cam {
                             loops.push(l.reversed());
                         }
                         let rg = Region { loops };
-                        let p = ops::pocket(
+                        // the in-process stock's box: passes that would cut nothing in it are
+                        // left out
+                        let (b0, b1) = (s.ip.min, s.ip.max);
+                        let q = [
+                            p2(b0[0], b0[1]),
+                            p2(b1[0], b0[1]),
+                            p2(b1[0], b1[1]),
+                            p2(b0[0], b1[1]),
+                        ];
+                        let sbox = Region {
+                            loops: vec![Loop {
+                                segs: (0..4)
+                                    .map(|i| Seg::Line {
+                                        a: q[i],
+                                        b: q[(i + 1) % 4],
+                                    })
+                                    .collect(),
+                            }],
+                        };
+                        let p = ops::pocket_in(
                             &rg,
                             ops::Cut {
                                 tool: t,
@@ -2738,6 +2775,7 @@ impl Cam {
                             stepover,
                             get_num(a, "leave", Some(0.0))?,
                             ramp,
+                            Some(&sbox),
                         )
                         .map_err(|e| format!("{e:?}"))?;
                         if stepover <= r
