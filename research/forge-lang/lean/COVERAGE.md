@@ -113,10 +113,10 @@ The theorems are about the core model of a part document (`Core.lean`). The text
 any document. **Machining documents** (CAM-UI sends exactly SetArg, AddFeature, DeleteFeature,
 MoveFeature, ReplaceFeature, Suppress, Unsuppress and Rename to them, through
 `forge_lang::edit::apply`), and robot documents likewise: a call's head there is a built-in,
-never a read, which is the model's `Families.readsE`. In the Rust, Rename of a machining
-document leaves call heads (`edit_ops::calls_closed`); PENDING (branch claude/lang-callheads,
-held for the speed band): the same for every other op's precheck, Suppress's closure and Respell's
-reads, and for robot and bending documents; until then those treat a call's head as a read. Proven there: Rename (`FamiliesRename.rename_run`); every
+never a read, which is the model's `Families.readsE`. PENDING in the Rust (branch
+claude/lang-callheads, held for the speed band): `edit_ops::calls_closed`, used by every precheck,
+Suppress's closure, Respell's reads and Rename; until it lands, forge-lang's edit ops treat a call's
+head as a read there too (the three findings below). Proven there: Rename (`FamiliesRename.rename_run`); every
 op leaves the statements before the first it changes exactly as they were, results, state and
 environment (`FamiliesRename.edit_prefix`, `FamiliesRename.run_append`); the run is a function of
 the text. GAP, and no theorem of the parts' form can hold: what later statements compute, since
@@ -135,7 +135,7 @@ ops); the text-level theorems (`Print`, `Suppress.suppress_text_closure`) are th
 | op | `MoveFeature` | | `edit.rs` | `Struct.move_sound`, `Complete.move_complete`, `ScopedMore.move_down`, `ScopedMore.move_up`, `ScopedMore.scopedMove_ok`, `Print.body_text_swap` |
 | op | `LiftLiteral` | | `edit.rs` | shared scope: `LiftLiteral.liftLiteral_body` (if the document evaluates, the lifted one evaluates to the same model and log: every id, trace and observed site as it was, the literal's site now the param's), `LiftLiteral.lift_nested`; `Local` scope: `LiftLiteral.liftLiteral_at` (the binding right before the feature that holds the literal, the statements before it untouched; a fresh name, so seen by that feature alone or by every later one reads the same). GAP: the text splice |
 | op | `SetArg` | | `edit_ops.rs` `apply_set_arg` (a call's argument, or `arg: text` added), `apply_component_arg` | a literal argument or component default set to a literal: SetParam on its site (`Edits.setParam_roundtrip`, as Scoped.lean notes); any text: a ReplaceFeature keeping the name, so `ScopedMore.replace_complete` (nothing reads it) and `EditClosure.edit_closure` (it is read: everything outside the closure of its name unchanged). GAP: that the edited document evaluates (a re-run of the closure); the text splice parsing back to the one-argument change (checked by reparsing at run time, not proven); machining documents (see above) |
-| op | `Rename` | | `edit_ops.rs` `precheck_rename`, `apply_rename`, `ast_rename` (token-level: the binding and its reads, in the document and in its function, procedure and component bodies; not members, labels or params' names; in a machining document, `calls_closed`, not a call's head; robot and bending documents PENDING on branch claude/lang-callheads) | part documents: `RenameDefs.rename_defs` (definitions renamed with the document, as the op does: the renamed document evaluates at the same fuel to the same traces and log, every binding renamed and every feature's id renamed in its first segment, `a`'s features becoming `b`'s), `RenamePart.renFirst_keep` (no other id changes), `RenamePart.rename_body` (the case no definition reads either name), `RenameDefs.renD_nested`, `RenameDefs.renD_top`. Machining and robot documents: `FamiliesRename.rename_run`, `FamiliesRename.rename_accepted`. GAP: a name bound inside a loop's body (Rust's `bound` lists those at top level; the core nests them under the loop's id), a definition's parameter named `a` or `b`, the run's duplicate-id check after renaming, and the text splice parsing back |
+| op | `Rename` | | `edit_ops.rs` `precheck_rename`, `apply_rename`, `ast_rename` (token-level: the binding and its reads, in the document and in its function, procedure and component bodies; not members, labels or params' names; in a machining or robot document not a call's head: PENDING, `calls_closed` on branch claude/lang-callheads) | part documents: `RenameDefs.rename_defs` (definitions renamed with the document, as the op does: the renamed document evaluates at the same fuel to the same traces and log, every binding renamed and every feature's id renamed in its first segment, `a`'s features becoming `b`'s), `RenamePart.renFirst_keep` (no other id changes), `RenamePart.rename_body` (the case no definition reads either name), `RenameDefs.renD_nested`, `RenameDefs.renD_top`. Machining and robot documents: `FamiliesRename.rename_run`, `FamiliesRename.rename_accepted`. GAP: a name bound inside a loop's body (Rust's `bound` lists those at top level; the core nests them under the loop's id), a definition's parameter named `a` or `b`, the run's duplicate-id check after renaming, and the text splice parsing back |
 | op | `SetProperty` | | `props.rs` `apply_set` (a value reading no name, in the one `properties(..)` statement, which binds nothing and makes no feature) | as a ReplaceFeature of a statement nothing reads: `ScopedMore.replace_complete` and `EditClosure.edit_closure` (every feature's id, trace and log unchanged). GAP: what the properties feed (title block, BOM, the material's density in `Run::physical`) is outside the core |
 | op | `Suppress` | | `edit_ops.rs` `apply_suppress` | `Suppress.suppress_complete`, `Suppress.suppress_stmts`, `Suppress.suppress_text_closure`, `Suppress.suppress_live`; ids `HistoryId.historyId_stable` |
 | op | `Unsuppress` | | `edit_ops.rs` | `Suppress.unsuppress_suppress` |
@@ -197,9 +197,9 @@ scope).
   path's Debug text, matched by suffix): fixed, an exact id match, as `Families.St.bindCall`
   models it (test cam::a_statements_params_are_its_own).
 * Rename on a machining document rewrote a call's head when a binding shared a built-in's name
-  (`drill = drill(..)` became `holes = holes(..)`, an unknown built-in): fixed
-  (`edit_ops::calls_closed`; test edits::rename_in_a_machining_document_leaves_call_heads);
-  `FamiliesRename.renSt` is the fixed op.
+  (`drill = drill(..)` became `holes = holes(..)`, an unknown built-in): fix PENDING
+  (`edit_ops::calls_closed`, branch claude/lang-callheads; test
+  edits::rename_in_a_machining_document_leaves_call_heads); `FamiliesRename.renSt` is the fixed op.
 * The same cause, for the other ops on a machining document: DeleteFeature and MoveFeature of
   `drill = drill(..)` were refused (`StillRead`) because a later `d2 = drill(..)` only calls the
   built-in, AddFeature of such a call above the binding likewise, and Suppress took `d2` out with

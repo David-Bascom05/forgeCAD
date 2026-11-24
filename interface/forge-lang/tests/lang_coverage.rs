@@ -300,10 +300,6 @@ const HEADER_FILES: &[(&str, &str)] = &[
         "families assembly, assembly-part, assembly-kinds",
     ),
     (
-        "interface/forge-lang/src/edit_ops.rs",
-        "reads the header only: Rename's `calls_closed`",
-    ),
-    (
         "interface/forge-render/src/shell/fg.rs",
         "reads the header only: `is_assembly` (families assembly*)",
     ),
