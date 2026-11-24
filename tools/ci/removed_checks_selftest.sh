@@ -27,4 +27,8 @@ fresh; sed -i 's/name = "samples", kind = "mutation"/name = "gone", kind = "muta
 fresh; sed -i 's/kind = "mutation"/kind = "unit"/' "$tmp/f/good.toml"; fails "a hand model with no mutation test" "mutation test"
 fresh; sed -i 's/owed = \["code = model"\]/owed = []/' "$tmp/f/good.toml"; fails "a hand model owing nothing" "code = model"
 fresh; sed -i 's/fn guarded(/fn renamed(/' "$tmp/f/src/lib.rs"; fails "the fn is gone" "not found"
+fresh; sed -i 's/^lemmas = .*/lemmas = []/' "$tmp/f/good.toml"; fails "no lemma and no hypothesis" "no lemma"
+fresh; sed -i 's/^lemmas = .*/lemmas = []\nhyp = "H.fixture"/; s/^owed = .*/owed = ["code = model", "lemma"]/' "$tmp/f/good.toml"
+python3 "$check" --registry "$tmp/f/good.toml" >/dev/null || { echo "self-test FAILED: a hypothesis entry owing its lemma fails"; exit 1; }
+echo "passes: an entry on a hypothesis, owing its lemma"
 echo "self-test passed"
