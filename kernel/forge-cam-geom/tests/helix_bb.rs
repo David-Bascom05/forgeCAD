@@ -20,6 +20,16 @@ impl Rng {
     }
 }
 
+/// atan by its series (|t| <= 0.4 here: 60 terms are exact to rounding)
+fn atan(t: f64) -> f64 {
+    let (mut p, mut s) = (t, 0.0);
+    for k in 0..60 {
+        s += p / (2 * k + 1) as f64;
+        p *= -t * t;
+    }
+    s
+}
+
 /// The rational map's point: (cos, sin) of 2 atan(t).
 fn circ(t: f64) -> (f64, f64) {
     let d = 1.0 + t * t;
@@ -50,11 +60,19 @@ fn a_helix_against_a_torus_is_decided_and_every_verdict_holds() {
     let (mut clear, mut hit, mut undecided) = (0, 0, 0);
     for _ in 0..120 {
         // a helix whose arc lies near the torus, below, beside or above it
-        let th = g.r(-0.5, 0.5);
+        // (directions from normalised random vectors: no std trigonometry in the workspace)
+        let u = g.r(-0.55, 0.55);
         let rc = g.r(6.0, 14.0);
-        let c = [rc * th.cos(), rc * th.sin(), 0.0];
-        let a = g.r(0.0, std::f64::consts::TAU);
-        let (x, y) = ([a.cos(), a.sin(), 0.0], [-a.sin(), a.cos(), 0.0]);
+        let n = (1.0 + u * u).sqrt();
+        let c = [rc / n, rc * u / n, 0.0];
+        let (ax, ay) = loop {
+            let (vx, vy) = (g.r(-1.0, 1.0), g.r(-1.0, 1.0));
+            let m = (vx * vx + vy * vy).sqrt();
+            if m > 0.1 && m <= 1.0 {
+                break (vx / m, vy / m);
+            }
+        };
+        let (x, y) = ([ax, ay, 0.0], [-ay, ax, 0.0]);
         let z0 = g.r(-1.0, 8.0);
         let mv = Move::Helix {
             c,
@@ -73,11 +91,11 @@ fn a_helix_against_a_torus_is_decided_and_every_verdict_holds() {
             unreachable!()
         };
         // the real helix at s (t linear in s, its height linear in the angle)
-        let (a0, a1) = (2.0 * t0.atan(), 2.0 * t1.atan());
+        let (a0, a1) = (2.0 * atan(t0), 2.0 * atan(t1));
         let at = |s: f64| {
             let t = t0 + s * (t1 - t0);
             let (cc, ss) = circ(t);
-            let ang = 2.0 * t.atan();
+            let ang = 2.0 * atan(t);
             let z = z0 + (z1 - z0) * (ang - a0) / (a1 - a0);
             [
                 c[0] + hr * (x[0] * cc + y[0] * ss),
