@@ -1,0 +1,15 @@
+[package]
+name = "forge-tooling-builder"
+description = "Custom cutting tools, holders, collets, nuts, pull studs, inserts and turning holders on the shared library builder: forge-tooling's records at the project, user and built-in levels, written byte-stable, derived and checked (research/cam/library-builder.md)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-dirs = { path = "../../kernel/forge-dirs" }
+forge-library = { path = "../forge-library" }
+forge-tooling = { path = "../../kernel/forge-tooling" }
+
+[lints]
+workspace = true

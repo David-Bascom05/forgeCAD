@@ -24,6 +24,7 @@ forge-lang = { path = "../forge-lang" }
 forge-cam-lang = { path = "../forge-cam-lang" }
 forge-machine-lang = { path = "../forge-machine-lang" }
 forge-machine-builder = { path = "../forge-machine-builder" }
+forge-tooling-builder = { path = "../forge-tooling-builder" }
 forge-turn-lang = { path = "../forge-turn-lang" }
 forge-step = { path = "../../kernel/forge-step" }
 

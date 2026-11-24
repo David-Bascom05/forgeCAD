@@ -29,6 +29,7 @@ fn usage() -> ExitCode {
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
          forgecad machine SETUP.toml [--json]   (posted G-code on a machine: timeline, collisions, removal)\n       \
          forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
+         forgecad tool|holder|collet|collet_nut|pull_stud|insert|turn_holder list | new ID --from ID [FIELD=VALUE..] [--project] | check ID|FILE   (your own tooling)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
@@ -215,6 +216,20 @@ fn main() -> ExitCode {
         Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("machine") if args.len() >= 3 => machine(&args[2..]),
+        Some(w @ ("tool" | "holder" | "collet" | "collet_nut" | "pull_stud" | "insert" | "turn_holder"))
+            if args.len() >= 3 =>
+        {
+            let env = forge_tooling_builder::cli::Env {
+                project: std::path::PathBuf::from("."),
+                user_cam: forge_tooling_builder::user_cam(),
+            };
+            let o = forge_tooling_builder::cli::run(&env, w, &args[2..]).expect("a tooling kind");
+            let _ = write!(std::io::stdout(), "{}", o.out);
+            if !o.err.is_empty() {
+                eprintln!("{}", o.err.trim_end());
+            }
+            ExitCode::from(o.code)
+        }
         Some("vendor") => {
             let json = args.iter().any(|a| a == "--json");
             let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();

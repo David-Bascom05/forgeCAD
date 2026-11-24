@@ -133,6 +133,7 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-step",
+ "forge-tooling-builder",
  "forge-topo",
  "forge-turn-lang",
 ]
@@ -522,6 +523,15 @@ version = "0.1.0"
 dependencies = [
  "forge-cam-geom",
  "forge-math",
+]
+
+[[package]]
+name = "forge-tooling-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-tooling",
 ]
 
 [[package]]
