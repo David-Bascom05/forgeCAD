@@ -70,6 +70,8 @@ pub enum ImportError {
     Brep,
     /// An IGES file that does not read as one.
     Iges,
+    /// A Parasolid transmit file that does not read as one.
+    Xt(crate::xt::XtError),
     NoSolids,
 }
 
@@ -79,6 +81,7 @@ impl std::fmt::Display for ImportError {
             ImportError::Parse(e) => write!(f, "{e}"),
             ImportError::Brep => write!(f, "not a readable OpenCascade .brep file"),
             ImportError::Iges => write!(f, "not a readable IGES file"),
+            ImportError::Xt(e) => write!(f, "not a readable Parasolid file: {e}"),
             ImportError::NoSolids => write!(f, "the file holds no solid"),
         }
     }
@@ -1430,6 +1433,9 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
     }
     if crate::iges::is_iges(text) {
         return crate::iges::import(text, lim);
+    }
+    if crate::xt::is_xt(text) {
+        return crate::xt::import(text, lim);
     }
     read_file(text, lim, false)
 }

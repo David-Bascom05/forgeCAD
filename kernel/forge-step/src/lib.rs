@@ -6,6 +6,7 @@ pub use brep::{BrepTopo, Used};
 pub mod fit;
 mod heal;
 mod iges;
+pub mod xt;
 pub mod nurbs;
 pub mod part21;
 pub mod read;
