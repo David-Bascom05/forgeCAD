@@ -150,6 +150,9 @@ pub struct OpOut {
     /// Feeds and speeds resolved in layers (forge_tooling::resolve), with the source of each
     /// value and the op's feed checks; None for hole plans (drill feeds are not resolved yet).
     pub resolved: Option<resolve::Resolved>,
+    /// A hole plan's drilling feeds and speeds (forge_tooling::resolve::drilling), per tool:
+    /// ("spot" | "drill", the tool's id, what was resolved).
+    pub drilled: Vec<(&'static str, String, resolve::DrillResolved)>,
     pub checks: Vec<CheckOut>,
     pub pairs: usize,
     pub cells: usize,
@@ -510,6 +513,89 @@ fn feeds_speeds_json(r: &resolve::Resolved) -> Json {
             ),
         ),
     ])
+}
+
+/// One drilling tool's resolved values for the reply: as feeds_speeds, per tool of a hole plan.
+fn drilling_json(role: &str, id: &str, r: &resolve::DrillResolved) -> Json {
+    let n = |x: f64| if x.is_finite() { Json::Num(x) } else { Json::Null };
+    let val = |v: &resolve::Val| {
+        Json::obj(vec![
+            ("v", n(v.v)),
+            ("unit", Json::Str(v.unit.into())),
+            ("source", Json::Str(v.source.name().into())),
+            ("note", Json::Str(v.note.clone())),
+        ])
+    };
+    Json::obj(vec![
+        ("role", Json::Str(role.into())),
+        ("tool", Json::Str(id.into())),
+        (
+            "values",
+            Json::obj(vec![
+                ("vc", val(&r.vc)),
+                ("rpm", val(&r.rpm)),
+                ("f", val(&r.f)),
+                ("feed", val(&r.feed)),
+                ("peck", val(&r.peck)),
+            ]),
+        ),
+        (
+            "derived",
+            Json::obj(vec![
+                ("h", n(r.h)),
+                ("mrr_cm3_min", n(r.mrr)),
+                ("power_kw", n(r.power)),
+                (
+                    "power_pct",
+                    match r.power_avail {
+                        Some(a) if a > 0.0 && r.power.is_finite() => Json::Num(100.0 * r.power / a),
+                        _ => Json::Null,
+                    },
+                ),
+                ("torque_nm", n(r.torque)),
+            ]),
+        ),
+        (
+            "checks",
+            Json::Arr(
+                r.checks
+                    .iter()
+                    .map(|c| {
+                        Json::obj(vec![
+                            ("what", Json::Str(c.what.into())),
+                            ("verdict", Json::Str(c.verdict.name().into())),
+                            ("value", n(c.value)),
+                            ("limit", n(c.limit)),
+                            ("unit", Json::Str(c.unit.into())),
+                            ("why", Json::Str(c.why.clone())),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
+/// A drill op's feeds-and-speeds args: vc|rpm, f (mm/rev)|feed (mm/min), peck (mm; 0: none),
+/// max_power, max_torque.
+fn drill_ask_of(m: &BTreeMap<String, V>) -> Result<resolve::DrillAsk, String> {
+    let g = |k: &str, zero_ok: bool| -> Result<Option<f64>, String> {
+        match m.get(k) {
+            None => Ok(None),
+            Some(V::Num(x)) if x.is_finite() && (*x > 0.0 || (zero_ok && *x == 0.0)) => Ok(Some(*x)),
+            Some(V::Num(x)) => Err(format!("`{k}` must be over 0 (got {x})")),
+            Some(_) => Err(format!("`{k}` must be a number")),
+        }
+    };
+    Ok(resolve::DrillAsk {
+        vc: g("vc", false)?,
+        rpm: g("rpm", false)?,
+        f: g("f", false)?,
+        feed: g("feed", false)?,
+        peck: g("peck", true)?,
+        max_power: g("max_power", false)?,
+        max_torque: g("max_torque", false)?,
+    })
 }
 
 /// The feeds-and-speeds args of an op or a tool (units: m/min, rpm, mm, mm/min, degrees, kW,
@@ -2291,21 +2377,76 @@ impl Cam {
         paths.iter().map(|p| schedule(p, &mut map, &prof, &sc)).collect()
     }
 
-    fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
-        let g = self.lib.group(&self.parts[self.setups[su].part].group)?;
-        let m = self.lib.machine(&self.setups[su].machine).ok()?;
-        Some(feeds::feeds(
-            g,
-            &feeds::Cut {
-                d: t.tool.dc,
-                flutes: t.tool.nof.max(1),
-                ball: t.tool.kind == Kind::Ball,
-                carbide: feeds::Substrate::of(&t.tool.material) == feeds::Substrate::Carbide,
-                ap,
-                ae,
+    /// A drilling tool's feeds and speeds: the user's over the drill's preset over the group's
+    /// `[[drill]]` row for its substrate (forge_tooling::resolve::drilling).
+    fn drill_resolve(
+        &self,
+        su: usize,
+        ti: usize,
+        ask: &resolve::DrillAsk,
+        depth: f64,
+        d_cut: Option<f64>,
+    ) -> Result<resolve::DrillResolved, String> {
+        let part = &self.parts[self.setups[su].part];
+        let m = self
+            .lib
+            .machine(&self.setups[su].machine)
+            .map_err(|e| e.to_string())?;
+        let t = &self.tools[ti];
+        let sub = feeds::Substrate::of(&t.tool.material);
+        let preset = t.tool.presets.iter().find(|p| p.group == part.group).map(|p| {
+            let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
+            (p, t.tool.cites.iter().find(|c| c.path == path))
+        });
+        let row = match sub {
+            feeds::Substrate::Carbide => self.lib.drilling(&part.group, "carbide"),
+            feeds::Substrate::Hss => self.lib.drilling(&part.group, "hss"),
+            _ => None,
+        };
+        resolve::drilling(
+            ask,
+            &resolve::DrillTool {
+                d: d_cut.unwrap_or(t.tool.dc).min(t.tool.dc),
+                flutes: t.tool.nof.max(2),
+                point: t.tool.angle,
+                substrate: sub,
+                preset,
             },
-            m.rpm,
-        ))
+            self.lib.group(&part.group),
+            part.material.as_deref().and_then(|m| self.lib.stock(m)),
+            row,
+            &resolve::Spindle {
+                rpm: m.rpm,
+                max_feed: m.max_feed,
+                power: &m.power,
+            },
+            depth,
+        )
+        .map(|mut r| {
+            if t.tool.kind == Kind::Spot && preset.is_none() {
+                // no spot-drill data read: the twist-drill row is borrowed, at the diameter the
+                // spot cuts to
+                for v in [&mut r.f, &mut r.feed, &mut r.vc] {
+                    if v.source == resolve::Source::Material {
+                        v.note = format!(
+                            "twist-drill data borrowed for a spot drill (no spot data read), at Ø{:.2}; {}",
+                            d_cut.unwrap_or(t.tool.dc),
+                            v.note
+                        );
+                    }
+                }
+            }
+            r
+        })
+        .ok_or_else(|| {
+            format!(
+                "no drilling data for `{}` ({} drill) in group `{}` ({}): no preset on the drill, no [[drill]] row, no `vc:`/`rpm:` and `f:`/`feed:` given",
+                t.tool.id,
+                sub.name(),
+                part.group,
+                part.material_note
+            )
+        })
     }
 
     /// A stock material by name: (its forge-material name, its ISO 513 group, how they were
@@ -2410,6 +2551,7 @@ impl Cam {
             paths: vec![],
             feeds: None,
             resolved: None,
+            drilled: vec![],
             checks: vec![],
             pairs: 0,
             cells: 0,
@@ -2897,9 +3039,10 @@ impl Cam {
         };
         if let Some(sp) = spot {
             let ti = add(self, sp, base_t)?;
+            // the spot cuts out to its chamfer ring, 0.9 of the drill (dspot below)
+            let r = self.drill_resolve(su, ti, &resolve::DrillAsk::default(), 1.0, Some(0.9 * drill_d))?;
             let t = &self.tools[ti];
-            let fe = self.feeds_for(su, t, t.tool.dc, 1.0);
-            let f = fe.map(|x| 0.3 * x.vf).unwrap_or(100.0);
+            let f = r.feed.v;
             // a 90° spot to just under the drill's radius: the chamfer ring the drill centres in
             let (sn, cs) = forge_math::dmath::sin_cos((0.5 * t.tool.angle).to_radians());
             let dspot = 0.45 * drill_d / (sn / cs).max(1e-9);
@@ -2920,16 +3063,36 @@ impl Cam {
                     *z = *r - 2.0 - dspot;
                 }
             }
-            // the speed the feed was set at (unset, the post's fallback S3000 ran it)
-            p.rpm = fe.map(|x| x.rpm).unwrap_or(0.0);
+            p.rpm = r.rpm.v;
             plan.push(format!("spot {} to {:.2} mm", t.tool.id, dspot));
+            out.drilled.push(("spot", t.tool.id.clone(), r));
             paths.push(p);
         }
         let ti = add(self, drill, base_t + 1)?;
+        let dask = drill_ask_of(a)?;
+        let r = self.drill_resolve(su, ti, &dask, depth, None)?;
+        for c in &r.checks {
+            match c.verdict {
+                Verdict::Fail => {
+                    out.fix = Some(format!(
+                        "lower the {} (`max_power:`/`max_torque:` lower the feed to fit), or another drill or machine",
+                        c.what
+                    ));
+                    return Err(format!(
+                        "{} {:.3} {} over the limit {:.3} ({})",
+                        c.what, c.value, c.unit, c.limit, c.why
+                    ));
+                }
+                Verdict::Warn => self
+                    .warnings
+                    .push(format!("{}: drill {} {}", out.name, c.what, c.why)),
+                _ => {}
+            }
+        }
         let t = &self.tools[ti];
-        let peck = depth > 3.0 * t.tool.dc;
-        let fe = self.feeds_for(su, t, t.tool.dc, t.tool.dc);
-        let f = fe.map(|x| 0.1 * x.vf.min(2000.0)).unwrap_or(100.0);
+        let q = r.peck.v;
+        let peck = q > 0.0;
+        let f = r.feed.v;
         let kind = if peck { CycleKind::Peck } else { CycleKind::Drill };
         let mut dp = ops::holes(
             &hole.places,
@@ -2941,10 +3104,11 @@ impl Cam {
                 feed: (f, f),
             },
             depth,
-            if peck { t.tool.dc } else { 0.0 },
+            q,
         );
-        dp.rpm = fe.map(|x| x.rpm).unwrap_or(0.0);
+        dp.rpm = r.rpm.v;
         paths.push(dp);
+        out.drilled.push(("drill", t.tool.id.clone(), r));
         // each hole's circle is cleared down to where the full diameter reaches
         for p in &hole.places {
             let r = 0.5 * t.tool.dc;
@@ -2968,11 +3132,7 @@ impl Cam {
             if peck { "peck" } else { "drill" },
             t.tool.id,
             if through { "through" } else { "to depth" },
-            if peck {
-                format!(", q {}", t.tool.dc)
-            } else {
-                String::new()
-            }
+            if peck { format!(", q {q}") } else { String::new() }
         ));
         out.tool = Some(ti);
         if let Some(tp) = tap {
@@ -4237,6 +4397,11 @@ impl Cam {
                     ])
                 });
                 let feeds_speeds = o.resolved.as_ref().map(feeds_speeds_json);
+                let drilling: Vec<Json> = o
+                    .drilled
+                    .iter()
+                    .map(|(role, id, r)| drilling_json(role, id, r))
+                    .collect();
                 let checks: Vec<Json> = o
                     .checks
                     .iter()
@@ -4297,6 +4462,7 @@ impl Cam {
                     ),
                     ("feeds", feeds.unwrap_or(Json::Null)),
                     ("feeds_speeds", feeds_speeds.unwrap_or(Json::Null)),
+                    ("drilling", Json::Arr(drilling)),
                     (
                         "path",
                         Json::obj(vec![

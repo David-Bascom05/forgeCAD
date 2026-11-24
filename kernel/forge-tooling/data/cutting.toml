@@ -345,3 +345,241 @@ real = true
 path = "group"
 status = "estimate"
 basis = "A286 is an iron-nickel-chromium heat-resistant superalloy (filed under family stainless in forge-material); ISO 513 class S covers heat-resistant super alloys"
+
+# Generic drilling data per group and drill substrate: vc and the feed per revolution at stated
+# diameters (linear between; outside, the lesser of the linear and proportional extension). Each
+# row is one maker's series (Guhring's catalog values, already cited on its drill records in
+# tools/guhring.toml) held for drills of that substrate with no data of their own: an estimate,
+# said per value. A drill's own preset and the user's values come first.
+
+[[drill]]
+group = "P"
+substrate = "carbide"
+real = true
+vc = 144.78
+d_rows = [6.35, 9.525]
+f_rows = [0.254, 0.3175]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN <= 150: SFM 475; IPR 0.0100 at 1/4 in, 0.0125 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN <= 150: SFM 475; IPR 0.0100 at 1/4 in, 0.0125 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN <= 150: SFM 475; IPR 0.0100 at 1/4 in, 0.0125 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "M"
+substrate = "carbide"
+real = true
+vc = 54.86
+d_rows = [6.35, 9.525]
+f_rows = [0.1651, 0.2032]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Stainless steels, austenitic, HRC <= 36, BHN <= 337: SFM 180; IPR 0.0065 at 1/4 in, 0.0080 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Stainless steels, austenitic, HRC <= 36, BHN <= 337: SFM 180; IPR 0.0065 at 1/4 in, 0.0080 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Stainless steels, austenitic, HRC <= 36, BHN <= 337: SFM 180; IPR 0.0065 at 1/4 in, 0.0080 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "K"
+substrate = "carbide"
+real = true
+vc = 210.31
+d_rows = [6.35, 9.525]
+f_rows = [0.4064, 0.508]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Cast iron, HRC <= 23, BHN <= 242: SFM 690; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Cast iron, HRC <= 23, BHN <= 242: SFM 690; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Cast iron, HRC <= 23, BHN <= 242: SFM 690; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "N"
+substrate = "carbide"
+real = true
+vc = 309.37
+d_rows = [6.35, 9.525]
+f_rows = [0.4064, 0.508]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN <= 120: SFM 1015; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN <= 120: SFM 1015; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 290-291)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN <= 120: SFM 1015; IPR 0.0160 at 1/4 in, 0.0200 at 3/8 in"
+basis = "Guhring Series 5510 (solid carbide 3xD) values for this group, held for other carbide drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "P"
+substrate = "hss"
+real = true
+vc = 39.62
+d_rows = [6.35, 9.525]
+f_rows = [0.2032, 0.254]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN <= 150: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN <= 150: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN <= 150: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "K"
+substrate = "hss"
+real = true
+vc = 39.62
+d_rows = [6.35, 9.525]
+f_rows = [0.2032, 0.254]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Cast iron, HRC <= 23, BHN <= 242: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Cast iron, HRC <= 23, BHN <= 242: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog pages 137-140)"
+taken = "2026-11-23"
+value = "Cast iron, HRC <= 23, BHN <= 242: SFM 130; IPR 0.0080 at 1/4 in, 0.0100 at 3/8 in"
+basis = "Guhring Series 651 (HSS jobber) values for this group, held for other hss drills; another maker's or series' data may differ"
+
+[[drill]]
+group = "N"
+substrate = "hss"
+real = true
+vc = 47.244
+d_rows = [3, 6, 10, 12, 20]
+f_rows = [0.0508, 0.127, 0.2032, 0.2286, 0.3556]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Aluminum 5052, 7075: Drilling Speed 105-205 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.014"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Aluminum 5052, 7075, held for other HSS drills in group N: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Aluminum 5052, 7075: Drilling Speed 105-205 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.014"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Aluminum 5052, 7075, held for other HSS drills in group N: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Aluminum 5052, 7075: Drilling Speed 105-205 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.014"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Aluminum 5052, 7075, held for other HSS drills in group N: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+
+[[drill]]
+group = "M"
+substrate = "hss"
+real = true
+vc = 15.24
+d_rows = [3, 6, 10, 12, 20]
+f_rows = [0.0508, 0.127, 0.2032, 0.2286, 0.3302]
+[[drill.cite]]
+path = "vc"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Austenitic 304, 316: Drilling Speed 40-60 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.013"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Austenitic 304, 316, held for other HSS drills in group M: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+[[drill.cite]]
+path = "d_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Austenitic 304, 316: Drilling Speed 40-60 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.013"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Austenitic 304, 316, held for other HSS drills in group M: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"
+[[drill.cite]]
+path = "f_rows"
+status = "estimate"
+source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(s)-%201100_%201600.pdf"
+taken = "2026-11-24"
+value = "Austenitic 304, 316: Drilling Speed 40-60 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12, 20 mm: 0.002, 0.005, 0.008, 0.009, 0.013"
+basis = "OSG EX-SUS-GOLD (HSS-V jobber, Lists 1100/1600, catalog page 353) for Austenitic 304, 316, held for other HSS drills in group M: vc at the middle of the printed SFM range (the speed OSG's own RPM column is printed at), the feed at the LOW end of each printed range (a starting point, errs slow)"

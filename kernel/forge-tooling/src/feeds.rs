@@ -302,6 +302,95 @@ impl Stock {
     }
 }
 
+/// Generic drilling data for one ISO 513 group and drill substrate: the cutting speed and the
+/// feed per revolution at stated diameters (cutting.toml `[[drill]]`, cited per value).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DrillRow {
+    pub group: String,
+    /// "carbide" | "hss".
+    pub substrate: String,
+    pub vc: f64,
+    pub d_rows: Vec<f64>,
+    /// mm/rev at each of d_rows.
+    pub f_rows: Vec<f64>,
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+impl DrillRow {
+    pub fn from_table(t: &Table) -> Result<DrillRow, LibError> {
+        let s = |k: &'static str| {
+            text(t, k).map(str::to_string).ok_or_else(|| LibError::Missing {
+                record: "[[drill]]".into(),
+                field: k,
+                fix: format!("give `{k}`"),
+            })
+        };
+        let (group, substrate) = (s("group")?, s("substrate")?);
+        let rec = format!("drill data {group}/{substrate}");
+        let vc = num(t, "vc").ok_or_else(|| LibError::Missing {
+            record: rec.clone(),
+            field: "vc",
+            fix: "give `vc`, m/min".into(),
+        })?;
+        let (d_rows, f_rows) = (
+            nums(t, "d_rows").unwrap_or_default(),
+            nums(t, "f_rows").unwrap_or_default(),
+        );
+        if d_rows.is_empty() || d_rows.len() != f_rows.len() || d_rows.windows(2).any(|w| w[0] >= w[1]) {
+            return Err(LibError::Bad {
+                record: rec,
+                field: "d_rows",
+                why: "d_rows and f_rows are the same length (at least one), d increasing".into(),
+            });
+        }
+        let required = ["vc", "d_rows", "f_rows"].map(String::from);
+        let (real, cites) = cite::read(t, &rec, &required, &["group", "substrate"])?;
+        Ok(DrillRow {
+            group,
+            substrate,
+            vc,
+            d_rows,
+            f_rows,
+            real,
+            cites,
+        })
+    }
+
+    /// Feed per revolution at diameter d: linear between the stated diameters; outside them the
+    /// lesser of the linear extension and the nearest row scaled by d (said in the note).
+    pub fn f_at(&self, d: f64) -> (f64, String) {
+        let (ds, fs) = (&self.d_rows, &self.f_rows);
+        let n = ds.len();
+        if n == 1 {
+            return (fs[0] * d / ds[0], format!("scaled by diameter from Ø{}", ds[0]));
+        }
+        let lin = |j: usize| fs[j] + (fs[j + 1] - fs[j]) * (d - ds[j]) / (ds[j + 1] - ds[j]);
+        if d < ds[0] {
+            let f = lin(0).min(fs[0] * d / ds[0]).max(0.0);
+            (
+                f,
+                format!(
+                    "under the data's Ø{}: the lesser of the linear and the proportional extension",
+                    ds[0]
+                ),
+            )
+        } else if d > ds[n - 1] {
+            let f = lin(n - 2).min(fs[n - 1] * d / ds[n - 1]);
+            (
+                f,
+                format!(
+                    "over the data's Ø{}: the lesser of the linear and the proportional extension",
+                    ds[n - 1]
+                ),
+            )
+        } else {
+            let j = ds.iter().position(|&x| x >= d).unwrap_or(n - 1).max(1) - 1;
+            (lin(j), format!("between Ø{} and Ø{}", ds[j], ds[j + 1]))
+        }
+    }
+}
+
 /// What the engine was asked for.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Cut {

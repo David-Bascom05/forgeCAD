@@ -113,7 +113,18 @@ Checks per op: rpm (a clamp warns), power and torque against the machine's spind
 rpm (over: the op is refused, with the numbers), feed against the machine's maximum, the peak chip
 against the tool's own chip (over: warns). Missing data is `not checked`, never a pass: no power
 curve, an rpm outside the curve (no extrapolation), no kc data for the material, no maximum feed,
-no tool data. Drilling feeds are not resolved yet (hole plans keep their fixed fractions).
+no tool data.
+
+Drilling (`drill(..)`: spot and drill) is its own model, forge_tooling::resolve::drilling: `vc:`|`rpm:`,
+`f:` (mm/rev)|`feed:` (mm/min), `peck:` (mm, 0 none), `max_power:`, `max_torque:` on the op. Layers:
+the group's `[[drill]]` row for the drill's substrate (cutting.toml: vc and the feed per rev by
+diameter, each row one maker's cited series held for the substrate: Guhring 5510 carbide and 651
+HSS, OSG EX-SUS-GOLD HSS for N and M) → the drill's own preset (its maker's vc and mm/rev) → the user.
+Sandvik's drilling formulas: n = 1000 vc/(π Dc), vf = fn n, Q = Dc fn vc/4, Pc = fn vc Dc kc/240e3,
+Mc = Pc 30e3/(π n), kc at (fn/z) sin κr. Peck: the user's, else forgeCAD's rule (one diameter past a
+3 D depth, labelled: no source). A spot drill borrows the twist-drill row at the diameter it cuts
+to (said; no spot data read). Reply: ops[].drilling[] {role, tool, values, derived, checks}. Taps
+still run at a fixed 300 rpm.
 
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.

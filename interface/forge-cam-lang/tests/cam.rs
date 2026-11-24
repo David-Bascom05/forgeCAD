@@ -840,21 +840,20 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
         "{:?}",
         cam.warnings
     );
-    // a material group with no cutting data: the ops fall back to S3000, under this
-    // spindle's least speed: refused by the posted S
+    // a material group with no cutting data: no op falls back to a guessed speed (it was S3000,
+    // refused at post by the spindle's range): each is refused before posting, with the fix
     machine("[5000, 24000]", "10000");
     let cam = forge_cam_lang::run(&src.replace("group: \"N\"", "group: \"X\""), &dir);
     assert!(!cam.ok && cam.program_text().is_none());
-    let c = cam
-        .ops
-        .iter()
-        .flat_map(|o| o.checks.iter())
-        .find(|c| c.rule == "machine_limit")
-        .expect("a spindle speed under the range");
-    assert!(
-        c.value == 3000.0 && c.limit == 5000.0 && c.other.starts_with("spindle"),
-        "{c:?}"
-    );
+    for o in &cam.ops {
+        assert_eq!(o.status, "refused", "{}", o.name);
+        let why = o.refusal.as_deref().unwrap();
+        assert!(
+            why.starts_with("no cutting data") || why.starts_with("no drilling data"),
+            "{why}"
+        );
+        assert!(o.fix.is_some() || why.contains("give"), "{}", o.name);
+    }
     std::fs::remove_dir_all(&dir).ok();
 }
 
@@ -1209,4 +1208,53 @@ fn stock_material_sets_the_cutting_data() {
     let r = skim.resolved.as_ref().unwrap();
     let p = r.checks.iter().find(|c| c.what == "power").unwrap();
     assert_eq!(p.verdict, forge_tooling::resolve::Verdict::NotChecked);
+}
+
+/// Drilling is its own model (forge_tooling::resolve::drilling), not a fraction of the milling
+/// feed: the flange's 6.6 mm HSS drill in group N takes OSG's HSS jobber row (vc at the middle
+/// of its printed SFM, feed per rev at the low end, between its 6 and 10 mm rows), was 0.0085
+/// mm/rev; the user's `f:`, `rpm:` and `peck:` win.
+#[test]
+fn drilling_is_its_own_model() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?}",
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let bolts = cam.ops.iter().find(|o| o.name == "bolts").unwrap();
+    let (_, id, r) = bolts.drilled.iter().find(|(role, ..)| *role == "drill").unwrap();
+    assert_eq!(id, "drill-6.6");
+    assert_eq!(r.vc.source, Source::Material);
+    assert!((r.vc.v - 155.0 * 0.3048).abs() < 1e-3);
+    let want = 0.127 + (0.2032 - 0.127) * (6.6 - 6.0) / 4.0;
+    assert!((r.f.v - want).abs() < 1e-9, "{}", r.f.v);
+    assert!(r.f.note.contains("osgtool.com"), "{}", r.f.note);
+    assert!((r.feed.v - r.f.v * r.rpm.v).abs() < 1e-9);
+    let (_, _, spot) = bolts.drilled.iter().find(|(role, ..)| *role == "spot").unwrap();
+    assert!(
+        spot.f.note.contains("borrowed for a spot drill"),
+        "{}",
+        spot.f.note
+    );
+    // the user's values
+    let cam = forge_cam_lang::run(
+        &src.replace("plan: \"auto\")", "plan: \"auto\", f: 0.1, rpm: 2000, peck: 2)"),
+        &dir,
+    );
+    let bolts = cam.ops.iter().find(|o| o.name == "bolts").unwrap();
+    let (_, _, r) = bolts.drilled.iter().find(|(role, ..)| *role == "drill").unwrap();
+    assert_eq!((r.f.v, r.f.source), (0.1, Source::User));
+    assert_eq!((r.rpm.v, r.peck.v, r.peck.source), (2000.0, 2.0, Source::User));
+    assert!(
+        bolts
+            .plan
+            .iter()
+            .any(|p| p.starts_with("peck") && p.contains("q 2")),
+        "{:?}",
+        bolts.plan
+    );
 }

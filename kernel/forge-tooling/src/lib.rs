@@ -605,6 +605,8 @@ pub struct Library {
     pub cutting: Vec<feeds::Group>,
     /// Cutting data for specific stock materials (forge-material names), over their group's.
     pub stock: Vec<feeds::Stock>,
+    /// Generic drilling data per group and substrate.
+    pub drilling: Vec<feeds::DrillRow>,
     pub vises: Vec<Vise>,
     pub jaw_blanks: Vec<JawBlank>,
     pub collets: Vec<Collet>,
@@ -936,6 +938,9 @@ impl Library {
         for r in tables(&t, "group") {
             self.cutting.push(feeds::Group::from_table(r)?);
         }
+        for r in tables(&t, "drill") {
+            self.drilling.push(feeds::DrillRow::from_table(r)?);
+        }
         for r in tables(&t, "stock") {
             let x = feeds::Stock::from_table(r)?;
             if self.stock.iter().any(|o| o.material == x.material) {
@@ -1036,6 +1041,12 @@ impl Library {
     }
     pub fn group(&self, g: &str) -> Option<&feeds::Group> {
         self.cutting.iter().find(|x| x.group == g || x.name == g)
+    }
+    /// Generic drilling data for a group and substrate ("carbide" | "hss").
+    pub fn drilling(&self, group: &str, substrate: &str) -> Option<&feeds::DrillRow> {
+        self.drilling
+            .iter()
+            .find(|x| x.group == group && x.substrate == substrate)
     }
     /// The cutting data for a stock material by its forge-material name.
     pub fn stock(&self, material: &str) -> Option<&feeds::Stock> {
