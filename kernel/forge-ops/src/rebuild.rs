@@ -389,14 +389,8 @@ pub(crate) fn reversed(c: &Curve) -> Curve {
             frame: k.frame.flipped(),
             ..*k
         }),
-        Curve::Ellipse(k) => Curve::Ellipse(forge_geom::Ellipse {
-            frame: k.frame.flipped(),
-            ..*k
-        }),
-        Curve::Parabola(k) => Curve::Parabola(forge_geom::Parabola {
-            frame: k.frame.flipped(),
-            ..*k
-        }),
+        Curve::Ellipse(k) => Curve::Ellipse(forge_geom::Ellipse::new(k.frame.flipped(), k.major, k.minor)),
+        Curve::Parabola(k) => Curve::Parabola(forge_geom::Parabola::new(k.frame.flipped(), k.focal)),
         Curve::Hyperbola(k) => Curve::Hyperbola(forge_geom::Hyperbola {
             frame: k.frame.flipped(),
             ..*k

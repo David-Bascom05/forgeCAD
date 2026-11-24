@@ -4632,10 +4632,7 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
             Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {
                 let h = pa.frame.z() * edge.range.width().max(1.0);
                 let rail = |o: Vec3| forge_geom::ruled::Rail::Parabola {
-                    curve: forge_geom::Parabola {
-                        frame: pa.frame.with_origin(pa.frame.origin + o),
-                        focal: pa.focal,
-                    },
+                    curve: forge_geom::Parabola::new(pa.frame.with_origin(pa.frame.origin + o), pa.focal),
                     range: edge.range,
                 };
                 match forge_geom::ruled::Ruled::new(rail(-h), rail(h)) {

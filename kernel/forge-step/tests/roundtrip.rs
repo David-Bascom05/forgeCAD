@@ -322,3 +322,25 @@ fn a_cavity_comes_back_a_cavity() {
         assert!((mass(back).unwrap().volume - want).abs() < 1e-6);
     }
 }
+
+/// A semi-axis finite in the file but past f64 once its unit is applied (1e306 metres in
+/// millimetres): refused by name, not read as an ellipse of infinite size (H.curveOK: `Ellipse::new`
+/// asserts its semi-axes finite).
+#[test]
+fn a_semi_axis_infinite_after_its_unit_is_refused() {
+    let t = b"ISO-10303-21;DATA;\
+        #1=MANIFOLD_SOLID_BREP('',#2);#2=CLOSED_SHELL('',(#3));\
+        #3=ADVANCED_FACE('',(#4),#9,.T.);#4=FACE_BOUND('',#5,.T.);#5=EDGE_LOOP('',(#6));\
+        #6=ORIENTED_EDGE('',*,*,#7,.T.);#7=EDGE_CURVE('',#10,#10,#8,.T.);\
+        #8=ELLIPSE('',#20,1.E306,1.);\
+        #9=PLANE('',#20);\
+        #10=VERTEX_POINT('',#11);#11=CARTESIAN_POINT('',(0.,0.,0.));\
+        #20=AXIS2_PLACEMENT_3D('',#11,#21,#22);#21=DIRECTION('',(0.,0.,1.));#22=DIRECTION('',(1.,0.,0.));\
+        #12=ADVANCED_BREP_SHAPE_REPRESENTATION('',(#1),#13);\
+        #13=(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNIT_ASSIGNED_CONTEXT((#14))REPRESENTATION_CONTEXT('',''));\
+        #14=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT($,.METRE.));ENDSEC;";
+    let i = import(t, &Limits::default()).unwrap();
+    assert!(i.solids.is_empty());
+    assert_eq!(i.refusals.len(), 1, "{:?}", i.refusals);
+    assert!(i.refusals[0].why.contains("semi-axis"), "{:?}", i.refusals);
+}

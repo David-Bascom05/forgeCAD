@@ -192,18 +192,11 @@ fn curve(e: &Curve, r: Interval, c: Point3, k: f64) -> Option<(Curve, Interval)>
             r,
         ),
         Curve::Ellipse(o) => (
-            Curve::Ellipse(Ellipse {
-                frame: frame(&o.frame, c, k),
-                major: o.major * k,
-                minor: o.minor * k,
-            }),
+            Curve::Ellipse(Ellipse::new(frame(&o.frame, c, k), o.major * k, o.minor * k)),
             r,
         ),
         Curve::Parabola(p) => (
-            Curve::Parabola(Parabola {
-                frame: frame(&p.frame, c, k),
-                focal: p.focal * k,
-            }),
+            Curve::Parabola(Parabola::new(frame(&p.frame, c, k), p.focal * k)),
             by_k,
         ),
         Curve::Hyperbola(h) => (

@@ -291,14 +291,12 @@ fn curve(m: &Motion, c: &Curve) -> Result<Curve, PatternError> {
             frame: m.frame(&c.frame, false),
             ..*c
         }),
-        Curve::Ellipse(c) => Curve::Ellipse(forge_geom::Ellipse {
-            frame: m.frame(&c.frame, false),
-            ..*c
-        }),
-        Curve::Parabola(c) => Curve::Parabola(forge_geom::Parabola {
-            frame: m.frame(&c.frame, false),
-            ..*c
-        }),
+        Curve::Ellipse(c) => Curve::Ellipse(forge_geom::Ellipse::new(
+            m.frame(&c.frame, false),
+            c.major,
+            c.minor,
+        )),
+        Curve::Parabola(c) => Curve::Parabola(forge_geom::Parabola::new(m.frame(&c.frame, false), c.focal)),
         Curve::Hyperbola(c) => Curve::Hyperbola(forge_geom::Hyperbola {
             frame: m.frame(&c.frame, false),
             ..*c

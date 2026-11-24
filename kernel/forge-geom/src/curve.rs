@@ -68,18 +68,50 @@ pub struct Circle {
 
 /// Ellipse with semi-axis `major` along the frame's x and `minor` along y.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Ellipse {
     pub frame: Frame,
     pub major: f64,
     pub minor: f64,
 }
 
+impl Ellipse {
+    /// An ellipse in `frame`'s xy plane: semi-axes `major` along x and `minor` along y, finite,
+    /// `major > 0`, `minor >= 0` (H.curveOK, verify/forge-bool-proof/LEDGER.md: what `across` needs
+    /// of an ellipse edge). Outside forge-geom this is the only way to make one (`#[non_exhaustive]`),
+    /// so every producer is a call here; the condition is asserted in debug and test builds and
+    /// costs nothing in release.
+    #[inline]
+    pub fn new(frame: Frame, major: f64, minor: f64) -> Ellipse {
+        debug_assert!(
+            major.is_finite() && major > 0.0 && minor.is_finite() && minor >= 0.0,
+            "an ellipse's semi-axes must be finite, the major positive: {major} {minor}"
+        );
+        Ellipse { frame, major, minor }
+    }
+}
+
 /// Parabola with vertex at the frame origin opening along x, focal length
 /// `focal`: P(t) = (t^2 / 4f) x + t y.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct Parabola {
     pub frame: Frame,
     pub focal: f64,
+}
+
+impl Parabola {
+    /// A parabola in `frame`'s xy plane with focal length `focal`, finite and not zero (a negative
+    /// one opens the other way; H.curveOK). Outside forge-geom the only way to make one
+    /// (`#[non_exhaustive]`); asserted in debug and test builds, nothing in release.
+    #[inline]
+    pub fn new(frame: Frame, focal: f64) -> Parabola {
+        debug_assert!(
+            focal.is_finite() && focal != 0.0,
+            "a parabola's focal length must be finite and not zero: {focal}"
+        );
+        Parabola { frame, focal }
+    }
 }
 
 /// One branch of a hyperbola centred on the frame origin, opening along +x:

@@ -538,14 +538,7 @@ fn equal_crossing(c: &Cylinder, d: &Cylinder) -> Option<SurfaceSurface> {
         // a point x t from the crossing is t |x × a| from either axis
         let frame = Frame::from_axes(o, x, m, x.cross(m))?;
         let major = r / x.cross(a).length();
-        out.push((
-            Curve::Ellipse(Ellipse {
-                frame,
-                major,
-                minor: r,
-            }),
-            Contact::Crossing,
-        ));
+        out.push((Curve::Ellipse(Ellipse::new(frame, major, r)), Contact::Crossing));
     }
     Some(SurfaceSurface::Curves(out))
 }

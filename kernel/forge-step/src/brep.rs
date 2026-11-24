@@ -584,12 +584,19 @@ impl Read<'_> {
                 let (frame, _) = self.frame(xf).ok_or_else(bad)?;
                 let t = &mut self.f.toks;
                 let (major, minor) = (t.num().ok_or_else(bad)?, t.num().ok_or_else(bad)?);
-                Ok(Curve::Ellipse(Ellipse { frame, major, minor }))
+                // (finite, as read; refused here, before it is made, as the edge would refuse it)
+                if !(major > 0.0 && minor > 0.0) {
+                    return Err(bad());
+                }
+                Ok(Curve::Ellipse(Ellipse::new(frame, major, minor)))
             }
             4 => {
                 let (frame, _) = self.frame(xf).ok_or_else(bad)?;
                 let focal = self.f.toks.num().ok_or_else(bad)?;
-                Ok(Curve::Parabola(Parabola { frame, focal }))
+                if focal == 0.0 {
+                    return Err(bad());
+                }
+                Ok(Curve::Parabola(Parabola::new(frame, focal)))
             }
             5 => {
                 let (frame, _) = self.frame(xf).ok_or_else(bad)?;

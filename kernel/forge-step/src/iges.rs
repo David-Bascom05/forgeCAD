@@ -296,6 +296,10 @@ impl Read<'_> {
                     return refuse(id, "conic", "not an ellipse on its axes");
                 }
                 let (ra, rb) = ((-g / a).sqrt() * s, (-g / c).sqrt() * s);
+                // (positive by the signs above; finite unless a coefficient's ratio overflows)
+                if !(ra.is_finite() && rb.is_finite() && ra > 0.0 && rb > 0.0) {
+                    return refuse(id, "conic", "a semi-axis not finite");
+                }
                 let centre = self.point(&xf, 0.0, 0.0, p[6]);
                 let (x, y) = if ra >= rb {
                     (Vec3::X, Vec3::Y)
@@ -303,11 +307,7 @@ impl Read<'_> {
                     (Vec3::Y, -Vec3::X)
                 };
                 match plane_frame(centre, xf.vec(x), xf.vec(y)) {
-                    Some(frame) => Ok(Curve::Ellipse(Ellipse {
-                        frame,
-                        major: ra.max(rb),
-                        minor: ra.min(rb),
-                    })),
+                    Some(frame) => Ok(Curve::Ellipse(Ellipse::new(frame, ra.max(rb), ra.min(rb)))),
                     None => refuse(id, "conic", "no frame"),
                 }
             }
