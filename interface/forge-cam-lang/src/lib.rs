@@ -3512,12 +3512,11 @@ impl Cam {
                 match kind {
                     "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, false, &mut voids),
                     "slot" => self.engrave(su, a, t, ti, h, (vf, vp), step, true, &mut voids),
-                    "parallel" | "waterline" | "zlevel" | "pencil" | "scallop" | "rest" => {
+                    "parallel" | "waterline" | "zlevel" => {
                         self.surfacing(su, kind, a, ti, h, (vf, vp), &mut voids)
                     }
-                    "steep_shallow" | "spiral" | "radial" | "ramping" | "flat" => {
-                        self.finish3d(su, kind, a, ti, h, (vf, vp), &mut out)
-                    }
+                    "steep_shallow" | "spiral" | "radial" | "ramping" | "flat" | "scallop" | "pencil"
+                    | "rest" => self.finish3d(su, kind, a, ti, h, (vf, vp), &mut out),
                     "thread_mill" => self.thread_mill(su, a, t, ti, h, (vf, vp), &mut out, &mut voids),
                     "edge_break" => self.edge_break(su, a, t, ti, h, (vf, vp), &mut out),
                     "bore" => self.bore(su, a, t, ti, h, (vf, vp), ax, &mut voids),
@@ -3976,48 +3975,7 @@ impl Cam {
                 }
                 p
             }
-            "pencil" => surf::pencil(
-                &sf,
-                c,
-                area,
-                get_num(a, "grid", Some(0.1 * d))?,
-                get_num(a, "kink", Some(0.02))?,
-            )
-            .map_err(e)?,
-            "scallop" => {
-                surf::scallop(&sf, c, area, get_num(a, "stepover", Some(0.1 * d))?, grid).map_err(e)?
-            }
-            _ => {
-                let bj = match a.get("after") {
-                    Some(V::Tool(j)) => *j,
-                    _ => return Err("rest(SETUP, tool:, after: EARLIER_TOOL, ..)".into()),
-                };
-                let bb = self.tools[bj]
-                    .shape
-                    .bodies
-                    .iter()
-                    .find(|b| b.part == forge_cam_geom::tool::Part::Cutter)
-                    .ok_or("the earlier tool has no cutter")?;
-                let before = Surfacer::new(
-                    &part.faces,
-                    bb,
-                    get_num(a, "after_leave", Some(0.0))?,
-                    s.tol,
-                    floor,
-                )
-                .map_err(|x| format!("{x:?}"))?;
-                surf::rest(
-                    &sf,
-                    &before,
-                    c,
-                    area,
-                    get_num(a, "stepover", Some(0.1 * d))?,
-                    get_num(a, "step", Some(0.5))?,
-                    grid,
-                    get_num(a, "min", Some(0.05))?,
-                )
-                .map_err(e)?
-            }
+            _ => return Err(format!("{kind}: not a surfacing op")),
         };
         Ok(vec![p])
     }
@@ -4258,6 +4216,112 @@ impl Cam {
                     .map_err(|x| e(format!("{x:?}")))?
                     .len();
                 vec![within.clip(rp.into_iter().skip(skip).collect(), None)]
+            }
+            "scallop" => {
+                // constant stepover on the surface (geodesic parallels), from the area's edge or
+                // from walls steeper than `walls` degrees
+                let so = match cusp_at(0.0)? {
+                    Some((h0, hb, ..)) => {
+                        fin.cusp = Some(h0);
+                        fin.cusp_bound = Some(hb);
+                        step_for(
+                            Contact::of(&cut, Ival::pt(0.0), Ival::pt(1.0)).map_err(|x| format!("{x:?}"))?,
+                            h0,
+                            2.0 * d,
+                        )
+                        .map_err(|x| format!("{x:?}"))?
+                        .min(0.9 * d)
+                    }
+                    None => get_num(a, "stepover", Some(0.1 * d))?,
+                };
+                fin.stepover = so;
+                let tan_wall = match a.get("walls") {
+                    None => f64::INFINITY,
+                    Some(V::Num(w)) if *w > 0.0 && *w < 90.0 => {
+                        let (sn, cs) = sc(*w);
+                        sn.lo / cs.hi
+                    }
+                    Some(_) => return Err("walls: the slope (degrees, under 90) the passes run from".into()),
+                };
+                let gp = forge_cam_3d::geodesic::Params {
+                    grid,
+                    stepover: so,
+                    tan_wall,
+                };
+                vec![forge_cam_3d::geodesic::scallop(&dc, gp, dr, &within).map_err(|x| e(format!("{x:?}")))?]
+            }
+            "pencil" => {
+                // the double-contact creases: a corner whose CL second difference is at least
+                // `kink` (1/mm; default 1/D: corners up to about D + R)
+                let pp = forge_cam_3d::pencil::Params {
+                    grid: get_num(a, "grid", Some(0.1 * d))?,
+                    kink: get_num(a, "kink", Some(1.0 / d))?,
+                    min_len: get_num(a, "min_len", Some(0.5 * d))?,
+                };
+                vec![forge_cam_3d::pencil::pencil(&dc, pp, dr, &within).map_err(|x| e(format!("{x:?}")))?]
+            }
+            "rest" => {
+                // where the earlier tool (`after:`) left more than `min` (mm) that this one reaches:
+                // the two cutters' lower envelopes on the grid, parallel passes over that region
+                let bj = match a.get("after") {
+                    Some(V::Tool(j)) => *j,
+                    _ => return Err("rest(SETUP, tool:, after: EARLIER_TOOL, ..)".into()),
+                };
+                let bb = self.tools[bj]
+                    .shape
+                    .bodies
+                    .iter()
+                    .find(|b| b.part == forge_cam_geom::tool::Part::Cutter)
+                    .ok_or("the earlier tool has no cutter")?;
+                let before = Surfacer::new(
+                    &part.faces,
+                    bb,
+                    get_num(a, "after_leave", Some(0.0))?,
+                    s.tol,
+                    floor,
+                )
+                .map_err(|x| format!("{x:?}"))?;
+                let bdc = forge_cam_3d::surfdrop::SurfDrop::new(&before)
+                    .ok_or("after_leave: not a usable stock to leave")?;
+                let so = match cusp_at(0.0)? {
+                    Some((h0, hb, ..)) => {
+                        fin.cusp = Some(h0);
+                        fin.cusp_bound = Some(hb);
+                        step_for(
+                            Contact::of(&cut, Ival::pt(0.0), Ival::pt(1.0)).map_err(|x| format!("{x:?}"))?,
+                            h0,
+                            2.0 * d,
+                        )
+                        .map_err(|x| format!("{x:?}"))?
+                        .min(0.9 * d)
+                    }
+                    None => get_num(a, "stepover", Some(0.1 * d))?,
+                };
+                fin.stepover = so;
+                let m = forge_cam_3d::rest::region(
+                    &dc,
+                    &sf.check,
+                    &bdc,
+                    &before.check,
+                    grid,
+                    get_num(a, "min", Some(0.05))?,
+                );
+                if !m.on.iter().any(|x| *x) {
+                    return Err(
+                        "rest: nothing left by the earlier tool that this one reaches (above `min`)".into(),
+                    );
+                }
+                let rp = forge_cam_3d::rest::rest(
+                    &dc,
+                    &m,
+                    get_num(a, "margin", Some(0.5 * d))?,
+                    get_num(a, "angle", Some(0.0))?,
+                    so,
+                    dr,
+                    &within,
+                )
+                .map_err(|x| e(format!("{x:?}")))?;
+                vec![rp]
             }
             _ => {
                 // flat: the flat heights within the band, raster passes at each
