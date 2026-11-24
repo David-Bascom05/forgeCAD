@@ -99,7 +99,26 @@ impl WorkholdingUi {
     /// Field `k` set to `v` as the user's value.
     pub fn set(&mut self, k: &str, v: f64) {
         let Some(r) = &self.cur else { return };
-        match r.with(k, v) {
+        let got = r.with(k, v);
+        self.took(got);
+    }
+
+    /// A list field (a parallel set's heights) set as the user's.
+    pub fn set_list(&mut self, k: &str, v: Vec<f64>) {
+        let Some(r) = &self.cur else { return };
+        let got = r.with_list(k, v);
+        self.took(got);
+    }
+
+    /// A word field (screw, system, mount, ...) set as the user's; empty removes it.
+    pub fn set_word(&mut self, k: &str, v: &str) {
+        let Some(r) = &self.cur else { return };
+        let got = r.with_word(k, v);
+        self.took(got);
+    }
+
+    fn took(&mut self, got: Result<Record, forge_workholding::WhError>) {
+        match got {
             Ok(mut r) => {
                 for c in &mut r.cites {
                     if c.source == "given in the job" {
@@ -324,6 +343,8 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
     }
     ui.separator();
     let mut set: Option<(String, f64)> = None;
+    let mut set_list: Option<(String, Vec<f64>)> = None;
+    let mut set_word: Option<(String, String)> = None;
     egui::ScrollArea::vertical()
         .id_salt("workholding:form")
         .show(ui, |ui| {
@@ -364,12 +385,39 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                     }
                                 },
                                 Ty::Points(_) => {
-                                    let v = r.lists.get(&f.path).cloned().unwrap_or_default();
-                                    ui.label(RichText::new(format!("{v:?}")).font(sans(11.0)));
+                                    let mut v = r.lists.get(&f.path).cloned().unwrap_or_default();
+                                    let mut ch = false;
+                                    ui.horizontal_wrapped(|ui| {
+                                        let mut del = None;
+                                        for (i, x) in v.iter_mut().enumerate() {
+                                            ch |= ui
+                                                .add(egui::DragValue::new(x).speed(0.1).max_decimals(3))
+                                                .changed();
+                                            if ui.small_button("x").clicked() {
+                                                del = Some(i);
+                                            }
+                                        }
+                                        if let Some(i) = del {
+                                            v.remove(i);
+                                            ch = true;
+                                        }
+                                        if ui.small_button("+").clicked() {
+                                            v.push(v.last().copied().unwrap_or(10.0));
+                                            ch = true;
+                                        }
+                                    });
+                                    if ch {
+                                        set_list = Some((f.path.clone(), v));
+                                    }
                                 }
                                 _ => {
-                                    let w = r.words.get(&f.path).cloned().unwrap_or_default();
-                                    ui.label(RichText::new(w).font(sans(11.0)));
+                                    let mut w = r.words.get(&f.path).cloned().unwrap_or_default();
+                                    if ui
+                                        .add(egui::TextEdit::singleline(&mut w).desired_width(120.0))
+                                        .lost_focus()
+                                    {
+                                        set_word = Some((f.path.clone(), w));
+                                    }
                                 }
                             }
                             let (w, col) = status(t, &r, &f.path);
@@ -401,5 +449,19 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
         });
     if let Some((k, v)) = set {
         st.set(&k, v);
+    }
+    if let Some((k, v)) = set_list {
+        st.set_list(&k, v);
+    }
+    if let Some((k, v)) = set_word
+        && st
+            .cur
+            .as_ref()
+            .and_then(|r| r.words.get(&k))
+            .map(String::as_str)
+            .unwrap_or("")
+            != v
+    {
+        st.set_word(&k, &v);
     }
 }

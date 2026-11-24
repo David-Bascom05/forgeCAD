@@ -322,6 +322,37 @@ fn make_jog_check_save_and_close() {
         assert!(w.message.starts_with("Saved"), "{}", w.message);
     }
     assert!(dir.join("cam/workholding/shop-vise.toml").is_file());
+    // a list (parallels' heights) and a word edited as the user's
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        let w = m.workholding.as_mut().unwrap();
+        if let Some(e) = w
+            .entries
+            .iter()
+            .find(|e| e.def.kind.name() == "parallels")
+            .cloned()
+        {
+            w.pick(e);
+            w.set_list("heights", vec![10.0, 20.0, 30.0]);
+            assert_eq!(
+                w.cur.as_ref().unwrap().lists["heights"],
+                vec![10.0, 20.0, 30.0],
+                "{}",
+                w.message
+            );
+        }
+        let vise = w
+            .entries
+            .iter()
+            .find(|e| e.def.name == "shop-vise")
+            .cloned()
+            .unwrap();
+        w.pick(vise);
+        if let Some(k) = w.cur.as_ref().unwrap().words.keys().next().cloned() {
+            w.set_word(&k, "user-word");
+            assert_eq!(w.cur.as_ref().unwrap().words[&k], "user-word", "{}", w.message);
+        }
+    }
     shot(&mut h, "31-workholding-derived");
     h.gui.shell.machine.as_mut().unwrap().set_lib("machine");
     h.step();
