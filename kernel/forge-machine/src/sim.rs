@@ -270,6 +270,8 @@ pub enum Violation {
     Rpm { line: usize, rpm: i64, range: [f64; 2] },
     /// The changer has fewer pockets (turret fewer stations) than the T asked.
     Pocket { line: usize, t: u32, max: u32 },
+    /// The joints enter a zone the control forbids (a stored stroke check): the control alarms.
+    Zone { line: usize, zone: String, at: Vec<f64> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -713,7 +715,119 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     }
     tl.t_min = t;
     tl.t_stop = t_est;
+    for sg in &tl.segments {
+        for z in &def.zones {
+            if let Some(sv) = zone_entry(def, z, sg) {
+                tl.violations.push(Violation::Zone {
+                    line: sg.line,
+                    zone: z.name.clone(),
+                    at: sg.at(sv),
+                });
+            }
+        }
+    }
     Ok(tl)
+}
+
+/// Where a segment is strictly inside a zone (some s ∈ [0, 1]), if anywhere: exact for the
+/// linear joints (the slab test); for an arc's two joints, bisection on s with bounds of the arc
+/// over each span, to 2^-30 of the segment (an entry shallower than that is not reported).
+pub fn zone_entry(def: &MachineDef, z: &crate::def::Zone, sg: &Segment) -> Option<f64> {
+    let idx = def.zone_joints(z);
+    let (arc_a, arc_b) = match &sg.path {
+        Path::Arc { a, b, .. } => (Some(*a), Some(*b)),
+        Path::Line => (None, None),
+    };
+    // the slab over the linear joints: s where every one is strictly inside
+    let (mut lo, mut hi) = (0.0f64, 1.0f64);
+    for (k, &j) in idx.iter().enumerate() {
+        if Some(j) == arc_a || Some(j) == arc_b {
+            continue;
+        }
+        let (a, b) = (sg.q0[j], sg.q1[j]);
+        let d = b - a;
+        if d == 0.0 {
+            if !(z.min[k] < a && a < z.max[k]) {
+                return None;
+            }
+            continue;
+        }
+        let (t1, t2) = ((z.min[k] - a) / d, (z.max[k] - a) / d);
+        lo = lo.max(t1.min(t2));
+        hi = hi.min(t1.max(t2));
+        if lo >= hi {
+            return None;
+        }
+    }
+    let inside = |q: &[f64]| {
+        idx.iter()
+            .enumerate()
+            .all(|(k, &j)| z.min[k] < q[j] && q[j] < z.max[k])
+    };
+    if arc_a.is_none() || !idx.iter().any(|j| Some(*j) == arc_a || Some(*j) == arc_b) {
+        let sm = 0.5 * (lo + hi);
+        return inside(&sg.at(sm)).then_some(sm);
+    }
+    // the arc joints: bound each over a span and bisect
+    let Path::Arc {
+        a,
+        b,
+        c,
+        r,
+        r1,
+        a0,
+        sweep,
+    } = &sg.path
+    else {
+        return None;
+    };
+    let bound = |s0: f64, s1: f64| -> [[f64; 2]; 2] {
+        let (t0, t1) = (a0 + s0 * sweep, a0 + s1 * sweep);
+        let (t0, t1) = (t0.min(t1), t0.max(t1));
+        let rm = r.max(*r1) * (1.0 + 1e-12) + 1e-12;
+        let rn = r.min(*r1);
+        let mut cs = [f64::INFINITY, f64::NEG_INFINITY];
+        let mut sn = [f64::INFINITY, f64::NEG_INFINITY];
+        let mut take = |t: f64| {
+            let (y, x) = dmath::sin_cos(t);
+            for rr in [rm, rn] {
+                cs = [cs[0].min(rr * x), cs[1].max(rr * x)];
+                sn = [sn[0].min(rr * y), sn[1].max(rr * y)];
+            }
+        };
+        take(t0);
+        take(t1);
+        let q = std::f64::consts::FRAC_PI_2;
+        let mut k = (t0 / q).ceil();
+        while k * q <= t1 {
+            take(k * q);
+            k += 1.0;
+        }
+        // a little slack for the rounding of sin/cos
+        [
+            [c[0] + cs[0] - 1e-9, c[0] + cs[1] + 1e-9],
+            [c[1] + sn[0] - 1e-9, c[1] + sn[1] + 1e-9],
+        ]
+    };
+    let ka = idx.iter().position(|j| j == a);
+    let kb = idx.iter().position(|j| j == b);
+    let mut stack = vec![(lo, hi)];
+    while let Some((s0, s1)) = stack.pop() {
+        let bd = bound(s0, s1);
+        let miss = |kk: Option<usize>, w: [f64; 2]| kk.is_some_and(|k| w[1] <= z.min[k] || w[0] >= z.max[k]);
+        if miss(ka, bd[0]) || miss(kb, bd[1]) {
+            continue;
+        }
+        let sm = 0.5 * (s0 + s1);
+        if inside(&sg.at(sm)) {
+            return Some(sm);
+        }
+        if s1 - s0 > (hi - lo) * 2f64.powi(-30) {
+            stack.push((sm, s1));
+            stack.push((s0, sm));
+        }
+    }
+    None
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1152,6 +1266,11 @@ pub fn timeline_json(tl: &Timeline) -> String {
             Violation::Pocket { line, t, max } => {
                 format!("{{\"kind\":\"pocket\",\"line\":{line},\"t\":{t},\"max\":{max}}}")
             }
+            Violation::Zone { line, zone, at } => format!(
+                "{{\"kind\":\"zone\",\"line\":{line},\"zone\":\"{}\",\"at\":[{}]}}",
+                esc(zone),
+                at.iter().map(|v| num(*v)).collect::<Vec<_>>().join(",")
+            ),
         });
     }
     o.push_str("]}");

@@ -196,3 +196,49 @@ fn the_machine_states_its_peck_parameters_and_the_interpreter_uses_them() {
     let got: Vec<(&str, usize)> = u.iter().map(|u| (u.path.as_str(), u.line)).collect();
     assert_eq!(got, vec![("machine.peck_clear", 2), ("machine.chip_lift", 3)]);
 }
+
+#[test]
+fn entering_a_zone_is_a_violation_on_lines_and_arcs() {
+    // a zone over X and Y joint values: (-10, 10) × (40, 60)
+    let src = vmc3()
+        + "\n[[machine.zone]]\nname = \"clamp\"\njoints = [\"X\", \"Y\"]\nmin = [-10, 40]\nmax = [10, 60]\n";
+    let m = &MachineDef::parse_all(&src).unwrap()[0];
+    let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+    let zone_lines = |prog: &str| -> Vec<usize> {
+        sim::simulate(prog, &s)
+            .unwrap()
+            .violations
+            .iter()
+            .filter_map(|v| match v {
+                Violation::Zone { line, zone, .. } if zone == "clamp" => Some(*line),
+                _ => None,
+            })
+            .collect()
+    };
+    // a line through it; one along its edge (the boundary is travel); one past it
+    assert_eq!(zone_lines("G0 X-50. Y50. Z0\nG1 X50. F1000.\n"), vec![2]);
+    assert_eq!(
+        zone_lines("G0 X-50. Y40. Z0\nG1 X50. F1000.\n"),
+        Vec::<usize>::new()
+    );
+    assert_eq!(
+        zone_lines("G0 X-50. Y70. Z0\nG1 X50. F1000.\n"),
+        Vec::<usize>::new()
+    );
+    // an arc whose ends are outside but whose top passes through it (centre (0, 0), r 50)
+    assert_eq!(
+        zone_lines("G0 X50. Y0 Z0\nG3 X-50. Y0 I-50. J0 F1000.\n"),
+        vec![2]
+    );
+    // the same circle the other way round misses it
+    assert_eq!(
+        zone_lines("G0 X50. Y0 Z0\nG2 X-50. Y0 I-50. J0 F1000.\n"),
+        Vec::<usize>::new()
+    );
+    // r 39: passes under it
+    assert_eq!(
+        zone_lines("G0 X39. Y0 Z0\nG3 X-39. Y0 I-39. J0 F1000.\n"),
+        Vec::<usize>::new()
+    );
+}

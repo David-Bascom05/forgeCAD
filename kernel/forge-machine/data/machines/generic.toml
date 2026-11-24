@@ -472,8 +472,7 @@ parent = "Z"
 side = "head"
 type = "linear"
 axis = [1, 0, 0]
-range = [90, 300]       # the head stays outside the headstock, chucks and sub-head radially (no
-                        # interference zones in the format yet: a real mill-turn's head reaches in)
+range = [-50, 300]
 home = 300
 rapid = 30000
 max_feed = 8000
@@ -498,10 +497,80 @@ side = "head"
 type = "rotary"
 axis = [0, 1, 0]
 pivot = [250, 0, 0]
-range = [0, 90]         # horizontal to vertical
+range = [-30, 210]
 rapid = 18000
 max_feed = 7200
 accel = 3600
+
+# Zones the control forbids (stored stroke checks), so the B head cannot reach the headstock,
+# the chuck or the sub-spindle. The head reaches 175 mm from its B pivot (X + 250, Z); each
+# zone keeps it 1 mm clear for every B. The sub-spindle's (Z + Z2 > 724, X < 106) is a staircase
+# of overlapping 50 mm bins in Z.
+[[machine.zone]]
+name = "headstock"
+joints = ["X", "Z"]
+min = [-51, -101]
+max = [146, 86]
+
+[[machine.zone]]
+name = "chuck"
+joints = ["X", "Z"]
+min = [-51, -101]
+max = [31, 176]
+
+[[machine.zone]]
+name = "sub-1"
+joints = ["X", "Z", "Z2"]
+min = [-51, 173, 500]
+max = [106, 225, 501]
+
+[[machine.zone]]
+name = "sub-2"
+joints = ["X", "Z", "Z2"]
+min = [-51, 223, 450]
+max = [106, 275, 501]
+
+[[machine.zone]]
+name = "sub-3"
+joints = ["X", "Z", "Z2"]
+min = [-51, 273, 400]
+max = [106, 325, 501]
+
+[[machine.zone]]
+name = "sub-4"
+joints = ["X", "Z", "Z2"]
+min = [-51, 323, 350]
+max = [106, 375, 501]
+
+[[machine.zone]]
+name = "sub-5"
+joints = ["X", "Z", "Z2"]
+min = [-51, 373, 300]
+max = [106, 425, 501]
+
+[[machine.zone]]
+name = "sub-6"
+joints = ["X", "Z", "Z2"]
+min = [-51, 423, 250]
+max = [106, 475, 501]
+
+[[machine.zone]]
+name = "sub-7"
+joints = ["X", "Z", "Z2"]
+min = [-51, 473, 200]
+max = [106, 525, 501]
+
+[[machine.zone]]
+name = "sub-8"
+joints = ["X", "Z", "Z2"]
+min = [-51, 523, 150]
+max = [106, 575, 501]
+
+[[machine.zone]]
+name = "sub-9"
+joints = ["X", "Z", "Z2"]
+min = [-51, 573, 100]
+max = [106, 625, 501]
 
 [[machine.spindle]]
 name = "main"

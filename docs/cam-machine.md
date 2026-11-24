@@ -132,11 +132,29 @@ index time is 0, so `t_min` is still a lower bound. Values given with an `estima
 still used (the record's number, chosen conservatively as `basis` says) and the checks against
 them are listed as estimated.
 
+## `[[machine.zone]]`
+
+A region of joint space the control forbids: a stored stroke check (Fanuc stroke limits 2 and 3),
+an interference zone. Machine data like any other, stated in the record and citable as
+`zone.NAME` (often `user`: the values set in the control).
+
+| field | | meaning |
+|---|---|---|
+| name | required | unique |
+| joints | required | the joints it bounds; every other joint is free |
+| min, max | required | per joint, min < max: the zone is the open box min < q < max (its boundary is travel) |
+| note | optional | |
+
+The simulation reports a program entering one (violation `zone`, at the first point found: exact
+on straight moves, by bisection on arcs); the self-collision check below leaves zones out of the
+travel. The generic mill-turn declares the zones that keep its B head off the headstock, chuck and
+sub-spindle.
+
 ## Self-collision through travel
 
-A machine's own bodies must not collide anywhere inside the declared travel: a pose the joints
-can reach where they do is wrong data (fix the geometry or the travel; the format has no soft limits
-or interference zones yet). tests/collide.rs sweeps every built-in: for each pair of bodies, each
+A machine's own bodies must not collide anywhere inside the declared travel outside its zones: a
+pose the joints can reach where they do is wrong data (fix the geometry, the travel, or declare
+the zone the control enforces). tests/collide.rs sweeps every built-in: for each pair of bodies, each
 joint that moves one relative to the other through its whole range, with the others at every
 combination of their ends; no Hit and no Near.
 

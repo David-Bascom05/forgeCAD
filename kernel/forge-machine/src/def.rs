@@ -272,6 +272,28 @@ pub struct Body {
     pub ignore: Vec<String>,
 }
 
+/// A region of joint space the control forbids (Fanuc stored stroke check 2/3, an interference
+/// zone): the open box min < q < max over the named joints, every other joint free. Machine data
+/// stated per record (cite `zone.NAME`); the simulation reports a program entering it, and the
+/// self-collision check of the record excludes it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Zone {
+    pub name: String,
+    pub joints: Vec<String>,
+    pub min: Vec<f64>,
+    pub max: Vec<f64>,
+    pub note: String,
+}
+
+impl Zone {
+    /// Strictly inside, for joint values q in def.joints order (`idx`: the joints' indexes).
+    pub fn contains(&self, idx: &[usize], q: &[f64]) -> bool {
+        idx.iter()
+            .enumerate()
+            .all(|(k, &j)| self.min[k] < q[j] && q[j] < self.max[k])
+    }
+}
+
 /// How a cited value stands (docs/cam-machine.md, "Provenance").
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CiteStatus {
@@ -331,6 +353,8 @@ pub struct MachineDef {
     /// so for every peck cycle.
     pub peck_clear: Option<f64>,
     pub chip_lift: Option<f64>,
+    /// Forbidden regions of joint space the control enforces.
+    pub zones: Vec<Zone>,
     /// A record of a real maker's model: every value in `cite_paths` must be cited.
     pub real: bool,
     pub cites: Vec<Cite>,
@@ -1044,7 +1068,44 @@ impl MachineDef {
                 None => Ok(None),
             }
         };
+        let mut zones = Vec::new();
+        for z in tables(t, "zone") {
+            let zn = need_text(z, &format!("{m} zone"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} zone `{zn}`");
+            let joints = texts(z, "joints")
+                .ok_or_else(|| rec_err(&rec, "joints", "give `joints = [\"X\", \"Z\"]`"))?;
+            let min =
+                nums(z, "min").ok_or_else(|| rec_err(&rec, "min", "give `min`, one value per joint"))?;
+            let max =
+                nums(z, "max").ok_or_else(|| rec_err(&rec, "max", "give `max`, one value per joint"))?;
+            if joints.is_empty() || min.len() != joints.len() || max.len() != joints.len() {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "joints",
+                    why: "needs at least one joint and one min and max per joint".into(),
+                });
+            }
+            if min
+                .iter()
+                .zip(&max)
+                .any(|(a, b)| a >= b || a.is_nan() || b.is_nan())
+            {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "min",
+                    why: "needs min < max for every joint".into(),
+                });
+            }
+            zones.push(Zone {
+                joints,
+                min,
+                max,
+                note: text(z, "note").unwrap_or("").to_string(),
+                name: zn,
+            });
+        }
         let def = MachineDef {
+            zones,
             peck_clear: nonneg("peck_clear")?,
             chip_lift: nonneg("chip_lift")?,
             real: boolean(t, "real").unwrap_or(false),
@@ -1114,6 +1175,19 @@ impl MachineDef {
         out
     }
 
+    /// A zone's joints as indexes into `joints` (validated to exist).
+    pub fn zone_joints(&self, z: &Zone) -> Vec<usize> {
+        z.joints.iter().filter_map(|j| self.joint_index(j)).collect()
+    }
+
+    /// The zones q is strictly inside.
+    pub fn zones_at(&self, q: &[f64]) -> Vec<&Zone> {
+        self.zones
+            .iter()
+            .filter(|z| z.contains(&self.zone_joints(z), q))
+            .collect()
+    }
+
     /// How a value stands, from its cites: the weakest of them (unknown, then estimate, then
     /// conflict, then user, then published); None if uncited.
     pub fn cite_status(&self, path: &str) -> Option<CiteStatus> {
@@ -1149,6 +1223,7 @@ impl MachineDef {
                 (Some("mount"), Some(n), Some(_)) => self.mount(n).is_some(),
                 (Some("machine"), Some(_), None) => true,
                 (Some("changer"), Some("position"), None) => self.changer.is_some(),
+                (Some("zone"), Some(n), None) => self.zones.iter().any(|z| z.name == n),
                 _ => false,
             }
         };
@@ -1418,6 +1493,11 @@ impl MachineDef {
         }
         if !matches!(self.kind, Kind::Lathe | Kind::MillTurn) && self.length_joint.is_none() {
             return Err(self.shape("a mill needs `length_joint` (the joint G43 moves)".into()));
+        }
+        for z in &self.zones {
+            if let Some(j) = z.joints.iter().find(|j| self.joint(j).is_none()) {
+                return Err(self.shape(format!("zone `{}` names no joint `{j}`", z.name)));
+            }
         }
         if let Some(c) = &self.changer {
             for (jn, v) in &c.position {

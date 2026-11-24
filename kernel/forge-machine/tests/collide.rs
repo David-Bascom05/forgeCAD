@@ -239,6 +239,43 @@ fn rapid(q0: Vec<f64>, q1: Vec<f64>) -> sim::Segment {
     }
 }
 
+/// The pieces [a, b] of the line q0 → q1 outside every zone of the record (zones are open boxes:
+/// their boundaries are travel).
+fn outside_zones(m: &forge_machine::MachineDef, q0: &[f64], q1: &[f64]) -> Vec<(f64, f64)> {
+    let mut inside: Vec<(f64, f64)> = Vec::new();
+    for z in &m.zones {
+        let (mut lo, mut hi) = (0.0f64, 1.0f64);
+        for (k, j) in m.zone_joints(z).into_iter().enumerate() {
+            let (a, d) = (q0[j], q1[j] - q0[j]);
+            if d == 0.0 {
+                if !(z.min[k] < a && a < z.max[k]) {
+                    hi = lo;
+                }
+                continue;
+            }
+            let (t1, t2) = ((z.min[k] - a) / d, (z.max[k] - a) / d);
+            lo = lo.max(t1.min(t2));
+            hi = hi.min(t1.max(t2));
+        }
+        if lo < hi {
+            inside.push((lo, hi));
+        }
+    }
+    inside.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut out = Vec::new();
+    let mut at = 0.0;
+    for (a, b) in inside {
+        if a > at {
+            out.push((at, a));
+        }
+        at = at.max(b);
+    }
+    if at < 1.0 {
+        out.push((at, 1.0));
+    }
+    out
+}
+
 /// Every pair of bodies through the joints that move one relative to the other: each such joint
 /// swept through its whole range with the others at every combination of their ends. A Hit is a
 /// pose inside the declared travel where the machine's own bodies collide (wrong data); a Near is
@@ -274,7 +311,11 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                         let (mut q0, mut q1) = (base.clone(), base);
                         q0[j] = m.joints[j].range.unwrap()[0];
                         q1[j] = m.joints[j].range.unwrap()[1];
-                        segs.push(rapid(q0, q1));
+                        // the record's zones are not travel: only the pieces outside them
+                        for (a, b) in outside_zones(&m, &q0, &q1) {
+                            let at = |t: f64| q0.iter().zip(&q1).map(|(x, y)| x + t * (y - x)).collect();
+                            segs.push(rapid(at(a), at(b)));
+                        }
                     }
                 }
                 let mut d2 = m.clone();
