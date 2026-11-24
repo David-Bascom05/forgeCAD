@@ -421,7 +421,7 @@ impl MachineUi {
             "split into {}: {}",
             made.len(),
             made.iter()
-                .map(|m| format!("{} → {}", m.file, m.body.as_deref().unwrap_or("")))
+                .map(|m| format!("{} from {}", m.body.as_deref().unwrap_or("unassigned"), m.file))
                 .collect::<Vec<_>>()
                 .join(", ")
         ))
