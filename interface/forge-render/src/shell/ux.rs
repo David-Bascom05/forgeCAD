@@ -606,7 +606,7 @@ pub fn transport(ui: &mut Ui, t: &Theme, playing: bool, status: &str) -> Option<
         if icon_button(ui, t, "first", "First (Home)", false).clicked() {
             out = Some(Transport::First);
         }
-        if icon_button(ui, t, "stepback", "Previous step (←)", false).clicked() {
+        if icon_button(ui, t, "stepback", "Previous step (Left arrow)", false).clicked() {
             out = Some(Transport::Back);
         }
         let (icon, tip) = if playing {
@@ -617,7 +617,7 @@ pub fn transport(ui: &mut Ui, t: &Theme, playing: bool, status: &str) -> Option<
         if icon_button(ui, t, icon, tip, playing).clicked() {
             out = Some(Transport::PlayPause);
         }
-        if icon_button(ui, t, "stepfwd", "Next step (→)", false).clicked() {
+        if icon_button(ui, t, "stepfwd", "Next step (Right arrow)", false).clicked() {
             out = Some(Transport::Forward);
         }
         if icon_button(ui, t, "last", "Last (End)", false).clicked() {
