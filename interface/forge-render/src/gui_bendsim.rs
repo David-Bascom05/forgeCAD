@@ -52,6 +52,46 @@ pub struct BendView {
     fade: std::collections::HashMap<String, (u8, f32)>,
     /// A body is fading in or out, or waiting its frames to.
     fading: bool,
+    /// What is seen through, outlined: its silhouette edges from the eye, in the world.
+    outline: Vec<([[f32; 3]; 2], f32)>,
+}
+
+/// A mesh's silhouette from `eye`: its edges between a triangle facing the eye and one facing
+/// away, and its open edges (the mesh's corners welded to a hundredth of a millimetre).
+pub fn silhouette(m: &Mesh, eye: [f32; 3]) -> Vec<[[f32; 3]; 2]> {
+    use std::collections::HashMap;
+    let key = |p: [f32; 3]| p.map(|v| (v * 100.0).round() as i64);
+    let mut faces: HashMap<([i64; 3], [i64; 3]), (usize, [f32; 3], [f32; 3], bool)> = HashMap::new();
+    for t in &m.tri {
+        let [a, b, c] = t.map(|i| m.pos[i as usize]);
+        let (u, v) = (
+            [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+            [c[0] - a[0], c[1] - a[1], c[2] - a[2]],
+        );
+        let n = [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ];
+        let to = [eye[0] - a[0], eye[1] - a[1], eye[2] - a[2]];
+        let front = n[0] * to[0] + n[1] * to[1] + n[2] * to[2] > 0.0;
+        for (p, q) in [(a, b), (b, c), (c, a)] {
+            let (kp, kq) = (key(p), key(q));
+            let k = if kp <= kq { (kp, kq) } else { (kq, kp) };
+            let e = faces.entry(k).or_insert((0, p, q, front));
+            e.0 += 1;
+            if e.0 > 1 && e.3 != front {
+                // one face each way: on the silhouette
+                e.3 = !front;
+                e.0 = usize::MAX / 2;
+            }
+        }
+    }
+    faces
+        .into_values()
+        .filter(|e| e.0 == 1 || e.0 >= usize::MAX / 2)
+        .map(|e| [e.1, e.2])
+        .collect()
 }
 
 /// Frames a body must block the bend for, running, before it starts to fade (hysteresis).
@@ -367,9 +407,36 @@ fn hits(a: [f32; 3], b: [f32; 3], lo: [f32; 3], hi: [f32; 3]) -> bool {
 }
 
 /// The press's parts cut away for an eye: those (frame, beams, backgauge) that stand between it
-/// and the subject (its centre and corners), or that hold it (docs/ux/STANDARD.md §2: the eye
-/// outside every body, the machine's near walls cut away). The tools and the part are never cut.
-pub fn cutaway(bodies: &[Body], eye: [f32; 3], lo: [f32; 3], hi: [f32; 3]) -> Vec<String> {
+/// and the subject (its centre and corners), or that hold it, and those above the subject,
+/// nearer the eye than it, in the picture (docs/ux/STANDARD.md §2: the eye outside every body,
+/// the machine's near walls cut away). The tools and the part are never cut.
+pub fn cutaway(
+    bodies: &[Body],
+    cam: &crate::camera::Camera,
+    size: (u32, u32),
+    lo: [f32; 3],
+    hi: [f32; 3],
+) -> Vec<String> {
+    let eye = cam.eye();
+    // the subject's nearest reach from the eye, and the view's projection: a press part above the
+    // working zone and nearer the eye than any of it, in the picture, hangs in front of it (the
+    // upper beam over a bend seen from in front and above): cut too
+    let near_of = |a: [f32; 3], c: [f32; 3]| {
+        let q = [0, 1, 2].map(|k| eye[k].clamp(a[k], c[k]) - eye[k]);
+        (q[0] * q[0] + q[1] * q[1] + q[2] * q[2]).sqrt()
+    };
+    let subject = near_of(lo, hi);
+    let mid_z = 0.5 * (lo[2] + hi[2]);
+    let m = cam.view(size.0.max(1), size.1.max(1)).matrix;
+    let seen = |a: [f32; 3], c: [f32; 3]| {
+        (0..8).any(|k| {
+            let p = [0, 1, 2].map(|i| if k >> i & 1 == 0 { a[i] } else { c[i] });
+            let w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+            let x = (m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12]) / w;
+            let y = (m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13]) / w;
+            w > 0.0 && x.abs() <= 1.0 && y.abs() <= 1.0
+        })
+    };
     let mut aims = vec![[
         0.5 * (lo[0] + hi[0]),
         0.5 * (lo[1] + hi[1]),
@@ -390,6 +457,7 @@ pub fn cutaway(bodies: &[Body], eye: [f32; 3], lo: [f32; 3], hi: [f32; 3]) -> Ve
                 // a little inside its box: a face the subject rests on is not in the way
                 let (a2, c2) = (a.map(|v| v + 1.0), c.map(|v| v - 1.0));
                 aims.iter().any(|&m| hits(eye, m, a2, c2))
+                    || (a[2] > mid_z && near_of(a, c) < subject && seen(a, c))
             })
         })
         .map(|x| x.name.clone())
@@ -397,6 +465,20 @@ pub fn cutaway(bodies: &[Body], eye: [f32; 3], lo: [f32; 3], hi: [f32; 3]) -> Ve
 }
 
 impl BendView {
+    /// The outline of what is seen through, as world triangles: lines 2 px wide facing this eye,
+    /// white, as strong as the body has faded. The view's frame and a capture's (Render Studio's recorder) both draw them.
+    pub fn outline_tris(
+        &self,
+        camera: &crate::camera::Camera,
+        size: (u32, u32),
+    ) -> Vec<crate::origin::WorldVert> {
+        let mut out = Vec::new();
+        for (e, level) in &self.outline {
+            crate::origin::polyline(e, 2.0, [0.92, 0.94, 0.98, 0.9 * level], camera, size, &mut out);
+        }
+        out
+    }
+
     /// The view holds the simulation's bodies, not the design.
     pub fn showing(&self) -> bool {
         self.taken.is_some()
@@ -490,7 +572,7 @@ impl Gui {
             };
             if let Some((cam, lo, hi)) = framing(&bodies, envelope, how, v.size) {
                 self.bend.cut = match how {
-                    Framing::Work => cutaway(&bodies, cam.eye(), lo, hi),
+                    Framing::Work => cutaway(&bodies, &cam, v.size, lo, hi),
                     Framing::Overview => Vec::new(),
                 };
                 if how == Framing::Work && !handling {
@@ -630,7 +712,7 @@ impl Gui {
         self.bend.fading = moving;
         self.bend.ghosts.clear();
         let material = b.material.as_deref();
-        let mut outlines: Vec<Vec<[f32; 3]>> = Vec::new();
+        let mut outline: Vec<([[f32; 3]; 2], f32)> = Vec::new();
         for (k, body) in self.bend.bodies.iter().enumerate() {
             let level = self.bend.fade.get(&body.name).map_or(0.0, |f| f.1);
             let on = level > 0.0;
@@ -645,18 +727,14 @@ impl Gui {
                     face: 0,
                     rgba: [to8(c[0]), to8(c[1]), to8(c[2]), to8(alpha)],
                 });
-                // its outline, for the panel to draw over the view (a ghost must read, not
-                // vanish), once it is mostly faded
-                if level > 0.5 {
-                    let m = &body.mesh;
-                    let step = (m.pos.len() / 600).max(1);
-                    outlines.push(m.pos.iter().step_by(step).copied().collect());
-                }
+                // its outline, drawn into the scene (a ghost must read, not vanish; recordings
+                // and photos carry it), fading in with it
+                outline.extend(silhouette(&body.mesh, eye).into_iter().map(|e| (e, level)));
             }
         }
         v.dirty = true;
+        self.bend.outline = outline;
         if let Some(b) = self.shell.sheet.bend_sim.as_mut() {
-            b.outlines = outlines;
             if moving {
                 // frames still to draw while a body fades
                 b.settle = b.settle.max(2);
@@ -676,6 +754,7 @@ impl Gui {
         self.bend.blocking.clear();
         self.bend.fade.clear();
         self.bend.fading = false;
+        self.bend.outline.clear();
         self.bend.step = None;
         self.bend.envelope = None;
         if let (Some(t), Some(v)) = (self.bend.taken.take(), &mut self.view) {
