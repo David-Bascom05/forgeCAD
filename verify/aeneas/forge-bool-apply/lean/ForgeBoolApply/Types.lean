@@ -134,38 +134,38 @@ structure imprint.Src (Self : Type _) where
     forge_topo.body.Body)
 
 /-- [forge_bool::boolean::grown_tol::{closure#1}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:48-2325:65 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2318:48-2318:65 -/
 @[reducible]
 def boolean.grown_tol.closure_1 := Unit
 
 /-- [forge_bool::boolean::grown_tol::{closure}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2325:24-2325:36 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2318:24-2318:36 -/
 @[reducible]
 def boolean.grown_tol.closure := boolean.VKey
 
 /-- [forge_bool::boolean::renamed::{closure#1}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:54-2320:68 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2306:54-2306:68 -/
 @[reducible]
 def boolean.renamed.closure_1 := Slice (boolean.VKey × forge_topo.name.Name)
 
 /-- [forge_bool::boolean::renamed::{closure}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2320:35-2320:42 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2306:35-2306:42 -/
 @[reducible]
 def boolean.renamed.closure := Unit
 
 /-- [forge_bool::boolean::Made]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2272:0-2276:1 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2258:0-2262:1 -/
 structure boolean.Made where
   new_vertex : alloc.vec.Vec (Option forge_topo.body.VertexId)
   b_vertex : alloc.vec.Vec (Option forge_topo.body.VertexId)
 
 /-- [forge_bool::boolean::apply::{closure#2}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:69-2221:99 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2211:69-2211:99 -/
 @[reducible]
 def boolean.apply.closure_2 (S : Type _) := alloc.vec.Vec boolean.Spec
 
 /-- [forge_bool::boolean::apply::{closure#1}]
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2221:29-2221:48 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2211:29-2211:48 -/
 @[reducible]
 def boolean.apply.closure_1 (S : Type _) := Unit
 

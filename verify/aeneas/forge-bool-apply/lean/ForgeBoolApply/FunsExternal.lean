@@ -26,7 +26,9 @@ mutability (their `Arc`s are shared, read-only): the same value.
 **Models (to prove)**: `boolean::staying_faces` (an iterator chain over `zip` and `copied`,
 which Aeneas does not take) and `boolean::drop_replaced_loops` (a spec borrowed across `&mut a`
 calls) are written here as boolean.rs reads, over the translated `Body` methods
-(`stayingModel`, `dropReplacedModel`). `classify::extend_query` and `classify::drop_query_loops` keep face `f`'s
+(`stayingModel`, `dropReplacedModel`), and `boolean::reversed`
+(an in-place `into_iter().rev().map().collect()`) as the list reversed with each use flipped. The
+first two reach Charon through translate.patch (code motion, translation only). `classify::extend_query` and `classify::drop_query_loops` keep face `f`'s
 point-in-face index (`face.query`) in step with its loops. Each is modelled as writing an opaque
 new `query` into face `f` and changing nothing else (`queryExtended`, `queryDropped`), the
 writes' failure included in the opaque value. D8 reads no `query` (verify/forge-bool-proof LEDGER
@@ -466,5 +468,11 @@ def boolean.drop_replaced_loops (a : forge_topo.body.Body) (specs : Slice boolea
     Result ((alloc.vec.Vec Std.Usize) × forge_topo.body.Body) := do
   let (a, out) ← dropReplacedWalk specs a [] kept.val
   if h : out.length ≤ Usize.max then ok (alloc.vec.Vec.from out h, a) else fail .panic
+
+/-- **`reversed`, as boolean.rs reads** (a model, to prove): the uses reversed, each flipped. -/
+def boolean.reversed (uses : alloc.vec.Vec (forge_topo.body.EdgeId × Bool)) :
+    Result (alloc.vec.Vec (forge_topo.body.EdgeId × Bool)) :=
+  let l := uses.val.reverse.map fun p => (p.1, !p.2)
+  if h : l.length ≤ Usize.max then ok (alloc.vec.Vec.from l h) else fail .panic
 
 end forge_bool

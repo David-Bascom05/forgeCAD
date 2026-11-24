@@ -16,6 +16,11 @@
 #                                  here: their items are defined once, by that translation (below)
 #   SRC_CRATE=forge-bool           the kernel crate, when it is not the directory's name (a second
 #                                  translation of one crate, in a package of its own)
+#   SRC_PATCH=translate.patch      a patch applied (in a scratch copy of the workspace) to the source
+#                                  before Charon reads it: code motion only, so that a block Aeneas
+#                                  does not take sits in a function of its own (then --opaque and
+#                                  modelled) while the shipped code keeps its exact form, at no cost
+#                                  to speed. The patched code is a model of the shipped (LEDGER)
 #   DROP_FIELDS=(size_hint)        trait-method fields to drop from the generated trait instances,
 #                                  where Aeneas's Lean structure for the trait has no such field
 #                                  (a Rust impl overriding a method the library does not model)
@@ -58,6 +63,7 @@ conf=$dir/translate.conf
 PKG=
 SRC_CRATE=
 DROP_FIELDS=()
+SRC_PATCH=
 BRIDGE=
 DEPS=()
 OVERFLOW_CHECKS=true
@@ -69,6 +75,14 @@ src=$root/kernel/${SRC_CRATE:-$crate}
 [ -d "$src" ] || { echo "no crate $src" >&2; exit 2; }
 
 work=$(mktemp -d)
+if [ -n "$SRC_PATCH" ]; then
+  # the workspace's files (tracked, and untracked ones not ignored) copied with their times, then
+  # the patch applied there: Charon reads the patched copy, the checkout is untouched
+  mkdir "$work/root"
+  (cd "$root" && git ls-files -co --exclude-standard -z | tar --null -T - -cf -) | tar -xf - -C "$work/root"
+  patch -s -p1 -d "$work/root" < "$dir/$SRC_PATCH" || { echo "$SRC_PATCH does not apply" >&2; exit 1; }
+  src=$work/root/kernel/${SRC_CRATE:-$crate}
+fi
 # FORGE_KEEP=DIR keeps the scratch translation (logs, raw Aeneas output) there, for debugging
 trap 'if [ -n "${FORGE_KEEP:-}" ]; then rm -rf "$FORGE_KEEP"; cp -a "$work" "$FORGE_KEEP"; fi; rm -rf "$work"' EXIT
 name=${SRC_CRATE:-$crate}

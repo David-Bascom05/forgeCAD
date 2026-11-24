@@ -1,0 +1,90 @@
+--- a/kernel/forge-bool/src/boolean.rs	2026-11-24 10:10:57.125220562 +0000
++++ b/kernel/forge-bool/src/boolean.rs	2026-11-24 10:10:57.162967847 +0000
+@@ -2112,18 +2112,7 @@
+             as_is[si] = true;
+         }
+     }
+-    let mut staying: Vec<FaceId> = specs
+-        .iter()
+-        .zip(&as_is)
+-        .filter(|(_, k)| **k)
+-        .map(|(s, _)| s.from)
+-        .collect();
+-    staying.extend(
+-        kept.iter()
+-            .filter(|&&(si, flip)| specs[si].extend && !flip)
+-            .map(|&(si, _)| specs[si].from),
+-    );
+-    staying.extend(untouched_kept.iter().copied());
++    let mut staying = staying_faces(specs, &as_is, kept, untouched_kept);
+     staying.sort_unstable();
+     staying.dedup();
+     for &f in involved {
+@@ -2133,19 +2122,7 @@
+     }
+     // a face split locally gives up the loops it replaces before it gains the new ones; where
+     // its outer loop goes, the spec's first loop (its new outer one) takes its place
+-    let mut new_outer: Vec<usize> = Vec::new();
+-    for &(si, flip) in kept {
+-        let s = &specs[si];
+-        if s.extend && !flip && !s.remove.is_empty() {
+-            if s.remove.contains(&a.face(s.from).loops[0]) {
+-                new_outer.push(si);
+-            }
+-            crate::classify::drop_query_loops(a, s.from, &s.remove);
+-            for &l in &s.remove {
+-                a.remove_loop(s.from, l);
+-            }
+-        }
+-    }
++    let new_outer = drop_replaced_loops(a, specs, kept);
+     let mut made = Made {
+         b_vertex: vec![None; b.vertex_count()],
+         new_vertex: vec![None; points.len()],
+@@ -2237,6 +2214,46 @@
+     }
+ }
+ 
++/// (translation only, tools/aeneas: apply's `staying` chain, moved here verbatim)
++fn staying_faces(
++    specs: &[Spec],
++    as_is: &[bool],
++    kept: &[(usize, bool)],
++    untouched_kept: &[FaceId],
++) -> Vec<FaceId> {
++    let mut staying: Vec<FaceId> = specs
++        .iter()
++        .zip(as_is)
++        .filter(|(_, k)| **k)
++        .map(|(s, _)| s.from)
++        .collect();
++    staying.extend(
++        kept.iter()
++            .filter(|&&(si, flip)| specs[si].extend && !flip)
++            .map(|&(si, _)| specs[si].from),
++    );
++    staying.extend(untouched_kept.iter().copied());
++    staying
++}
++
++/// (translation only, tools/aeneas: apply's loop dropping the replaced loops, moved here verbatim)
++fn drop_replaced_loops(a: &mut Body, specs: &[Spec], kept: &[(usize, bool)]) -> Vec<usize> {
++    let mut new_outer: Vec<usize> = Vec::new();
++    for &(si, flip) in kept {
++        let s = &specs[si];
++        if s.extend && !flip && !s.remove.is_empty() {
++            if s.remove.contains(&a.face(s.from).loops[0]) {
++                new_outer.push(si);
++            }
++            crate::classify::drop_query_loops(a, s.from, &s.remove);
++            for &l in &s.remove {
++                a.remove_loop(s.from, l);
++            }
++        }
++    }
++    new_outer
++}
++
+ /// The vertices `apply` adds to A, as it first needs each: B's, and the new ones.
+ struct Made {
+     // (declared in this order so they drop as main's locals did: new_vertex, then b_vertex)

@@ -199,8 +199,10 @@ frame lemmas rest on them.
 
 | id | item | why not translated | model | status |
 |---|---|---|---|---|
-| M.staying | boolean.rs `staying_faces` (an `#[inline(always)]` helper holding main's iterator chain) | Aeneas: no `Iterator::copied`, an internal error on the `zip` chain | `stayingModel`: the chain as lists | model, to prove |
-| M.dropreplaced | boolean.rs `drop_replaced_loops` (the same, holding main's loop) | a spec borrowed across `&mut a` calls ("Not implemented") | `dropReplacedModel`: the loop over the translated `face`, `remove_loop`, query model | model, to prove |
+| M.patch | verify/aeneas/forge-bool-apply/translate.patch: for the translation only, two blocks of `apply` moved verbatim into functions of their own (`staying_faces`, `drop_replaced_loops`); the shipped code keeps main's exact form (every helper form there cost speed on the gate) | — | the patched `apply` is the shipped one up to code motion | model, to prove (by inspection of the patch today) |
+| M.staying | `staying_faces` (from M.patch): main's iterator chain | Aeneas: no `Iterator::copied`, an internal error on the `zip` chain | the chain as lists | model, to prove |
+| M.dropreplaced | `drop_replaced_loops` (from M.patch): main's loop | a spec borrowed across `&mut a` calls ("Not implemented") | the loop over the translated `face`, `remove_loop`, query model | model, to prove |
+| M.reversed | boolean.rs `reversed` (shipped: an `#[inline(always)]` helper, no cost on the gate) | an in-place `into_iter().rev().map().collect()` | the list reversed, each use flipped | model, to prove |
 | M.rebuild | body.rs `Body::rebuild_shells` | its union-find walks `windows` and `map` iterators | only the shells and the live faces' shell ids change (opaque grouping) | model, to prove |
 | M.query | classify.rs `extend_query`, `drop_query_loops` | the point-in-face index behind `Arc<dyn Any>` | only face `f`'s `query` changes | model, to prove |
 | M.oncelock | std `OnceLock::set` (through `&self`) | interior mutability: the write is not carried back | `Ok`/`Err` as std's, the cache unchanged; read only by `Cached::set` (a face's box) | model (no statement reads a cache) |

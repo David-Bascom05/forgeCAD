@@ -633,15 +633,22 @@ axiom classify.extend_query
   forge_topo.body.Body → forge_topo.body.FaceId → forge_topo.body.LoopId
     → Result forge_topo.body.Body
 
+/-- [forge_bool::boolean::reversed]:
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2312:0-2314:1 -/
+axiom boolean.reversed
+  :
+  alloc.vec.Vec (forge_topo.body.EdgeId × Bool) → Result (alloc.vec.Vec
+    (forge_topo.body.EdgeId × Bool))
+
 /-- [forge_bool::boolean::drop_replaced_loops]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2254:0-2269:1 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2240:0-2255:1 -/
 axiom boolean.drop_replaced_loops
   :
   forge_topo.body.Body → Slice boolean.Spec → Slice (Std.Usize × Bool) →
     Result ((alloc.vec.Vec Std.Usize) × forge_topo.body.Body)
 
 /-- [forge_bool::boolean::staying_faces]:
-    Source: 'kernel/forge-bool/src/boolean.rs', lines 2230:0-2249:1 -/
+    Source: 'kernel/forge-bool/src/boolean.rs', lines 2218:0-2237:1 -/
 axiom boolean.staying_faces
   :
   Slice boolean.Spec → Slice Bool → Slice (Std.Usize × Bool) → Slice
