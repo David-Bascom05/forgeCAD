@@ -137,10 +137,14 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     for (let k = 0; ; k++) {
       await click(p, "cam:op:arg:leave");
       await p.evaluate(() => window.forgecad.fc.app_type("0.2", false));
-      await settle(p);
+      // the typed text can land a frame after settle returns: wait for it before typing again,
+      // or a retry appends to it (leave: 0.20.2)
+      const typed = await t
+        .until(p, (s) => /leave: 0\.2\)/.test(s.cam?.op_text ?? ""), "the typed leave", 5000)
+        .then(() => true, () => false);
+      if (typed) break;
       const now = await p.evaluate(() => window.forgecad.state());
-      if (/leave: 0\.2\)/.test(now.cam.op_text ?? "")) break;
-      assert.ok(k < 5, `never typed: ${now.cam.op_text}`);
+      assert.ok(k < 5 && !/leave: [0-9.]*0\.2[0-9.]/.test(now.cam.op_text ?? ""), `never typed: ${now.cam.op_text}`);
     }
     const before = st.cam.text;
     await click(p, "cam:op:ok");
