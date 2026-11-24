@@ -1463,10 +1463,21 @@ fn prop(ui: &mut egui::Ui, t: &Theme, label: &str, value: String, key: Option<&s
 /// Returns the bend's name when its "flat pattern" link is clicked.
 /// A step's checks that are not passes, counted by kind, worst first, each in its colour: "1 fail",
 /// "2 warnings", "1 not checked", "1 near" (UX-LEAD: nothing that is not a pass goes uncounted).
+/// A check whose envelope (the part's boxes through the operator's move, against the press
+/// bodies' boxes) overlaps: not proven clear, not a measured collision (BENDSIM-TOOLS' undecided
+/// handling; UX-LEAD: counted apart from the warnings, never printed as a negative clearance).
+pub fn not_proven(c: &fb::Check) -> bool {
+    !c.pass && c.undecided && c.severity == fb::Severity::Warning && c.unchecked.is_none() && c.near.is_none()
+}
+
+/// What an envelope check is, on hover.
+pub const ENVELOPE_METHOD: &str = "Checked with the part's bounding boxes through the operator's move, against the press's bodies: a pass is proven; this overlap is of those boxes, not a measured collision.";
+
 fn tally(checks: &[fb::Check]) -> Vec<(String, egui::Color32)> {
     let n = |f: &dyn Fn(&fb::Check) -> bool| checks.iter().filter(|c| !c.pass && f(c)).count();
     let fail = n(&|c| c.severity == fb::Severity::Error);
-    let warn = n(&|c| c.severity == fb::Severity::Warning && c.unchecked.is_none() && c.near.is_none());
+    let warn = n(&|c| c.severity == fb::Severity::Warning && c.unchecked.is_none() && c.near.is_none() && !not_proven(c));
+    let unproven = n(&not_proven);
     let unchecked = n(&|c| c.unchecked.is_some());
     let near = n(&|c| c.near.is_some());
     let plural = |k: usize, w: &str| {
@@ -1487,6 +1498,7 @@ fn tally(checks: &[fb::Check]) -> Vec<(String, egui::Color32)> {
             look::FAIL,
         ),
         (warn, plural(warn, "warning"), look::WARN),
+        (unproven, format!("{unproven} not proven"), look::NEAR),
         (unchecked, format!("{unchecked} not checked"), look::MUTED),
         (near, format!("{near} near"), look::NEAR),
     ]
@@ -1561,19 +1573,35 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
     let cat = st.catalog.as_ref().and_then(|c| c.as_ref().ok());
     if let Some(s) = plan.steps.get(st.step) {
         let ok = s.pass();
-        ui.horizontal(|ui| {
-            ui.label(
-                egui::RichText::new(format!("Bend {} · {}", st.step + 1, names[s.bend]))
-                    .font(super::theme::semi(14.0))
-                    .color(t.ink),
-            );
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        let title = format!("Bend {} · {}", st.step + 1, names[s.bend]);
+        // the badge beside the title when both fit, else on its own row under it (its words
+        // never run over the title)
+        let fits = {
+            let p = ui.painter();
+            let words: Vec<String> = tally(&s.checks).into_iter().map(|x| x.0).collect();
+            let badge = p
+                .layout_no_wrap(
+                    format!("Passes · {}", words.join(" · ")),
+                    egui::FontId::proportional(12.0),
+                    t.ink,
+                )
+                .size()
+                .x
+                + 24.0;
+            let head = p
+                .layout_no_wrap(title.clone(), super::theme::semi(14.0), t.ink)
+                .size()
+                .x;
+            head + badge + 12.0 <= ui.available_width()
+        };
+        let badge = |ui: &mut egui::Ui| {
                 // the outline amber once anything warns (UX-LEAD); a pass's green otherwise
                 let warns = s.checks.iter().any(|c| {
                     !c.pass
                         && c.severity == fb::Severity::Warning
                         && c.unchecked.is_none()
                         && c.near.is_none()
+                        && !not_proven(c)
                 });
                 let c = if !ok {
                     look::FAIL
@@ -1604,8 +1632,16 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                             );
                         });
                     });
-            });
+        };
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new(&title).font(super::theme::semi(14.0)).color(t.ink));
+            if fits {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), badge);
+            }
         });
+        if !fits {
+            ui.horizontal(|ui| ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), badge));
+        }
         ui.label(
             egui::RichText::new(format!("step {} of {}", st.step + 1, plan.steps.len()))
                 .small()
@@ -1740,7 +1776,7 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
         let rank = |c: &fb::Check| {
             if c.pass {
                 3
-            } else if c.near.is_some() {
+            } else if c.near.is_some() || not_proven(c) {
                 2
             } else if c.severity == fb::Severity::Warning || c.unchecked.is_some() {
                 1
@@ -1851,6 +1887,8 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                         // proven within the resolution of the limit, not at it (David): a word, in
                         // a muted amber, weaker than a warning (UX-LEAD)
                         (look::NEAR, "near")
+                    } else if not_proven(c) {
+                        (look::NEAR, "not proven")
                     } else if c.severity == fb::Severity::Warning {
                         (look::WARN, "warning")
                     } else if c.undecided {
@@ -1867,6 +1905,11 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                             len_down(c.value),
                             len(c.limit),
                             len(c.near.unwrap_or(0.0))
+                        ),
+                        (None, Some(x)) if not_proven(c) => format!(
+                            "{ENVELOPE_METHOD}\nThe envelopes overlap by {} against {}.",
+                            len((-c.value).max(0.0)),
+                            cards::body_words(cat, x)
                         ),
                         (None, Some(x)) => format!("against {}", cards::body_words(cat, x)),
                         _ => String::new(),
@@ -1910,6 +1953,22 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                                         .color(t.ink2),
                                 )
                                 .wrap(),
+                            );
+                        }
+                        // an envelope's overlap, not a clearance: said so, muted; the method on hover
+                        None if not_proven(c) => {
+                            hover(
+                                ui.add(
+                                    egui::Label::new(
+                                        egui::RichText::new(format!(
+                                            "envelope overlaps by {}",
+                                            len((-c.value).max(0.0))
+                                        ))
+                                        .font(super::theme::caption())
+                                        .color(t.ink2),
+                                    )
+                                    .wrap(),
+                                ),
                             );
                         }
                         // only a lower bound is known (near, undecided): what was proven, the limit
@@ -2297,12 +2356,13 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
                 ),
                 Some(c) => (
                     format!(
-                        "operator handling: not proven clear{}",
+                        "operator handling: not proven clear{}{}",
                         c.tool
                             .as_deref()
-                            .map_or(String::new(), |t| format!(" of {}", cards::body_words(cat, t)))
+                            .map_or(String::new(), |t| format!(" of {}", cards::body_words(cat, t))),
+                        if not_proven(c) { " (envelope check)" } else { "" }
                     ),
-                    look::WARN,
+                    if not_proven(c) { look::NEAR } else { look::WARN },
                 ),
                 None => ("operator handling: the first step, none".into(), look::MUTED),
             });
@@ -2344,6 +2404,23 @@ pub const OVERLAY_CUBE_ROOM: f32 = 130.0;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// An envelope overlap of the handling check is counted as not proven, never as a warning
+    /// (UX-LEAD): "1 not proven", the badge outline not amber for it.
+    #[test]
+    fn an_envelope_overlap_is_not_proven_not_a_warning() {
+        let mut c = fb::Check::rule(fb::Rule::Handling, -21.0, 0.5, false);
+        c.severity = fb::Severity::Warning;
+        c.undecided = true;
+        assert!(not_proven(&c));
+        let words: Vec<String> = tally(std::slice::from_ref(&c)).into_iter().map(|x| x.0).collect();
+        assert_eq!(words, ["1 not proven"]);
+        // a warning that is not an envelope stays a warning
+        c.undecided = false;
+        assert!(!not_proven(&c));
+        let words: Vec<String> = tally(&[c]).into_iter().map(|x| x.0).collect();
+        assert_eq!(words, ["1 warning"]);
+    }
 
     const L: &str = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
         sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (120, 60))\n}\n\

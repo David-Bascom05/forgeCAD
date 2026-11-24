@@ -226,9 +226,9 @@ pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
 
 /// How far the other stations' tools are set back toward a light neutral, that neutral, and what
 /// of their metal's sheen they keep.
-pub const STATION_DIM: f32 = 0.55;
-pub const STATION_DIM_TO: f32 = 0.8;
-pub const STATION_DIM_METAL: f32 = 0.3;
+pub const STATION_DIM: f32 = 0.8;
+pub const STATION_DIM_TO: f32 = 0.85;
+pub const STATION_DIM_METAL: f32 = 0.1;
 
 fn own_tint(b: &Body, material: Option<&str>) -> [f32; 4] {
     let id = if b.hit {
