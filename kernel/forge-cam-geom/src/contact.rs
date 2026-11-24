@@ -454,6 +454,81 @@ pub fn clear(body: &Body, f: &Face, mv: &Move, limit: f64) -> Option<Verdict> {
     }
 }
 
+/// A level arc (`Move::Arc`) clear by its chords, or None. The arc is cut into n pieces evenly in
+/// its parameter t; a piece spans an angle of at most 2h (h the step in t: dθ/dt = 2/(1+t²) ≤ 2),
+/// so every point of it is within its sagitta r(1 − cos h) ≤ r h²/2 of its chord. The body's
+/// signed distance to a face is 1-Lipschitz in the body's position, so each chord proven clear
+/// by `clear` at `limit + s` (s that sagitta, widened past the chords' ends' rounding) proves the
+/// arc at `limit`, with a lower bound s under the chords' least. None (the caller goes on to
+/// its other methods) for any other move, non-finite or overflowing data, too fine a cut, or a
+/// chord `clear` does not prove.
+pub fn clear_arc(body: &Body, f: &Face, mv: &Move, limit: f64) -> Option<Verdict> {
+    let Move::Arc { c, x, y, r, t0, t1 } = *mv else {
+        return None;
+    };
+    let small = |v: f64| v.is_finite() && v.abs() <= 1e100;
+    if !(c.iter().chain(x.iter()).chain(y.iter()).all(|v| small(*v))
+        && small(r)
+        && r > 0.0
+        && small(t0)
+        && small(t1)
+        && t0 <= t1
+        && t0.abs() <= 1.5
+        && t1.abs() <= 1.5
+        && small(limit))
+    {
+        return None;
+    }
+    // the chords' sagitta at most ARC_SAG (a step h = √(2 s / r)), in at most ARC_CHORDS pieces
+    let h_max = (2.0 * ARC_SAG / r).sqrt();
+    let n = ((t1 - t0) / h_max).ceil().max(1.0);
+    if !(n <= ARC_CHORDS as f64) {
+        return None;
+    }
+    let n = n as usize;
+    let h = (t1 - t0) / n as f64;
+    let at = |t: f64| -> V3 {
+        let d = 1.0 + t * t;
+        let u = (1.0 - t * t) / d;
+        let v = 2.0 * t / d;
+        [
+            c[0] + r * (x[0] * u + y[0] * v),
+            c[1] + r * (x[1] * u + y[1] * v),
+            c[2] + r * (x[2] * u + y[2] * v),
+        ]
+    };
+    // the sagitta, and each computed end's distance from the true arc (a few roundings of terms
+    // of size |c| + r), both widened
+    let scale = 1.0 + r + c.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+    let s = Ival::pt(r)
+        .mul(Ival::pt(h))
+        .mul(Ival::pt(h))
+        .mul(Ival::pt(0.5))
+        .add(Ival::pt(1e-12 * scale))
+        .hi;
+    let lim = Ival::pt(limit).add(Ival::pt(s)).hi;
+    let mut least = f64::INFINITY;
+    let mut a = at(t0);
+    for k in 1..=n {
+        let b = if k == n { at(t1) } else { at(t0 + h * k as f64) };
+        match clear(body, f, &Move::Line { a, b }, lim)? {
+            Verdict::Clear { lower } => least = least.min(lower),
+            _ => return None,
+        }
+        a = b;
+    }
+    Some(Verdict::Clear {
+        lower: Ival::pt(least).sub(Ival::pt(s)).lo,
+    })
+}
+
+/// `clear_arc`'s largest chord sagitta (mm): small beside any tolerance, so the chords' margin is
+/// barely more than the arc's.
+const ARC_SAG: f64 = 1e-4;
+
+/// `clear_arc`'s most chords: a finer cut than this is left to the caller's other methods.
+const ARC_CHORDS: usize = 4096;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -613,6 +688,223 @@ mod tests {
             k += 1;
         }
         assert!(agreed > 15, "{agreed}");
+    }
+
+    /// A level arc cleared by its chords is never cleared above its true minimum (dense
+    /// sampling of the arc against the face), and the branch and bound never finds a Hit where
+    /// it clears.
+    #[test]
+    fn arcs_by_chords_never_above_the_true_minimum() {
+        let b = ball(6.0);
+        let mut seed = 0x2545f4914f6cdd1du64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let (mut cleared, mut k) = (0, 0);
+        while k < 120 {
+            let f = if k % 2 == 0 {
+                sphere(
+                    [rnd() * 10.0 - 5.0, rnd() * 10.0 - 5.0, rnd() * 4.0 - 10.0],
+                    5.0 + rnd() * 10.0,
+                )
+            } else {
+                Face::new(
+                    Surf::Cyl {
+                        o: [0.0, 0.0, -5.0],
+                        x: [0.0, 1.0, 0.0],
+                        y: [0.0, 0.0, 1.0],
+                        ax: [1.0, 0.0, 0.0],
+                        r: 3.0 + rnd() * 8.0,
+                    },
+                    Ival::new(-1.0, 1.0),
+                    Ival::new(-20.0, 20.0),
+                    None,
+                    0.0,
+                    1,
+                )
+            };
+            let (ux, uy) = (rnd() - 0.5, rnd() - 0.5);
+            let l = (ux * ux + uy * uy).sqrt().max(1e-3);
+            let (cs, sn) = (ux / l, uy / l);
+            let x = [cs, sn, 0.0];
+            let y = [-sn, cs, 0.0];
+            let c = [rnd() * 16.0 - 8.0, rnd() * 16.0 - 8.0, 4.0 + rnd() * 12.0];
+            let r = 0.5 + rnd() * 10.0;
+            let t0 = -rnd() * 0.9;
+            let t1 = rnd() * 0.9;
+            let mv = Move::Arc { c, x, y, r, t0, t1 };
+            if let Some(Verdict::Clear { lower }) = clear_arc(&b, &f, &mv, -1.0) {
+                // dense sample of the true minimum over the face and the arc
+                let mut tmin = f64::INFINITY;
+                let n = 24;
+                for i in 0..=n {
+                    for j in 0..=n {
+                        let p = f.p.lo + (f.p.hi - f.p.lo) * i as f64 / n as f64;
+                        let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / n as f64;
+                        let w = f.surf.eval(Ival::pt(p), Ival::pt(q));
+                        let w = [w[0].mid(), w[1].mid(), w[2].mid()];
+                        for m in 0..=40 {
+                            let t = t0 + (t1 - t0) * m as f64 / 40.0;
+                            let d = 1.0 + t * t;
+                            let (u, v) = ((1.0 - t * t) / d, 2.0 * t / d);
+                            let g = [
+                                c[0] + r * (x[0] * u + y[0] * v),
+                                c[1] + r * (x[1] * u + y[1] * v),
+                                c[2],
+                            ];
+                            let sd = b
+                                .sd(
+                                    Ival::pt(w[0] - g[0]),
+                                    Ival::pt(w[1] - g[1]),
+                                    Ival::pt(w[2] - g[2]),
+                                )
+                                .mid();
+                            tmin = tmin.min(sd);
+                        }
+                    }
+                }
+                assert!(lower <= tmin + 1e-9, "k={k}: lower {lower} sampled {tmin}");
+                if lower >= 0.0 {
+                    let (v, _) = certify_bb(&b, &f, &mv, lower - 1e-9, 0.01, 20_000);
+                    assert!(
+                        !matches!(v, Verdict::Hit { .. }),
+                        "k={k}: chords clear at {lower}, B&B hits: {v:?}"
+                    );
+                }
+                cleared += 1;
+            }
+            k += 1;
+        }
+        assert!(cleared > 20, "{cleared}");
+    }
+
+    /// `clear_arc` refuses non-finite or overflowing data and anything but a level arc.
+    #[test]
+    fn arcs_with_bad_data_are_refused() {
+        let b = ball(6.0);
+        let f = sphere([0.0, 0.0, -10.0], 5.0);
+        let ok = Move::Arc {
+            c: [0.0, 0.0, 20.0],
+            x: [1.0, 0.0, 0.0],
+            y: [0.0, 1.0, 0.0],
+            r: 3.0,
+            t0: -0.5,
+            t1: 0.5,
+        };
+        assert!(matches!(
+            clear_arc(&b, &f, &ok, -0.01),
+            Some(Verdict::Clear { .. })
+        ));
+        for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY, 1e300] {
+            let Move::Arc { c, x, y, r, t0, t1 } = ok else {
+                unreachable!()
+            };
+            let tries = [
+                Move::Arc {
+                    c: [bad, c[1], c[2]],
+                    x,
+                    y,
+                    r,
+                    t0,
+                    t1,
+                },
+                Move::Arc {
+                    c,
+                    x: [bad, x[1], x[2]],
+                    y,
+                    r,
+                    t0,
+                    t1,
+                },
+                Move::Arc {
+                    c,
+                    x,
+                    y: [y[0], bad, y[2]],
+                    r,
+                    t0,
+                    t1,
+                },
+                Move::Arc {
+                    c,
+                    x,
+                    y,
+                    r: bad,
+                    t0,
+                    t1,
+                },
+                Move::Arc {
+                    c,
+                    x,
+                    y,
+                    r,
+                    t0: bad,
+                    t1,
+                },
+                Move::Arc {
+                    c,
+                    x,
+                    y,
+                    r,
+                    t0,
+                    t1: bad,
+                },
+            ];
+            for mv in tries {
+                assert!(clear_arc(&b, &f, &mv, -0.01).is_none(), "{mv:?}");
+            }
+            assert!(clear_arc(&b, &f, &ok, bad).is_none());
+        }
+        // a line, a reversed or vanishing arc, a too-fine cut
+        assert!(
+            clear_arc(
+                &b,
+                &f,
+                &Move::Line {
+                    a: [0.0; 3],
+                    b: [1.0, 0.0, 20.0]
+                },
+                -0.01
+            )
+            .is_none()
+        );
+        let Move::Arc { c, x, y, .. } = ok else {
+            unreachable!()
+        };
+        assert!(
+            clear_arc(
+                &b,
+                &f,
+                &Move::Arc {
+                    c,
+                    x,
+                    y,
+                    r: 3.0,
+                    t0: 0.5,
+                    t1: -0.5
+                },
+                -0.01
+            )
+            .is_none()
+        );
+        assert!(
+            clear_arc(
+                &b,
+                &f,
+                &Move::Arc {
+                    c,
+                    x,
+                    y,
+                    r: 1e9,
+                    t0: -0.5,
+                    t1: 0.5
+                },
+                -0.01
+            )
+            .is_none()
+        );
     }
 
     /// Non-finite or overflowing data anywhere (move, face, frame, radius, mu, limit) never
