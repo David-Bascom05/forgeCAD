@@ -545,10 +545,14 @@ kernel/forge-machine/parts/haas/haas-umc-500/support-r.fg#1 agree
 kernel/forge-machine/parts/haas/haas-umc-750/base.fg#1 agree
 kernel/forge-machine/parts/haas/haas-umc-750/column.fg#1 agree
 kernel/forge-machine/parts/haas/haas-umc-750/cradle.fg#1 agree
+kernel/forge-machine/parts/haas/haas-umc-750/cradle.fg#3 agree
 kernel/forge-machine/parts/haas/haas-umc-750/enclosure.fg#1 agree
 kernel/forge-machine/parts/haas/haas-umc-750/head.fg#1 agree
+kernel/forge-machine/parts/haas/haas-umc-750/head.fg#5 agree
 kernel/forge-machine/parts/haas/haas-umc-750/support-l.fg#1 agree
 kernel/forge-machine/parts/haas/haas-umc-750/support-r.fg#1 agree
+kernel/forge-machine/parts/haas/haas-umc-750/support-r.fg#3 agree
+kernel/forge-machine/parts/haas/haas-umc-750/support-r.fg#5 agree
 kernel/forge-machine/parts/haas/haas-umc-750ss/cradle.fg#1 agree
 kernel/forge-machine/parts/haas/haas-umc-750ss/head.fg#1 agree
 kernel/forge-machine/parts/haas/haas-umc-750ss/support-l.fg#1 agree
