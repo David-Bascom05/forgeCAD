@@ -11,6 +11,7 @@
 
 mod bendsim;
 mod builtin;
+mod render;
 
 use super::ribbon::{Group, Tool};
 use super::{Action, Shell};

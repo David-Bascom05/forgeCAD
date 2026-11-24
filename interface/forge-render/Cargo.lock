@@ -1275,6 +1275,7 @@ dependencies = [
  "keyring-core",
  "png",
  "rfd",
+ "sha2",
  "ureq",
  "wasm-bindgen",
  "wasm-bindgen-futures",

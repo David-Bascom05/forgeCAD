@@ -24,6 +24,10 @@ path = "src/bin/forge_app.rs"
 name = "forge-parity"
 path = "src/bin/forge_parity.rs"
 
+[[bin]]
+name = "forge-studio"
+path = "src/bin/forge_studio.rs"
+
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }
 # the kernel's scoped threads: the threaded browser build gives them its Web Workers
@@ -70,6 +74,8 @@ rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal",
 egui-winit = { version = "=0.37.0", default-features = false, features = ["wayland", "x11", "smithay-clipboard"] }
 ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
 keyring-core = "=1.0.1"
+# a fetched HDRI checked against its pinned hash (studio/hdri.rs); already in the lock
+sha2 = "=0.11.1"
 
 # already in wgpu's tree on this target: only the entry point names them
 [target.'cfg(target_arch = "wasm32")'.dependencies]
