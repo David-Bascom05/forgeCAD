@@ -556,7 +556,7 @@ coolants = ["flood"]
 clearance = 1
 source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308 | https://www.machinetools.com/en/models/spinner-u5-620"
 taken = "2026-11-24"
-note = "Out of production; no maker document could be read (spinner.eu.com lists only the U5-630 and later; archived pages not reachable): every value is a dealer listing's restatement, cited estimate, or conflict where they disagree. B tilts the cradle and carries C; that B turns about Y is from the axis letter only (DIN 66217), its +B sense UNKNOWN: modelled right-handed about +y. B's pivot below the table top and the B to C offset are UNKNOWN (no source gives them): the pivot is placed at the table top (0) as a placeholder, NOT an estimate, so anything that depends on the pivot (3+2 / TRAORI programs' machine positions, cradle collisions) is not checked by this record. B range in conflict: Asset-Trade +5 (+50 option) / -110, another listing -5 (-90) / +110, another +60 / -140: -110..+5 used (the listing with the most detail). Z in conflict: 460 (most listings) vs 420 (one 2008 listing): 460 used. Spindle: 12000 rpm in the listings (a family brochure is reported to give 9000 standard, 12000 optional: not read); power 22 kW peak / 135 N·m (Asset-Trade) vs 19 kW / 121 N·m (another): no power check. Rapid 48 m/min given as one 'feed / rapid' value: per-axis rapids and max cutting feed UNKNOWN. Rotary speeds UNKNOWN. Spindle nose to table 150-610 mm (Asset-Trade) sets the nose at 610 above the table at the top of Z. Tool: 32 pockets, max length 290, diameter 76 (127 with free neighbours), 7 kg (Asset-Trade). Control: Siemens 840D-SL on the dataset's machine (dealer listings also show Heidenhain TNC 620 machines). Joint 0 = mid-travel for X and Y and the top of travel for Z; the dataset's programs home at SUPA X-365 Y224 Z610 B0 C0 in the control's machine coordinates, whose zero differs from this record's by a constant per axis (UNKNOWN). Bodies are single boxes/cylinders, estimates kept large where the tool and part move; the enclosure is not modelled."
+note = "Out of production; no maker document could be read (spinner.eu.com lists only the U5-630 and later; archived pages not reachable): every value is a dealer listing's restatement, cited estimate, or conflict where they disagree. B tilts the cradle and carries C; that B turns about Y is from the axis letter only (DIN 66217), its +B sense UNKNOWN: modelled right-handed about +y. B's pivot below the table top and the B to C offset are UNKNOWN (no source gives them): the pivot is placed at the table top (0) as a placeholder, NOT an estimate, so anything that depends on the pivot (3+2 / TRAORI programs' machine positions, cradle collisions) is not checked by this record. B range in conflict: Asset-Trade +5 (+50 option) / -110, another listing -5 (-90) / +110, another +60 / -140; -5..+110 used, in the control's sense (what programs command): the dataset's own program Coordinate_system_representation_Achskreuz.mpf (ElMoe, CC BY 4.0) commands G0 B90. on this machine with no transformation active (N10290, N10610, N15330, N15970), so +90 is reachable; Asset-Trade's +5 / -110 fits only with the opposite sign convention. Which way the table tips for +B is UNKNOWN. Control: the dataset's programs are Siemens 840D native; `control` stays forge-post's siemens until its 840D dialect lands. Z in conflict: 460 (most listings) vs 420 (one 2008 listing): 460 used. Spindle: 12000 rpm in the listings (a family brochure is reported to give 9000 standard, 12000 optional: not read); power 22 kW peak / 135 N·m (Asset-Trade) vs 19 kW / 121 N·m (another): no power check. Rapid 48 m/min given as one 'feed / rapid' value: per-axis rapids and max cutting feed UNKNOWN. Rotary speeds UNKNOWN. Spindle nose to table 150-610 mm (Asset-Trade) sets the nose at 610 above the table at the top of Z. Tool: 32 pockets, max length 290, diameter 76 (127 with free neighbours), 7 kg (Asset-Trade). Control: Siemens 840D-SL on the dataset's machine (dealer listings also show Heidenhain TNC 620 machines). Joint 0 = mid-travel for X and Y and the top of travel for Z; the dataset's programs home at SUPA X-365 Y224 Z610 B0 C0 in the control's machine coordinates, whose zero differs from this record's by a constant per axis (UNKNOWN). Bodies are single boxes/cylinders, estimates kept large where the tool and part move; the enclosure is not modelled."
 real = true
 
 [[machine.joint]]
@@ -596,7 +596,7 @@ side = "table"
 type = "rotary"
 axis = [0, 1, 0]
 pivot = [0, 0, 0]   # UNKNOWN: a placeholder, not an estimate (note)
-range = [-110, 5]
+range = [-5, 110]
 rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
 max_feed = 360000   # rotary max feed UNKNOWN: = rapid
 tcp = true
@@ -776,10 +776,10 @@ basis = "max cutting feed UNKNOWN (not stated apart from the rapid): = rapid, no
 [[machine.cite]]
 path = "joint.B.range"
 status = "conflict"
-source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
+source = "RPTU/Spinner dataset (ElMoe @b8003660, CC BY 4.0) NC_code/Coordinate_system_representation_Achskreuz/Coordinate_system_representation_Achskreuz.mpf N10290 'G0 B90. C0.0' (also N10610, N15330, N15970) | https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
 taken = "2026-11-24"
-value = "-110..+5 deg used (Asset-Trade: 'B Achse +5 (+50) / -110')"
-note = "Asset-Trade: +5 (+50 option) / -110; another listing: -5 (-90) / +110; another: max 60 / min -140. Measure the machine"
+value = "-5..+110 deg used, in the control's sense: the dataset's program reaches B+90 on this machine"
+note = "listings: '-5 (-90) / +110' (used: it contains +90); Asset-Trade '+5 (+50) / -110' (fits only with the opposite sign); another 'max 60 / min -140'. Which way the table tips for +B is UNKNOWN"
 
 [[machine.cite]]
 path = "joint.B.rapid"
