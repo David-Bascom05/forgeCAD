@@ -1479,8 +1479,9 @@ impl Shell {
             // a Forge file is written when asked (Ctrl+S too)
             items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
             items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
-            // the part's mesh for printing and viewers: written natively, beside the part
-            if cfg!(not(target_arch = "wasm32")) {
+            // the part's mesh for printing and viewers: natively where the file dialog says, in a
+            // page to the browser's downloads
+            {
                 use forge_lang::meshfile::Format;
                 for (label, f) in [
                     ("Export STL...", Format::Stl),
@@ -1791,12 +1792,27 @@ fn menu_at(
                 }
             }
         });
-    let outside = ctx.input(|i| {
-        i.pointer.any_pressed()
-            && i.pointer
-                .interact_pos()
-                .is_some_and(|p| !inner.response.rect.contains(p))
+    // the frame a menu first shows, the press that opened it is no press outside it: when the
+    // press and its release came in one frame (a tap, or a page whose frames lag the mouse) the
+    // menu shut in the frame it opened, so File never opened in a browser
+    let frame = ctx.cumulative_frame_nr();
+    let shown = egui::Id::unique(id).with("shown");
+    // (the frame it first showed in, the last): shown again the frame after, it is still open
+    let opened_now = ctx.data_mut(|d| {
+        let first = match d.get_temp::<(u64, u64)>(shown) {
+            Some((first, last)) if last + 1 >= frame => first,
+            _ => frame,
+        };
+        d.insert_temp(shown, (first, frame));
+        first == frame
     });
+    let outside = !opened_now
+        && ctx.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|p| !inner.response.rect.contains(p))
+        });
     if matches!(out, MenuResult::Open) && (outside || ctx.input(|i| i.key_pressed(egui::Key::Escape))) {
         out = MenuResult::Close;
     }

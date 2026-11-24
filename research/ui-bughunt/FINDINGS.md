@@ -228,6 +228,30 @@ list on main: this branch's new strings add none).
   after; page 12 -> 2151). Load cost: rack open, single-threaded build, longest task 1438 ms
   without it, 1444 ms with it (noise: that task is the build itself; threaded 197 ms).
 
+## 16. File's menu never opened in the page; its exports were missing; Export CSV failed (ui/bughunt-3)
+
+- Symptoms (page): clicking File showed nothing. On the desktop File > Export STL / 3MF / OBJ
+  exist; the page left them out. Weldments > Cut List > Export CSV said "Couldn't write
+  /project/weldments/gate_frame-cutlist.csv: operation not supported on this platform".
+- Root causes: `menu_at` (shell/mod.rs) shut a menu on any press outside it, including in the
+  frame it opened. When the press and its release land in one frame, the press on File counts
+  as outside the new menu, so the menu shuts at once. In the page that happens on every quick
+  click (frames lag the mouse there); natively, on a touchpad tap. The exports were left out of
+  the page's menu because the page's host had nothing to do with `Action::ExportMesh` (it fell
+  into `_ => {}`). The cut list was written with `std::fs::write`, and a page has no std files.
+- Fixes: a menu ignores an outside press in the frame it first shows (the agent switcher
+  already left out the button that opens it). In the page, File > Export STL / 3MF / OBJ builds
+  the mesh and hands it to the browser's downloads (`window.forge_download`). Natively
+  `fg::export_mesh` is the same as before: `mesh_file` is its bytes, then written. The cut list
+  is written through `forge_dirs::fs`, which is std's natively and the project's in a page,
+  kept where the project is. The browser build's clippy config now also denies std's file
+  calls (`std::fs::write`, `read`, `File::open`, ...). That found these two, the only ones in
+  forge-render. build.rs allows them: it runs on the build machine.
+- Tests: `tests/tap_menu.rs` (native: a press and release in one frame on File, then the menu
+  is open; a click outside still shuts it; fails before) and `web/tests/export.cjs` (the page:
+  File > Export STL downloads `gate_frame.stl`, a valid binary STL; Export CSV writes
+  `weldments/gate_frame-cutlist.csv` on the serving machine; fails before: no download).
+
 ## Open (reported, not fixed here)
 
 

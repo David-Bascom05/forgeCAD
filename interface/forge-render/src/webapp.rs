@@ -36,6 +36,9 @@ extern "C" {
     /// The page's: File > Save As, a name asked for.
     #[wasm_bindgen(js_namespace = window, js_name = forge_save_as)]
     fn page_save_as(name: &str);
+    /// The page's: a file handed to the browser to save (its downloads).
+    #[wasm_bindgen(js_namespace = window, js_name = forge_download)]
+    fn page_download(name: &str, bytes: Uint8Array);
     #[wasm_bindgen(js_namespace = performance, js_name = now)]
     fn perf_now() -> f64;
     #[wasm_bindgen(js_namespace = Date, js_name = now)]
@@ -423,6 +426,19 @@ impl Host {
             match a {
                 Action::Open | Action::Sheet(crate::shell::sheet::SheetCmd::NewPart) => page_pick(),
                 Action::SaveAs => page_save_as(&self.gui.shell.name),
+                // File > Export STL / 3MF / OBJ: built here and handed to the browser's downloads
+                // (it did nothing: the desktop's file dialog has no page counterpart)
+                Action::ExportMesh(f) => {
+                    let Some(s) = &self.gui.fg else { continue };
+                    let name = format!("{}.{}", self.gui.shell.name.trim_end_matches(".fg"), f.ext());
+                    self.gui.shell.status = match crate::fg::mesh_file(&s.src, s.path.as_deref(), &name, f) {
+                        Ok((bytes, said)) => {
+                            page_download(&name, Uint8Array::from(&bytes[..]));
+                            said
+                        }
+                        Err(e) => format!("Not exported: {e}"),
+                    };
+                }
                 _ => {}
             }
         }

@@ -151,6 +151,8 @@ if (store) {
   });
 }
 window.forge_pick = openDialog;
+// File > Export STL / 3MF / OBJ: the file the app made, to the browser's downloads
+window.forge_download = (name, bytes) => download(name, new Blob([bytes]));
 window.forge_save_as = (name) => {
   const n = prompt("Save as (a path in the project)", name || "part.fg");
   if (n) fc.app_save_as(`${MOUNT}/${cleanPath(n)}`);

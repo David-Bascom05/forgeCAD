@@ -806,15 +806,15 @@ type Builder = (
 );
 static BUILDERS: std::sync::Mutex<Vec<Builder>> = std::sync::Mutex::new(Vec::new());
 
-/// Stops the build threads this thread's documents started, and waits for each.
 /// File > Export STL / 3MF / OBJ: the part's text built afresh (an assembly with its parts' bodies)
-/// and its mesh written to `out` at the default tolerances; what to say in the status bar.
-pub fn export_mesh(
+/// and its mesh at the default tolerances, as the file `name` (its stem names the objects): the
+/// file's bytes, and what to say in the status bar.
+pub fn mesh_file(
     src: &str,
     part: Option<&str>,
-    out: &std::path::Path,
+    name: &str,
     f: forge_lang::meshfile::Format,
-) -> Result<String, String> {
+) -> Result<(Vec<u8>, String), String> {
     use forge_lang::meshfile;
     let dir = part.and_then(|p| std::path::Path::new(p).parent().map(std::path::Path::to_path_buf));
     let opts = forge_lang::Options {
@@ -823,29 +823,41 @@ pub fn export_mesh(
         ..forge_lang::Options::default()
     };
     let (run, _) = forge_lang::run(src, opts, Cache::default());
-    let name = part
-        .or(out.to_str())
-        .and_then(|p| std::path::Path::new(p).file_stem())
+    let stem = std::path::Path::new(part.unwrap_or(name))
+        .file_stem()
         .map_or_else(|| "part".into(), |s| s.to_string_lossy().into_owned());
-    let e = meshfile::export(&run, &name, dir.as_deref(), &meshfile::Options::new(f))?;
-    std::fs::write(out, &e.bytes).map_err(|e| format!("{}: {e}", out.display()))?;
-    let file = out
-        .file_name()
-        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
-    Ok(if e.watertight() && e.manifold() {
+    let e = meshfile::export(&run, &stem, dir.as_deref(), &meshfile::Options::new(f))?;
+    let said = if e.watertight() && e.manifold() {
         format!(
-            "Exported {file}: {} objects, {} triangles, watertight and manifold",
+            "Exported {name}: {} objects, {} triangles, watertight and manifold",
             e.checks.len(),
             e.triangles()
         )
     } else {
         format!(
-            "Exported {file}: {} triangles, but not closed and manifold: check it before printing",
+            "Exported {name}: {} triangles, but not closed and manifold: check it before printing",
             e.triangles()
         )
-    })
+    };
+    Ok((e.bytes, said))
 }
 
+/// `mesh_file`, written to `out`; what to say in the status bar.
+pub fn export_mesh(
+    src: &str,
+    part: Option<&str>,
+    out: &std::path::Path,
+    f: forge_lang::meshfile::Format,
+) -> Result<String, String> {
+    let name = out
+        .file_name()
+        .map_or_else(String::new, |n| n.to_string_lossy().into_owned());
+    let (bytes, said) = mesh_file(src, part, &name, f)?;
+    forge_dirs::fs::write(out, &bytes).map_err(|e| format!("{}: {e}", out.display()))?;
+    Ok(said)
+}
+
+/// Stops the build threads this thread's documents started, and waits for each.
 pub fn stop_builders() {
     let me = std::thread::current().id();
     let mine: Vec<Builder> = {
