@@ -4080,6 +4080,7 @@ fn sole_pieces_keep_names(
         while end < kept.len() && key(end) == key(at) {
             end += 1;
         }
+        let mut clash = false;
         for k in at..end {
             let s = &mut specs[kept[k].0];
             if end == at + 1 && !s.whole {
@@ -4104,38 +4105,40 @@ fn sole_pieces_keep_names(
                     s.name = whole.piece(s.name);
                 }
                 wholes.push((s.name, whole));
+                clash |= s.name == whole;
             }
         }
-        // a piece of a piece shares the first whole's high half (`Name::piece`), so a region named
-        // by the boundary piece that once named the face can come out as the face's own name, which
-        // the piece that keeps the face in place keeps too: that region told apart (cold: only
-        // where a face keeps its name beside its new pieces)
-        if end > at + 1 {
-            let keeper = (at..end).find(|&k| specs[kept[k].0].extend);
-            if let Some(kk) = keeper {
-                let name = specs[kept[kk].0].name;
-                for k in at..end {
-                    if k != kk && specs[kept[k].0].name == name {
-                        retell(&mut specs[kept[k].0], name, &mut wholes);
-                    }
-                }
-            }
+        if clash {
+            retell(specs, &kept[at..end], &mut wholes);
         }
         at = end;
     }
     (split, wholes)
 }
 
-/// `sole_pieces_keep_names`' region whose name came out as its face's own: a piece name of its own.
+/// `sole_pieces_keep_names`' regions of one face whose name came out as the face's own. A piece of
+/// a piece shares the first whole's high half (`Name::piece`), so a region named by the boundary
+/// piece that once named the face can come out as the face's own name, which the piece that keeps
+/// the face in place keeps too: such a region gets a piece name of its own. (Cold: the only names a
+/// face's run of several specs can share with the face are those regions', so `clash` finds them.)
 #[cold]
 #[inline(never)]
-fn retell(s: &mut Spec, whole: Name, wholes: &mut Vec<(Name, Name)>) {
-    let old = s.name;
-    s.name = whole.piece(old.with_str("again"));
-    if let Some(w) = wholes.iter_mut().find(|w| w.0 == old && w.1 == whole) {
-        w.0 = s.name;
-    } else {
-        wholes.push((s.name, whole));
+fn retell(specs: &mut [Spec], run: &[(usize, bool)], wholes: &mut Vec<(Name, Name)>) {
+    let Some(kk) = run.iter().position(|&(i, _)| specs[i].extend) else {
+        return;
+    };
+    let whole = specs[run[kk].0].name;
+    for (k, &(i, _)) in run.iter().enumerate() {
+        if k == kk || specs[i].name != whole {
+            continue;
+        }
+        let old = specs[i].name;
+        specs[i].name = whole.piece(old.with_str("again"));
+        if let Some(w) = wholes.iter_mut().find(|w| w.0 == old && w.1 == whole) {
+            w.0 = specs[i].name;
+        } else {
+            wholes.push((specs[i].name, whole));
+        }
     }
 }
 
