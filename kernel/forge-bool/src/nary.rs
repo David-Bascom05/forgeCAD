@@ -2795,6 +2795,16 @@ fn nary_body(
     }
     out.joins.pieces.extend(wholes);
     let shell = out.add_shell();
+    // the bound of every vertex's tolerance, once, for every vertex made below (the tools', grown
+    // or not, and the new points')
+    out.note_vertex_tol(
+        point_tols
+            .iter()
+            .copied()
+            .chain(grown.iter().map(|g| g.1))
+            .chain(tools.iter().map(|t| t.vertex_tol()))
+            .fold(0.0, f64::max),
+    );
     // the body's vertex of each tool vertex (per tool, made on first use) and each new one
     let mut old_v: Vec<Vec<Option<VertexId>>> = vec![Vec::new(); n];
     let mut new_v: Vec<Option<VertexId>> = vec![None; points.len()];
@@ -2845,9 +2855,9 @@ fn nary_body(
                                     let name = flush
                                         .binary_search_by_key(&v, |f| f.0)
                                         .map_or(x.name, |k| flush[k].1);
-                                    out.add_tolerant_vertex(x.point, t, name)
+                                    out.add_vertex_within(x.point, t, name)
                                 }
-                                VKey::New(i) => out.add_tolerant_vertex(
+                                VKey::New(i) => out.add_vertex_within(
                                     points[i as usize],
                                     point_tols[i as usize],
                                     vnames

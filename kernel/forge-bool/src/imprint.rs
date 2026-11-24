@@ -90,6 +90,8 @@ pub(crate) trait Src {
     }
     fn vertex_count(&self) -> usize;
     fn vertex(&self, v: VertexId) -> (Point3, f64, Name);
+    /// At least every vertex's tolerance (`Body::vertex_tol`).
+    fn vertex_tol(&self) -> f64;
     fn edge(&self, e: EdgeId) -> (&Curve, Interval, VertexId, VertexId, Name);
     /// How far edge `e` may lie from its faces.
     fn edge_tol(&self, _e: EdgeId) -> f64 {
@@ -102,6 +104,9 @@ pub(crate) trait Src {
 }
 
 impl Src for Body {
+    fn vertex_tol(&self) -> f64 {
+        Body::vertex_tol(self)
+    }
     fn body(&self) -> std::borrow::Cow<'_, Body> {
         std::borrow::Cow::Borrowed(self)
     }
@@ -142,6 +147,10 @@ impl Src for Body {
 }
 
 impl Src for Unlinked {
+    fn vertex_tol(&self) -> f64 {
+        // (its vertices have no tolerance of their own: LINEAR)
+        0.0
+    }
     fn body(&self) -> std::borrow::Cow<'_, Body> {
         std::borrow::Cow::Owned(self.clone().into_body())
     }
