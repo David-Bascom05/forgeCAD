@@ -463,6 +463,10 @@ pub struct MachineDef {
     /// (SINUMERIK: set in machine data, PGsl 03/2013 11.2 LookAhead; grbl 1.1h: its planner
     /// buffer). `machine.lookahead`. None: UNKNOWN: the estimate plans over each whole run.
     pub lookahead: Option<usize>,
+    /// Whether the control blends G0 blocks into each other (true) or stops at every G0 block's
+    /// end (false). `machine.rapid_blend`. None: not published (UNKNOWN): the estimate stops at
+    /// every G0 block and also reports the blended time (`Timeline::t_scurve_blend`).
+    pub rapid_blend: Option<bool>,
     /// Forbidden regions of joint space the control enforces.
     pub zones: Vec<Zone>,
     /// Gang tool posts (`[[machine.gang]]`): each station is a tool mount named `GANG.T<n>`;
@@ -1493,6 +1497,16 @@ impl MachineDef {
             block_cycle: match num(t, "block_cycle") {
                 Some(v) => Some(positive(&m, "block_cycle", v)?),
                 None => None,
+            },
+            rapid_blend: match (t.contains_key("rapid_blend"), boolean(t, "rapid_blend")) {
+                (true, None) => {
+                    return Err(DefError::Bad {
+                        record: m.clone(),
+                        field: "rapid_blend",
+                        why: "must be true or false (leave it out when not published)".into(),
+                    });
+                }
+                (_, b) => b,
             },
             lookahead: match num(t, "lookahead") {
                 Some(v) if v >= 1.0 && v.fract() == 0.0 && v <= 1e6 => Some(v as usize),
