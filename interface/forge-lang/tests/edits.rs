@@ -289,3 +289,53 @@ fn rename_in_a_machining_document_leaves_call_heads() {
     .unwrap();
     assert_eq!(out, "fn sq2(x) {\n  return x * x\n}\na = sq2(2)\n");
 }
+
+/// In a machining document a call's head is not a read: deleting, moving or suppressing
+/// `drill = drill(..)` is not held up by, and does not take out, a later statement that only
+/// calls the built-in `drill` (it once refused with StillRead, and Suppress took `d2` too).
+#[test]
+fn a_call_head_in_a_machining_document_is_not_a_read() {
+    let src = "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\ndrill = drill(op1, f.bolts)\nd2 = drill(op1, f.other)\nprog = program(op1, after: drill)\n";
+    let del = apply(
+        "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\ndrill = drill(op1, f.bolts)\nd2 = drill(op1, f.other)\n",
+        &Op::DeleteFeature { id: "drill".into() },
+    )
+    .unwrap();
+    assert_eq!(
+        del,
+        "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\nd2 = drill(op1, f.other)\n"
+    );
+    // a real read still holds it: `prog` reads `drill`
+    assert!(apply(src, &Op::DeleteFeature { id: "drill".into() }).is_err());
+    let sup = apply(src, &Op::Suppress { id: "drill".into() }).unwrap();
+    assert!(sup.contains("\nd2 = drill(op1, f.other)\n"), "{sup}");
+    assert!(sup.contains("#~drill drill = drill(op1, f.bolts)"), "{sup}");
+    assert!(sup.contains("#~drill prog = program(op1, after: drill)"), "{sup}");
+    let mv = apply(
+        src,
+        &Op::MoveFeature {
+            id: "d2".into(),
+            before: Some("drill".into()),
+        },
+    )
+    .unwrap();
+    assert!(
+        mv.contains("d2 = drill(op1, f.other)\ndrill = drill(op1, f.bolts)\n"),
+        "{mv}"
+    );
+    let add = apply(
+        src,
+        &Op::AddFeature {
+            before: Some("drill".into()),
+            text: "d3 = drill(op1, f.third)".into(),
+        },
+    )
+    .unwrap();
+    assert!(
+        add.contains("d3 = drill(op1, f.third)\ndrill = drill(op1, f.bolts)\n"),
+        "{add}"
+    );
+    // a part's call of a function is a read of it
+    let part = "fn sq(x) {\n  return x * x\n}\na = sq(2)\n";
+    assert!(apply(part, &Op::DeleteFeature { id: "sq".into() }).is_err());
+}

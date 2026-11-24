@@ -275,3 +275,39 @@ theorem rename_accepted (E : ETab S α) (T X : TTab S α) {a b : Name} (sts : Li
 
 end Families
 end ForgeLang
+
+namespace ForgeLang
+namespace Families
+
+variable {S α : Type} (P : Prims α)
+
+/-- A document run in two parts: the second from the state and environment the first leaves. -/
+theorem run_append (E : ETab S α) (T X : TTab S α) :
+    ∀ (pre post : List St) (s : S) (ρ : Env α),
+      run P E T X s ρ (pre ++ post) =
+        ((run P E T X (run P E T X s ρ pre).1 (run P E T X s ρ pre).2.1 post).1,
+          (run P E T X (run P E T X s ρ pre).1 (run P E T X s ρ pre).2.1 post).2.1,
+          (run P E T X s ρ pre).2.2 ++
+            (run P E T X (run P E T X s ρ pre).1 (run P E T X s ρ pre).2.1 post).2.2)
+  | [], post, s, ρ => by simp [run]
+  | st :: pre, post, s, ρ => by
+    simp only [List.cons_append, run]
+    rw [run_append E T X pre post]
+
+/-- Any edit of a machining or robot document (Add, Delete, Move, Replace, SetArg, Suppress: a
+change from some statement on) leaves every statement before the first one it changes exactly as
+it was: the same results, and the same state and environment where the change begins. -/
+theorem edit_prefix (E : ETab S α) (T X : TTab S α) (pre post post' : List St) (s : S)
+    (ρ : Env α) :
+    (run P E T X s ρ (pre ++ post)).2.2.take pre.length = (run P E T X s ρ pre).2.2 ∧
+      (run P E T X s ρ (pre ++ post')).2.2.take pre.length = (run P E T X s ρ pre).2.2 := by
+  have hl : ∀ (q : List St) (s : S) (ρ : Env α), (run P E T X s ρ q).2.2.length = q.length := by
+    intro q
+    induction q with
+    | nil => intro s ρ; simp [run]
+    | cons st q ih => intro s ρ; simp [run, ih]
+  rw [run_append P E T X pre post, run_append P E T X pre post']
+  simp [List.take_left' (hl pre s ρ)]
+
+end Families
+end ForgeLang

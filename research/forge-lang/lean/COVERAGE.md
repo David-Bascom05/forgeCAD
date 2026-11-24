@@ -82,12 +82,16 @@ documents in `examples/machined/` included. Headers that are names add no syntax
 
 The theorems are about the core model of a part document (`Core.lean`). The text-level ones
 (`Print`, `Respell.respell_text`, `Suppress.suppress_text_closure`, `LL1.ReparseModel`) hold of
-any document. **Machining documents** (CAM-UI and the lathe editor send SetArg, AddFeature,
-DeleteFeature, MoveFeature, Suppress, Rename to them): GAP for every op's semantics. Their
-built-ins carry state (an op registers with its setup; `program` posts every op of a setup), so
-no edit of one statement is local to it, and no locality theorem can hold as stated for parts;
-what is proven is that the run is a function of the text (`Families.run`), the names facts
-above, and Rename (`FamiliesRename.rename_run`).
+any document. **Machining documents** (CAM-UI sends exactly SetArg, AddFeature, DeleteFeature,
+MoveFeature, ReplaceFeature, Suppress, Unsuppress and Rename to them, through
+`forge_lang::edit::apply`): a call's head there is a built-in, never a read
+(`edit_ops::calls_closed`, used by every precheck, Suppress's closure, Respell's reads and Rename),
+which is the model's `Families.readsE`. Proven there: Rename (`FamiliesRename.rename_run`); every
+op leaves the statements before the first it changes exactly as they were, results, state and
+environment (`FamiliesRename.edit_prefix`, `FamiliesRename.run_append`); the run is a function of
+the text. GAP, and no theorem of the parts' form can hold: what later statements compute, since
+their built-ins read the state earlier ones leave (an op the in-process stock, `program` a setup's
+ops); the text-level theorems (`Print`, `Suppress.suppress_text_closure`) are the core printer's.
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
@@ -162,6 +166,12 @@ scope).
   (`drill = drill(..)` became `holes = holes(..)`, an unknown built-in): fixed
   (`edit_ops::calls_closed`; test edits::rename_in_a_machining_document_leaves_call_heads);
   `FamiliesRename.renSt` is the fixed op.
+* The same cause, for the other ops on a machining document: DeleteFeature and MoveFeature of
+  `drill = drill(..)` were refused (`StillRead`) because a later `d2 = drill(..)` only calls the
+  built-in, AddFeature of such a call above the binding likewise, and Suppress took `d2` out with
+  it: fixed (`edit::mentions_in`; test edits::a_call_head_in_a_machining_document_is_not_a_read).
+* A machining document passes over a bare call statement silently (`facing(op1, ..)` with no
+  name does nothing, reports nothing): reported to CAM-CORE / CAM-TURN.
 * A `fn`'s name and params may take a built-in's name (no `ShadowsBuiltin`): harmless, they are
   read before built-ins, so no family extension changes them.
 
