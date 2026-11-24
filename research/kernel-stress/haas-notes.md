@@ -5,9 +5,11 @@
   `git show`, never checking the branch out; each zip is unpacked to a scratch dir and deleted.
 - **Corpus**: `research/kernel-stress/corpus.tsv` holds the smallest cases of each failure class
   (zip, file, solid entity, op, what it gave). `python3 -I tools/kernel-stress/corpus.py run`
-  replays them from the branch and says pass or fail now. No Haas geometry is in the repository:
-  the README beside the zips says not to redistribute them, and this repository is public. The
-  reproducers committed as tests are made from the kernel's own parts or written by hand.
+  replays them from the branch and says pass or fail now. Small extracted solids (each under
+  1 MB) are committed as fixtures in `kernel/forge-step/tests/data/haas/`, with
+  `tests/haas_fixtures.rs`: fixed cases are live tests, open ones are `#[ignore]` tests that say
+  what they should do (`cargo test -p forge-step --test haas_fixtures -- --ignored`). Larger
+  cases stay in the manifest.
 - **Shrink one**: `python3 -I tools/kernel-stress/extract.py FILE.step ENT[,ENT] out.step` writes
   one solid (or several) as a STEP of its own; `target/release/forge-stress out.step --only OP`
   runs one op on it.
@@ -46,6 +48,9 @@ refusals for time, 2 EdgeOffFace wrong Oks; after: 0, 1 and 0.
 | import: entity missing or of another kind (Cobot) | none: a file defect | an EDGE_LOOP lists an EDGE_CURVE, an EDGE_CURVE's vertex is an ORIENTED_EDGE; refusing is right |
 
 ## Parasolid (.x_t)
+
+PARASOLID (session_01WJtawyMeaFg2YQpEPzN4eu) now owns a native reader; what follows is this
+sweep's first look at the files, kept for them.
 
 Every zip holds the same machine as Parasolid text (`.x_t`, schema SCH_3000298 and later,
 SolidWorks 2018 to 2026); there is no reader for it, so none of it is read here. What one would
