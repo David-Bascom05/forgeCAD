@@ -8,7 +8,7 @@
 use super::Gui;
 use crate::origin::WorldVert;
 use crate::shell::robot::{RobotAct, RobotPanel};
-use forge_lang::urdf::{self, Exported, UrdfError};
+use forge_urdf::{self as urdf, Exported, UrdfError};
 use std::path::Path;
 
 /// The robot document's export, as the panel shows it: the source built with its structure, the
@@ -16,7 +16,7 @@ use std::path::Path;
 pub fn robot_export(file: &str) -> Result<Result<Exported, UrdfError>, String> {
     let text = forge_dirs::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
     let dir = Path::new(file).parent().map(Path::to_path_buf);
-    let r = forge_lang::robot::read(&text, dir.as_deref())
+    let r = forge_urdf::robot::read(&text, dir.as_deref())
         .map_err(|es| es.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "))?;
     let name = Path::new(file)
         .file_stem()
@@ -152,7 +152,7 @@ impl Gui {
             }
         };
         let dir = Path::new(path).parent().map(Path::to_path_buf);
-        let r = match forge_lang::robot::read(&text, dir.as_deref()) {
+        let r = match forge_urdf::robot::read(&text, dir.as_deref()) {
             Ok(r) => r,
             Err(es) => {
                 self.shell.status = es.iter().map(ToString::to_string).collect::<Vec<_>>().join("; ");
@@ -305,9 +305,9 @@ impl Gui {
 }
 
 /// An edit of the robot document on disk: the text before it, for Undo.
-pub fn robot_edit(file: &str, e: &forge_lang::robot::Edit) -> Result<String, String> {
+pub fn robot_edit(file: &str, e: &forge_urdf::robot::Edit) -> Result<String, String> {
     let before = forge_dirs::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
-    let after = forge_lang::robot::edit(&before, e)?;
+    let after = forge_urdf::robot::edit(&before, e)?;
     forge_dirs::fs::write(file, &after).map_err(|e| format!("{file}: {e}"))?;
     Ok(before)
 }
@@ -320,7 +320,7 @@ pub fn robot_write(file: &str) -> String {
         Err(e) => return e.to_string(),
     };
     let dir = Path::new(file).parent().map(Path::to_path_buf);
-    let r = match forge_lang::robot::read(&text, dir.as_deref()) {
+    let r = match forge_urdf::robot::read(&text, dir.as_deref()) {
         Ok(r) => r,
         Err(es) => return es.iter().map(ToString::to_string).collect::<Vec<_>>().join("; "),
     };

@@ -2,7 +2,7 @@
 
 A part or an assembly as a URDF robot description: one ZIP (the reply's bytes) holding
 `NAME/NAME.urdf` and `NAME/meshes/*.stl`; the CLI unpacks it into `NAME_urdf/` (or writes the
-ZIP as is with `-o X.zip`). Code: `interface/forge-lang/src/urdf.rs` (no kernel code changes).
+ZIP as is with `-o X.zip`). Code: `interface/forge-urdf` (no kernel code changes; forge-lang keeps only the assembly's `kin` hook and the `robot` document kind's words, so its own code generation, which the speed gate counts, is unchanged).
 
 ## Links
 - A part is one link, named for the file; its frame is the part's origin.

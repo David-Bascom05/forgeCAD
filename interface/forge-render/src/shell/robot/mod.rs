@@ -142,10 +142,10 @@ mod tests {
         let mut s = Shell::default();
         let mut p = RobotPanel::new("arm_robot.fg");
         p.source = Some("arm.fg".into());
-        let view = forge_lang::urdf::RobotView {
+        let view = forge_urdf::RobotView {
             root: "base".into(),
             links: ["base", "upper"]
-                .map(|n| forge_lang::urdf::ViewLink {
+                .map(|n| forge_urdf::ViewLink {
                     name: n.into(),
                     bodies: vec![n.into()],
                     mass: Some(1.0),
@@ -155,7 +155,7 @@ mod tests {
                     dummy: false,
                 })
                 .to_vec(),
-            joints: vec![forge_lang::urdf::ViewJoint {
+            joints: vec![forge_urdf::ViewJoint {
                 name: "shoulder".into(),
                 kind: "revolute",
                 of: "shoulder".into(),
@@ -196,7 +196,7 @@ mod tests {
         let out = &s.robot.as_ref().unwrap().out;
         assert_eq!(
             out[0],
-            RobotAct::Edit(forge_lang::robot::Edit::Put {
+            RobotAct::Edit(forge_urdf::robot::Edit::Put {
                 call: "root".into(),
                 text: "root(src.upper)".into()
             })
@@ -205,7 +205,7 @@ mod tests {
         command(&mut s, 13);
         assert_eq!(
             s.robot.as_ref().unwrap().out[1],
-            RobotAct::Edit(forge_lang::robot::Edit::Add {
+            RobotAct::Edit(forge_urdf::robot::Edit::Add {
                 text: "freeze(src.shoulder, at: 28.64789deg)".into()
             })
         );

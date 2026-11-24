@@ -7,7 +7,7 @@
 //! What URDF has and the document does not (gazebo tags, sensors, a calibration, safety
 //! controllers) is listed as dropped, never silently.
 
-use crate::robot::is_robot;
+use forge_lang::robot::is_robot;
 use forge_math::{Frame, Point3, Vec3, dmath};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
@@ -271,7 +271,7 @@ fn binding(n: &str, taken: &mut BTreeSet<String>) -> String {
     if b.is_empty() || b.starts_with(|c: char| c.is_ascii_digit()) {
         b.insert(0, '_');
     }
-    if crate::syntax::parse(&format!("{b} = 1\n")).is_err() {
+    if forge_lang::syntax::parse(&format!("{b} = 1\n")).is_err() {
         b.push_str("_l");
     }
     let mut out = b.clone();

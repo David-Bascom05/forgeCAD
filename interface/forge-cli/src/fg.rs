@@ -889,7 +889,7 @@ impl Session {
     /// the part or assembly as a URDF robot (research/export/urdf.md). The reply's bytes are a
     /// ZIP of `NAME.urdf` and `meshes/*.stl`; a refusal is typed (`kind`, `fixes`).
     fn export_urdf(&mut self, a: &Args) -> Result<Reply, String> {
-        use forge_lang::urdf;
+        use forge_urdf as urdf;
         let o = urdf::Options::parse(&a.words)?;
         let (path, src) = self.read(&a.file)?;
         let name = Path::new(&a.file)
@@ -920,9 +920,9 @@ impl Session {
         path: &Path,
         src: &str,
         name: &str,
-        o: &forge_lang::urdf::Options,
-    ) -> Result<Result<forge_lang::urdf::Exported, forge_lang::urdf::UrdfError>, String> {
-        use forge_lang::{robot, urdf};
+        o: &forge_urdf::Options,
+    ) -> Result<Result<forge_urdf::Exported, forge_urdf::UrdfError>, String> {
+        use forge_urdf::{self as urdf, robot};
         let doc_dir = path.parent().map(Path::to_path_buf);
         let (robot, src_path, src_text) = if robot::is_robot(src) {
             let r = match robot::read(src, doc_dir.as_deref()) {
@@ -960,7 +960,7 @@ impl Session {
             .file_stem()
             .map_or_else(|| "robot".into(), |n| n.to_string_lossy().into_owned());
         // a build reports what is missing without refusing on it
-        let o = forge_lang::urdf::Options {
+        let o = forge_urdf::Options {
             placeholder: true,
             ..Default::default()
         };

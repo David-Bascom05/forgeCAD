@@ -2,7 +2,7 @@
 
 David: "urdf also needs a full editor so that you can mess w joint and everything", and "it should
 be linked to the assembly or part, but not to the point I can't change or simplify the URDF."
-Builds on the exporter (research/export/urdf.md, `forge_lang::urdf`).
+Builds on the exporter (research/export/urdf.md, `forge_urdf`; the crate `interface/forge-urdf`, kept out of forge-lang so the language's code generation, which the speed gate counts, is untouched).
 
 ## 1. Principles
 - **Text is the source of truth.** A robot is a `.fg` document of its own (a `robot`
@@ -57,7 +57,7 @@ transmission(src.shoulder, actuator: "m1", reduction: 50)
   URDF-only data is only ever in the robot document.
 
 ## 3. The model
-`forge_lang::urdf` is split in two (no change to the output):
+`forge_urdf` is split in two (no change to the output):
 - `model(run, robot_doc) -> Model`: links and joints, every field a `Field<T> { value, from:
   Linked | Overridden { was } | Robot }`, plus validation issues; the exporter's current
   analysis is the linked layer, the robot document's statements apply on top in order.
@@ -130,7 +130,7 @@ Look: forgeCAD's existing panels and palette (gui_inspect, palette.rs); no new w
   research/export/urdf-ui/, from the web build in Chromium as web.yml runs it.
 
 ## 7a. Status (claude/urdf-robot)
-Built (phase 2a): `forge_lang::robot` (the document, read with every bad line named),
+Built (phase 2a): `forge_urdf::robot` (the document, read with every bad line named),
 `urdf::export_robot` (tree overrides `root`/`cut`/`freeze` into the walk, which keeps each link's
 solved anchor apart from its URDF placement so a frozen joint at another value moves its subtree
 rigidly; model overrides `link`/`merge`/`drop`/`frame`/`visual`/`collision`/`collisions`/
@@ -142,13 +142,13 @@ Built (phase 2b): unlinked robots (`source(none)`; `NAME = link(mass:, com:, ine
 friction:, mimic: (J, multiplier, offset))`, checked a tree with one root; point masses allowed,
 impossible inertias refused), `mesh(file, scale:)` (packaged once when a readable STL/OBJ beside
 the document, else referenced as written, said), visual `material:`/`colour:`, and
-`forgecad import ROBOT.urdf [-o DIR]` (`forge_lang::urdf_import`: its own XML reader; inertials
+`forgecad import ROBOT.urdf [-o DIR]` (`forge_urdf::import`: its own XML reader; inertials
 turned from their rpy into link axes; what the document cannot carry listed as `# not imported`).
 Built (phase 3, read-only workspace): `RobotView` (`Exported.view`: links, joints, `place(q)`
 forward kinematics with mimics, `clamp`); in forge-render a robot document opens its source
 with a Robot panel (tree, sliders held in the robot's limits, details with overridden fields
 marked), the parts placed by the robot's own kinematics each frame.
-Built (phase 4, editing, first cut): `forge_lang::robot::edit` (set a field on an override
+Built (phase 4, editing, first cut): `forge_urdf::robot::edit` (set a field on an override
 statement, recording `FIELD_was` when it was linked; reset a field, the statement going when
 empty; add/remove statements); the panel's limits / effort / velocity / damping / friction /
 mass overrides, Reset to linked, Apply to assembly (SetArg on the source joint, then reset),

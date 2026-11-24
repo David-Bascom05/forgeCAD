@@ -1336,6 +1336,7 @@ dependencies = [
  "forge-thermo",
  "forge-tooling",
  "forge-topo",
+ "forge-urdf",
  "forge-vendor",
  "js-sys",
  "keyring-core",
@@ -1421,6 +1422,19 @@ dependencies = [
 [[package]]
 name = "forge-units"
 version = "0.1.0"
+
+[[package]]
+name = "forge-urdf"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-asm",
+ "forge-lang",
+ "forge-material",
+ "forge-math",
+ "forge-mesh",
+ "forge-topo",
+]
 
 [[package]]
 name = "forge-vendor"

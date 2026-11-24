@@ -6,9 +6,9 @@
 
 mod urdf_util;
 
-use forge_lang::robot::{self, RobotError};
-use forge_lang::urdf::{self, Exported, UrdfError};
 use forge_lang::{Options, Run};
+use forge_urdf::robot::{self, RobotError};
+use forge_urdf::{self as urdf, Exported, UrdfError};
 use std::path::{Path, PathBuf};
 use urdf_util::*;
 
@@ -451,7 +451,7 @@ fn the_view_drives_the_robot_as_the_assembly_moves() {
 
 #[test]
 fn edits_set_and_reset_overrides_in_the_text() {
-    use forge_lang::robot::{Edit, edit};
+    use forge_urdf::robot::{Edit, edit};
     let base = doc("joint(src.elbow, damping: 0.1)\n");
     // a new statement for a joint with none
     let s = edit(

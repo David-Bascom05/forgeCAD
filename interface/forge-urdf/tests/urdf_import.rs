@@ -7,9 +7,10 @@
 
 mod urdf_util;
 
-use forge_lang::urdf::{self, Exported};
-use forge_lang::urdf_import::{import, parse_xml};
-use forge_lang::{Options, robot};
+use forge_lang::Options;
+use forge_urdf::import::{import, parse_xml};
+use forge_urdf::robot;
+use forge_urdf::{self as urdf, Exported};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use urdf_util::*;

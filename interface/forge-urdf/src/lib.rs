@@ -13,157 +13,16 @@
 //! Output is deterministic: document order throughout, shortest round-trip number text, trig
 //! through `forge_math::dmath`.
 
-use crate::Run;
-use crate::props::{Piece, combine};
 use forge_agent::json::Json;
-use forge_asm as fa;
-use forge_asm::{ConstraintKind, Freedom, JointKind};
+use forge_asm::{Freedom, JointKind};
+use forge_lang::Run;
+use forge_lang::kin::{Kin, KinLink};
+use forge_lang::props::{Piece, combine};
 use forge_math::{Frame, Point3, Vec3, dmath};
 use forge_mesh::scene::{Scene, Solids};
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::Write as _;
 use std::path::Path;
-
-// ---- the solved structure ---------------------------------------------------------------------
-
-/// An assembly's kinematic structure as solved: what the export reads (`AsmOut::kin`).
-#[derive(Clone, Debug, Default)]
-pub struct Kin {
-    /// The top-level instances not suppressed, in document order.
-    pub bodies: Vec<KinBody>,
-    /// Joints and loose constraints not suppressed, in document order.
-    pub links: Vec<KinLink>,
-    pub relations: Vec<KinRelation>,
-    /// Each of `AsmOut::occurrences`' top-level body (an index into `bodies`).
-    pub occ_body: Vec<Option<usize>>,
-}
-
-#[derive(Clone, Debug)]
-pub struct KinBody {
-    pub name: String,
-    pub ground: bool,
-    /// Its solved pose.
-    pub pose: Frame,
-}
-
-#[derive(Clone, Debug)]
-pub struct KinLink {
-    pub id: String,
-    /// The joint's kind; None for a loose constraint (`constraint` names its kind).
-    pub kind: Option<JointKind>,
-    pub constraint: Option<ConstraintKind>,
-    /// Each end's body (A, B), None where its instance is not placed.
-    pub ends: [Option<usize>; 2],
-    /// Each end's anchor frame in the world as solved: A's flipped when the joint says so.
-    pub at: [Option<Frame>; 2],
-    /// The solved values (mm, rad), and the limits as written.
-    pub values: Vec<(Freedom, f64)>,
-    pub limits: Vec<(Freedom, f64, f64)>,
-}
-
-impl KinLink {
-    /// Rigid: a fastened joint or a lock constraint.
-    pub fn rigid(&self) -> bool {
-        self.kind == Some(JointKind::Fastened) || self.constraint == Some(ConstraintKind::Lock)
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct KinRelation {
-    pub id: String,
-    pub kind: &'static str,
-    /// d follower / d leader, in forge's units (mm, rad).
-    pub slope: f64,
-    pub leader: (String, Freedom),
-    pub follower: (String, Freedom),
-    pub offset: Option<f64>,
-}
-
-type Namer<'a> = &'a dyn Fn(u64) -> Option<String>;
-
-/// The structure of a solved assembly level, names given by id.
-pub fn kin_of<P: fa::Parts>(
-    asm: &fa::Assembly,
-    sol: &fa::Solution,
-    parts: &P,
-    inst_name: Namer,
-    link_name: Namer,
-    rel_name: Namer,
-) -> Kin {
-    let mut kin = Kin::default();
-    let mut index: BTreeMap<fa::InstanceId, usize> = BTreeMap::new();
-    for inst in asm.instances.iter().filter(|i| !i.suppressed) {
-        if index.contains_key(&inst.id) {
-            continue;
-        }
-        index.insert(inst.id, kin.bodies.len());
-        kin.bodies.push(KinBody {
-            name: inst_name(inst.id.0).unwrap_or_else(|| format!("i{}", inst.id.0)),
-            ground: inst.ground,
-            pose: sol.pose(inst.id).unwrap_or(inst.pose),
-        });
-    }
-    let world = |e: &fa::End| -> Option<Frame> {
-        let local = |info: Option<&fa::PartInfo>| match &e.anchor {
-            fa::AnchorRef::Local(r) => Some(r.frame),
-            fa::AnchorRef::Named(n) => info?.refs.get(n)?.as_ref().ok().map(|r| r.frame),
-        };
-        if let Some(o) = sol.occurrences.iter().find(|o| o.path == e.path) {
-            return Some(o.pose.compose(&local(parts.part(&o.part))?));
-        }
-        match (&e.anchor, e.path.as_slice()) {
-            (fa::AnchorRef::Local(r), [only]) => Some(sol.pose(*only)?.compose(&r.frame)),
-            _ => None,
-        }
-    };
-    let body = |e: &fa::End| e.path.first().and_then(|i| index.get(i).copied());
-    for j in asm.joints.iter().filter(|j| !j.suppressed) {
-        let a = world(&j.a).map(|f| if j.flip { f.flipped() } else { f });
-        kin.links.push(KinLink {
-            id: link_name(j.id.0).unwrap_or_else(|| format!("j{}", j.id.0)),
-            kind: Some(j.kind),
-            constraint: None,
-            ends: [body(&j.a), body(&j.b)],
-            at: [a, world(&j.b)],
-            values: sol
-                .joints
-                .iter()
-                .find(|r| r.joint == j.id)
-                .map(|r| r.values.clone())
-                .unwrap_or_default(),
-            limits: j.limits.clone(),
-        });
-    }
-    for c in asm.constraints.iter().filter(|c| !c.suppressed) {
-        let a = world(&c.a).map(|f| if c.flip { f.flipped() } else { f });
-        kin.links.push(KinLink {
-            id: link_name(c.id).unwrap_or_else(|| format!("c{}", c.id)),
-            kind: None,
-            constraint: Some(c.kind),
-            ends: [body(&c.a), body(&c.b)],
-            at: [a, world(&c.b)],
-            values: vec![],
-            limits: vec![],
-        });
-    }
-    for r in asm.relations.iter().filter(|r| !r.suppressed) {
-        let joint = |v: &fa::ValueRef| link_name(v.joint.0).unwrap_or_else(|| format!("j{}", v.joint.0));
-        kin.relations.push(KinRelation {
-            id: rel_name(r.id.0).unwrap_or_else(|| format!("r{}", r.id.0)),
-            kind: r.kind.name(),
-            slope: r.kind.slope(),
-            leader: (joint(&r.leader), r.leader.freedom),
-            follower: (joint(&r.follower), r.follower.freedom),
-            offset: r.offset,
-        });
-    }
-    kin.occ_body = sol
-        .occurrences
-        .iter()
-        .map(|o| o.path.first().and_then(|i| index.get(i).copied()))
-        .collect();
-    kin
-}
 
 // ---- options and errors -----------------------------------------------------------------------
 
@@ -195,7 +54,7 @@ pub struct Options {
 
 impl Default for Options {
     fn default() -> Options {
-        let m = crate::meshfile::Options::new(crate::meshfile::Format::Stl);
+        let m = forge_lang::meshfile::Options::new(forge_lang::meshfile::Format::Stl);
         Options {
             tol: m.tol,
             angle: m.angle,
@@ -1098,10 +957,10 @@ fn part(
             None
         }
     };
-    let mut mo = crate::meshfile::Options::new(crate::meshfile::Format::Stl);
+    let mut mo = forge_lang::meshfile::Options::new(forge_lang::meshfile::Format::Stl);
     mo.tol = o.tol;
     mo.angle = o.angle;
-    let scene = crate::meshfile::scene(run, name, dir, &mo).map_err(UrdfError::Mesh)?;
+    let scene = forge_lang::meshfile::scene(run, name, dir, &mo).map_err(UrdfError::Mesh)?;
     let mesh_name = format!("meshes/{}.stl", ident(name));
     let objects = scene.flatten().objects;
     let pts: Vec<Point3> = objects.iter().flat_map(|o| o.positions.iter().copied()).collect();
@@ -1163,7 +1022,12 @@ fn find(p: &mut [usize], mut i: usize) -> usize {
 }
 
 #[allow(clippy::too_many_lines)]
-fn assembly(run: &Run, asm: &crate::asm::AsmOut, o: &Options, ex: &mut Exported) -> Result<Model, UrdfError> {
+fn assembly(
+    run: &Run,
+    asm: &forge_lang::asm::AsmOut,
+    o: &Options,
+    ex: &mut Exported,
+) -> Result<Model, UrdfError> {
     let kin = asm.kin.as_ref().ok_or_else(|| {
         UrdfError::NotBuilt("the assembly was run without its structure (Options::kin)".into())
     })?;
@@ -1418,7 +1282,7 @@ fn assembly(run: &Run, asm: &crate::asm::AsmOut, o: &Options, ex: &mut Exported)
     let inner: Vec<&str> = asm
         .links
         .iter()
-        .filter(|l| !l.owner.is_empty() && l.family == crate::asm::LinkFamily::Joint && !l.suppressed)
+        .filter(|l| !l.owner.is_empty() && l.family == forge_lang::asm::LinkFamily::Joint && !l.suppressed)
         .map(|l| l.id.as_str())
         .collect();
     if !inner.is_empty() {
@@ -1429,7 +1293,7 @@ fn assembly(run: &Run, asm: &crate::asm::AsmOut, o: &Options, ex: &mut Exported)
     }
     // meshes: one per part body, in the order first used
     let q = {
-        let mut mo = crate::meshfile::Options::new(crate::meshfile::Format::Stl);
+        let mut mo = forge_lang::meshfile::Options::new(forge_lang::meshfile::Format::Stl);
         mo.tol = o.tol;
         mo.angle = o.angle;
         mo.quality()
@@ -1465,7 +1329,7 @@ fn assembly(run: &Run, asm: &crate::asm::AsmOut, o: &Options, ex: &mut Exported)
                         solids: &[],
                     };
                     let objects = forge_mesh::body_objects(&asm.parts[*p], &q, &by, false).map_err(|e| {
-                        UrdfError::Mesh(format!("meshing {stem} failed: {}", crate::error::words(&e)))
+                        UrdfError::Mesh(format!("meshing {stem} failed: {}", forge_lang::error::words(&e)))
                     })?;
                     let f = format!("meshes/{}.stl", mnames.take(&stem));
                     points.insert(
@@ -1501,7 +1365,7 @@ fn assembly(run: &Run, asm: &crate::asm::AsmOut, o: &Options, ex: &mut Exported)
         let Some(sum) = sum else { continue };
         let masses = sum.masses().map_err(|e| UrdfError::Mass(e.to_string()))?;
         for (s, m) in sum.solids.iter().zip(masses) {
-            if body != 0 && crate::asm::hid(&s.0) != body {
+            if body != 0 && forge_lang::build::history_id(&s.0) != body {
                 continue;
             }
             if s.1.is_none() {
@@ -3329,6 +3193,9 @@ fn view_of(links: &[Wl], joints: &[Wj], root: &str, o: &Options) -> RobotView {
             .collect(),
     }
 }
+
+pub mod import;
+pub mod robot;
 
 #[cfg(test)]
 mod tests {

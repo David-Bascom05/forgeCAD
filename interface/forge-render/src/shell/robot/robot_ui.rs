@@ -8,8 +8,8 @@ use crate::shell::Shell;
 use crate::shell::placed::Placed;
 use crate::shell::theme::{medium, mono, sans};
 use egui::{RichText, Ui, pos2, vec2};
-use forge_lang::robot::Edit;
-use forge_lang::urdf::{Conflict, Exported, RobotView, UrdfError, ViewJoint};
+use forge_urdf::robot::Edit;
+use forge_urdf::{Conflict, Exported, RobotView, UrdfError, ViewJoint};
 use std::collections::BTreeMap;
 
 /// What the panel asks of the host, in order.
@@ -317,7 +317,7 @@ impl RobotPanel {
     }
 
     /// How the document names a link: `src.B` by a source instance it holds, else its name.
-    pub fn link_target(&self, l: &forge_lang::urdf::ViewLink) -> String {
+    pub fn link_target(&self, l: &forge_urdf::ViewLink) -> String {
         match l.bodies.first() {
             Some(b) if self.source.is_some() => format!("src.{b}"),
             _ => format!("\"{}\"", l.name),
@@ -848,12 +848,12 @@ impl Shell {
                             .collisions
                             .iter()
                             .map(|c| match &c.shape {
-                                forge_lang::urdf::Shape::Mesh { file, .. } => {
+                                forge_urdf::Shape::Mesh { file, .. } => {
                                     file.rsplit('/').next().unwrap_or(file).to_string()
                                 }
-                                forge_lang::urdf::Shape::Box(_) => "box".into(),
-                                forge_lang::urdf::Shape::Cylinder { .. } => "cylinder".into(),
-                                forge_lang::urdf::Shape::Sphere(_) => "sphere".into(),
+                                forge_urdf::Shape::Box(_) => "box".into(),
+                                forge_urdf::Shape::Cylinder { .. } => "cylinder".into(),
+                                forge_urdf::Shape::Sphere(_) => "sphere".into(),
                             })
                             .collect();
                         row(ui, "collision", shapes.join(", "));
@@ -921,7 +921,7 @@ impl Shell {
 
     /// The selected link's place in the tree, changed: made the root, dropped, merged into its
     /// parent (across a fixed joint only), a frame hung on it, its collision made its hull.
-    fn link_actions(ui: &mut Ui, p: &mut RobotPanel, _view: &RobotView, _l: &forge_lang::urdf::ViewLink) {
+    fn link_actions(ui: &mut Ui, p: &mut RobotPanel, _view: &RobotView, _l: &forge_urdf::ViewLink) {
         ui.add_space(4.0);
         ui.horizontal_wrapped(|ui| {
             for op in [

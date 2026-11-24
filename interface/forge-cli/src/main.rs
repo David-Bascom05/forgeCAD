@@ -578,7 +578,7 @@ fn import_urdf(path: &Path, dir: &Path, json: bool) -> ExitCode {
     let doc_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
     let r = std::fs::read_to_string(path)
         .map_err(|e| e.to_string())
-        .and_then(|x| forge_lang::urdf_import::import(&x, &urdf_dir, &doc_dir));
+        .and_then(|x| forge_urdf::import::import(&x, &urdf_dir, &doc_dir));
     let i = match r {
         Ok(i) => i,
         Err(e) => {
