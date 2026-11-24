@@ -1983,6 +1983,14 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
             "estimated envelope (no published geometry; errs large)".into(),
         ));
     }
+    if c.rule == Rule::Handling {
+        f.push((
+            "method",
+            "the part's boxes and bounding sphere swept through the operator's move, against the press's bodies' boxes: \
+             a pass is proven; an overlap is of these envelopes (value: how far they overlap), not a measured collision of the part"
+                .into(),
+        ));
+    }
     if let Some(lo) = c.lo {
         f.push(("limit_lo", v(lo)));
     }

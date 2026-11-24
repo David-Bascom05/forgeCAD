@@ -922,6 +922,9 @@ impl<'a> Scene<'a> {
         c.certified = c.pass;
         if !c.pass {
             c.tool = Some(worst.1);
+            // the envelopes meet (the part's boxes and sphere, the bodies' boxes): not a measured
+            // collision of the part itself, so undecided, never a proven fail
+            c.undecided = true;
         }
         Some(c)
     }

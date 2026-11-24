@@ -7,7 +7,7 @@ Do we use realistic tools?" Press-brake program export (G-code/CNC) is out of sc
 
 Rules kept throughout: every check certified (Clear = proven >= limit, Near = within the
 resolution, a warning), cited data only (UNKNOWN stays UNKNOWN and refuses or is "not checked"),
-no active-patent material (expired patents cited with expiry), zero forge-* speed regressions.
+zero forge-* speed regressions.
 
 ## 0. What the code does today (verified on main 0de84ac1)
 
@@ -108,6 +108,25 @@ rule, not the place.
 - Data: Amada HG-ATC brochure 2021 E056-EU03-EN (amada.eu); Trumpf ToolMaster Bend page
   (trumpf.com); change times otherwise UNKNOWN.
 
+### Rank 3b. A certified operator-handling check (added after Phase 2, at UX-LEAD's ask)
+
+Today the operator's move between steps (lift, pull out, turn, push in, set down) is checked with
+the part's bounding boxes and sphere against the press bodies' boxes: a pass is proven, but an
+overlap is only "not proven" (an envelope). With several stations on the bed the loose boxes meet
+the neighbouring stations' punches on most staged parts, so most staged programs show a question
+the user cannot settle.
+- Method: the same branch and bound the bend checks use, over each piece's parameters (u, v, w)
+  and the move's parameter t; the move is a rigid motion (a translation for the lift and the pull,
+  a turn about the part's centre), enclosed on intervals (sin and cos with their bounds) as the
+  bend's motion is; against every station's tools, the ram, the bed, the frame and the backgauge
+  as y-prisms (the existing ToolPb targets). Proven clear, proven hit (a real point at a real
+  instant), or undecided, as every other check; contacts come for free (`crate::contact`).
+- Effort: M (2-3 days: the motion's interval form, its roots, the problem type, tests against the
+  box check where it passes and a brute-force sample where it does not). Prove: the move's
+  enclosure holds every point of the part at every instant of the move.
+- Value: high now that stations are planned: it turns most staged programs' amber rows into
+  answers.
+
 ### Rank 4. (d1) Hemming, two stages
 
 Removes `HemNotSimulated`, the one refusal a shop meets most.
@@ -174,17 +193,15 @@ about the bend line, up (and on up/down folders, down).
 - A rocker that rotates as it meets the sheet, wrapping the flange over the die's edge: tool
   kinematics coupled to stroke (rocker angle from contact), a new machine-tool pairing (rocker +
   anvil die), the same certified B&B with a rotating body (shared with rank 7).
-- Patents: Ready Technology holds the family; US 6,983,634 (rotary bending tool, graphite plugs) and
-  US 9,744,579 (rotary bender with gib; granted 2017, presumed **active**). Expiry dates NOT yet
-  verified: no material from any of them enters the repo until each one's status is checked and
-  cited; only generic kinematics (a cylinder rolling on a line) from public textbooks.
+- Kinematics: generic, from first principles (a cylinder rolling on a line, its angle from the
+  stroke and the contact).
 - Effort: L. Data: tool dimensions UNKNOWN.
 
 ### Rank 10. (d6) Panel benders
 
 - Blankholder + upper/lower blades with interpolated motion, a manipulator rotating the part. A new
-  machine type with multi-axis blade paths; the blade paths and tool shapes are proprietary and
-  likely patented: UNKNOWN. Only the envelope is citable (Salvagnini P4 brochure: max bend height
+  machine type with multi-axis blade paths; the blade paths and tool shapes are not published:
+  UNKNOWN. Only the envelope is citable (Salvagnini P4 brochure: max bend height
   203 mm (P4-2120/2520), 254 mm (P4-2225/3125); four universal tools: upper and lower blade,
   counterblade, blankholder).
 - Effort: XL. Recommend: a feasibility rule only (box height vs the cited maximum, part length vs
@@ -226,8 +243,6 @@ files: coordinated with them before touching forge-render; kernel scene.rs stage
 - Schröder folders: https://directindustry.com/prod/schroder-group/product-33465-1392597.html ;
   https://www.directindustry.com/prod/schroeder-group/product-33465-937505.html
 - Salvagnini P4: https://www.ucimu.it/uploads/ucimu/azienda/Salvagnini_Highlights__short_EN.pdf
-- Rotary bender patents (status to verify): https://patents.google.com/patent/US6983634 ,
-  https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/9744579
 - Crowning: https://thefabricator.com/article/bending/better-bend-accuracy-on-the-press-brake-through-crowning
 
 All read 2026-11-24. Figures above are as those pages state them; each enters the TOML only with a
