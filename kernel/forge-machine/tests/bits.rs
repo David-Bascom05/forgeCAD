@@ -19,7 +19,10 @@ fn f(h: &mut u64, v: f64) {
     fnv(h, &v.to_bits().to_le_bytes());
 }
 
-const PINNED: u64 = 0xff9328d4d74088e4;
+// re-pinned on train 4a: #21's sound Interval sin/cos (judged a fix, David OK) moves the
+// interval kinematics' bounds; with main's forge-math interval.rs the old 0xff9328d4d74088e4
+// returns exactly. The same value on wasm32-wasip1.
+const PINNED: u64 = 0xcd78466c86f8e8b5;
 
 #[test]
 fn the_same_bits_everywhere() {

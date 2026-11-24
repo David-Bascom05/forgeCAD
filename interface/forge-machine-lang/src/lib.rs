@@ -167,7 +167,7 @@ pub fn library(dir: &Path) -> Result<forge_machine::library::Library, String> {
     if let Some((_, f, e)) = cat.errors.first() {
         return Err(format!("{f}: {e}"));
     }
-    Ok(cat.library())
+    Ok(forge_machine_builder::catalog::library(&cat))
 }
 
 /// Runs a setup file: the program on the machine, its timeline, collisions and removal.
