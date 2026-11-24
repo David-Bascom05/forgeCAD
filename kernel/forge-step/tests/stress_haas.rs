@@ -267,3 +267,37 @@ fn edge_off_at(text: &str, pt: &str, d: Vec3) -> String {
     let moved = format!("{:e},{:e},{:e}", xyz[0] + d.x, xyz[1] + d.y, xyz[2] + d.z);
     format!("{}{}{}", &text[..open], moved, &text[close..])
 }
+
+/// The point a surface's placement stands on, as its `#` id: the first `kind` in the file.
+fn anchor_of<'a>(text: &'a str, kind: &str) -> &'a str {
+    let at = text.find(&format!("{kind}('',")).expect("the surface");
+    let rest = &text[at + kind.len() + 4..];
+    let place = &rest[..rest.find([',', ')']).unwrap()];
+    let pl = text.find(&format!("{place}=AXIS2_PLACEMENT_3D('',")).unwrap();
+    let pt = &text[pl + place.len() + 23..];
+    &pt[..pt.find(',').unwrap()]
+}
+
+/// A placement's origin far out where it changes nothing of the shape: a cylinder's 600 m along
+/// its axis, a plane's 600 m across it (TR210 and 15 more: refused as "outside the 1 km model
+/// box"). It is moved to the place nearest the world's origin and the solid is read.
+#[test]
+fn a_far_anchor_on_an_axis_or_a_plane_is_read() {
+    let text = export(&bar(5.0, 10.0), &Options::default()).unwrap().text;
+    let cyl = anchor_of(&text, "CYLINDRICAL_SURFACE").to_string();
+    let far = edge_off_at(&text, &cyl, Vec3::new(0.0, 0.0, 6e5));
+    let pl = anchor_of(&far, "PLANE").to_string();
+    let far = edge_off_at(&far, &pl, Vec3::new(6e5, -6e5, 0.0));
+    let imp = import(far.as_bytes(), &Limits::default()).unwrap();
+    assert!(imp.refusals.is_empty(), "{:?}", imp.refusals);
+    let b = &imp.solids[0].body;
+    assert!(check(b).is_empty(), "{:?}", check(b));
+    let want = forge_math::dmath::PI * 25.0 * 10.0;
+    let v = forge_topo::mass::mass(b).unwrap().volume;
+    assert!((v - want).abs() < 1e-6 * want, "{v} vs {want}");
+    // a point that is far out and anchors nothing is still refused
+    let pt = text.find("=VERTEX_POINT('',").map(|i| &text[i + 17..]).unwrap();
+    let pt = &pt[..pt.find(')').unwrap()];
+    let bad = edge_off_at(&text, pt, Vec3::new(6e5, 0.0, 0.0));
+    assert!(import(bad.as_bytes(), &Limits::default()).map_or(true, |i| !i.refusals.is_empty()));
+}

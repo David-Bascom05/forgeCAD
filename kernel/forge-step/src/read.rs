@@ -102,6 +102,14 @@ struct Units {
     uncertainty: f64,
 }
 
+/// Where a placement's origin may move without moving the shape on it (`Reader::placement_with`).
+#[derive(Clone, Copy)]
+enum Slide {
+    No,
+    Along,
+    Across,
+}
+
 struct Reader<'a> {
     f: &'a File<'a>,
     u: Units,
@@ -289,6 +297,27 @@ impl<'a> Reader<'a> {
     }
 
     fn point(&self, id: u32) -> R<Point3> {
+        let p = self.point_anywhere(id)?;
+        if !forge_math::tol::in_model_box(p) {
+            return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
+        }
+        Ok(p)
+    }
+
+    /// A point that anchors an axis (a line's, a cylinder's): anywhere along it is the same
+    /// shape, and files put it far out (TR210: a cylinder's origin 500 m along its axis). It is
+    /// slid along `dir` to the foot nearest the world's origin, and only then held to the box.
+    fn point_on_axis(&self, id: u32, dir: UnitVec3) -> R<Point3> {
+        let p = self.point_anywhere(id)?;
+        let d = Vec3::from(dir);
+        let foot = p - d * (p - Point3::ORIGIN).dot(d);
+        if !forge_math::tol::in_model_box(foot) {
+            return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
+        }
+        Ok(foot)
+    }
+
+    fn point_anywhere(&self, id: u32) -> R<Point3> {
         let a = self.args_of(id, "CARTESIAN_POINT")?;
         let c = self.list(id, "CARTESIAN_POINT", a.get(1))?;
         if c.len() != 3 {
@@ -300,7 +329,8 @@ impl<'a> Reader<'a> {
             self.real(id, "CARTESIAN_POINT", c.get(1))? * m,
             self.real(id, "CARTESIAN_POINT", c.get(2))? * m,
         );
-        if !forge_math::tol::in_model_box(p) {
+        // far past the box, a slide along an axis would lose the point's last digits
+        if !(p.x.abs().max(p.y.abs()).max(p.z.abs()) <= 1e3 * forge_math::tol::MODEL_HALF_SIZE) {
             return refuse(id, "CARTESIAN_POINT", "outside the 1 km model box");
         }
         Ok(p)
@@ -324,11 +354,31 @@ impl<'a> Reader<'a> {
     }
 
     fn placement(&self, id: u32) -> R<Frame> {
+        self.placement_with(id, Slide::No)
+    }
+
+    /// `placement`, its origin moved where that changes nothing of the shape on it: along z
+    /// for a cylinder's axis, within the x-y plane for a plane (TR210: a plane's origin 500 m out
+    /// on it), to the place nearest the world's origin.
+    fn placement_with(&self, id: u32, slide: Slide) -> R<Frame> {
         let a = self.args_of(id, "AXIS2_PLACEMENT_3D")?;
-        let origin = self.point(self.reference(id, "AXIS2_PLACEMENT_3D", a.get(1))?)?;
         let z = match a.get(2) {
             Some(Value::Ref(r)) => Some(self.direction(*r)?),
             _ => None,
+        };
+        let at = self.reference(id, "AXIS2_PLACEMENT_3D", a.get(1))?;
+        let origin = match slide {
+            Slide::No => self.point(at)?,
+            Slide::Along => self.point_on_axis(at, z.unwrap_or(UnitVec3::Z))?,
+            Slide::Across => {
+                let n = Vec3::from(z.unwrap_or(UnitVec3::Z));
+                let p = self.point_anywhere(at)?;
+                let foot = Point3::ORIGIN + n * (p - Point3::ORIGIN).dot(n);
+                if !forge_math::tol::in_model_box(foot) {
+                    return refuse(at, "CARTESIAN_POINT", "outside the 1 km model box");
+                }
+                foot
+            }
         };
         let x = match a.get(3) {
             Some(Value::Ref(r)) => Some(self.direction(*r)?),
@@ -529,10 +579,10 @@ impl<'a> Reader<'a> {
         match name {
             "LINE" => {
                 let a = self.args_of(id, "LINE")?;
-                let origin = self.point(self.reference(id, "LINE", a.get(1))?)?;
                 let v = self.reference(id, "LINE", a.get(2))?;
                 let va = self.args_of(v, "VECTOR")?;
                 let dir = self.direction(self.reference(v, "VECTOR", va.get(1))?)?;
+                let origin = self.point_on_axis(self.reference(id, "LINE", a.get(1))?, dir)?;
                 Ok(Curve::Line(Line { origin, dir }))
             }
             "CIRCLE" => {
@@ -626,12 +676,12 @@ impl<'a> Reader<'a> {
             "PLANE" => {
                 let a = self.args_of(id, name)?;
                 Ok(Surface::Plane(Plane {
-                    frame: self.placement(self.reference(id, name, a.get(1))?)?,
+                    frame: self.placement_with(self.reference(id, name, a.get(1))?, Slide::Across)?,
                 }))
             }
             "CYLINDRICAL_SURFACE" => {
                 let a = self.args_of(id, name)?;
-                let frame = self.placement(self.reference(id, name, a.get(1))?)?;
+                let frame = self.placement_with(self.reference(id, name, a.get(1))?, Slide::Along)?;
                 let radius = self.real(id, name, a.get(2))? * m;
                 if !positive(radius) {
                     return refuse(id, name, "radius not positive");
