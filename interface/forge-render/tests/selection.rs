@@ -1,4 +1,5 @@
-//! A face clicked in the view is drawn selected (the theme's chosen colour over it) after the
+//! A face clicked in the view is drawn selected (the theme's chosen colour over it, its edges
+//! outlined in it) after the
 //! pointer leaves it, and the pointer over the part never lights an origin plane behind it.
 //! Before: the frame's marks left out what was selected, so a clicked face showed nothing once the
 //! pointer left; and with the face under the pointer selected (its hover mark gone) the origin
@@ -19,6 +20,19 @@ fn settled(g: &Gui) -> bool {
 /// Warm (amber, the chosen colour) over neutral: red well over blue.
 fn warm(p: [u8; 3]) -> bool {
     p[0] as i32 - p[2] as i32 > 25
+}
+
+/// The selection's outline colour, full strength: the amber of the theme's chosen.
+fn outline(p: [u8; 3]) -> bool {
+    p[0] > 200 && (120..200).contains(&p[1]) && p[2] < 90
+}
+
+/// Outline pixels around the plate's top face.
+fn outlined(px: &forge_render::gui::Pixels) -> usize {
+    (300..620)
+        .flat_map(|y| (580..1000).map(move |x| (x, y)))
+        .filter(|&(x, y)| outline(px.at(x, y)))
+        .count()
 }
 
 #[test]
@@ -63,6 +77,12 @@ fn a_clicked_face_is_drawn_selected_and_no_plane_lights_behind_it() {
         warm(p),
         "the selected face not drawn selected: {p:?} (before {:?})",
         before.at(face.0 as usize, face.1 as usize)
+    );
+    // and outlined: its edges in the selection's colour
+    let (o0, o1) = (outlined(&before), outlined(&after));
+    assert!(
+        o1 > 500 && o1 > o0 * 10,
+        "the selected face's outline: {o1} amber pixels (before {o0})"
     );
     let _ = std::fs::remove_dir_all(&dir);
 }

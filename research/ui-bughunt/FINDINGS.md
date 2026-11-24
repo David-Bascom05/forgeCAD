@@ -220,7 +220,13 @@ list on main: this branch's new strings add none).
 - Tests: `tests/selection.rs` (native, headless: the face's pixel warm after the pointer leaves,
   the plane's pixel unchanged with the pointer on the face; both fail before) and
   `web/tests/select.cjs` (the same in the page; fails before).
-- Not done: an outline along the selected face's edges (the tint is the selection's mark now).
+- Then the outline (asked for: tint plus outline): a selected face's B-rep edges drawn in the
+  selection's amber over the picture, as a selected edge is (`render.rs` `face_edges`: which edges
+  bound which face, from each part's finest level at upload; only the edges' middle-segment ends
+  are hashed, each face's own vertices looked up once). Shot: `shots/face-pick-outline.png`.
+  Tests: the same two count amber outline pixels around the face (native 11 before -> passes
+  after; page 12 -> 2151). Load cost: rack open, single-threaded build, longest task 1438 ms
+  without it, 1444 ms with it (noise: that task is the build itself; threaded 197 ms).
 
 ## Open (reported, not fixed here)
 

@@ -92,6 +92,64 @@ struct PickIndex {
     faces: Vec<FaceRange>,
     edges: Vec<EdgeRange>,
     first_segment: u32,
+    /// (face, edge) for each B-rep edge on a face's boundary, by face: a selected face's outline.
+    /// The part's, shared by its levels.
+    face_edges: std::sync::Arc<Vec<(u32, u32)>>,
+}
+
+/// Which B-rep edges bound which faces, from a part's finest tessellated level (edge ids are the
+/// B-rep's, the same on every level): an edge's middle segment has both its ends at vertices of
+/// the face (a face's boundary vertices are its edges' polyline points). Only those few points
+/// are hashed; each face's own vertices are looked up in them once.
+fn face_edges(p: &PartMesh) -> Vec<(u32, u32)> {
+    let Some(l) = p
+        .lods
+        .iter()
+        .find(|l| !l.segments.is_empty() && l.faces.iter().any(|f| f.vertices > 0))
+    else {
+        return vec![];
+    };
+    let word = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().expect("4 bytes"));
+    let end = |s: u32, k: usize| {
+        let at = s as usize * crate::mesh::SEGMENT + 16 * k;
+        [0, 1, 2].map(|i| word(&l.segments, at + 4 * i))
+    };
+    // each edge's middle segment's two ends: point -> (edge, which end)
+    let mut ends: std::collections::HashMap<[u32; 3], Vec<(u32, u8)>> = Default::default();
+    for e in l.edges.iter().filter(|e| e.count > 0) {
+        let s = e.first + e.count / 2;
+        if (s as usize + 1) * crate::mesh::SEGMENT > l.segments.len() {
+            continue;
+        }
+        for k in 0..2 {
+            ends.entry(end(s, k)).or_default().push((e.edge, k as u8));
+        }
+    }
+    let mut out = vec![];
+    let mut seen: Vec<(u32, u8)> = vec![];
+    for f in &l.faces {
+        seen.clear();
+        for v in f.first_vertex..f.first_vertex + f.vertices {
+            let at = v as usize * crate::mesh::VERTEX;
+            if at + 12 > l.vertices.len() {
+                break;
+            }
+            if let Some(hit) = ends.get(&[0, 1, 2].map(|k| word(&l.vertices, at + 4 * k))) {
+                seen.extend(hit);
+            }
+        }
+        seen.sort_unstable();
+        seen.dedup();
+        // both ends of an edge's middle segment on this face
+        out.extend(
+            seen.windows(2)
+                .filter(|w| w[0].0 == w[1].0)
+                .map(|w| (f.face, w[0].0)),
+        );
+    }
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 /// What a frame drew.
@@ -721,6 +779,7 @@ fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> G
         .iter()
         .zip(&lods)
         .map(|(p, row)| {
+            let outline = std::sync::Arc::new(face_edges(p));
             p.lods
                 .iter()
                 .zip(row)
@@ -728,6 +787,7 @@ fn geometry(device: &wgpu::Device, queue: &wgpu::Queue, parts: &[PartMesh]) -> G
                     faces: l.faces.clone(),
                     edges: l.edges.clone(),
                     first_segment: d.first_segment,
+                    face_edges: outline.clone(),
                 })
                 .collect()
         })
@@ -2340,11 +2400,23 @@ impl Renderer {
                     continue;
                 };
                 let lod = self.pick_lod(part, lod);
-                if let Entity::Edge(e) = m.entity
-                    && let Some(r) = self.index[part as usize][lod].edges.iter().find(|r| r.edge == e)
-                {
-                    let first = self.lods[part as usize][lod].first_segment + r.first;
-                    pass.draw_indexed(0..r.count * 6, first as i32 * 4, k..k + 1);
+                let ix = &self.index[part as usize][lod];
+                let draw = |pass: &mut wgpu::RenderPass<'_>, e: u32| {
+                    if let Some(r) = ix.edges.iter().find(|r| r.edge == e) {
+                        let first = self.lods[part as usize][lod].first_segment + r.first;
+                        pass.draw_indexed(0..r.count * 6, first as i32 * 4, k..k + 1);
+                    }
+                };
+                match m.entity {
+                    Entity::Edge(e) => draw(pass, e),
+                    // a selected face's outline: its edges, in the selection's colour
+                    Entity::Face(f) if m.selected => {
+                        let from = ix.face_edges.partition_point(|x| x.0 < f);
+                        for &(_, e) in ix.face_edges[from..].iter().take_while(|x| x.0 == f) {
+                            draw(pass, e);
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
@@ -3107,7 +3179,10 @@ impl Renderer {
             pass.set_pipeline(&self.ao_pipe.apply);
             pass.draw(0..3, 0..1);
         }
-        if overlay.marks.iter().any(|m| matches!(m.entity, Entity::Edge(_))) {
+        // marked edges, and a selected face's outline
+        if overlay.marks.iter().any(|m| {
+            matches!(m.entity, Entity::Edge(_)) || (m.selected && matches!(m.entity, Entity::Face(_)))
+        }) {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("marked edges"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {

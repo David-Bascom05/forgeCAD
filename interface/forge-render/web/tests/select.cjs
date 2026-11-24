@@ -29,6 +29,20 @@ async function at(p, [x, y]) {
   );
 }
 const warm = (c) => c[0] - c[2] > 25;
+// the selection's outline, full strength, around the plate's top face
+async function outlined(p) {
+  return p.evaluate(async () => {
+    const f = await window.forgecad.pixels();
+    let n = 0;
+    for (let y = 300; y < 620; y++)
+      for (let x = 580; x < 1000; x++) {
+        const i = (y * f.width + x) * 4;
+        const [r, g, b] = [f.rgba[i], f.rgba[i + 1], f.rgba[i + 2]];
+        if (r > 200 && g > 120 && g < 200 && b < 90) n++;
+      }
+    return n;
+  });
+}
 
 (async () => {
   const app = path.resolve(process.argv[2] ?? "web/out");
@@ -43,6 +57,7 @@ const warm = (c) => c[0] - c[2] > 25;
     await p.mouse.move(300, 650);
     await pause(1500);
     const face0 = await at(p, FACE);
+    const out0 = await outlined(p);
     const plane0 = await at(p, PLANE);
     assert.ok(!warm(face0), `the face warm before any click: ${face0}`);
     await p.mouse.move(...FACE);
@@ -56,7 +71,9 @@ const warm = (c) => c[0] - c[2] > 25;
     await pause(1500);
     const face1 = await at(p, FACE);
     assert.ok(warm(face1), `the selected face not drawn selected: ${face1} (before ${face0})`);
-    console.log(`ok - the clicked face drawn selected (${face0} -> ${face1}), no plane lit`);
+    const out1 = await outlined(p);
+    assert.ok(out1 > 500 && out1 > out0 * 10, `the selected face's outline: ${out1} amber pixels (before ${out0})`);
+    console.log(`ok - the clicked face drawn selected (${face0} -> ${face1}, outline ${out0} -> ${out1}), no plane lit`);
     t.check(p);
   } finally {
     await b.close();
