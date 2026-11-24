@@ -46,6 +46,7 @@ what their absence means.
 | coolants | optional | kinds present: flood mist through air (empty: none declared) |
 | peck_clear, chip_lift | optional | G83's peck clearance and G73's chip-break lift, mm: the control's parameters (Fanuc 5115/5114, Haas settings, Siemens _ZSFR, ...), citable as `machine.peck_clear` / `machine.chip_lift`. Absent: forge-post's 0.5 / 0.2 mm are used and every program with G83/G73 reports them not checked (`sim::unchecked_cycles`) |
 | block_cycle, lookahead | optional | The control's block cycle (s: no block takes less, SINUMERIK "each block requires at least one interpolation cycle", PGsl 03/2013 11.2 G641; its IPO cycle is machine data MD10071) and look-ahead depth (blocks: SINUMERIK machine data, PGsl 03/2013 11.2 LookAhead), citable as `machine.block_cycle` / `machine.lookahead`. Absent (UNKNOWN, the usual case: makers set them per machine and do not publish them): `t_scurve` applies no block-rate limit and plans over each whole run |
+| rapid_blend | optional | Whether the control blends G0 blocks into each other (`true`) or stops at the end of every G0 block (`false`), citable as `machine.rapid_blend` (a control parameter: makers set it per machine). Absent (UNKNOWN): `t_scurve` stops at every G0 block, and `t_scurve_blend` gives the time with G0 blended beside it; both are shown |
 | real | optional | true: a real maker's model; every value must be cited (Provenance). false if absent |
 
 ## `[[machine.joint]]`

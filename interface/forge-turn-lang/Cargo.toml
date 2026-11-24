@@ -15,6 +15,7 @@ forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 # the certification taken from an earlier run of the same inputs
 forge-memo = { path = "../../kernel/forge-memo" }
+forge-material = { path = "../../kernel/forge-material" }
 
 [lints]
 workspace = true

@@ -87,6 +87,10 @@ fn the_flange_simulates_in_the_app() {
             .camsim_command("colour=material;part=hidden;op=3;locate=3,0,40,0.5;tab=moves")
             .unwrap();
         shot(&mut h, &format!("native-sim-04-moves-{tag}"));
+        if w == 1400.0 {
+            h.gui.camsim_command("tab=checks;source=toolpath").unwrap();
+            shot(&mut h, &format!("native-sim-07-checks-{tag}"));
+        }
         if h.gui
             .camsim_command("tab=program;source=machine;machine=1;at=0.3")
             .is_ok()
@@ -225,4 +229,38 @@ fn realistic_tools_close_up() {
             }
         }
     }
+}
+
+/// Issues of two kinds in the Checks tab (UX-LEAD's review): the flange's bolt holes drilled alone
+/// under a clear height below the stock's top rapid into it, and drilling alone leaves
+/// the plate's material. A place is picked: its kind's row opens to it, highlighted, and the
+/// playhead is on it. The first line names the failure in words.
+#[test]
+fn issues_of_two_kinds_in_the_checks() {
+    let dir = copied("issues", &["flange.fg"]);
+    let src = "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 2), below: 3), origin: \"top-center\", tol: 0.01, clear: -0.5, retract: -1)\nbolts = drill(op1, f.bolts, plan: \"auto\")\nprog = program(op1)\n";
+    std::fs::write(dir.join("flange_broken_cam.fg"), src).unwrap();
+    let Some(mut h) = open(&dir.join("flange_broken_cam.fg"), (1400.0, 860.0), true) else {
+        return;
+    };
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    let kinds = |rule: &str| st.sim.markers.iter().filter(|m| m.rule == rule).count();
+    assert!(kinds("rapid_into_stock") > 0, "rapids into the stock");
+    assert!(kinds("leftover") > 0, "material left");
+    let (line, failed) =
+        forge_render::gui_camsim_panel::checked_line(&st.sim.markers, st.sim.cam.leftover_done);
+    assert!(failed && line.contains("rapids into the stock"), "{line}");
+    let k = st
+        .sim
+        .markers
+        .iter()
+        .position(|m| m.rule == "rapid_into_stock")
+        .unwrap();
+    h.gui
+        .camsim_command(&format!("tab=checks;marker={k};part=hidden"))
+        .unwrap();
+    shot(&mut h, "native-sim-08-issues-1400x860");
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    assert_eq!(st.issue, Some(k));
+    assert!(!st.issue_new, "opened and scrolled to once");
 }

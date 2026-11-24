@@ -449,6 +449,7 @@ name = "forge-material"
 version = "0.1.0"
 dependencies = [
  "forge-dirs",
+ "forge-math",
 ]
 
 [[package]]
@@ -720,6 +721,7 @@ dependencies = [
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
+ "forge-material",
  "forge-memo",
  "forge-tooling",
  "forge-turn",

@@ -54,8 +54,6 @@ impl Gui {
         {
             r.quality = Some(q);
             changed = true;
-            // the status line drops its "measuring quality"
-            self.shell.status = crate::shell::cam::status_line(w);
         }
         if !took && self.shell.status.is_empty() && w.run.is_some() && w.running.is_none() {
             // nothing else to say (a view loaded after the run cleared it): the run's state
@@ -71,10 +69,6 @@ impl Gui {
             w.running = Some(text.clone());
             self.shell.status = "Generating: every op posted, read back and certified".into();
             let qslot = w.quality_job.clone();
-            // this run's number: its quality measure stops once a later run starts (an edit
-            // made while it measures), so it never holds the cores the new run needs
-            let runs = w.runs.clone();
-            let mine = runs.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
             crate::plat::spawn("forge-cam", move || {
                 // the paths shown first, then the quality measured on them (it can take longer
                 // than the run): taken in only while the text is still the run's
@@ -82,10 +76,8 @@ impl Gui {
                 let cam = r.cam.clone();
                 *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
                 waker();
-                let later = || runs.load(std::sync::atomic::Ordering::SeqCst) != mine;
-                if let Some(cam) = cam
-                    && let Some(q) = run::measure_cam_unless(&cam, &later)
-                {
+                if let Some(cam) = cam {
+                    let q = run::measure_cam(&cam);
                     *qslot.lock().unwrap_or_else(|e| e.into_inner()) = Some((text, q));
                     waker();
                 }
@@ -119,22 +111,10 @@ impl Gui {
             let key = (op.clone(), r.text.clone());
             if w.alt_asked.as_ref() != Some(&key) {
                 w.alt_asked = Some(key);
-                let (text, dir, slot, waker) = (
-                    r.text.clone(),
-                    w.dir.clone(),
-                    w.alt_job.clone(),
-                    self.waker.clone(),
-                );
+                let (text, dir, slot, waker) = (r.text.clone(), w.dir.clone(), w.alt_job.clone(), self.waker.clone());
                 crate::plat::spawn("forge-cam-alt", move || {
-                    let q = forge_cam_quality::alternative_clear(
-                        &text,
-                        &dir,
-                        &op,
-                        &forge_cam_quality::Config::default(),
-                    );
-                    let got = q
-                        .filter(|q| q.t_min > 0.0)
-                        .map(|q| (q.t_min, q.t_scurve.max(q.t_min)));
+                    let q = forge_cam_quality::alternative_clear(&text, &dir, &op, &forge_cam_quality::Config::default());
+                    let got = q.filter(|q| q.t_min > 0.0).map(|q| (q.t_min, q.t_scurve.max(q.t_min)));
                     *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((op, text, got));
                     waker();
                 });
@@ -284,13 +264,22 @@ impl Gui {
         let free = self.shell.camsim_free(vr);
         let Some(w) = &mut self.shell.cam else { return };
         // what covers the view's bottom: the timeline, and the Document Text panel above it
-        let text = if w.text_open {
-            crate::shell::cam::text_panel_h(free.height()) + 4.0
-        } else {
-            0.0
-        };
+        let text = if w.text_open { crate::shell::cam::text_panel_h(free.height()) + 4.0 } else { 0.0 };
         let cover = vr.bottom() - free.bottom() + text;
-        if (w.view_w - vr.width()).abs() < 1.0 && (w.view_cover - cover).abs() < 1.0 {
+        // the turning Section window over the view's bottom right: framed around as a right inset
+        // or a bottom one, whichever leaves the more room (UX-LEAD: the part in what is left)
+        let side = match w.section_at {
+            Some(r) => {
+                let right = (vr.right() - r.left()).max(0.0);
+                let bottom = (vr.bottom() - r.top() - cover).max(0.0);
+                let by_right = (vr.width() - right) * (vr.height() - cover);
+                let by_bottom = vr.width() * (vr.height() - cover - bottom);
+                if by_right >= by_bottom { [right, 0.0] } else { [0.0, bottom] }
+            }
+            None => [0.0, 0.0],
+        };
+        let side_changed = (w.view_side[0] - side[0]).abs() >= 1.0 || (w.view_side[1] - side[1]).abs() >= 1.0;
+        if (w.view_w - vr.width()).abs() < 1.0 && (w.view_cover - cover).abs() < 1.0 && !side_changed {
             return;
         }
         let first = w.view_w == 0.0;
@@ -298,12 +287,14 @@ impl Gui {
         let Some(v) = &mut self.view else { return };
         w.view_w = vr.width();
         w.view_cover = cover;
+        w.view_side = side;
         // moved since this workspace last framed it (by the user, or another framing): keep
         // that view and pan it so the subject's centre is the new view's (docs/ux/STANDARD.md
         // §2); else frame it whole. The first width seen with a view is framed whole: the view
         // was framed when made, maybe before the column narrowed it (a browser page builds its
         // view after the run).
-        let moved = !first && w.framed.is_some_and(|c| c != v.nav.heading_to());
+        // (a window opened over it is framed around whole: the part fills what it leaves)
+        let moved = !first && !side_changed && w.framed.is_some_and(|c| c != v.nav.heading_to());
         // the subject: what the scene shows (the part, the stock with the simulation's view)
         let subject = match v.scene.shown_box() {
             Some((lo, hi)) => crate::frame::Bounds::new(lo, hi),
@@ -320,7 +311,7 @@ impl Gui {
             height: vr.height(),
             // the simulation's panel is in the properties column (outside `vr`) whenever there is
             // one, docked or not yet: only its timeline covers the view
-            covered: [0.0, 0.0, 0.0, cover],
+            covered: [0.0, 0.0, side[0], cover + side[1]],
         };
         // from the direction the view is seen from now, the subject at the standard's 70 %
         let (yaw, pitch) = (v.nav.camera.yaw.to_degrees(), v.nav.camera.pitch.to_degrees());

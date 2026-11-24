@@ -632,6 +632,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_torque",
             "tap_vc",
             "tap_rpm",
+            "allowance",
         ],
     ),
     (
@@ -850,6 +851,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_feed",
             "ramp",
             "grid",
+            "fit",
         ],
     ),
     (
@@ -885,6 +887,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "max_feed",
             "ramp",
             "stepover",
+            "fit",
         ],
     ),
     (
@@ -2575,6 +2578,10 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
     }
     cam
 }
+
+/// z-level's default floor over a bare support: one posting step above it (0.0001 in, the
+/// coarsest common post's step: a metric post's 0.001 mm rounds it up, an inch post's is it).
+const ZLEVEL_SUPPORT_STEP: f64 = 0.00254;
 
 fn line_of(src: &str, at: usize) -> usize {
     src[..at.min(src.len())].bytes().filter(|b| *b == b'\n').count() + 1
@@ -4823,6 +4830,19 @@ impl Cam {
         depth: f64,
         d_cut: Option<f64>,
     ) -> Result<resolve::DrillResolved, String> {
+        self.drill_resolve_in(su, ti, ask, depth, d_cut, false)
+    }
+
+    /// `drill_resolve` on the group's `[[counterbore]]` rows (`counterbore`) or `[[drill]]` rows.
+    fn drill_resolve_in(
+        &self,
+        su: usize,
+        ti: usize,
+        ask: &resolve::DrillAsk,
+        depth: f64,
+        d_cut: Option<f64>,
+        counterbore: bool,
+    ) -> Result<resolve::DrillResolved, String> {
         let part = &self.parts[self.setups[su].part];
         let m = self
             .lib
@@ -4831,9 +4851,16 @@ impl Cam {
         let t = &self.tools[ti];
         let sub = feeds::Substrate::of(&t.tool.material);
         let preset = t.tool.preset_for(&part.group, "general").map(|(p, c, _)| (p, c));
+        let table = |g: &str, s: &str| {
+            if counterbore {
+                self.lib.counterbore(g, s)
+            } else {
+                self.lib.drilling(g, s)
+            }
+        };
         let row = match sub {
-            feeds::Substrate::Carbide => self.lib.drilling(&part.group, "carbide"),
-            feeds::Substrate::Hss => self.lib.drilling(&part.group, "hss"),
+            feeds::Substrate::Carbide => table(&part.group, "carbide"),
+            feeds::Substrate::Hss => table(&part.group, "hss"),
             _ => None,
         };
         resolve::drilling(
@@ -4873,11 +4900,14 @@ impl Cam {
         })
         .ok_or_else(|| {
             format!(
-                "NoDrillingData: No drilling data for drill `{}` ({}) in material group `{}` ({}): the drill has no preset, the library no [[drill]] row, and the op gives no `vc:`/`rpm:` and `f:`/`feed:`.",
+                "NoDrillingData: No {} data for {} `{}` ({}) in material group `{}` ({}): the tool has no preset, the library no [[{}]] row, and the op gives no `vc:`/`rpm:` and `f:`/`feed:`.",
+                if counterbore { "counterboring" } else { "drilling" },
+                if counterbore { "counterbore" } else { "drill" },
                 t.tool.id,
                 sub.name(),
                 part.group,
-                part.material_note
+                part.material_note,
+                if counterbore { "counterbore" } else { "drill" },
             )
         })
     }
@@ -4921,6 +4951,75 @@ impl Cam {
             _ => return None,
         };
         feeds::hardness_band_of_hb(hb)
+    }
+
+    /// A reamer's feeds and speeds and its pre-drill: the user's over the reamer's preset over
+    /// the group's `[[ream]]` row for its substrate, the allowance from `[[ream_allowance]]`
+    /// (forge_tooling::resolve::reaming). Err: no data for the group, or a check over its limit.
+    fn ream_resolve(
+        &self,
+        su: usize,
+        reamer: &forge_tooling::Tool,
+        allowance: Option<f64>,
+    ) -> Result<resolve::ReamResolved, String> {
+        let part = &self.parts[self.setups[su].part];
+        let m = self
+            .lib
+            .machine(&self.setups[su].machine)
+            .map_err(|e| e.to_string())?;
+        let sub = feeds::Substrate::of(&reamer.material);
+        let sub_name = match sub {
+            feeds::Substrate::Carbide => "carbide",
+            feeds::Substrate::Hss => "hss",
+            _ => "",
+        };
+        let preset = reamer.preset_for(&part.group, "general").map(|(p, c, _)| (p, c));
+        let r = resolve::reaming(
+            &resolve::ReamAsk {
+                allowance,
+                ..resolve::ReamAsk::default()
+            },
+            &resolve::DrillTool {
+                d: reamer.dc,
+                flutes: reamer.nof.max(2),
+                point: reamer.angle,
+                substrate: sub,
+                preset,
+            },
+            self.lib.group(&part.group),
+            part.stock.as_ref(),
+            self.lib.ream(&part.group, sub_name),
+            self.lib.ream_allowance(sub_name),
+            &resolve::Spindle {
+                rpm: m.rpm,
+                max_feed: m.max_feed,
+                power: &m.power,
+            },
+        )
+        .filter(|r| r.feed.v.is_finite() && r.rpm.v.is_finite())
+        .ok_or_else(|| {
+            format!(
+                "NeedData: no reaming data for reamer {} ({}) in group {}: give the reamer a preset for the group",
+                reamer.id, reamer.material, part.group
+            )
+        })?;
+        if let Some(c) = r.checks.iter().find(|c| c.verdict == Verdict::Fail) {
+            return Err(format!(
+                "reamer {}: {} {:.3} {} over the limit {:.3} ({})",
+                reamer.id, c.what, c.value, c.unit, c.limit, c.why
+            ));
+        }
+        if !r.predrill.v.is_finite() {
+            return Err(format!(
+                "reamer {}: {}",
+                reamer.id,
+                r.checks
+                    .iter()
+                    .find(|c| c.what == "allowance")
+                    .map_or("no reaming allowance".to_string(), |c| c.why.clone())
+            ));
+        }
+        Ok(r)
     }
 
     fn stock_family(name: &str, dir: &Path) -> Option<String> {
@@ -6032,6 +6131,28 @@ impl Cam {
         let leave = get_num(a, "leave", Some(0.0))?;
         let floor = get_num(a, "floor", Some(part.bbox.0[2]))?;
         let sf = Surfacer::new(&part.faces, body, leave, s.tol, floor).map_err(|e| format!("{e:?}"))?;
+        // parallel and waterline: each run fitted into longer lines and arcs within `fit` (default
+        // tol/4, the chords' own fit to the CL), each piece proven by the generator's gap at
+        // −tol/2 before it is kept; z-level's passes are exact region offsets already
+        let fit_tol = if kind == "zlevel" {
+            0.0
+        } else {
+            get_num(a, "fit", Some(0.25 * s.tol))?
+        };
+        if !(fit_tol >= 0.0 && fit_tol <= 0.5 * s.tol) {
+            return Err(format!(
+                "fit: a chord tolerance in mm, 0 to half the setup's tol ({} mm)",
+                0.5 * s.tol
+            ));
+        }
+        let sf = if fit_tol > 0.0 {
+            sf.with_fit(forge_cam::fit::Fit {
+                min_r: arc_min_r(&s.machine, feed.0),
+                ..forge_cam::fit::Fit::arcs(fit_tol)
+            })
+        } else {
+            sf
+        };
         let area = match a.get("area") {
             // roughing takes the whole stock: tool centres up to a diameter past its sides (so a
             // margin narrower than the tool is cleared), as `clear` does
@@ -6069,14 +6190,25 @@ impl Cam {
         // and box, the cutter's body and diameter (surf.rs reads no other part of the tool: not
         // its stickout or holder, which only the certification sees; surfacing_memo_tests::
         // the_generators_read_no_other_part_of_the_tool fails if one starts to), the tool's
-        // index, the heights and feeds, the stock box, the setup's tolerance), see memo.rs.
+        // index, the heights and feeds, the machine, the stock box, the setup's tolerance), see memo.rs.
         // A generator that starts reading the in-process stock (s.ip, stock_before) must put it
         // in this key: the voids it returns feed later ops' stock stages.
+        // (and the fitter's smallest arc, the value it reads from the machine at the feed)
         let key = format!(
-            "surfacing/3 {:?}",
+            "surfacing/4 {:?}",
             (
                 kind,
-                (a, &part.faces, body, d, ti, h, feed, leave),
+                (
+                    a,
+                    &part.faces,
+                    body,
+                    d,
+                    ti,
+                    h,
+                    feed,
+                    leave,
+                    arc_min_r(&s.machine, feed.0)
+                ),
                 (
                     s.tol,
                     floor,
@@ -6109,7 +6241,17 @@ impl Cam {
                 }
                 "zlevel" => {
                     let top = get_num(a, "from", Some(s.stock.max[2]))?;
-                    let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
+                    // with no workholding declared, the stock rests on a bare support the tool
+                    // may not touch: the default floor stays one posting step above it (0.0001
+                    // in, at least a step of every metric and inch post, so it cannot round down
+                    // onto it; the program's dialect is declared after its ops). With a fixture,
+                    // the checker decides against its own geometry: the part's bottom.
+                    let floor_default = if s.fixture.is_some() {
+                        part.bbox.0[2]
+                    } else {
+                        part.bbox.0[2].max(s.stock.min[2] + ZLEVEL_SUPPORT_STEP)
+                    };
+                    let bottom = get_num(a, "to", Some(floor_default))?;
                     let (p, vs) = surf::zlevel_voids(
                         &sf,
                         c,
@@ -6726,8 +6868,9 @@ impl Cam {
                 .cloned()
         };
         // a hole with an ISO class (`fit: "H7"`) is drilled under its size and reamed: the
-        // library's drill 0.1 to 0.4 under it nearest 0.2 under (the usual reaming allowance),
-        // then a reamer of its size
+        // library's drill nearest the pre-drill (its size less the reaming allowance for it, or
+        // `allowance:`), within 0.1 of it and at least 0.1 under the size, then a reamer of its
+        // size
         let ream = match hole.class {
             Some(class) if hole.thread.is_none() => {
                 let reamer = self
@@ -6746,28 +6889,41 @@ impl Cam {
                         mm(hole.d)
                     ));
                 };
-                Some((reamer, class))
+                let allowance = match a.get("allowance") {
+                    None => None,
+                    Some(V::Num(x)) if x.is_finite() && *x > 0.0 && *x < hole.d => Some(*x),
+                    Some(v) => {
+                        return Err(format!(
+                            "`allowance:` is the stock the reamer takes off the diameter, mm (over 0, under the hole's {}): not {v:?}",
+                            mm(hole.d)
+                        ));
+                    }
+                };
+                let rr = self.ream_resolve(su, &reamer, allowance)?;
+                Some((reamer, class, rr))
             }
             _ => None,
         };
-        let drill = match ream {
-            Some(_) => self
+        let predrill = ream.as_ref().map(|(_, _, rr)| rr.predrill.v);
+        let drill = match predrill {
+            Some(pd) => self
                 .lib
                 .tools
                 .iter()
                 .filter(|t| {
-                    t.kind == Kind::Drill && t.dc <= hole.d - 0.1 + 1e-9 && t.dc >= hole.d - 0.4 - 1e-9
+                    t.kind == Kind::Drill
+                        && t.dc <= (pd + 0.1).min(hole.d - 0.1) + 1e-9
+                        && t.dc >= pd - 0.1 - 1e-9
                 })
-                .min_by(|a, b| {
-                    (a.dc - (hole.d - 0.2))
-                        .abs()
-                        .total_cmp(&(b.dc - (hole.d - 0.2)).abs())
-                })
+                .min_by(|a, b| (a.dc - pd).abs().total_cmp(&(b.dc - pd).abs()))
                 .cloned(),
             None => find(&self.lib, Kind::Drill, (drill_d * 100.0).round() / 100.0)
                 .or_else(|| find(&self.lib, Kind::Drill, drill_d)),
         };
-        let drill_d = if ream.is_some() { hole.d - 0.2 } else { drill_d };
+        let drill_d = match predrill {
+            Some(pd) => (pd * 1000.0).round() / 1000.0,
+            None => drill_d,
+        };
         // a plain hole of a dowel's size with no class: said (the part may want `fit: "H7"`)
         if ream.is_none()
             && hole.thread.is_none()
@@ -6991,14 +7147,15 @@ impl Cam {
         ));
         out.tool = Some(ti);
         // the ream, after the drill, to the hole's depth (a reamer cuts no point)
-        if let Some((reamer, class)) = ream {
+        if let Some((reamer, class, rr)) = ream {
             let ti = add(self, reamer, base_t + 5)?;
+            let f = rr.feed.v;
+            for c in rr.checks.iter().filter(|c| c.verdict == Verdict::Warn) {
+                self.warnings
+                    .push(format!("{}: ream {} {}", out.name, c.what, c.why));
+            }
             let t = &self.tools[ti];
-            let f = self
-                .feeds_for(su, ti, "general", t.tool.dc, t.tool.dc)
-                .map(|x| 0.1 * x.vf.min(2000.0))
-                .unwrap_or(100.0);
-            paths.push(ops::holes(
+            let mut rp = ops::holes(
                 &hole.places,
                 CycleKind::Ream,
                 ops::Cut {
@@ -7011,6 +7168,31 @@ impl Cam {
                 },
                 depth,
                 0.0,
+            );
+            rp.rpm = rr.rpm.v;
+            paths.push(rp);
+            out.drilled.push((
+                "ream",
+                t.tool.id.clone(),
+                resolve::DrillResolved {
+                    vc: rr.vc.clone(),
+                    rpm: rr.rpm.clone(),
+                    f: rr.f.clone(),
+                    feed: rr.feed.clone(),
+                    peck: resolve::Val::new(0.0, "mm", resolve::Source::Default, "a reamer does not peck"),
+                    h: rr.h,
+                    mrr: rr.mrr,
+                    power: rr.power,
+                    torque: rr.torque,
+                    power_hi: rr.power,
+                    power_avail: rr.power_avail,
+                    checks: rr.checks.clone(),
+                },
+            ));
+            plan.push(format!(
+                "pre-drill {} for a {} allowance",
+                mm(rr.predrill.v),
+                mm(rr.allowance.v)
             ));
             for p in &hole.places {
                 let st = p2(p[0] + 0.5 * hole.d, p[1]);
@@ -7062,12 +7244,11 @@ impl Cam {
                 .cloned();
             if let Some(cb) = cbt {
                 let ti = add(self, cb, base_t + 3)?;
+                // the counterbore's preset, else the group's [[counterbore]] row
+                let r = self.drill_resolve_in(su, ti, &resolve::DrillAsk::default(), cdep, None, true)?;
                 let t = &self.tools[ti];
-                let f = self
-                    .feeds_for(su, ti, "general", t.tool.dc, 1.0)
-                    .map(|x| 0.3 * x.vf)
-                    .unwrap_or(100.0);
-                paths.push(ops::holes(
+                let f = r.feed.v;
+                let mut cp = ops::holes(
                     &hole.places,
                     CycleKind::Drill,
                     ops::Cut {
@@ -7080,7 +7261,10 @@ impl Cam {
                     },
                     cdep,
                     0.0,
-                ));
+                );
+                cp.rpm = r.rpm.v;
+                paths.push(cp);
+                out.drilled.push(("counterbore", t.tool.id.clone(), r));
                 for p in &hole.places {
                     voids.push((Some(circle(p, 0.5 * cd)), p[2] - cdep));
                 }
@@ -7090,10 +7274,13 @@ impl Cam {
                 let t = &self.tools[ti];
                 let dc = t.tool.dc;
                 let (stepover, step) = (0.4 * dc, (0.5 * dc).min(cdep));
-                let (vf, vp) = match self.feeds_for(su, ti, "pocket", stepover, step) {
-                    Some(fe) => (fe.vf, 0.3 * fe.vf),
-                    None => (300.0, 100.0),
+                let Some(fe) = self.feeds_for(su, ti, "pocket", stepover, step) else {
+                    return Err(format!(
+                        "NoCuttingData: no cutting data for end mill `{}` in material group `{}` to pocket the counterbore of `{hn}`: give the part a material or the tool vc and fz",
+                        t.tool.id, self.parts[pi].group
+                    ));
                 };
+                let (vf, vp) = (fe.vf, 0.3 * fe.vf);
                 for p in &hole.places {
                     let rg = circle(p, 0.5 * cd);
                     let op = ops::pocket(
@@ -7162,10 +7349,13 @@ impl Cam {
             let ti = add(self, ct, base_t + 4)?;
             let t = &self.tools[ti];
             let depth = 0.5 * (csd - t.tool.tip_d) / tan_rad((0.5 * ang).to_radians());
-            let f = self
-                .feeds_for(su, ti, "general", t.tool.dc, 1.0)
-                .map(|x| 0.3 * x.vf)
-                .unwrap_or(100.0);
+            let Some(fe) = self.feeds_for(su, ti, "general", t.tool.dc, 1.0) else {
+                return Err(format!(
+                    "NoCuttingData: no cutting data for countersink `{}` in material group `{}` for hole `{hn}`: give the part a material or the tool vc and fz",
+                    t.tool.id, self.parts[pi].group
+                ));
+            };
+            let f = 0.3 * fe.vf;
             paths.push(ops::holes(
                 &hole.places,
                 CycleKind::Drill,
