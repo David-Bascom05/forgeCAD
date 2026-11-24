@@ -797,3 +797,15 @@ Conditions, to be asserted in code:
 - (c) cleanup rings stay partial: only the arcs that cut material.
 
 Counsel Q3 is unchanged.
+
+**§9 status (2026-11-24).** At cam/quality-adaptive-wip @1aeee6e2, each condition of this section
+is asserted by a test in kernel/forge-cam/src/adaptive.rs (presence checked here; the tests were
+not run here):
+- `single_capped_target`: one cap, no minimum;
+- `passes_peel_one_way`: passes within PEEL of the sweep;
+- `path_winds_round_nothing`: per-pass turn ≤ 2·PEEL, and the travelled path never completes a
+  revolution about an island or about material still uncut;
+- `rings_after_the_sweep_one_wall_offset_cleanup_partial`: conditions (a)–(c) above.
+
+The engineering OK of §9 covers that commit. It is not train-ready on performance (it does not
+yet beat `clear` on our parts). Counsel Q3, Q9 and Q10 stay open.
