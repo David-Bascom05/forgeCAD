@@ -15,6 +15,14 @@ use forge_cam_geom::ival::Ival;
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
 use forge_math::dmath;
 
+/// The stock faces made in this thread, by stock (`InProcess::faces`), the most recently used
+/// last; at most `FACES_MAX`.
+type FacesMemo = Vec<(Vec<u64>, Result<Vec<Face>, String>)>;
+thread_local! {
+    static FACES: std::cell::RefCell<FacesMemo> = const { std::cell::RefCell::new(Vec::new()) };
+}
+const FACES_MAX: usize = 8;
+
 #[derive(Clone, Debug)]
 pub struct InProcess {
     pub min: [f64; 3],
@@ -179,8 +187,74 @@ impl InProcess {
         zs
     }
 
-    /// The stock's boundary as the checker's faces (all prisms along z).
+    /// The stock's boundary as the checker's faces (all prisms along z). Made once per stock:
+    /// a later call with the same stock (every number the same, bit for bit) has the faces
+    /// made before, `faces_anew` being a function of those numbers alone. Ops of one setup
+    /// that leave the stock as it was (3D finishing after roughing) are certified against
+    /// the same stock, whose faces took seconds each time (mold_core: 3 × 1.7 s).
     pub fn faces(&self) -> Result<Vec<Face>, String> {
+        let key = self.key();
+        let known = FACES.with(|m| {
+            let mut m = m.borrow_mut();
+            let i = m.iter().position(|(k, _)| *k == key)?;
+            // most recently used last
+            let e = m.remove(i);
+            let r = e.1.clone();
+            m.push(e);
+            Some(r)
+        });
+        if let Some(r) = known {
+            return r;
+        }
+        let r = self.faces_anew();
+        FACES.with(|m| {
+            let mut m = m.borrow_mut();
+            if m.len() >= FACES_MAX {
+                let _evicted = m.remove(0);
+            }
+            m.push((key, r.clone()));
+        });
+        r
+    }
+
+    /// The stock's content as bits: box, then each void's and under's region and height, with
+    /// the counts that delimit them (two stocks with the same key are the same stock).
+    fn key(&self) -> Vec<u64> {
+        let mut k = Vec::new();
+        for v in self.min.iter().chain(&self.max) {
+            k.push(v.to_bits());
+        }
+        for list in [&self.voids, &self.under] {
+            k.push(list.len() as u64);
+            for (r, h) in list {
+                k.push(h.to_bits());
+                k.push(r.loops.len() as u64);
+                for l in &r.loops {
+                    k.push(l.segs.len() as u64);
+                    for sg in &l.segs {
+                        match *sg {
+                            Seg::Line { a, b } => {
+                                k.extend([0, a.x.to_bits(), a.y.to_bits(), b.x.to_bits(), b.y.to_bits()])
+                            }
+                            Seg::Arc { a, b, c, ccw } => k.extend([
+                                1 + ccw as u64,
+                                a.x.to_bits(),
+                                a.y.to_bits(),
+                                b.x.to_bits(),
+                                b.y.to_bits(),
+                                c.x.to_bits(),
+                                c.y.to_bits(),
+                            ]),
+                        }
+                    }
+                }
+            }
+        }
+        k
+    }
+
+    /// `faces`, made anew.
+    fn faces_anew(&self) -> Result<Vec<Face>, String> {
         let mu = 1e-9 * (1.0 + self.max[0].abs().max(self.max[1].abs()).max(self.max[2].abs()));
         let mut zs: Vec<f64> = vec![self.min[2], self.max[2]];
         for (_, f) in self.voids.iter().chain(&self.under) {
