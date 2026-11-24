@@ -106,6 +106,10 @@ interface/forge-lang/tests/parts/near_singular_hinge.fg#1 agree
 interface/forge-lang/tests/parts/near_singular_hinge.fg#3 agree
 interface/forge-render/tests/faulty/check-loops-cross.fg#1 agree
 interface/forge-render/tests/faulty/check-loops-cross.fg#6 agree
+kernel/forge-workholding/parts/standin-chuck-200/body.fg#3 agree
+kernel/forge-workholding/parts/standin-vise-150/base.fg#1 agree
+kernel/forge-workholding/parts/standin-vise-150/base.fg#3 agree
+kernel/forge-workholding/parts/standin-vise-150/jaw.fg#1 agree
 loft/00000 agree
 loft/00001 agree
 loft/00002 agree

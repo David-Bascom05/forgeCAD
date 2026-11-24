@@ -119,6 +119,30 @@ pub fn chuck_jaws(
     })
 }
 
+/// A chuck's numbers as forge-turn's `ops::Chuck` takes them (CAM-TURN builds its struct from
+/// these; forge-turn does not depend on this crate): the jaws' face z, the grip length, how far
+/// the jaws stand out from the bar's surface, the body's radius and its length behind the jaws.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ChuckParams {
+    pub z_face: f64,
+    pub grip: f64,
+    pub jaw_height: f64,
+    pub body_r: f64,
+    pub body_len: f64,
+}
+
+/// `ChuckParams` for a chuck record gripping a bar of `bar_d` (checked as `chuck` checks it).
+pub fn chuck_params(rec: &Record, bar_d: f64, z_face: f64, grip: f64) -> Result<ChuckParams, WhError> {
+    chuck("chuck", rec, bar_d, z_face, grip)?;
+    Ok(ChuckParams {
+        z_face,
+        grip,
+        jaw_height: rec.get("jaw_height")?,
+        body_r: 0.5 * rec.get("body_d")?,
+        body_len: rec.get("body_len")?,
+    })
+}
+
 /// A collet chuck: its nose ends at `z_face`; the bar within the collet's range.
 pub fn collet(name: &str, rec: &Record, bar_d: f64, z_face: f64) -> Result<Spin, WhError> {
     want(rec, Kind::Collet)?;
@@ -351,6 +375,14 @@ pub fn to_region(r: &Ring) -> Region {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chuck_params_for_forge_turn() {
+        let l = crate::Library::builtin();
+        let p = chuck_params(l.get("standin-chuck-200").unwrap(), 60.0, 0.0, 25.0).unwrap();
+        assert_eq!((p.jaw_height, p.body_r, p.body_len), (35.0, 100.0, 80.0));
+        assert!(chuck_params(l.get("kitagawa-b208").unwrap(), 60.0, 0.0, 25.0).is_err());
+    }
 
     #[test]
     fn signed_distance() {
