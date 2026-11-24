@@ -177,3 +177,56 @@ fn builtin_files_are_named_by_vendor() {
     }
     assert_eq!(l, Library::builtin());
 }
+
+/// FEEDS-SPEEDS' preset spec: one preset per (ISO group, class), named "<group> <class>", each
+/// cited once; the numbers are the maker's printed inch values converted exactly.
+#[test]
+fn presets_follow_the_spec() {
+    let l = Library::builtin();
+    let mut n = 0;
+    for t in l.tools.iter().filter(|t| t.real) {
+        let mut names = std::collections::BTreeSet::new();
+        for p in &t.presets {
+            n += 1;
+            let (g, class) = p
+                .name
+                .split_once(' ')
+                .unwrap_or_else(|| panic!("{}: {}", t.id, p.name));
+            assert_eq!(g, p.group, "{}", t.id);
+            assert!("PMKNSHO".contains(g) && g.len() == 1, "{}: {g}", t.id);
+            assert!(
+                ["slot", "rough", "finish", "general"].contains(&class),
+                "{}: {class}",
+                t.id
+            );
+            assert!(names.insert(p.name.clone()), "{}: {} twice", t.id, p.name);
+            assert!(p.vc > 0.0 && p.fz > 0.0, "{}: {}", t.id, p.name);
+            let c = t
+                .cites
+                .iter()
+                .find(|c| c.path == format!("preset.{}", p.name))
+                .unwrap_or_else(|| panic!("{}: {} uncited", t.id, p.name));
+            assert!(!c.value.is_empty() && !c.source.is_empty(), "{}", t.id);
+        }
+    }
+    assert!(n >= 500, "{n}");
+    // Harvey 792208 (1/8", uncoated): of its N materials the lowest-speed one, High Coppers,
+    // 225 SFM and .00146 IPT slotting at 1x D radial, .5x D axial
+    let t = l.tool("harvey-792208").unwrap();
+    let p = t.presets.iter().find(|p| p.name == "N slot").unwrap();
+    assert_eq!((p.vc, p.fz), (225.0 * 0.3048, 0.00146 * 25.4));
+    assert_eq!((p.ap, p.ae), (Some(0.5 * 3.175), Some(3.175)));
+    let c = t.cites.iter().find(|c| c.path == "preset.N slot").unwrap();
+    assert_eq!(c.status, CiteStatus::Estimate);
+    assert!(
+        c.value.contains("225 SFM") && c.value.contains(".00146 IPT"),
+        "{}",
+        c.value
+    );
+    // Helical's finishing column is a programmed feed at its stated RDOC
+    let h = l.tools.iter().filter(|t| t.vendor == "Helical Solutions");
+    let fin: Vec<_> = h
+        .flat_map(|t| t.cites.iter().filter(|c| c.path.ends_with(" finish")))
+        .collect();
+    assert!(!fin.is_empty() && fin.iter().all(|c| c.note.contains("programmed at ae")));
+}

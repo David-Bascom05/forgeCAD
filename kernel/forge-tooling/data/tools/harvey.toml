@@ -22,13 +22,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.0465
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.0371
+fz = 0.037084
+ap = 1.5875
+ae = 3.175
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.04318
+ap = 1.5875
+ae = 1.5875
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.046482
+ap = 1.5875
+ae = 0.3175
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -82,15 +93,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00183 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00146 IPT (0.125 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00146 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00170 IPT (0.125 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00183 IPT (0.125 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-792212"
@@ -112,13 +133,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.0693
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.0554
+fz = 0.055372
+ap = 2.38125
+ae = 4.7625
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.064516
+ap = 2.38125
+ae = 2.38125
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.069596
+ap = 2.38125
+ae = 0.47625
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -172,15 +204,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00273 IPT (0.187 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00218 IPT (0.187 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00218 IPT (0.187 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00254 IPT (0.187 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/ozvoamglc6/pdf/SF_792100.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00274 IPT (0.187 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-942316"
@@ -202,13 +244,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.0838
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.0671
+fz = 0.067056
+ap = 3.175
+ae = 6.35
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.078232
+ap = 3.175
+ae = 3.175
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.08382
+ap = 3.175
+ae = 0.635
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -262,15 +315,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00330 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00264 IPT (0.250 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00264 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00308 IPT (0.250 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00330 IPT (0.250 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-942324"
@@ -292,13 +355,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.1321
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.1057
+fz = 0.105664
+ap = 4.7625
+ae = 9.525
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.12319
+ap = 4.7625
+ae = 4.7625
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.13208
+ap = 4.7625
+ae = 0.9525
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -352,15 +426,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00520 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00416 IPT (0.375 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00416 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00485 IPT (0.375 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00520 IPT (0.375 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-942332"
@@ -382,13 +466,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Square, Material Specific
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.176
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.1407
+fz = 0.140716
+ap = 6.35
+ae = 12.7
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.164338
+ap = 6.35
+ae = 6.35
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.176022
+ap = 6.35
+ae = 1.27
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -442,15 +537,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00693 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00554 IPT (0.500 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00554 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00647 IPT (0.500 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/gpcwfoqsfl/pdf/SF_942300.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00693 IPT (0.500 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-900457"
@@ -604,13 +709,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Ball, Material Specific E
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.0419
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.0335
+fz = 0.033528
+ap = 1.5875
+ae = 3.175
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.039116
+ap = 1.5875
+ae = 1.5875
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.04191
+ap = 1.5875
+ae = 0.3175
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -664,15 +780,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00165 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00132 IPT (0.125 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00132 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00154 IPT (0.125 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00165 IPT (0.125 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-989816"
@@ -694,13 +820,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Ball, Material Specific E
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.0838
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.0671
+fz = 0.067056
+ap = 3.175
+ae = 6.35
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.078232
+ap = 3.175
+ae = 3.175
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.08382
+ap = 3.175
+ae = 0.635
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -754,15 +891,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00330 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00264 IPT (0.250 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00264 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00308 IPT (0.250 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00330 IPT (0.250 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-989824"
@@ -784,13 +931,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Ball, Material Specific E
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.1321
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.1057
+fz = 0.105664
+ap = 4.7625
+ae = 9.525
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.12319
+ap = 4.7625
+ae = 4.7625
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.13208
+ap = 4.7625
+ae = 0.9525
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -844,15 +1002,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00520 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00416 IPT (0.375 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00416 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00485 IPT (0.375 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00520 IPT (0.375 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-989832"
@@ -874,13 +1042,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Ball, Material Specific E
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.176
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.1407
+fz = 0.140716
+ap = 6.35
+ae = 12.7
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.164338
+ap = 6.35
+ae = 6.35
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.176022
+ap = 6.35
+ae = 1.27
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -934,15 +1113,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00693 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00554 IPT (0.500 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00554 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00647 IPT (0.500 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/5bbm177eyt/pdf/SF_989700.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00693 IPT (0.500 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-904208"
@@ -965,13 +1154,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material S
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.0419
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.0335
+fz = 0.033528
+ap = 1.5875
+ae = 3.175
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.039116
+ap = 1.5875
+ae = 1.5875
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.04191
+ap = 1.5875
+ae = 0.3175
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1031,15 +1231,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00165 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00132 IPT (0.125 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00132 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00154 IPT (0.125 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00165 IPT (0.125 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-904216"
@@ -1062,13 +1272,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material S
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.0838
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.0671
+fz = 0.067056
+ap = 3.175
+ae = 6.35
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.078232
+ap = 3.175
+ae = 3.175
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.08382
+ap = 3.175
+ae = 0.635
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1128,15 +1349,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00330 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00264 IPT (0.250 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00264 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00308 IPT (0.250 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00330 IPT (0.250 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-904224"
@@ -1159,13 +1390,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material S
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.1321
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.1057
+fz = 0.105664
+ap = 4.7625
+ae = 9.525
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.12319
+ap = 4.7625
+ae = 4.7625
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.13208
+ap = 4.7625
+ae = 0.9525
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1225,15 +1467,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00520 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00416 IPT (0.375 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00416 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00485 IPT (0.375 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/5l0g4jh6tl/pdf/SF_50000.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00520 IPT (0.375 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-893932"
@@ -1256,13 +1508,24 @@ note = "Variable Helix End Mills for Aluminum Alloys - Corner Radius, Material S
 [[tool.preset]]
 name = "N slot"
 group = "N"
-vc = 228.6
-fz = 0.2024
-[[tool.preset]]
-name = "S slot"
-group = "S"
 vc = 68.58
-fz = 0.162
+fz = 0.162052
+ap = 6.35
+ae = 12.7
+[[tool.preset]]
+name = "N rough"
+group = "N"
+vc = 68.58
+fz = 0.188976
+ap = 6.35
+ae = 6.35
+[[tool.preset]]
+name = "N finish"
+group = "N"
+vc = 68.58
+fz = 0.202438
+ap = 6.35
+ae = 1.27
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1322,15 +1585,25 @@ path = "preset.N slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx): 750 SFM; .00797 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'ALUMINUM ALLOYS: Casting (2xx, 5xx, 7xx, 8xx)' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00638 IPT (0.500 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.S slot"
+path = "preset.N rough"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel alloys, C7xxxx): 225 SFM; .00638 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'COPPER ALLOYS: Copper Nickels, Nickel Silvers (Copper Nickel' mapped to ISO 513 group S by its name; fz is the smallest of a stated range"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00744 IPT (0.500 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/goxf8o5uvv/pdf/SF_61700.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "COPPER ALLOYS: High Coppers - 90%+ (C1xxxx); 225 SFM; .00797 IPT (0.500 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'COPPER ALLOYS: High Coppers - 90%+ (C1xxxx)' mapped to ISO 513 group N by its name; of the maker's materials in N, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-958608-c3"
@@ -1352,13 +1625,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Spec
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0168
+vc = 54.864
+fz = 0.016764
+ap = 1.5875
+ae = 3.175
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.02032
+ap = 1.5875
+ae = 1.5875
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.024384
+ap = 1.5875
+ae = 0.3175
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0168
+vc = 67.056
+fz = 0.016764
+ap = 1.5875
+ae = 3.175
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.02032
+ap = 1.5875
+ae = 1.5875
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.024384
+ap = 1.5875
+ae = 0.3175
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1412,15 +1717,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00066 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00066 IPT (0.125 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00080 IPT (0.125 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00096 IPT (0.125 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00066 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00066 IPT (0.125 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00080 IPT (0.125 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00096 IPT (0.125 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-958612-c3"
@@ -1442,13 +1781,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Spec
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0251
+vc = 54.864
+fz = 0.025146
+ap = 2.38125
+ae = 4.7625
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.03048
+ap = 2.38125
+ae = 2.38125
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.036576
+ap = 2.38125
+ae = 0.47625
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0251
+vc = 67.056
+fz = 0.025146
+ap = 2.38125
+ae = 4.7625
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.03048
+ap = 2.38125
+ae = 2.38125
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.036576
+ap = 2.38125
+ae = 0.47625
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1502,15 +1873,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00099 IPT (0.187 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00099 IPT (0.187 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00120 IPT (0.187 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00144 IPT (0.187 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00099 IPT (0.187 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00099 IPT (0.187 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00120 IPT (0.187 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00144 IPT (0.187 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-958616-c3"
@@ -1532,13 +1937,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Spec
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0338
+vc = 54.864
+fz = 0.033782
+ap = 3.175
+ae = 6.35
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.04064
+ap = 3.175
+ae = 3.175
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.049022
+ap = 3.175
+ae = 0.635
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0338
+vc = 67.056
+fz = 0.033782
+ap = 3.175
+ae = 6.35
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.04064
+ap = 3.175
+ae = 3.175
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.049022
+ap = 3.175
+ae = 0.635
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1592,15 +2029,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00133 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00133 IPT (0.250 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00160 IPT (0.250 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00193 IPT (0.250 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00133 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00133 IPT (0.250 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00160 IPT (0.250 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00193 IPT (0.250 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-958620-c3"
@@ -1622,13 +2093,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Spec
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0442
+vc = 54.864
+fz = 0.044196
+ap = 3.96875
+ae = 7.9375
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.05334
+ap = 3.96875
+ae = 3.96875
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.064008
+ap = 3.96875
+ae = 0.79375
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0442
+vc = 67.056
+fz = 0.044196
+ap = 3.96875
+ae = 7.9375
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.05334
+ap = 3.96875
+ae = 3.96875
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.064008
+ap = 3.96875
+ae = 0.79375
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1682,15 +2185,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00174 IPT (0.312 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00174 IPT (0.312 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00210 IPT (0.312 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00252 IPT (0.312 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00174 IPT (0.312 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00174 IPT (0.312 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00210 IPT (0.312 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00252 IPT (0.312 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-958624-c3"
@@ -1712,13 +2249,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Spec
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0531
+vc = 54.864
+fz = 0.053086
+ap = 4.7625
+ae = 9.525
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.064008
+ap = 4.7625
+ae = 4.7625
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.076962
+ap = 4.7625
+ae = 0.9525
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0531
+vc = 67.056
+fz = 0.053086
+ap = 4.7625
+ae = 9.525
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.064008
+ap = 4.7625
+ae = 4.7625
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.076962
+ap = 4.7625
+ae = 0.9525
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1772,15 +2341,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00209 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00209 IPT (0.375 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00252 IPT (0.375 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00303 IPT (0.375 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00209 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00209 IPT (0.375 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00252 IPT (0.375 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00303 IPT (0.375 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-958632-c3"
@@ -1802,13 +2405,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Square, Material Spec
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0706
+vc = 54.864
+fz = 0.070612
+ap = 6.35
+ae = 12.7
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.085344
+ap = 6.35
+ae = 6.35
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.102616
+ap = 6.35
+ae = 1.27
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0706
+vc = 67.056
+fz = 0.070612
+ap = 6.35
+ae = 12.7
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.085344
+ap = 6.35
+ae = 6.35
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.102616
+ap = 6.35
+ae = 1.27
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -1862,15 +2497,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00278 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00278 IPT (0.500 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00336 IPT (0.500 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00404 IPT (0.500 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00278 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00278 IPT (0.500 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00336 IPT (0.500 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/idonmwryeh/pdf/SF_958500.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00404 IPT (0.500 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-945957-c3"
@@ -2024,13 +2693,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Ball, Material Specif
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0168
+vc = 54.864
+fz = 0.016764
+ap = 1.5875
+ae = 3.175
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.02032
+ap = 1.5875
+ae = 1.5875
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.024384
+ap = 1.5875
+ae = 0.3175
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0168
+vc = 67.056
+fz = 0.016764
+ap = 1.5875
+ae = 3.175
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.02032
+ap = 1.5875
+ae = 1.5875
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.024384
+ap = 1.5875
+ae = 0.3175
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2084,15 +2785,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00066 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00066 IPT (0.125 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00080 IPT (0.125 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00096 IPT (0.125 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00066 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00066 IPT (0.125 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00080 IPT (0.125 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00096 IPT (0.125 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-971912-c3"
@@ -2114,13 +2849,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Ball, Material Specif
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0251
+vc = 54.864
+fz = 0.025146
+ap = 2.38125
+ae = 4.7625
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.03048
+ap = 2.38125
+ae = 2.38125
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.036576
+ap = 2.38125
+ae = 0.47625
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0251
+vc = 67.056
+fz = 0.025146
+ap = 2.38125
+ae = 4.7625
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.03048
+ap = 2.38125
+ae = 2.38125
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.036576
+ap = 2.38125
+ae = 0.47625
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2174,15 +2941,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00099 IPT (0.187 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00099 IPT (0.187 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00120 IPT (0.187 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00144 IPT (0.187 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00099 IPT (0.187 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00099 IPT (0.187 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00120 IPT (0.187 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00144 IPT (0.187 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-971916-c3"
@@ -2204,13 +3005,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Ball, Material Specif
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0338
+vc = 54.864
+fz = 0.033782
+ap = 3.175
+ae = 6.35
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.04064
+ap = 3.175
+ae = 3.175
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.049022
+ap = 3.175
+ae = 0.635
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0338
+vc = 67.056
+fz = 0.033782
+ap = 3.175
+ae = 6.35
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.04064
+ap = 3.175
+ae = 3.175
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.049022
+ap = 3.175
+ae = 0.635
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2264,15 +3097,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00133 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00133 IPT (0.250 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00160 IPT (0.250 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00193 IPT (0.250 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00133 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00133 IPT (0.250 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00160 IPT (0.250 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/nrorr1xq35/pdf/SF_971800.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00193 IPT (0.250 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-927908-c3"
@@ -2294,13 +3161,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Materi
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0168
+vc = 54.864
+fz = 0.016764
+ap = 1.5875
+ae = 3.175
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.02032
+ap = 1.5875
+ae = 1.5875
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.024384
+ap = 1.5875
+ae = 0.3175
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0168
+vc = 67.056
+fz = 0.016764
+ap = 1.5875
+ae = 3.175
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.02032
+ap = 1.5875
+ae = 1.5875
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.024384
+ap = 1.5875
+ae = 0.3175
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2354,15 +3253,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00066 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00066 IPT (0.125 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00080 IPT (0.125 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00096 IPT (0.125 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00066 IPT (0.125 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00066 IPT (0.125 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00080 IPT (0.125 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00096 IPT (0.125 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-45716-c3"
@@ -2384,13 +3317,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Materi
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0338
+vc = 54.864
+fz = 0.033782
+ap = 3.175
+ae = 6.35
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.04064
+ap = 3.175
+ae = 3.175
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.049022
+ap = 3.175
+ae = 0.635
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0338
+vc = 67.056
+fz = 0.033782
+ap = 3.175
+ae = 6.35
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.04064
+ap = 3.175
+ae = 3.175
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.049022
+ap = 3.175
+ae = 0.635
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2444,15 +3409,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00133 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00133 IPT (0.250 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00160 IPT (0.250 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00193 IPT (0.250 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00133 IPT (0.250 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00133 IPT (0.250 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00160 IPT (0.250 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00193 IPT (0.250 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-45724-c3"
@@ -2474,13 +3473,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Materi
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0531
+vc = 54.864
+fz = 0.053086
+ap = 4.7625
+ae = 9.525
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.064008
+ap = 4.7625
+ae = 4.7625
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.076962
+ap = 4.7625
+ae = 0.9525
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0531
+vc = 67.056
+fz = 0.053086
+ap = 4.7625
+ae = 9.525
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.064008
+ap = 4.7625
+ae = 4.7625
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.076962
+ap = 4.7625
+ae = 0.9525
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2534,15 +3565,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00209 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00209 IPT (0.375 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00252 IPT (0.375 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00303 IPT (0.375 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00209 IPT (0.375 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00209 IPT (0.375 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00252 IPT (0.375 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/iw7yhpha1k/pdf/SF_45600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00303 IPT (0.375 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-52732-c3"
@@ -2564,13 +3629,45 @@ note = "Variable Helix End Mills for Medium Alloy Steels - Corner Radius, Materi
 [[tool.preset]]
 name = "P slot"
 group = "P"
-vc = 76.2
-fz = 0.0793
+vc = 54.864
+fz = 0.079248
+ap = 6.35
+ae = 12.7
+[[tool.preset]]
+name = "P rough"
+group = "P"
+vc = 54.864
+fz = 0.095504
+ap = 6.35
+ae = 6.35
+[[tool.preset]]
+name = "P finish"
+group = "P"
+vc = 54.864
+fz = 0.115062
+ap = 6.35
+ae = 1.27
 [[tool.preset]]
 name = "M slot"
 group = "M"
-vc = 67.06
-fz = 0.0793
+vc = 67.056
+fz = 0.079248
+ap = 6.35
+ae = 12.7
+[[tool.preset]]
+name = "M rough"
+group = "M"
+vc = 67.056
+fz = 0.095504
+ap = 6.35
+ae = 6.35
+[[tool.preset]]
+name = "M finish"
+group = "M"
+vc = 67.056
+fz = 0.115062
+ap = 6.35
+ae = 1.27
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2624,15 +3721,49 @@ path = "preset.P slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/mofj1fa9vw/pdf/SF_52600.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3xxx, 4xxx & 4xLxx, 5xxx & 5xLxx, 50xxx & 50Lxxx, 51xxx & 51Lxxx, 52xxx & 52Lxxx, 6xxx, 8xxx, 9xxx: 250 SFM; .00312 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'CARBON STEELS: 1030 - 1095, 1140 - 1151, 13xx, 15xx, 2xxx, 3' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00312 IPT (0.500 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/mofj1fa9vw/pdf/SF_52600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00376 IPT (0.500 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/mofj1fa9vw/pdf/SF_52600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "TOOL STEELS: A, L, O, P, W series; 180 SFM; .00453 IPT (0.500 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'TOOL STEELS: A, L, O, P, W series' mapped to ISO 513 group P by its name; of the maker's materials in P, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M slot"
 status = "estimate"
 source = "https://harveyperformance.widen.net/content/mofj1fa9vw/pdf/SF_52600.pdf?u=d9orjt"
 taken = "2026-11-23"
-value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502: 220 SFM; .00312 IPT (0.500 column, Slotting)"
-basis = "the vendor's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 3' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00312 IPT (0.500 column, Slotting); ap Axial .5x Dia; ae Radial 1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M rough"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/mofj1fa9vw/pdf/SF_52600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00376 IPT (0.500 column, Roughing); ap Axial .5x - 1x Dia; ae Radial .5x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M finish"
+status = "estimate"
+source = "https://harveyperformance.widen.net/content/mofj1fa9vw/pdf/SF_52600.pdf?u=d9orjt"
+taken = "2026-11-23"
+value = "STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 310, 314, 316, 316L, 317, 321, 329, 330, 347, 348, 385, 403, 405, 409, 410, 413, 414, 42x, 43x, 44x, 501, 502; 220 SFM; .00453 IPT (0.500 column, Finishing); ap Axial .5x - 1x Dia; ae Radial .1x Dia"
+basis = "the maker's material 'STAINLESS STEELS: 201, 202, 203, 205, 301, 302, 304, 304L, 308, 309, 3' mapped to ISO 513 group M by its name; of the maker's materials in M, the one with the lowest vc; ap is the low end of the printed range"
+note = "metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "harvey-816108"
