@@ -280,7 +280,7 @@ mod tests {
     fn it_is_an_environment_of_the_framework() {
         use crate::shell::env::{EnvId, ROBOT_TAB};
         // nothing open: off, with the reason
-        let mut s = Shell::default();
+        let s = Shell::default();
         assert!(EnvId::Robot.available(&s).is_err());
         // a robot document's panel: in, on its tab; Finish leaves it kept for coming back
         let mut s = arm();
