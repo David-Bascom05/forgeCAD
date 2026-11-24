@@ -835,3 +835,64 @@ fn a_probe_move_posts_only_where_cited_and_round_trips() {
         }
     }
 }
+
+#[test]
+fn haas_writes_the_inspection_plus_macros_and_reads_them_back() {
+    let p = Program {
+        number: 1,
+        title: "probe".into(),
+        recs: vec![
+            Rec::Wcs(0),
+            Rec::ToolChange {
+                t: 20,
+                h: 20,
+                name: "probe".into(),
+            },
+            Rec::Rapid([-40.0, 20.0, 100.0]),
+            Rec::ProbeOn(true),
+            Rec::ProbeProtected {
+                to: [-40.0, 20.0, -8.0],
+                f: 3000.0,
+            },
+            Rec::ProbeSurface {
+                axis: 0,
+                at: -50.0,
+                q: 10.0,
+                wcs: Some(54),
+            },
+            Rec::ProbeProtected {
+                to: [-40.0, 20.0, 100.0],
+                f: 3000.0,
+            },
+            Rec::ProbeOn(false),
+            Rec::Rapid([0.0, 0.0, 100.0]),
+        ],
+    };
+    let d = Dialect::get("haas").unwrap();
+    let q = quantize(&p, &d).unwrap();
+    let (txt, back) = round_trip(&q, &d).unwrap();
+    for want in [
+        "G65 P9832",
+        "G65 P9810 X-40. Y20. Z-8. F3000.",
+        "G65 P9811 X-50. Q10. S1",
+        "G65 P9833",
+    ] {
+        assert!(txt.contains(want), "{want}: {txt}");
+    }
+    assert!(back.contains(&Motion::ProbeSurface {
+        axis: 0,
+        at: -50000,
+        q: 10000,
+        wcs: Some(54)
+    }));
+    // after the probe is switched off, Z is written again
+    let after = txt.lines().skip_while(|l| !l.contains("P9833")).nth(1).unwrap();
+    assert!(after.contains('Z'), "{after}");
+    // a control with no cited macros refuses each
+    let f = Dialect::get("fanuc").unwrap();
+    let qf = quantize(&p, &f).unwrap();
+    match print(&qf, &f) {
+        Err(PostError::Unsupported { what, .. }) => assert!(what.contains("probe_on"), "{what}"),
+        other => panic!("{other:?}"),
+    }
+}

@@ -149,7 +149,7 @@ pub struct Cite {
 }
 
 /// The template keys a dialect may set; with `cite_required`, each one it sets is cited.
-pub const KEYS: [&str; 47] = [
+pub const KEYS: [&str; 51] = [
     "program_open",
     "program_close",
     "comment",
@@ -200,6 +200,10 @@ pub const KEYS: [&str; 47] = [
     "comp_off",
     "comp_corner",
     "probe_move",
+    "probe_on",
+    "probe_off",
+    "probe_protected",
+    "probe_surface",
 ];
 
 impl Dialect {
@@ -509,6 +513,25 @@ pub enum Rec {
         to: [f64; 3],
         f: f64,
     },
+    /// A probing macro control's probe switched on (true) or off: the dialect's `probe_on` /
+    /// `probe_off` (Renishaw Inspection Plus on Haas: G65 P9832 / P9833, each with a small Z
+    /// move of unpublished size inside: afterwards Z is unknown to the program).
+    ProbeOn(bool),
+    /// A protected positioning move (`probe_protected`, Inspection Plus O9810): a feed move to
+    /// `to` that stops with an alarm if the probe triggers on the way.
+    ProbeProtected {
+        to: [f64; 3],
+        f: f64,
+    },
+    /// A single-surface measure (`probe_surface`, Inspection Plus O9811) along axis 0/1/2 (X Y
+    /// Z) toward the surface expected at `at`, searching `q` past it, then back to the start;
+    /// `wcs` (54..59) the work offset it sets from the error, if any.
+    ProbeSurface {
+        axis: u8,
+        at: f64,
+        q: f64,
+        wcs: Option<u32>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -561,6 +584,14 @@ pub enum QRec {
     Dwell(Q),
     Home,
     Probe([Q; 3], Q),
+    ProbeOn(bool),
+    ProbeProtected([Q; 3], Q),
+    ProbeSurface {
+        axis: u8,
+        at: Q,
+        q: Q,
+        wcs: Option<u32>,
+    },
 }
 
 /// What the control does: the motion and the machine-state events, in integer units.
@@ -587,6 +618,17 @@ pub enum Motion {
     Home,
     /// A probe (skip) move toward the point at the feed: it stops where the probe triggers.
     Probe([Q; 3], Q),
+    /// The probe switched on or off (a macro whose small Z move is not published).
+    ProbeOn(bool),
+    /// A protected positioning move to the point at the feed.
+    ProbeProtected([Q; 3], Q),
+    /// A single-surface measure along an axis toward `at`, `q` past it, back to its start.
+    ProbeSurface {
+        axis: u8,
+        at: Q,
+        q: Q,
+        wcs: Option<u32>,
+    },
 }
 
 /// The nearest integer to x · 10^k, ties to even, exactly.
@@ -769,7 +811,14 @@ fn comp_rules(p: &Program) -> Result<(), PostError> {
                 want_line = false;
             }
             _ if want_line => return Err(bad("the move after G41/G42/G40 is not a straight feed move")),
-            Rec::ToolChange { .. } | Rec::Cycle { .. } | Rec::Dwell(_) | Rec::Home | Rec::Probe { .. }
+            Rec::ToolChange { .. }
+            | Rec::Cycle { .. }
+            | Rec::Dwell(_)
+            | Rec::Home
+            | Rec::Probe { .. }
+            | Rec::ProbeOn(_)
+            | Rec::ProbeProtected { .. }
+            | Rec::ProbeSurface { .. }
                 if on =>
             {
                 return Err(bad(
@@ -848,6 +897,28 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
             Rec::Rapid(v) => QRec::Rapid(q3(*v)?),
             Rec::Line(v, f) => QRec::Line(q3(*v)?, qlen(*f, fk, inch)?),
             Rec::Probe { to, f } => QRec::Probe(q3(*to)?, qlen(*f, fk, inch)?),
+            Rec::ProbeOn(on) => QRec::ProbeOn(*on),
+            Rec::ProbeProtected { to, f } => QRec::ProbeProtected(q3(*to)?, qlen(*f, fk, inch)?),
+            Rec::ProbeSurface { axis, at, q, wcs } => {
+                if *axis > 2 {
+                    return Err(PostError::Range {
+                        what: "a probe surface axis (0 X, 1 Y, 2 Z)".into(),
+                        value: *axis as f64,
+                    });
+                }
+                if wcs.is_some_and(|n| !(54..=59).contains(&n)) {
+                    return Err(PostError::Range {
+                        what: "a probed work offset (G54..G59)".into(),
+                        value: wcs.unwrap_or(0) as f64,
+                    });
+                }
+                QRec::ProbeSurface {
+                    axis: *axis,
+                    at: qlen(*at, k, inch)?,
+                    q: qlen(*q, k, inch)?,
+                    wcs: *wcs,
+                }
+            }
             Rec::Arc { to, c, cw, f } => QRec::Arc {
                 to: q3(*to)?,
                 c: [qlen(c[0], k, inch)?, qlen(c[1], k, inch)?],
@@ -991,6 +1062,14 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
             QRec::Rapid(v) => out.push(Motion::Rapid(*v)),
             QRec::Line(v, f) => out.push(Motion::Feed(*v, *f)),
             QRec::Probe(v, f) => out.push(Motion::Probe(*v, *f)),
+            QRec::ProbeOn(on) => out.push(Motion::ProbeOn(*on)),
+            QRec::ProbeProtected(v, f) => out.push(Motion::ProbeProtected(*v, *f)),
+            QRec::ProbeSurface { axis, at, q, wcs } => out.push(Motion::ProbeSurface {
+                axis: *axis,
+                at: *at,
+                q: *q,
+                wcs: *wcs,
+            }),
             QRec::Arc { to, c, cw, f, full } => out.push(Motion::Arc {
                 to: *to,
                 c: *c,
@@ -1088,6 +1167,17 @@ impl Writer<'_> {
 }
 
 /// Writes the program in the dialect.
+/// A probing record the dialect does not cite.
+fn no_probe(d: &Dialect, key: &str) -> PostError {
+    PostError::Unsupported {
+        what: format!(
+            "`{key}` on {} (no openly published probing cycle is cited for it)",
+            d.name
+        ),
+        fix: "probe by hand, or post for a control whose probing cycles are cited".into(),
+    }
+}
+
 pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
     let k = d.decimals;
     let num_ = |q: Q| d.coord(q);
@@ -1244,6 +1334,55 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                     }
                     w.emit(&ws.join(" "));
                 }
+            }
+            QRec::ProbeOn(on) => {
+                let key = if *on { "probe_on" } else { "probe_off" };
+                let tpl = d.s(key).to_string();
+                if tpl.is_empty() {
+                    return Err(no_probe(d, key));
+                }
+                w.emit(&tpl);
+                // its small Z move is not published: Z is written again
+                pos[2] = None;
+                motion = None;
+            }
+            QRec::ProbeProtected(v, f) => {
+                let tpl = d.s("probe_protected").to_string();
+                if tpl.is_empty() {
+                    return Err(no_probe(d, "probe_protected"));
+                }
+                w.emit(&fill(
+                    &tpl,
+                    &[
+                        ("x", num_(v[0])),
+                        ("y", num_(v[1])),
+                        ("z", num_(v[2])),
+                        ("f", fnum(*f)),
+                    ],
+                ));
+                pos = [Some(v[0]), Some(v[1]), Some(v[2])];
+                motion = None;
+                feed = None;
+            }
+            QRec::ProbeSurface { axis, at, q, wcs } => {
+                let tpl = d.s("probe_surface").to_string();
+                if tpl.is_empty() {
+                    return Err(no_probe(d, "probe_surface"));
+                }
+                let letter = ['X', 'Y', 'Z'][*axis as usize];
+                let set = wcs.map(|n| format!(" S{}", n - 53)).unwrap_or_default();
+                w.emit(&fill(
+                    &tpl,
+                    &[
+                        ("axis", letter.to_string()),
+                        ("at", num_(*at)),
+                        ("q", digits(*q, k, d.point)),
+                        ("set", set),
+                    ],
+                ));
+                // it returns to its start: the position is as before; the motion mode is the macro's
+                motion = None;
+                feed = None;
             }
             QRec::Probe(v, f) => {
                 let tpl = d.s("probe_move").to_string();
@@ -1558,6 +1697,19 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
     let mut feed: Q = 0;
     let mut motion: Option<u32> = None;
     let mut cycle: Option<(CycleKind, Q, Q, Q, Q, Q)> = None; // kind, z, r, q, dwell ms, clear
+    // the dialect's probing macros: each template's P number (G65 P9811 ...)
+    let macro_p = |key: &str| -> Option<u32> {
+        let t = d.s(key);
+        if !t.contains("G65") {
+            return None;
+        }
+        t.split_whitespace()
+            .find_map(|w| w.strip_prefix('P').and_then(|p| p.parse::<u32>().ok()))
+    };
+    let macros: Vec<(&str, u32)> = ["probe_on", "probe_off", "probe_protected", "probe_surface"]
+        .into_iter()
+        .filter_map(|k| macro_p(k).map(|p| (k, p)))
+        .collect();
     // the dialect's probe move: its template's leading G word (G38.2, G31)
     let probe_g: Option<f64> = d
         .s("probe_move")
@@ -1666,7 +1818,10 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                 }
             }
         }
-        if let Some(sv) = get('S') {
+        // (a probing macro's S is the work offset it sets, not a speed)
+        if let Some(sv) = get('S')
+            && !gs.contains(&65)
+        {
             rpm = parse_q(&sv, 0, ln)?;
         }
         // a dwell written with F (G4 F seconds) is not a feed
@@ -1706,6 +1861,75 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         if ms.contains(&0) && !ms.contains(&6) {
             let t = raw_tool(text_, ln);
             out.push(Motion::Tool(t));
+        }
+        // a probing macro call: G65 P<number> the dialect's templates name
+        if gs.contains(&65) {
+            let p: Option<u32> = get('P').and_then(|v| v.trim_end_matches('.').parse().ok());
+            let Some(&(key, _)) = macros.iter().find(|(_, n)| Some(*n) == p) else {
+                return Err(ReadError {
+                    line: ln,
+                    what: format!(
+                        "G65 P{} is not a probing macro this dialect writes",
+                        p.unwrap_or(0)
+                    ),
+                });
+            };
+            let coord =
+                |c: char| -> Result<Option<Q>, ReadError> { get(c).map(|v| parse_q(&v, k, ln)).transpose() };
+            match key {
+                "probe_on" | "probe_off" => {
+                    out.push(Motion::ProbeOn(key == "probe_on"));
+                    pos[2] = None;
+                }
+                "probe_protected" => {
+                    let mut to = pos;
+                    for (i, c) in ['X', 'Y', 'Z'].into_iter().enumerate() {
+                        if let Some(v) = coord(c)? {
+                            to[i] = Some(v);
+                        }
+                    }
+                    let (Some(x), Some(y), Some(z)) = (to[0], to[1], to[2]) else {
+                        return Err(ReadError {
+                            line: ln,
+                            what: "a protected positioning move from an unknown position".into(),
+                        });
+                    };
+                    out.push(Motion::ProbeProtected([x, y, z], feed));
+                    pos = [Some(x), Some(y), Some(z)];
+                }
+                _ => {
+                    let axes: Vec<(u8, Q)> = ['X', 'Y', 'Z']
+                        .into_iter()
+                        .enumerate()
+                        .filter_map(|(i, c)| coord(c).transpose().map(|v| v.map(|v| (i as u8, v))))
+                        .collect::<Result<_, _>>()?;
+                    let [(axis, at)] = axes[..] else {
+                        return Err(ReadError {
+                            line: ln,
+                            what: "a single-surface measure names one axis".into(),
+                        });
+                    };
+                    let q = coord('Q')?.ok_or_else(|| ReadError {
+                        line: ln,
+                        what: "a single-surface measure with no Q (its default is not assumed)".into(),
+                    })?;
+                    let wcs = match get('S') {
+                        None => None,
+                        Some(v) => match v.trim_end_matches('.').parse::<u32>() {
+                            Ok(n) if (1..=6).contains(&n) => Some(n + 53),
+                            _ => {
+                                return Err(ReadError {
+                                    line: ln,
+                                    what: format!("S{v}: only S1..S6 (G54..G59) are read"),
+                                });
+                            }
+                        },
+                    };
+                    out.push(Motion::ProbeSurface { axis, at, q, wcs });
+                }
+            }
+            motion = None;
+            continue;
         }
         let mut home = false;
         let mut skip_motion = false;
@@ -1983,7 +2207,8 @@ pub fn normalize(m: &[Motion]) -> Vec<Motion> {
                 at = Some(*p);
             }
             Motion::Arc { to, .. } => at = Some(*to),
-            Motion::Home | Motion::Tool(_) | Motion::Probe(..) => at = None,
+            Motion::Home | Motion::Tool(_) | Motion::Probe(..) | Motion::ProbeOn(_) => at = None,
+            Motion::ProbeProtected(p, _) => at = Some(*p),
             _ => {}
         }
         out.push(x.clone());
