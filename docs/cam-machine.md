@@ -168,6 +168,13 @@ on straight moves, by bisection on arcs); the self-collision check below leaves 
 travel. The generic mill-turn declares the zones that keep its B head off the headstock, chuck and
 sub-spindle.
 
+When the maker does not publish its crash zones, the record cites `zones` (the path, as a whole)
+`unknown`. A real lathe's turret does reach its chuck, and an HMC's spindle its pallet, within the
+published travel. In such a record, a contact between the machine's own bodies in a run is
+reported with the contact as "possible contact: crash zones not published" (not checked: never
+clear). The built-in vendor records whose envelopes meet within travel cite it. Their contacts are
+pinned in tests/collide.rs: a new one fails, and so does one that goes away.
+
 ## Self-collision through travel
 
 A machine's own bodies must not collide anywhere inside the declared travel outside its zones: a

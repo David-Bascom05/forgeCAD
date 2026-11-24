@@ -73,12 +73,13 @@ fn template_clone_list_check_and_simulate() {
     assert_eq!(o.code, 0, "{}", o.err);
     let o = run(&e, &["check", "my-trunnion"]);
     assert!(o.out.contains("(user, "), "{}", o.out);
-    assert!(o.out.contains(" user"), "{}", o.out);
+    assert!(o.out.contains("provenance: 37 user"), "{}", o.out);
     assert!(!o.out.contains("uncited"), "{}", o.out);
-    // the cradle and head move relative to each other through X Y Z B; the check reports it,
-    // never as a hit inside the corrected travel (Z [-280, 0])
-    assert!(o.out.contains("cradle / head (via X Y Z B):"), "{}", o.out);
-    assert!(!o.out.contains("cradle / head (via X Y Z B): HIT"), "{}", o.out);
+    // the generic trunnion's Z travel stops above its cradle (cam/machine-train4: Z [-280, 0]):
+    // the pair is swept, its lines clear, and no HIT
+    assert!(o.out.contains("cradle / head (via X Y Z B): "), "{}", o.out);
+    assert!(!o.out.contains("HIT"), "{}", o.out);
+    assert_eq!(o.code, 0, "{}", o.out);
 
     // shadowing: a user machine named like a built-in hides it, and list says so
     let o = run(&e, &["new", "generic-vmc3", "--from", "generic-vmc3"]);
