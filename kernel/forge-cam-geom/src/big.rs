@@ -210,6 +210,42 @@ impl Nat {
     }
 
     /// floor(self / 2^k).
+    /// The number of trailing zero bits (0 for zero).
+    pub fn trailing_zeros(&self) -> u64 {
+        let mut i = 0;
+        while i < self.limbs.len() {
+            if self.limbs[i] != 0 {
+                return 32 * i as u64 + self.limbs[i].trailing_zeros() as u64;
+            }
+            i += 1;
+        }
+        0
+    }
+
+    /// `self.shr(k)` in place (its limbs reused).
+    pub fn shr_assign(&mut self, k: u64) {
+        let w = (k / 32) as usize;
+        if w >= self.limbs.len() {
+            self.limbs.clear();
+            return;
+        }
+        let b = (k % 32) as u32;
+        let n = self.limbs.len();
+        let mut i = w;
+        while i < n {
+            let lo = self.limbs[i] >> b;
+            let hi = if b > 0 && i + 1 < n {
+                self.limbs[i + 1] << (32 - b)
+            } else {
+                0
+            };
+            self.limbs[i - w] = lo | hi;
+            i += 1;
+        }
+        self.limbs.truncate(n - w);
+        trim(&mut self.limbs);
+    }
+
     pub fn shr(&self, k: u64) -> Nat {
         let w = (k / 32) as usize;
         if w >= self.limbs.len() {
@@ -475,5 +511,45 @@ mod tests {
         assert!(s.mul(&s).cmp(&big) != Ordering::Greater);
         let s1 = s.add(&n(1));
         assert!(s1.mul(&s1).cmp(&big) == Ordering::Greater);
+    }
+
+    /// shr_assign and trailing_zeros agree with shr and bit-by-bit counting (Dy::norm uses
+    /// them), on numbers of 1 to 6 limbs with runs of zero bits, every shift up to past the end.
+    #[test]
+    fn shift_in_place_is_shr() {
+        let mut seed = 0x2545f4914f6cdd1du64;
+        let mut rnd = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for _ in 0..300 {
+            let len = 1 + (rnd() % 6) as usize;
+            let mut limbs: Vec<u32> = (0..len).map(|_| rnd() as u32).collect();
+            // zero limbs and low bits at the bottom, sometimes
+            let z = (rnd() % 3) as usize;
+            for l in limbs.iter_mut().take(z.min(len - 1)) {
+                *l = 0;
+            }
+            limbs[0] &= !((1u32 << (rnd() % 31)) - 1);
+            let mut x = Nat { limbs };
+            trim(&mut x.limbs);
+            if x.is_zero() {
+                continue;
+            }
+            let mut k = 0u64;
+            while !x.bit(k) {
+                k += 1;
+            }
+            assert_eq!(x.trailing_zeros(), k);
+            let mut sh = 0;
+            while sh <= 32 * len as u64 + 33 {
+                let mut y = x.clone();
+                y.shr_assign(sh);
+                assert_eq!(y, x.shr(sh), "{x:?} >> {sh}");
+                sh += 1 + rnd() % 7;
+            }
+        }
     }
 }

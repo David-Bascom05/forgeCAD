@@ -36,19 +36,17 @@ impl Dy {
         if mag.is_zero() {
             return Dy::zero();
         }
-        // strip trailing zero bits
-        let mut k = 0u64;
-        while !mag.bit(k) {
-            k += 1;
-        }
+        // strip trailing zero bits (counted a limb at a time, shifted in place)
+        let k = mag.trailing_zeros();
+        let mut mag = mag;
         if k > 0 {
-            return Dy {
-                neg,
-                mag: mag.shr(k),
-                exp: exp + k as i64,
-            };
+            mag.shr_assign(k);
         }
-        Dy { neg, mag, exp }
+        Dy {
+            neg,
+            mag,
+            exp: exp + k as i64,
+        }
     }
 
     /// The exact value of a finite f64.
