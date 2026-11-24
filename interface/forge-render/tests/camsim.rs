@@ -332,6 +332,15 @@ fn the_flanges_posted_program_on_its_machine() {
         }
     };
     let m = &mv.run;
+    // the playback clock (feeds as programmed, rapids at the machine's published rates, the
+    // axes together) is never longer than the machine run's own lower bound, which adds tool
+    // changes and dwells to the same motion
+    assert!(
+        sim.tl.total <= m.tl.t_min + 1e-6,
+        "playback {} s over the machine's least {} s",
+        sim.tl.total,
+        m.tl.t_min
+    );
     assert_eq!(m.def.name, "generic-vmc3");
     assert!(m.wcs_given, "the flange gives its `at:` (CAM-CORE 8cae054a)");
     assert!(m.tl.segments.len() > 300);
