@@ -1322,13 +1322,17 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
     }
     // (decision log: the sampled events against the certified ones, curved-sites gap #7)
     #[cfg(feature = "decisions")]
-    if form == Form::Poly4 && std::env::var_os("FORGE_DECISIONS_DUMP").is_some() {
+    if form == Form::Poly4 && (oracle::on() || std::env::var_os("FORGE_DECISIONS_DUMP").is_some()) {
         let t = std::time::Instant::now();
         let v = cert::certify(&eq, &events);
-        eprintln!("poly4-cert {:?} us {}", v, t.elapsed().as_micros());
-        if !matches!(v, cert::Verdict::Certified { .. } | cert::Verdict::NotCovered) {
-            eprintln!("poly4-cert-pair {a:?} | {b:?} | events {events:?}");
+        if std::env::var_os("FORGE_DECISIONS_DUMP").is_some() {
+            eprintln!("poly4-cert {:?} us {}", v, t.elapsed().as_micros());
         }
+        let ok = matches!(v, cert::Verdict::Certified { .. } | cert::Verdict::NotCovered);
+        if !ok {
+            eprintln!("poly4-cert {v:?}\npoly4-cert-pair {a:?} | {b:?} | events {events:?}");
+        }
+        oracle::record(ok, matches!(v, cert::Verdict::NotCovered));
     }
     // two events polished onto one point: the isolation was off somewhere
     if events.windows(2).any(|w| w[1].0 - w[0].0 <= 1e-9) {
@@ -1876,6 +1880,43 @@ pub fn coaxial(a: &Surface, b: &Surface) -> Option<SurfaceSurface> {
 #[cfg(any(test, feature = "decisions"))]
 #[path = "meet_cert.rs"]
 mod cert;
+
+/// The event search's test oracle (M.ct, M.cert): with `on`, every torus × cylinder event search is
+/// certified (meet_cert) and counted; CI's poly4_oracle test fails on any search not certified.
+/// The decisions feature only: the shipped build has none of it.
+#[cfg(feature = "decisions")]
+pub mod oracle {
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
+    static ON: AtomicBool = AtomicBool::new(false);
+    static CERTIFIED: AtomicUsize = AtomicUsize::new(0);
+    static NOT_COVERED: AtomicUsize = AtomicUsize::new(0);
+    static FAILED: AtomicUsize = AtomicUsize::new(0);
+    /// Certify every torus × cylinder search from now on.
+    pub fn start() {
+        ON.store(true, Relaxed);
+    }
+    pub(super) fn on() -> bool {
+        ON.load(Relaxed)
+    }
+    pub(super) fn record(ok: bool, not_covered: bool) {
+        let c = if !ok {
+            &FAILED
+        } else if not_covered {
+            &NOT_COVERED
+        } else {
+            &CERTIFIED
+        };
+        c.fetch_add(1, Relaxed);
+    }
+    /// (certified, not covered (a cone host), missed or undecided) so far.
+    pub fn counts() -> (usize, usize, usize) {
+        (
+            CERTIFIED.load(Relaxed),
+            NOT_COVERED.load(Relaxed),
+            FAILED.load(Relaxed),
+        )
+    }
+}
 
 #[cfg(test)]
 #[path = "meet_tests.rs"]
