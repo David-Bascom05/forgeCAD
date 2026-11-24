@@ -11,3 +11,6 @@ import ForgeBoolApply.ApplySense
 
 /-- info: 'ForgeBoolApply.apply_sense' depends on axioms: [propext, Classical.choice, Quot.sound] -/
 #guard_msgs in #print axioms ForgeBoolApply.apply_sense
+
+/-- info: 'ForgeBoolApply.apply_writes' depends on axioms: [propext, Classical.choice, Quot.sound] -/
+#guard_msgs in #print axioms ForgeBoolApply.apply_writes

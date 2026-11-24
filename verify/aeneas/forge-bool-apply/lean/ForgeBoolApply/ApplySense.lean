@@ -486,6 +486,13 @@ theorem into_iter_slice {T : Type _} {A : Type _} {v : alloc.vec.Vec T}
   subst this
   simp [alloc.vec.Vec.deref, alloc.vec.Vec.val, Slice.from_val]
 
+theorem into_iter_i {T : Type _} {A : Type _} {v : alloc.vec.Vec T}
+    {it : core.slice.iter.Iter T}
+    (h : SharedAVec.Insts.CoreIterTraitsCollectIntoIteratorSharedATIter.into_iter A v = ok it) :
+    it.i = 0 := by
+  have := ok_inj h
+  subst this; rfl
+
 /-- `WrittenW` relative to a body with the same faces. -/
 theorem WrittenW.of_same {S : Type _} {inst : imprint.Src S} {b : S}
     {specs : alloc.vec.Vec boolean.Spec} {kept : List (Usize × Bool)} {a a4 : body.Body}
@@ -578,5 +585,260 @@ theorem apply_sense {S : Type _} (inst : imprint.Src S) (a : body.Body) (b : S)
       | (refine okspec_mono (rebuild_shells_keep _) ?_
          intro r hr
          exact hS.weaken hr)
+
+/-- `next` on a slice iterator: the element at its index, the index one on; or none at the end. -/
+theorem iter_next_at {T : Type _} (it : core.slice.iter.Iter T) :
+    okspec (core.slice.iter.IteratorSliceIter.next it) fun r =>
+      r.2.slice = it.slice ∧
+      ((r.1 = none ∧ it.slice.val.length ≤ it.i ∧ r.2.i = it.i) ∨
+       (∃ x, r.1 = some x ∧ it.slice.val[it.i]? = some x ∧ r.2.i = it.i + 1)) := by
+  unfold core.slice.iter.IteratorSliceIter.next
+  split
+  · rename_i h
+    rw [okspec_ok]
+    refine ⟨rfl, Or.inr ⟨_, rfl, ?_, rfl⟩⟩
+    exact List.getElem?_eq_getElem (by simpa using h)
+  · rename_i h
+    rw [okspec_ok]
+    exact ⟨rfl, Or.inl ⟨rfl, by simpa using h, rfl⟩⟩
+
+/-! ## D8.lone's combinatorial core: one written face per kept spec, in order -/
+
+/-- A face's sense and surface. -/
+def proj (f : body.Face) : Bool × forge_geom.surface.Surface := (f.same_sense, f.surface)
+
+/-- The faces past the first `n`, as senses and surfaces. -/
+def tailProj (n : Nat) (r : body.Body) : List (Bool × forge_geom.surface.Surface) :=
+  (r.faces.val.drop n).map proj
+
+theorem tailProj_same {n : Nat} {x y : body.Body} (h : FaceSame x y) : tailProj n y = tailProj n x := by
+  unfold tailProj
+  apply List.ext_getElem?
+  intro j
+  simp only [List.getElem?_map, List.getElem?_drop]
+  cases hx : x.faces.val[n + j]? with
+  | none =>
+    cases hy : y.faces.val[n + j]? with
+    | none => rfl
+    | some g =>
+      obtain ⟨f, hf, -⟩ := h.2 _ _ hy
+      rw [hx] at hf; cases hf
+  | some f =>
+    obtain ⟨g, hg, hs, hu⟩ := h.1 _ _ hx
+    rw [hg]; simp [proj, hs, hu]
+
+theorem tailProj_append {n : Nat} {x y : body.Body} {g : body.Face}
+    (hn : n ≤ x.faces.val.length) (hy : y.faces.val = x.faces.val ++ [g]) :
+    tailProj n y = tailProj n x ++ [proj g] := by
+  unfold tailProj; rw [hy, List.drop_append_of_le_length hn]; simp
+
+theorem tailProj_self (r : body.Body) : tailProj r.faces.val.length r = [] := by
+  simp [tailProj]
+
+/-- **What the main loop writes, in order**: for each kept `(si, flip)`, nothing when the spec is
+kept as it is or is an extended face of A reused in place, else one face with the source's sense
+`!= flip` and the source's surface. -/
+inductive Writes {S : Type _} (inst : imprint.Src S) (b : S) (specs : alloc.vec.Vec boolean.Spec)
+    (as_is : alloc.vec.Vec Bool) (a0 : body.Body) :
+    List (Usize × Bool) → List (Bool × forge_geom.surface.Surface) → Prop
+  | nil : Writes inst b specs as_is a0 [] []
+  | asIs {ks L si flip} : Writes inst b specs as_is a0 ks L → as_is.val[si.val]? = some true →
+      Writes inst b specs as_is a0 (ks ++ [(si, flip)]) L
+  | reuse {ks L si flip s} : Writes inst b specs as_is a0 ks L → as_is.val[si.val]? = some false →
+      specs.val[si.val]? = some s → s.extend = true → flip = false →
+      Writes inst b specs as_is a0 (ks ++ [(si, flip)]) L
+  | write {ks L si flip s σ srf} : Writes inst b specs as_is a0 ks L →
+      as_is.val[si.val]? = some false → specs.val[si.val]? = some s →
+      ¬(s.extend = true ∧ flip = false) → SrcSense inst b a0 s σ → SrcSurf inst b a0 s srf →
+      Writes inst b specs as_is a0 (ks ++ [(si, flip)]) (L ++ [((σ != flip), srf)])
+
+theorem FaceKeep.trans_same {x y z : body.Body} (h1 : FaceKeep x y) (h2 : FaceSame y z) :
+    FaceKeep x z := h1.trans h2.1
+
+theorem take_succ_of_getElem? {α : Type _} {l : List α} {i : Nat} {x : α} (h : l[i]? = some x) :
+    l.take (i + 1) = l.take i ++ [x] := by
+  rw [List.take_succ, h]; rfl
+
+/-- **The main loop, exactly**: its faces past A's are one per kept spec it writes, in `kept`'s
+order (`Writes`); A's faces keep their senses and surfaces. -/
+theorem loop3_writes {S : Type _} (inst : imprint.Src S)
+    (it : core.slice.iter.Iter (Usize × Bool)) (a : body.Body) (b : S)
+    (v : alloc.vec.Vec boolean.Piece) (v1 v2 : alloc.vec.Vec name.Name)
+    (v3 : alloc.vec.Vec boolean.Spec) (v4 : alloc.vec.Vec (Usize × Bool))
+    (v5 : alloc.vec.Vec forge_math.vec.Point3) (v6 : alloc.vec.Vec name.Name)
+    (v7 : alloc.vec.Vec (boolean.VKey × name.Name)) (v8 : alloc.vec.Vec F64)
+    (v9 : alloc.vec.Vec (boolean.VKey × F64)) (v10 : alloc.vec.Vec (boolean.VKey × boolean.VKey))
+    (v11 : alloc.vec.Vec (name.Name × name.Name)) (v12 v13 : alloc.vec.Vec body.FaceId)
+    (pieces : alloc.vec.Vec boolean.Piece) (specs : alloc.vec.Vec boolean.Spec)
+    (as_is : alloc.vec.Vec Bool) (new_outer : alloc.vec.Vec Usize) (made : boolean.Made)
+    (emap : alloc.vec.Vec (Option body.EdgeId)) (shell : body.ShellId)
+    (hfrom : ∀ s ∈ specs.val, s.side = 0#usize → (s.from : Std.U32).val < a.faces.val.length)
+    (hi0 : it.i = 0) (kept : List (Usize × Bool)) (hkept : it.slice.val = kept) :
+    okspec (boolean.apply_loop3 inst it a b v v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12 v13 pieces
+      specs as_is new_outer made emap shell)
+      fun r => FaceKeep a r ∧
+        Writes inst b specs as_is a kept (tailProj a.faces.val.length r) := by
+  subst hkept
+  unfold boolean.apply_loop3
+  refine okspec_loop _ (fun st => st.1.slice = it.slice ∧ FaceKeep a st.2.1 ∧
+      Writes inst b specs as_is a (it.slice.val.take st.1.i) (tailProj a.faces.val.length st.2.1))
+    _ ?_ _ ⟨rfl, FaceKeep.refl a, by rw [hi0, tailProj_self]; exact Writes.nil⟩
+  rintro ⟨it', a', made', emap'⟩ ⟨hsl, hk', hw⟩
+  dsimp only at hsl hk' hw
+  unfold boolean.apply_loop3.body
+  refine okspec_bind (iter_next_at it') fun ⟨o, it1⟩ ⟨hsl1, hnx⟩ => ?_
+  dsimp only at hsl1 hnx
+  have hit : it1.slice = it.slice := hsl1.trans hsl
+  rcases hnx with ⟨rfl, hend, hi⟩ | ⟨⟨si, flip⟩, rfl, hx, hi⟩
+  · simp only [uncurry_apply_pair]
+    rw [okspec_ok]
+    refine ⟨hk', ?_⟩
+    rw [← hsl, List.take_of_length_le hend] at hw
+    rw [← hsl]; exact hw
+  have hx' : it.slice.val[it'.i]? = some (si, flip) := hsl ▸ hx
+  have htake : it.slice.val.take it1.i = it.slice.val.take it'.i ++ [(si, flip)] := by
+    rw [hi]; exact take_succ_of_getElem? hx'
+  have hmemK : (si, flip) ∈ it.slice.val := List.mem_of_getElem? hx'
+  simp only [uncurry_apply_pair]
+  refine okspec_bind (vec_index as_is si) fun b1 hb1 => ?_
+  split
+  · rename_i hb
+    subst hb
+    exact (okspec_ok _ _).mpr ⟨hit, hk', by rw [htake]; exact Writes.asIs hw hb1⟩
+  rename_i hb
+  have hb1' : as_is.val[si.val]? = some false := by
+    cases b1 <;> simp_all
+  refine okspec_bind (vec_index specs si) fun s hspec => ?_
+  have hmemS : s ∈ specs.val := List.mem_of_getElem? hspec
+  have hlt : s.side = 0#usize → (s.from : Std.U32).val < a.faces.val.length := hfrom s hmemS
+  -- the sense
+  refine okspec_bind (p := fun r => SrcSense inst b a s r.1) ?_ fun ⟨σ, bx⟩ hσ => ?_
+  · split
+    · rename_i h0
+      refine okspec_let fun f hf => ?_
+      go_steps
+      all_goals
+        rw [okspec_ok]
+        obtain ⟨g0, hg0, hs0, -⟩ := read_face hk' (hlt h0) hf
+        exact Or.inl ⟨h0, g0, hg0, hs0⟩
+    · rename_i h1
+      refine okspec_let fun r hr => ?_
+      go_steps
+      all_goals
+        rw [okspec_ok]
+        exact Or.inr ⟨h1, r.1, r.2.2, by rw [hr]⟩
+  simp only [uncurry_apply_pair]
+  -- the face
+  refine okspec_bind (p := fun r => FaceKeep a r.1 ∧
+      Writes inst b specs as_is a (it.slice.val.take it1.i) (tailProj a.faces.val.length r.1)) ?_
+    fun ⟨a1, face⟩ ha1 => ?_
+  · have add : ∀ srf, SrcSurf inst b a s srf → ¬(s.extend = true ∧ flip = false) →
+        okspec (do
+          let (face1, a2) ← body.Body.add_face a' shell srf (σ != flip) s.name
+          ok (a2, face1)) fun r => FaceKeep a r.1 ∧
+            Writes inst b specs as_is a (it.slice.val.take it1.i) (tailProj a.faces.val.length r.1) := by
+      intro srf hsrf hne
+      refine okspec_bind (add_face_spec a' shell srf (σ != flip) s.name)
+        fun ⟨fid, a2⟩ ⟨_, ⟨g, hg, hsurf, hss, _⟩, _⟩ => ?_
+      rw [uncurry_apply_pair, okspec_ok]
+      refine ⟨hk'.trans (FaceKeep.of_append hg), ?_⟩
+      rw [tailProj_append hk'.length_le hg, htake]
+      have : proj g = ((σ != flip), srf) := by simp [proj, hss, hsurf]
+      rw [this]
+      exact Writes.write hw hb1' hspec hne hσ hsrf
+    split
+    · split
+      · rename_i he hf
+        exact okspec_bind (surf_block inst b hk' s hlt) fun srf hsrf =>
+          add srf hsrf (by simp [hf])
+      · rename_i he hf
+        rw [okspec_ok]
+        refine ⟨hk', ?_⟩
+        rw [htake]
+        exact Writes.reuse hw hb1' hspec he (by simpa using hf)
+    · rename_i he
+      exact okspec_bind (surf_block inst b hk' s hlt) fun srf hsrf =>
+        add srf hsrf (by simp [he])
+  obtain ⟨hka1, hwa1⟩ := ha1
+  simp only [uncurry_apply_pair]
+  refine okspec_bind (p := fun r => r = a1) ?_ fun a2 (ha2 : a2 = a1) => ?_
+  · go_steps
+    all_goals exact (okspec_ok _ _).mpr rfl
+  subst ha2
+  refine okspec_let fun iter2 _ => ?_
+  refine okspec_bind (loop3_loop0_rel inst iter2 (FaceSame.refl a2) b v v1 v2 v3 v4 v5 v6 v7 v8
+    v9 v10 v11 v12 v13 pieces made' emap' flip s.extend face) fun ⟨a3, made1, emap1⟩ h3 => ?_
+  dsimp only at h3
+  have hk3 := hka1.trans h3.1
+  have hw3 := tailProj_same (n := a.faces.val.length) h3 ▸ hwa1
+  simp only [uncurry_apply_pair]
+  go_steps
+  all_goals first
+    | exact (okspec_ok _ _).mpr ⟨hit, hk3, hw3⟩
+    | (rw [okspec_ok]; dsimp only
+       have hi := ‹alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice body.Face)
+         _ _ = ok _›
+       refine ⟨hit, hk3.trans_same (FaceSame.of_index_mut hi _ rfl ⟨rfl, rfl⟩), ?_⟩
+       convert hw3 using 1
+       exact tailProj_same (FaceSame.of_index_mut hi _ rfl ⟨rfl, rfl⟩))
+
+theorem Writes.tail_same {S : Type _} {inst : imprint.Src S} {b : S}
+    {specs : alloc.vec.Vec boolean.Spec} {as_is : alloc.vec.Vec Bool} {a0 x y : body.Body}
+    {ks : List (Usize × Bool)} {n : Nat}
+    (hw : Writes inst b specs as_is a0 ks (tailProj n x)) (h : FaceSame x y) :
+    Writes inst b specs as_is a0 ks (tailProj n y) := by
+  rw [tailProj_same h]; exact hw
+
+/-- `Writes` relative to a body with the same faces. -/
+theorem Writes.of_same {S : Type _} {inst : imprint.Src S} {b : S}
+    {specs : alloc.vec.Vec boolean.Spec} {as_is : alloc.vec.Vec Bool} {a a4 : body.Body}
+    (h : FaceSame a a4) {ks : List (Usize × Bool)} {L : List (Bool × forge_geom.surface.Surface)}
+    (hw : Writes inst b specs as_is a4 ks L) : Writes inst b specs as_is a ks L := by
+  have sense : ∀ s σ, SrcSense inst b a4 s σ → SrcSense inst b a s σ := by
+    rintro s σ (⟨h0, g, hg, hσ⟩ | h1)
+    · obtain ⟨g', hg', hs', -⟩ := h.2 _ _ hg
+      exact Or.inl ⟨h0, g', hg', by rw [hσ, hs']⟩
+    · exact Or.inr h1
+  have surf : ∀ s srf, SrcSurf inst b a4 s srf → SrcSurf inst b a s srf := by
+    rintro s srf (⟨h0, g, hg, hu⟩ | h1)
+    · obtain ⟨g', hg', -, hu'⟩ := h.2 _ _ hg
+      exact Or.inl ⟨h0, g', hg', by rw [hu, hu']⟩
+    · exact Or.inr h1
+  induction hw with
+  | nil => exact Writes.nil
+  | asIs _ h1 ih => exact Writes.asIs ih h1
+  | reuse _ h1 h2 h3 h4 ih => exact Writes.reuse ih h1 h2 h3 h4
+  | write _ h1 h2 h3 h4 h5 ih => exact Writes.write ih h1 h2 h3 (sense _ _ h4) (surf _ _ h5)
+
+set_option maxHeartbeats 4000000 in
+/-- **D8.lone's combinatorial core, of the shipped `apply`.** On its `ok` result, A's faces keep
+their senses and surfaces, and the faces past A's are exactly one per kept spec `apply` writes, in
+`kept`'s order (`Writes`, over the as-is table `apply` builds): a spec kept as it is, or an
+extended face of A reused in place, adds none; every other kept `(si, flip)` adds one face, with
+its source's sense `!= flip` and its source's surface. -/
+theorem apply_writes {S : Type _} (inst : imprint.Src S) (a : body.Body) (b : S)
+    (plan : boolean.Plan)
+    (hfrom : ∀ s ∈ plan.specs.val, s.side = 0#usize → (s.from : Std.U32).val < a.faces.val.length) :
+    okspec (boolean.apply inst a b plan) fun r => FaceKeep a r ∧
+      ∃ as_is, Writes inst b plan.specs as_is a plan.kept.val (tailProj a.faces.val.length r) := by
+  unfold boolean.apply
+  have h0 := FaceSame.refl a
+  same_steps
+  all_goals
+    have h3e := ‹boolean.apply_loop3 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ = ok _›
+    have h4 := okspec_of_eq (loop4_same _ _) ‹boolean.apply_loop4 _ _ = ok _›
+    have hA4 : FaceSame a _ := ‹_›
+    have h3 := okspec_of_eq (loop3_writes _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+      (fun s hs h0 => by rw [hA4.length_eq]; exact hfrom s hs h0) (into_iter_i ‹_›) plan.kept.val
+      (into_iter_slice ‹_›)) h3e
+    rw [hA4.length_eq] at h3
+    obtain ⟨hk3, hw3⟩ := h3
+    have hk := (hA4.1.trans hk3).trans h4.1
+    have hw := (hw3.tail_same h4).of_same hA4
+    first
+      | exact (okspec_ok _ _).mpr ⟨hk, _, hw⟩
+      | (refine okspec_mono (rebuild_shells_keep _) ?_
+         intro r hr
+         exact ⟨hk.trans hr.1, _, hw.tail_same hr⟩)
 
 end ForgeBoolApply
