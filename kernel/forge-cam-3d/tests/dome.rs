@@ -72,7 +72,8 @@ fn dome_waterline_is_certified() {
     };
     // scallop 0.01 mm on slopes of 45° and steeper
     let d = step_for(Contact::Ball { r: 3.0 }, 0.01, 6.0).unwrap();
-    let s45 = Ival::new(0.7071067811865475, 0.7071067811865476);
+    let h = std::f64::consts::FRAC_1_SQRT_2;
+    let s45 = Ival::new(h.next_down(), h.next_up());
     let dz = waterline_step(d, s45);
     assert!(dz > 0.3 && dz < 0.5, "dz={dz}");
     let mut loops = Vec::new();
