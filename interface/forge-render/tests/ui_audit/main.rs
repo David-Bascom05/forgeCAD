@@ -952,7 +952,22 @@ impl Crawl {
             && after.dirty == before.dirty
             && after.env == before.env
             && after.docs == before.docs;
-        if !tip.is_empty() && still && matches!(rec.class, Class::Nothing | Class::Action | Class::Mode) {
+        // a reason, not just a name: "Off: …", "… first", "isn't …" (a live button whose tooltip
+        // only names it, and whose click does nothing, is dead)
+        let reason = {
+            let l = tip.to_lowercase();
+            [
+                "off", "first", "isn't", "can't", "cannot", "not ", "no ", "only", "needs", "select",
+                "used by", "finish",
+            ]
+            .iter()
+            .any(|w| l.contains(w))
+        };
+        if !tip.is_empty()
+            && reason
+            && still
+            && matches!(rec.class, Class::Nothing | Class::Action | Class::Mode)
+        {
             rec.class = Class::Disabled;
             rec.detail = format!("off: {}", judge::short(&tip));
             rec.findings
