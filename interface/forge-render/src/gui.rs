@@ -2425,7 +2425,16 @@ impl Gui {
                 }) {
                     p.selected = None;
                 }
-                self.shell.status = p.summary.clone();
+                // the edit that asked for this build says what it did first, then the build
+                self.shell.status = match p.said.take() {
+                    Some(w) if b.checked && !b.preview => format!("{w}: done · {}", p.summary),
+                    Some(w) => {
+                        let line = format!("{w} · {}", p.summary);
+                        p.said = Some(w);
+                        line
+                    }
+                    None => p.summary.clone(),
+                };
             }
             if let Some(a) = &b.asm
                 && let Some(p) = &mut self.shell.fg
@@ -2808,6 +2817,7 @@ impl Gui {
                 };
                 if let Some(p) = p {
                     p.refused = None;
+                    p.said = Some(self.shell.status.clone());
                 }
                 self.fg_text();
                 Ok(())

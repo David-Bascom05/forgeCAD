@@ -1221,7 +1221,10 @@ impl Shell {
         let x = self.voice_status(ui, 6.0, st);
         // an environment owns the status bar too
         let env_line = self.env_status();
-        let status = shown(&self.status);
+        let full = shown(&self.status);
+        // a file's path said by its name; the whole line (the paths) on hover
+        let status = brief(&full);
+        let pathed = status != full;
         let line: &str = if let Some(l) = &env_line {
             l
         } else if self.status.is_empty() && self.unshown {
@@ -1242,12 +1245,13 @@ impl Shell {
         p.galley(said.min, g, Color32::WHITE);
         // the whole line on hover when cut; a release refusal's detail (its rule, the syntax) too
         let detail = if self.tab == CAM_TAB { self.cam.as_ref().and_then(cam::release_words).map(|b| b.detail) } else { None };
-        if elided || detail.is_some() {
+        let whole = if pathed && env_line.is_none() { full.to_string() } else { line.to_string() };
+        if elided || detail.is_some() || pathed {
             let r = ui.interact(said, ui.scope_id().with("status-line"), Sense::hover());
-            r.on_hover_text(match (elided, detail) {
-                (true, Some(d)) => format!("{line}\n\n{d}"),
+            r.on_hover_text(match (elided || pathed, detail) {
+                (true, Some(d)) => format!("{whole}\n\n{d}"),
                 (false, Some(d)) => d,
-                _ => line.to_string(),
+                _ => whole,
             });
         }
         if let (Some((label, action)), Some(g)) = (fix, fix_g) {
@@ -1892,6 +1896,28 @@ enum MenuResult {
 }
 
 /// A flat menu at a point; closes on Esc or a press outside it.
+/// The status line as the bar draws it: each file path by its file's name ("Saved plate.fg",
+/// not the folders it's in; UX-LEAD), the whole line kept for the hover.
+pub fn brief(s: &str) -> String {
+    s.split(' ')
+        .map(|w| {
+            let core = w.trim_end_matches([',', ':', ';', ')']);
+            let tail = &w[core.len()..];
+            let path = (core.starts_with('/') || core.starts_with("~/") || core.get(1..3) == Some(":\\"))
+                && core.len() > 1
+                || (core.matches('/').count() >= 1
+                    && core.rsplit('/').next().is_some_and(|f| f.contains('.') && !f.ends_with('.'))
+                    && !core.contains("://"));
+            match core.rsplit(['/', '\\']).next() {
+                // a file's name has letters (not a ratio like 1/2.5)
+                Some(name) if path && name.chars().any(char::is_alphabetic) => format!("{name}{tail}"),
+                _ => w.to_string(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 /// What the status bar shows of `s`: in a page, the project's files by their path in the
 /// project ("weldments/gate_frame-cutlist.csv"): where the page keeps them (`/project`) is its own
 /// business.
@@ -1988,4 +2014,19 @@ fn menu_at(
         out = MenuResult::Close;
     }
     out
+}
+
+#[cfg(test)]
+mod brief_tests {
+    use super::brief;
+
+    #[test]
+    fn a_path_is_said_by_its_file_name() {
+        assert_eq!(brief("Saved /tmp/fg-ui-audit-5005/sketch/run/plate.fg"), "Saved plate.fg");
+        assert_eq!(brief("Wrote out/a.nc, out/b.nc"), "Wrote a.nc, b.nc");
+        assert_eq!(brief("Saved weldments/gate_frame-cutlist.csv"), "Saved gate_frame-cutlist.csv");
+        // not paths: units, ratios, links
+        assert_eq!(brief("F 3726 mm/min · 1/2.5 turn"), "F 3726 mm/min · 1/2.5 turn");
+        assert_eq!(brief("see https://example.com/a.html"), "see https://example.com/a.html");
+    }
 }

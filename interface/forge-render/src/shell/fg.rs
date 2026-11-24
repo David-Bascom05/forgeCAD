@@ -339,6 +339,9 @@ pub struct FgPanel {
     pub rename_fresh: bool,
     /// The last op the host refused, and why.
     pub refused: Option<String>,
+    /// What the last applied edit said ("Move hole1 above fillet1"), kept to lead the build's
+    /// summary when it comes, so the reply isn't replaced by the statistics.
+    pub said: Option<String>,
     pub collapsed: HashSet<String>,
     pub sheets: Vec<SheetRow>,
     /// The part's thermoforms, and whether their wall thickness is mapped on the view.
@@ -859,8 +862,17 @@ impl Shell {
             }
             match forge_lang::edit::apply_all_checked(&source, std::slice::from_ref(op)) {
                 Ok(_) => None,
-                Err(forge_lang::error::Error::StillRead { reader, .. }) => {
-                    Some(format!("Used by {reader}: delete or change {reader} first"))
+                Err(forge_lang::error::Error::StillRead { name, reader, .. }) => {
+                    // a delete names up to three that use it; a move, the one in the way
+                    let mut users = match op {
+                        Op::DeleteFeature { .. } => readers(&source, &name),
+                        _ => vec![],
+                    };
+                    if users.is_empty() {
+                        users.push(reader);
+                    }
+                    let them = if users.len() == 1 { users[0].clone() } else { "them".into() };
+                    Some(format!("Used by {}: delete or change {them} first", listed(&users)))
                 }
                 Err(e) => Some(e.text()),
             }
@@ -1151,8 +1163,17 @@ impl Shell {
                                 fg.out.push(FgAct::Rollback(Some(key.clone())));
                             }
                             let op = Op::DeleteFeature { id: key.clone() };
-                            if off_item(ui, "Delete", "delete", refusal(&op)) {
+                            let why = refusal(&op);
+                            let used = why.is_some() && !sketching;
+                            if off_item(ui, "Delete", "delete", why) {
                                 fg.out.push(FgAct::Apply(op));
+                            }
+                            // what stops the delete, a click away (STANDARD §9: naming it selects it)
+                            if used
+                                && let Some(first) = readers(&source, &key).into_iter().next()
+                                && off_item(ui, &format!("Select {first}"), "select-user", None)
+                            {
+                                chosen = Some(first);
                             }
                         }
                         // one instance of a loop or a call: a shared param of its own
@@ -1781,5 +1802,51 @@ mod tests {
         // nothing it builds changes
         let run = |t: &str| forge_lang::run(t, forge_lang::Options::default(), Default::default()).0;
         assert!(run(&inch).errors.is_empty());
+    }
+}
+
+/// The statements that read `name`, in order: what a delete of it would leave reading nothing.
+fn readers(source: &str, name: &str) -> Vec<String> {
+    use forge_lang::syntax::StmtKind;
+    let Ok(prog) = forge_lang::syntax::parse(source) else {
+        return vec![];
+    };
+    prog.iter()
+        .filter_map(|s| match &s.kind {
+            StmtKind::Assign { name: n, .. } | StmtKind::Block { name: n, .. }
+                if n != name && forge_lang::edit::mentions(s).contains(name) =>
+            {
+                Some(n.clone())
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// "a", "a and b", "a, b and c", "a, b, c and 2 more".
+fn listed(names: &[String]) -> String {
+    match names {
+        [] => String::new(),
+        [a] => a.clone(),
+        [a, b] => format!("{a} and {b}"),
+        [a, b, c] => format!("{a}, {b} and {c}"),
+        [a, b, c, rest @ ..] => format!("{a}, {b}, {c} and {} more", rest.len()),
+    }
+}
+
+#[cfg(test)]
+mod used_by_tests {
+    use super::{listed, readers};
+
+    #[test]
+    fn a_delete_names_up_to_three_users() {
+        let src = "sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (60, 40))\n}\n\
+plate = extrude(plan, 6)\nlid = extrude(plan, 2)\n";
+        assert_eq!(readers(src, "plan"), ["plate", "lid"]);
+        let n: Vec<String> = ["a", "b", "c", "d", "e"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(listed(&n[..1]), "a");
+        assert_eq!(listed(&n[..2]), "a and b");
+        assert_eq!(listed(&n[..3]), "a, b and c");
+        assert_eq!(listed(&n), "a, b, c and 2 more");
     }
 }

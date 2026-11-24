@@ -208,7 +208,8 @@ impl Shell {
             ui.label(
                 RichText::new(format!("Off: {}", why(self, scope, tool.name)))
                     .font(sans(12.0))
-                    .color(t.error),
+                    // guidance, not an error (UX-LEAD): amber, as a warning is
+                    .color(t.warn),
             );
         }
         if !long {
