@@ -734,3 +734,18 @@ The conditions:
 3. Power is a check only, and the cap is a number (no ae-vs-ap plot).
 Residual for counsel: Q3 (moat), Q9 (applies to all CAM), and Q10 (whether a generator alone can
 infringe).
+
+**§9 clarification (2026-11-24, after TOOLPATH-QUALITY ran the winding test).** One-way passes
+with their return links each enclose a strip of already-cleared air, where |w| = 1. Classic
+one-way raster pocketing ("zig") has the same property, and it is old prior art. What the
+spiral-loop and moat claims describe is loops that *nest around a common point* (a spiral) or
+encircle an island or uncut material.
+
+So condition (2) reads:
+- (i) winding 0 around every island, and around every point of material still uncut when the
+  loop is made;
+- (ii) |w| ≤ 1 at every point. No two pass-plus-link loops nest or overlap, so the loops progress
+  side by side across the sweep, never concentrically;
+- (iii) passes start in monotone cross-sweep order. This is what guarantees (ii).
+
+Zero winding everywhere is NOT required. Retracing zigzag returns are not needed for FTO.
