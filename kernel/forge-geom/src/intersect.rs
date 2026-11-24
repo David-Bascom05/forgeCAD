@@ -1148,10 +1148,30 @@ pub fn plane_cone(p: &Plane, c: &Cone) -> SurfaceSurface {
     }
     let e1z = e1.z;
 
+    // The cone's unit normal along its generator going up in local direction (dx, dy) from the axis:
+    // ∝ (cos θ, sin θ, -tan a) for the gradient of x² + y² - tan² a (z - apex)², at that azimuth.
+    let generator_normal = |dx: f64, dy: f64| {
+        let r = (dx * dx + dy * dy).sqrt().max(f64::MIN_POSITIVE);
+        Vec3::new(dx / r, dy / r, -k).normalize().map(|u| u.get())
+    };
+    // A plane within LINEAR of the apex crossing the cone is read as through it (two generators) only
+    // where that reading lies within LINEAR of the true section: the generators lie on the cone and
+    // within apex_dist of the plane, so within apex_dist / sin γ of its curve, γ the angle between
+    // the plane and the cone along them. Near tangent (γ small) the true section, a thin hyperbola,
+    // runs far from them (apex_planes 8, 14, 46: 3e-4, 9e-3, 8e-2): the general case below takes it.
+    let snaps = |dirs: &[Vec3]| {
+        dirs.iter().all(|d| {
+            generator_normal(d.x, d.y)
+                .is_some_and(|nc| apex_dist.abs() <= tol::LINEAR * n.get().cross(nc).length())
+        })
+    };
     if apex_dist.abs() <= tol::LINEAR {
         // Through the apex: generators where the in-plane direction makes the half-angle with the axis.
         let apex_w = to_world(apex);
         let cos_phi = c.cos_a() / e1z.max(f64::MIN_POSITIVE);
+        // (the apex alone, or one generator the plane touches along: as read, a tolerance site still
+        // open, G11c: whether the plane's gap to the cone stays within LINEAR over the faces' extent
+        // is not known here)
         if cos_phi > 1.0 + tol::ANGULAR {
             return SurfaceSurface::Points(vec![apex_w]);
         }
@@ -1159,17 +1179,23 @@ pub fn plane_cone(p: &Plane, c: &Cone) -> SurfaceSurface {
             let dir = f.unit_to_world(UnitVec3::new_unchecked(e1));
             return SurfaceSurface::Curves(vec![(Curve::Line(Line::new(apex_w, dir)), Contact::Touching)]);
         }
-        let sin_phi = (1.0 - cos_phi * cos_phi).sqrt();
-        let lines = [-1.0, 1.0].map(|side| {
-            let d = (e1 * cos_phi + e2 * (side * sin_phi))
-                .normalize()
-                .expect("unit combination");
-            (
-                Curve::Line(Line::new(apex_w, f.unit_to_world(d))),
-                Contact::Crossing,
-            )
-        });
-        return SurfaceSurface::Curves(lines.to_vec());
+        {
+            let sin_phi = (1.0 - cos_phi * cos_phi).sqrt();
+            let dirs = [-1.0, 1.0].map(|side| {
+                (e1 * cos_phi + e2 * (side * sin_phi))
+                    .normalize()
+                    .expect("unit combination")
+            });
+            if snaps(&[dirs[0].get(), dirs[1].get()]) {
+                let lines = dirs.map(|d| {
+                    (
+                        Curve::Line(Line::new(apex_w, f.unit_to_world(d))),
+                        Contact::Crossing,
+                    )
+                });
+                return SurfaceSurface::Curves(lines.to_vec());
+            }
+        }
     }
 
     // Origin of plane coordinates: the plane point nearest the apex.
@@ -1653,6 +1679,32 @@ mod tests {
         } else {
             panic!("{res:?}");
         }
+    }
+
+    #[test]
+    fn a_plane_near_the_apex_and_near_tangent_is_not_read_as_through_it() {
+        // (apex_planes 8, 14, 46) a plane LINEAR / 2 off the apex, crossing the cone at 1e-3 rad
+        // along its generators: as two generators through the apex they sit d / sin γ ≈ 5e-3 from
+        // the true section, a thin hyperbola, so the hyperbola is what comes back
+        let cone = Cone::new(Frame::WORLD, 1.0, dmath::FRAC_PI_2 / 2.0).unwrap(); // apex at z = -1
+        let apex = cone.apex();
+        let tangent = Vec3::new(1.0, 0.0, -1.0).normalize().unwrap().get();
+        let n = (tangent + Vec3::new(0.0, 1e-3, 0.0)).normalize().unwrap();
+        let plane = Plane::new(Frame::from_z(apex + n.get() * (0.5 * tol::LINEAR), n));
+        let res = plane_cone(&plane, &cone);
+        assert!(
+            matches!(&res, SurfaceSurface::Curves(c) if matches!(c[0].0, Curve::Hyperbola(_))),
+            "{res:?}"
+        );
+        check_curves(&Surface::Plane(plane), &Surface::Cone(cone), &res);
+        // crossing clearly, as near the apex: still two generators
+        let n = Vec3::new(0.0, 1.0, 0.0).normalize().unwrap();
+        let plane = Plane::new(Frame::from_z(apex + n.get() * (0.5 * tol::LINEAR), n));
+        let res = plane_cone(&plane, &cone);
+        assert!(
+            matches!(&res, SurfaceSurface::Curves(c) if c.len() == 2 && matches!(c[0].0, Curve::Line(_))),
+            "{res:?}"
+        );
     }
 
     #[test]
