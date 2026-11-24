@@ -2,7 +2,7 @@
 //! and each vertical cylinder over an arc whose heights span z contributes its section curve;
 //! the curves chain into closed loops by their shared ends (the lowering's shared vertices), and
 //! the loops are oriented as a region (outer counter-clockwise, islands clockwise).
-use forge_cam_geom::check::Face;
+use forge_cam_geom::check::{Face, Surf, TSeg};
 use forge_cam_geom::region::{Loop, P2, Region, Seg, p2};
 use forge_cam_geom::slab::{Prism, Sec};
 
@@ -52,6 +52,48 @@ fn merge_arcs(lp: Vec<Seg>) -> Vec<Seg> {
     out
 }
 
+/// The section at z of a vertical planar face whose trim is not its parameter box (lines only:
+/// an L-shaped side wall, a step flush with the outline): the trim cut by the horizontal line at
+/// z, its crossings paired in order along it, each pair a segment. None (not 2.5D at z) for any
+/// other face, or when z is within mu of a trim vertex (the section changes there).
+fn wall_section(f: &Face, z: f64, mu: f64) -> Option<Vec<Seg>> {
+    let Surf::Plane { o, u, v } = f.surf else {
+        return None;
+    };
+    if !(u[2] == 0.0 && v[0] == 0.0 && v[1] == 0.0 && (v[2] == 1.0 || v[2] == -1.0)) {
+        return None;
+    }
+    let t = f.trim.as_ref()?;
+    // the trim's q at height z (v = ±z, so exact up to the subtraction's rounding)
+    let qz = v[2] * (z - o[2]);
+    let mut cross: Vec<f64> = Vec::new();
+    for sg in &t.segs {
+        let TSeg::Line { a, b } = *sg else {
+            return None;
+        };
+        if (a[1] - qz).abs() <= mu || (b[1] - qz).abs() <= mu {
+            return None;
+        }
+        if (a[1] < qz) != (b[1] < qz) {
+            cross.push(a[0] + (b[0] - a[0]) * (qz - a[1]) / (b[1] - a[1]));
+        }
+    }
+    if cross.is_empty() || !cross.len().is_multiple_of(2) {
+        return None;
+    }
+    cross.sort_by(|x, y| x.partial_cmp(y).unwrap());
+    let at = |p: f64| p2(o[0] + p * u[0], o[1] + p * u[1]);
+    Some(
+        cross
+            .chunks(2)
+            .map(|c| Seg::Line {
+                a: at(c[0]),
+                b: at(c[1]),
+            })
+            .collect(),
+    )
+}
+
 /// The section of the lowered part at height z (strictly inside every wall's height range it
 /// meets: a height at a floor or top is refused as ambiguous by `NotPrism` of that flat face).
 pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> {
@@ -83,7 +125,10 @@ pub fn section(faces: &[Face], z: f64, mu: f64) -> Result<Region, SectionError> 
                     return Err(SectionError::NotPrism { face: f.id });
                 }
             }
-            None => return Err(SectionError::NotPrism { face: f.id }),
+            None => match wall_section(f, z, mu) {
+                Some(segs) => pieces.extend(segs),
+                None => return Err(SectionError::NotPrism { face: f.id }),
+            },
         }
     }
     if pieces.is_empty() {

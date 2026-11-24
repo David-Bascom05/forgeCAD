@@ -68,7 +68,7 @@ Don't:
   whole view over a 50 mm tool.
 - Animated subjects (bend, toolpath): the camera does not cut per step; it holds a frame that
   contains the whole motion envelope; "Follow" is opt-in.
-- Helper: `camera::frame(bounds, view_rect, Dir::Iso)` (section 12). No environment computes its
+- Helper: `frame::frame(bounds, view_rect, Framing::default(), obstacles)` (section 12). No environment computes its
   own fit distance.
 
 ## 3. Style: Realistic for physical things
@@ -101,13 +101,18 @@ A preview is a claim that the thing looks like this. So:
    cutter is shank + flutes (fluted helix or at least the cut length shaded differently) at
    `dc`, `dcon`, `lcf`, `oal`. A die is its section swept along its *segment* lengths, not the
    longest one.
-2. **Unknown = ghost + label.** A dimension the record does not publish is drawn as a
-   translucent, outlined envelope (30 % alpha, dashed silhouette) with a leader label:
-   `height · unknown`. A whole object with no geometry is a ghost bounding box with its name and
-   "no geometry published".
+2. **Recognisable at a glance.** A preview must read as the object (a vise, a press brake) at
+   first sight. So each body is drawn **solid at its best value**: the published value, else the
+   first cited value of a conflict, else a labelled estimate (an `estimate` chip, the rule it
+   came from on hover). Only the uncertain *dimension* is marked: a dashed dimension line or
+   hatching on that face, with its chip and a leader label (`Height · sources disagree`,
+   `Jaw thickness · estimate`). A body is **fully ghosted** (see-through, dashed) only when none
+   of its size is known from any source; then it carries its name and "no geometry published".
+   Labels sit out to the side with leaders and never overlap each other or the subject.
 3. **Never an invented solid.** No placeholder blocks presented as the product, no default sizes
-   pulled from nowhere. A "stand-in" is allowed only for the user's own experiments, always shown
-   as a ghost with a `stand-in` badge, and never offered first.
+   pulled from nowhere: every solid size is published, cited or a labelled estimate. A
+   "stand-in" is allowed only for the user's own experiments, always shown with a `stand-in`
+   badge, and never offered first.
 4. **Conflict is visible.** A value with conflicting sources is drawn at the value used, with the
    conflict badge, and the sheet says which sources disagree.
 5. **Long or small features get an inset.** A die or punch section is shown as a 2D section inset
@@ -217,7 +222,8 @@ spellings per row: `UNKNOWN`, `set`, `not given`, `published ?`).
   1400×860 and 1600×1000, and one at 1024×700 to prove nothing clips.
 - Differences are allowed only where the platform forces them (file dialogs, menus) and are
   listed in the branch's README.
-- Fonts: the app's Inter / mono pair at the theme sizes; nothing smaller than 11 px.
+- Fonts: the app's Public Sans / IBM Plex Mono pair (shell/theme.rs) at the theme sizes
+  (`caption` 11, `small` 12, `body` 13, `title` 14); nothing smaller than 11 px.
 
 ## 11. The review gate
 
@@ -233,10 +239,13 @@ Adopt these instead of writing your own:
 
 | Widget / helper | Does |
 |---|---|
-| `ux::PropertySheet` | sectioned label/value/unit/badge grid; raw key on hover; sizes columns; handles unknown/set |
-| `ux::provenance_badge` | section 6 |
-| `ux::thumbnail` | renders a body list offscreen to a cached 96×96 texture, 3/4 view, Realistic |
-| `camera::frame` | section 2: fit bounds into the uncovered view rect, from a direction, eye outside obstacles |
-| `ux::ghost` | translucent outlined envelope + leader label for unknown geometry |
-| `ux::empty_state` / `ux::loading` | section 7 |
-| `ux::LibraryList` | section 8 rows, groups, levels filter, search |
+| `shell::ux::Sheet` (`num`, `text`, `flag`, `section`) | sectioned label / value / unit / badge rows; raw key + file on hover; unknown = `unknown · Set…` |
+| `shell::ux::badge`, `ux::Source` | section 6 |
+| `shell::ux::show`, `ux::Qty`, `ux::System` | section 5 units: length, angle, mass, force (kN), torque, speed, feed, accel, rpm, power, load per length; metric / inch |
+| `shell::ux::label` | person's label for a record key (`dc` → Cutting diameter, `speeds.approach` → Approach speed) |
+| `frame::frame`, `frame::Bounds`, `frame::ViewRect`, `frame::grid_step` | section 2: fit bounds into the uncovered view rect from a direction, eye moved outside obstacles (or `eye_blocked` so the caller ghosts them); grid step for a subject |
+| `shell::ux::empty_state`, `ux::loading` | section 7 |
+| `shell::ux::transport`, `ux::transport_key`, `ux::icon_button` | the one transport row with icons and its keys (Space, ←/→, Home/End) |
+| `thumb::render`, `shell::ux::thumbnail` | section 8: a record's real geometry drawn small (CPU rasteriser, same on native and wasm), cached as a texture per record hash; no geometry = dashed ghost square |
+| `ghost::ghost_box`, `ghost::Label`, `shell::ux::ghost_labels` | section 4: see-through envelope with dashed edges into the frame's translucent `world` triangles, plus leader labels ("Height · unknown") over the view |
+| planned: `ux::LibraryList` | section 8 rows, groups, levels filter, search |

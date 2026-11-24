@@ -345,6 +345,12 @@ basis = "the spindle head (estimate); one box/cylinder from published overall si
 # ---------------------------------------------------------------------------------------------
 # Spinner TC600: TC universal lathes.
 # X 275 Y 90 Z 700; 4000 rpm built-in motor spindle, hollow hydraulic clamping.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "spinner-tc600"
 kind = "lathe"
