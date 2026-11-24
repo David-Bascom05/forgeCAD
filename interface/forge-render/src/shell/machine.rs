@@ -1675,7 +1675,7 @@ fn tab_joints(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
                 let txt = format!(
                     "{}{} {} ({}, {})",
                     "    ".repeat(depth),
-                    "└",
+                    "-",
                     j.name,
                     if j.ty == JointType::Linear {
                         "linear"
@@ -2444,35 +2444,54 @@ fn overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
         egui::Id::unique("machine:overlay"),
     ));
     let p = p.with_clip_rect(v);
-    for (at, words) in &st.view_labels {
-        // wrapped to the room the view leaves, on the side of the point with more of it
-        let room_r = v.right() - at.x - 24.0;
-        let room_l = at.x - v.left() - 24.0;
-        let right = room_r >= room_l;
-        let wrap = room_r.max(room_l).clamp(120.0, 360.0);
-        let g = p.layout(words.clone(), sans(11.0), t.ink, wrap);
-        let size = g.size() + vec2(10.0, 6.0);
-        let min = if right {
-            *at + vec2(14.0, -size.y - 6.0)
-        } else {
-            *at + vec2(-14.0 - size.x, -size.y - 6.0)
-        };
-        let box_ = egui::Rect::from_min_size(min, size);
-        let foot = if right {
-            box_.left_bottom()
-        } else {
-            box_.right_bottom()
-        };
-        p.line_segment([*at, foot], egui::Stroke::new(1.0, t.ink2));
-        p.circle_filled(*at, 2.5, t.ink2);
-        p.rect_filled(box_, 4.0, t.surface.gamma_multiply(0.92));
-        p.rect_stroke(
-            box_,
-            4.0,
-            egui::Stroke::new(1.0, t.line),
-            egui::StrokeKind::Inside,
-        );
-        p.galley(box_.min + vec2(5.0, 3.0), g, t.ink);
+    // the labels in two columns at the view's sides (the side nearer each one's anchor),
+    // stacked down from their anchors so none overlaps another, each with a leader to its anchor
+    let inset_top = st
+        .inset
+        .as_ref()
+        .map(|_| v.bottom() - (v.width().min(v.height()) / 3.0).clamp(140.0, 220.0) - 24.0);
+    let wrap = (v.width() * 0.26).clamp(150.0, 260.0);
+    let mut sides: [Vec<(egui::Pos2, &String)>; 2] = [Vec::new(), Vec::new()];
+    for (at, words) in st.view_labels.iter().filter(|(_, w)| !w.is_empty()) {
+        sides[usize::from(at.x > v.center().x)].push((*at, words));
+    }
+    for (side, list) in sides.iter_mut().enumerate() {
+        list.sort_by(|a, b| a.0.y.total_cmp(&b.0.y));
+        let mut next = v.top() + 44.0;
+        for (at, words) in list.iter() {
+            let g = p.layout(words.to_string(), sans(11.0), t.ink, wrap);
+            let size = g.size() + vec2(12.0, 8.0);
+            let mut y = at.y.max(next) - size.y / 2.0;
+            y = y.max(next);
+            let bottom = if side == 0 {
+                inset_top.unwrap_or(v.bottom() - 12.0)
+            } else {
+                v.bottom() - 12.0
+            };
+            y = y.min(bottom - size.y);
+            let x = if side == 0 {
+                v.left() + 12.0
+            } else {
+                v.right() - 12.0 - size.x
+            };
+            let box_ = egui::Rect::from_min_size(pos2(x, y), size);
+            next = box_.bottom() + 6.0;
+            let foot = if side == 0 {
+                box_.right_center()
+            } else {
+                box_.left_center()
+            };
+            p.line_segment([*at, foot], egui::Stroke::new(1.0, t.ink2.gamma_multiply(0.8)));
+            p.circle_filled(*at, 2.5, t.ink2);
+            p.rect_filled(box_, 4.0, t.surface.gamma_multiply(0.94));
+            p.rect_stroke(
+                box_,
+                4.0,
+                egui::Stroke::new(1.0, t.line),
+                egui::StrokeKind::Inside,
+            );
+            p.galley(box_.min + vec2(6.0, 4.0), g, t.ink);
+        }
     }
     if let Some((outline, dims)) = &st.inset {
         // a corner of the view: a third of its shorter side, 140 to 220 px

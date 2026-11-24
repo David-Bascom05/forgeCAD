@@ -431,15 +431,14 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                     }
                                 }
                                 _ => {
-                                    let mut w = r.words.get(&f.path).cloned().unwrap_or_default();
-                                    if ui
-                                        .add_sized(
-                                            egui::vec2(140.0, 20.0),
-                                            egui::TextEdit::singleline(&mut w),
-                                        )
-                                        .on_hover_text(w.clone())
-                                        .lost_focus()
-                                    {
+                                    let w = r.words.get(&f.path).cloned().unwrap_or_default();
+                                    if let Some(w) = super::lib_form::text_cell(
+                                        ui,
+                                        t,
+                                        ("workholding:text", &f.path),
+                                        &w,
+                                        140.0,
+                                    ) {
                                         set_word = Some((f.path.clone(), w));
                                     }
                                 }

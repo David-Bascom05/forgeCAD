@@ -450,15 +450,8 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut ToolingUi) {
                                         edit = Some((k.clone(), Val::Str(s)));
                                     }
                                 }
-                                Some(Val::Str(mut s)) => {
-                                    if ui
-                                        .add_sized(
-                                            egui::vec2(140.0, 20.0),
-                                            egui::TextEdit::singleline(&mut s),
-                                        )
-                                        .on_hover_text(s.clone())
-                                        .changed()
-                                    {
+                                Some(Val::Str(s0)) => {
+                                    if let Some(s) = lf::text_cell(ui, t, ("tooling:text", k), &s0, 140.0) {
                                         edit = Some((k.clone(), Val::Str(s)));
                                     }
                                 }

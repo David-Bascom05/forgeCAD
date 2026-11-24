@@ -119,14 +119,16 @@ fn punches_dies_presses() {
         );
         assert!(!p.parts.is_empty() || !p.ghosts.is_empty(), "{w}: nothing drawn");
         assert!(
-            p.ghosts.iter().all(|g| g.label.is_empty()
-                || g.label.contains("unknown")
-                || g.label.contains("not in the record")),
+            // labels in words, not record keys (STANDARD §4.2, §5)
+            p.ghosts.iter().all(|g| !g.label.contains('_')
+                && !g.label.contains("frame.")
+                && !g.label.contains("ram.")
+                && !g.label.contains("bed.")),
             "{w}: {:?}",
             p.ghosts.iter().map(|g| &g.label).collect::<Vec<_>>()
         );
+        assert!(!p.parts.is_empty(), "{w}: drawn solid, not as wire boxes");
         if *w != "press" {
-            assert!(!p.parts.is_empty(), "{w}: a published section is drawn solid");
             assert!(p.section.is_some(), "{w}: its section inset");
         }
     }

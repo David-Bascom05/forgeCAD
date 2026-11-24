@@ -113,20 +113,12 @@ impl Preview {
             .push((prims_tris(&[Prim::Cyl { base, axis, r, h }]), look));
     }
 
-    fn ghost_box(&mut self, min: [f64; 3], max: [f64; 3], label: impl Into<String>) {
+    /// A body with no size from any source: a see-through box and its label.
+    pub fn ghost_box(&mut self, min: [f64; 3], max: [f64; 3], label: impl Into<String>) {
         self.ghosts.push(Ghost {
             bounds: Some((min, max)),
             edges: Vec::new(),
             at: [max[0], (min[1] + max[1]) / 2.0, max[2]],
-            label: label.into(),
-        });
-    }
-
-    fn ghost_line(&mut self, a: [f64; 3], b: [f64; 3], label: impl Into<String>) {
-        self.ghosts.push(Ghost {
-            bounds: None,
-            edges: dashes(a, b, dist(a, b) / 24.0),
-            at: b,
             label: label.into(),
         });
     }
@@ -326,190 +318,204 @@ pub fn turned(outline: &[[f64; 2]]) -> Preview {
 // ---------------------------------------------------------------------------------------------
 // workholding
 
-type Vals<'a> = &'a std::collections::BTreeMap<String, f64>;
-
-fn why(r: &forge_workholding::Record, k: &str) -> &'static str {
+/// A record's value for `k`: the published one, else the first value its note gives for a
+/// conflict ("height in conflict: the page gives OAH 110.74 but ..."), with what it is.
+fn best(r: &forge_workholding::Record, k: &str) -> Option<(f64, Basis)> {
+    if let Some(v) = r.vals.get(k).copied().filter(|x| *x > 0.0) {
+        return Some((v, Basis::Cited));
+    }
     if r.conflict.iter().any(|x| x == k) {
-        "sources disagree"
-    } else {
-        "unknown"
+        let at = r.note.find(&format!("{k} in conflict"))?;
+        let v = first_number(&r.note[at..])?;
+        return Some((v, Basis::Conflict));
+    }
+    None
+}
+
+/// How a drawn size was come by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Basis {
+    Cited,
+    /// The first of disagreeing cited values.
+    Conflict,
+    /// Not in the record: the rule given with it.
+    Estimate,
+}
+
+fn first_number(s: &str) -> Option<f64> {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i].is_ascii_digit() {
+            let j = (i..b.len())
+                .find(|&j| !(b[j].is_ascii_digit() || b[j] == b'.'))
+                .unwrap_or(b.len());
+            return s[i..j].parse().ok();
+        }
+        i += 1;
+    }
+    None
+}
+
+impl Preview {
+    /// A dimension the record is not sure of: a dashed line along it, and its label.
+    fn mark(&mut self, a: [f64; 3], b: [f64; 3], label: impl Into<String>) {
+        let l = dist(a, b);
+        let mut e = dashes(a, b, l / 14.0);
+        // end ticks across, a tenth of the length
+        let t = l * 0.06;
+        for p in [a, b] {
+            e.push(vec![[p[0] - t, p[1], p[2]], [p[0] + t, p[1], p[2]]]);
+        }
+        self.ghosts.push(Ghost {
+            bounds: None,
+            edges: e,
+            at: [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0, (a[2] + b[2]) / 2.0],
+            label: label.into(),
+        });
     }
 }
 
-/// A machine vise from its record. Its seat (the table) at z = 0, the clamp axis along x, the
-/// fixed jaw at -x.
+/// A machine vise from its record (docs/ux/STANDARD.md §4.2): base, fixed jaw, moving jaw at the
+/// maximum opening and the screw, solid at their best sizes; a size the record does not settle
+/// (a conflict, an estimate) marked by a dashed dimension line and its label. Its seat (the
+/// table) at z = 0, the clamp axis along x, the fixed jaw at -x.
 pub fn vise(r: &forge_workholding::Record) -> Preview {
-    let v: Vals = &r.vals;
     let mut p = Preview::default();
-    let g = |k: &str| v.get(k).copied().filter(|x| *x > 0.0);
-    let jw = g("jaw_width");
-    let jh = g("jaw_height");
-    let jt = g("jaw_thickness");
-    let mo = g("max_opening");
-    let bl = g("body_length");
-    let bw = g("body_width");
-    let h = g("height");
-    // the sizes a ghost is drawn at when its value is missing, from what is known
+    let jw = best(r, "jaw_width");
+    let jh = best(r, "jaw_height");
+    let mo = best(r, "max_opening");
+    let bl = best(r, "body_length");
+    let bw = best(r, "body_width");
+    let h = best(r, "height");
+    let jt = best(r, "jaw_thickness");
+    // a size from no source: the rule given in its label
     let scale = [jw, bw, mo, bl]
-        .into_iter()
+        .iter()
         .flatten()
+        .map(|x| x.0)
         .fold(0.0, f64::max)
         .max(50.0);
-    let bw_d = bw.or(jw).unwrap_or(scale);
-    let bl_d = bl.or(mo.map(|m| m * 1.8)).unwrap_or(scale * 2.0);
-    let jh_d = jh.unwrap_or(scale * 0.3);
-    let jt_d = jt.unwrap_or(scale * 0.12);
-    let mo_d = mo.unwrap_or(scale);
-    let jw_d = jw.unwrap_or(bw_d);
-    // the base: up to the jaws' seat (height less the jaw height)
-    let base_top = match (h, jh) {
-        (Some(h), Some(jh)) if h > jh => Some(h - jh),
-        _ => None,
+    let est = |v: Option<(f64, Basis)>, rule: f64| v.unwrap_or((rule, Basis::Estimate));
+    let (jw, jh) = (est(jw, scale), est(jh, scale * 0.3));
+    let jt = est(jt, jh.0 * 0.5);
+    let mo = est(mo, scale);
+    let bw = est(bw, jw.0);
+    let bl = est(bl, mo.0 + 4.0 * jt.0);
+    // the base up to the jaws' seat: the height less the jaw height
+    let base = match h {
+        Some((h, b)) if h > jh.0 => (h - jh.0, b),
+        _ => (jh.0, Basis::Estimate),
     };
-    let bt = base_top.unwrap_or(jh_d);
-    let (x0, x1, y) = (-bl_d / 2.0, bl_d / 2.0, bw_d / 2.0);
-    match (bl, bw, base_top) {
-        (Some(_), Some(_), Some(_)) => p.solid_box([x0, -y, 0.0], [x1, y, bt], Look::MachinePaint),
-        _ => {
-            let mut missing = Vec::new();
-            if bl.is_none() {
-                missing.push(format!("body length · {}", why(r, "body_length")));
-            }
-            if bw.is_none() {
-                missing.push(format!("body width · {}", why(r, "body_width")));
-            }
-            if base_top.is_none() {
-                missing.push(format!("height · {}", why(r, "height")));
-            }
-            p.ghost_box(
-                [x0, -y, 0.0],
-                [x1, y, bt],
-                format!("body: {}", missing.join(", ")),
-            );
-        }
-    }
-    // the jaws: the fixed one at the -x end, the moving one at the maximum opening
-    let fixed_in = x0 + jt_d.max(bl_d * 0.08);
-    let jaws = [
-        (
-            [fixed_in - jt_d, -jw_d / 2.0, bt],
-            [fixed_in, jw_d / 2.0, bt + jh_d],
-            "fixed jaw",
-        ),
-        (
-            [fixed_in + mo_d, -jw_d / 2.0, bt],
-            [fixed_in + mo_d + jt_d, jw_d / 2.0, bt + jh_d],
-            "moving jaw",
-        ),
-    ];
-    for (a, b, name) in jaws {
-        if jw.is_some() && jh.is_some() && jt.is_some() && mo.is_some() {
-            p.solid_box(a, b, Look::ToolSteel);
-        } else {
-            let mut missing = Vec::new();
-            for (k, have) in [
-                ("jaw_width", jw),
-                ("jaw_height", jh),
-                ("jaw_thickness", jt),
-                ("max_opening", mo),
-            ] {
-                if have.is_none() {
-                    missing.push(format!("{} · {}", k.replace('_', " "), why(r, k)));
-                }
-            }
-            p.ghost_box(a, b, format!("{name}: {}", missing.join(", ")));
-        }
-    }
-    // the screw is not in the record: its axis only
-    let zc = bt * 0.5;
-    p.ghost_line(
-        [fixed_in + mo_d + jt_d, 0.0, zc],
-        [x1 + bl_d * 0.12, 0.0, zc],
-        "screw · not in the record",
+    let (x0, x1, y) = (-bl.0 / 2.0, bl.0 / 2.0, bw.0 / 2.0);
+    let bt = base.0;
+    p.solid_box([x0, -y, 0.0], [x1, y, bt], Look::MachinePaint);
+    // the jaws: the fixed one near the -x end, the moving one at the maximum opening
+    let fixed_in = x0 + jt.0 + bl.0 * 0.04;
+    p.solid_box(
+        [fixed_in - jt.0, -jw.0 / 2.0, bt],
+        [fixed_in, jw.0 / 2.0, bt + jh.0],
+        Look::ToolSteel,
     );
+    let mv = fixed_in + mo.0;
+    p.solid_box(
+        [mv, -jw.0 / 2.0, bt],
+        [mv + jt.0, jw.0 / 2.0, bt + jh.0],
+        Look::ToolSteel,
+    );
+    // the screw out of the +x end: not in the record, drawn at an estimate
+    let sd = (jw.0 * 0.14).max(8.0);
+    let zc = bt * 0.55;
+    let sl = bl.0 * 0.12;
+    p.solid_cyl([x1, 0.0, zc], [1.0, 0.0, 0.0], sd / 2.0, sl, Look::Steel);
+    p.mark(
+        [x1, 0.0, zc + sd],
+        [x1 + sl, 0.0, zc + sd],
+        "Screw · not in the record (an estimate)",
+    );
+    // the sizes it is not sure of
+    let say = |what: &str, v: f64, b: Basis| match b {
+        Basis::Cited => String::new(),
+        Basis::Conflict => format!(
+            "{what} {} mm · sources disagree (the first cited)",
+            forge_units::trim(v)
+        ),
+        Basis::Estimate => format!("{what} · not published (an estimate)"),
+    };
+    if let Some((hv, hb)) = h.map(|x| (x.0, x.1)).or(Some((bt + jh.0, Basis::Estimate)))
+        && hb != Basis::Cited
+    {
+        p.mark([x0, -y, 0.0], [x0, -y, hv], say("Height", hv, hb));
+    }
+    if jt.1 != Basis::Cited {
+        p.mark(
+            [fixed_in - jt.0, -jw.0 / 2.0, bt + jh.0],
+            [fixed_in, -jw.0 / 2.0, bt + jh.0],
+            match jt.1 {
+                Basis::Estimate => "Jaw thickness · not published (half the jaw height)".to_string(),
+                b => say("Jaw thickness", jt.0, b),
+            },
+        );
+    }
+    for (what, v, a, b) in [
+        (
+            "Jaw width",
+            jw,
+            [fixed_in, -jw.0 / 2.0, bt + jh.0],
+            [fixed_in, jw.0 / 2.0, bt + jh.0],
+        ),
+        ("Max opening", mo, [fixed_in, y, bt + jh.0], [mv, y, bt + jh.0]),
+        ("Body length", bl, [x0, y, 0.0], [x1, y, 0.0]),
+        ("Body width", bw, [x1, -y, 0.0], [x1, y, 0.0]),
+    ] {
+        if v.1 != Basis::Cited {
+            p.mark(a, b, say(what, v.0, v.1));
+        }
+    }
     p
 }
 
-/// A lathe chuck from its record: its face at z = 0, its body behind (-z), its jaws in front.
+/// A lathe chuck from its record (STANDARD §4.2): body and jaws solid, the jaws open to the
+/// largest grip; a size the record does not give drawn at an estimate and marked. Its face at
+/// z = 0, its body behind (-z), its jaws in front.
 pub fn chuck(r: &forge_workholding::Record) -> Preview {
-    let v: Vals = &r.vals;
     let mut p = Preview::default();
-    let g = |k: &str| v.get(k).copied().filter(|x| *x > 0.0);
-    let (bd, bl) = (g("body_d"), g("body_len"));
-    let n = g("jaws").map_or(3, |n| n.round() as usize).clamp(2, 8);
-    let (jl, gmax) = (g("jaw_len"), g("grip_max"));
-    let bd_d = bd.or(gmax.map(|x| x * 1.3)).unwrap_or(200.0);
-    match (bd, bl) {
-        (Some(d), Some(l)) => p.solid_cyl([0.0, 0.0, -l], [0.0, 0.0, 1.0], d / 2.0, l, Look::Steel),
-        _ => {
-            let l = bl.unwrap_or(bd_d * 0.4);
-            p.ghost_box(
-                [-bd_d / 2.0, -bd_d / 2.0, -l],
-                [bd_d / 2.0, bd_d / 2.0, 0.0],
-                format!(
-                    "body: {}",
-                    [("body_d", bd), ("body_len", bl)]
-                        .iter()
-                        .filter(|(_, x)| x.is_none())
-                        .map(|(k, _)| format!("{} · {}", k.replace('_', " "), why(r, k)))
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                ),
-            );
-        }
-    }
-    // the jaws open to the largest grip, out to the body's rim; their width is not published
-    let r_in = gmax.map_or(bd_d * 0.15, |x| x / 2.0).min(bd_d * 0.45);
-    let r_out = bd_d / 2.0;
-    let len = jl.unwrap_or(bd_d * 0.15);
-    let w = (r_out - r_in).max(1.0) * 0.5;
+    let gmax = best(r, "grip_max");
+    let bd = best(r, "body_d").unwrap_or((gmax.map_or(200.0, |g| g.0 * 1.3), Basis::Estimate));
+    let bl = best(r, "body_len").unwrap_or((bd.0 * 0.4, Basis::Estimate));
+    let jl = best(r, "jaw_len").unwrap_or((bd.0 * 0.15, Basis::Estimate));
+    let n = best(r, "jaws").map_or(3, |n| n.0.round() as usize).clamp(2, 8);
+    p.solid_cyl([0.0, 0.0, -bl.0], [0.0, 0.0, 1.0], bd.0 / 2.0, bl.0, Look::Steel);
+    let r_in = gmax.map_or(bd.0 * 0.15, |x| x.0 / 2.0).min(bd.0 * 0.45);
+    let r_out = bd.0 / 2.0;
+    let w = ((r_out - r_in) * 0.45).max(4.0);
     for k in 0..n {
         let th = std::f64::consts::TAU * k as f64 / n as f64;
         let (sn, cs) = forge_math::dmath::sin_cos(th);
-        // a jaw's box in its own radial frame, as its outline at the jaw's mid-width
-        let pts: Vec<[f64; 3]> = [
-            (r_in, -w / 2.0),
-            (r_out, -w / 2.0),
-            (r_out, w / 2.0),
-            (r_in, w / 2.0),
-        ]
-        .iter()
-        .flat_map(|(rr, t)| [0.0, len].map(|z| [rr * cs - t * sn, rr * sn + t * cs, z]))
-        .collect();
-        let mut edges = Vec::new();
-        for (a, b) in [
-            (0, 2),
-            (2, 4),
-            (4, 6),
-            (6, 0),
-            (1, 3),
-            (3, 5),
-            (5, 7),
-            (7, 1),
-            (0, 1),
-            (2, 3),
-            (4, 5),
-            (6, 7),
-        ] {
-            edges.extend(dashes(pts[a], pts[b], len.max(w) / 10.0));
-        }
-        p.ghosts.push(Ghost {
-            bounds: None,
-            edges,
-            at: pts[3],
-            label: if k == 0 {
-                format!(
-                    "jaws: width · not in the record{}",
-                    if jl.is_none() {
-                        ", jaw length · unknown"
-                    } else {
-                        ""
-                    }
-                )
-            } else {
-                String::new()
-            },
-        });
+        let (u, v) = ([cs, sn, 0.0], [-sn, cs, 0.0]);
+        let o = [r_in * cs - w / 2.0 * v[0], r_in * sn - w / 2.0 * v[1], 0.0];
+        let mut t = Tris::default();
+        crate::machine_mesh::obox_tris(o, [u, v, [0.0, 0.0, 1.0]], [r_out - r_in, w, jl.0], &mut t);
+        p.parts.push((t, Look::ToolSteel));
+    }
+    let say = |what: &str, b: Basis| match b {
+        Basis::Estimate => format!("{what} · not published (an estimate)"),
+        Basis::Conflict => format!("{what} · sources disagree (the first cited)"),
+        Basis::Cited => String::new(),
+    };
+    if bl.1 != Basis::Cited {
+        p.mark([r_out, 0.0, -bl.0], [r_out, 0.0, 0.0], say("Body length", bl.1));
+    }
+    if jl.1 != Basis::Cited {
+        p.mark([r_out, 0.0, 0.0], [r_out, 0.0, jl.0], say("Jaw length", jl.1));
+    }
+    p.mark(
+        [r_in, -w / 2.0, jl.0],
+        [r_in, w / 2.0, jl.0],
+        "Jaw width · not in the record (an estimate)",
+    );
+    if bd.1 != Basis::Cited {
+        p.mark([-r_out, 0.0, 0.0], [r_out, 0.0, 0.0], say("Body diameter", bd.1));
     }
     p
 }
@@ -517,8 +523,39 @@ pub fn chuck(r: &forge_workholding::Record) -> Preview {
 // ---------------------------------------------------------------------------------------------
 // press brakes
 
-/// A press brake from its record (forge-brake's table): the floor at z = 0, the bed along x,
-/// the operator at -y.
+/// A prism whose section is in the (y, z) plane, swept along x from `x0` to `x1`.
+fn sweep_x(outline_yz: &[[f64; 2]], x0: f64, x1: f64) -> Tris {
+    let mut t = crate::machine_mesh::prism(outline_yz, x1 - x0);
+    let mid = (x0 + x1) / 2.0;
+    // (y as x, x as y): swap, which mirrors, so the triangles turn the other way
+    let swap = |p: &mut [f64; 3]| {
+        let (a, b) = (p[0], p[1]);
+        p[0] = b + mid;
+        p[1] = a;
+    };
+    for p in t.pos.iter_mut() {
+        swap(p);
+    }
+    for n in t.nrm.iter_mut() {
+        let (a, b) = (n[0], n[1]);
+        n[0] = b;
+        n[1] = a;
+    }
+    for tr in t.tri.iter_mut() {
+        tr.swap(1, 2);
+    }
+    for e in t.edges.iter_mut() {
+        for p in e.iter_mut() {
+            swap(p);
+        }
+    }
+    t
+}
+
+/// A press brake from its record (STANDARD §4.2): two C-frame side housings with the throat
+/// open in front, the bed below and the ram above at their cited sizes, and a punch and die in
+/// place (forgecad's stand-in set, said so); what the record does not give drawn at an estimate
+/// and marked. The floor at z = 0, the bed along x, the operator at -y.
 pub fn press(t: &forge_vendor::toml::Table) -> Preview {
     use crate::shell::machine_brake::get;
     use forge_vendor::toml::Item;
@@ -530,101 +567,116 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
         long_axis: Some(0),
         ..Default::default()
     };
-    let bl = g("bed_length");
-    let gap = g("housing_gap");
-    let oh = g("open_height");
-    let th = g("table_height");
-    let throat = g("throat");
-    let (ft, fd) = (g("frame.thickness"), g("frame.depth"));
-    let (rf, rb) = (g("ram.front"), g("ram.back"));
-    let (bf, bb) = (g("bed.front"), g("bed.back"));
-    let bl_d = bl.unwrap_or(3000.0);
-    let th_d = th.unwrap_or(900.0);
-    let oh_d = oh.unwrap_or(400.0);
-    let gap_d = gap.unwrap_or(bl_d * 0.85);
-    let beam = |front: Option<f64>, back: Option<f64>| (front.unwrap_or(60.0), back.unwrap_or(60.0));
-    // the bed: its top at the table height
-    let (f0, b0) = beam(bf, bb);
-    let bed = ([-bl_d / 2.0, -f0, 0.0], [bl_d / 2.0, b0, th_d]);
-    let missing = |ks: &[(&str, Option<f64>)]| {
-        ks.iter()
-            .filter(|(_, v)| v.is_none())
-            .map(|(k, _)| format!("{k} · unknown"))
-            .collect::<Vec<_>>()
-            .join(", ")
+    let mut est: Vec<&str> = Vec::new();
+    let mut or = |v: Option<f64>, e: f64, what: &'static str| {
+        v.unwrap_or_else(|| {
+            est.push(what);
+            e
+        })
     };
-    let m = missing(&[
-        ("bed_length", bl),
-        ("table_height", th),
-        ("bed.front", bf),
-        ("bed.back", bb),
-    ]);
-    if m.is_empty() {
-        p.solid_box(bed.0, bed.1, Look::MachinePaint);
-    } else {
-        p.ghost_box(bed.0, bed.1, format!("bed: {m}"));
-    }
-    // the ram: its underside at the open height above the table, its own height not published
-    let (f1, b1) = beam(rf, rb);
-    let ram_h = oh_d * 0.8;
-    let ram = (
-        [-bl_d / 2.0, -f1, th_d + oh_d],
-        [bl_d / 2.0, b1, th_d + oh_d + ram_h],
+    let bl = or(g("bed_length"), 3000.0, "bending length");
+    let gap = or(g("housing_gap"), bl * 0.8, "width between housings");
+    let oh = or(g("open_height"), 400.0, "open height");
+    let th = or(g("table_height"), 900.0, "table height");
+    let throat = or(g("throat"), 400.0, "throat depth");
+    let stroke = g("stroke");
+    let ft = or(g("frame.thickness"), 60.0, "housing thickness");
+    let fd = or(g("frame.depth"), throat * 2.2, "housing depth");
+    let (bf, bb) = (or(g("bed.front"), 70.0, "bed"), or(g("bed.back"), 70.0, "bed"));
+    let (rf, rb) = (or(g("ram.front"), 70.0, "ram"), or(g("ram.back"), 70.0, "ram"));
+    let est: Vec<&str> = {
+        let mut e = est;
+        e.dedup();
+        e
+    };
+    // the bed beam under the table line, the ram above the open height
+    let bed_h = th * 0.45;
+    let ram_h = oh * 1.6;
+    let ram_z = th + oh;
+    p.solid_box(
+        [-bl / 2.0, -bf, th - bed_h],
+        [bl / 2.0, bb, th],
+        Look::MachinePaint,
     );
-    let m = missing(&[
-        ("bed_length", bl),
-        ("open_height", oh),
-        ("ram.front", rf),
-        ("ram.back", rb),
-    ]);
-    p.ghost_box(
-        ram.0,
-        ram.1,
-        if m.is_empty() {
-            "ram: its height · not in the record".to_string()
-        } else {
-            format!("ram: {m}, its height · not in the record")
-        },
+    p.solid_box(
+        [-bl / 2.0, -rf, ram_z],
+        [bl / 2.0, rb, ram_z + ram_h],
+        Look::MachinePaint,
     );
-    // the side housings, the throat open in front between table and ram
-    let (t_d, d_d) = (
-        ft.unwrap_or(60.0),
-        fd.or(throat.map(|x| x * 2.0)).unwrap_or(900.0),
-    );
-    let top = th_d + oh_d + ram_h;
+    // the housings: a C in (y, z), the throat cut in front between the table and the ram
+    let top = ram_z + ram_h + oh * 0.4;
+    let y0 = -(bf.max(rf)) - 60.0;
+    let y1 = y0 + fd.max(throat + 200.0);
+    let yt = (-bf).min(-rf) + throat;
+    let c = [
+        [y0, 0.0],
+        [y1, 0.0],
+        [y1, top],
+        [y0, top],
+        [y0, ram_z + ram_h * 0.3],
+        [yt, ram_z + ram_h * 0.3],
+        [yt, th - bed_h * 0.6],
+        [y0, th - bed_h * 0.6],
+    ];
     for s in [-1.0, 1.0] {
-        let x_in = s * gap_d / 2.0;
-        let x_out = s * (gap_d / 2.0 + t_d);
-        let (xa, xb) = (x_in.min(x_out), x_in.max(x_out));
-        let m = missing(&[("housing_gap", gap), ("frame.thickness", ft), ("frame.depth", fd)]);
-        let box_ = ([xa, -f0.max(f1), 0.0], [xb, d_d - f0.max(f1), top]);
-        if m.is_empty() && oh.is_some() && th.is_some() {
-            // a C: below the table and above the ram solid, the throat's depth open in front
-            let thr = throat.unwrap_or(0.0).min(d_d);
-            let y0 = box_.0[1];
-            p.solid_box([xa, y0, 0.0], [xb, box_.1[1], th_d], Look::MachinePaint);
-            p.solid_box(
-                [xa, y0 + thr, th_d],
-                [xb, box_.1[1], th_d + oh_d],
-                Look::MachinePaint,
-            );
-            p.ghost_box(
-                [xa, y0, th_d + oh_d],
-                [xb, box_.1[1], top],
-                "housing above the ram · not in the record",
-            );
-        } else {
-            p.ghost_box(
-                box_.0,
-                box_.1,
-                if s < 0.0 {
-                    format!("housing: {m}")
-                } else {
-                    String::new()
-                },
-            );
-        }
+        let (a, b) = (s * gap / 2.0, s * (gap / 2.0 + ft));
+        p.parts
+            .push((sweep_x(&c, a.min(b), a.max(b)), Look::MachinePaint));
     }
+    // a punch and die in place: forgecad's stand-in set, its sections along the bed
+    let tpl = forge_brake_builder::templates();
+    let mut tool_len = bl * 0.6;
+    if let Some(stroke) = stroke {
+        // the ram's travel, as a mark at the front
+        p.mark(
+            [bl / 2.0 + 40.0, -rf, ram_z],
+            [bl / 2.0 + 40.0, -rf, ram_z - stroke],
+            String::new(),
+        );
+    }
+    for r in tpl.iter().filter(|r| r.kind == "die" || r.kind == "punch") {
+        let Ok(secs) = forge_brake_builder::preview(r) else {
+            continue;
+        };
+        for (_, o, _) in &secs {
+            // the die on the table, the punch from the ram
+            let (dz, flip) = if r.kind == "die" {
+                (th, false)
+            } else {
+                (ram_z, true)
+            };
+            let yz: Vec<[f64; 2]> = o
+                .iter()
+                .map(|q| [q[0], if flip { dz - q[1].abs() } else { dz + q[1] }])
+                .collect();
+            p.parts
+                .push((sweep_x(&yz, -tool_len / 2.0, tool_len / 2.0), Look::ToolSteel));
+        }
+        tool_len *= 1.0;
+    }
+    // labels: what is cited is the drawing; what is not, said once each
+    p.mark(
+        [-gap / 2.0 - ft, yt, th],
+        [-gap / 2.0 - ft, (-bf).min(-rf), th],
+        format!("Throat {} mm", forge_units::trim(throat)),
+    );
+    p.ghosts.last_mut().map(|g| {
+        // the throat is cited: no dashes, only its label
+        g.edges.clear();
+    });
+    if !est.is_empty() {
+        p.mark(
+            [gap / 2.0 + ft, y1, 0.0],
+            [gap / 2.0 + ft, y1, top],
+            format!("Not published, drawn at an estimate: {}", est.join(", ")),
+        );
+    }
+    p.mark(
+        [0.0, -bf, th + 2.0],
+        [tool_len / 2.0, -bf, th + 2.0],
+        "Punch and die · forgecad's stand-in set",
+    );
+    p.ghosts.last_mut().map(|g| g.edges.clear());
     p
 }
 

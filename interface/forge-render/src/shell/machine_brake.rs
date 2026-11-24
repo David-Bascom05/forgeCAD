@@ -677,11 +677,7 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
             num_cell(ui, &mut x, &sfx).then_some(Item::Num(x))
         }
         (Ty::Text, Some(Item::Str(s))) => {
-            let mut s2 = s.clone();
-            let r = ui
-                .add_sized(vec2(140.0, 20.0), egui::TextEdit::singleline(&mut s2))
-                .on_hover_text(s2.clone());
-            (r.lost_focus() && s2 != *s).then_some(Item::Str(s2))
+            super::lib_form::text_cell(ui, t, ("brake:text", &f.path), s, 140.0).map(Item::Str)
         }
         (Ty::Text, Some(Item::Arr(a))) => {
             // a list of words, comma separated

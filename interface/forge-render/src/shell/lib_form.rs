@@ -546,3 +546,67 @@ pub fn workholding_label(key: &str) -> String {
     }
     .to_string()
 }
+
+/// A text value in a sheet (STANDARD §5): shown as a label in `w`, cut with "…" and whole on
+/// hover, a click to edit it; a web address shown as a link with its domain, edited by its
+/// pencil. Some(new text) when an edit is committed.
+pub fn text_cell(
+    ui: &mut Ui,
+    t: &Theme,
+    salt: impl std::hash::Hash + std::fmt::Debug,
+    value: &str,
+    w: f32,
+) -> Option<String> {
+    let id = ui.make_persistent_id(salt);
+    let editing = ui.data(|d| d.get_temp::<String>(id));
+    if let Some(mut buf) = editing {
+        let r = ui.add_sized(vec2(w, 20.0), egui::TextEdit::singleline(&mut buf));
+        if !r.has_focus() && !r.lost_focus() {
+            r.request_focus();
+        }
+        if r.lost_focus() {
+            ui.data_mut(|d| d.remove::<String>(id));
+            return (buf != value).then_some(buf);
+        }
+        ui.data_mut(|d| d.insert_temp(id, buf));
+        return None;
+    }
+    let url = value.starts_with("http://") || value.starts_with("https://");
+    let start = |ui: &mut Ui| ui.data_mut(|d| d.insert_temp(id, value.to_string()));
+    ui.allocate_ui_with_layout(
+        vec2(w, 20.0),
+        egui::Layout::left_to_right(egui::Align::Center),
+        |ui| {
+            ui.set_width(w);
+            if url {
+                let rest = value.split("://").nth(1).unwrap_or(value);
+                let domain = rest.split('/').next().unwrap_or(rest).trim_start_matches("www.");
+                ui.add(egui::Hyperlink::from_label_and_url(
+                    RichText::new(format!("{domain} (link)")).font(sans(12.0)),
+                    value,
+                ))
+                .on_hover_text(value);
+                if ui
+                    .small_button("edit")
+                    .on_hover_text("change the address")
+                    .clicked()
+                {
+                    start(ui);
+                }
+            } else {
+                let shown = if value.is_empty() { "(none)" } else { value };
+                let r = ui
+                    .add(
+                        egui::Label::new(RichText::new(shown).font(sans(12.0)).color(t.ink))
+                            .truncate()
+                            .sense(Sense::click()),
+                    )
+                    .on_hover_text(format!("{value}\n(click to edit)"));
+                if r.clicked() {
+                    start(ui);
+                }
+            }
+        },
+    );
+    None
+}
