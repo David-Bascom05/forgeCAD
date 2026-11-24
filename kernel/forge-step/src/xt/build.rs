@@ -378,6 +378,7 @@ impl Build<'_, '_> {
         }
         let same = (agree == (f.c("sense") != b'-')) == out;
         let mut loops = Vec::new();
+        let mut poles: Vec<u32> = Vec::new();
         for l in chain(s, f.p("loop"), "next") {
             if l.ty() != 15 {
                 return refuse(l.index, l.ty(), "not a loop");
@@ -397,6 +398,9 @@ impl Build<'_, '_> {
                 if e == 0 {
                     // an isolated loop: a vertex alone (an apex or a pole); seams reach it in healing
                     isolated = true;
+                    if fin.p("vertex") != 0 {
+                        poles.push(fin.p("vertex"));
+                    }
                     break;
                 }
                 let (pe, flipped) = self.edge(e)?;
@@ -433,6 +437,17 @@ impl Build<'_, '_> {
                 );
             }
         }
+        // a spindle torus's cap, its rim and its pole on the axis: healing knows no pole of a
+        // torus, so the meridian from the rim to the pole is made here
+        if let (forge_geom::Surface::Torus(t), [pole], [rim]) = (&surface, &poles[..], &mut loops[..])
+            && t.is_spindle()
+        {
+            let pv = self.vertex(*pole)?;
+            if let Some((seam, from_rim)) = self.meridian(t, rim, pv) {
+                rim.push((seam, from_rim));
+                rim.push((seam, !from_rim));
+            }
+        }
         if loops.is_empty()
             && let forge_geom::Surface::Torus(t) = &surface
         {
@@ -466,6 +481,61 @@ impl Build<'_, '_> {
         });
         self.stats.faces += 1;
         Ok(())
+    }
+
+    /// The arc of a spindle torus's tube circle from the rim loop's first vertex to the pole, the
+    /// way that stays on the torus's used part (a + b cos v >= 0).
+    /// The edge, and whether it runs from the rim's vertex.
+    fn meridian(
+        &mut self,
+        t: &forge_geom::Torus,
+        rim: &[(usize, bool)],
+        pole: usize,
+    ) -> Option<(usize, bool)> {
+        use forge_geom::{Circle, Curve};
+        use forge_math::{Frame, Interval, Vec3};
+        let &(e0, fw0) = rim.first()?;
+        let va = if fw0 {
+            self.p.edges[e0].start
+        } else {
+            self.p.edges[e0].end
+        };
+        let (pa, pp) = (self.p.verts[va].0, self.p.verts[pole].0);
+        let f = &t.frame;
+        let l = f.point_to_local(pa);
+        let r = Vec3::from(f.x()) * l.x + Vec3::from(f.y()) * l.y;
+        let r = r.normalize()?;
+        let z: Vec3 = f.z().into();
+        let c = f.origin + Vec3::from(r) * t.major;
+        let frame = Frame::from_zx(c, Vec3::from(r).cross(z).normalize()?, r.into())?;
+        let circle = Curve::Circle(Circle {
+            frame,
+            radius: t.minor,
+        });
+        let at = |p: forge_math::Point3| {
+            let q = frame.point_to_local(p);
+            q.y.atan2(q.x)
+        };
+        let (va_t, vp_t) = (at(pa), at(pp));
+        // either way round: the one whose middle stays where the torus is used
+        let tau = forge_math::dmath::TAU;
+        let up = (vp_t - va_t).rem_euclid(tau);
+        let mid_up = va_t + 0.5 * up;
+        let used = |v: f64| t.major + t.minor * v.cos() >= 0.0;
+        let (start, end, range) = if used(mid_up) {
+            (va, pole, Interval::new(va_t, va_t + up))
+        } else {
+            (pole, va, Interval::new(vp_t, vp_t + (tau - up)))
+        };
+        self.p.edges.push(PEdge {
+            curve: circle,
+            range,
+            start,
+            end,
+            name: self.salt.with_str("meridian").with(va as u64),
+        });
+        let _ = end;
+        Some((self.p.edges.len() - 1, start == va))
     }
 
     /// A whole torus face, which a file bounds with nothing, as two bands round the axis, out

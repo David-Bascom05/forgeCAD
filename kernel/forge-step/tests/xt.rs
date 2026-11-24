@@ -167,3 +167,41 @@ fn nothing_else_is_taken_for_a_transmit_file() {
     assert!(!xt::is_xt(b"T"));
     assert!(!xt::is_xt(b"PS\0\0"));
 }
+
+/// Bodies cut from the Haas corpus (SolidWorks exports) by research/parasolid/extract.py --bare:
+/// each reads to one solid whose integrals and mesh agree, at the volume it read to when its
+/// model matched the STEP export of the same model to 1e-4 (research/parasolid/README.md).
+#[test]
+fn corpus_bodies_read_and_measure() {
+    for (f, want, what) in [
+        (
+            "haas_blend.x_t",
+            5158.094583,
+            "rolling-ball blends on elliptic spines, their springs",
+        ),
+        (
+            "haas_bsurface.x_t",
+            4189.081327,
+            "a B-surface, intersection curves",
+        ),
+        ("haas_sphere.x_t", 14.348845, "a sphere in two faces"),
+        (
+            "haas_spun_sp.x_t",
+            2773.260189,
+            "spun surfaces, SP-curves on them",
+        ),
+    ] {
+        let imp = import(&data(f), &Limits::default()).unwrap_or_else(|e| panic!("{f}: {e}"));
+        assert!(imp.refusals.is_empty(), "{f} ({what}): {:?}", imp.refusals);
+        assert_eq!(imp.solids.len(), 1, "{f}");
+        let s = &imp.solids[0];
+        assert!(
+            s.body.unverified.is_none(),
+            "{f} ({what}): {:?}",
+            s.body.unverified
+        );
+        let v = s.mass.as_ref().map(|m| m.volume).expect("measured");
+        assert!(near(v, want, 1e-6), "{f} ({what}): {v} against {want}");
+        assert!(imp.system.contains("SOLIDWORKS"), "{}", imp.system);
+    }
+}
