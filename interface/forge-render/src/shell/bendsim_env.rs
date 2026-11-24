@@ -118,14 +118,12 @@ pub(super) fn status(s: &Shell) -> Option<String> {
         None => "stand-in tooling".into(),
     };
     let n = sim.plan.steps.len();
+    // the environment owns the status bar: no feasible order is said there with its first
+    // reason (BUTTON-AUDITOR: Suggest Order and Simulate Again never silent)
     Some(format!(
         "Bend Simulation · {machine} · {n} bend{} · {}",
         if n == 1 { "" } else { "s" },
-        if sim.plan.feasible {
-            "feasible"
-        } else {
-            "no feasible order"
-        }
+        infeasible(b).unwrap_or_else(|| "feasible".into())
     ))
 }
 
@@ -145,6 +143,29 @@ pub(super) fn why_off(s: &Shell, name: &str) -> Option<String> {
     }
 }
 
+/// A catalogue key in words: "trumpf/EV004_30deg" reads "EV004 30°" (UX-LEAD; the key itself
+/// on hover where it is shown).
+pub fn tool_words(id: &str) -> String {
+    let w = id.rsplit('/').next().unwrap_or(id).replace('_', " ");
+    w.split(' ')
+        .map(|p| {
+            // "30deg", "85deg" read as degrees; a part such as "V16-85deg" too
+            match p.rsplit_once('-') {
+                Some((a, b)) if b.ends_with("deg") => format!("{a}-{}", degrees(b)),
+                _ => degrees(p),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn degrees(p: &str) -> String {
+    match p.strip_suffix("deg") {
+        Some(n) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit() || c == '.') => format!("{n}°"),
+        _ => p.to_string(),
+    }
+}
+
 /// The planner found no feasible order: the first reason, in words.
 pub(super) fn infeasible(b: &BendSimUi) -> Option<String> {
     let sim = b.sim.as_ref().ok().filter(|x| !x.plan.feasible)?;
@@ -156,12 +177,12 @@ pub(super) fn infeasible(b: &BendSimUi) -> Option<String> {
             .map(|c| super::bendsim_cards::rule_label(c.rule).to_lowercase())
             .collect();
         format!(
-            "bend {} ({}) fails {} (best tried: {} on {})",
+            "bend {} ({}) fails {} (best tried: {} punch on {} die)",
             k.bend + 1,
             sim.names[k.bend],
             if rules.is_empty() { "its checks".to_string() } else { rules.join(", ") },
-            k.punch,
-            k.die
+            tool_words(&k.punch),
+            tool_words(&k.die)
         )
     });
     Some(format!(
@@ -530,6 +551,8 @@ pub(super) fn label_at(s: &Shell, t: f64) -> Option<String> {
 pub struct Chip {
     pub station: usize,
     pub text: String,
+    /// The tools' catalogue keys (on hover).
+    pub keys: String,
     pub rect: Rect,
     /// Its station's place on the screen (the chip's leader runs to it).
     pub at: egui::Pos2,
@@ -545,7 +568,7 @@ pub fn chips(ui: &Ui, view: Rect, camera: Option<(crate::camera::Camera, (u32, u
     };
     let ppp = ui.ctx().pixels_per_point();
     let here = sim.plan.steps.get(b.step).and_then(|s| s.station);
-    let short = |id: &str| id.rsplit('/').next().unwrap_or(id).to_string();
+    let short = tool_words;
     let mut out = Vec::new();
     for (k, st) in sim.tooling.stations.iter().enumerate() {
         let bends: Vec<String> = sim
@@ -556,8 +579,12 @@ pub fn chips(ui: &Ui, view: Rect, camera: Option<(crate::camera::Camera, (u32, u
             .filter(|(_, s)| s.station == Some(k))
             .map(|(i, _)| (i + 1).to_string())
             .collect();
+        let keys = format!(
+            "punch {} · die {}",
+            sim.tooling.punches[st.punch].id, sim.tooling.dies[st.die].id
+        );
         let text = format!(
-            "S{} · {} / {} · {}",
+            "S{} · {} punch / {} die · {}",
             k + 1,
             short(&sim.tooling.punches[st.punch].id),
             short(&sim.tooling.dies[st.die].id),
@@ -575,10 +602,13 @@ pub fn chips(ui: &Ui, view: Rect, camera: Option<(crate::camera::Camera, (u32, u
             continue;
         }
         let g = ui.painter().layout_no_wrap(text.clone(), egui::FontId::proportional(12.0), egui::Color32::WHITE);
-        let rect = Rect::from_center_size(q, g.size() + egui::vec2(12.0, 6.0));
+        // hung under its station's place, clear of the tools
+        let sz = g.size() + egui::vec2(12.0, 6.0);
+        let rect = Rect::from_min_size(egui::pos2(q.x - 0.5 * sz.x, q.y + 14.0), sz);
         out.push(Chip {
             station: k,
             text,
+            keys,
             rect,
             at: q,
             here: here == Some(k),
@@ -616,7 +646,7 @@ fn station_chips(
             egui::Color32::from_black_alpha(170)
         };
         if !c.rect.contains(c.at) {
-            let from = egui::pos2(c.rect.left() + 10.0, c.rect.top());
+            let from = egui::pos2(c.rect.center().x, c.rect.top());
             p.line_segment([from, c.at], egui::Stroke::new(1.0, egui::Color32::from_black_alpha(170)));
             p.circle_filled(c.at, 3.0, fill);
         }
@@ -628,7 +658,7 @@ fn station_chips(
             egui::FontId::proportional(12.0),
             egui::Color32::WHITE,
         );
-        let r = r.on_hover_text("go to this station's first bend");
+        let r = r.on_hover_text(format!("{}\nclick: go to this station's first bend", c.keys));
         if r.clicked() {
             go = Some(c.station);
         }
@@ -651,6 +681,16 @@ pub fn select_station(b: &mut BendSimUi, k: usize) {
         b.playing = false;
         b.overview = false;
         b.frame = Some(super::bendsim::Framing::Work);
+    }
+}
+
+#[cfg(test)]
+mod words_tests {
+    #[test]
+    fn a_catalogue_key_reads_in_words() {
+        assert_eq!(super::tool_words("trumpf/EV004_30deg"), "EV004 30°");
+        assert_eq!(super::tool_words("bystronic/V16-85deg_H55"), "V16-85° H55");
+        assert_eq!(super::tool_words("trumpf/OW202-S"), "OW202-S");
     }
 }
 

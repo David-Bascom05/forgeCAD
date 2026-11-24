@@ -1656,6 +1656,7 @@ fn no_feasible_order_is_said_and_bend_one_has_no_previous() {
         let st = h.gui.shell.status.clone();
         assert!(st.starts_with("No feasible order: bend "), "{tool}: {st:?}");
     }
+    shot(&mut h, "ux-no-feasible-order");
     let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
     b.go(0);
     for tool in ["tool:First Bend", "tool:Previous Bend"] {
@@ -1695,6 +1696,16 @@ fn the_overview_labels_its_stations_and_a_chip_selects_one() {
         h.step();
     }
     shot(&mut h, "ux-overview-station-chips");
+    // the press's body hiding the tool row is seen through; no tool is
+    let ghosts = h.gui.bend.ghosted_names();
+    assert!(
+        ghosts.iter().any(|g| g.starts_with("frame:") || g == "ram" || g == "bed"),
+        "the press body ghosted: {ghosts:?}"
+    );
+    assert!(
+        !ghosts.iter().any(|g| g.contains("punch:") || g.contains("die:")),
+        "a tool ghosted: {ghosts:?}"
+    );
     for k in 1..=n {
         assert!(h.placed(&format!("env:bendsim:station:{k}")).is_some(), "station {k}'s chip");
     }

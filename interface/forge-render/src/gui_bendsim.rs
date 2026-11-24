@@ -63,7 +63,7 @@ pub struct BendView {
     /// The instant's bodies as the scene makes them (before the cut-away and the x-ray), and the
     /// eye and settings the drawn ones were derived for.
     raw: Vec<Body>,
-    derived: Option<([u32; 3], bool, u32)>,
+    derived: Option<([u32; 3], bool, u32, bool)>,
     /// What is seen through, outlined: its silhouette edges from the eye, in the world.
     outline: Vec<([[f32; 3]; 2], f32)>,
 }
@@ -327,7 +327,12 @@ pub fn framing(
             }
         }
         Framing::Overview => {
-            for x in bodies.iter().filter(|x| !matches!(x.look, Look::Floor)) {
+            // the bed's tool row (every station) and the part: the overview's subject (UX-LEAD),
+            // not the press around it
+            for x in bodies
+                .iter()
+                .filter(|x| matches!(x.look, Look::Tool | Look::Sheet | Look::BendZone))
+            {
                 if let Some((a, c)) = x.mesh.bounds() {
                     grow(a);
                     grow(c);
@@ -348,7 +353,8 @@ pub fn framing(
     let (yaw, pitch) = match (how, profile) {
         (Framing::Work, false) => (215f32, 28f32),
         (Framing::Work, true) => (PROFILE_YAW, PROFILE_PITCH),
-        (Framing::Overview, _) => (220f32, 20f32),
+        // from the operator's side and above, the row along the bed seen nearly broadside
+        (Framing::Overview, _) => (200f32, 30f32),
     };
     cam.yaw = yaw.to_radians();
     cam.pitch = pitch.to_radians();
@@ -470,6 +476,27 @@ pub fn cutaway(
 /// on the punch tip where it meets the sheet, on the free edge of the flange swinging up (the
 /// coordinator), and on any check's witness. A body is seen through
 /// only where it stands between the eye and these.
+/// What the press overview watches: every station's tools (each body's middle and its ends
+/// along the bed, at its middle height and near its working edge). The press body hiding them
+/// is seen through (UX-LEAD).
+pub fn overview_samples(bodies: &[Body]) -> Vec<[f32; 3]> {
+    let mut out = Vec::new();
+    for x in bodies.iter().filter(|x| x.look == Look::Tool) {
+        let Some((a, c)) = x.mesh.bounds() else { continue };
+        let die = x.name.contains("die:");
+        let mx = 0.5 * (a[0] + c[0]);
+        let mz = 0.5 * (a[2] + c[2]);
+        // the die's top, the punch's foot: where the work is
+        let edge = if die { c[2] - 0.1 * (c[2] - a[2]) } else { a[2] + 0.1 * (c[2] - a[2]) };
+        for f in [0.15f32, 0.5, 0.85] {
+            let y = a[1] + f * (c[1] - a[1]);
+            out.push([mx, y, mz]);
+            out.push([mx, y, edge]);
+        }
+    }
+    out
+}
+
 pub fn roi_samples(bodies: &[Body]) -> Vec<[f32; 3]> {
     // up to `n` of a mesh's points, spread along its length (y: along the bed)
     fn spread(pts: Vec<[f32; 3]>, n: usize) -> Vec<[f32; 3]> {
@@ -922,7 +949,8 @@ impl Gui {
         }
         let cam = v.nav.camera;
         let eye = cam.eye();
-        let key = (eye.map(f32::to_bits), b.see_through, b.opacity.to_bits());
+        let overview = b.overview;
+        let key = (eye.map(f32::to_bits), b.see_through, b.opacity.to_bits(), overview);
         if self.bend.derived == Some(key) && !self.bend.fading {
             return;
         }
@@ -964,14 +992,26 @@ impl Gui {
         );
         // worked out even with see-through off: what is still fading out keeps fading until it is
         // solid again
-        let aims = roi_samples(&self.bend.raw);
+        let aims = if overview {
+            overview_samples(&self.bend.raw)
+        } else {
+            roi_samples(&self.bend.raw)
+        };
         let need = ((aims.len() as f32 * ROI_SHARE).ceil() as usize).max(2);
         let see = b.see_through;
         let mut blocks: std::collections::HashSet<String> = Default::default();
         if !aims.is_empty() {
             for x in working
                 .iter()
-                .filter(|x| cut_level(&x.name) == 0.0 && xray_candidate(x, zone))
+                .filter(|x| {
+                    cut_level(&x.name) == 0.0
+                        && if overview {
+                            // the overview: only the press's body is seen through, the tools stay
+                            matches!(x.look, Look::Frame | Look::Gauge)
+                        } else {
+                            xray_candidate(x, zone)
+                        }
+                })
             {
                 if roi_blocked(&x.mesh, eye, &aims) >= need {
                     blocks.insert(x.name.clone());
