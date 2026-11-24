@@ -310,3 +310,6 @@ urdf-export, machines/builder, posts/dialects.
 - FEA: research only for now (FEA-RESEARCH session_01WJtawwqWL5HTwiC8HTrB6k, branch research/fea). Build waits on forge-num; needs orient3d/insphere in the shared core.
 - Cycle time UI: always t_min (bound) beside t_scurve (estimate), never the estimate alone.
 - CAM-UI adaptive entry: blocked until David retires "no adaptive until counsel" in CAM-UI's own session.
+- PIPELINE, NEVER IDLE (David): while long gates/tests run, build the next step assuming they pass; fix speed/test issues if they come up. Only train merges wait on green.
+- ffmpeg: use PUBLIC prebuilt releases (gyan.dev / evermeet or Martin Riedl / johnvansickle or BtbN), pinned version+sha256; GPL fine (separate process); NO CI build, NO release on our repo.
+- Adaptive: allowed flat out, merged as opt-in even if slower (David told CAM-UI directly).
