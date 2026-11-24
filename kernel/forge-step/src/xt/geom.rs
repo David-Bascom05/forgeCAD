@@ -326,7 +326,13 @@ impl<'s> Geo<'s> {
                 let d = self.real(&n, "offset")? * k;
                 // along the base's oriented normal, which the kernel's natural one is when they agree
                 let d = if agree { d } else { -d };
-                match offset(&b, d) {
+                // Parasolid checked the offset over its faces (the `check` field); the kernel's own
+                // check spans the whole base, which can curve tighter elsewhere
+                let made = offset(&b, d).or_else(|| match &b {
+                    Surface::Procedural(p) => forge_geom::blend::Offset::surface_over(p, d, f64::INFINITY),
+                    _ => None,
+                });
+                match made {
                     Some(o) => {
                         // the offset keeps its base's parameters and natural normal: it agrees as
                         // its base does, by the senses of both
@@ -367,6 +373,15 @@ impl<'s> Geo<'s> {
                         (s, natural)
                     }
                     None => return refuse(idx, ty, "the spin makes no surface"),
+                }
+            }
+            56 if n.all("range").iter().all(|r| *r == 0.0) => {
+                // a blend of no radius: its spine (a cliff edge) as a surface of no thickness,
+                // which only a cliff-edge blend or an offset (a tube round the edge) is made from
+                let edge = self.curve(n.p("spine"))?;
+                match forge_geom::tube::Tube::rail(&edge, edge.domain().interval()) {
+                    Some(s) => (s, true),
+                    None => return refuse(idx, ty, "the cliff's curve makes no rail"),
                 }
             }
             56 => {
@@ -845,8 +860,9 @@ impl<'s> Geo<'s> {
             let natural = self.blend_natural(n, b);
             return Ok((b.clone(), natural));
         }
-        if n.c("blend_type") != b'R' {
-            return refuse(idx, ty, "a cliff-edge blend");
+        let cliff = n.c("blend_type") == b'E';
+        if !cliff && n.c("blend_type") != b'R' {
+            return refuse(idx, ty, "a blend of a kind not read");
         }
         let surf = n.all("surface");
         let range = n.all("range");
@@ -859,11 +875,24 @@ impl<'s> Geo<'s> {
             _ => return refuse(idx, ty, "its offsets are null"),
         };
         let (a, aa) = self.surface(sa)?;
-        let (b, ab) = self.surface(sb)?;
         let k = self.xf.k;
         // offsets along each surface's oriented normal, the kernel's natural one where they agree
         let da = if aa { ra * k } else { -ra * k };
-        let db = if ab { rb * k } else { -rb * k };
+        // a cliff-edge blend's second surface is a blend of no radius whose spine is the cliff:
+        // the ball rolls on that edge, as the kernel's rail of it (a tube of no thickness)
+        let (b, db) = if cliff {
+            let Some(rim) = self.s.of(sb, 56) else {
+                return refuse(idx, ty, "a cliff-edge blend with no cliff");
+            };
+            let edge = self.curve(rim.p("spine"))?;
+            let Some(rail) = forge_geom::tube::Tube::rail(&edge, edge.domain().interval()) else {
+                return refuse(idx, ty, "the cliff's curve makes no rail");
+            };
+            (rail, da.abs())
+        } else {
+            let (b, ab) = self.surface(sb)?;
+            (b, if ab { rb * k } else { -rb * k })
+        };
         let radius = da.abs();
         if (db.abs() - radius).abs() > 1e-9 * k.max(1.0) || radius <= tol::LINEAR {
             return refuse(idx, ty, format!("offsets {ra} and {rb}: not one ball"));

@@ -433,6 +433,30 @@ impl Build<'_, '_> {
                 );
             }
         }
+        if loops.is_empty()
+            && let forge_geom::Surface::Torus(t) = &surface
+        {
+            let bands = self.whole_torus(t, idx)?;
+            for (k, mut band) in bands.into_iter().enumerate() {
+                if !same {
+                    for l in &mut band {
+                        l.reverse();
+                        for u in l.iter_mut() {
+                            u.1 = !u.1;
+                        }
+                    }
+                }
+                self.p.faces.push(PFace {
+                    surface: surface.clone(),
+                    same_sense: same,
+                    name: self.salt.with(u64::from(idx)).with_str("band").with(k as u64),
+                    shell,
+                    loops: band,
+                });
+            }
+            self.stats.faces += 1;
+            return Ok(());
+        }
         self.p.faces.push(PFace {
             surface,
             same_sense: same,
@@ -442,6 +466,61 @@ impl Build<'_, '_> {
         });
         self.stats.faces += 1;
         Ok(())
+    }
+
+    /// A whole torus face, which a file bounds with nothing, as two bands round the axis, out
+    /// and in, met at its outer and inner equators: the circles round the axis at v = 0 and pi,
+    /// each made two halves as a ring edge is. Each band's loops wind as a cylinder's rims do.
+    fn whole_torus(&mut self, t: &forge_geom::Torus, idx: u32) -> R<[Vec<Vec<(usize, bool)>>; 2]> {
+        use forge_geom::{Circle, Curve};
+        use forge_math::Interval;
+        if t.minor <= forge_math::tol::LINEAR || t.major <= t.minor + forge_math::tol::LINEAR {
+            return refuse(idx, 14, "a whole torus that reaches its axis");
+        }
+        let pi = forge_math::dmath::PI;
+        let mut rim = |radius: f64, k: u64| -> [usize; 2] {
+            let c = Curve::Circle(Circle {
+                frame: t.frame,
+                radius,
+            });
+            let p0 = c.eval(0.0);
+            let p1 = c.eval(pi);
+            self.p
+                .verts
+                .push((p0, self.salt.with_str("rim0").with(u64::from(idx)).with(k)));
+            self.p
+                .verts
+                .push((p1, self.salt.with_str("rim1").with(u64::from(idx)).with(k)));
+            let (v0, v1) = (self.p.verts.len() - 2, self.p.verts.len() - 1);
+            for (h, (r, a, b)) in [
+                (Interval::new(0.0, pi), v0, v1),
+                (Interval::new(pi, 2.0 * pi), v1, v0),
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                self.p.edges.push(PEdge {
+                    curve: c.clone(),
+                    range: r,
+                    start: a,
+                    end: b,
+                    name: self
+                        .salt
+                        .with_str("rim")
+                        .with(u64::from(idx))
+                        .with(k)
+                        .with(h as u64),
+                });
+            }
+            let n = self.p.edges.len();
+            [n - 2, n - 1]
+        };
+        let outer = rim(t.major + t.minor, 0);
+        let inner = rim(t.major - t.minor, 1);
+        let fw = |e: [usize; 2]| vec![(e[0], true), (e[1], true)];
+        let back = |e: [usize; 2]| vec![(e[1], false), (e[0], false)];
+        // v from 0 to pi: up the outer equator's side, back along the inner; then on round
+        Ok([vec![fw(outer), back(inner)], vec![fw(inner), back(outer)]])
     }
 
     /// A shell of a solid region: its back faces, whose normals point out of the solid.

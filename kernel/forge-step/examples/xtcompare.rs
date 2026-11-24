@@ -313,6 +313,11 @@ fn main() {
             for r in &i.refusals {
                 eprintln!("refusal {} {}: {}", r.entity, r.kind, r.why);
             }
+            for (k, s) in i.solids.iter().enumerate() {
+                if let Some(u) = &s.body.unverified {
+                    eprintln!("unverified {k} ({} faces): {u}", s.body.face_ids().count());
+                }
+            }
         }
     }
 }
