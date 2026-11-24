@@ -52,7 +52,10 @@ render = bool(sel["workspaces"]["interface/forge-render"]["packages"])
 only = set(a.only.split(",")) if a.only else None
 record = {"branch": head, "base": base, "reads_map": os.path.exists(reads),
           "selected": {ws: w["packages"] for ws, w in sel["workspaces"].items()},
-          "gate_reached": sel["gate"], "steps": {}}
+          "gate_reached": sel["gate"], "steps": {},
+          # (the train squashes a branch that carries e3148c8b, else merges it --no-ff)
+          "e3148c8b": subprocess.run(["git", "merge-base", "--is-ancestor", "e3148c8b", head],
+                                     capture_output=True).returncode == 0}
 log_dir = tempfile.mkdtemp(prefix="preverify.")
 
 
@@ -77,10 +80,20 @@ def ps(names):
     return [x for n in names for x in ("-p", n)]
 
 
-step("guards", [[sys.executable, "tools/ci/removed_checks.py"],
+# the patent grep the train's assembly runs on each branch's added lines (TRAIN-CONDUCTOR's)
+PATENT = (r"git diff {base}...HEAD -- . ':(exclude)LICENSE' ':(exclude)**/LICENSE*' | grep '^+' | "
+          r"grep -iE 'patent|\bFTO\b|freedom.to.operate|design.around|counsel|\bUS [0-9]{{1,2}},[0-9]{{3}},[0-9]{{3}}' | "
+          r"grep -viE 'leftover|pdftotext|technical-information--patents|Patent and trademark rights' "
+          r"&& {{ echo 'patent grep: lines above need the coordinator'; exit 1; }} || exit 0")
+step("guards", [["sh", "-c", PATENT.format(base=base)],
+                [sys.executable, "tools/ci/removed_checks.py"],
                 [sys.executable, "tools/ci/model-licences.py", "."],
                 [sys.executable, "-I", "tools/ci/no-fusion-gallery.py"],
                 [sys.executable, "-I", "tools/ci/no-vendor-tool-libraries.py"]])
+test_env0 = {"CARGO_PROFILE_TEST_DEBUG": "0", "CARGO_PROFILE_DEV_DEBUG": "0", "CARGO_INCREMENTAL": "0"}
+# every hidden input reviewed (forge-model's test scans every kernel crate): whole, every branch
+step("hidden", [["cargo", "test", "--locked", "-p", "forge-model", "--test", "hidden_inputs", "--",
+                 "every_hidden_input_is_reviewed"]], env=test_env0)
 test_env = {"CARGO_PROFILE_TEST_DEBUG": "0", "CARGO_PROFILE_DEV_DEBUG": "0",
             "CARGO_INCREMENTAL": "0", "JOBS": os.environ.get("JOBS", "3")}
 clippy = []
@@ -138,6 +151,7 @@ json.dump(record, open(rec, "w"), indent=1)
 steps = " ".join(f"{k}:{'ok' if v['ok'] else 'FAIL'}" for k, v in record["steps"].items())
 print(f"\nPRE-VERIFY {'GREEN' if ok else 'RED'} {head[:12]} on main {base[:12]}: {steps}; "
       f"{len(pk)} packages{' + forge-render' if render else ''}; gate "
-      f"{'judged' if sel['gate'] else 'not reached'}; map {'yes' if record['reads_map'] else 'no'}"
+      f"{'judged' if sel['gate'] else 'not reached'}; map {'yes' if record['reads_map'] else 'no'}; "
+      f"e3148c8b {'yes' if record['e3148c8b'] else 'no'}"
       f"\nrecord: {rec}")
 sys.exit(0 if ok else 1)
