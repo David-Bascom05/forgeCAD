@@ -10289,7 +10289,7 @@ mod certify_memo_tests {
         e.1 = tool("flat-6", 30.5);
         edits.push(("tool", e));
         let mut e = base.clone();
-        e.2[3].mu *= 2.0;
+        e.2[3].mu = e.2[3].mu * 2.0 + 1e-9;
         edits.push(("part face", e));
         let mut e = base.clone();
         e.3 = vec![(

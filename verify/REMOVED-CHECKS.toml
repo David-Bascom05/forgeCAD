@@ -122,3 +122,28 @@ tests = [
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "a_ball_cutter_has_a_capsule_and_a_flat_does_not", kind = "unit" },
 ]
 owed = ["lemma", "code = model"]
+
+# CAM-CORE: an exact closed form for an axis-aligned plane face (a workholding box, a plate, the
+# stock's faces) after the existing paths, only where they left the pair Undecided: a separation
+# along one coordinate (the body's z range or its radius against the face's box), least at a move's
+# end, compared with limit + mu in exact rationals (real.rs), so a tie at the limit (a pass exactly
+# at the fixture clearance, a tool on a plate at distance 0) is proven. No check is skipped: it
+# only decides what was undecided (a refusal before).
+[[check]]
+id = "axisplane-clear"
+owner = "CAM-CORE"
+removed = "check.rs certify_shared's Undecided (a refusal) replaced by a Clear where the separating-axis bound proves it"
+rust = { file = "kernel/forge-cam-geom/src/axisplane.rs", fn = "clear" }
+reviewed_at = "dca6dc7c8270281a"
+level = "L1"
+lemmas = [
+  { project = "verify/forge-cam", name = "ForgeCam.AxisPlane.axisplane_clear" },
+  { project = "verify/forge-cam", name = "ForgeCam.AxisPlane.axisplane_clear_below" },
+]
+tests = [
+  { file = "kernel/forge-cam-geom/tests/axisplane.rs", name = "never_clear_where_the_branch_and_bound_hits", kind = "sampling" },
+  { file = "kernel/forge-cam-geom/tests/axisplane.rs", name = "a_pass_exactly_at_the_clearance_over_a_jaw_is_clear", kind = "mutation" },
+  { file = "kernel/forge-cam-geom/tests/axisplane.rs", name = "a_pass_beside_a_jaw_exactly_at_the_clearance_is_clear", kind = "unit" },
+  { file = "kernel/forge-cam-geom/tests/axisplane.rs", name = "a_tool_resting_on_a_plate_at_distance_zero_is_clear_at_limit_zero", kind = "unit" },
+]
+owed = ["code = model"]
