@@ -137,3 +137,26 @@ geometry depends on it.
 So far: 3 S (each owing one bound lemma), 7 T (all resting on one δ-accumulation lemma plus
 `near_segment`), 1 U, 1 N. The δ-accumulation lemma is the next proof: it would close the T class
 for every site that merges within a stored tolerance.
+
+## Triage, batch 2 (the next twelve busiest live flat sites; line numbers at main f04c533)
+
+| site | class | the argument, and what is still owed |
+|---|---|---|
+| boolean.rs:4728 an imprint stretch with `w[1] - w[0] <= 1e-12 (1 + width)` is skipped | T | as boolean.rs:3611: a stretch that short moves nothing by more than δ. Owed: the same bound for a conic's parameter (radius × angle). |
+| boolean.rs:2257 `grown_tols` records a vertex's reach only where `d > vertex.tol` | S | exact bookkeeping: `grown_tol` takes the max of the vertex's tolerance and every recorded reach, so skipping a reach within the tolerance gives the same max. Nothing is owed beyond that sentence. |
+| boolean.rs:4695 imprint: a hit of another body's edge accepted by `on_edge` | T | the base predicate (boolean.rs:289): the δ-accumulation lemma. |
+| boolean.rs:2715 trim on a plane: `plane_meet`'s hits accepted by `on_edge` | T | as boolean.rs:3057 (`on_edge`, then the box-only accept of G14.lean). |
+| boolean.rs:3337 (first test) two neighbouring cuts within `1.2 max(tol)` are left for the dedup | T | they are merged by the dedup below, within the larger tolerance: the δ-accumulation lemma, taking the larger tolerance (as nary.rs:1514). Owed: why 1.2 and not 1.0 (the slack between this test and the dedup's own `reach`). |
+| boolean.rs:3337 (second test) cuts more than 0.3 mm apart are never one shallow pass | U | the comment's bound: a curve of radius R stays within t of a tangent for sqrt(8 R t), under 0.3 mm unless R is over a metre. That is an assumption on input size, not a theorem. Owed: sqrt(8 R tol) from the curve's own radius, or R ≤ 1 m stated as an InputSize bound, with what a missed shallow pass costs (two cuts a hair apart kept: a sliver edge). |
+| boolean.rs:3521 (second column) trim_in's sampler, the 4·LINEAR end test on the golden-section samples | U | batch 1's 3521, its other operand: it chooses where samples go, not what they say. Same open part of trim_in. |
+| shape.rs:234 `on_sweep`: a sweep within 1e-12 rad of a whole turn is whole | S | shape.rs is a screen: In or Out only clear of the boundary by a margin, else Near, and the caller asks the B-rep (shape.rs's header, nary.rs:509, 1971, 2145). A gap of 1e-12 rad is r·1e-12 of arc. Owed: r·1e-12 ≤ the margin under InputSize (r ≤ the model box). |
+| shape.rs:131 the crossing count's ends test, for an arc not within 1e-12 rad of whole | S | same screen: a ray grazing an arc's end returns None (undecided, the caller asks the B-rep). Same lemma. |
+| classify.rs:1104 a ray hit within LINEAR of the plane through the axis, or 10·LINEAR of the point along the ray, is inconclusive (None) | S | None only declines: the caller casts another ray or asks another test. Owed: that a hit outside those margins is counted rightly (the parity is exact up to rounding: the margins exceed the evaluation error under InputSize). |
+| nary.rs:1073 a new edge whose box, grown by LINEAR, the shapes find surely outside the result is dropped | S | `outside` is `box_out` with SHAPE_MARGIN over every holder: a filter. Owed: `box_out`'s soundness at that margin (the shapes lemma; it covers nary.rs:669 too). |
+| nary.rs:3576 the interior probe's step shrinks to LINEAR | U | it chooses where a face is sampled (points clear of every edge by the step less a slack), not what the sample says. Whether a point clear by `step - slack` is surely inside the face is owed: the slack is `min(1e-3 step, 0.1 LINEAR)`, below the tolerance. |
+
+Batch 2: 5 S (shape.rs's margin lemma covers three of them; 2257 needs no lemma), 4 T (the
+δ-accumulation lemma again), 3 U: the 0.3 mm shallow bound and two sampler choices (trim_in's and
+the n-ary interior probe's). With batch 1, of the 24 busiest: 8 S, 11 T, 4 U, 1 N. The
+δ-accumulation lemma would close 11; shape.rs's margin lemma 3; the 0.3 mm bound is the one site
+that rests on an unstated input-size assumption.
