@@ -974,12 +974,15 @@ impl Shell {
         );
         self.note("title:name", r);
 
+        // a page has no window of its own to minimize, maximize or close: none drawn there
+        // (they were, and did nothing)
         let wins = [
             ("minimize", "minimize", "Minimize", Action::Minimize),
             ("maximize", "maximize", "Maximize", Action::Maximize),
             ("close", "close", "Close", Action::Close),
         ];
-        for (k, (name, icon, tip, action)) in wins.into_iter().enumerate() {
+        let wins = if cfg!(target_arch = "wasm32") { &[][..] } else { &wins[..] };
+        for (k, &(name, icon, tip, action)) in wins.iter().enumerate() {
             let r = Rect::from_min_size(pos2(w - 110.0 + k as f32 * 36.0, 3.0), vec2(34.0, 30.0));
             if self.icon_button(ui, name, r, icon, tip, Color32::WHITE).clicked() {
                 self.out.push(action);
@@ -1302,6 +1305,7 @@ impl Shell {
 
     /// Esc backs out one level, wherever one is: never two, and never none.
     fn escape_one_level(&mut self, ctx: &egui::Context) {
+        fgasm::escape_clear(ctx);
         if !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             return;
         }
@@ -1323,6 +1327,13 @@ impl Shell {
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {
             p.tool = None;
             self.status.clear();
+        // the dialogs up over the view, each as its Cancel or × (Esc closed none of them)
+        } else if self.content.open {
+            self.content.open = false;
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.occ_edit.is_some()) {
+            p.occ_edit = None;
+        } else if let Some(t) = self.fg.as_ref().and_then(|p| p.asm.as_ref()?.tool.as_ref()) {
+            fgasm::escape_to(ctx, t.head());
         } else if let Some(p) = self
             .fg
             .as_mut()
@@ -1499,7 +1510,8 @@ impl Shell {
     }
 
     fn resize_edges(&mut self, ui: &mut Ui, s: Rect) {
-        if self.view.maximized {
+        // a page's edges are the browser's: no resize cursor there for a resize that never comes
+        if self.view.maximized || cfg!(target_arch = "wasm32") {
             return;
         }
         let Some(at) = ui.ctx().input(|i| i.pointer.hover_pos()) else {
@@ -1544,8 +1556,9 @@ impl Shell {
             // a Forge file is written when asked (Ctrl+S too)
             items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
             items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
-            // the part's mesh for printing and viewers: written natively, beside the part
-            if cfg!(not(target_arch = "wasm32")) {
+            // the part's mesh for printing and viewers: natively where the file dialog says, in a
+            // page to the browser's downloads
+            {
                 use forge_lang::meshfile::Format;
                 for (label, f) in [
                     ("Export STL...", Format::Stl),
@@ -1856,12 +1869,27 @@ fn menu_at(
                 }
             }
         });
-    let outside = ctx.input(|i| {
-        i.pointer.any_pressed()
-            && i.pointer
-                .interact_pos()
-                .is_some_and(|p| !inner.response.rect.contains(p))
+    // the frame a menu first shows, the press that opened it is no press outside it: when the
+    // press and its release came in one frame (a tap, or a page whose frames lag the mouse) the
+    // menu shut in the frame it opened, so File never opened in a browser
+    let frame = ctx.cumulative_frame_nr();
+    let shown = egui::Id::unique(id).with("shown");
+    // (the frame it first showed in, the last): shown again the frame after, it is still open
+    let opened_now = ctx.data_mut(|d| {
+        let first = match d.get_temp::<(u64, u64)>(shown) {
+            Some((first, last)) if last + 1 >= frame => first,
+            _ => frame,
+        };
+        d.insert_temp(shown, (first, frame));
+        first == frame
     });
+    let outside = !opened_now
+        && ctx.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|p| !inner.response.rect.contains(p))
+        });
     if matches!(out, MenuResult::Open) && (outside || ctx.input(|i| i.key_pressed(egui::Key::Escape))) {
         out = MenuResult::Close;
     }

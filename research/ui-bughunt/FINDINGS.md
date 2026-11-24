@@ -228,6 +228,78 @@ list on main: this branch's new strings add none).
   after; page 12 -> 2151). Load cost: rack open, single-threaded build, longest task 1438 ms
   without it, 1444 ms with it (noise: that task is the build itself; threaded 197 ms).
 
+## 16. File's menu never opened in the page; its exports were missing; Export CSV failed (ui/bughunt-3)
+
+- Symptoms (page): clicking File showed nothing. On the desktop File > Export STL / 3MF / OBJ
+  exist; the page left them out. Weldments > Cut List > Export CSV said "Couldn't write
+  /project/weldments/gate_frame-cutlist.csv: operation not supported on this platform".
+- Root causes: `menu_at` (shell/mod.rs) shut a menu on any press outside it, including in the
+  frame it opened. When the press and its release land in one frame, the press on File counts
+  as outside the new menu, so the menu shuts at once. In the page that happens on every quick
+  click (frames lag the mouse there); natively, on a touchpad tap. The exports were left out of
+  the page's menu because the page's host had nothing to do with `Action::ExportMesh` (it fell
+  into `_ => {}`). The cut list was written with `std::fs::write`, and a page has no std files.
+- Fixes: a menu ignores an outside press in the frame it first shows (the agent switcher
+  already left out the button that opens it). In the page, File > Export STL / 3MF / OBJ builds
+  the mesh and hands it to the browser's downloads (`window.forge_download`). Natively
+  `fg::export_mesh` is the same as before: `mesh_file` is its bytes, then written. The cut list
+  is written through `forge_dirs::fs`, which is std's natively and the project's in a page,
+  kept where the project is. The browser build's clippy config now also denies std's file
+  calls (`std::fs::write`, `read`, `File::open`, ...). That found these two, the only ones in
+  forge-render. build.rs allows them: it runs on the build machine.
+- Tests: `tests/tap_menu.rs` (native: a press and release in one frame on File, then the menu
+  is open; a click outside still shuts it; fails before) and `web/tests/export.cjs` (the page:
+  File > Export STL downloads `gate_frame.stl`, a valid binary STL; Export CSV writes
+  `weldments/gate_frame-cutlist.csv` on the serving machine; fails before: no download).
+
+## 17. Esc closed no dialog over the view; Place hung on a fifo beside the assembly (ui/bughunt-3)
+
+- Symptoms, desktop and page alike: Esc left Place Component, Place Joint, Constrain, Free
+  Move/Rotate, Pattern, Mirror and Place from Content Center up, so each stayed open under the
+  next one opened. Separately, Assemble > Place hung the app for good when a folder beside the
+  assembly's held a fifo named `*.fg`. A link there to /dev/zero filled the memory instead.
+- Root causes: `escape_one_level` (shell/mod.rs) runs first in the frame and always takes Esc
+  for its own levels, and none of those levels was one of these dialogs. A dialog that looked for
+  Esc itself (fgdialog.rs, the occurrence editor) never saw it either. Place reads every `.fg`
+  in the folder and in the folders beside it to mark the assemblies, using `read_to_string`.
+- Fixes: three new Esc levels after a feature dialog's. Content Center closes. The occurrence
+  editor closes. The assembly tool's dialog gets its own × (`escape_to` names it, and
+  `dialog_head` answers as if its × was clicked, so each tool cleans up as it does on ×). Place
+  reads with `forge_lang::deps::read_plain`, as the loaders read: plain files only, no links
+  followed, capped.
+- Tests (tests/asm_tools.rs): `escape_closes_the_dialog_up` (five tools and Content Center; fails
+  before: "Place: Esc left its dialog up") and
+  `place_lists_beside_files_without_reading_a_fifo_or_a_device` (a fifo and a /dev/zero link
+  beside the assembly; fails before: the list never comes).
+- Found because other tests leave such fixtures in the temp folder (`fg-read-kinds-*`). The
+  Place dialog of an assembly whose parent folder is the temp folder hung on them.
+
+## 18. Inspect > Wall froze the page for minutes; natively 4.5 minutes for a welded frame (ui/bughunt-3)
+
+- Symptom: Inspect > Wall on `examples/weldments/gate_frame.fg` measures the whole part as soon
+  as it opens. Natively that took 269 s (`forgecad measure F wall` too). In the single-threaded
+  page the job runs on the page's thread, so the tab hung for longer than 5 minutes.
+- Root cause: `forge_agent::measure::wall` tried every triangle against every other one
+  (165,669 triangles: 2.7e10 pairs).
+- Fix: a box tree over the triangles. Each ray tries only the triangles whose boxes it passes
+  through, no further than the thinnest wall found so far. A long sliver goes in as several
+  pieces, so one long box doesn't lie across every ray near it. The tests and the order of the
+  outer loop are unchanged, so the answer is the same to the bit: only triangles that could not
+  be nearer are left out, and the point depends only on the ray and the distance. 269 s ->
+  about 3.5 s.
+- Tests: `measure::tests::the_tree_finds_the_wall_every_pair_does_bit_for_bit` (the old loop
+  kept as the reference: a plate with holes, a tube). Also every example compared old vs new
+  with `forgecad measure F wall exact`: identical.
+- Still open: about 3.5 s natively (likely 2-3x that in wasm) on the single-threaded page's
+  thread. The threaded page and the desktop run it off the UI thread.
+
+## 19. The page drew window controls that did nothing (ui/bughunt-3)
+
+- The desktop's Minimize / Maximize / Close sat at the page's title bar's right end, and the
+  page's edges showed resize cursors; a page has no window of its own, so none of them did
+  anything (the page's host drops those actions). Not drawn in the page now (shell/mod.rs
+  `title_bar`, `resize_edges`). Test: `web/tests/chrome.cjs` (no icon pixels there; fails before).
+
 ## Open (reported, not fixed here)
 
 

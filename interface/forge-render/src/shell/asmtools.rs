@@ -149,6 +149,17 @@ pub enum AsmTool {
 }
 
 impl AsmTool {
+    /// Its dialog's name, as `dialog_head` has it (Esc closes it by its ×).
+    pub fn head(&self) -> &'static str {
+        match self {
+            AsmTool::Place(_) => "asm:place",
+            AsmTool::Link(_) => "asm:link",
+            AsmTool::Pattern(_) => "asm:pattern",
+            AsmTool::MirrorCopy(_) => "asm:mirror",
+            AsmTool::Free(_) => "asm:free",
+        }
+    }
+
     /// An origin is wanted from the view.
     pub fn waiting(&self) -> bool {
         matches!(self, AsmTool::Link(f) if f.waiting.is_some())
@@ -608,6 +619,24 @@ fn fg_files(base: &std::path::Path, out: &mut Vec<String>) {
             out.push(name(&p));
         }
     }
+}
+
+/// The Place dialog's rows: `place_files` but the assembly's own file (`own`), each with whether
+/// it is an assembly.
+pub fn place_list(d: &std::path::Path, own: &str) -> Vec<(String, bool)> {
+    place_files(d)
+        .into_iter()
+        .filter(|f| !own.ends_with(f.as_str()) || f.contains('/'))
+        .map(|f| {
+            // read as the loaders read: a plain file, capped (the folder's parent is anyone's: a
+            // fifo there hung the app, a link to /dev/zero filled its memory)
+            let sub = forge_lang::deps::read_plain(&d.join(&f), forge_lang::deps::LIMIT)
+                .ok()
+                .and_then(|b| String::from_utf8(b).ok())
+                .is_some_and(|t| super::fg::is_assembly(&t));
+            (f, sub)
+        })
+        .collect()
 }
 
 /// The .fg files a Place dialog offers: the assembly's folder's, then its parent's (from `..`).
@@ -1754,21 +1783,7 @@ pub fn command(fg: &mut super::fg::FgPanel, c: super::FgCmd) -> String {
     let (tool, say) = match c {
         C::Place => {
             let own = fg.file.clone();
-            let files = a
-                .dir
-                .as_deref()
-                .map(|d| {
-                    place_files(d)
-                        .into_iter()
-                        .filter(|f| !own.ends_with(f.as_str()) || f.contains('/'))
-                        .map(|f| {
-                            let sub = forge_dirs::fs::read_to_string(d.join(&f))
-                                .is_ok_and(|t| super::fg::is_assembly(&t));
-                            (f, sub)
-                        })
-                        .collect()
-                })
-                .unwrap_or_default();
+            let files = a.dir.as_deref().map(|d| place_list(d, &own)).unwrap_or_default();
             (
                 AsmTool::Place(PlaceForm {
                     files,

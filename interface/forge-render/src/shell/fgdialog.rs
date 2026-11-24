@@ -506,9 +506,7 @@ impl Shell {
             self.view_blocks.push(r.response.rect);
             self.places.push(("fg:occ-edit".into(), r.response.rect));
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            done = Some(false);
-        }
+        // (Esc: `escape_one_level` closes it)
         match done {
             Some(true) => fg.out.push(FgAct::Apply(e.op())),
             Some(false) => {}
