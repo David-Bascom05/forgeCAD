@@ -192,6 +192,11 @@ pub struct Resolved {
     pub checks: Vec<Check>,
 }
 
+/// How far under the machine's maximum feed a clamped feed is held, mm/min: the runtime limit
+/// check (forge-cam-lang `runtime_limits`) compares the posted F against the limit's
+/// outward-rounded lower end, so an F exactly at the limit is refused.
+pub const FEED_MARGIN: f64 = 1.0;
+
 /// Spindle power at `rpm` from a piecewise-linear (rpm, kW) curve; None outside it (no
 /// extrapolation: what the curve does not cover is not known).
 pub fn power_at(curve: &[[f64; 2]], rpm: f64) -> Option<f64> {
@@ -443,18 +448,22 @@ pub fn milling(
         fz = Val::new(fz.v * lim / vf.v.max(1e-12), "mm", Source::Limited, why.clone());
         vf = Val::new(lim, "mm/min", Source::Limited, why);
     }
-    if spindle.max_feed > 0.0 && vf.v > spindle.max_feed {
+    if spindle.max_feed > 0.0 && vf.v > spindle.max_feed - FEED_MARGIN {
+        let to = (spindle.max_feed - FEED_MARGIN).max(0.5 * spindle.max_feed);
         let why = format!(
-            "asked {:.1} mm/min; the machine feeds at most {:.1}",
+            "asked {:.1} mm/min; the machine feeds at most {:.1} (held {FEED_MARGIN} under it: a posted F at the limit is refused)",
             vf.v, spindle.max_feed
         );
-        fz = Val::new(
-            fz.v * spindle.max_feed / vf.v,
-            "mm",
-            Source::MachineClamped,
-            why.clone(),
-        );
-        vf = Val::new(spindle.max_feed, "mm/min", Source::MachineClamped, why);
+        checks.push(Check {
+            what: "feed",
+            verdict: Verdict::Warn,
+            value: vf.v,
+            limit: spindle.max_feed,
+            unit: "mm/min",
+            why: format!("clamped: {why}"),
+        });
+        fz = Val::new(fz.v * to / vf.v, "mm", Source::MachineClamped, why.clone());
+        vf = Val::new(to, "mm/min", Source::MachineClamped, why);
     }
 
     let entry = |v: Option<f64>, frac: f64, what: &str| match v {
@@ -844,7 +853,15 @@ mod tests {
             ..Ask::default()
         };
         let r = milling(&ask, &tool(None), Some(&g), &spindle(), (1.0, 1.0)).unwrap();
-        assert_eq!((r.feed.v, r.feed.source), (10_000.0, Source::MachineClamped));
+        assert_eq!(
+            (r.feed.v, r.feed.source),
+            (10_000.0 - FEED_MARGIN, Source::MachineClamped)
+        );
+        assert!(
+            r.checks
+                .iter()
+                .any(|k| k.what == "feed" && k.verdict == Verdict::Warn)
+        );
         assert!(r.feed.note.contains("15000.0"));
     }
 

@@ -31,6 +31,7 @@ use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolU
 use forge_cam_geom::check::Face;
 use forge_cam_geom::region::{Loop, Region, Seg, p2};
 use forge_post::{CycleKind, Rec};
+use forge_tooling::resolve::{self, Ask, Verdict};
 use forge_tooling::{Kind, Library, feeds};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -124,6 +125,9 @@ pub struct OpOut {
     pub tool: Option<usize>,
     pub paths: Vec<OpPath>,
     pub feeds: Option<feeds::Feeds>,
+    /// Feeds and speeds resolved in layers (forge_tooling::resolve), with the source of each
+    /// value and the op's feed checks; None for hole plans (drill feeds are not resolved yet).
+    pub resolved: Option<resolve::Resolved>,
     pub checks: Vec<CheckOut>,
     pub pairs: usize,
     pub cells: usize,
@@ -197,6 +201,8 @@ pub struct Cam {
     pub warnings: Vec<String>,
     parts: Vec<PartIn>,
     tools: Vec<ToolUse>,
+    /// The user's feeds and speeds given on each tool (`tool(.., vc: 300)`), under the op's.
+    tool_asks: Vec<Ask>,
     setups: Vec<SetupIn>,
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
@@ -380,6 +386,120 @@ fn get_num(m: &BTreeMap<String, V>, k: &str, default: Option<f64>) -> Result<f64
         None => default.ok_or_else(|| format!("missing `{k}:`")),
     }
 }
+/// An op's resolved feeds and speeds for the report and the UI's Feeds & Speeds tab: each value
+/// with its unit, source (default | material | library | user | machine-clamped | limited) and
+/// note; the derived numbers; the feed checks (pass | warn | fail | not checked).
+fn feeds_speeds_json(r: &resolve::Resolved) -> Json {
+    let n = |x: f64| if x.is_finite() { Json::Num(x) } else { Json::Null };
+    let val = |v: &resolve::Val| {
+        Json::obj(vec![
+            ("v", n(v.v)),
+            ("unit", Json::Str(v.unit.into())),
+            ("source", Json::Str(v.source.name().into())),
+            ("note", Json::Str(v.note.clone())),
+        ])
+    };
+    let f = &r.feeds;
+    let pct = |have: f64, avail: Option<f64>| match avail {
+        Some(a) if a > 0.0 && have.is_finite() => Json::Num(100.0 * have / a),
+        _ => Json::Null,
+    };
+    Json::obj(vec![
+        (
+            "values",
+            Json::obj(vec![
+                ("vc", val(&r.vc)),
+                ("rpm", val(&r.rpm)),
+                ("chip", val(&r.chip)),
+                ("fz", val(&r.fz)),
+                ("feed", val(&r.feed)),
+                ("ap", val(&r.ap)),
+                ("ae", val(&r.ae)),
+                ("plunge_feed", val(&r.plunge)),
+                ("ramp_feed", val(&r.ramp)),
+                ("lead_in_feed", val(&r.lead_in)),
+                ("min_feed", val(&r.min_feed)),
+                ("max_feed", val(&r.max_feed)),
+            ]),
+        ),
+        (
+            "derived",
+            Json::obj(vec![
+                ("hex", n(f.hex)),
+                ("hm", n(f.hm)),
+                ("engagement_deg", n(f.phi.to_degrees())),
+                ("d_eff", n(f.d_eff)),
+                ("mrr_cm3_min", n(r.mrr)),
+                ("power_kw", n(f.power)),
+                ("power_pct", pct(f.power, r.power_avail)),
+                ("torque_nm", n(f.torque)),
+                ("torque_pct", pct(f.torque, r.torque_avail)),
+            ]),
+        ),
+        (
+            "checks",
+            Json::Arr(
+                r.checks
+                    .iter()
+                    .map(|c| {
+                        Json::obj(vec![
+                            ("what", Json::Str(c.what.into())),
+                            ("verdict", Json::Str(c.verdict.name().into())),
+                            ("value", n(c.value)),
+                            ("limit", n(c.limit)),
+                            ("unit", Json::Str(c.unit.into())),
+                            ("why", Json::Str(c.why.clone())),
+                        ])
+                    })
+                    .collect(),
+            ),
+        ),
+    ])
+}
+
+/// The feeds-and-speeds args of an op or a tool (units: m/min, rpm, mm, mm/min, degrees, kW,
+/// N·m). `ap`/`ae` are the op's `step`/`stepover` under other names; each must be over 0.
+fn ask_of(m: &BTreeMap<String, V>) -> Result<Ask, String> {
+    let g = |k: &str| -> Result<Option<f64>, String> {
+        match m.get(k) {
+            None => Ok(None),
+            Some(V::Num(x)) if *x > 0.0 && x.is_finite() => Ok(Some(*x)),
+            Some(V::Num(x)) => Err(format!("`{k}` must be over 0 (got {x})")),
+            Some(_) => Err(format!("`{k}` must be a number")),
+        }
+    };
+    let ask = Ask {
+        vc: g("vc")?,
+        rpm: g("rpm")?,
+        chip: g("chip")?,
+        fz: g("fz")?,
+        feed: g("feed")?,
+        ap: g("ap")?,
+        ae: g("ae")?,
+        max_angle: g("max_angle")?,
+        plunge: g("plunge_feed")?,
+        ramp: g("ramp_feed")?,
+        lead_in: g("lead_in_feed")?,
+        max_power: g("max_power")?,
+        max_torque: g("max_torque")?,
+        min_feed: g("min_feed")?,
+        max_feed: g("max_feed")?,
+    };
+    if let Some(a) = ask.max_angle
+        && a > 180.0
+    {
+        return Err(format!(
+            "`max_angle` is an engagement angle in degrees, at most 180 (got {a})"
+        ));
+    }
+    if let (Some(lo), Some(hi)) = (ask.min_feed, ask.max_feed)
+        && lo > hi
+    {
+        return Err(format!("`min_feed` {lo} is over `max_feed` {hi}"));
+    }
+    Ok(ask)
+}
+
 fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<String, String> {
     match m.get(k) {
         Some(V::Str(x)) => Ok(x.clone()),
@@ -400,6 +520,7 @@ pub fn run(src: &str, dir: &Path) -> Cam {
         warnings: vec![],
         parts: vec![],
         tools: vec![],
+        tool_asks: vec![],
         setups: vec![],
         ops: vec![],
         programs: vec![],
@@ -803,6 +924,7 @@ impl Cam {
                     stickout,
                     shape,
                 });
+                self.tool_asks.push(ask_of(a)?);
                 Ok(V::Tool(self.tools.len() - 1))
             }
             "setup" => {
@@ -2042,6 +2164,36 @@ impl Cam {
         ))
     }
 
+    /// The op's feeds and speeds: the user's (op over tool) over the tool's preset for the
+    /// part's group over the group's data, clamped by the machine (forge_tooling::resolve).
+    fn resolve_for(&self, su: usize, ti: usize, ask: &Ask, nominal: (f64, f64)) -> Option<resolve::Resolved> {
+        let group_name = &self.parts[self.setups[su].part].group;
+        let g = self.lib.group(group_name);
+        let m = self.lib.machine(&self.setups[su].machine).ok()?;
+        let t = &self.tools[ti];
+        let preset = t.tool.presets.iter().find(|p| &p.group == group_name).map(|p| {
+            let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
+            (p, t.tool.cites.iter().find(|c| c.path == path))
+        });
+        resolve::milling(
+            &ask.over(self.tool_asks[ti]),
+            &resolve::ToolData {
+                d: t.tool.dc,
+                flutes: t.tool.nof.max(1),
+                ball: t.tool.kind == Kind::Ball,
+                carbide: t.tool.material == "carbide",
+                preset,
+            },
+            g,
+            &resolve::Spindle {
+                rpm: m.rpm,
+                max_feed: m.max_feed,
+                power: &m.power,
+            },
+            nominal,
+        )
+    }
+
     fn op(&mut self, name: &str, kind: &str, a: &BTreeMap<String, V>) -> Result<V, String> {
         let su = match a.get("#0") {
             Some(V::Setup(i)) => *i,
@@ -2066,6 +2218,7 @@ impl Cam {
             tool: None,
             paths: vec![],
             feeds: None,
+            resolved: None,
             checks: vec![],
             pairs: 0,
             cells: 0,
@@ -2094,25 +2247,79 @@ impl Cam {
                     _ => return Err(format!("{kind}: missing `tool:`")),
                 };
                 out.tool = Some(ti);
-                let t = &self.tools[ti];
-                let d = t.tool.dc;
-                let step = get_num(a, "step", Some(0.5 * d))?;
+                let d = self.tools[ti].tool.dc;
+                let lcf = self.tools[ti].tool.lcf;
+                let mut ask = ask_of(a)?;
+                // `ap` is `step` (the depth per level) under its cutting-data name; one of them
+                let step = match (a.get("step"), ask.ap) {
+                    (Some(_), Some(_)) => return Err(format!("{kind}: give `step` or `ap`, not both")),
+                    (_, Some(ap)) => ap,
+                    (Some(_), None) => get_num(a, "step", None)?,
+                    (None, None) => 0.5 * d,
+                };
+                if a.contains_key("step") {
+                    ask.ap = Some(step);
+                }
                 // a helical entry at this angle (degrees) where it fits; else plunges
                 let ramp = match a.get("ramp") {
                     None => None,
                     Some(V::Num(x)) if *x > 0.0 && *x <= 30.0 => Some(*x),
                     Some(_) => return Err("ramp: an angle in degrees, over 0 and at most 30".into()),
                 };
-                let fd = match kind {
-                    "facing" => self.feeds_for(su, t, 0.7 * d, step.min(t.tool.lcf)),
-                    "pocket" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
-                    _ => self.feeds_for(su, t, 0.1 * d, step),
+                // `ae` is a clearing op's `stepover` under its cutting-data name; one of them.
+                // Offset clearing (clear, pocket) cuts its stepover wide; the op's nominal
+                // engagement (ae, ap) is used where the user gives none.
+                let stepover = match (a.contains_key("stepover"), ask.ae) {
+                    (true, Some(_)) => return Err(format!("{kind}: give `stepover` or `ae`, not both")),
+                    (true, None) => get_num(a, "stepover", None)?,
+                    (false, Some(ae)) => ae,
+                    (false, None) => 0.4 * d,
                 };
-                let (vf, vp) = match fd {
-                    Some(fe) => (fe.vf, 0.3 * fe.vf),
-                    None => (300.0, 100.0),
+                let nominal = match kind {
+                    "facing" => (0.7 * d, step.min(lcf)),
+                    "clear" | "pocket" => {
+                        ask.ae = Some(stepover);
+                        (stepover, step)
+                    }
+                    _ => (0.1 * d, step),
                 };
-                out.feeds = fd;
+                let rs = self.resolve_for(su, ti, &ask, nominal);
+                let (vf, vp) = match &rs {
+                    Some(r) => (r.feed.v, r.plunge.v),
+                    None => {
+                        self.warnings.push(format!(
+                            "{name}: no cutting data (no speed given, no preset on the tool and no data for the part's group): feeds 300/100 mm/min, unchecked"
+                        ));
+                        (300.0, 100.0)
+                    }
+                };
+                if let Some(r) = &rs {
+                    for c in &r.checks {
+                        if c.verdict == Verdict::Warn {
+                            self.warnings.push(format!("{name}: {} {}", c.what, c.why));
+                        }
+                    }
+                    let mut it = r.checks.iter().filter(|c| c.verdict == Verdict::Fail);
+                    if let Some(c) = it.next() {
+                        out.status = "refused";
+                        out.refusal = Some(format!(
+                            "{} {:.3} {} over the limit {:.3} ({})",
+                            c.what, c.value, c.unit, c.limit, c.why
+                        ));
+                        out.fix = Some(format!(
+                            "lower the {} (`max_power:`/`max_torque:` lower the feed to fit; or a smaller `ap`/`ae`, another tool or machine)",
+                            c.what
+                        ));
+                    }
+                }
+                out.feeds = rs.as_ref().map(|r| r.feeds);
+                out.resolved = rs;
+                if out.status == "refused" {
+                    // as a path refusal: not released, and it cuts nothing from the stock
+                    self.ops.push(out);
+                    return Ok(V::Op(self.ops.len() - 1));
+                }
+                let t = &self.tools[ti];
                 let h = s.heights;
                 match kind {
                     "engrave" => self.engrave(su, a, t, ti, h, (vf, vp), step, false, &mut voids),
@@ -2170,7 +2377,6 @@ impl Cam {
                             loops.push(l.reversed());
                         }
                         let rg = Region { loops };
-                        let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                         let p = ops::pocket(
                             &rg,
                             ops::Cut {
@@ -2263,7 +2469,6 @@ impl Cam {
                             let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                                 .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
                             let pockets = pockets_of(&sec)?;
-                            let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                             let leave = get_num(a, "leave", Some(0.0))?;
                             let mut paths = vec![];
                             for rg in pockets {
@@ -2310,7 +2515,6 @@ impl Cam {
                                     "the hole `{hn}` is not drilled along −z: it needs its own setup"
                                 ));
                             }
-                            let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                             let mut paths = vec![];
                             for p in &hole.places {
                                 let r = 0.5 * hole.d;
@@ -3619,6 +3823,7 @@ impl Cam {
                         ("torque_nm", n(f.torque)),
                     ])
                 });
+                let feeds_speeds = o.resolved.as_ref().map(feeds_speeds_json);
                 let checks: Vec<Json> = o
                     .checks
                     .iter()
@@ -3678,6 +3883,7 @@ impl Cam {
                         Json::Arr(o.removals.iter().map(|s| Json::Str(s.clone())).collect()),
                     ),
                     ("feeds", feeds.unwrap_or(Json::Null)),
+                    ("feeds_speeds", feeds_speeds.unwrap_or(Json::Null)),
                     (
                         "path",
                         Json::obj(vec![

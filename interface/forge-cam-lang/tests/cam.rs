@@ -784,17 +784,35 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
         cam.errors,
         cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
     );
-    // a feed limit under the profile's feed: refused by the posted F, with the limit
+    // a feed limit under the profile's cutting data: the resolved feed is clamped to the
+    // machine and says so (forge_tooling::resolve), and the posted F passes the runtime check
     machine("[100, 12000]", "1000");
     let cam = forge_cam_lang::run(&src, &dir);
-    assert!(!cam.ok && cam.program_text().is_none());
-    let c = cam
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let clamped: Vec<_> = cam
         .ops
         .iter()
-        .flat_map(|o| o.checks.iter())
-        .find(|c| c.rule == "machine_limit")
-        .expect("a feed over the limit");
-    assert!(c.value > 1000.0 && c.limit == 1000.0, "{c:?}");
+        .filter_map(|o| o.resolved.as_ref())
+        .filter(|r| r.feed.source == forge_tooling::resolve::Source::MachineClamped)
+        .collect();
+    assert!(!clamped.is_empty());
+    for r in clamped {
+        assert!(
+            r.feed.v < 1000.0 && r.feed.note.contains("at most 1000"),
+            "{:?}",
+            r.feed
+        );
+    }
+    assert!(
+        cam.warnings.iter().any(|w| w.contains("feed clamped")),
+        "{:?}",
+        cam.warnings
+    );
     // a material group with no cutting data: the ops fall back to S3000, under this
     // spindle's least speed: refused by the posted S
     machine("[5000, 24000]", "10000");
@@ -878,4 +896,93 @@ fn cycle_time_counts_arcs() {
         );
     }
     assert!(arcs_seen > 0);
+}
+
+/// Feeds and speeds are op (and tool) params, resolved in layers with a source per value
+/// (forge_tooling::resolve): the tool's `rpm:` under the op's, the op's `fz:` used as given, the
+/// group's chip otherwise; a user power limit lowers the feed only; a cut over the spindle's
+/// power at its rpm is refused, with the numbers.
+#[test]
+fn feeds_and_speeds_are_params() {
+    use forge_tooling::resolve::{Source, Verdict};
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace(
+            "t1   = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")",
+            "t1   = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\", rpm: 9000)",
+        )
+        .replace(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)",
+            "skim = facing(op1, tool: t1, to: 18, step: 1, fz: 0.05, plunge_feed: 200)",
+        )
+        .replace(
+            "prof = contour(op1, tool: t1, side: \"outside\", from: 12, to: -0.5, step: 4)",
+            "prof = contour(op1, tool: t1, side: \"outside\", from: 12, to: -0.5, step: 4, rpm: 11000, ae: 2, max_power: 0.2)",
+        );
+    let cam = forge_cam_lang::run(&src, &dir);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+    );
+    let op = |n: &str| {
+        cam.ops
+            .iter()
+            .find(|o| o.name == n)
+            .unwrap()
+            .resolved
+            .clone()
+            .unwrap()
+    };
+    let skim = op("skim");
+    assert_eq!((skim.rpm.v, skim.rpm.source), (9000.0, Source::User));
+    assert_eq!((skim.fz.v, skim.fz.source), (0.05, Source::User));
+    assert_eq!(
+        (skim.feed.v, skim.feed.source),
+        (0.05 * 9000.0 * 3.0, Source::User)
+    );
+    assert_eq!((skim.plunge.v, skim.plunge.source), (200.0, Source::User));
+    assert_eq!((skim.ap.v, skim.ap.source), (1.0, Source::User));
+    let top = op("top");
+    assert_eq!((top.ae.v, top.ae.source), (4.0, Source::User));
+    assert_eq!(top.chip.source, Source::Material);
+    assert!((top.feeds.hex - top.chip.v).abs() < 1e-12);
+    let prof = op("prof");
+    assert_eq!((prof.rpm.v, prof.rpm.source), (11000.0, Source::User));
+    assert_eq!(prof.feed.source, Source::Limited);
+    assert!((prof.feeds.power - 0.2).abs() < 1e-9 && (prof.ae.v, prof.ap.v) == (2.0, 4.0));
+    let json = cam.json().to_string();
+    assert!(
+        json.contains("\"feeds_speeds\"") && json.contains("\"source\":\"limited\""),
+        "{json}"
+    );
+
+    // a machine whose spindle gives 0.1 kW at most: the profile at 11,000 rpm is refused
+    let tmp = forge_dirs::temp_dir().join(format!("forge-cam-feeds-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(tmp.join("cam")).unwrap();
+    std::fs::copy(dir.join("flange.fg"), tmp.join("flange.fg")).unwrap();
+    let m = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-tooling/data/machines.toml"),
+    )
+    .unwrap();
+    let vmc = m.split("[[machine]]").nth(1).unwrap();
+    let curve = vmc.lines().find(|l| l.starts_with("curve_kw")).unwrap();
+    let rec = vmc
+        .replace("\"generic-vmc3\"", "\"weak-vmc\"")
+        .replace(curve, "curve_kw = [0.1, 0.1, 0.1]");
+    std::fs::write(tmp.join("cam/weak.toml"), format!("[[machine]]{rec}")).unwrap();
+    let cam = forge_cam_lang::run(&src.replace("generic-vmc3", "weak-vmc"), &tmp);
+    let prof = cam.ops.iter().find(|o| o.name == "prof").unwrap();
+    assert_eq!(prof.status, "refused");
+    assert!(
+        prof.refusal.as_deref().unwrap().starts_with("power"),
+        "{:?}",
+        prof.refusal
+    );
+    let r = prof.resolved.as_ref().unwrap();
+    let p = r.checks.iter().find(|c| c.what == "power").unwrap();
+    assert_eq!((p.verdict, p.limit), (Verdict::Fail, 0.1));
+    std::fs::remove_dir_all(&tmp).ok();
 }
