@@ -1098,7 +1098,7 @@ impl Body {
     /// a corner runs counterclockwise from a leaving edge to the next arriving one. Edges are
     /// ordered as they stand a vertex tolerance out along each (to second order: a line and a circle
     /// tangent to it leave in one direction and part by their curvature).
-    fn corners(&self, f: FaceId, v: VertexId) -> Vec<(CoedgeId, CoedgeId)> {
+    pub(crate) fn corners(&self, f: FaceId, v: VertexId) -> Vec<(CoedgeId, CoedgeId)> {
         let at = self.vertex(v);
         let uses: Vec<CoedgeId> = self
             .face(f)
