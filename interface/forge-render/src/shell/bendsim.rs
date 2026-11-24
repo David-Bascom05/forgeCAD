@@ -1688,7 +1688,6 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
     flat
 }
 
-/// The timeline: every step a block, its stages marked; drag to scrub.
 /// A transport button: its icon, its name and key on hover.
 fn transport(ui: &mut egui::Ui, icon: &str, tip: &str) -> egui::Response {
     let (r, resp) = ui.allocate_exact_size(egui::vec2(28.0, 24.0), egui::Sense::click());
@@ -1747,7 +1746,74 @@ fn transport(ui: &mut egui::Ui, icon: &str, tip: &str) -> egui::Response {
     resp.on_hover_text(tip)
 }
 
-pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
+/// Follow bend, See through and its opacity: listed right to left at the bar's end, or left to
+/// right on a row of their own.
+fn view_settings(ui: &mut egui::Ui, st: &mut BendSimUi, rtl: bool) {
+    ui.spacing_mut().item_spacing.x = 8.0;
+    let ink = egui::Color32::from_gray(230);
+    let follow = |ui: &mut egui::Ui, st: &mut BendSimUi| {
+        if ui
+            .checkbox(&mut st.follow, egui::RichText::new("Follow bend").color(ink))
+            .on_hover_text("frame each new bend; off, the view stays where you put it")
+            .changed()
+            && st.follow
+        {
+            st.frame = Some(Framing::Work);
+        }
+    };
+    let see = |ui: &mut egui::Ui, st: &mut BendSimUi| {
+        ui.checkbox(&mut st.see_through, egui::RichText::new("See through").color(ink))
+            .on_hover_text(
+                "what stands between you and the bend being made is drawn faint; a collision stays solid red",
+            );
+    };
+    let opacity = |ui: &mut egui::Ui, st: &mut BendSimUi| {
+        if st.see_through {
+            ui.add(
+                egui::Slider::new(&mut st.opacity, 0.05..=0.8)
+                    .show_value(false)
+                    .text(egui::RichText::new("opacity").color(egui::Color32::from_gray(200))),
+            )
+            .on_hover_text("how much of what is seen through still shows");
+        }
+    };
+    if rtl {
+        opacity(ui, st);
+        see(ui, st);
+        follow(ui, st);
+    } else {
+        follow(ui, st);
+        see(ui, st);
+        opacity(ui, st);
+    }
+}
+
+/// How much room the play bar has: the view's width decides (STANDARD.md §5: nothing drawn
+/// over anything).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bar {
+    /// All on one row.
+    Wide,
+    /// The view's settings on a row of their own.
+    Narrow,
+    /// Icons, "1/2 · gauge", and the view's settings in a View menu.
+    Compact,
+}
+
+impl Bar {
+    pub fn for_width(w: f32) -> Bar {
+        if w < 560.0 {
+            Bar::Compact
+        } else if w < 900.0 {
+            Bar::Narrow
+        } else {
+            Bar::Wide
+        }
+    }
+}
+
+/// The timeline: every step a block, its stages named in it; drag to scrub.
+pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi, bar: Bar) {
     let n = st.steps();
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
@@ -1771,50 +1837,44 @@ pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
         if transport(ui, "last", "Last bend (End)").clicked() && n > 0 {
             st.go(n - 1);
         }
-        ui.add_space(10.0);
+        ui.add_space(if bar == Bar::Compact { 6.0 } else { 10.0 });
         let (stage, _) = stage_at(st.t);
         let pose = st.pose();
-        ui.label(
-            egui::RichText::new(format!(
+        let words = match bar {
+            Bar::Compact => format!("{}/{} · {}", st.step + 1, n, stage.word()),
+            _ => format!(
                 "Bend {} of {} · {}{}",
                 st.step + 1,
                 n,
                 stage.word(),
                 pose.map_or(String::new(), |p| format!(" · {:.1}°", p.phi.to_degrees()))
-            ))
-            .color(egui::Color32::from_gray(230)),
-        );
-        // the view's own settings, at its foot: follow the bend, see through what hides it
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.spacing_mut().item_spacing.x = 8.0;
-            if st.see_through {
-                ui.add(
-                    egui::Slider::new(&mut st.opacity, 0.05..=0.8)
-                        .show_value(false)
-                        .text(egui::RichText::new("opacity").color(egui::Color32::from_gray(200))),
-                )
-                .on_hover_text("how much of what is seen through still shows");
+            ),
+        };
+        ui.label(egui::RichText::new(words).color(egui::Color32::from_gray(230)));
+        // the view's own settings, at its foot: follow the bend, see through what hides it (on a
+        // row of their own when the view is narrow; in a menu when it is narrower still)
+        match bar {
+            Bar::Wide => {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    view_settings(ui, st, true);
+                });
             }
-            ui.checkbox(
-                &mut st.see_through,
-                egui::RichText::new("See through").color(egui::Color32::from_gray(230)),
-            )
-            .on_hover_text(
-                "what stands between you and the bend being made is drawn faint; a collision stays solid red",
-            );
-            if ui
-                .checkbox(
-                    &mut st.follow,
-                    egui::RichText::new("Follow bend").color(egui::Color32::from_gray(230)),
-                )
-                .on_hover_text("frame each new bend; off, the view stays where you put it")
-                .changed()
-                && st.follow
-            {
-                st.frame = Some(Framing::Work);
+            Bar::Compact => {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.menu_button(
+                        egui::RichText::new("View").color(egui::Color32::from_gray(230)),
+                        |ui| {
+                            ui.vertical(|ui| view_settings(ui, st, false));
+                        },
+                    );
+                });
             }
-        });
+            Bar::Narrow => {}
+        }
     });
+    if bar == Bar::Narrow {
+        ui.horizontal(|ui| view_settings(ui, st, false));
+    }
     let w = ui.available_width().max(100.0);
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 34.0), egui::Sense::click_and_drag());
     let p = ui.painter_at(rect);

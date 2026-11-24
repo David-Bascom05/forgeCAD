@@ -356,8 +356,14 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
             }
         }
     }
+    // a narrow view: the view's settings on a row of their own, the bar taller for it
+    let bar = super::bendsim::Bar::for_width(view.width());
+    let narrow = bar == super::bendsim::Bar::Narrow;
     let band = Rect::from_min_max(
-        egui::pos2(view.left() + 12.0, view.bottom() - 74.0),
+        egui::pos2(
+            view.left() + 12.0,
+            view.bottom() - if narrow { 104.0 } else { 74.0 },
+        ),
         egui::pos2(view.right() - 12.0, view.bottom() - 8.0),
     );
     egui::Area::new(egui::Id::unique("env-bendsim-timeline"))
@@ -370,7 +376,7 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
                 .inner_margin(6.0)
                 .show(ui, |ui| {
                     ui.set_width(band.width() - 12.0);
-                    super::bendsim::timeline_ui(ui, b);
+                    super::bendsim::timeline_ui(ui, b, bar);
                 });
         });
     s.places.push(("env:bendsim:view".into(), view));
@@ -469,11 +475,14 @@ pub(super) fn duration(s: &Shell) -> f64 {
         .map_or(0.0, |b| b.steps() as f64 * super::bendsim::STEP_SECONDS)
 }
 
-/// The simulation put at `t` seconds into the program: its step and instant, play stopped. The
-/// instant's pose (ram, sheet, backgauge) is a function of these alone: no clock is read.
+/// The simulation put at `t` seconds into the program: its step and instant, play stopped, Follow
+/// bend on (a recording frames each bend and keeps the handling in view). The instant's pose
+/// (ram, sheet, backgauge) is a function of these alone: no clock is read.
 pub(super) fn seek(s: &mut Shell, t: f64) {
     if let Some(b) = s.sheet.bend_sim.as_deref_mut() {
         b.playing = false;
+        // a recording follows the bends: each framed on its station, the handling kept in view
+        b.follow = true;
         b.set_position(t.max(0.0) / super::bendsim::STEP_SECONDS);
     }
 }
@@ -519,6 +528,7 @@ mod timeline_tests {
         let b = s.sheet.bend_sim.as_ref().unwrap();
         assert_eq!(b.step, 1);
         assert!((b.t - 0.6).abs() < 1e-9 && !b.playing);
+        assert!(b.follow, "a recording follows the bends");
         let pose = b.pose().unwrap();
         seek(&mut s, 0.0);
         seek(&mut s, t);
