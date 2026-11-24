@@ -92,7 +92,9 @@ fn a_saved_conversation_keeps_its_turns_and_diff_cards() {
         e => panic!("{e:?}"),
     }
     // too large to keep: said as a note, with no Undo to offer
-    assert!(matches!(&back.entries[2], Entry::Note { text, .. } if text.contains("too large to undo")));
+    assert!(
+        matches!(&back.entries[2], Entry::Note { text, .. } if text == "Changed huge.fg (+1 −1) · too large to undo after a resume")
+    );
     let f = &back.turns[0].files[0];
     assert_eq!(
         (f.before.as_deref(), f.after.as_str()),
@@ -196,6 +198,20 @@ fn after_a_restart_the_last_chat_is_back_and_its_undo_works_while_the_file_is_as
         let png = h.png().unwrap();
         std::fs::write(Path::new(&shots).join("history-1400-dark-reopened.png"), png).unwrap();
     }
+    // where it was resumed: a divider saying when it was from, not a note saved with it
+    let (at, said) = h.gui.shell.agent.resumed.clone().unwrap();
+    assert_eq!(at, h.gui.shell.agent.entries.len());
+    assert_eq!(said, "Resumed · just now");
+    assert!(h.gui.shell.place("agent:resumed:new").is_some());
+    assert!(
+        !h.gui
+            .shell
+            .agent
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::Note { .. })),
+        "no note"
+    );
     assert!(h.gui.shell.place("agent:undo:0:0").is_some(), "with its Undo");
     assert!(h.click("agent:undo:0:0"));
     h.step();
@@ -224,5 +240,10 @@ fn after_a_restart_the_last_chat_is_back_and_its_undo_works_while_the_file_is_as
             .contains("sk1.w3 = 90"),
         "nothing lost"
     );
+    // its New chat: a fresh one, the old one kept in Chats
+    assert!(h.click("agent:resumed:new"));
+    h.step();
+    assert!(h.gui.shell.agent.entries.is_empty());
+    assert_eq!(h.gui.shell.agent.resumed, None);
     let _ = std::fs::remove_dir_all(dir);
 }

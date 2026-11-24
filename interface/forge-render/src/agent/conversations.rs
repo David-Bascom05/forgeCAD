@@ -327,7 +327,7 @@ fn with_diffs(mut c: Conversation) -> Conversation {
             None => {
                 *e = Entry::Note {
                     text: format!(
-                        "{} {file} (+{added}/−{removed}): too large to undo after a resume",
+                        "{} {file} (+{added} −{removed}) · too large to undo after a resume",
                         if *created { "Created" } else { "Changed" }
                     ),
                     error: false,

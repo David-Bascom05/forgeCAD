@@ -37,17 +37,75 @@ fn a_turns_end_says_what_it_took_and_a_limit_is_said() {
         }
     ));
     // allowed: nothing said; reached: said, with when it resets
-    assert!(
-        p.line(r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":0}}"#)
-            .is_empty()
+    assert_eq!(
+        p.line(r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":0}}"#),
+        [Event::Limit {
+            reached: false,
+            close: false,
+            resets: Some(0.0)
+        }]
     );
-    let later = forge_history::now() + 3 * 3600 + 60;
-    let evs = p.line(&format!(
-        r#"{{"type":"rate_limit_event","rate_limit_info":{{"status":"rejected","resetsAt":{later}}}}}"#
-    ));
-    assert!(
-        matches!(&evs[..], [Event::Note { text, error: true }] if text == "Your Claude plan's limit: reached; it resets in about 3 hours"),
-        "{evs:?}"
+    let evs =
+        p.line(r#"{"type":"rate_limit_event","rate_limit_info":{"status":"rejected","resetsAt":5000}}"#);
+    assert_eq!(
+        evs,
+        [Event::Limit {
+            reached: true,
+            close: false,
+            resets: Some(5000.0)
+        }]
+    );
+    let evs = p.line(r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning"}}"#);
+    assert_eq!(
+        evs,
+        [Event::Limit {
+            reached: false,
+            close: true,
+            resets: None
+        }]
+    );
+    // in words, said under the last turn: when it resets, under a day in hours and minutes
+    use forge_render::shell::agent::limit_words;
+    assert_eq!(
+        limit_words(true, Some(1000.0 + 3.0 * 3600.0 + 1200.0), 1000.0),
+        "Plan limit reached · resets in 3 h 20 min"
+    );
+    assert_eq!(
+        limit_words(true, Some(1000.0 + 7200.0), 1000.0),
+        "Plan limit reached · resets in 2 h"
+    );
+    assert_eq!(
+        limit_words(false, Some(1000.0 + 600.0), 1000.0),
+        "Close to your plan's limit · resets in 10 min"
+    );
+    assert_eq!(
+        limit_words(false, Some(1000.0 + 3.0 * 86400.0), 1000.0),
+        "Close to your plan's limit · resets in 3 days"
+    );
+    assert_eq!(limit_words(true, None, 0.0), "Plan limit reached");
+    // the tab: amber when reached, gone when allowed again
+    let mut tab = forge_render::shell::agent::AgentTab::default();
+    tab.take(Event::Limit {
+        reached: true,
+        close: false,
+        resets: None,
+    });
+    assert_eq!(tab.limit, Some((true, None)));
+    tab.take(Event::Limit {
+        reached: false,
+        close: false,
+        resets: None,
+    });
+    assert_eq!(tab.limit, None);
+    // a turn's cost only when paid per token
+    assert_eq!(
+        p.line(r#"{"type":"system","subtype":"init","session_id":"s","model":"m","apiKeySource":"none"}"#)
+            .last(),
+        Some(&Event::ApiKeyed(false))
+    );
+    assert_eq!(
+        p.line(r#"{"type":"system","subtype":"init","session_id":"s","model":"m","apiKeySource":"ANTHROPIC_API_KEY"}"#).last(),
+        Some(&Event::ApiKeyed(true))
     );
 }
 
@@ -106,8 +164,9 @@ fn up_brings_back_what_was_sent_and_the_turn_says_what_it_took() {
     if let Ok(shots) = std::env::var("FORGE_UI_SHOTS") {
         // a reply with Markdown, for the picture
         h.gui.shell.agent.entries.push(forge_render::shell::agent::Entry::Agent {
-            text: "## What changed\n- **extrude1** depth from 12 to 14 mm\n- `fillet1` kept at 2 mm\n> The part builds: 0 errors.\n\n| feature | value |\n|---|---|\n| d | 14 mm |".into(),
+            text: "## What changed\n- **extrude1** depth from 12 to 14 mm\n- `fillet1` kept at 2 mm\n> The part builds: 0 errors.\n\n| feature | value | was | drives |\n|---|--:|--:|---|\n| `extrude1.d` | 14 mm | 12 mm | the plate's thickness, and the holes' depth |\n| `fillet1.r` | 2 mm | 2 mm | the top edges |".into(),
         });
+        h.gui.shell.agent.limit = Some((true, Some(forge_history::now() as f64 + 3.0 * 3600.0 + 1200.0)));
         for _ in 0..12 {
             h.step();
         }
@@ -115,6 +174,7 @@ fn up_brings_back_what_was_sent_and_the_turn_says_what_it_took() {
         let png = h.png().unwrap();
         std::fs::write(Path::new(&shots).join("polish2-1400-dark-markdown-usage.png"), png).unwrap();
         h.gui.shell.agent.entries.pop();
+        h.gui.shell.agent.limit = None;
     }
     // ↑ ↑ ↓ ↓ in the empty box
     let input = |h: &forge_render::gui::Headless| h.gui.shell.agent.input.clone();

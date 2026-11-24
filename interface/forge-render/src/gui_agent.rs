@@ -644,15 +644,16 @@ impl Gui {
         self.agent.session = Some(std::sync::Arc::new(std::sync::Mutex::new(chat.session.clone())));
         self.agent.endpoint_history = Some(std::sync::Arc::new(std::sync::Mutex::new(chat.history.clone())));
         self.agent.resumed = true;
-        self.shell.agent.take(Event::Note {
-            text: if interrupted {
-                "Resumed an interrupted conversation. Project files are unchanged by resuming."
+        // a divider, not a note: said once, wherever it was resumed, and not saved with the chat
+        let when = crate::shell::agent::ago(chat.updated);
+        self.shell.agent.resumed = Some((
+            self.shell.agent.entries.len(),
+            if interrupted {
+                format!("Resumed · {when} · it stopped mid-turn")
             } else {
-                "Resumed conversation. Its changes still undo while their files are as it left them; + starts a new conversation."
-            }
-            .into(),
-            error: false,
-        });
+                format!("Resumed · {when}")
+            },
+        ));
         self.agent.chat = Some(chat);
         self.agent_capture_conversation(true);
     }

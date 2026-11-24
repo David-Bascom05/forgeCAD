@@ -70,6 +70,15 @@ pub enum Event {
     Mode(String),
     /// The slash commands the backend takes in a message (Claude Code's `init` says them).
     Commands(Vec<String>),
+    /// Signed in with an API key (paid per token), or not (a Claude plan).
+    ApiKeyed(bool),
+    /// The plan's limit: reached, or close to it (else neither: allowed), and when it resets
+    /// (seconds since the epoch).
+    Limit {
+        reached: bool,
+        close: bool,
+        resets: Option<f64>,
+    },
     /// What a turn took: seconds, tokens in and out, and what the API would charge for them.
     Usage {
         secs: f64,
@@ -320,6 +329,15 @@ pub struct AgentTab {
     /// The mode the person's own settings gave the chat at its start, when the tab has no name
     /// for it (a bypass, `auto`): the mode menu offers it back after another is chosen.
     pub own_mode: Option<String>,
+    /// A chat brought back: where it was resumed (the entries before it are the old ones) and
+    /// what the divider there says ("Resumed · 2 h ago").
+    pub resumed: Option<(usize, String)>,
+    /// Paid per token (an API key): a turn's cost is said. A plan's turns aren't charged.
+    pub api_keyed: bool,
+    /// `/new` just started this chat: the empty chat says where the last one went.
+    pub started_new: bool,
+    /// The plan's limit, when it's reached or close: (reached, when it resets).
+    pub limit: Option<(bool, Option<f64>)>,
     /// A selection the person took off the next message (its chip's ×): not suggested again
     /// until something else is selected.
     pub dismissed: Option<String>,
@@ -333,12 +351,14 @@ pub struct AgentTab {
 }
 
 /// One thing `@` can name: what goes in the message, and what it is.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Candidate {
     pub name: String,
     pub what: String,
     /// More, on the row's hover: what a param drives.
     pub tip: String,
+    /// Whose command it is (`/`'s list): "app", "Claude Code" or "skill"; empty for `@`'s.
+    pub source: &'static str,
 }
 
 /// The `@` list: the word typed after `@`, what matches it, and the one Enter takes.
@@ -382,8 +402,8 @@ fn backend_says(name: &str) -> String {
         "effort" => "How hard the model thinks".into(),
         "review" | "code-review" => "Review the changes".into(),
         "security-review" => "Review the changes for security".into(),
-        n if n.contains(':') => "Skill (Claude Code)".into(),
-        _ => "Claude Code".into(),
+        n if n.contains(':') => "A skill".into(),
+        _ => String::new(),
     }
 }
 
@@ -395,6 +415,7 @@ pub fn command_candidates(backend: &[String]) -> Vec<Candidate> {
             name: n.to_string(),
             what: w.to_string(),
             tip: String::new(),
+            source: "app",
         })
         .collect();
     for n in backend {
@@ -405,6 +426,7 @@ pub fn command_candidates(backend: &[String]) -> Vec<Candidate> {
             name: n.clone(),
             what: backend_says(n),
             tip: String::new(),
+            source: if n.contains(':') { "skill" } else { "Claude Code" },
         });
     }
     all
@@ -536,6 +558,14 @@ impl AgentTab {
                 state: Asked::Waiting,
             }),
             Event::Commands(c) => self.commands = c,
+            Event::ApiKeyed(k) => self.api_keyed = k,
+            Event::Limit {
+                reached,
+                close,
+                resets,
+            } => {
+                self.limit = (reached || close).then_some((reached, resets));
+            }
             Event::Usage {
                 secs,
                 tokens_in,
@@ -648,9 +678,12 @@ impl AgentTab {
             return;
         }
         if !self.running {
-            if text == "/clear" {
+            if text == "/clear" || text == "/new" {
                 self.input.clear();
+                let had = !self.entries.is_empty();
                 self.new_chat();
+                // said in the empty chat, not kept in it
+                self.started_new = had;
                 return;
             }
             if text == "/model" {
@@ -665,18 +698,15 @@ impl AgentTab {
             }
             if text == "/help" {
                 self.input.clear();
-                let mut said: Vec<String> = COMMANDS.iter().map(|(n, w)| format!("/{n}: {w}")).collect();
-                if !self.commands.is_empty() {
-                    said.push(format!(
-                        "And Claude Code's own: {}",
-                        self.commands
-                            .iter()
-                            .filter(|c| !c.starts_with("__"))
-                            .map(|c| format!("/{c}"))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    ));
-                }
+                // one row a command, whose it is when it isn't the app's
+                let said: Vec<String> = command_candidates(&self.commands)
+                    .iter()
+                    .map(|c| match (c.source, c.what.as_str()) {
+                        ("app", w) => format!("/{} · {w}", c.name),
+                        (s, "") => format!("/{} · {s}", c.name),
+                        (s, w) => format!("/{} · {w} · {s}", c.name),
+                    })
+                    .collect();
                 self.entries.push(Entry::Note {
                     text: said.join("\n"),
                     error: false,
@@ -691,11 +721,6 @@ impl AgentTab {
             if let Some(id) = text.strip_prefix("/resume ") {
                 self.input.clear();
                 self.out.push(AgentAct::ResumeConversation(id.trim().into()));
-                return;
-            }
-            if text == "/new" {
-                self.input.clear();
-                self.new_chat();
                 return;
             }
         }
@@ -713,6 +738,7 @@ impl AgentTab {
             self.refs.push(s);
         }
         let refs = std::mem::take(&mut self.refs);
+        self.started_new = false;
         self.entries.push(Entry::User {
             text: text.clone(),
             refs: refs.clone(),
@@ -738,6 +764,7 @@ impl AgentTab {
     pub fn restore_entries(&mut self, entries: Vec<Entry>) {
         self.cancel_dictation();
         self.entries = entries;
+        self.started_new = false;
         self.input.clear();
         self.refs.clear();
         self.thumbs.clear();
@@ -757,6 +784,7 @@ impl AgentTab {
         }
         self.cancel_dictation();
         self.entries.clear();
+        self.started_new = false;
         self.thumbs.clear();
         self.markup.shown = None;
         self.refs.clear();
@@ -767,6 +795,8 @@ impl AgentTab {
         self.mode_chosen = false;
         self.mode_other = None;
         self.own_mode = None;
+        self.resumed = None;
+        self.limit = None;
         self.out.push(AgentAct::NewChat);
     }
 
@@ -1341,6 +1371,91 @@ fn segments(text: &str) -> Vec<(bool, &str)> {
     out
 }
 
+/// Prose cut into its Markdown tables (runs of `|` lines) and the rest: (is a table, the run).
+fn tables(text: &str) -> Vec<(bool, &str)> {
+    let mut out: Vec<(bool, &str)> = Vec::new();
+    let mut start = 0;
+    let mut kind = None;
+    let mut at = 0;
+    for line in text.split_inclusive('\n') {
+        let is = line.trim_start().starts_with('|');
+        if kind.is_some_and(|k| k != is) {
+            let run = text[start..at].trim_matches('\n');
+            if !run.trim().is_empty() {
+                out.push((kind.unwrap(), run));
+            }
+            start = at;
+        }
+        kind = Some(is);
+        at += line.len();
+    }
+    if let Some(k) = kind {
+        let run = text[start..].trim_matches('\n');
+        if !run.trim().is_empty() {
+            out.push((k, run));
+        }
+    }
+    out
+}
+
+/// A Markdown table's cells, row by row, its rule (`|---|:--|`) left out.
+fn table_cells(run: &str) -> Vec<Vec<&str>> {
+    run.lines()
+        .map(str::trim)
+        .filter(|l| !l.chars().all(|c| "|-: ".contains(c)))
+        .map(|l| {
+            let l = l.strip_prefix('|').unwrap_or(l);
+            let l = l.strip_suffix('|').unwrap_or(l);
+            l.split('|').map(str::trim).collect()
+        })
+        .collect()
+}
+
+/// A Markdown table as a grid: its header in the bold face, rows striped, sideways scroll when
+/// it's wider than the panel.
+fn table_grid(
+    ui: &mut Ui,
+    t: &Theme,
+    run: &str,
+    inner: f32,
+    code_ink: Color32,
+    id: impl std::hash::Hash + std::fmt::Debug + Copy,
+) {
+    let rows = table_cells(run);
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        ui.add_space(PAD);
+        egui::ScrollArea::horizontal()
+            .id_salt(id)
+            .max_width(inner)
+            .auto_shrink([true, true])
+            .show(ui, |ui| {
+                egui::Grid::new(id)
+                    .striped(true)
+                    .spacing(vec2(14.0, 4.0))
+                    .show(ui, |ui| {
+                        for (n, row) in rows.iter().enumerate() {
+                            let font = if n == 0 { semi(12.0) } else { sans(12.0) };
+                            for cell in row {
+                                let mut job = LayoutJob::default();
+                                let base = TextFormat {
+                                    font_id: font.clone(),
+                                    color: t.ink,
+                                    ..Default::default()
+                                };
+                                for (s, f) in inline(cell, base, code_ink) {
+                                    job.append(&s, 0.0, f);
+                                }
+                                ui.add(egui::Label::new(job).selectable(true).extend());
+                            }
+                            ui.end_row();
+                        }
+                    });
+            });
+    });
+    ui.add_space(4.0);
+}
+
 /// Laid-out text put where it goes, selectable: a drag across messages, a double click on a
 /// word, Ctrl+C.
 fn selectable(ui: &mut Ui, at: egui::Pos2, g: std::sync::Arc<egui::Galley>) {
@@ -1756,16 +1871,7 @@ impl Shell {
                             {
                                 continue;
                             }
-                            let age = (forge_history::now() as u64).saturating_sub(chat.updated);
-                            let age = if age < 60 {
-                                "just now".into()
-                            } else if age < 3600 {
-                                format!("{} min ago", age / 60)
-                            } else if age < 86400 {
-                                format!("{} h ago", age / 3600)
-                            } else {
-                                format!("{} days ago", age / 86400)
-                            };
+                            let age = ago(chat.updated);
                             let button = ui.add_sized(
                                 vec2(ui.available_width(), 48.0),
                                 egui::Button::new(format!("{}\n{} · {}", chat.title, chat.backend, age)),
@@ -1925,6 +2031,7 @@ impl Shell {
             })
             .collect();
         let a = &self.agent;
+        let mut fresh = false;
         let shown = egui::ScrollArea::vertical()
             .id_salt("agent-chat")
             .auto_shrink([false, false])
@@ -1952,11 +2059,23 @@ impl Shell {
                         }
                         _ => "Ask about this project, organize its folders, or create your first part".into(),
                     };
+                    if a.started_new {
+                        let g =
+                            ui.fonts_mut(|f| f.layout_job(plain_job(STARTED_NEW, sans(12.0), t.ink2, inner)));
+                        let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 10.0), Sense::hover());
+                        ui.painter().galley(pos2(PAD, r.top() + 8.0), g, t.ink2);
+                        places.push(("agent:started-new".into(), r));
+                    }
                     let g = ui.fonts_mut(|f| f.layout_job(plain_job(&what, sans(13.0), t.ink2, inner)));
                     let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 16.0), Sense::hover());
                     ui.painter().galley(pos2(PAD, r.top() + 8.0), g, t.ink2);
                 }
                 for (k, e) in a.entries.iter().enumerate() {
+                    if let Some((at, said)) = &a.resumed
+                        && *at == k
+                    {
+                        fresh |= resumed_divider(ui, &t, w, said, &mut places);
+                    }
                     match e {
                         Entry::User { text, refs, markup } => {
                             ui.add_space(6.0);
@@ -2032,11 +2151,24 @@ impl Shell {
                             let top = ui.cursor().top();
                             for (j, (code, part)) in segments(text).into_iter().enumerate() {
                                 if !code {
-                                    let g =
-                                        ui.fonts_mut(|f| f.layout_job(rich(part, inner, t.ink, code_ink)));
-                                    let (r, _) =
-                                        ui.allocate_exact_size(vec2(w, g.size().y + 10.0), Sense::hover());
-                                    selectable(ui, pos2(PAD, r.top() + 5.0), g);
+                                    for (n, (table, run)) in tables(part).into_iter().enumerate() {
+                                        if table {
+                                            table_grid(
+                                                ui,
+                                                &t,
+                                                run,
+                                                inner,
+                                                code_ink,
+                                                ("agent-table", k, j, n),
+                                            );
+                                            continue;
+                                        }
+                                        let g =
+                                            ui.fonts_mut(|f| f.layout_job(rich(run, inner, t.ink, code_ink)));
+                                        let (r, _) = ui
+                                            .allocate_exact_size(vec2(w, g.size().y + 10.0), Sense::hover());
+                                        selectable(ui, pos2(PAD, r.top() + 5.0), g);
+                                    }
                                     continue;
                                 }
                                 // a code block: its own card, a copy button on it
@@ -2162,10 +2294,17 @@ impl Shell {
                                         format!("Show all {n} lines")
                                     };
                                     let (rr, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::click());
-                                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &word));
+                                    resp.widget_info(|| {
+                                        egui::WidgetInfo::labeled(egui::Role::Button, true, &word)
+                                    });
                                     let ink = if resp.hovered() { t.ink } else { t.focus };
-                                    ui.painter()
-                                        .text(pos2(PAD + 6.0, rr.center().y), Align2::LEFT_CENTER, word, sans(11.0), ink);
+                                    ui.painter().text(
+                                        pos2(PAD + 6.0, rr.center().y),
+                                        Align2::LEFT_CENTER,
+                                        word,
+                                        sans(11.0),
+                                        ink,
+                                    );
                                     places.push((format!("agent:tool-all:{id}"), rr));
                                     if resp.clicked() {
                                         toggles.push(format!("all:{id}"));
@@ -2279,6 +2418,14 @@ impl Shell {
                                 Sense::click(),
                             );
                             resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, word));
+                            // from before a resume: it undoes only over what the agent left
+                            let resp = if !*undone && a.resumed.as_ref().is_some_and(|(at, _)| k < *at) {
+                                resp.on_hover_text(format!(
+                                    "Undoes this change while {file} is as the agent left it."
+                                ))
+                            } else {
+                                resp
+                            };
                             p.rect_filled(br, 3.0, if resp.hovered() { t.hover } else { t.raised });
                             p.rect_stroke(br, 3.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
                             p.text(br.center(), Align2::CENTER_CENTER, word, sans(12.0), t.ink);
@@ -2391,6 +2538,11 @@ impl Shell {
                         }
                     }
                 }
+                if let Some((at, said)) = &a.resumed
+                    && *at == a.entries.len()
+                {
+                    fresh |= resumed_divider(ui, &t, w, said, &mut places);
+                }
                 if let Some(dir) = &a.trust_ask {
                     trust_card(ui, &t, dir, w, &mut places);
                 }
@@ -2415,8 +2567,10 @@ impl Shell {
                     // §7's loading state: a spinner and what it's doing
                     let r = ui
                         .scope_builder(
-                            egui::UiBuilder::new()
-                                .max_rect(Rect::from_min_size(pos2(PAD, ui.cursor().top() + 4.0), vec2(w - PAD, 18.0))),
+                            egui::UiBuilder::new().max_rect(Rect::from_min_size(
+                                pos2(PAD, ui.cursor().top() + 4.0),
+                                vec2(w - PAD, 18.0),
+                            )),
                             |ui| super::ux::loading(ui, &t, &said),
                         )
                         .response
@@ -2426,12 +2580,17 @@ impl Shell {
                 } else if let Some((secs, tin, tout, cost)) = a.usage
                     && !a.entries.is_empty()
                 {
-                    // what the last turn took, faint; what the API would charge, on hover
-                    let said = format!("{} · {} tokens in · {} out", duration(secs), thousands(tin), thousands(tout));
-                    let (r, resp) = ui.allocate_exact_size(vec2(w, 18.0), Sense::hover());
-                    resp.on_hover_text(format!(
-                        "What the API would charge for this turn: ${cost:.2}. A Claude plan isn't charged per turn; /usage says where you are in its limits."
-                    ));
+                    // what the last turn took, faint; what it cost, when it's paid per token
+                    let mut said = format!(
+                        "{} · {} tokens in · {} out",
+                        duration(secs),
+                        thousands(tin),
+                        thousands(tout)
+                    );
+                    if a.api_keyed && cost > 0.0 {
+                        said.push_str(&format!(" · ${cost:.2}"));
+                    }
+                    let (r, _) = ui.allocate_exact_size(vec2(w, 18.0), Sense::hover());
                     ui.painter().text(
                         pos2(PAD, r.center().y),
                         Align2::LEFT_CENTER,
@@ -2440,6 +2599,24 @@ impl Shell {
                         t.ink2.gamma_multiply(0.8),
                     );
                     places.push(("agent:usage".into(), r));
+                }
+                // the plan's limit: amber when reached, faint when close
+                if let Some((reached, resets)) = a.limit {
+                    let said = limit_words(reached, resets, forge_history::now() as f64);
+                    let (r, _) = ui.allocate_exact_size(vec2(w, 18.0), Sense::hover());
+                    let ink = if reached {
+                        t.warn
+                    } else {
+                        t.ink2.gamma_multiply(0.8)
+                    };
+                    ui.painter().text(
+                        pos2(PAD, r.center().y),
+                        Align2::LEFT_CENTER,
+                        said,
+                        sans(11.0),
+                        ink,
+                    );
+                    places.push(("agent:limit".into(), r));
                 }
                 ui.add_space(10.0);
                 // "Jump to latest": to the end, where it sticks again
@@ -2559,6 +2736,9 @@ impl Shell {
             }
         }
         self.places.extend(places);
+        if fresh {
+            self.agent.new_chat();
+        }
         for a in acts {
             // the thumbnail again hides its marks
             if let AgentAct::ShowMarkup(k) = a {
@@ -2754,6 +2934,7 @@ impl Shell {
                 name: f.id.clone(),
                 what: f.kind.clone(),
                 tip: String::new(),
+                ..Default::default()
             }));
             all.extend(fg.params.iter().map(|p| {
                 let key = p.key.to_string();
@@ -2768,6 +2949,7 @@ impl Shell {
                     } else {
                         format!("Drives {}", p.used_by.join(", "))
                     },
+                    ..Default::default()
                 }
             }));
         }
@@ -2782,6 +2964,7 @@ impl Shell {
                         name,
                         what: "file".into(),
                         tip: String::new(),
+                        ..Default::default()
                     }),
             );
         }
@@ -3011,7 +3194,12 @@ impl Shell {
                         let name = ui.fonts_mut(|f| {
                             f.layout_no_wrap(format!("{}{}", m.sigil, c.name), mono(12.0), ink)
                         });
-                        let room = (rr.width() - name.size().x - 28.0).max(0.0);
+                        // whose it is, faint, at the right
+                        let tag = (!c.source.is_empty()).then(|| {
+                            ui.fonts_mut(|f| f.layout_no_wrap(c.source.to_string(), sans(10.0), t.ink2))
+                        });
+                        let tag_w = tag.as_ref().map_or(0.0, |g| g.size().x + 10.0);
+                        let room = (rr.width() - name.size().x - 28.0 - tag_w).max(0.0);
                         let mut job = plain_job(&c.what, sans(11.0), t.ink2, room);
                         job.wrap.max_rows = 1;
                         job.wrap.break_anywhere = true;
@@ -3022,10 +3210,18 @@ impl Shell {
                             name,
                             ink,
                         );
+                        if let Some(g) = tag {
+                            let tr = Rect::from_min_size(
+                                pos2(rr.right() - 4.0 - g.size().x - 8.0, rr.center().y - 8.0),
+                                vec2(g.size().x + 8.0, 16.0),
+                            );
+                            p.rect_stroke(tr, 8.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+                            p.galley(pos2(tr.left() + 4.0, tr.center().y - g.size().y * 0.5), g, t.ink2);
+                        }
                         if room > 24.0 {
                             p.galley(
                                 pos2(
-                                    rr.right() - 8.0 - what.size().x,
+                                    rr.right() - 8.0 - tag_w - what.size().x,
                                     rr.center().y - what.size().y * 0.5,
                                 ),
                                 what,
@@ -3395,6 +3591,25 @@ fn down_chevron(p: &egui::Painter, c: egui::Pos2, ink: Color32) {
 }
 
 /// A time as a person reads it: "8 s", "2 min 5 s".
+/// The plan's limit in words: reached or close, and when it resets ("in 3 h 20 min").
+pub fn limit_words(reached: bool, resets: Option<f64>, now: f64) -> String {
+    let what = if reached {
+        "Plan limit reached"
+    } else {
+        "Close to your plan's limit"
+    };
+    let Some(at) = resets else { return what.into() };
+    let mins = ((at - now) / 60.0).ceil().max(0.0) as u64;
+    let when = match mins {
+        0 => return format!("{what} · resets now"),
+        1..60 => format!("{mins} min"),
+        60..1440 if mins.is_multiple_of(60) => format!("{} h", mins / 60),
+        60..1440 => format!("{} h {} min", mins / 60, mins % 60),
+        _ => format!("{} days", mins.div_ceil(1440)),
+    };
+    format!("{what} · resets in {when}")
+}
+
 pub fn duration(secs: f64) -> String {
     let s = secs.max(0.0).round() as u64;
     if s < 60 {
@@ -3499,6 +3714,56 @@ pub fn edited(tool: &str, input: &forge_agent::json::Json, now: &str) -> Option<
         _ => None,
     }
 }
+
+/// How long ago `updated` (seconds since the epoch) was, in words: "just now", "5 min ago".
+pub fn ago(updated: u64) -> String {
+    let age = (forge_history::now() as u64).saturating_sub(updated);
+    if age < 60 {
+        "just now".into()
+    } else if age < 3600 {
+        format!("{} min ago", age / 60)
+    } else if age < 86400 {
+        format!("{} h ago", age / 3600)
+    } else {
+        format!("{} days ago", age / 86400)
+    }
+}
+
+/// The line between a resumed chat's old part and what's said since: when it was from, and a
+/// way to start afresh instead.
+fn resumed_divider(ui: &mut Ui, t: &Theme, w: f32, said: &str, places: &mut Vec<(String, Rect)>) -> bool {
+    let g = ui.fonts_mut(|f| f.layout_no_wrap(said.to_string(), sans(11.0), t.ink2));
+    let new = ui.fonts_mut(|f| f.layout_no_wrap("New chat".to_string(), medium(11.0), t.focus));
+    let (r, _) = ui.allocate_exact_size(vec2(w, 26.0), Sense::hover());
+    let y = r.center().y;
+    let text_l = PAD + 18.0;
+    let p = ui.painter();
+    p.line_segment([pos2(PAD, y), pos2(text_l - 6.0, y)], Stroke::new(1.0, t.line));
+    p.galley(pos2(text_l, y - g.size().y * 0.5), g.clone(), t.ink2);
+    let nr = Rect::from_min_size(
+        pos2(w - PAD - new.size().x - 4.0, y - 9.0),
+        vec2(new.size().x + 4.0, 18.0),
+    );
+    p.line_segment(
+        [pos2(text_l + g.size().x + 6.0, y), pos2(nr.left() - 6.0, y)],
+        Stroke::new(1.0, t.line),
+    );
+    let hit = ui
+        .interact(nr, ui.scope_id().with("agent-resumed-new"), Sense::click())
+        .on_hover_text("Start a new chat; this one stays in Chats");
+    hit.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "New chat"));
+    if hit.hovered() {
+        ui.painter().rect_filled(nr, 4.0, t.hover);
+    }
+    ui.painter()
+        .galley(pos2(nr.left() + 2.0, y - new.size().y * 0.5), new, t.focus);
+    places.push(("agent:resumed".into(), r));
+    places.push(("agent:resumed:new".into(), nr));
+    hit.clicked()
+}
+
+/// What the empty chat says after `/new`.
+pub const STARTED_NEW: &str = "Started a new chat · the last one is in Chats";
 
 /// What starts the page's agent: the command, to copy.
 pub const BRIDGE_COMMAND: &str = "forgecad web . --agent";
@@ -3787,6 +4052,24 @@ mod tests {
         // a table's row whole, in mono: its columns line up
         let t = runs("| a | b |");
         assert_eq!((t.len(), t[0].1.font_id.clone()), (1, mono(12.0)));
+    }
+
+    #[test]
+    fn a_table_is_cut_out_of_its_prose_and_read_as_cells() {
+        let text = "Here:\n| part | d |\n|---|--:|\n| plate | `14` |\nDone.";
+        assert_eq!(
+            tables(text),
+            vec![
+                (false, "Here:"),
+                (true, "| part | d |\n|---|--:|\n| plate | `14` |"),
+                (false, "Done.")
+            ]
+        );
+        assert_eq!(
+            table_cells("| part | d |\n|---|--:|\n| plate | `14` |"),
+            vec![vec!["part", "d"], vec!["plate", "`14`"]]
+        );
+        assert_eq!(tables("plain"), vec![(false, "plain")]);
     }
 
     #[test]

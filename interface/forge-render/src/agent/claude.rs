@@ -128,6 +128,11 @@ impl Parser {
                 if !commands.is_empty() {
                     out.push(Event::Commands(commands));
                 }
+                // paid per token (an API key) or a plan ("none": signed in): a turn's cost is said
+                // only for the first
+                if let Some(k) = d.get("apiKeySource").and_then(Json::str) {
+                    out.push(Event::ApiKeyed(!k.is_empty() && k != "none"));
+                }
             }
             "system" if str_of(&d, "subtype") == "status" => {
                 if let Some(m) = d.get("permissionMode").and_then(Json::str) {
@@ -283,26 +288,11 @@ impl Parser {
             "rate_limit_event" => {
                 let info = get(&d, "rate_limit_info");
                 let status = info.map_or("", |i| str_of(i, "status"));
-                if !status.is_empty() && status != "allowed" {
-                    let resets = info.and_then(|i| i.get("resetsAt")).and_then(Json::num);
-                    let when = resets.map_or(String::new(), |at| {
-                        let mins = ((at as i64 - forge_history::now()) / 60).max(0);
-                        if mins >= 120 {
-                            format!("; it resets in about {} hours", mins / 60)
-                        } else {
-                            format!("; it resets in about {mins} minutes")
-                        }
-                    });
-                    out.push(Event::Note {
-                        text: format!(
-                            "Your Claude plan's limit: {}{when}",
-                            if status == "allowed_warning" {
-                                "close to it"
-                            } else {
-                                "reached"
-                            }
-                        ),
-                        error: status != "allowed_warning",
+                if !status.is_empty() {
+                    out.push(Event::Limit {
+                        reached: !status.starts_with("allowed"),
+                        close: status == "allowed_warning",
+                        resets: info.and_then(|i| i.get("resetsAt")).and_then(Json::num),
                     });
                 }
             }

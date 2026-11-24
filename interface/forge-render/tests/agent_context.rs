@@ -31,7 +31,7 @@ fn c(name: &str) -> Candidate {
     Candidate {
         name: name.into(),
         what: String::new(),
-        tip: String::new(),
+        ..Default::default()
     }
 }
 
