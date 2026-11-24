@@ -31,8 +31,9 @@ const server = http.createServer((q, r) => {
 });
 
 async function picture(p, name) {
-  const st = await p.evaluate(() => window.forgecad.state());
-  await t.frames(p, st, 4);
+  // an idle app draws no frames by itself: reading pixels asks for one (twice: the first
+  // may predate the last change)
+  await t.pixels(p);
   const f = await t.pixels(p);
   console.log(`  ${name}: ${t.shot(name, f)} (${f.colours} colours)`);
   if (f.colours < 8) throw new Error(`${name}: a blank frame`);
@@ -78,9 +79,7 @@ server.listen(0, async () => {
     await p.close();
   });
 
-  // entered from the page once the part has built. (Bend Simulation is left out here:
-  // kernel/forge-brake times its searches with std::time::Instant, which panics on wasm32;
-  // reported to BEND-SIM.)
+  // entered from the page once the part has built
   await run("app_env flat-pattern, render", async () => {
     const p = await t.page(b, base);
     await t.until(p, (s) => s.ready, "ready");
@@ -100,6 +99,26 @@ server.listen(0, async () => {
     await p.evaluate(() => window.forgecad.fc.app_env("manufacture"));
     const m = await t.until(p, (s) => /Manufacture|manufacture/.test(s.status), "refused");
     if (m.env !== "render") throw new Error(`env ${m.env}`);
+    t.check(p);
+    await p.close();
+  });
+
+  // the Bend Simulation environment in the browser (forge-brake's clock is wasm-safe since
+  // bendsim/env 409a81d0): in, on its tab, drawn, out
+  await run("app_env bendsim", async () => {
+    const p = await t.page(b, base);
+    await t.until(p, (s) => s.ready, "ready");
+    await p.evaluate(() => window.forgecad.loaded);
+    await p.evaluate((text) => {
+      window.forgecad.fc.fs_write("/project/env/bent.fg", new TextEncoder().encode(text));
+      window.forgecad.fc.app_open("/project/env/bent.fg");
+      window.forgecad.fc.app_env("bendsim");
+    }, SHEET);
+    const s = await t.until(p, (s) => s.env === "bendsim", "in Bend Simulation");
+    if (s.tab !== 21) throw new Error(`tab ${s.tab}`);
+    await picture(p, "web-bend-simulation.png");
+    await p.evaluate(() => window.forgecad.fc.app_env("exit"));
+    await t.until(p, (s) => s.env === null, "back in the design");
     t.check(p);
     await p.close();
   });

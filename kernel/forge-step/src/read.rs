@@ -645,6 +645,15 @@ impl<'a> Reader<'a> {
                 let half = self.real(id, name, a.get(3))? * self.u.rad;
                 match Cone::new(frame, radius, half) {
                     Some(c) => Ok(Surface::Cone(c)),
+                    // a half angle within a millionth of a radian of a right angle (some files write a flat
+                    // ring so, ABC 00012071: 1.5707956859) is the plane square to the axis through its
+                    // circle, to within that angle times the face's reach; its edges are measured against
+                    // it as any edge is. Such a cone's normal is against its axis
+                    None if radius >= 0.0 && (half - dmath::FRAC_PI_2).abs() <= 1e-6 => {
+                        Ok(Surface::Plane(Plane {
+                            frame: frame.flipped(),
+                        }))
+                    }
                     None => refuse(id, name, format!("radius {radius}, half angle {half}")),
                 }
             }
@@ -1074,6 +1083,7 @@ impl Build<'_, '_> {
             }
             loops.push(out);
         }
+
         self.p.faces.push(PFace {
             surface,
             same_sense: same != flip,
@@ -1135,8 +1145,15 @@ pub(crate) fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Inte
                 if closed {
                     return (whole, a.distance(e0), false);
                 }
-                let t = |x: Point3| {
-                    if near(x, e0) {
+                // on a curve closed in fact (a closed B-spline), its closing point is both ends: the
+                // edge starts there at lo and ends there at hi, as it runs the way the parameter grows
+                let shut = e0.distance(e1) <= forge_math::tol::LINEAR;
+                let at_seam =
+                    |x: Point3| shut && x.distance(e0).min(x.distance(e1)) <= forge_math::tol::LINEAR;
+                let t = |x: Point3, end: bool| {
+                    if at_seam(x) {
+                        if end { d.hi } else { d.lo }
+                    } else if near(x, e0) {
                         d.lo
                     } else if near(x, e1) {
                         d.hi
@@ -1144,7 +1161,7 @@ pub(crate) fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Inte
                         c.closest(x, whole)
                     }
                 };
-                let (t0, t1) = (t(a), t(b));
+                let (t0, t1) = (t(a, false), t(b, true));
                 let off = c.eval(t0).distance(a).max(c.eval(t1).distance(b));
                 return (Interval::new(t0.min(t1), t0.max(t1)), off, t1 < t0);
             }
@@ -1405,6 +1422,28 @@ pub(crate) fn finish(
     if proto.faces.is_empty() {
         return Err("a solid with no faces".into());
     }
+    // an edge runs at most once round a closed curve, over a finite range (a file's range of
+    // many turns made a check sample it 65536 times over itself, and every pair of those crossed)
+    for e in &proto.edges {
+        let r = e.range;
+        if !(r.lo.is_finite() && r.hi.is_finite()) {
+            return Err("an edge's range is not finite".into());
+        }
+        if let Some(p) = e.curve.domain().period
+            && r.width() > p * (1.0 + 1e-9)
+        {
+            return Err("an edge runs more than once round its curve".into());
+        }
+    }
+    // a face goes along an edge at most once each way (a seam: once each way); loops that repeat
+    // an edge are no boundary, and meshing them cut the repeats finer until memory ran out
+    for f in &proto.faces {
+        let mut used: Vec<(usize, bool)> = f.loops.iter().flatten().copied().collect();
+        used.sort_unstable();
+        if used.windows(2).any(|w| w[0] == w[1]) {
+            return Err("a face's loops go along one edge twice the same way".into());
+        }
+    }
     measure_gaps(&proto, stats);
     let budget = forge_geom::budget::scoped(lim.max_evals);
     proto.split_closed_splines();
@@ -1415,12 +1454,33 @@ pub(crate) fn finish(
     proto.split_fans();
     proto.outer_first();
     let mut body = proto.into_body();
+    if laid_out_in_a_speck(&body) {
+        return Err("a face laid out over a span of its parameters below 2^-433".into());
+    }
     record_deviations(&mut body, stats);
     let agree = measures_agree(&body);
     drop(budget);
     let (unverified, mass) = agree?;
     body.unverified = unverified;
     Ok((body, mass))
+}
+
+/// Whether a face's parameter loops, drawn as finely as `forge_topo::check` draws them, hold a
+/// coordinate that is not 0 but below 2^-433 in size: a surface's frame 1e308 from its face
+/// lays the face out over a span of 1e-308. The predicates' filters (`orient2d`'s debug
+/// precondition, `forge_math::predicates::check_filter`) hold for coordinates that are 0 or at
+/// least 2^-433: their differences are multiples of 2^-485, so each product of two is exact,
+/// and a nonzero sum of such products times the filter's bound (about 1.5 * 2^-52) is at least
+/// 2^-1022, normal. This covers the loops' points only, not every point projected into them.
+fn laid_out_in_a_speck(body: &Body) -> bool {
+    // 2^-433, exactly
+    const SPECK: f64 = f64::from_bits(((1023 - 433) as u64) << 52);
+    let tiny = |x: f64| x != 0.0 && x.abs() < SPECK;
+    body.face_ids().any(|f| {
+        forge_topo::uv::face_uv_loops_with(body, f, |e| 8 * forge_topo::uv::default_segments(e))
+            .iter()
+            .any(|l| l.points.iter().any(|p| tiny(p.x) || tiny(p.y)))
+    })
 }
 
 /// Reads a whole file. Parts that cannot be read become refusals; the others are returned.

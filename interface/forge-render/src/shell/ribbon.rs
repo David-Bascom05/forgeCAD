@@ -547,6 +547,16 @@ fn groups(s: &Shell) -> Vec<Group> {
                 ],
             ),
             g(
+                "Machines",
+                vec![go(
+                    "Machine Builder",
+                    "gear",
+                    Action::MachineBuilder,
+                    s.machine.is_some(),
+                )],
+                vec![],
+            ),
+            g(
                 "Options",
                 vec![go("Settings", "options", Action::Settings, s.prefs.open)],
                 vec![],

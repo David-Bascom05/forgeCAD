@@ -64,6 +64,12 @@ structure topo_edges.EdgeTopo (Self : Type _) where
   coedge_forward : Self → Std.Usize → Result Bool
   edge_degenerate : Self → Std.Usize → Result Bool
 
+/-- Trait declaration: [forge_topo::topo_euler::EulerSink]
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 8:0-11:1
+    Visibility: public -/
+structure topo_euler.EulerSink (Self : Type _) where
+  shell_euler : Self → Std.Usize → Std.I64 → Result Self
+
 /-- Trait declaration: [forge_topo::topo_shell::ShellTopo]
     Source: 'kernel/forge-topo/src/topo_shell.rs', lines 8:0-15:1
     Visibility: public -/

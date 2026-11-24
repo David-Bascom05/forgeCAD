@@ -12,6 +12,7 @@
 mod bendsim;
 mod builtin;
 mod render;
+mod workspaces;
 
 use super::ribbon::{Group, Tool};
 use super::{Action, Shell};
@@ -21,6 +22,8 @@ use egui::{Rect, Ui};
 pub const ENV_TAB: usize = 20;
 /// The tabs of environments with no design tab of their own (11..19 kept for the in-flight ones).
 pub const BENDSIM_TAB: usize = 21;
+/// The Machine Builder's (Manufacture's is `CAM_TAB`, 11).
+pub const MACHINE_TAB: usize = 12;
 pub const RENDER_TAB: usize = 22;
 
 /// Every environment, known or still to land.
@@ -237,7 +240,20 @@ impl Shell {
 
     /// Each frame, first: the environment kept up with the document (another way into or out
     /// of it — the Flat Pattern's own buttons — or the document no longer fit for it).
-    pub(super) fn env_sync(&mut self) {
+    pub(crate) fn env_sync(&mut self) {
+        // the workspaces with state of their own: open is in, closed is out
+        for (open, id) in [
+            (self.machine.is_some(), EnvId::MachineBuilder),
+            (self.cam.is_some(), EnvId::Manufacture),
+        ] {
+            if open && self.env != Some(id) && (self.env.is_none() || id == EnvId::MachineBuilder) {
+                self.env = Some(id);
+                self.tab = id.imp().tabs()[0].0;
+            } else if !open && self.env == Some(id) {
+                self.env = None;
+                self.tab = self.tab_order()[0];
+            }
+        }
         let flat = self.fg.is_some() && self.sheet.flat_env;
         if flat && self.env != Some(EnvId::FlatPattern) {
             self.env = Some(EnvId::FlatPattern);
@@ -402,7 +418,8 @@ mod tests {
         let gs = groups(&t).unwrap();
         let tiles: Vec<_> = gs.iter().flat_map(|g| &g.big).collect();
         assert_eq!(tiles.len(), EnvId::ALL.len());
-        for tile in tiles {
+        // the Machine Builder edits machine files, not the document: on with nothing open
+        for tile in tiles.into_iter().filter(|t| t.name != "Machine Builder") {
             assert!(tile.action.is_none(), "{} is on with nothing open", tile.name);
             assert!(t.env_why_off(tile.name).is_some());
         }

@@ -213,7 +213,9 @@ jobs:
       - name: end to end
         if: matrix.test == 'e2e'
         working-directory: interface/forge-render
-        run: node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+        run: |
+          node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
       # the Render Studio's tracer on WebGPU against the native golden picture
       - name: render studio
         if: matrix.test == 'e2e' && !matrix.threaded

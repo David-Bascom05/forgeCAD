@@ -54,15 +54,27 @@ def measure(path):
 
     vol = area = 0.0
     n = 0
+    # the truth rule's five measures (research/import/truth.md on the importer's branch: the volume
+    # by Gauss-Kronrod at 1e-9, the area by whichever of the default and the precise call agrees
+    # with it), summed over the solids; rate.py applies the rule
+    rule = {"vol": 0.0, "area": 0.0, "vol_eps": 0.0, "area_eps": 0.0, "vol_gk": 0.0}
+
+    def mass(f, solid, *a):
+        g = GProp_GProps()
+        f(solid, g, *a)
+        return g.Mass()
+
     ex = TopExp_Explorer(s, TopAbs_SOLID)
     while ex.More():
-        g = GProp_GProps()
+        so = TopoDS.Solid(ex.Current())
         # adaptive: the default rule was 2% out on a long spline face (frame's threads)
-        BRepGProp.VolumeProperties_s(TopoDS.Solid(ex.Current()), g, 1e-4, False, False)
-        vol += abs(g.Mass())
-        g = GProp_GProps()
-        BRepGProp.SurfaceProperties_s(TopoDS.Solid(ex.Current()), g)
-        area += g.Mass()
+        vol += abs(mass(BRepGProp.VolumeProperties_s, so, 1e-4, False, False))
+        area += mass(BRepGProp.SurfaceProperties_s, so)
+        rule["vol"] += abs(mass(BRepGProp.VolumeProperties_s, so))
+        rule["area"] += mass(BRepGProp.SurfaceProperties_s, so)
+        rule["vol_eps"] += abs(mass(BRepGProp.VolumeProperties_s, so, 1e-9))
+        rule["area_eps"] += mass(BRepGProp.SurfaceProperties_s, so, 1e-9)
+        rule["vol_gk"] += abs(mass(BRepGProp.VolumePropertiesGK_s, so, 1e-9, False, True))
         n += 1
         ex.Next()
     box = Bnd_Box()
@@ -77,6 +89,7 @@ def measure(path):
         "verts": count(TopAbs_VERTEX),
         "vol": vol,
         "area": area,
+        "rule": rule,
         "box": [lo.X(), lo.Y(), lo.Z(), hi.X(), hi.Y(), hi.Z()],
         "secs": round(time.time() - t0, 3),
     }
