@@ -2425,15 +2425,17 @@ impl Gui {
                 }) {
                     p.selected = None;
                 }
-                // the edit that asked for this build says what it did first, then the build
-                self.shell.status = match p.said.take() {
-                    Some(w) if b.checked && !b.preview => format!("{w}: done · {}", p.summary),
-                    Some(w) => {
-                        let line = format!("{w} · {}", p.summary);
-                        p.said = Some(w);
-                        line
+                // the edit that asked for this build says what it did first, then the build: on
+                // every build of that edit (its number was kept when it was sent)
+                self.shell.status = match &p.said {
+                    Some((w, Some(at))) if *at == b.seq && b.checked && !b.preview => {
+                        format!("{w}: done · {}", p.summary)
                     }
-                    None => p.summary.clone(),
+                    Some((w, Some(at))) if *at == b.seq => format!("{w} · {}", p.summary),
+                    _ => {
+                        p.said = None;
+                        p.summary.clone()
+                    }
                 };
             }
             if let Some(a) = &b.asm
@@ -2817,9 +2819,14 @@ impl Gui {
                 };
                 if let Some(p) = p {
                     p.refused = None;
-                    p.said = Some(self.shell.status.clone());
+                    p.said = Some((self.shell.status.clone(), None));
                 }
                 self.fg_text();
+                // the build this edit asked for: its number, now it's sent
+                let seq = self.fg.as_ref().map(|s| s.seq);
+                if let Some((_, at)) = self.shell.fg.as_mut().and_then(|p| p.said.as_mut()) {
+                    *at = seq;
+                }
                 Ok(())
             }
             Err(e) => {

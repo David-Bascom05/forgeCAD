@@ -341,7 +341,9 @@ pub struct FgPanel {
     pub refused: Option<String>,
     /// What the last applied edit said ("Move hole1 above fillet1"), kept to lead the build's
     /// summary when it comes, so the reply isn't replaced by the statistics.
-    pub said: Option<String>,
+    /// The build it belongs to, once one comes: every build of that edit (its checks, its final
+    /// mesh) keeps the words in front; the next edit's doesn't.
+    pub said: Option<(String, Option<u64>)>,
     pub collapsed: HashSet<String>,
     pub sheets: Vec<SheetRow>,
     /// The part's thermoforms, and whether their wall thickness is mapped on the view.
