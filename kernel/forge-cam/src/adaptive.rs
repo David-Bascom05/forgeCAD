@@ -427,6 +427,8 @@ pub fn adaptive(
     let peel_cos = dmath::cos(PEEL.to_radians());
     // the entries a sweep of a level may make before it stops
     let max_entries = 20usize;
+    // the cleanup rings' spacing: a radius (half a radius was tried: slower, no more complete)
+    let ring_step = 0.5 * tool.tool.dc;
     // the tightest a pass may curve: the tool's radius. A control holds a feed F round a curve of
     // radius R only while F <= sqrt(A R) (A its acceleration); at R = r that is about 47 mm/s at
     // 750 mm/s^2 for a 6 mm tool, above roughing feeds, so passes keep their feed through turns
@@ -503,11 +505,13 @@ pub fn adaptive(
         // the two across it, each with its own entries
         let all_cands = cands.clone();
         let mut dir_k = 0usize;
+        // crumb passes taken back (see CRUMB_STEPS) until a level would be left incomplete
+        let mut crumbs_now = true;
         sweep_dir = {
             let (sn, cs) = dmath::sin_cos(prm.sweep.to_radians());
             [cs, sn]
         };
-        let left_area = |f: &Field| -> f64 {
+        let left_area = |f: &Field, d: f64| -> f64 {
             let (lo, hi) = (ip.min, ip.max);
             let h = f.map.h;
             let mut a = 0.0;
@@ -517,7 +521,7 @@ pub fn adaptive(
                 while x <= hi[0] {
                     // (material within a radius of the region's edge is the rings' and the wall
                     // pass's to take)
-                    if f.material(x, y, z) && edge_dist(&f.allowed, x, y) > 4.0 * f.r && f.ok(x, y) {
+                    if f.material(x, y, z) && edge_dist(&f.allowed, x, y) > d && f.ok(x, y) {
                         a += h * h;
                     }
                     x += h;
@@ -535,7 +539,25 @@ pub fn adaptive(
         let mut entries = 0usize;
         macro_rules! next_sweep {
             () => {{
-                if dir_k < 3 && left_area(&f) > 10.0 * f.r * f.r {
+                let left_far = left_area(&f, 4.0 * f.r) > 10.0 * f.r * f.r;
+                // with crumbs taken back, any material more than a radius from the walls (beyond
+                // the cleanup rings' reach) sends the level round again with every pass kept
+                let left_near = crumbs_now && dir_k >= 3 && left_area(&f, f.r) > f.r * f.r;
+                if (left_far || left_near) && dir_k >= 3 && crumbs_now {
+                    // every direction tried while crumbs were taken back, material still far
+                    // from the walls: the sweeps again with every pass kept (complete first)
+                    crumbs_now = false;
+                    dir_k = 0;
+                    let (sn, cs) = dmath::sin_cos(prm.sweep.to_radians());
+                    sweep_dir = [cs, sn];
+                    entries = 0;
+                    small = 0;
+                    open_try = true;
+                    entered = false;
+                    last_sign = 1.0;
+                    cands = all_cands.clone();
+                    true
+                } else if dir_k < 3 && left_far {
                     dir_k += 1;
                     let a = prm.sweep + [180.0, 90.0, -90.0][dir_k - 1];
                     let (sn, cs) = dmath::sin_cos(a.to_radians());
@@ -817,6 +839,19 @@ pub fn adaptive(
                 && f.ok(cur[0], cur[1])
                 && !f.disk_has_material(cur[0], cur[1], z);
             let target = if snap { cur } else { [p[0], p[1], z] };
+            // what the pass changes, kept so a crumb pass can be taken back
+            let undo_map = if crumbs_now { f.map.z.clone() } else { Vec::new() };
+            let undo = (
+                mv.len(),
+                hist.clone(),
+                retraces_log.len(),
+                moves_at_level.len(),
+                at,
+                start,
+                last_sign,
+                back.clone(),
+                pass_ranges.len(),
+            );
             let retrace = if retrace_ok && cur[2] == z && !f.link_clear([cur[0], cur[1]], p, z) {
                 retrace_link(
                     cur,
@@ -1025,11 +1060,59 @@ pub fn adaptive(
             }
             // drop the trailing air steps already swept (they cut nothing) from the path
             let keep = pass.len().saturating_sub(air_run);
+            // a crumb pass (a few steps into a sliver a corner or the cap left): taken back with
+            // its link, the sliver left to the cleanup rings below, and counted as a stall
+            if crumbs_now && keep <= CRUMB_STEPS {
+                f.map.z = undo_map;
+                mv.truncate(undo.0);
+                hist = undo.1;
+                retraces_log.truncate(undo.2);
+                moves_at_level.truncate(undo.3);
+                at = undo.4;
+                start = undo.5;
+                last_sign = undo.6;
+                back = undo.7;
+                pass_ranges.truncate(undo.8);
+                cands.retain(|c| *c != p);
+                small += 1;
+                if small >= 3 {
+                    entries += 1;
+                    if entries >= max_entries {
+                        if next_sweep!() {
+                            continue;
+                        }
+                        break;
+                    }
+                    entered = false;
+                    small = 0;
+                }
+                continue;
+            }
             let mut pts = vec![target];
             pts.extend_from_slice(&pass[..keep]);
             let k0 = mv.len();
             fit_pass(&pts, f.r, feed.0, &mut mv);
             pass_ranges.push((k0, mv.len()));
+            if std::env::var_os("FORGE_ADAPTIVE_DIAG").is_some() {
+                let mut a = pts[0];
+                let mut ls = Vec::new();
+                for m in &mv[k0..] {
+                    let (to, l) = match *m {
+                        PMove::Arc { to, c, cw, .. } => (to, arc_len(a, to, c, cw)),
+                        PMove::Line { to, .. } => {
+                            (to, ((to[0] - a[0]).powi(2) + (to[1] - a[1]).powi(2)).sqrt())
+                        }
+                        _ => continue,
+                    };
+                    ls.push(format!(
+                        "{}{:.1}",
+                        if matches!(m, PMove::Arc { .. }) { "a" } else { "l" },
+                        l
+                    ));
+                    a = to;
+                }
+                eprintln!("pass {} steps: {}", pts.len() - 1, ls.join(" "));
+            }
             // the pass as cut, for a link back along it
             hist.1.extend_from_slice(&mv[k0..]);
             at = Some(if keep > 0 { pass[keep - 1] } else { target });
@@ -1065,10 +1148,11 @@ pub fn adaptive(
         }
         // every sweep has stopped: material left far from the walls (the wall pass and rings
         // take what is nearer) is reported, never left silently
-        let left = left_area(&f);
+        let left = left_area(&f, 4.0 * f.r);
         if left > 10.0 * f.r * f.r {
             notes.push(format!(
-                "adaptive: at z {z:.3} the passes left {left:.0} mm² uncut away from the walls after every                  sweep (G4 lists it); clear() takes it"
+                "adaptive: at z {z:.3} the passes left {left:.0} mm² uncut away from the walls \
+                 after every sweep (G4 lists it); clear() takes it"
             ));
         }
         // a plain offset pass along the walls (rule 5), linked by the same rule
@@ -1078,7 +1162,7 @@ pub fn adaptive(
         if prm.wall_pass {
             let mut rings: Vec<(usize, Vec<Seg>)> = Vec::new();
             for k in 0..64 {
-                let Ok((ring, _)) = offset(rg, r + k as f64 * f.r) else {
+                let Ok((ring, _)) = offset(rg, r + k as f64 * ring_step) else {
                     break;
                 };
                 if ring.is_empty() {
@@ -1324,6 +1408,41 @@ pub fn adaptive(
             }
             eprintln!("left area {left:.0} mm2");
         }
+        if std::env::var_os("FORGE_ADAPTIVE_DIAG").is_some() {
+            let (lo, hi) = (ip.min, ip.max);
+            let mut y = hi[1];
+            eprintln!("after rings at z={z}:");
+            while y >= lo[1] {
+                let mut row = String::new();
+                let mut x = lo[0];
+                while x <= hi[0] {
+                    let mut n = 0;
+                    let mut yy = y - 2.0;
+                    while yy < y {
+                        let mut xx = x;
+                        while xx < x + 2.0 {
+                            if f.material(xx, yy, z) {
+                                n += 1;
+                            }
+                            xx += f.map.h;
+                        }
+                        yy += f.map.h;
+                    }
+                    row.push(if n > 20 {
+                        '#'
+                    } else if n > 0 {
+                        '+'
+                    } else if !f.ok(x + 1.0, y - 1.0) {
+                        '.'
+                    } else {
+                        ' '
+                    });
+                    x += 2.0;
+                }
+                eprintln!("  |{row}|");
+                y -= 2.0;
+            }
+        }
         // what this level provably cleared
         if let Some(v) = claimed(&moves_at_level, z, r_flat, ip, f.r) {
             voids.push((v, z));
@@ -1380,7 +1499,16 @@ pub fn adaptive(
             } else if (to[2] - at[2]).abs() > 1e-9 {
                 "vertical/helix"
             } else {
-                "link/other"
+                match m {
+                    PMove::Line {
+                        phase: Phase::Link, ..
+                    } => "link line",
+                    PMove::Line {
+                        phase: Phase::Cut, ..
+                    } => "cut line (other)",
+                    PMove::Arc { .. } => "arc (other)",
+                    _ => "other",
+                }
             };
             let e = cnt.entry(what).or_default();
             e.0 += 1;
@@ -1783,6 +1911,9 @@ fn simplify(p: &[[f64; 2]], tol: f64) -> Vec<[f64; 2]> {
     l.extend(r);
     l
 }
+
+/// A pass of at most this many steps is a crumb, taken back (`adaptive`).
+pub const CRUMB_STEPS: usize = 3;
 
 /// How far a fitted arc or line may stray from the simulated steps it replaces (mm). The allowed
 /// tool centres keep this much more from the region's edge, and the feeds are set from the
@@ -2425,8 +2556,10 @@ mod tests {
         }
     }
 
-    /// The peel: every cutting step at depth, wall pass off, heads
-    /// within PEEL of the sweep direction, so no pass winds round a centre.
+    /// The peel: every pass (a run of cutting steps at depth between links, wall pass off) heads
+    /// within PEEL of one direction throughout, so no pass winds round a centre; that direction
+    /// is the user's sweep, or one of the further sweeps a level may need (its reverse, then the
+    /// two across it).
     #[test]
     fn passes_peel_one_way() {
         let t = tool("flat-6");
@@ -2468,10 +2601,27 @@ mod tests {
                 &prm,
             )
             .unwrap();
-            let (sn, cs) = dmath::sin_cos(sweep.to_radians());
+            let dirs: Vec<(f64, f64)> = [0.0, 180.0, 90.0, -90.0]
+                .iter()
+                .map(|d| dmath::sin_cos((sweep + d).to_radians()))
+                .collect();
             let lim = dmath::cos((PEEL + 1.0).to_radians());
             let mut at = out.path.start;
             let mut n = 0;
+            // the steps of the pass being read (unit headings)
+            let mut run: Vec<(f64, f64, [f64; 3], [f64; 3])> = Vec::new();
+            let check = |run: &[(f64, f64, [f64; 3], [f64; 3])]| {
+                if run.is_empty() {
+                    return;
+                }
+                assert!(
+                    dirs.iter()
+                        .any(|&(sn, cs)| run.iter().all(|&(ux, uy, ..)| ux * cs + uy * sn >= lim)),
+                    "sweep {sweep}: a pass of {} steps from {:?} heads within PEEL of no one sweep",
+                    run.len(),
+                    run[0].2
+                );
+            };
             for (mi, mv) in out.path.moves.iter().enumerate() {
                 let to = match *mv {
                     PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
@@ -2493,14 +2643,15 @@ mod tests {
                     // lines and fitted arcs (by their chord) alike
                     if l > 1e-9 {
                         n += 1;
-                        assert!(
-                            (dx * cs + dy * sn) / l >= lim,
-                            "sweep {sweep}: step {at:?} -> {to:?}"
-                        );
+                        run.push((dx / l, dy / l, at, to));
                     }
+                } else {
+                    check(&run);
+                    run.clear();
                 }
                 at = to;
             }
+            check(&run);
             assert!(n > 20, "sweep {sweep}: {n} steps");
         }
     }

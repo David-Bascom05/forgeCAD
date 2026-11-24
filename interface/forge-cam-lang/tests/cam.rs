@@ -2060,3 +2060,66 @@ fn the_3axis_step_down_is_step() {
             .any(|o| o.name == "w" && o.paths.iter().any(|p| !p.moves.is_empty()))
     );
 }
+
+/// A named steel resolves in its hardness band (its forge-material record's cited hardness:
+/// 1018 cold drawn, 126 HB, soft), not over every P row down to 50 HRC; a part naming only P
+/// takes the whole group, slower.
+#[test]
+fn a_named_steel_resolves_in_its_hardness_band() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let skim = |src: &str| {
+        let cam = forge_cam_lang::run(src, &dir);
+        cam.ops
+            .iter()
+            .find(|o| o.name == "skim")
+            .unwrap()
+            .resolved
+            .clone()
+            .unwrap()
+    };
+    let mild = skim(&src.replace("material: \"6061-T6\"", "material: \"1018 cold drawn\""));
+    let p = skim(&src.replace("material: \"6061-T6\"", "group: \"P\""));
+    let sp = mild.spread.clone().unwrap();
+    assert!(sp.class.contains("soft"), "{}", sp.class);
+    assert!(mild.vc.v > p.vc.v, "{} {}", mild.vc.v, p.vc.v);
+    // a group-only part's pooled default says how to sharpen it; a named alloy's does not
+    assert!(p.vc.note.contains("hardness unknown"), "{}", p.vc.note);
+    assert!(!mild.vc.note.contains("hardness unknown"), "{}", mild.vc.note);
+}
+
+/// A maker's tool always takes its maker's own row, never a pooled default: a Lakeshore end
+/// mill on a steel part (named or group-only) and on 6061-T6 resolves at one of its own
+/// presets' speeds, with no generic class spread.
+#[test]
+fn a_makers_tool_always_takes_its_own_row() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
+        .unwrap()
+        .replace("tool(\"flat-10\"", "tool(\"lakeshore-LC204012\"");
+    let lib = forge_tooling::Library::builtin();
+    let tool = lib.tool("lakeshore-LC204012").unwrap();
+    for (stock, group) in [
+        ("material: \"6061-T6\"", "N"),
+        ("material: \"1045 cold drawn\"", "P"),
+        ("group: \"P\"", "P"),
+    ] {
+        let cam = forge_cam_lang::run(&src.replace("material: \"6061-T6\"", stock), &dir);
+        let skim = cam.ops.iter().find(|o| o.name == "skim").unwrap();
+        let r = skim
+            .resolved
+            .clone()
+            .unwrap_or_else(|| panic!("{stock}: {:?} {:?}", cam.errors, skim.refusal));
+        assert_eq!(r.vc.source, Source::Library, "{stock}: {}", r.vc.note);
+        assert!(r.spread.is_none(), "{stock}");
+        assert!(!r.vc.note.contains("percentile"), "{stock}: {}", r.vc.note);
+        assert!(
+            tool.presets
+                .iter()
+                .any(|p| p.group == group && (p.vc - r.vc.v).abs() < 1e-9),
+            "{stock}: vc {} is not one of the tool's {group} rows",
+            r.vc.v
+        );
+    }
+}

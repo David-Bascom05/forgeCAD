@@ -82,6 +82,17 @@ impl Environment for Manufacture {
     /// tabs under it (Simulation, NC Programs, Quality). Narrow: the sheet is one of the tabs,
     /// chosen while it is open.
     fn properties(&self, s: &mut Shell, ui: &mut Ui, r: Rect) {
+        // Checks asked for (the ribbon): the simulation's own Checks tab, where there is one
+        if s.cam.as_ref().is_some_and(|w| w.checks_open)
+            && let Some(st) = s.camsim.as_deref_mut()
+        {
+            st.tab = crate::gui_camsim_panel::Tab::Checks;
+            if let Some(w) = &mut s.cam {
+                w.checks_open = false;
+                w.programs_open = false;
+                w.quality_open = false;
+            }
+        }
         let Some(w) = s.cam.as_ref() else { return };
         let sheet = w.op_dlg.is_some() || w.setup_dlg.is_some();
         let sim = s.camsim.is_some();

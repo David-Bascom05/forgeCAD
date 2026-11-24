@@ -28,6 +28,7 @@ node web/tests/select.cjs "$out"
 node web/tests/export.cjs "$out"
 node web/tests/chrome.cjs "$out"
 node web/tests/wall.cjs "$out"
+node web/tests/deeplink.cjs "$out"
 if [ -n "$PARITY_EXAMPLES" ]; then
   node web/tests/parity.cjs "$out" --examples "$PARITY_EXAMPLES"
 else

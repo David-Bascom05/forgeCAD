@@ -18,6 +18,8 @@ use std::sync::Mutex;
 const MAX_BYTES: usize = 64 << 20;
 
 std::thread_local! {
+    /// The tests' switch: every call on this thread made anew (`bypass`).
+    static BYPASS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// Calls made anew on this thread, per memo (by its address: the memos are statics).
     static COMPUTED: std::cell::RefCell<HashMap<usize, u64>> = std::cell::RefCell::new(HashMap::new());
 }
@@ -51,7 +53,7 @@ impl<V: Clone> Memo<V> {
 
     /// The value for `key`: the one made before for the same key, else `make()`, kept.
     pub fn get_or(&self, key: String, make: impl FnOnce() -> V) -> V {
-        if key.contains("NaN") {
+        if key.contains("NaN") || BYPASS.with(|b| b.get()) {
             self.count();
             return make();
         }
@@ -132,4 +134,11 @@ impl<V: Clone> Default for Memo<V> {
     fn default() -> Self {
         Memo::new()
     }
+}
+
+/// Every memo's calls on this thread made anew while `on` (for the tests: a run through the
+/// memos against the same run made fresh).
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn bypass(on: bool) {
+    BYPASS.with(|b| b.set(on));
 }

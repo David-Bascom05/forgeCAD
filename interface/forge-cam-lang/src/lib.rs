@@ -62,6 +62,13 @@ static SURFACED: memo::Memo<Surfaced> = memo::Memo::new();
 /// The certifications made by earlier runs of documents in this process (memo.rs).
 static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
 
+/// Parts' sections at a height (`PartIn::section`).
+static SECTIONS: memo::Memo<Result<Region, forge_cam::section::SectionError>> = memo::Memo::new();
+
+/// Programs' round trips (G6): the text and the motion read back, or why not.
+type RoundTrip = Result<(String, Vec<forge_post::Motion>), String>;
+static ROUND_TRIPS: memo::Memo<RoundTrip> = memo::Memo::new();
+
 /// 2D ops' engagement samples, per path (`feeds_from_engagement`).
 static SCHEDULED: memo::Memo<Vec<Vec<forge_cam::engage::Sample>>> = memo::Memo::new();
 
@@ -78,17 +85,22 @@ static FINISHED: memo::Memo<Finished> = memo::Memo::new();
 fn certify_memo(
     p: &OpPath,
     tool: &ops::ToolUse,
-    part: &[Face],
-    stages: &[(usize, Vec<Face>)],
-    fixture: &[Face],
+    (part, part_key): (&[Face], &str),
+    (stages, stages_key): (&[(usize, Vec<Face>)], &str),
+    (fixture, fixture_key): (&[Face], &str),
     fclear: f64,
     tol: f64,
     clearance: f64,
     column: bool,
 ) -> ops::CheckSummary {
+    // the faces by what they are made from (each `*_key` names its faces exactly: see the
+    // caller), the rest by their full text
+    // each stand-in Debug-printed as a string (quoted and escaped): the components cannot run
+    // into each other, so distinct inputs give distinct keys by construction
     let key = format!(
-        "certify_with/1 {:?}",
-        (p, tool, part, stages, fixture, fclear, tol, clearance, column)
+        "certify_with/3 {:?} {:?}",
+        (p, tool, fclear, tol, clearance, column),
+        (part_key, stages_key, fixture_key)
     );
     CERTIFIED.get_or(key, || {
         ops::certify_with(p, tool, part, stages, fixture, fclear, tol, clearance, column)
@@ -173,6 +185,9 @@ struct PartIn {
     turn_of: Option<usize>,
     file: String,
     faces: Vec<Face>,
+    /// `faces`' full text, made once (the certification memo's key for them): `faces` is not
+    /// changed after the part is read.
+    faces_text: std::sync::OnceLock<String>,
     holes: Vec<holes::HoleInfo>,
     bbox: ([f64; 3], [f64; 3]),
     /// ISO 513 group: `group:`, else the stock material's record, else its family; "" when
@@ -183,6 +198,8 @@ struct PartIn {
     /// The stock material's family (forge-material: aluminium, copper, steel, ...), for the
     /// generic class of a tool with no maker data.
     family: Option<String>,
+    /// The stock's hardness band from its record's cited hardness (feeds::hardness_band_of_hb).
+    hardness: Option<&'static str>,
     /// Where the material and group came from, for the reply and the fixes.
     material_note: String,
     /// The material's machining data (its record's machining.* keys), read once.
@@ -1316,11 +1333,23 @@ pub struct Cam {
     setups: Vec<SetupIn>,
     pub ops: Vec<OpOut>,
     pub programs: Vec<ProgramOut>,
-    lib: Library,
+    lib: std::sync::Arc<Library>,
     jaws: Vec<forge_cam::fixture::SoftJaws>,
 }
 
 impl PartIn {
+    /// `faces`' full text, made at the first call.
+    fn faces_key(&self) -> &str {
+        self.faces_text.get_or_init(|| format!("part {:?}", self.faces))
+    }
+
+    /// The section of the part at height z (forge_cam::section), from an earlier call with the
+    /// same faces, z and mu (memo.rs): a function of these alone.
+    fn section(&self, z: f64, mu: f64) -> Result<Region, forge_cam::section::SectionError> {
+        let key = format!("section/1 {:?}", (self.faces_key(), z, mu));
+        SECTIONS.get_or(key, || forge_cam::section::section(&self.faces, z, mu))
+    }
+
     /// Its lowest plus its highest z: turning over about x maps z to h − z.
     fn h(&self) -> f64 {
         self.bbox.0[2] + self.bbox.1[2]
@@ -1444,7 +1473,8 @@ impl Cam {
         let mut secs = vec![];
         for w in zs.windows(2) {
             let zm = 0.5 * (w[0] + w[1]);
-            let sec = forge_cam::section::section(&p.faces, zm, 1e-5)
+            let sec = p
+                .section(zm, 1e-5)
                 .map_err(|e| e.refusal(&format!("A shaped stock needs a 2.5D part: at z = {} mm", mm(zm))))?;
             secs.push((zm, sec));
         }
@@ -1625,6 +1655,7 @@ impl Cam {
             turn_of: Some(i),
             file: p.file.clone(),
             faces,
+            faces_text: std::sync::OnceLock::new(),
             // the holes in the turned frame, (x, y, z) -> (x, -y, h - z), their direction
             // turned too: one drilled from below is now drilled from above, and one from
             // above is refused here as before (a hole is drilled from the side it opens on)
@@ -1642,6 +1673,7 @@ impl Cam {
             group: p.group.clone(),
             material: p.material.clone(),
             family: p.family.clone(),
+            hardness: p.hardness,
             material_note: p.material_note.clone(),
             stock: p.stock.clone(),
         };
@@ -2185,7 +2217,16 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
 
 /// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
-    run_with_library(src, dir, Library::builtin())
+    // the built-in library, shared: read once (Library::builtin), and copied only if the
+    // document's project files add to it (run_with_library)
+    static BUILTIN: std::sync::OnceLock<std::sync::Arc<Library>> = std::sync::OnceLock::new();
+    run_shared(
+        src,
+        dir,
+        BUILTIN
+            .get_or_init(|| std::sync::Arc::new(Library::builtin()))
+            .clone(),
+    )
 }
 
 /// Runs a machining document on a given tooling library: the one the user's levels make
@@ -2193,6 +2234,11 @@ pub fn run(src: &str, dir: &Path) -> Cam {
 /// over the built-in), so tools, holders and inserts made in the builder reach CAM. The
 /// document's `cam/*.toml` beside it are added on top, as with `run`.
 pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
+    run_shared(src, dir, std::sync::Arc::new(lib))
+}
+
+/// `run_with_library` on a shared library (copied where the project's files add to it).
+fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
     let mut cam = Cam {
         leftover: vec![],
         leftover_done: false,
@@ -2235,7 +2281,7 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
             files.sort();
             for f in files {
                 if let Ok(s) = forge_dirs::fs::read_to_string(&f)
-                    && let Err(e) = cam.lib.add(&f.display().to_string(), &s)
+                    && let Err(e) = std::sync::Arc::make_mut(&mut cam.lib).add(&f.display().to_string(), &s)
                 {
                     cam.errors.push(e.to_string());
                     cam.ok = false;
@@ -2491,7 +2537,7 @@ impl Cam {
                 let mut found = None;
                 let mut failed = false;
                 for (zp, g) in tries {
-                    match forge_cam::section::section(&part.faces, zp, 1e-5) {
+                    match part.section(zp, 1e-5) {
                         Ok(sec) => {
                             if std::env::var("FORGE_CAM_DEBUG").is_ok() {
                                 eprintln!("G4 band {w:?}: section at {zp}, grown {g}");
@@ -2697,11 +2743,13 @@ impl Cam {
                     turn_of: None,
                     file,
                     faces,
+                    faces_text: std::sync::OnceLock::new(),
                     holes,
                     bbox: (lo, hi),
                     stock: material.as_deref().map(|m| stock_of(m, &group, dir)),
                     group,
                     family: material.as_deref().and_then(|m| Self::stock_family(m, dir)),
+                    hardness: material.as_deref().and_then(|m| Self::stock_hardness(m, dir)),
                     material,
                     material_note,
                 });
@@ -3104,7 +3152,7 @@ impl Cam {
         if relief {
             for w in zs.windows(2) {
                 let zm = 0.5 * (w[0] + w[1]);
-                if let Ok(sec) = forge_cam::section::section(&part.faces, zm, 1e-5) {
+                if let Ok(sec) = part.section(zm, 1e-5) {
                     relief_at.extend(forge_cam::fixture::corners(&sec));
                 }
             }
@@ -3211,12 +3259,16 @@ impl Cam {
             turn_of: None,
             file: format!("{name} (soft jaws, {})", bl.name),
             faces: sj.part.clone(),
+            faces_text: std::sync::OnceLock::new(),
             holes: vec![],
             bbox: (b.min, b.max),
             stock: jaw_material
                 .as_deref()
                 .map(|m| stock_of(m, &jaw_group, Path::new("."))),
             group: jaw_group,
+            hardness: jaw_material
+                .as_deref()
+                .and_then(|m| Self::stock_hardness(m, Path::new("."))),
             family: jaw_material
                 .as_deref()
                 .and_then(|m| Self::stock_family(m, Path::new("."))),
@@ -4309,7 +4361,7 @@ impl Cam {
         // function of the paths, the in-process stock they start from, the tool's profile and
         // the schedule's numbers (the cell and sample length among them) alone; the feeds are
         // set from them below as before
-        let key = format!("engagement/2 {:?} {:?}", (&paths, &s.ip), (prof, sc));
+        let key = format!("engagement/3 {:?}", ((&paths, &s.ip), (prof, sc)));
         let all = SCHEDULED.get_or(key, || {
             let mut map = HeightMap::of_stock(&s.ip, cell);
             paths
@@ -4374,11 +4426,11 @@ impl Cam {
                 // sample, at most cap fz, no faster than the next sample, within [f_min, f_max]):
                 // at the op's chip, and for a rough op at its class chip, taken where the sample is
                 // engaged under 90° (ae < D/2 on a straight cut: the peak chip is thinned)
-                let base = sample_feeds(&samples, &sc);
+                let base = sample_feeds(samples, &sc);
                 let rough_feed = rough.map(|(slot, f)| {
                     (
-                        sample_feeds(&samples, &Sched { fz: slot * f, ..sc }),
-                        sample_feeds(&samples, &Sched { fz: slot, ..sc }),
+                        sample_feeds(samples, &Sched { fz: slot * f, ..sc }),
+                        sample_feeds(samples, &Sched { fz: slot, ..sc }),
                     )
                 });
                 let chosen = |k: usize| -> f64 {
@@ -4453,14 +4505,16 @@ impl Cam {
                         PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
                         _ => 0.0,
                     };
-                    // adaptive: one F per move, the lowest its samples call for, the move posted
-                    // whole (its passes are long arcs and lines; engage::schedule_per_move's rule,
-                    // TOOLPATH-QUALITY)
+                    // adaptive's passes are long arcs and lines: each move whole, one F, the lowest
+                    // its samples call for (a move wholly in air keeps its own feed where higher)
                     if kind == "adaptive" {
-                        let mut f = (start..k).map(|i| feed[i].0).fold(f64::INFINITY, f64::min);
-                        if (start..k).all(|i| samples[i].engage.is_none()) && own > f {
-                            f = own.min(sc.f_max.max(sc.f_min));
-                        }
+                        let air = samples[start..k].iter().all(|sm| sm.engage.is_none());
+                        let lo = feed[start..k].iter().map(|x| x.0).fold(f64::INFINITY, f64::min);
+                        let f = if air && own > lo {
+                            own.min(sc.f_max.max(sc.f_min))
+                        } else {
+                            lo
+                        };
                         moves.push(match *mv {
                             PMove::Line { to, phase, .. } => PMove::Line { to, f, phase },
                             PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f },
@@ -4600,6 +4654,23 @@ impl Cam {
     /// found). The group is the material's `[[stock]]` record's, else its family's ISO 513
     /// class; None when the name is unknown or its family has no class.
     /// A forge-material record's family, by its name.
+    /// A forge-material record's hardness band: its `machining.hardness_hb`, else its
+    /// `machining.hardness_hrc` read as Brinell (feeds::hb_of_hrc), banded at the makers' class
+    /// edges (feeds::hardness_band_of_hb); None where the record cites no hardness.
+    fn stock_hardness(name: &str, dir: &Path) -> Option<&'static str> {
+        let libs = forge_material::Libraries::cached(Some(dir));
+        let (_, m) = libs.find(name)?;
+        let hb = match (
+            m.extra("machining.hardness_hb"),
+            m.extra("machining.hardness_hrc"),
+        ) {
+            (Some(forge_material::Value::Num(hb)), _) => *hb,
+            (_, Some(forge_material::Value::Num(hrc))) => feeds::hb_of_hrc(*hrc),
+            _ => return None,
+        };
+        feeds::hardness_band_of_hb(hb)
+    }
+
     fn stock_family(name: &str, dir: &Path) -> Option<String> {
         forge_material::Libraries::cached(Some(dir))
             .find(name)
@@ -4699,6 +4770,7 @@ impl Cam {
         let gu = if preset.is_none() {
             let tc = feeds::ToolClass {
                 family: self.parts[self.setups[su].part].family.as_deref(),
+                hardness: self.parts[self.setups[su].part].hardness,
                 tier: None,
                 flutes: Some(t.tool.nof.max(1)),
                 coated: feeds::ToolClass::coated(&t.tool.coating),
@@ -4730,9 +4802,31 @@ impl Cam {
             (None, Some(c)) => Some((c.name.as_str(), c.chip_factor, class_src)),
             _ => None,
         };
+        // hardness unknown where the group's classes split by hardness: the pooled class is
+        // the conservative default, and the note says what would sharpen it (coordinator's rule)
+        let pooled_note = gu
+            .filter(|_| self.parts[self.setups[su].part].hardness.is_none())
+            .and_then(|u| {
+                let banded = ["soft", "21-36HRC", "36-50HRC"].into_iter().any(|b| {
+                    let tc = feeds::ToolClass {
+                        family: self.parts[self.setups[su].part].family.as_deref(),
+                        hardness: Some(b),
+                        tier: None,
+                        flutes: Some(t.tool.nof.max(1)),
+                        coated: feeds::ToolClass::coated(&t.tool.coating),
+                        helix: None,
+                    };
+                    self.lib
+                        .generic(group_name, class, &tc)
+                        .is_some_and(|g| g.hardness == b && g.vc.p10 != u.op.vc.p10)
+                });
+                banded.then_some(
+                    "; hardness unknown: pooled over the hardness classes (conservative) — name the alloy and condition (e.g. material: \"1045 cold drawn\") for realistic speeds",
+                )
+            });
         let part = &self.parts[self.setups[su].part];
         let stock = part.stock.as_ref();
-        resolve::milling_on(
+        let mut r = resolve::milling_on(
             &asked,
             &resolve::ToolData {
                 d: t.tool.dc,
@@ -4754,7 +4848,11 @@ impl Cam {
                 power: &m.power,
             },
             nominal,
-        )
+        )?;
+        if let Some(n) = pooled_note {
+            r.vc.note.push_str(n);
+        }
+        Some(r)
     }
 
     /// A probing op: `probe_wcs` (a feature's position for a work offset) or `inspect` (one
@@ -5158,7 +5256,7 @@ impl Cam {
                         out.code = Some("OverLimit".into());
                         out.refusal = Some(format!(
                             "{} would be {} {}, over the limit of {} {} ({}).",
-                            cap(&c.what),
+                            cap(c.what),
                             mm(c.value),
                             c.unit,
                             mm(c.limit),
@@ -5220,8 +5318,9 @@ impl Cam {
                         let top = get_num(a, "from", Some(s.stock.max[2]))?;
                         let bottom = get_num(a, "to", None)?;
                         let zmid = 0.5 * (top + bottom);
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
-                            .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                        let sec = part
+                            .section(zmid, 1e-5)
+                            .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                         let regions = match get_str(a, "region", Some("outside"))?.as_str() {
                             "outside" => {
                                 let islands = outer_or_inner(&sec, true)?;
@@ -5309,7 +5408,8 @@ impl Cam {
                         let bottom = get_num(a, "to", None)? + ax;
                         let zmid = 0.5 * (top + bottom);
                         let r = 0.5 * d;
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                        let sec = part
+                            .section(zmid, 1e-5)
                             .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                         let islands = outer_or_inner(&sec, true)?;
                         // the tool may pass wholly outside the stock: a strip between the part
@@ -5388,7 +5488,8 @@ impl Cam {
                             tabs: contour_tabs(a, d, top - bottom)?,
                         };
                         let zmid = 0.5 * (top + bottom);
-                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                        let sec = part
+                            .section(zmid, 1e-5)
                             .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                         let rg = outer_or_inner(&sec, side == "outside")?;
                         if side == "outside" {
@@ -5461,7 +5562,8 @@ impl Cam {
                             let top = get_num(a, "from", None)?;
                             let bottom = get_num(a, "to", None)? + ax;
                             let zmid = 0.5 * (top + bottom);
-                            let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                            let sec = part
+                                .section(zmid, 1e-5)
                                 .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                             let pockets = pockets_of(&sec)?;
                             let leave = get_num(a, "leave", Some(0.0))?;
@@ -5473,7 +5575,7 @@ impl Cam {
                             // a hole that ends above `to:` (a drilled hole's floor or point) is
                             // left to its own op: the section just above the bottom shows
                             // material where it was (when that section can be made)
-                            let below = forge_cam::section::section(&part.faces, bottom + 1e-3, 1e-5).ok();
+                            let below = part.section(bottom + 1e-3, 1e-5).ok();
                             let mut shallow: Vec<[f64; 4]> = vec![];
                             for rg in pockets {
                                 // (where no section can be made there, a drill point crossing
@@ -5707,7 +5809,7 @@ impl Cam {
             lead_feed: None,
         };
         let grid = get_num(a, "grid", Some(0.25 * d))?;
-        let e = |x: forge_cam::ops::OpError| format!("{x:?}");
+        let e = |x: forge_cam::ops::OpError| x.refusal("");
         // the op's path (and z-level's voids) from an earlier run when every input is the same:
         // the generators are functions of these alone (the kind, its arguments, the part's faces
         // and box, the cutter's body and diameter (surf.rs reads no other part of the tool: not
@@ -5717,17 +5819,20 @@ impl Cam {
         // A generator that starts reading the in-process stock (s.ip, stock_before) must put it
         // in this key: the voids it returns feed later ops' stock stages.
         let key = format!(
-            "surfacing/2 {kind} {:?} {:?}",
-            (a, &part.faces, body, d, ti, h, feed, leave),
+            "surfacing/3 {:?}",
             (
-                s.tol,
-                floor,
-                area,
-                grid,
-                part.bbox,
-                &s.stock,
-                c.ramp_feed,
-                c.lead_feed
+                kind,
+                (a, &part.faces, body, d, ti, h, feed, leave),
+                (
+                    s.tol,
+                    floor,
+                    area,
+                    grid,
+                    part.bbox,
+                    &s.stock,
+                    c.ramp_feed,
+                    c.lead_feed
+                )
             )
         );
         let made = SURFACED.get_or(key, || -> Surfaced {
@@ -5812,9 +5917,12 @@ impl Cam {
             _ => None,
         };
         let key = format!(
-            "finish3d/1 {kind} {:?} {:?}",
-            (a, &part.faces, part.bbox, &t.tool, cutter(t), after),
-            (s.tol, ti, h, feed)
+            "finish3d/2 {:?}",
+            (
+                kind,
+                (a, &part.faces, part.bbox, &t.tool, cutter(t), after),
+                (s.tol, ti, h, feed)
+            )
         );
         let (paths, plan, finish) = FINISHED.get_or(key, || {
             let (mut plan, mut finish) = (Vec::new(), None);
@@ -8364,7 +8472,11 @@ impl Cam {
             .stock_before
             .clone()
             .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
+        // what each stage's faces are made from, in order (the memo key's: `faces_of` is a
+        // function of the in-process stock and, on its error, the setup's stock alone)
+        let stage_ips: std::cell::RefCell<Vec<String>> = std::cell::RefCell::new(Vec::new());
         let faces_of = |ip: &forge_cam::stock::InProcess| {
+            stage_ips.borrow_mut().push(format!("{ip:?}"));
             // a clock only when asked: std's panics in a browser page
             let t0 = std::env::var("FORGE_CAM_DEBUG")
                 .is_ok()
@@ -8603,12 +8715,30 @@ impl Cam {
                 | "ramping"
                 | "flat"
         );
+        // the key's stand-ins for the faces (each formatted once, not per op): the part's
+        // faces' text (made once per part), or the op's own target's; the stages' in-process
+        // stocks (and the setup's stock, `faces_of`'s fallback) with their move indices; the
+        // fixture (its faces are `Fixture::faces` of it) or the stock (its support face)
+        let target_key: std::borrow::Cow<str> = match &self.ops[oi].target {
+            Some(t) => format!("own {t:?}").into(),
+            None => part.faces_key().into(),
+        };
+        let stages_key = format!(
+            "{:?}",
+            (
+                stock_needed,
+                stages.iter().map(|x| x.0).collect::<Vec<_>>(),
+                &s.stock,
+                &*stage_ips.borrow()
+            )
+        );
+        let fixture_key = format!("{:?} {:?}", s.fixture, s.stock);
         let mut sum = certify_memo(
             posted,
             &tool,
-            target,
-            &stages,
-            &ffaces,
+            (target, &target_key),
+            (&stages, &stages_key),
+            (&ffaces, &fixture_key),
             fclear,
             s.tol,
             s.clearance,
@@ -8922,7 +9052,13 @@ impl Cam {
                 return po;
             }
         };
-        match forge_post::round_trip(&q, &d) {
+        // from an earlier run when the program and the dialect are the same (memo.rs): the
+        // round trip prints, reads back and compares, a function of these alone; the key is
+        // the quantised program (integers) and the dialect, each in full
+        let rt = ROUND_TRIPS.get_or(format!("round_trip/2 {:?}", (&q, &d)), || {
+            forge_post::round_trip(&q, &d)
+        });
+        match rt {
             Ok((txt, _)) => {
                 po.round_trip = true;
                 // the single-surface measure's S writes a surface probe's work offset
@@ -10102,7 +10238,21 @@ mod certify_memo_tests {
             0.01,
             2.0,
         );
-        let run = |a: &Args| certify_memo(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7, false);
+        let run = |a: &Args| {
+            // the faces' stand-ins: here their own full text, which names them exactly
+            let (k2, k3, k4) = (format!("{:?}", a.2), format!("{:?}", a.3), format!("{:?}", a.4));
+            certify_memo(
+                &a.0,
+                &a.1,
+                (&a.2, &k2),
+                (&a.3, &k3),
+                (&a.4, &k4),
+                a.5,
+                a.6,
+                a.7,
+                false,
+            )
+        };
         let fresh = |a: &Args| ops::certify_with(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7, false);
         let same = |x: &ops::CheckSummary, y: &ops::CheckSummary| format!("{x:?}") == format!("{y:?}");
         let n0 = CERTIFIED.computed();
@@ -10159,6 +10309,91 @@ mod certify_memo_tests {
         let before = CERTIFIED.computed();
         assert!(same(&run(&base), &s0));
         assert_eq!(CERTIFIED.computed(), before, "the same arguments certified again");
+    }
+}
+
+#[cfg(test)]
+mod memo_edit_tests {
+    /// Runs through the memos are the runs made fresh, byte for byte, after edits of each kind
+    /// on a document every memo serves (2D ops with engagement feeds, holes, two setups): the
+    /// part's dimensions (every face, so every certification key's stand-in for the part and
+    /// the stocks), an op's numbers, a tool, the stock; each edit run after the original, so the
+    /// memos hold the original's entries.
+    #[test]
+    fn edited_runs_through_the_memos_are_the_fresh_runs() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/memo_edit_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("well_island.fg")).unwrap();
+        let doc = forge_dirs::fs::read_to_string(src_dir.join("well_island_cam.fg")).unwrap();
+        let reply = |d: &str| {
+            let cam = super::run(d, &dir);
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let both = |d: &str, p: &str| {
+            forge_dirs::fs::write(dir.join("well_island.fg"), p).unwrap();
+            let memo = reply(d);
+            super::memo::bypass(true);
+            let fresh = reply(d);
+            super::memo::bypass(false);
+            (memo, fresh)
+        };
+        let (m, f) = both(&doc, &part);
+        assert_eq!(m, f, "the original");
+        // the part: its length (every face and path changes); and the well's floor raised
+        // under a pocket that still cuts to its old depth (the same paths and stock, only the
+        // part's faces differ: the certification must find the gouge, not take the old verdict)
+        let p2 = part.replacen("shared L = 60", "shared L = 62", 1);
+        let p3 = part.replacen("shared depth = 6", "shared depth = 5", 1);
+        assert!(p2 != part && p3 != part);
+        let mut edits = vec![(doc.clone(), p2), (doc.clone(), p3)];
+        for (a, b) in [("stepover: ", "stepover: 1.3"), ("margin: (", "margin: (4, ")] {
+            if let Some(k) = doc.find(a) {
+                let end = doc[k..].find([',', ')']).map(|e| k + e).unwrap_or(doc.len());
+                let mut d = doc.clone();
+                d.replace_range(k..end, if a == "stepover: " { b } else { "margin: (4" });
+                edits.push((d, part.clone()));
+            }
+        }
+        assert!(edits.len() >= 2, "no op edit found in the document");
+        for (k, (d, p)) in edits.iter().enumerate() {
+            // the original first, so the memos hold its entries
+            let _ = both(&doc, &part);
+            let (m, f) = both(d, p);
+            assert_eq!(m, f, "edit {k}: the run through the memos is not the fresh run");
+        }
+        // the part alone changed under paths that stay the same: a facing over a stock given
+        // outright, the boss raised into it. Only the part's faces (the certification key's
+        // stand-in for them) tell the two runs apart; the edited one must be refused
+        let skim = "machining\nf = part(\"well_island.fg\", material: \"6061-T6\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(min: (-3, -3, 0), max: (63, 43, 13)), origin: \"top-corner\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 12.5, step: 1)\nprog = program(op1, post: \"fanuc\", number: 3001)\n";
+        let raised = part.replacen(
+            "boss = extrude(bs.c, depth)",
+            "boss = extrude(bs.c, depth + 0.8)",
+            1,
+        );
+        assert_ne!(raised, part);
+        let (m0, f0) = both(skim, &part);
+        assert_eq!(m0, f0);
+        assert!(
+            m0.starts_with("{\"ok\":true"),
+            "the facing clears the part: {}",
+            &m0[..200]
+        );
+        let (m1, f1) = both(skim, &raised);
+        assert_eq!(
+            m1, f1,
+            "the raised boss: the run through the memos is not the fresh run"
+        );
+        assert!(
+            m1.starts_with("{\"ok\":false"),
+            "the raised boss is gouged: {}",
+            &m1[..200]
+        );
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
     }
 }
 
