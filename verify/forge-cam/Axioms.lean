@@ -130,17 +130,6 @@ import ForgeCam
 #print axioms ForgeCam.Turn.smear_hull
 #print axioms ForgeCam.Turn.eroded_gap
 #print axioms ForgeCam.Turn.rect_in_convex
-#print axioms ForgeCam.sd_ge_of_halfspace
-#print axioms ForgeCam.sd_antitone
-#print axioms ForgeCam.column_compl_nonempty
-#print axioms ForgeCam.sd_body_ge_of_column
-#print axioms ForgeCam.sd_column_ge_vertical
-#print axioms ForgeCam.sd_column_ge_radial
-#print axioms ForgeCam.drop_clear
-#print axioms ForgeCam.ring_rho_ge
-#print axioms ForgeCam.ring_bound
-#print axioms ForgeCam.line_rho_ge
-#print axioms ForgeCam.line_bound
 #print axioms ForgeCam.Quad.quad_mul
 #print axioms ForgeCam.Quad.quad_div
 #print axioms ForgeCam.Quad.quad_sign_rat
