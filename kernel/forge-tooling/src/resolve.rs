@@ -14,7 +14,7 @@
 //!
 //! The formulas are feeds.rs's (chip thinning, mean chip, Kienzle power, torque). Power and
 //! torque limits lower the feed only, never ap or ae (patent note: fto-adaptive.md, '607).
-use crate::feeds::{self, Cut, DrillRow, Group, Stock, Substrate, THIN_CAP};
+use crate::feeds::{self, Cut, DrillRow, Group, Stock, Substrate, THIN_CAP, TapRow};
 use crate::{Cite, Preset};
 use std::f64::consts::PI;
 
@@ -1331,6 +1331,120 @@ pub fn drilling(
     })
 }
 
+/// A tap's speed: the user's `vc`|`rpm` over the tap's preset over the group's `[[tap]]` row
+/// for its substrate; clamped to the machine (reported). The feed is not a parameter: a tap
+/// feeds its pitch per revolution (vf = p n), so it follows the speed exactly. None without a
+/// speed from any layer.
+pub fn tapping(
+    vc_ask: Option<f64>,
+    rpm_ask: Option<f64>,
+    d: f64,
+    pitch: f64,
+    preset: Option<(&Preset, Option<&Cite>)>,
+    row: Option<&TapRow>,
+    spindle: &Spindle,
+) -> Option<(Val, Val, Val, Vec<Check>)> {
+    let d = d.max(1e-6);
+    let mut checks = Vec::new();
+    let note_of = |c: Option<&Cite>, f: &str| match c {
+        Some(c) if !c.source.is_empty() => {
+            format!("{}: {}", format!("{:?}", c.status).to_lowercase(), c.source)
+        }
+        _ => f.to_string(),
+    };
+    let (n0, mut vc) = match rpm_ask {
+        Some(n) => (
+            n,
+            Val::new(PI * d * n / 1000.0, "m/min", Source::User, "from the user's rpm"),
+        ),
+        None => {
+            let vc = if let Some(v) = vc_ask {
+                Val::new(v, "m/min", Source::User, "")
+            } else if let Some((p, c)) = preset {
+                Val::new(
+                    p.vc,
+                    "m/min",
+                    Source::Library,
+                    note_of(c, "the tap's preset (uncited)"),
+                )
+            } else {
+                let r = row?;
+                let c = r.cites.iter().find(|c| c.path == "vc");
+                Val::new(
+                    r.vc,
+                    "m/min",
+                    Source::Material,
+                    format!(
+                        "group {} {} tapping data; {}",
+                        r.group,
+                        r.substrate,
+                        note_of(c, "uncited")
+                    ),
+                )
+            };
+            (1000.0 * vc.v / (PI * d), vc)
+        }
+    };
+    let n = n0.clamp(spindle.rpm[0], spindle.rpm[1]);
+    let rpm = if n != n0 {
+        let why = format!(
+            "asked {n0:.0} rpm; the machine runs {:.0}–{:.0}",
+            spindle.rpm[0], spindle.rpm[1]
+        );
+        checks.push(Check {
+            what: "rpm",
+            verdict: Verdict::Warn,
+            value: n0,
+            limit: if n0 > n { spindle.rpm[1] } else { spindle.rpm[0] },
+            unit: "rpm",
+            why: format!("clamped: {why}"),
+        });
+        vc = Val::new(PI * d * n / 1000.0, "m/min", Source::MachineClamped, why.clone());
+        Val::new(n, "rpm", Source::MachineClamped, why)
+    } else {
+        Val::new(
+            n,
+            "rpm",
+            if rpm_ask.is_some() {
+                Source::User
+            } else {
+                vc.source
+            },
+            "",
+        )
+    };
+    let feed = Val::new(
+        pitch * n,
+        "mm/min",
+        rpm.source,
+        format!("the pitch {pitch} mm × the speed"),
+    );
+    checks.push(if spindle.max_feed > 0.0 {
+        Check {
+            what: "feed",
+            verdict: if feed.v > spindle.max_feed {
+                Verdict::Fail
+            } else {
+                Verdict::Pass
+            },
+            value: feed.v,
+            limit: spindle.max_feed,
+            unit: "mm/min",
+            why: String::new(),
+        }
+    } else {
+        Check {
+            what: "feed",
+            verdict: Verdict::NotChecked,
+            value: feed.v,
+            limit: f64::NAN,
+            unit: "mm/min",
+            why: "the machine's maximum feed is not known".into(),
+        }
+    });
+    Some((vc, rpm, feed, checks))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1810,5 +1924,23 @@ mod tests {
         // outside the rows: the lesser extension
         let (f3, how) = row.f_at(3.0);
         assert!(f3 <= 0.4064 * 3.0 / 6.35 + 1e-15 && how.contains("under"));
+    }
+
+    /// Tapping: speed from the row at the tap's diameter, feed = pitch × rpm exactly.
+    #[test]
+    fn tapping_speed_and_pitch_feed() {
+        let row = TapRow {
+            group: "N".into(),
+            substrate: "hss".into(),
+            vc: 21.336,
+            ..TapRow::default()
+        };
+        let (vc, rpm, feed, _) = tapping(None, None, 8.0, 1.25, None, Some(&row), &spindle()).unwrap();
+        assert_eq!((vc.v, vc.source), (21.336, Source::Material));
+        assert!((rpm.v - 1000.0 * 21.336 / (PI * 8.0)).abs() < 1e-9);
+        assert!((feed.v - 1.25 * rpm.v).abs() < 1e-12);
+        let (_, rpm, _, _) = tapping(None, Some(400.0), 8.0, 1.25, None, Some(&row), &spindle()).unwrap();
+        assert_eq!((rpm.v, rpm.source), (400.0, Source::User));
+        assert!(tapping(None, None, 8.0, 1.25, None, None, &spindle()).is_none());
     }
 }

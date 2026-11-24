@@ -123,8 +123,10 @@ HSS, OSG EX-SUS-GOLD HSS for N and M) → the drill's own preset (its maker's vc
 Sandvik's drilling formulas: n = 1000 vc/(π Dc), vf = fn n, Q = Dc fn vc/4, Pc = fn vc Dc kc/240e3,
 Mc = Pc 30e3/(π n), kc at (fn/z) sin κr. Peck: the user's, else PMPA's schedule (Cribsheet #116: peck past 3–4 D; 3.5 D, 2 D, then 1 D),
 held at its 1 D for every peck from 3 D (one G83 Q; errs slow). A spot drill borrows the twist-drill row at the diameter it cuts
-to (said; no spot data read). Reply: ops[].drilling[] {role, tool, values, derived, checks}. Taps
-still run at a fixed 300 rpm.
+to (said; no spot data read). Reply: ops[].drilling[] {role, tool, values, derived, checks}. Taps (`drill(.., plan: "auto")` on a threaded hole) run at `tap_vc:`|`tap_rpm:`, else the
+tap's preset, else the group's `[[tap]]` row (OSG A Brand cut-tap tables, List 16505/16515: the low
+end of the slower list; none for S or H), clamped to the machine; the feed is the pitch per
+revolution. Reply rows: role spot | drill | tap.
 
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.

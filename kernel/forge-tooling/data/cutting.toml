@@ -612,3 +612,61 @@ source = "https://osgtool.com/content/literature/8002024CA/Tech%20pg.%20List%20(
 taken = "2026-11-24"
 value = "Titanium Alloys (Annealed): Drilling Speed 120-140 SFM; Feed IPR (low end of the printed range) at 3, 6, 10, 12 mm: 0.0010, 0.0015, 0.0024, 0.0025"
 basis = "OSG solid carbide general drilling (Lists 215/220D/200/233, catalog pages 338-340) for annealed titanium alloys, held for other carbide drills in group S: vc at the middle of the printed SFM range, the feed at the LOW end (errs slow); not for nickel alloys or solution-treated titanium (OSG prints 50-70 SFM for those)"
+
+# Generic tapping speeds per group and tap substrate. OSG A Brand Tap Lineup Vol 2 (EDP 80061CA-V2,
+# (c) 2019 OSG USA; powder-metallurgy HSS, V coating), its List 16505 A-SFT (spiral flute) and
+# 16515 A-POT (spiral point) tables: the lower of the two lists at the LOW end of the printed SFM
+# range (a generic tap's form is not stated; errs slow). No row for S or H: OSG prints none for
+# titanium or over 45 HRC in these cut-tap tables.
+
+[[tap]]
+group = "P"
+substrate = "hss"
+real = true
+vc = 24.384
+[[tap.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.dgisupply.ca/pdf//manufacturers/OSG%20Literature/OSG-A-Brand-Tap-Lineup.pdf (catalog pages 33 and 41)"
+taken = "2026-11-24"
+value = "Low carbon 1010/1018: SFM 80-120 (A-SFT 16505 and A-POT 16515)"
+basis = "the low end of the slower list (80 SFM), held for other HSS cut taps in group P; OSG's are PM-HSS with V coating, a plain HSS tap may want less"
+
+[[tap]]
+group = "M"
+substrate = "hss"
+real = true
+vc = 4.572
+[[tap.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.dgisupply.ca/pdf//manufacturers/OSG%20Literature/OSG-A-Brand-Tap-Lineup.pdf (catalog pages 33 and 41)"
+taken = "2026-11-24"
+value = "300 stainless: SFM 15-35 (A-SFT 16505); 25-75 (A-POT 16515)"
+basis = "the low end of the slower list (15 SFM), held for other HSS cut taps in group M; OSG's are PM-HSS with V coating, a plain HSS tap may want less"
+
+[[tap]]
+group = "K"
+substrate = "hss"
+real = true
+vc = 15.24
+[[tap.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.dgisupply.ca/pdf//manufacturers/OSG%20Literature/OSG-A-Brand-Tap-Lineup.pdf (catalog pages 33 and 41)"
+taken = "2026-11-24"
+value = "Cast Iron: SFM 50-80 (A-SFT 16505); 60-100 (A-POT 16515)"
+basis = "the low end of the slower list (50 SFM), held for other HSS cut taps in group K; OSG's are PM-HSS with V coating, a plain HSS tap may want less"
+
+[[tap]]
+group = "N"
+substrate = "hss"
+real = true
+vc = 21.336
+[[tap.cite]]
+path = "vc"
+status = "estimate"
+source = "https://cdn.dgisupply.ca/pdf//manufacturers/OSG%20Literature/OSG-A-Brand-Tap-Lineup.pdf (catalog pages 33 and 41)"
+taken = "2026-11-24"
+value = "Aluminium 6061/7075: SFM 70-120 (A-SFT 16505 and A-POT 16515)"
+basis = "the low end of the slower list (70 SFM), held for other HSS cut taps in group N; OSG's are PM-HSS with V coating, a plain HSS tap may want less"

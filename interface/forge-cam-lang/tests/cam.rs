@@ -1258,3 +1258,36 @@ fn drilling_is_its_own_model() {
         bolts.plan
     );
 }
+
+/// Taps run at a cited speed for the group (OSG's cut-tap tables, the low end), not a fixed
+/// 300 rpm; their feed is the pitch per revolution; `tap_rpm:` wins.
+#[test]
+fn taps_run_at_a_resolved_speed() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("block_m6_cam.fg"))
+        .unwrap()
+        .replace("plan: \"drill\"", "plan: \"auto\"");
+    let cam = forge_cam_lang::run(&src, &dir);
+    // the block does not model its thread, so a tap is refused by G1 (a gouge): what the
+    // feeds resolved is recorded all the same (the example thread-mills it for that reason)
+    let d = cam.ops.iter().find(|o| o.name == "tapd").unwrap();
+    assert!(
+        d.status == "built" || d.refusal.as_deref().unwrap_or("").contains("gouge"),
+        "{:?}",
+        d.refusal
+    );
+    let (_, id, r) = d.drilled.iter().find(|(role, ..)| *role == "tap").unwrap();
+    assert!(id.contains("m6"), "{id}");
+    assert_eq!(r.vc.source, Source::Material);
+    assert!(r.vc.note.contains("OSG"), "{}", r.vc.note);
+    assert!((r.rpm.v - 1000.0 * r.vc.v / (std::f64::consts::PI * 6.0)).abs() < 1e-9);
+    assert!((r.feed.v - 1.0 * r.rpm.v).abs() < 1e-9);
+    let cam = forge_cam_lang::run(
+        &src.replace("plan: \"auto\"", "plan: \"auto\", tap_rpm: 400"),
+        &dir,
+    );
+    let d = cam.ops.iter().find(|o| o.name == "tapd").unwrap();
+    let (_, _, r) = d.drilled.iter().find(|(role, ..)| *role == "tap").unwrap();
+    assert_eq!((r.rpm.v, r.rpm.source), (400.0, Source::User));
+}

@@ -391,6 +391,43 @@ impl DrillRow {
     }
 }
 
+/// Generic tapping speed for one ISO 513 group and tap substrate (cutting.toml `[[tap]]`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TapRow {
+    pub group: String,
+    pub substrate: String,
+    pub vc: f64,
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+impl TapRow {
+    pub fn from_table(t: &Table) -> Result<TapRow, LibError> {
+        let s = |k: &'static str| {
+            text(t, k).map(str::to_string).ok_or_else(|| LibError::Missing {
+                record: "[[tap]]".into(),
+                field: k,
+                fix: format!("give `{k}`"),
+            })
+        };
+        let (group, substrate) = (s("group")?, s("substrate")?);
+        let rec = format!("tap data {group}/{substrate}");
+        let vc = num(t, "vc").ok_or_else(|| LibError::Missing {
+            record: rec.clone(),
+            field: "vc",
+            fix: "give `vc`, m/min".into(),
+        })?;
+        let (real, cites) = cite::read(t, &rec, &["vc".to_string()], &["group", "substrate"])?;
+        Ok(TapRow {
+            group,
+            substrate,
+            vc,
+            real,
+            cites,
+        })
+    }
+}
+
 /// What the engine was asked for.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Cut {

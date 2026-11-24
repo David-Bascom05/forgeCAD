@@ -3137,9 +3137,80 @@ impl Cam {
         out.tool = Some(ti);
         if let Some(tp) = tap {
             let ti = add(self, tp, base_t + 2)?;
+            let part = &self.parts[self.setups[su].part];
+            let m = self
+                .lib
+                .machine(&self.setups[su].machine)
+                .map_err(|e| e.to_string())?;
             let t = &self.tools[ti];
-            let rpm = 300.0;
-            let f = t.tool.tp * rpm;
+            let sub = feeds::Substrate::of(&t.tool.material);
+            let preset = t.tool.presets.iter().find(|p| p.group == part.group).map(|p| {
+                let path = format!("preset.{}", if p.name.is_empty() { &p.group } else { &p.name });
+                (p, t.tool.cites.iter().find(|c| c.path == path))
+            });
+            let row = match sub {
+                feeds::Substrate::Hss => self.lib.tapping(&part.group, "hss"),
+                feeds::Substrate::Carbide => self.lib.tapping(&part.group, "carbide"),
+                _ => None,
+            };
+            let num_arg = |k: &str| match a.get(k) {
+                Some(V::Num(x)) if *x > 0.0 => Ok(Some(*x)),
+                Some(_) => Err(format!("`{k}` must be a number over 0")),
+                None => Ok(None),
+            };
+            let (vc, rpmv, feed, checks) = resolve::tapping(
+                num_arg("tap_vc")?,
+                num_arg("tap_rpm")?,
+                t.tool.dc,
+                t.tool.tp,
+                preset,
+                row,
+                &resolve::Spindle {
+                    rpm: m.rpm,
+                    max_feed: m.max_feed,
+                    power: &m.power,
+                },
+            )
+            .ok_or_else(|| {
+                format!(
+                    "no tapping speed for `{}` ({} tap) in group `{}`: no preset on the tap, no [[tap]] row, no `tap_vc:`/`tap_rpm:` given",
+                    t.tool.id,
+                    sub.name(),
+                    part.group
+                )
+            })?;
+            if let Some(c) = checks.iter().find(|c| c.verdict == Verdict::Fail) {
+                return Err(format!(
+                    "tap {} {:.1} {} over the limit {:.1}",
+                    c.what, c.value, c.unit, c.limit
+                ));
+            }
+            let rpm = rpmv.v;
+            let f = feed.v;
+            let tap_res = resolve::DrillResolved {
+                vc,
+                rpm: rpmv,
+                f: resolve::Val {
+                    v: t.tool.tp,
+                    unit: "mm/rev",
+                    source: resolve::Source::Library,
+                    note: "the tap's pitch".into(),
+                },
+                feed,
+                peck: resolve::Val {
+                    v: 0.0,
+                    unit: "mm",
+                    source: resolve::Source::Default,
+                    note: "a tap does not peck".into(),
+                },
+                h: f64::NAN,
+                mrr: f64::NAN,
+                power: f64::NAN,
+                torque: f64::NAN,
+                power_hi: f64::NAN,
+                power_avail: None,
+                checks,
+            };
             let mut p = ops::holes(
                 &hole.places,
                 CycleKind::Tap,
@@ -3154,7 +3225,8 @@ impl Cam {
             );
             p.rpm = rpm;
             paths.push(p);
-            plan.push(format!("tap {} (pitch {}) at {rpm} rpm", t.tool.id, t.tool.tp));
+            plan.push(format!("tap {} (pitch {}) at {rpm:.0} rpm", t.tool.id, t.tool.tp));
+            out.drilled.push(("tap", t.tool.id.clone(), tap_res));
         }
         out.plan = plan;
         // the plan's paths are posted one after the other, each with its tool

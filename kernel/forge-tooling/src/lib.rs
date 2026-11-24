@@ -607,6 +607,8 @@ pub struct Library {
     pub stock: Vec<feeds::Stock>,
     /// Generic drilling data per group and substrate.
     pub drilling: Vec<feeds::DrillRow>,
+    /// Generic tapping speeds per group and substrate.
+    pub tapping: Vec<feeds::TapRow>,
     pub vises: Vec<Vise>,
     pub jaw_blanks: Vec<JawBlank>,
     pub collets: Vec<Collet>,
@@ -938,6 +940,9 @@ impl Library {
         for r in tables(&t, "group") {
             self.cutting.push(feeds::Group::from_table(r)?);
         }
+        for r in tables(&t, "tap") {
+            self.tapping.push(feeds::TapRow::from_table(r)?);
+        }
         for r in tables(&t, "drill") {
             self.drilling.push(feeds::DrillRow::from_table(r)?);
         }
@@ -1041,6 +1046,12 @@ impl Library {
     }
     pub fn group(&self, g: &str) -> Option<&feeds::Group> {
         self.cutting.iter().find(|x| x.group == g || x.name == g)
+    }
+    /// Generic tapping speed for a group and substrate ("hss" | "carbide").
+    pub fn tapping(&self, group: &str, substrate: &str) -> Option<&feeds::TapRow> {
+        self.tapping
+            .iter()
+            .find(|x| x.group == group && x.substrate == substrate)
     }
     /// Generic drilling data for a group and substrate ("carbide" | "hss").
     pub fn drilling(&self, group: &str, substrate: &str) -> Option<&feeds::DrillRow> {
