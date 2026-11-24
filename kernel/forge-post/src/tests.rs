@@ -791,3 +791,47 @@ fn cutter_comp_rules_print_and_read() {
     p.recs.insert(6, Rec::Home);
     assert!(quantize(&p, &d).is_err(), "home while on");
 }
+
+fn probe_prog() -> Program {
+    Program {
+        number: 1,
+        title: "probe".into(),
+        recs: vec![
+            Rec::Wcs(0),
+            Rec::Rapid([10.0, 20.0, 5.0]),
+            Rec::Probe {
+                to: [10.0, 20.0, -10.0],
+                f: 100.0,
+            },
+            Rec::Rapid([10.0, 20.0, 5.0]),
+            Rec::Line([12.0, 20.0, 5.0], 500.0),
+        ],
+    }
+}
+
+#[test]
+fn a_probe_move_posts_only_where_cited_and_round_trips() {
+    for name in ["linuxcnc", "grbl"] {
+        let d = Dialect::get(name).unwrap();
+        let q = quantize(&probe_prog(), &d).unwrap();
+        let (txt, back) = round_trip(&q, &d).unwrap();
+        assert!(txt.contains("G38.2 X10"), "{name}: {txt}");
+        // after the probe every axis and the motion are written again
+        let after = txt.lines().skip_while(|l| !l.contains("G38.2")).nth(1).unwrap();
+        assert!(
+            after.contains("G0") && after.contains('X') && after.contains('Y') && after.contains('Z'),
+            "{name}: {after}"
+        );
+        assert!(back.iter().any(|m| matches!(m, Motion::Probe(..))));
+    }
+    for name in ["fanuc", "haas", "siemens"] {
+        let d = Dialect::get(name).unwrap();
+        let q = quantize(&probe_prog(), &d).unwrap();
+        match print(&q, &d) {
+            Err(PostError::Unsupported { what, .. }) => {
+                assert!(what.contains("probe move"), "{name}: {what}")
+            }
+            other => panic!("{name}: {other:?}"),
+        }
+    }
+}

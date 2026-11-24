@@ -50,6 +50,8 @@ note = "verify with your configuration"
 comp_left = "G41 D{d}"
 comp_right = "G42 D{d}"
 comp_off = "G40"
+# probe (skip) move: straight probe toward the point, error if it is reached untriggered
+probe_move = "G38.2 X{x} Y{y} Z{z} F{f}"
 
 [[dialect.cite]]
 key = "comp_left"
@@ -79,3 +81,10 @@ source = "https://linuxcnc.org/docs/html/gcode/tool-compensation.html"
 taken = "2026-11-24"
 where = "4. Cutter Radius Compensation"
 note = "states only: an outside corner moves 'to the end point of the compensated cut line', an inside one 'will stop short'; arc or intersection is not stated: UNKNOWN"
+
+[[dialect.cite]]
+key = "probe_move"
+source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
+taken = "2026-11-24"
+where = "LinuxCNC G-code reference, G38.n Straight Probe"
+note = "G38.2: probe toward workpiece, stop on contact, signal error if failure; the axis words define the destination, at least one is used; the controlled point moves in a straight line at the current feed rate; #5061-#5069 hold the trip point in the current work coordinates and #5070 is 1 on success (read by PROBING, 2026-11-24)"
