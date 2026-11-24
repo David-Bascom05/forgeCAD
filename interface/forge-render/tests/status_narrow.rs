@@ -1,5 +1,6 @@
 //! The status bar in a narrow window (480 px): the status line ends short of Markup, cut with "…"
-//! and whole on hover, and leads with the short state (valid, faces, volume) for the cut to keep. Before: it ran on under Markup and the issues chip, both drawn over it.
+//! and whole on hover, and leads with the short state (valid, volume, faces) for the cut to keep.
+//! Before: it ran on under Markup and the issues chip, both drawn over it.
 
 use forge_render::gui::{Gui, Headless};
 
@@ -29,13 +30,13 @@ fn the_status_line_stops_short_of_markup_in_a_narrow_window() {
         h.step();
     }
     let status = h.gui.shell.status.clone();
-    // the short state first, so the cut takes the details: valid, the faces, the volume in cm³
-    assert!(status.starts_with("valid · 6 faces · 57.6 cm³ · "), "{status}");
+    // the short state first, so the cut takes the details: valid, the volume in cm³, the faces
+    assert!(status.starts_with("valid · 57.6 cm³ · 6 faces · "), "{status}");
     let said = h.placed("status:said").expect("the status line");
     // cut between its parts, the short state whole
     let shown = h.gui.shell.status_shown.clone();
     assert!(
-        shown.starts_with("valid \u{b7} 6 faces") && shown.ends_with(" \u{b7} \u{2026}"),
+        shown.starts_with("valid \u{b7} 57.6 cm³") && shown.ends_with(" \u{b7} \u{2026}"),
         "{shown}"
     );
     let markup = h.placed("status:markup").expect("Markup");
