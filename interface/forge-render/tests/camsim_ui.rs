@@ -115,3 +115,31 @@ fn a_turning_document_gets_no_milling_simulation() {
     );
     shot(&mut h, "native-sim-06-turning-no-sim-1400x860");
 }
+
+/// Docked: an environment's properties column hosts the panel (`Shell::camsim_properties`, drawn
+/// before the simulation's own chrome each frame); the floating panel then stands down and the
+/// view's free part reaches its right edge. Hosting stops, the panel floats again.
+#[test]
+fn the_panel_docks_in_an_environments_properties() {
+    let dir = copied("dock", &["flange.fg", "flange_cam.fg"]);
+    let Some(mut h) = open(&dir.join("flange_cam.fg"), (1400.0, 860.0), true) else {
+        return;
+    };
+    let ctx = egui::Context::default();
+    let host = |h: &mut Headless| {
+        let mut drawn = false;
+        let _ = ctx.run_ui(egui::RawInput::default(), |ui| {
+            let r = egui::Rect::from_min_size(egui::pos2(1000.0, 100.0), egui::vec2(340.0, 700.0));
+            drawn = h.gui.shell.camsim_properties(ui, r);
+        });
+        drawn
+    };
+    assert!(host(&mut h), "a simulation to host");
+    h.step();
+    let st = h.gui.shell.camsim.as_ref().unwrap();
+    assert!(st.docked, "hosted before the frame: docked");
+    assert!(!st.hosted, "taken by the frame");
+    // not hosted on the next frame: floating again
+    h.step();
+    assert!(!h.gui.shell.camsim.as_ref().unwrap().docked);
+}
