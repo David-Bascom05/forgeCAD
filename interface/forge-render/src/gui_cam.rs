@@ -111,22 +111,10 @@ impl Gui {
             let key = (op.clone(), r.text.clone());
             if w.alt_asked.as_ref() != Some(&key) {
                 w.alt_asked = Some(key);
-                let (text, dir, slot, waker) = (
-                    r.text.clone(),
-                    w.dir.clone(),
-                    w.alt_job.clone(),
-                    self.waker.clone(),
-                );
+                let (text, dir, slot, waker) = (r.text.clone(), w.dir.clone(), w.alt_job.clone(), self.waker.clone());
                 crate::plat::spawn("forge-cam-alt", move || {
-                    let q = forge_cam_quality::alternative_clear(
-                        &text,
-                        &dir,
-                        &op,
-                        &forge_cam_quality::Config::default(),
-                    );
-                    let got = q
-                        .filter(|q| q.t_min > 0.0)
-                        .map(|q| (q.t_min, q.t_scurve.max(q.t_min)));
+                    let q = forge_cam_quality::alternative_clear(&text, &dir, &op, &forge_cam_quality::Config::default());
+                    let got = q.filter(|q| q.t_min > 0.0).map(|q| (q.t_min, q.t_scurve.max(q.t_min)));
                     *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some((op, text, got));
                     waker();
                 });
@@ -276,11 +264,7 @@ impl Gui {
         let free = self.shell.camsim_free(vr);
         let Some(w) = &mut self.shell.cam else { return };
         // what covers the view's bottom: the timeline, and the Document Text panel above it
-        let text = if w.text_open {
-            crate::shell::cam::text_panel_h(free.height()) + 4.0
-        } else {
-            0.0
-        };
+        let text = if w.text_open { crate::shell::cam::text_panel_h(free.height()) + 4.0 } else { 0.0 };
         let cover = vr.bottom() - free.bottom() + text;
         // the turning Section window over the view's bottom right: framed around as a right inset
         // or a bottom one, whichever leaves the more room (UX-LEAD: the part in what is left)
