@@ -356,8 +356,13 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
             }
         }
     }
+    // a narrow view: the view's settings on a row of their own, the bar taller for it
+    let narrow = view.width() < 900.0;
     let band = Rect::from_min_max(
-        egui::pos2(view.left() + 12.0, view.bottom() - 74.0),
+        egui::pos2(
+            view.left() + 12.0,
+            view.bottom() - if narrow { 104.0 } else { 74.0 },
+        ),
         egui::pos2(view.right() - 12.0, view.bottom() - 8.0),
     );
     egui::Area::new(egui::Id::unique("env-bendsim-timeline"))
@@ -370,7 +375,7 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
                 .inner_margin(6.0)
                 .show(ui, |ui| {
                     ui.set_width(band.width() - 12.0);
-                    super::bendsim::timeline_ui(ui, b);
+                    super::bendsim::timeline_ui(ui, b, narrow);
                 });
         });
     s.places.push(("env:bendsim:view".into(), view));
