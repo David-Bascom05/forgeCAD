@@ -94,18 +94,38 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
             false,
         )
     };
-    let of = |g: &str| -> Vec<Button> { schema::OPS.iter().filter(|o| o.group == g).map(op).collect() };
-    let two_d = of("2D");
-    let (big2, small2) = two_d.split_at(3.min(two_d.len()));
+    let of = |g: &str| -> Vec<Button> {
+        schema::OPS
+            .iter()
+            .chain(schema::TURN_OPS)
+            .filter(|o| o.group == g)
+            .map(op)
+            .collect()
+    };
     let generating = w.running.is_some();
-    vec![
-        (
-            "Setup",
-            vec![("New Setup", "cam_setup", a(Ask::NewSetup), false)],
-            vec![],
-        ),
-        ("2D", big2.to_vec(), small2.to_vec()),
-        ("Drilling", of("Drilling"), vec![]),
+    // a document is milling or turning (one dispatch per document): its own setup and ops;
+    // an empty one offers both setups
+    let turning = w.turning();
+    let milling = !turning && has_setup;
+    let mut setup = vec![];
+    if !turning {
+        setup.push(("New Setup", "cam_setup", a(Ask::NewSetup), false));
+    }
+    if !milling {
+        setup.push(("New Lathe Setup", "cam_lathe", a(Ask::NewLatheSetup), false));
+    }
+    let mut out = vec![("Setup", setup, vec![])];
+    if turning {
+        let t = of("Turning");
+        let (big, small) = t.split_at(3.min(t.len()));
+        out.push(("Turning", big.to_vec(), small.to_vec()));
+    } else {
+        let two_d = of("2D");
+        let (big2, small2) = two_d.split_at(3.min(two_d.len()));
+        out.push(("2D", big2.to_vec(), small2.to_vec()));
+        out.push(("Drilling", of("Drilling"), vec![]));
+    }
+    out.extend(vec![
         (
             "Actions",
             vec![
@@ -144,7 +164,8 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
             vec![("Tool Library", "cam_tools", a(Ask::ToolLibrary), w.tools_open)],
             vec![("Document Text", "cam_post", a(Ask::ToggleText), w.text_open)],
         ),
-    ]
+    ]);
+    out
 }
 
 /// A one-line number: up to 3 decimals, no trailing zeros.
@@ -584,6 +605,53 @@ fn details(
     let run = w.run.as_ref();
     heading(ui, t, &format!("{id} · {}", s.func), width);
     match &s.role {
+        super::doc::Role::Setup if s.func == "lathe_setup" => {
+            let v = |k: &str| s.arg(k).map(str::to_string).unwrap_or_else(|| "—".into());
+            fact(
+                ui,
+                t,
+                "Lathe",
+                &s.arg_str("machine").unwrap_or_else(|| "none".into()),
+                width,
+                t.ink,
+            );
+            fact(
+                ui,
+                t,
+                "Bar",
+                &format!("D {} mm, front at z {}", v("bar"), v("front")),
+                width,
+                t.ink,
+            );
+            fact(ui, t, "Chuck", &v("chuck"), width, t.ink);
+            match s.arg("at") {
+                Some(a) => fact(ui, t, "Z0 at machine Z", a, width, t.ink),
+                None => fact(ui, t, "Placed", "no (G5 spans only)", width, t.ink2),
+            }
+            fact(
+                ui,
+                t,
+                "Tolerance",
+                &s.arg("tol").unwrap_or("0.002 (default)").to_string(),
+                width,
+                t.ink,
+            );
+            for l in run.map(|r| r.leftover.clone()).unwrap_or_default() {
+                note(
+                    ui,
+                    &format!(
+                        "Left over: ρ {}…{}, z {}…{} ({})",
+                        num(l.boxes[0][0]),
+                        num(l.boxes[0][2]),
+                        num(l.z[0]),
+                        num(l.z[1]),
+                        l.why
+                    ),
+                    width,
+                    t.ink2,
+                );
+            }
+        }
         super::doc::Role::Setup => {
             let Some(su) = run.and_then(|r| r.setup(id)) else {
                 note(ui, "Generate to see the stock and work offset.", width, t.ink2);
@@ -1038,6 +1106,8 @@ fn op_dialog(
                 match f.kind {
                     Kind::Len => arg_field(ui, t, f.label, &mut val, &hint, "mm", &key, places),
                     Kind::Deg => arg_field(ui, t, f.label, &mut val, &hint, "deg", &key, places),
+                    Kind::Z => arg_field(ui, t, f.label, &mut val, &hint, "mm z", &key, places),
+                    Kind::Count => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
                     Kind::Choice(words) => {
                         let mut items: Vec<(String, String)> = vec![];
                         if !f.required {
@@ -1178,6 +1248,9 @@ fn setup_dialog(
     d: &mut SetupDlg,
     places: &mut Places,
 ) -> (bool, Option<Rect>) {
+    if d.lathe {
+        return lathe_dialog(ctx, t, v, w, d, places);
+    }
     let (mut ok, mut cancel, mut close) = (false, false, false);
     let get = |d: &SetupDlg, k: &str| {
         d.args
@@ -1354,6 +1427,133 @@ fn setup_dialog(
     (!(ok || cancel || close), rect)
 }
 
+/// A lathe setup (`lathe_setup`, docs/cam-turning.md): the bar, the chuck, the lathe and where
+/// the work sits on it; the tolerances.
+fn lathe_dialog(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    d: &mut SetupDlg,
+    places: &mut Places,
+) -> (bool, Option<Rect>) {
+    let (mut ok, mut cancel, mut close) = (false, false, false);
+    let get = |d: &SetupDlg, k: &str| {
+        d.args
+            .iter()
+            .find(|a| a.0 == k)
+            .map(|a| a.1.clone())
+            .unwrap_or_default()
+    };
+    let set = |d: &mut SetupDlg, k: &str, v: String| match d.args.iter_mut().find(|a| a.0 == k) {
+        Some(a) => a.1 = v,
+        None => d.args.push((k.to_string(), v)),
+    };
+    let mut machines: Vec<(String, String)> = vec![(String::new(), "none (G5 not checked)".into())];
+    machines.extend(super::lathes().into_iter().map(|m| (format!("\"{m}\""), m)));
+    let mut chucks: Vec<(String, String)> = w
+        .stmts
+        .iter()
+        .filter(|s| s.func == "chuck")
+        .map(|s| {
+            (
+                s.name.clone(),
+                format!(
+                    "{} · {}",
+                    s.name,
+                    s.args
+                        .iter()
+                        .map(|a| a.key.clone().unwrap_or_default() + ": " + &a.text)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )
+        })
+        .collect();
+    chucks.push((
+        "chuck(face: -70, grip: 30, jaw: 15)".into(),
+        "a new chuck (face −70, grip 30, jaw 15)".into(),
+    ));
+    let new = d.id.is_none();
+    let r = egui::Window::new("cam-lathe")
+        .id(egui::Id::unique("cam-lathe-dialog"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        .fixed_size(vec2(DLG_W, 0.0))
+        .frame(frame(t))
+        .constrain_to(crate::shell::dialog_area(ctx))
+        .show_placed(ctx, places, |ui, places| {
+            ui.spacing_mut().item_spacing.y = 4.0;
+            close = head(
+                ui,
+                t,
+                "cam_lathe",
+                &if new { "New Lathe Setup".to_string() } else { format!("Lathe Setup · {}", d.name) },
+                DLG_W,
+                places,
+                "cam:setup",
+            );
+            tabs(ui, t, &["Setup", "Stock", "Tolerances"], &mut d.tab, DLG_W, places, "cam:setup:tab");
+            ui.add_space(4.0);
+            match d.tab {
+                0 => {
+                    let mut name = d.name.clone();
+                    arg_field(ui, t, "Name", &mut name, "", "", "cam:setup:name", places);
+                    d.name = name;
+                    let mut m = get(d, "machine");
+                    arg_choice(ui, t, "Lathe", &mut m, &machines, "cam:setup:machine", places);
+                    set(d, "machine", m);
+                    heading(ui, t, "Work and tools on the machine", DLG_W);
+                    let mut at = get(d, "at");
+                    arg_field(ui, t, "Z0 at machine Z", &mut at, "unplaced: G5 spans only", "mm", "cam:setup:at", places);
+                    set(d, "at", at);
+                    let mut off = get(d, "offsets");
+                    arg_field(ui, t, "Tool offsets", &mut off, "((station, x, z), ...)", "", "cam:setup:offsets", places);
+                    set(d, "offsets", off);
+                    heading(ui, t, "Workholding", DLG_W);
+                    let mut c = get(d, "chuck");
+                    arg_choice(ui, t, "Chuck", &mut c, &chucks, "cam:setup:chuck", places);
+                    set(d, "chuck", c);
+                    note(ui, "The chuck's face (z), grip length and jaw height: its envelope as it turns is what G2 keeps every tool body clear of.", DLG_W, t.ink2);
+                }
+                1 => {
+                    for (key, label, hint, unit) in [
+                        ("bar", "Bar diameter", "required", "mm"),
+                        ("front", "Front face at", "the bar's front face, z", "mm z"),
+                    ] {
+                        let mut x = get(d, key);
+                        arg_field(ui, t, label, &mut x, hint, unit, &format!("cam:setup:{key}"), places);
+                        set(d, key, x);
+                    }
+                    note(ui, "Z is the spindle axis, Z0 where the part puts it; the bar is the stock, its front face the first face cut.", DLG_W, t.ink2);
+                }
+                _ => {
+                    for (key, label, hint) in [
+                        ("tol", "Tolerance", "default 0.002"),
+                        ("clearance", "Fixture clearance", "default 1"),
+                    ] {
+                        let mut x = get(d, key);
+                        arg_field(ui, t, label, &mut x, hint, "mm", &format!("cam:setup:{key}"), places);
+                        set(d, key, x);
+                    }
+                }
+            }
+            note(ui, &w.setup_text(d), DLG_W, t.ink2);
+            if let Some(e) = &d.error {
+                note(ui, e, DLG_W, t.error);
+            }
+            (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+        });
+    let rect = r.map(|r| r.response.rect);
+    if ok && let Err(e) = w.setup_ok(d) {
+        d.error = Some(e);
+        return (true, rect);
+    }
+    (!(ok || cancel || close), rect)
+}
+
 fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
     let mut close = false;
     let progs: Vec<String> = w
@@ -1394,10 +1594,18 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
             let id = progs[k].clone();
             let s = w.stmt(&id).cloned().expect("listed");
             let mut post = s.arg("post").unwrap_or("").to_string();
-            let dialects: Vec<(String, String)> = forge_post::DIALECTS
-                .iter()
-                .map(|(n, _)| (format!("\"{n}\""), (*n).to_string()))
-                .collect();
+            // a lathe's program posts with the lathe dialects (forge-turn's)
+            let dialects: Vec<(String, String)> = if s.func == "lathe_program" {
+                ["fanuc-lathe", "haas-lathe", "linuxcnc-lathe"]
+                    .iter()
+                    .map(|n| (format!("\"{n}\""), (*n).to_string()))
+                    .collect()
+            } else {
+                forge_post::DIALECTS
+                    .iter()
+                    .map(|(n, _)| (format!("\"{n}\""), (*n).to_string()))
+                    .collect()
+            };
             let was = post.clone();
             arg_choice(ui, t, "Dialect", &mut post, &dialects, "cam:post:dialect", places);
             if post != was {
@@ -1541,6 +1749,11 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
             w.tools_filter = f.clone();
             let f = f.to_lowercase();
             let used: Vec<String> = w.tools().iter().filter_map(|s| s.pos(0).map(super::doc::unquote)).collect();
+            if w.turning() {
+                lathe_tools(ui, t, width, &f, &used, &mut add, places);
+                ui.add_space(8.0);
+                return;
+            }
             heading(ui, t, "Cutters", width);
             let (r, _) = ui.allocate_exact_size(vec2(width, 300.0), Sense::hover());
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
@@ -1583,6 +1796,25 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
             note(ui, "Built in: generic tools and conservative holders, our own numbers; verify with the vendor. A project adds its own in cam/*.toml beside the document.", width, t.ink2);
             ui.add_space(8.0);
         });
+    if let Some(id) = add.clone().filter(|_| w.turning()) {
+        // a lathe tool at the next free station
+        let tn = (1..)
+            .find(|k| !w.tools().iter().any(|s| s.arg("t") == Some(&k.to_string())))
+            .unwrap_or(1);
+        let name = super::doc::free_name(&w.stmts, &format!("t{tn}"));
+        let before = w
+            .tools()
+            .last()
+            .and_then(|s| w.stmts.iter().position(|x| x.name == s.name))
+            .and_then(|k| w.stmts.get(k + 1))
+            .or_else(|| w.stmts.iter().find(|s| s.role == super::doc::Role::Setup))
+            .map(|s| s.name.clone());
+        w.edit(&super::doc::Edit::Add {
+            before,
+            text: format!("{name} = lathe_tool(\"{id}\", t: {tn})"),
+        });
+        add = None;
+    }
     if let Some(id) = add {
         let n = w.tools().len() + 1;
         let tn = (1..)
@@ -1621,6 +1853,72 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         w.tools_open = false;
     }
     r.map(|r| r.response.rect)
+}
+
+/// The lathe tool library (forge-turn's built-in records): insert, holder or bar, nose radius,
+/// cutting data; Add puts a `lathe_tool(..)` at the next free station.
+#[allow(clippy::too_many_arguments)]
+fn lathe_tools(
+    ui: &mut Ui,
+    t: &Theme,
+    width: f32,
+    f: &str,
+    used: &[String],
+    add: &mut Option<String>,
+    places: &mut Places,
+) {
+    heading(ui, t, "Lathe tools", width);
+    let lib = forge_turn::insert::library(forge_turn::insert::BUILTIN).unwrap_or_default();
+    let (r, _) = ui.allocate_exact_size(vec2(width, 320.0), Sense::hover());
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
+    egui::ScrollArea::vertical()
+        .id_salt("cam-lathe-tools")
+        .auto_shrink([false, false])
+        .show(&mut child, |ui| {
+            for tool in &lib {
+                let line = format!(
+                    "{}  ·  {:?}  ·  {}  ·  r {}  ·  vc {}  ·  f {}",
+                    tool.id,
+                    tool.kind,
+                    tool.code,
+                    num(tool.re),
+                    num(tool.vc),
+                    num(tool.f)
+                );
+                if !f.is_empty() && !line.to_lowercase().contains(f) {
+                    continue;
+                }
+                let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 24.0), Sense::click());
+                if resp.hovered() {
+                    ui.painter().rect_filled(r, 0.0, t.hover);
+                }
+                let inu = used.contains(&tool.id);
+                ui.painter().text(
+                    pos2(r.left() + 14.0, r.center().y),
+                    Align2::LEFT_CENTER,
+                    &line,
+                    sans(12.0),
+                    t.ink,
+                );
+                ui.painter().text(
+                    pos2(r.right() - 10.0, r.center().y),
+                    Align2::RIGHT_CENTER,
+                    if inu { "in document" } else { "Add" },
+                    sans(12.0),
+                    if inu { t.ink2 } else { t.accent },
+                );
+                places.push((format!("cam:tools:row:{}", tool.id), r));
+                if resp.clicked() && !inu {
+                    *add = Some(tool.id.clone());
+                }
+            }
+        });
+    note(
+        ui,
+        "Inserts and holders decoded from their ISO codes (kernel/forge-turn/data/turning.toml); holder heads are generic: verify with the vendor.",
+        width,
+        t.ink2,
+    );
 }
 
 fn checks_window(

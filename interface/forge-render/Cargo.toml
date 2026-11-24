@@ -62,6 +62,9 @@ forge-cam-lang = { path = "../forge-cam-lang" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-post = { path = "../../kernel/forge-post" }
 forge-cam = { path = "../../kernel/forge-cam" }
+# turning: the lathe document (forgecad.cam/1, "process": "turning"), its tools, lathes and posts
+forge-turn-lang = { path = "../forge-turn-lang" }
+forge-turn = { path = "../../kernel/forge-turn" }
 # the tools' revolved profiles (the simulation's tool and stock)
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 # the machine simulation: machines as data, the posted text on them (forge-machine)

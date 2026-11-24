@@ -81,8 +81,9 @@ pub fn unquote(t: &str) -> String {
     }
 }
 
-/// The op built-ins this workspace knows (forge-cam-lang's `call`).
-pub const OP_FUNCS: [&str; 8] = [
+/// The op built-ins this workspace knows: forge-cam-lang's (milling), then forge-turn-lang's
+/// (turning).
+pub const OP_FUNCS: [&str; 16] = [
     "facing",
     "clear",
     "contour",
@@ -91,16 +92,24 @@ pub const OP_FUNCS: [&str; 8] = [
     "engrave",
     "thread_mill",
     "edge_break",
+    "turn_face",
+    "turn_rough",
+    "turn_finish",
+    "bore_rough",
+    "turn_groove",
+    "turn_thread",
+    "part_off",
+    "turn_drill",
 ];
 
 fn role_of(func: &str) -> Role {
     match func {
         "part" => Role::Part,
         "machine" => Role::Machine,
-        "tool" => Role::Tool,
-        "setup" => Role::Setup,
-        "vise" | "soft_jaw" => Role::Fixture,
-        "program" => Role::Program,
+        "tool" | "lathe_tool" => Role::Tool,
+        "setup" | "lathe_setup" => Role::Setup,
+        "vise" | "soft_jaw" | "chuck" => Role::Fixture,
+        "program" | "lathe_program" => Role::Program,
         f if OP_FUNCS.contains(&f) => Role::Op(f.to_string()),
         // an op built-in this workspace has no form for yet: shown, edited as text
         f if f.ends_with("_mill") || f.starts_with("rough") || f.starts_with("finish") => {

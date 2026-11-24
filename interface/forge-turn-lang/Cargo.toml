@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# the filesystem a browser page has too (its in-memory tree)
+forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-lang = { path = "../forge-lang" }
 forge-agent = { path = "../forge-agent" }
 forge-turn = { path = "../../kernel/forge-turn" }
