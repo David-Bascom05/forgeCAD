@@ -234,6 +234,23 @@ impl Check {
     }
 }
 
+/// Every wall's and zone's region within the flat pattern, in its own coordinates: a function
+/// of the model alone, made once and shared by every step a search simulates.
+#[derive(Clone, Debug)]
+pub struct Regions {
+    pub walls: Vec<Region>,
+    pub zones: Vec<Region>,
+}
+
+impl Regions {
+    pub fn of(m: &Model) -> Regions {
+        Regions {
+            walls: m.walls.iter().map(|w| w.region(&m.pattern)).collect(),
+            zones: m.bends.iter().map(|b| b.region(&m.pattern)).collect(),
+        }
+    }
+}
+
 /// One step's tooling and orientation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Setup {
@@ -411,6 +428,8 @@ pub struct StepCtx<'a> {
     pub oy: f64,
     /// The working station (index into the tooling's stations), when stations are set.
     pub station: Option<usize>,
+    /// `contact_range` already made for this bend and die (by a search).
+    pub contact_kept: Option<(f64, f64, f64, bool)>,
     /// Verdicts kept across steps: a piece's place depends only on the bends on its path to
     /// the moving one, so its verdict against a tool holds wherever those are bent alike.
     pub memo: Option<std::rc::Rc<std::cell::RefCell<Memo>>>,
@@ -465,6 +484,19 @@ impl<'a> StepCtx<'a> {
         setup: Setup,
         overbend: f64,
     ) -> StepCtx<'a> {
+        StepCtx::with_regions(m, tl, done, j, setup, overbend, &Regions::of(m))
+    }
+
+    /// `new`, with the model's regions already made (a search makes them once).
+    pub fn with_regions(
+        m: &'a Model,
+        tl: &'a Tooling,
+        done: &[bool],
+        j: usize,
+        setup: Setup,
+        overbend: f64,
+        rg: &Regions,
+    ) -> StepCtx<'a> {
         let bj = &m.bends[j];
         let punch = &tl.punches[setup.punch];
         let die = &tl.dies[setup.die];
@@ -509,7 +541,7 @@ impl<'a> StepCtx<'a> {
                 let s_inv = if beyond { &sb_inv } else { &sa_inv };
                 (Rigid2::ID, s_inv.then(&frames[wi]))
             };
-            let region = w.region(&m.pattern).moved(&to_param);
+            let region = rg.walls[wi].moved(&to_param);
             let (lo, hi) = region.bbox();
             pieces.push(Piece {
                 kind: Kind::Wall {
@@ -533,7 +565,7 @@ impl<'a> StepCtx<'a> {
             });
         }
         for (k, b) in m.bends.iter().enumerate() {
-            let region = b.region(&m.pattern);
+            let region = rg.zones[k].clone();
             let (lo, hi) = region.bbox();
             let dom = [
                 Interval::new(lo.x, hi.x),
@@ -618,6 +650,7 @@ impl<'a> StepCtx<'a> {
             punch_index: setup.punch,
             oy,
             station: station_ix,
+            contact_kept: None,
             memo: None,
             legs: None,
         }
@@ -658,6 +691,16 @@ impl<'a> StepCtx<'a> {
         self.oy = st.y;
         self.lengths = (Some(st.punch_length), Some(st.die_length));
         self
+    }
+
+    /// The shoulder's contact on the leg through the motion: its least and farthest place, where
+    /// the least is, and whether both are certified. It reads the bend, the die and the overbend
+    /// only (a search keeps it by bend and die: `contact_kept`).
+    pub fn contact_range(&self) -> (f64, f64, f64, bool) {
+        if let Some(c) = self.contact_kept {
+            return c;
+        }
+        range_1d(|i| self.contact(i), |x| self.contact(x), 0.0, self.phimax)
     }
 
     /// The punch tip's height above the die top at turn φ.
@@ -1413,7 +1456,7 @@ impl<'a> StepCtx<'a> {
         ));
         // the shoulder's contact on the leg through the motion, certified by bisection
         // certified: the contact's least place along the leg, and its farthest
-        let (cmin, cmax, at, proven) = range_1d(|i| self.contact(i), |x| self.contact(x), 0.0, self.phimax);
+        let (cmin, cmax, at, proven) = self.contact_range();
         let mut c = Check::rule(Rule::VTooNarrow, cmin, 0.0, false);
         c.phi = Some(at);
         if !proven {

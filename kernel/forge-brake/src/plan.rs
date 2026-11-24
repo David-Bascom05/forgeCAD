@@ -89,6 +89,10 @@ struct Search<'a> {
     dead: HashSet<u64>,
     verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
     legs: HashMap<(u64, usize), (f64, f64, f64)>,
+    /// The shoulder's contact range through the motion, by (bend, die, overbend).
+    contacts: HashMap<(usize, usize, u64), (f64, f64, f64, bool)>,
+    /// The model's regions, made once.
+    regions: crate::sim::Regions,
     /// Taken steps simulated in full, by (done, bend, setup).
     fulls: HashMap<(u64, usize, Setup), Step>,
     /// Steps with the last step's tools kept, by (done, bend, punch, die).
@@ -113,6 +117,7 @@ struct Caches {
     verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
     legs: HashMap<(u64, usize), (f64, f64, f64)>,
     fulls: HashMap<(u64, usize, Setup), Step>,
+    contacts: HashMap<(usize, usize, u64), (f64, f64, f64, bool)>,
 }
 
 fn mask(done: &[bool]) -> u64 {
@@ -178,6 +183,8 @@ impl<'a> Search<'a> {
             legs: HashMap::new(),
             kept: HashMap::new(),
             fulls: HashMap::new(),
+            regions: crate::sim::Regions::of(m),
+            contacts: HashMap::new(),
             best: vec![None; m.bends.len()],
             explored: 0,
             // a set's size scales the search: a whole maker's catalogue holds hundreds of setups
@@ -204,6 +211,7 @@ impl<'a> Search<'a> {
             verdicts: self.verdicts,
             legs: self.legs,
             fulls: self.fulls,
+            contacts: self.contacts,
         })
     }
 
@@ -217,6 +225,7 @@ impl<'a> Search<'a> {
         self.verdicts = c.verdicts;
         self.legs = c.legs;
         self.fulls = c.fulls;
+        self.contacts = c.contacts;
     }
 
     fn overbend(&self, j: usize) -> f64 {
@@ -293,7 +302,17 @@ impl<'a> Search<'a> {
 
     fn sim(&mut self, done: &[bool], j: usize, setup: Setup, quick: bool) -> Step {
         let ob = self.overbend(j);
-        let mut ctx = StepCtx::new(self.m, self.tl, done, j, setup, ob);
+        let mut ctx = StepCtx::with_regions(self.m, self.tl, done, j, setup, ob, &self.regions);
+        // the shoulder's contact reads the bend, the die and the overbend only
+        let ck = (j, setup.die, ob.to_bits());
+        ctx.contact_kept = match self.contacts.get(&ck) {
+            Some(c) => Some(*c),
+            None => {
+                let c = ctx.contact_range();
+                self.contacts.insert(ck, c);
+                Some(c)
+            }
+        };
         if let Some(k) = self.lock(j) {
             ctx = ctx.at_station(k);
         }
