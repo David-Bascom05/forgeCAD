@@ -172,7 +172,9 @@ pub fn push_path_at(
             None => dist(a, b),
             Some(ar) => ((ar.r * ar.sweep).powi(2) + (b[2] - a[2]).powi(2)).sqrt(),
         };
-        let fast = kind == Kind::Rapid || f <= 0.0 || f >= RAPID;
+        // a rapid, or a canned cycle's retract (timed here as G0: `RAPID` exactly); a G1 at any feed,
+        // however fast (a hop at the feed limit), is timed at its feed
+        let fast = kind == Kind::Rapid || f <= 0.0 || f == RAPID;
         let (rate, dt) = match (fast, rapids) {
             // the longest axis's time at its rate; the piece's own rate is what that comes to
             (true, Some(r)) => {
