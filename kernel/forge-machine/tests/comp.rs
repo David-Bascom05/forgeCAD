@@ -438,8 +438,8 @@ fn sample_wear_mode_is_the_centre_path_offset_by_the_wear() {
     assert_eq!(core(&c), core(&w0));
     // wear +0.02: the wall lines 0.02 further out (the tool is on the left: outside)
     let w = sample(&wear, 0.02).unwrap();
-    assert!(w.iter().any(|m| *m == ('L', -43.02, 40.0, None)), "{w:?}");
-    assert!(w.iter().any(|m| *m == ('L', 40.0, 43.02, None)), "{w:?}");
+    assert!(w.contains(&('L', -43.02, 40.0, None)), "{w:?}");
+    assert!(w.contains(&('L', 40.0, 43.02, None)), "{w:?}");
     // the corner arcs keep their centres (G2 about the part corners), radius 3.02
     assert!(
         w.iter().any(|m| *m == ('W', -40.0, 43.02, Some((-40.0, 40.0)))),
