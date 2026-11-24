@@ -6092,7 +6092,11 @@ impl Cam {
             // the passes' points stand up to the drape's leave (within tol) above the CL surface:
             // by default (`from` the part's top, an exact box's top face) that face's passes are
             // in the range; a `from` given is taken as given
-            zmax: if a.contains_key("from") { top + 1e-9 } else { top + tol },
+            zmax: if a.contains_key("from") {
+                top + 1e-9
+            } else {
+                top + tol
+            },
             ..Default::default()
         };
         // sin and cos of an angle in degrees, enclosed (dmath is within a few ulps)
