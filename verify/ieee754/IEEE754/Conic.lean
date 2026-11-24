@@ -71,4 +71,31 @@ theorem div_pos_finite {x y : FP f} (hx : x.isFinite) (hy : y.isFinite) {A : ℚ
   obtain ⟨hfin, hge⟩ := round_ge_two_pow_qmin f (zs := x.sign ^^ y.sign) hlo hhi
   exact ⟨hfin, lt_of_lt_of_le (two_zpow_pos _) hge⟩
 
+/-- **`quarter_pos_finite`** (forge-geom `plane_cone`'s parabola, `focal = |d| / 4`, made only when
+`|d| > f64::MIN_POSITIVE = 2^emin`): for `d` finite with `2^emin < |d|`, `|d| / 4` is finite and
+positive (any format of precision at least 3; binary64's is 53), with no hypothesis on `d`'s size: dividing by 4 cannot overflow, and `|d| / 4 >= 2^(emin-2)`,
+above the least subnormal, cannot round to zero. -/
+theorem quarter_pos_finite (hp : 3 ≤ f.prec) {d four : FP f} (hd : d.isFinite) (h4 : four.isFinite)
+    (h4v : four.val = 4) (hmin : (2 : ℚ) ^ f.emin < |d.val|) :
+    (FP.div d.abs four).isFinite ∧ 0 < (FP.div d.abs four).val := by
+  have hda : d.abs.isFinite := by simpa using hd
+  rw [div_eq_round hda h4 (by rw [h4v]; norm_num), FP.abs_val, h4v]
+  have hq : f.qmin ≤ f.emin - 2 := by
+    unfold Format.qmin; omega
+  have hlo : (2 : ℚ) ^ f.qmin ≤ |d.val| / 4 := by
+    have h1 : (2 : ℚ) ^ f.qmin ≤ 2 ^ (f.emin - 2) := two_zpow_le hq
+    have h2 : (2 : ℚ) ^ (f.emin - 2) = 2 ^ f.emin / 4 := by
+      rw [zpow_sub₀ (by norm_num : (2 : ℚ) ≠ 0)]; norm_num
+    rw [h2] at h1
+    linarith
+  have hhi : |d.val| / 4 ≤ 2 ^ f.emax := by
+    have h1 := FP.abs_val_lt hd
+    have h2 : (2 : ℚ) ^ (f.emax + 1) = 2 ^ f.emax * 2 := by
+      rw [zpow_add₀ (by norm_num : (2 : ℚ) ≠ 0), zpow_one]
+    have he := two_zpow_pos (K := ℚ) f.emax
+    rw [h2] at h1
+    linarith
+  obtain ⟨hfin, hge⟩ := round_ge_two_pow_qmin f (zs := d.abs.sign ^^ four.sign) hlo hhi
+  exact ⟨hfin, lt_of_lt_of_le (two_zpow_pos _) hge⟩
+
 end IEEE754

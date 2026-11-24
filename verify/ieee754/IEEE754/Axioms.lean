@@ -55,7 +55,7 @@ elab "#standard_axioms " ids:ident* : command => do
 
 #standard_axioms
   -- a conic's size made by a division (forge-geom plane_cylinder's ellipse)
-  IEEE754.round_ge_two_pow_qmin IEEE754.div_pos_finite
+  IEEE754.round_ge_two_pow_qmin IEEE754.div_pos_finite IEEE754.quarter_pos_finite
   -- rounding
   IEEE754.round_rel_err IEEE754.round_abs_err IEEE754.round_err IEEE754.round_mono
   IEEE754.round_val IEEE754.round_exact
