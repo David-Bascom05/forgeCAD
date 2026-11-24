@@ -12,3 +12,4 @@ import ForgeBoolProof.Orient
 import ForgeBoolProof.Seeded
 import ForgeBoolProof.Formula
 import ForgeBoolProof.KeepOf
+import ForgeBoolProof.Planar

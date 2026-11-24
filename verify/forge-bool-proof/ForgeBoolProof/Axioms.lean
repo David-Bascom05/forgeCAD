@@ -40,3 +40,10 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.local_formula_of_cone
 #print axioms ForgeBoolProof.keepOf_spec
 #print axioms ForgeBoolProof.written_eq
+#print axioms ForgeBoolProof.compl_meets_preconnected
+#print axioms ForgeBoolProof.thin_planar
+#print axioms ForgeBoolProof.cells_planar
+#print axioms ForgeBoolProof.reg_planar
+#print axioms ForgeBoolProof.oriented_result_planar
+#print axioms ForgeBoolProof.seeded_result_planar
+#print axioms ForgeBoolProof.local_formula_planar
