@@ -686,6 +686,21 @@ fn curvature_sign_and_rad(p: &Piece) -> (i32, Option<R>) {
 /// separation bound of every sign it takes part in). Coincident points become one literal.
 pub const GRID: f64 = 1.0 / 4294967296.0;
 
+/// `on_grid(cx.approx(a))`, from a's f64 enclosure [lo, hi] where that decides it. on_grid is
+/// non-decreasing, and approx(a) lies in [lo, hi]: it is lo when lo = hi, else the common
+/// nearest f64 of big-float bounds l ≤ a ≤ h, which is between nearest(lo) = lo and
+/// nearest(hi) = hi as rounding is monotone (at the 1024-bit cap, nearest(l) or the
+/// enclosure's midpoint, again in [lo, hi]). So when lo and hi round to one grid point, that
+/// is the result, and the big-float evaluation is not needed; else as before.
+fn grid_of(cx: &Ctx, a: R) -> f64 {
+    let iv = cx.iv(a);
+    let (l, h) = (on_grid(iv.lo), on_grid(iv.hi));
+    if l == h && l.is_finite() {
+        return l;
+    }
+    on_grid(cx.approx(a))
+}
+
 /// x rounded to the grid (exact in f64 for |x| < 2²⁰ mm; ties to even, as IEEE rounds).
 pub fn on_grid(x: f64) -> f64 {
     let k = x / GRID;
@@ -699,7 +714,7 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
     let mut i = 0;
     while i < chain.len() {
         let s = kept[chain[i]].s;
-        verts.push(p2(on_grid(cx.approx(s.x)), on_grid(cx.approx(s.y))));
+        verts.push(p2(grid_of(cx, s.x), grid_of(cx, s.y)));
         i += 1;
     }
     let mut segs = Vec::with_capacity(chain.len());
@@ -713,7 +728,7 @@ fn to_loop(cx: &mut Ctx, kept: &[Piece], chain: &[usize]) -> OLoop {
             Curve::Circle { c, ccw, .. } => Seg::Arc {
                 a,
                 b,
-                c: p2(on_grid(cx.approx(c.x)), on_grid(cx.approx(c.y))),
+                c: p2(grid_of(cx, c.x), grid_of(cx, c.y)),
                 ccw,
             },
         };
