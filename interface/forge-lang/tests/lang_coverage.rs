@@ -317,7 +317,10 @@ fn headers() -> BTreeSet<(String, String)> {
                 let w = src
                     .lines()
                     .find_map(|l| l.trim_start().strip_prefix("pub const HEADER: &str = "))
-                    .or_else(|| src.lines().find_map(|l| l.trim_start().strip_prefix("const HEADER: &str = ")))
+                    .or_else(|| {
+                        src.lines()
+                            .find_map(|l| l.trim_start().strip_prefix("const HEADER: &str = "))
+                    })
                     .expect("`n == HEADER` and no `const HEADER: &str`");
                 out.extend(quoted(w).into_iter().take(1).map(|w| (w, rel_of(&f))));
             }
@@ -640,8 +643,11 @@ fn every_argument_list_has_its_rows() {
                 // a built-in listed twice: the lookup takes the first, the second is dead
                 if ops.len() != lists.len() {
                     let mut seen = BTreeSet::new();
-                    let twice: Vec<&String> = lists.iter().map(|l| &l.0).filter(|o| !seen.insert(*o)).collect();
-                    errs.push(format!("`{kind}` ARGS: listed more than once {twice:?} (only the first entry is read)"));
+                    let twice: Vec<&String> =
+                        lists.iter().map(|l| &l.0).filter(|o| !seen.insert(*o)).collect();
+                    errs.push(format!(
+                        "`{kind}` ARGS: listed more than once {twice:?} (only the first entry is read)"
+                    ));
                 }
                 // a built-in without a list yet: its `args` row says GAP (any keyword is taken,
                 // unchecked), and the row goes when the list comes
@@ -653,8 +659,12 @@ fn every_argument_list_has_its_rows() {
                     }
                 }
                 for op in ops.intersection(&names) {
-                    if row(&rows, "args", &format!("{kind}::{op}")).is_some_and(|r| r.lean.contains("GAP no list")) {
-                        errs.push(format!("`{kind}::{op}` has a list now: its row's names are the list's, not GAP"));
+                    if row(&rows, "args", &format!("{kind}::{op}"))
+                        .is_some_and(|r| r.lean.contains("GAP no list"))
+                    {
+                        errs.push(format!(
+                            "`{kind}::{op}` has a list now: its row's names are the list's, not GAP"
+                        ));
                     }
                 }
                 let extra: Vec<_> = ops.difference(&names).collect();
@@ -757,9 +767,18 @@ fn lean_family_lists_are_the_rusts() {
     // forge_lang::robot's word lists are the reader's arms: STATEMENTS the statement calls (an
     // assignment's or a bare one's, `shared` read as its own statement kind), VALUES the values'
     let arm: BTreeSet<String> = rust("robot-assign").union(&rust("robot-stmt")).cloned().collect();
-    let stmts: BTreeSet<String> = owned(&forge_lang::robot::STATEMENTS).into_iter().filter(|w| w != "shared").collect();
+    let stmts: BTreeSet<String> = owned(&forge_lang::robot::STATEMENTS)
+        .into_iter()
+        .filter(|w| w != "shared")
+        .collect();
     assert_eq!(stmts, arm, "robot::STATEMENTS vs the reader's statement arms");
-    assert_eq!(owned(&forge_lang::robot::VALUES).into_iter().collect::<BTreeSet<_>>(), rust("robot-value"), "robot::VALUES");
+    assert_eq!(
+        owned(&forge_lang::robot::VALUES)
+            .into_iter()
+            .collect::<BTreeSet<_>>(),
+        rust("robot-value"),
+        "robot::VALUES"
+    );
     let hd: BTreeSet<String> = lean(&src, "headers");
     let words: BTreeSet<String> = headers().into_iter().map(|h| h.0).collect();
     assert!(hd.is_subset(&words), "Families.headers: {hd:?} vs {words:?}");

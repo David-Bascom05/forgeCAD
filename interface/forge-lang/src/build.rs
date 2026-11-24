@@ -841,25 +841,23 @@ impl std::hash::Hasher for NameMix {
     }
 }
 
-/// `a == b`, kept inline here (codegen: don't "simplify" it back to `==`). The derived
-/// `Surface::eq` became an out-of-line call in `lineage` once forge-lang's code around it grew
-/// (28,643 calls on the heatsink gate part, +0.23%). Most pairs differ in kind, decided by the
-/// variant alone; the analytic kinds compare their fields here, a procedural one through `==`.
+/// The name of the first live face before (in body order, then slot order) on a surface `same`
+/// takes whose box `hit` takes: the face before a new face is, if any.
 #[inline(always)]
-fn same_surface(a: &forge_geom::Surface, b: &forge_geom::Surface) -> bool {
-    use forge_geom::Surface as S;
-    if std::mem::discriminant(a) != std::mem::discriminant(b) {
-        return false;
+fn first_on(
+    pb: Work<'_>,
+    same: impl Fn(&forge_geom::Surface) -> bool,
+    hit: impl Fn(usize, &Body) -> bool,
+) -> Option<Name> {
+    for ps in pb.0 {
+        let p = &ps.body;
+        for (g, pf) in p.faces.iter().enumerate() {
+            if pf.alive && same(&pf.surface) && hit(g, p) {
+                return Some(pf.name);
+            }
+        }
     }
-    match (a, b) {
-        (S::Plane(x), S::Plane(y)) => x == y,
-        (S::Cylinder(x), S::Cylinder(y)) => x == y,
-        (S::Cone(x), S::Cone(y)) => x == y,
-        (S::Sphere(x), S::Sphere(y)) => x == y,
-        (S::Torus(x), S::Torus(y)) => x == y,
-        (S::Procedural(_), S::Procedural(_)) => a == b,
-        _ => false,
-    }
+    None
 }
 
 /// `forge_agent::select::lineage` with nothing copied, into a `Lineage`: each face's making
@@ -883,19 +881,23 @@ fn lineage(body: Work<'_>, prev: Option<(Work<'_>, &Lineage)>, i: usize) -> Line
             let o = prev.and_then(|(pb, po)| {
                 po.get(&face.name).cloned().or_else(|| {
                     // (the surfaces first: most differ, and a face's box is worked out only then;
-                    // the slots read straight, the live ones in order, as `face_ids` gives them)
-                    for ps in pb.0 {
-                        let p = &ps.body;
-                        for (g, pf) in p.faces.iter().enumerate() {
-                            if pf.alive
-                                && same_surface(&pf.surface, &face.surface)
-                                && pb.face_box(p, FaceId(g as u32)).overlaps(&body.face_box(b, f))
-                            {
-                                return po.get(&pf.name).cloned();
-                            }
+                    // the slots read straight, the live ones in order, as `face_ids` gives them;
+                    // the face's own kind chosen once, so each slot is one variant test and, of
+                    // its kind, the fields)
+                    use forge_geom::Surface as S;
+                    let hit =
+                        |g: usize, p: &Body| pb.face_box(p, FaceId(g as u32)).overlaps(&body.face_box(b, f));
+                    let found = match &face.surface {
+                        S::Plane(w) => first_on(pb, |s| matches!(s, S::Plane(x) if x == w), hit),
+                        S::Cylinder(w) => first_on(pb, |s| matches!(s, S::Cylinder(x) if x == w), hit),
+                        S::Cone(w) => first_on(pb, |s| matches!(s, S::Cone(x) if x == w), hit),
+                        S::Sphere(w) => first_on(pb, |s| matches!(s, S::Sphere(x) if x == w), hit),
+                        S::Torus(w) => first_on(pb, |s| matches!(s, S::Torus(x) if x == w), hit),
+                        S::Procedural(_) => {
+                            first_on(pb, |s| matches!(s, S::Procedural(_)) && *s == face.surface, hit)
                         }
-                    }
-                    None
+                    };
+                    found.and_then(|n| po.get(&n).cloned())
                 })
             });
             out.insert(face.name, o.unwrap_or(Origin::One(i)));
