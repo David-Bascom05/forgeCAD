@@ -241,4 +241,6 @@ Adopt these instead of writing your own:
 | `frame::frame`, `frame::Bounds`, `frame::ViewRect`, `frame::grid_step` | section 2: fit bounds into the uncovered view rect from a direction, eye moved outside obstacles (or `eye_blocked` so the caller ghosts them); grid step for a subject |
 | `shell::ux::empty_state`, `ux::loading` | section 7 |
 | `shell::ux::transport`, `ux::transport_key`, `ux::icon_button` | the one transport row with icons and its keys (Space, ←/→, Home/End) |
-| planned: `ux::thumbnail`, `ux::ghost`, `ux::LibraryList` | 48 px real-geometry thumbnails; ghost envelopes with leader labels; section 8 lists |
+| `thumb::render`, `shell::ux::thumbnail` | section 8: a record's real geometry drawn small (CPU rasteriser, same on native and wasm), cached as a texture per record hash; no geometry = dashed ghost square |
+| `ghost::ghost_box`, `ghost::Label`, `shell::ux::ghost_labels` | section 4: see-through envelope with dashed edges into the frame's translucent `world` triangles, plus leader labels ("Height · unknown") over the view |
+| planned: `ux::LibraryList` | section 8 rows, groups, levels filter, search |
