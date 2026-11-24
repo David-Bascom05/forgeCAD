@@ -820,3 +820,96 @@ left = flange(base.edge(plan.outline[3]), height: 60)\n";
     }
     shot(&mut h, "16-near-in-the-checks");
 }
+
+/// A clip for David (the coordinator): `BENDSIM_CLIP=DIR` writes 270 frames (9 s at 30 fps)
+/// through the whole program of a narrow channel on the standard tooling (it has a near row),
+/// seeked on the environment's timeline as a recording seeks it, and the Checks panel at the
+/// near step. Off unless asked.
+#[test]
+#[ignore]
+fn a_clip_for_david() {
+    let Ok(dir) = std::env::var("BENDSIM_CLIP") else {
+        return;
+    };
+    let Some(mut h) = headless() else { return };
+    let narrow = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (40, 200))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+right = flange(base.edge(plan.outline[1]), height: 60)\n\
+left = flange(base.edge(plan.outline[3]), height: 60)\n";
+    let d = scratch("clip");
+    let f = d.join("narrow-channel.fg");
+    std::fs::write(&f, narrow).unwrap();
+    open(&mut h, f.to_str().unwrap());
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    h.gui
+        .shell
+        .sheet
+        .bend_sim
+        .as_mut()
+        .unwrap()
+        .redo(Choice::default(), "std-eu");
+    for _ in 0..4 {
+        h.step();
+    }
+    let tl = h.gui.shell.env_timeline().expect("the timeline");
+    let total = tl.duration(&h.gui.shell);
+    assert!(total > 0.0);
+    // settle on the first instant before the first frame
+    tl.seek(&mut h.gui.shell, 0.0);
+    for _ in 0..20 {
+        h.step();
+    }
+    let n = 270;
+    for i in 0..n {
+        let tl = h.gui.shell.env_timeline().unwrap();
+        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
+        h.step();
+        std::fs::write(format!("{dir}/frame-{i:04}.ppm"), h.ppm()).unwrap();
+    }
+    // the Checks panel at the near step, every check shown
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    let at = b
+        .sim
+        .as_ref()
+        .unwrap()
+        .plan
+        .steps
+        .iter()
+        .position(|s| s.checks.iter().any(|c| c.near.is_some()))
+        .expect("a near");
+    b.step = at;
+    b.t = 0.6;
+    b.all_checks = true;
+    for _ in 0..20 {
+        h.step();
+    }
+    std::fs::write(format!("{dir}/checks.ppm"), h.ppm()).unwrap();
+    eprintln!("clip: {n} frames over {total} s of program");
+}
+
+/// The frames the coordinator saw the bed fill (the channel on the TruBend 5130, native frame
+/// ~125 at 30 fps: t = 4.17 s, the handling before bend 2), as they stand now. Off unless asked.
+#[test]
+#[ignore]
+fn the_handling_frames_on_the_trubend() {
+    let Ok(dir) = std::env::var("BENDSIM_CLIP") else {
+        return;
+    };
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "trubend-clip", "trumpf-trubend-5130", None);
+    let tl = h.gui.shell.env_timeline().expect("the timeline");
+    tl.seek(&mut h.gui.shell, 0.0);
+    for _ in 0..20 {
+        h.step();
+    }
+    for i in 0..=130u32 {
+        let tl = h.gui.shell.env_timeline().unwrap();
+        tl.seek(&mut h.gui.shell, i as f64 / 30.0);
+        h.step();
+        if i >= 120 {
+            std::fs::write(format!("{dir}/trubend-{i:04}.ppm"), h.ppm()).unwrap();
+        }
+    }
+}
