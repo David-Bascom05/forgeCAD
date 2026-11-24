@@ -810,8 +810,11 @@ impl Shell {
             .striped(true)
             .spacing(vec2(10.0, 2.0))
             .show(ui, |ui| {
-                for h in ["Type", "Size", "Mounting hole", "Edge, at least", "Code"] {
-                    ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
+                // the Code column only where some row has a code (a placeholder table has none)
+                let codes = rows.iter().any(|r| !r.code.is_empty());
+                let heads = ["Type", "Size", "Mounting hole", "Edge, at least", "Code"];
+                for h in &heads[..if codes { 5 } else { 4 }] {
+                    ui.label(egui::RichText::new(*h).font(medium(11.0)).color(t.ink2));
                 }
                 ui.end_row();
                 for (k, row) in rows.iter().enumerate() {
@@ -845,11 +848,13 @@ impl Shell {
                             "Keep the hole's centre at least {} from an edge (a bend counts as one). {from}.",
                             len(row.edge)
                         ));
-                    ui.label(
-                        egui::RichText::new(if row.code.is_empty() { "-" } else { &row.code })
-                            .font(mono(11.0))
-                            .color(t.ink2),
-                    );
+                    if codes {
+                        ui.label(
+                            egui::RichText::new(if row.code.is_empty() { "-" } else { &row.code })
+                                .font(mono(11.0))
+                                .color(t.ink2),
+                        );
+                    }
                     ui.end_row();
                 }
             });
