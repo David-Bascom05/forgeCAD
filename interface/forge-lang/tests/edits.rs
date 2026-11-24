@@ -339,3 +339,27 @@ fn a_call_head_in_a_machining_document_is_not_a_read() {
     let part = "fn sq(x) {\n  return x * x\n}\na = sq(2)\n";
     assert!(apply(part, &Op::DeleteFeature { id: "sq".into() }).is_err());
 }
+
+/// A robot document's calls are built-ins too (robot.rs): `frame = frame(..)` renamed keeps the
+/// call, and deleting it is not held up by a later call of `frame`.
+#[test]
+fn a_robot_documents_calls_are_built_ins() {
+    let src = "robot\nsrc = source(\"arm.fg\")\nframe = frame(on: src.base)\ntool0 = frame(on: src.tip)\n";
+    let out = apply(
+        src,
+        &Op::Rename {
+            from: "frame".into(),
+            to: "base0".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        "robot\nsrc = source(\"arm.fg\")\nbase0 = frame(on: src.base)\ntool0 = frame(on: src.tip)\n"
+    );
+    let del = apply(src, &Op::DeleteFeature { id: "frame".into() }).unwrap();
+    assert_eq!(
+        del,
+        "robot\nsrc = source(\"arm.fg\")\ntool0 = frame(on: src.tip)\n"
+    );
+}

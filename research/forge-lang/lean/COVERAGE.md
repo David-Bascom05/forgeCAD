@@ -78,8 +78,9 @@ The theorems are about the core model of a part document (`Core.lean`). The text
 (`Print`, `Respell.respell_text`, `Suppress.suppress_text_closure`, `LL1.ReparseModel`) hold of
 any document. **Machining documents** (CAM-UI sends exactly SetArg, AddFeature, DeleteFeature,
 MoveFeature, ReplaceFeature, Suppress, Unsuppress and Rename to them, through
-`forge_lang::edit::apply`): a call's head there is a built-in, never a read
-(`edit_ops::calls_closed`, used by every precheck, Suppress's closure, Respell's reads and Rename),
+`forge_lang::edit::apply`), and robot documents likewise: a call's head there is a built-in,
+never a read (`edit_ops::calls_closed`, used by every precheck, Suppress's closure, Respell's reads
+and Rename),
 which is the model's `Families.readsE`. Proven there: Rename (`FamiliesRename.rename_run`); every
 op leaves the statements before the first it changes exactly as they were, results, state and
 environment (`FamiliesRename.edit_prefix`, `FamiliesRename.run_append`); the run is a function of
