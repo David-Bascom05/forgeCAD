@@ -79,6 +79,9 @@ pub struct Punch {
     pub segments: Vec<Segment>,
     /// kN per metre of bend.
     pub max_load: Option<f64>,
+    /// The body's published width, for drawing only, where `width` is an envelope wider than it
+    /// (the checks read `width`: it errs large).
+    pub drawn_width: Option<f64>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
