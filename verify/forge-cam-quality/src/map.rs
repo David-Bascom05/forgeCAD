@@ -61,6 +61,7 @@ impl Profile {
     }
 }
 
+#[derive(Clone, Debug, Default)]
 pub struct HeightMap {
     pub x0: f64,
     pub y0: f64,
