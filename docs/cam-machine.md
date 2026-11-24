@@ -130,6 +130,17 @@ wins), `passes = "stock"` (the bar runs through it by construction, as through a
 bushing: stock against it is never a contact). Bodies on one
 link are never checked against each other.
 
+## Probing: `[[machine.probe]]`, `[[machine.setter]]`, `[[machine.homing]]`
+
+The devices themselves are kernel/forge-probe records (work probes, contact and laser tool
+setters, each value cited from the maker). A machine record links them:
+
+| table | fields | meaning |
+|---|---|---|
+| `[[machine.probe]]` | `name`, `device`, `offer`, optional `t` | a spindle work probe the maker ships (`offer = "standard"`) or offers (`"option"`); `t` the pocket/T it is kept in when stated. In the spindle it is a tool: the setup gives its SimTool (stylus and body). Cite `probe.NAME` |
+| `[[machine.setter]]` | `name`, `device`, `body`, `at`, `dir` | a tool setter whose envelope is the ordinary `[[machine.body]]` named `body` (so the collision checks and the self-collision sweep cover it unchanged); the body rides the table side (a table joint, or the base). `at`: the trigger point a tool is brought to; `dir`: the device's up; base frame, home pose. Cite `setter.NAME.at`, `setter.NAME.dir` |
+| `[[machine.homing]]` | `order` | at most one: groups of joints homed together, the groups in turn (`[["Z"], ["X", "Y"]]`); each joint goes toward its `ref` end. Only where the maker publishes the sequence; cite `homing`. Absent: a homing is a generic reference return, labelled generic |
+
 ## Provenance: `[[machine.cite]]`
 
 Where each value comes from. A record with `real = true` cites every value `MachineDef::cite_paths`

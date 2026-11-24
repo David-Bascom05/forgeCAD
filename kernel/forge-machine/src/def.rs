@@ -10,7 +10,7 @@
 //!
 //! Nothing is defaulted silently: a field a kind needs is a typed error naming the record, the
 //! field and the fix. Optional fields say so and what their absence means.
-use forge_tooling::toml::{self, Table, boolean, num, nums, tables, text, texts};
+use forge_tooling::toml::{self, Table, Val, boolean, num, nums, tables, text, texts};
 
 /// What a definition can be wrong about. Every variant names where.
 #[derive(Clone, Debug, PartialEq)]
@@ -368,6 +368,32 @@ impl Zone {
     }
 }
 
+/// A spindle work probe the machine ships with or offers (`[[machine.probe]]`): a forge-probe
+/// device record. In the spindle it is a tool (the setup gives its SimTool); cite `probe.NAME`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ProbeSlot {
+    pub name: String,
+    /// The forge-probe device id.
+    pub device: String,
+    /// `standard` (ships with the machine) or `option`.
+    pub offer: String,
+    /// The T number / pocket it is kept in, if the record states one.
+    pub t: Option<u32>,
+}
+
+/// A tool setter on the machine (`[[machine.setter]]`): a forge-probe device whose envelope is
+/// the ordinary `[[machine.body]]` named `body`. `at` is the device's trigger point (the point a
+/// tool is brought to) and `dir` the device's +z (away from the table), base frame, home pose;
+/// cite `setter.NAME.at` and `.dir`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Setter {
+    pub name: String,
+    pub device: String,
+    pub body: String,
+    pub at: [f64; 3],
+    pub dir: [f64; 3],
+}
+
 /// How a cited value stands (docs/cam-machine.md, "Provenance").
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CiteStatus {
@@ -433,6 +459,14 @@ pub struct MachineDef {
     /// Gang tool posts (`[[machine.gang]]`): each station is a tool mount named `GANG.T<n>`;
     /// T n selects it (no index, no stop).
     pub gangs: Vec<String>,
+    /// Work probes the machine ships with or offers.
+    pub probes: Vec<ProbeSlot>,
+    /// Tool setters on the table.
+    pub setters: Vec<Setter>,
+    /// The maker's homing order (`[[machine.homing]] order`): groups of joints, each group homed
+    /// together, the groups in turn; each joint toward its `ref` end. None: not published (a
+    /// homing is then a generic reference return, and replies say so). Cite `homing`.
+    pub homing: Option<Vec<Vec<String>>>,
     /// A record of a real maker's model: every value in `cite_paths` must be cited.
     pub real: bool,
     pub cites: Vec<Cite>,
@@ -1364,7 +1398,79 @@ impl MachineDef {
                 name: zn,
             });
         }
+        let mut probes = Vec::new();
+        for p in tables(t, "probe") {
+            let pn = need_text(p, &format!("{m} probe"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} probe `{pn}`");
+            let device = need_text(p, &rec, "device", "give `device`, a forge-probe device id")?.to_string();
+            let offer = need_text(p, &rec, "offer", "give `offer`: standard | option")?.to_string();
+            if offer != "standard" && offer != "option" {
+                return Err(DefError::Unknown {
+                    record: rec,
+                    field: "offer",
+                    name: offer,
+                    known: vec!["standard".into(), "option".into()],
+                });
+            }
+            let tn = match num(p, "t") {
+                None => None,
+                Some(v) if v >= 1.0 && v.fract() == 0.0 && v <= u32::MAX as f64 => Some(v as u32),
+                Some(_) => return Err(rec_err(&rec, "t", "`t` is a positive whole number")),
+            };
+            probes.push(ProbeSlot {
+                name: pn,
+                device,
+                offer,
+                t: tn,
+            });
+        }
+        let mut setters = Vec::new();
+        for p in tables(t, "setter") {
+            let sn = need_text(p, &format!("{m} setter"), "name", "give `name`")?.to_string();
+            let rec = format!("{m} setter `{sn}`");
+            setters.push(Setter {
+                device: need_text(p, &rec, "device", "give `device`, a forge-probe device id")?.to_string(),
+                body: need_text(p, &rec, "body", "give `body`, the [[machine.body]] that is its envelope")?
+                    .to_string(),
+                at: need_vec::<3>(p, &rec, "at", "give `at`, the trigger point, home pose")?,
+                dir: unit(p, &rec, "dir", "give `dir`, the device's up direction")?,
+                name: sn,
+            });
+        }
+        let homing = match tables(t, "homing") {
+            [] => None,
+            [h] => {
+                let rec = format!("{m} homing");
+                let Some(Val::Arr(groups)) = h.get("order") else {
+                    return Err(rec_err(&rec, "order", "give `order = [[\"Z\"], [\"X\", \"Y\"]]`"));
+                };
+                let mut order = Vec::new();
+                for g in groups {
+                    let Val::Arr(js) = g else {
+                        return Err(rec_err(&rec, "order", "each group is a list of joint names"));
+                    };
+                    let mut grp = Vec::new();
+                    for j in js {
+                        let Val::Str(j) = j else {
+                            return Err(rec_err(&rec, "order", "each group is a list of joint names"));
+                        };
+                        grp.push(j.clone());
+                    }
+                    order.push(grp);
+                }
+                Some(order)
+            }
+            _ => {
+                return Err(DefError::Shape {
+                    machine: name,
+                    why: "more than one [[machine.homing]]".into(),
+                });
+            }
+        };
         let def = MachineDef {
+            probes,
+            setters,
+            homing,
             zones,
             gangs,
             pallets,
@@ -1389,6 +1495,7 @@ impl MachineDef {
             name,
         };
         def.validate()?;
+        def.validate_probing()?;
         def.validate_cites()?;
         Ok(def)
     }
@@ -1449,7 +1556,86 @@ impl MachineDef {
         for b in &self.bodies {
             out.push(format!("body.{}", b.name));
         }
+        for p in &self.probes {
+            out.push(format!("probe.{}", p.name));
+        }
+        for st in &self.setters {
+            out.push(format!("setter.{}.at", st.name));
+            out.push(format!("setter.{}.dir", st.name));
+        }
+        if self.homing.is_some() {
+            out.push("homing".into());
+        }
         out
+    }
+
+    /// Probes, setters and the homing order: unique names; a setter's body exists and rides the
+    /// table side (a table joint's link, or the base); the homing order names each joint at
+    /// most once.
+    pub fn validate_probing(&self) -> Result<(), DefError> {
+        for (i, p) in self.probes.iter().enumerate() {
+            if self.probes[..i].iter().any(|q| q.name == p.name) {
+                return Err(DefError::Duplicate {
+                    kind: "probe",
+                    name: p.name.clone(),
+                });
+            }
+        }
+        for (i, st) in self.setters.iter().enumerate() {
+            if self.setters[..i].iter().any(|q| q.name == st.name) {
+                return Err(DefError::Duplicate {
+                    kind: "setter",
+                    name: st.name.clone(),
+                });
+            }
+            let rec = format!("machine `{}` setter `{}`", self.name, st.name);
+            let Some(b) = self.bodies.iter().find(|b| b.name == st.body) else {
+                return Err(DefError::Unknown {
+                    record: rec,
+                    field: "body",
+                    name: st.body.clone(),
+                    known: self.bodies.iter().map(|b| b.name.clone()).collect(),
+                });
+            };
+            let table_side = b.link == "base" || self.joint(&b.link).is_some_and(|j| j.side == Side::Table);
+            if !table_side {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "body",
+                    why: format!("rides `{}`, a head joint: a tool setter sits on the table side", b.link),
+                });
+            }
+        }
+        if let Some(order) = &self.homing {
+            let rec = format!("machine `{}` homing", self.name);
+            let mut seen: Vec<&str> = Vec::new();
+            for j in order.iter().flatten() {
+                if self.joint(j).is_none() {
+                    return Err(DefError::Unknown {
+                        record: rec,
+                        field: "order",
+                        name: j.clone(),
+                        known: self.joints.iter().map(|j| j.name.clone()).collect(),
+                    });
+                }
+                if seen.contains(&j.as_str()) {
+                    return Err(DefError::Bad {
+                        record: rec,
+                        field: "order",
+                        why: format!("names `{j}` twice"),
+                    });
+                }
+                seen.push(j);
+            }
+            if order.iter().any(|g| g.is_empty()) {
+                return Err(DefError::Bad {
+                    record: rec,
+                    field: "order",
+                    why: "has an empty group".into(),
+                });
+            }
+        }
+        Ok(())
     }
 
     /// A zone's joints as indexes into `joints` (validated to exist).
