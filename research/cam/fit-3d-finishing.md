@@ -51,10 +51,13 @@ below compares both against the unfitted op.
   arc of radius ~1000 mm failed it. That check now boxes the arc's own sweep.
 - The spiral's xy pattern is chorded at `tol`/20 (and within `fit`/5) whether fitted or not, so
   arcs fit its points and both runs cover the same area.
-- Waterline contours (steep_shallow's, ramping's) are traced at `tol − fit` (ramping's already at
-  `tol`/2), with the proof slack the op's. A contour held finer (`fit`/5) let more arcs fit but
-  doubled ramping's generation and made both paths longer; one held to `fit`/5 inward as well
-  (chords cutting a convex corner) tripled steep_shallow's points. Both were dropped.
+- Waterline contours: ramping's are the plain op's (`tol`/2, and `tol`/2 + `fit` is within `tol`);
+  steep_shallow's waterlines are left exactly as the plain op's and unfitted, and only its shallow
+  rows are fitted. A fitted steep contour has to be traced within `tol − fit` to keep `tol`, which
+  made its path 1.2% longer than the plain op's (cut 768.5 s against 760.9 s); unfitted, it cuts
+  in 760.2 s. Contours held finer (`fit`/5) let more arcs fit but doubled ramping's generation and
+  lengthened both paths; one held to `fit`/5 inward as well tripled steep_shallow's points. All
+  were dropped.
 
 ## Proving arcs cheaply
 
@@ -87,8 +90,8 @@ op's own time; release is the program's (post, read back, certified).
 
 | strategy | fit | blocks | NC bytes | t_scurve s | generation s | release s | stepover / step | fitted as | measured max dev mm |
 |---|---|---|---|---|---|---|---|---|---|
-| steep_shallow | 0 | 13701 | 237455 | 760.9 | 12.0 | 0.56 | 0.3461 / 0.3461 | | |
-| steep_shallow | 0.0025 | 5656 | 123545 | 768.5 | 12.6 | 0.40 | 0.3461 / 0.3461 | 12630 points as 4379 lines and 135 arcs | 0.00247 |
+| steep_shallow | 0 | 13701 | 237455 | 760.9 | 9.8 | 0.65 | 0.3461 / 0.3461 | | |
+| steep_shallow | 0.0025 | 9362 | 180006 | 760.2 | 9.9 | 0.08 | 0.3461 / 0.3461 | rows fitted, waterlines as plain: 12561 points as 8222 lines | 0.00014 |
 | spiral | 0 | 4956 | 108671 | 54.9 | 0.52 | 0.03 | 0.4895 | | |
 | spiral | 0.0025 | 230 | 7434 | 53.9 | 0.71 | 0.12 | 0.4895 | 4900 points as 61 lines and 113 arcs | 0.00249 |
 | radial | 0 | 807 | 17817 | 108.9 | 0.16 | 0.02 | 0.4895 | | |
@@ -110,11 +113,10 @@ The earlier version that charged the fit to the cusp (stepover for `cusp − fit
 ## Findings
 
 - **Generation and release time are the plain op's,** within a few tenths of a second.
-- **Cutting time is the plain op's or less, except steep_shallow (+1.0%).** Its path is 1.2%
-  longer (`t_min` 682.3 → 690.6 s) because the fitted op's contour and drape are held to
-  `tol − fit` where the plain op's are held to `tol`. The planner's overhead over `t_min` falls
-  (78.7 → 77.9 s), so the fitting itself is faster. With the contour at `tol`, steep_shallow cut in
-  758.7 s (−0.3%), but a fitted piece could then lie `tol` + `fit` outside the contour.
+- **Cutting time is the plain op's or less on every op.** steep_shallow's waterlines are left as
+  the plain op's (see Defaults): fitting them within the tolerance meant a contour within
+  `tol − fit`, a path 1.2% longer (`t_min` 682.3 → 690.6 s) and 1.0% slower to cut, though the
+  planner's overhead fell (78.7 → 77.9 s).
 - **No arc the machine must slow for.** A control holds an arc of radius r to √(a r) (centripetal
   acceleration) and (j r²)^(1/3) (jerk). The fitter's smallest radius is 1.5 × the radius where
   those reach the op's feed (`arc_min_r`, with a and j from the machine record or the planner's
@@ -128,7 +130,7 @@ The earlier version that charged the fit to the cusp (stepover for `cusp − fit
   - flat: 22× fewer blocks, 20× smaller;
   - scallop: 9.7× fewer blocks, 7.8× smaller;
   - pencil: 3.4× fewer blocks;
-  - steep_shallow: 2.4× fewer blocks, 1.9× smaller;
+  - steep_shallow: 1.5× fewer blocks, 1.3× smaller (its rows only);
   - radial: 2.0× fewer blocks;
   - ramping: 1.8× fewer blocks, 1.6× smaller.
 - **Where they don't:** rest's short passes over concave fillets barely merge.

@@ -48,6 +48,8 @@ pub struct FitRule {
     /// How far a fitted piece may dip below the CL surface (at most the op's inner tolerance,
     /// as for the strategies' own chords).
     pub slack: f64,
+    /// The passes (in the order given) before this index are emitted as they are, unfitted.
+    pub from: usize,
 }
 
 /// What a linked path did, for the quality report.
@@ -170,6 +172,8 @@ pub fn path_fit(
         forge_math::par::map(ps.len(), |k| {
             if ps[k].len() < 2 {
                 Vec::new()
+            } else if k < fr.from {
+                ps[k][1..].iter().map(|&to| Piece::Line { to }).collect()
             } else {
                 fit_pass(dc, &ps[k], fr)
             }
@@ -368,6 +372,7 @@ mod tests {
         let fr = FitRule {
             fit: Fit::arcs(0.002),
             slack: 0.005,
+            from: 0,
         };
         let r = Rules {
             max_stay: 2.0,

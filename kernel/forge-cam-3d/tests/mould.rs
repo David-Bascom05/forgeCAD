@@ -169,6 +169,7 @@ fn every_strategy_on_the_mould_core_is_certified() {
     let fr = link::FitRule {
         fit: forge_cam::fit::Fit::arcs(0.0005),
         slack: 0.005,
+        from: 0,
     };
     let sp = strategy::spiral_sag(&dc, [0.0, 0.0], 0.0, 12.0, 2.0, false, 0.0001, d, &top_box).unwrap();
     let (n0, _) = certify(&dc, "spiral, fine", sp.clone(), &faces, &tool);

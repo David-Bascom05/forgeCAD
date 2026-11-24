@@ -63,7 +63,10 @@ impl<'s, 'a> SurfDrop<'s, 'a> {
         // the closed form for a ball cutter (contact.rs: sphere, cylinder, plane, torus,
         // cone), then the column's gap on a small budget: undecided is "not proven", and
         // the strategy splits the piece
-        if forge_cam_geom::contact::clear(&self.sf.cutter, f, mv, self.sf.leave + limit).is_some() {
+        if matches!(
+            forge_cam_geom::contact::clear(&self.sf.cutter, f, mv, self.sf.leave + limit),
+            Some(forge_cam_geom::check::Verdict::Clear { .. })
+        ) {
             return true;
         }
         match gap_move(&self.chk, f, mv, limit, self.sf.res, GAP_BUDGET).0 {
@@ -157,9 +160,10 @@ impl DropCutter for SurfDrop<'_, '_> {
             };
             for &i in &idx {
                 let f = &self.sf.faces[i as usize];
-                if forge_cam_geom::contact::clear(&self.sf.cutter, f, &mv, self.sf.leave - slack + sag)
-                    .is_some()
-                {
+                if matches!(
+                    forge_cam_geom::contact::clear(&self.sf.cutter, f, &mv, self.sf.leave - slack + sag),
+                    Some(forge_cam_geom::check::Verdict::Clear { .. })
+                ) {
                     continue;
                 }
                 match gap_move(&grown, f, &mv, -slack, self.sf.res, GAP_BUDGET).0 {

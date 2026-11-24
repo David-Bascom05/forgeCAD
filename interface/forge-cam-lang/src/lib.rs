@@ -6123,9 +6123,10 @@ impl Cam {
                     grid,
                     tol,
                     leave: tol - fit_tol,
-                    // the contours within tol − fit, so a fitted piece keeps tol outward (as the
-                    // drape's leave); traced finer, they cost generation and gain no time
-                    contour: tol - fit_tol,
+                    // the waterlines as the plain op's (within tol): they are not fitted (a
+                    // fitted contour would have to be traced within tol − fit, a longer path
+                    // than the plain op's); the shallow rows are, draped within tol − fit
+                    contour: tol,
                     area: Some([[area[0], area[1]], [area[2], area[3]]]),
                 };
                 let (st, sh) = steep::steep_and_shallow(&dc, p).map_err(|x| e(format!("{x:?}")))?;
@@ -6365,6 +6366,12 @@ impl Cam {
             }
         };
         let groups: Vec<Vec<forge_cam_3d::drape::Pass>> = passes;
+        // steep_shallow's waterlines (its first group; `order` keeps groups in order) unfitted
+        let unfitted = if kind == "steep_shallow" {
+            groups[0].len()
+        } else {
+            0
+        };
         if std::env::var("FORGE_CAM3D_TIME").is_ok() {
             eprintln!(
                 "{kind}: passes generated in {:.1} s",
@@ -6401,6 +6408,7 @@ impl Cam {
                     ..forge_cam::fit::Fit::arcs(fit_tol)
                 },
                 slack: 0.5 * tol,
+                from: unfitted,
             }),
         );
         fin.links = [c.stay, c.lift, c.retract];
