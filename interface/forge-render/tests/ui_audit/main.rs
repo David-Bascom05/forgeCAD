@@ -23,6 +23,23 @@ use std::collections::BTreeSet;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
 
+thread_local! {
+    /// What the frames since it was last taken asked of the window's host (Open, Save As..).
+    static HOST: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn step(h: &mut Headless) {
+    let out = h.step();
+    if !out.host.is_empty() {
+        HOST.with(|x| x.borrow_mut().extend(out.host.iter().map(action_word)));
+    }
+}
+
+fn step_host(h: &mut Headless) -> Vec<String> {
+    step(h);
+    HOST.with(|x| std::mem::take(&mut *x.borrow_mut()))
+}
+
 const EXAMPLES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples");
 
 const PLATE: &str = "shared t = 6\nsketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (60, 40))\n}\n\
@@ -245,7 +262,7 @@ fn copy_dir(from: &Path, to: &Path) {
 fn settled(h: &mut Headless, secs: f64) {
     let end = std::time::Instant::now() + std::time::Duration::from_secs_f64(secs);
     while std::time::Instant::now() < end {
-        h.step();
+        step(h);
         let busy = h.gui.loading()
             || h.gui.fg.as_ref().is_some_and(|s| s.done != s.seq)
             || h.gui.view.as_ref().is_some_and(|v| v.nav.moving())
@@ -257,7 +274,7 @@ fn settled(h: &mut Headless, secs: f64) {
     }
     // past a window's fade-in
     for _ in 0..10 {
-        h.step();
+        step(h);
     }
 }
 
@@ -271,7 +288,7 @@ fn start(f: &Fixture, size: (f32, f32)) -> Option<Headless> {
         }
     };
     h.gui.audit_shapes = Some(Vec::new());
-    h.step();
+    step(&mut h);
     if let Some(p) = copy_fixture(f, "run") {
         h.gui.open(p.to_str().unwrap());
         let _ = h.until(|g| {
@@ -297,8 +314,8 @@ fn start(f: &Fixture, size: (f32, f32)) -> Option<Headless> {
 fn park(h: &mut Headless) {
     let w = h.gui.shell.view_rect.right().max(400.0);
     h.move_to(w * 0.3, 18.0);
-    h.step();
-    h.step();
+    step(h);
+    step(h);
 }
 
 fn tab_names(h: &Headless) -> Vec<String> {
@@ -317,11 +334,11 @@ fn tab_names(h: &Headless) -> Vec<String> {
 fn click_place(h: &mut Headless, name: &str) -> bool {
     let Some(r) = h.placed(name) else { return false };
     h.move_to(r.center().x, r.center().y);
-    h.step();
+    step(h);
     h.button(true);
-    h.step();
+    step(h);
     h.button(false);
-    h.step();
+    step(h);
     true
 }
 
@@ -334,13 +351,53 @@ fn go_tab(h: &mut Headless, tab: &str) -> bool {
     true
 }
 
+/// How a command is reached: a ribbon tool, or an item of a menu opened by a click (or a right
+/// click) on a placed name.
+#[derive(Clone)]
+enum Click {
+    Tool,
+    Menu {
+        opener: String,
+        right: bool,
+        item: String,
+    },
+}
+
+fn right_click_place(h: &mut Headless, name: &str) -> bool {
+    let Some(r) = h.placed(name) else { return false };
+    h.move_to(r.center().x, r.center().y);
+    step(h);
+    h.right_click_here();
+    step(h);
+    true
+}
+
+fn open_menu(h: &mut Headless, opener: &str, right: bool) -> bool {
+    let ok = if right {
+        right_click_place(h, opener)
+    } else {
+        click_place(h, opener)
+    };
+    for _ in 0..3 {
+        step(h);
+    }
+    ok
+}
+
+fn do_click(h: &mut Headless, how: &Click, group: &str, tool: &str) -> bool {
+    match how {
+        Click::Tool => click_tool(h, group, tool),
+        Click::Menu { opener, right, item } => open_menu(h, opener, *right) && click_place(h, item),
+    }
+}
+
 /// Clicks a ribbon tool, through its folded group's menu when the window is too narrow for it.
 fn click_tool(h: &mut Headless, group: &str, tool: &str) -> bool {
     if h.gui.shell.place(&format!("tool:{tool}")).is_some() && click_place(h, &format!("tool:{tool}")) {
         return true;
     }
     if click_place(h, &format!("ribbon:group:{group}")) {
-        h.step();
+        step(h);
         return click_place(h, &format!("tool:{tool}"));
     }
     false
@@ -367,6 +424,9 @@ impl Crawl {
             if let Some(png) = Snap::take(&mut h).png() {
                 self.write(&format!("{}--base.png", f.name), &png);
             }
+        }
+        if only_tab.is_none() || only_tab == Some("menus") {
+            h = self.menus(f, h);
         }
         for tab in tabs {
             // View, Inspect and Manage are the same everywhere: once per kind of document
@@ -399,7 +459,7 @@ impl Crawl {
         // whether a click changed it
         let a = Snap::take(&mut h);
         for _ in 0..20 {
-            h.step();
+            step(&mut h);
         }
         let b = Snap::take(&mut h);
         let view = Rect::from_min_max(pos2(0.0, 150.0), pos2(self.size.0, self.size.1 - 28.0));
@@ -411,7 +471,7 @@ impl Crawl {
             if let Some(b) = &mut self.budget {
                 *b -= 1;
             }
-            let (rec, fresh) = self.probe(f, h, tab, env, group, tool, live, base_env);
+            let (rec, fresh) = self.probe(f, h, tab, env, group, tool, live, base_env, &Click::Tool);
             eprintln!(
                 "  {:<14} {:<30} {:<16} {}",
                 f.name,
@@ -426,6 +486,96 @@ impl Crawl {
                     .reenter(f, tab, base_env)
                     .unwrap_or_else(|| panic!("{}: can't start again", f.name)),
             };
+        }
+        h
+    }
+
+    /// The File menu and the browser rows' right-click menus (a sketch's and a feature's): each
+    /// item as its menu places it.
+    fn menus(&mut self, f: &Fixture, mut h: Headless) -> Headless {
+        let mut openers: Vec<(String, String, bool, &'static str)> = Vec::new();
+        if self.seen.insert(format!("{}:File", kind_of(f))) {
+            openers.push(("File".into(), "file".into(), false, "file-menu:"));
+        }
+        let rows: Vec<String> = h
+            .gui
+            .shell
+            .places
+            .iter()
+            .filter_map(|(k, _)| k.strip_prefix("fg:row:").map(|x| x.to_string()))
+            .collect();
+        let kinds = |h: &Headless, key: &str| {
+            h.gui
+                .shell
+                .fg
+                .as_ref()
+                .and_then(|p| p.feats.iter().find(|x| x.id == key).map(|x| x.kind.clone()))
+        };
+        let mut took = BTreeSet::new();
+        for key in rows {
+            let k = kinds(&h, &key).unwrap_or_else(|| "row".into());
+            if took.insert(k.clone()) && took.len() <= 4 {
+                openers.push((
+                    format!("Browser: {k} row"),
+                    format!("fg:row:{key}"),
+                    true,
+                    "fg:menu:",
+                ));
+            }
+        }
+        for (menu, opener, right, prefix) in openers {
+            let before = Snap::take(&mut h);
+            if !open_menu(&mut h, &opener, right) {
+                continue;
+            }
+            let items: Vec<String> = Snap::take(&mut h)
+                .new_places(&before)
+                .into_iter()
+                .filter(|(k, _)| k.starts_with(prefix))
+                .map(|(k, _)| k)
+                .collect();
+            h.key(egui::Key::Escape);
+            settled(&mut h, 2.0);
+            park(&mut h);
+            h = restore(h, &before, h_env(&before), "", false)
+                .unwrap_or_else(|| start(f, self.size).unwrap());
+            let base_env = before.env;
+            for item in items {
+                let label = item
+                    .trim_start_matches(prefix)
+                    .split(':')
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                let how = Click::Menu {
+                    opener: opener.clone(),
+                    right,
+                    item: item.clone(),
+                };
+                let (rec, fresh) = self.probe(
+                    f,
+                    h,
+                    &format!("menu {menu}"),
+                    "",
+                    &menu,
+                    &label,
+                    true,
+                    base_env,
+                    &how,
+                );
+                eprintln!(
+                    "  {:<14} {:<30} {:<16} {}",
+                    f.name,
+                    format!("{menu}/{label}"),
+                    rec.class.word(),
+                    rec.detail
+                );
+                self.records.push(rec);
+                h = match fresh {
+                    Some(h) => h,
+                    None => start(f, self.size).unwrap(),
+                };
+            }
         }
         h
     }
@@ -489,6 +639,7 @@ impl Crawl {
         tool: &str,
         live: bool,
         base_env: Option<EnvId>,
+        how: &Click,
     ) -> (Record, Option<Headless>) {
         let t0 = std::time::Instant::now();
         let mut rec = Record {
@@ -522,11 +673,12 @@ impl Crawl {
         }
         let before = Snap::take(&mut h);
         let pickers = forge_render::plat::PICKERS_ASKED.load(std::sync::atomic::Ordering::Relaxed);
+        HOST.with(|x| x.borrow_mut().clear());
         let clicked = catch_unwind(AssertUnwindSafe(|| {
-            let hit = click_tool(&mut h, group, tool);
+            let hit = do_click(&mut h, how, group, tool);
             let mut host = Vec::new();
             for _ in 0..3 {
-                host.extend(h.step().host);
+                host.extend(step_host(&mut h));
             }
             settled(&mut h, 20.0);
             park(&mut h);
@@ -595,7 +747,7 @@ impl Crawl {
                     });
                 h.key(egui::Key::Escape);
                 for _ in 0..8 {
-                    h.step();
+                    step(&mut h);
                 }
                 let esc = Snap::take(&mut h);
                 let still = popup_region(&before, &esc);
@@ -621,6 +773,10 @@ impl Crawl {
         let fresh = restore(h, &before, base_env, tab, self.noisy);
         (rec, fresh)
     }
+}
+
+fn h_env(s: &Snap) -> Option<EnvId> {
+    s.env
 }
 
 fn kind_of(f: &Fixture) -> &'static str {
@@ -707,7 +863,7 @@ fn classify(
     rec: &mut Record,
     before: &Snap,
     after: &Snap,
-    host: &[Action],
+    host: &[String],
     picked: bool,
     screen: Rect,
     noisy: bool,
@@ -736,10 +892,7 @@ fn classify(
         rec.detail = "the system's file picker".into();
     } else if !host.is_empty() {
         rec.class = Class::Host;
-        rec.detail = format!(
-            "the window's host is asked: {:?}",
-            host.iter().map(action_word).collect::<Vec<_>>()
-        );
+        rec.detail = format!("the window's host is asked: {}", host.join(", "));
     } else if after.env != before.env {
         rec.class = Class::Workspace;
         rec.detail = format!(
@@ -842,7 +995,7 @@ fn disabled_tip(h: &mut Headless, group: &str, tool: &str) -> (String, bool) {
     h.move_to(r.center().x, r.center().y);
     let mut words = Vec::new();
     for _ in 0..90 {
-        h.step();
+        step(h);
         let tips: Vec<(egui::LayerId, Rect)> = h.gui.ctx.memory(|m| {
             m.areas()
                 .visible_layer_ids()
@@ -914,18 +1067,20 @@ fn restore(
                 1 => {
                     if h.gui.shell.env != base_env {
                         h.gui.shell.out.push(Action::ExitEnv);
-                        h.step();
+                        step(&mut h);
                         if let Some(e) = base_env {
                             h.gui.shell.out.push(Action::EnterEnv(e));
                         }
                     }
                 }
                 _ => {
-                    let _ = go_tab(&mut h, tab);
+                    if !tab.is_empty() && !tab.starts_with("menu ") {
+                        let _ = go_tab(&mut h, tab);
+                    }
                 }
             }
             for _ in 0..6 {
-                h.step();
+                step(&mut h);
             }
             park(&mut h);
         }

@@ -11,14 +11,14 @@ from collections import Counter, defaultdict
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "..", "..", "research", "ui-audit")
 
-WEIGHT = {"crash": 100, "nothing": 60, "error-text": 30, "off-screen": 25, "no-exit": 25,
+WEIGHT = {"page-crash": 100, "page-nothing": 60, "crash": 100, "nothing": 60, "error-text": 30, "off-screen": 25, "no-exit": 25,
           "silent-mode": 20, "raw-text": 15, "empty": 15, "overlap": 12, "clipped": 10,
           "no-reason": 8, "tiny-text": 6, "contrast": 6}
 SOFT = 3
 
 
-def read(d):
-    with open(os.path.join(d, "records.tsv"), newline="") as f:
+def read(d, name="records.tsv"):
+    with open(os.path.join(d, name), newline="") as f:
         return list(csv.DictReader(f, delimiter="\t", quoting=csv.QUOTE_NONE))
 
 
@@ -48,8 +48,15 @@ def main():
     if not dirs:
         sys.exit(__doc__)
     recs = read(dirs[0])
+    web = {}
+    for d in dirs:
+        if os.path.exists(os.path.join(d, "records-web.tsv")):
+            for r in read(d, "records-web.tsv"):
+                web[key(r)] = r
     narrow = defaultdict(list)
     for d in dirs[1:]:
+        if not os.path.exists(os.path.join(d, "records.tsv")):
+            continue
         for r in read(d):
             for rule, hard, what in findings(r):
                 if rule in ("off-screen", "clipped", "overlap"):
@@ -65,6 +72,9 @@ def main():
     rows = []
     for r in recs:
         fs = findings(r) + narrow.get(key(r), [])
+        w = web.get(key(r))
+        if w and w["class"] in ("CRASH", "NOTHING VISIBLE") and r["class"] not in ("CRASH", "NOTHING VISIBLE"):
+            fs.append(("page-" + ("crash" if w["class"] == "CRASH" else "nothing"), True, w["detail"]))
         s = score(r, fs)
         auto = "redo" if s >= 40 else "fix" if s >= 8 else "good"
         if r["class"] == "DISABLED" and not fs:
@@ -77,7 +87,7 @@ def main():
                 name = os.path.basename(src)
                 shutil.copy(src, os.path.join(OUT, "thumbs", name))
                 thumb = f"thumbs/{name}"
-        rows.append(dict(r, key=key(r), fs=fs, score=s, verdict=v, auto=auto, note=note, thumbp=thumb))
+        rows.append(dict(r, web=(w["class"] if w else ""), key=key(r), fs=fs, score=s, verdict=v, auto=auto, note=note, thumbp=thumb))
     classes = Counter(r["class"] for r in rows)
     vs = Counter(r["verdict"] for r in rows if r["class"] != "DISABLED")
     worst = sorted((r for r in rows), key=lambda r: -r["score"])[:20]
@@ -111,7 +121,7 @@ def main():
         by[(r["fixture"], r["env"], r["tab"])].append(r)
     for (fx, env, tab), rs in by.items():
         L.append(f"### {fx} · {env + ': ' if env else ''}{tab}\n")
-        L.append("| Command | What happens | Verdict | Problems | Shot |\n|---|---|---|---|---|")
+        L.append("| Command | What happens | Page | Verdict | Problems | Shot |\n|---|---|---|---|---|---|")
         for r in rs:
             probs = "<br>".join(f"{'**' if hard else ''}{rule}{'**' if hard else ''}: {what}".replace("|", "\\|")
                                 for rule, hard, what in r["fs"])
@@ -119,7 +129,8 @@ def main():
                 probs = (probs + "<br>" if probs else "") + "review: " + r["note"].replace("|", "\\|")
             shot = f"![]({r['thumbp']})" if r["thumbp"] else ""
             det = r["detail"].replace("|", "\\|")
-            L.append(f"| {r['group']} › {r['tool']} | {r['class']}: {det} | {r['verdict']} | {probs} | {shot} |")
+            page = "" if not r["web"] else ("same" if r["web"] == r["class"] else r["web"])
+            L.append(f"| {r['group']} › {r['tool']} | {r['class']}: {det} | {page} | {r['verdict']} | {probs} | {shot} |")
         L.append("")
     open(os.path.join(OUT, "report.md"), "w").write("\n".join(L) + "\n")
     T = ["# UI audit thumbnails\n", "Every popup or panel a command opened, worst first.\n"]
