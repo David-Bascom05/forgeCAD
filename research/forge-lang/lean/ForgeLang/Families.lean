@@ -496,8 +496,8 @@ theorem turn_conservative (ie : Name → S → List α → Except Err α)
 
 /-- The robot built-ins, likewise: its three tables (an assignment's arms then the value
 built-ins; the statements'; a nested call's, the value built-ins), extended by a later round's
-arms. Not modelled: the names `hull` and `none`, which `Reader::eval` reads before any binding
-(COVERAGE.md, robot-constants). -/
+arms. The names `hull` and `none` (`RESERVED`), read before any binding, may not be bound
+(`ReservedName`), so the part namespace's argument covers them (COVERAGE.md, robot-constants). -/
 theorem robot_conservative (iv : Name → S → List α → Except Err α)
     (ia ix : Name → S → List α → S × Except Err α) (ME : ETab S α) (MT MX : TTab S α)
     (sts : List St) (s s' : S) (ρ ρ' : Env α) (rs : List (Except Err Unit))
@@ -507,6 +507,21 @@ theorem robot_conservative (iv : Name → S → List α → Except Err α)
       ((tab robotAssign ia ++ tab robotValue (fun n s vs => (s, iv n s vs))) ++ MT)
       (tab robotStmt ix ++ MX) s ρ sts = (s', ρ', rs) :=
   run_ext_accepted P _ ME _ MT _ MX sts s ρ s' ρ' rs h ha
+
+/-- forge-lang's drawing document (`drawing/doc.rs`): `x = f(..)` and a nested `f(..)` both call
+from `FUNCTIONS`, nothing else is callable, and a read is a binding's (closed). -/
+def drawingFns : List Name :=
+  ["part", "assembly", "sheet", "base_view", "projected", "section", "detail", "flat_view", "dim", "angle", "radius", "diameter", "hole_note", "ordinate", "baseline", "chain", "center_mark", "center_marks", "centerlines", "centerline", "leader", "note", "balloon", "auto_balloons", "fcf", "datum", "datum_target", "surface", "weld", "edge", "parts_list", "e", "f"]
+
+/-- The drawing built-ins, extended by a later round's: every drawing accepted before means what
+it meant (one table for both a statement's call and a nested one; no bare call statements). -/
+theorem drawing_conservative (ie : Name → S → List α → Except Err α)
+    (is : Name → S → List α → S × Except Err α) (ME : ETab S α) (MT : TTab S α)
+    (sts : List St) (s s' : S) (ρ ρ' : Env α) (rs : List (Except Err Unit))
+    (h : run P (tab drawingFns ie) (tab drawingFns is) [] s ρ sts = (s', ρ', rs)) (ha : Accepted rs) :
+    run P (tab drawingFns ie ++ ME) (tab drawingFns is ++ MT) [] s ρ sts = (s', ρ', rs) := by
+  have := run_ext_accepted P _ ME _ MT [] [] sts s ρ s' ρ' rs h ha
+  simpa using this
 
 /-- No built-in of the machining and robot families, and no header word, is a keyword: each
 lexes as an identifier, so the grammar and the proven parser are unchanged by them. -/
