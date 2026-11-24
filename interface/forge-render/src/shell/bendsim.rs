@@ -108,6 +108,9 @@ pub struct BendSimUi {
     pub fit_only: bool,
     /// The planner's ranked programs asked for (the ribbon's Suggest Order): their list opened.
     pub suggest: bool,
+    /// The ranked programs have been searched for (they are not on opening: four-fifths of the
+    /// time a part took to open was that search; BENDSIM-TOOLS' measure).
+    pub programs_found: bool,
     /// The step's checks all shown, not only failures and those not checked.
     pub all_checks: bool,
     /// Each step's picture, for the simulation they were drawn from (its address).
@@ -161,8 +164,8 @@ impl BendSimUi {
             dies: choice.dies.clone(),
             sequence: choice.sequence.as_ref().map(|s| s.join(",")),
             keep_tools: choice.keep_tools,
-            // the ranked alternatives, offered beside the order shown (never applied unasked)
-            programs: Some(5),
+            // the ranked alternatives are searched for when asked (find_programs), not on opening
+            programs: None,
             ..Ask::default()
         };
         let mut sim = simulate(source, dir.clone(), None, &ask).map_err(|a| a.text);
@@ -220,6 +223,7 @@ impl BendSimUi {
             fit_only: true,
             all_checks: false,
             suggest: false,
+            programs_found: false,
             pictures: None,
         };
         if let Some(p) = b.choice.press.clone() {
@@ -284,6 +288,7 @@ impl BendSimUi {
             fit_only: true,
             all_checks: false,
             suggest: false,
+            programs_found: false,
             pictures: None,
         };
         if let Some(p) = b.choice.press.clone() {
@@ -386,6 +391,29 @@ impl BendSimUi {
         }
         fresh.resume(self);
         *self = fresh;
+    }
+
+    /// The planner's ranked alternatives to the order shown (up to five), searched for once, when
+    /// asked: the ribbon's Suggest Order or the program's "Find other orders".
+    pub fn find_programs(&mut self) {
+        if self.programs_found {
+            return;
+        }
+        self.programs_found = true;
+        let Ok(sim) = self.sim.as_mut() else { return };
+        let c = &self.choice;
+        let ask = Ask {
+            tooling: c.press.is_none().then(|| self.tooling.clone()),
+            press: c.press.clone(),
+            punches: c.punches.clone(),
+            dies: c.dies.clone(),
+            keep_tools: c.keep_tools,
+            programs: Some(5),
+            ..Ask::default()
+        };
+        if let Ok(found) = simulate(&self.source, dir_of(&self.path), None, &ask) {
+            sim.programs = found.programs;
+        }
     }
 
     /// The step and instant of an earlier simulation, where it still has that step.
@@ -1120,6 +1148,7 @@ pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
     let names: Vec<String> = sim.plan.steps.iter().map(|s| sim.names[s.bend].clone()).collect();
     let passes: Vec<bool> = sim.plan.steps.iter().map(fb::Step::pass).collect();
     let rotated: Vec<bool> = sim.plan.steps.iter().map(|s| s.setup.rotate).collect();
+    let feasible = sim.plan.feasible;
     let progs: Vec<(Vec<String>, [usize; 4])> = sim
         .programs
         .iter()
@@ -1284,8 +1313,15 @@ pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
         st.go(i);
     }
     doc_buttons(ui, st);
-    // the planner's ranked programs: offered, applied only by a click
+    // the planner's ranked programs: searched for when asked, offered, applied only by a click
     let mut apply: Option<Vec<String>> = None;
+    if st.suggest && !st.programs_found {
+        st.find_programs();
+        return;
+    }
+    if !st.programs_found && feasible && ui.link("Find other orders").clicked() {
+        st.suggest = true;
+    }
     if !progs.is_empty() {
         let open = std::mem::take(&mut st.suggest).then_some(true);
         egui::CollapsingHeader::new(format!("Suggested programs ({})", progs.len()))

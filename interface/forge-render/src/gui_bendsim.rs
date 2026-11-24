@@ -53,6 +53,9 @@ pub struct BendView {
     /// Each body's see-through state: frames it has blocked running, and how far it has faded
     /// (0 solid, 1 at the set opacity).
     fade: std::collections::HashMap<String, (u8, f32)>,
+    /// How far each press part is cut away (0 there, 1 gone), stepped a frame at a time over
+    /// FADE_FRAMES as it is cut or put back (the coordinator: no part vanishes in one frame).
+    cutfade: std::collections::HashMap<String, f32>,
     /// A body is fading in or out, or waiting its frames to.
     fading: bool,
     /// The instant's bodies as the scene makes them (before the cut-away and the x-ray), and the
@@ -905,7 +908,30 @@ impl Gui {
             None => Vec::new(),
         };
         let cut = self.bend.cut.clone();
-        let working: Vec<&Body> = self.bend.raw.iter().filter(|x| !cut.contains(&x.name)).collect();
+        // the cut-away faded in and out over FADE_FRAMES; a part first seen starts as it is
+        let step = 1.0 / FADE_FRAMES as f32;
+        let mut cutting = false;
+        let raw_names: Vec<String> = self.bend.raw.iter().map(|x| x.name.clone()).collect();
+        self.bend.cutfade.retain(|n, _| raw_names.contains(n));
+        for n in &raw_names {
+            let target = if cut.contains(n) { 1.0 } else { 0.0 };
+            let e = self.bend.cutfade.entry(n.clone()).or_insert(target);
+            *e = if *e < target {
+                (*e + step).min(target)
+            } else {
+                (*e - step).max(target)
+            };
+            cutting |= *e != target;
+        }
+        let cutfade = self.bend.cutfade.clone();
+        let cut_level = |n: &str| cutfade.get(n).copied().unwrap_or(0.0);
+        // drawn while not wholly cut away; a part being cut is no see-through candidate
+        let working: Vec<&Body> = self
+            .bend
+            .raw
+            .iter()
+            .filter(|x| cut_level(&x.name) < 1.0)
+            .collect();
         // the x-ray, from this eye: a candidate hiding enough of what is watched (the bend's zone,
         // the punch's contact, a witness) from it
         let zone = bounds(
@@ -921,7 +947,10 @@ impl Gui {
         let see = b.see_through;
         let mut blocks: std::collections::HashSet<String> = Default::default();
         if !aims.is_empty() {
-            for x in working.iter().filter(|x| xray_candidate(x, zone)) {
+            for x in working
+                .iter()
+                .filter(|x| cut_level(&x.name) == 0.0 && xray_candidate(x, zone))
+            {
                 if roi_blocked(&x.mesh, eye, &aims) >= need {
                     blocks.insert(x.name.clone());
                 }
@@ -930,7 +959,7 @@ impl Gui {
         // hysteresis and a fade, counted in frames (deterministic when recorded): a body must
         // block for FADE_AFTER frames running before it starts to fade, and fades in or out over
         // FADE_FRAMES frames, so a body grazing the line of sight does not flicker
-        let mut moving = false;
+        let mut moving = cutting;
         let names: Vec<String> = working.iter().map(|x| x.name.clone()).collect();
         self.bend.fade.retain(|n, _| names.contains(n));
         for n in &names {
@@ -1032,6 +1061,21 @@ impl Gui {
             });
             outline.extend(silhouette(&drawn[k].mesh, eye).into_iter().map(|e| (e, level)));
         }
+        // a press part being cut away or put back: in its own colour, fading (a cut, not an x-ray)
+        for (k, x) in drawn.iter().enumerate() {
+            let level = cut_level(&x.name);
+            if level <= 0.0 || xray.iter().any(|&(j, _)| j == k) {
+                continue;
+            }
+            v.scene.set_ghost(k, true);
+            let t = tint(x, material);
+            let to8 = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
+            self.bend.ghosts.push(crate::render::FaceColour {
+                placement: k as u32,
+                face: 0,
+                rgba: [to8(t[0]), to8(t[1]), to8(t[2]), to8(1.0 - level)],
+            });
+        }
         self.bend.outline = outline;
         self.bend.bodies = drawn;
         self.bend.ours = Some(v.renderer.geometry());
@@ -1056,6 +1100,7 @@ impl Gui {
         self.bend.bodies.clear();
         self.bend.ghosts.clear();
         self.bend.fade.clear();
+        self.bend.cutfade.clear();
         self.bend.fading = false;
         self.bend.outline.clear();
         self.bend.step = None;

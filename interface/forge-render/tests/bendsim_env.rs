@@ -435,7 +435,10 @@ fn see_through_fades_and_never_flickers() {
     for _ in 0..4 {
         h.step();
     }
-    let step = (1.0 - opacity) / forge_render::gui::gui_bendsim::FADE_FRAMES as f32 + 0.01;
+    // a step of a fade: an x-ray's from solid to the opacity set, a cut-away's from solid to
+    // gone, each over FADE_FRAMES
+    let frames = forge_render::gui::gui_bendsim::FADE_FRAMES as f32;
+    let step = ((1.0 - opacity) / frames).max(1.0 / frames) + 0.01;
     // as it stands before the sweep (what already fades counts from there)
     let names = h.gui.bend.drawn_names();
     let mut was: std::collections::HashMap<String, f32> = h
