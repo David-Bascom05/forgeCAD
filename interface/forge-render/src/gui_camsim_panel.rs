@@ -92,6 +92,10 @@ pub struct CamSimUi {
     /// Each op's cycle time on the machine (the workspace's run, forge-cam-quality: the lower
     /// bound and the estimate), by name; set by the host as it draws the panel.
     pub cycles: Vec<(String, (f64, f64))>,
+    /// The workspace's word on each op (name, the verdict's words, its colour) and its notes
+    /// (what is left over, the run's warnings), for the Checks tab; set by the host.
+    pub op_checks: Vec<(String, String, egui::Color32)>,
+    pub check_notes: Vec<String>,
     /// The op the workspace selected (its path drawn in the selection's blue).
     pub selected_op: Option<usize>,
     /// Every problem of the document listed, not the first few.
@@ -137,6 +141,8 @@ impl CamSimUi {
             hosted: false,
             docked: false,
             cycles: vec![],
+            op_checks: vec![],
+            check_notes: vec![],
             drawn_key: None,
             stock_mesh: vec![],
             stop_at_markers: true,
@@ -361,6 +367,9 @@ impl Shell {
         let t = self.theme;
         st.hosted = true;
         st.folded = false;
+        if let Some(w) = self.cam.as_ref() {
+            (st.op_checks, st.check_notes) = crate::shell::cam::check_lines(w, &t);
+        }
         st.cycles = self
             .cam
             .as_ref()
@@ -1224,6 +1233,21 @@ fn checks(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
         .size(11.0)
         .color(t.ink2),
     );
+    // each op's verdict (the workspace's: certified, refused, not posted), then the notes
+    if !st.op_checks.is_empty() {
+        heading(ui, t, "Ops");
+        for (name, words, c) in &st.op_checks {
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(name).size(12.0).color(t.ink));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    ui.label(egui::RichText::new(words).size(12.0).color(*c));
+                });
+            });
+        }
+    }
+    for n in &st.check_notes {
+        ui.label(egui::RichText::new(n).size(11.0).color(t.warn));
+    }
     heading(ui, t, &format!("Issues ({})", st.sim.markers.len()));
     let mut jump = None;
     egui::ScrollArea::vertical()

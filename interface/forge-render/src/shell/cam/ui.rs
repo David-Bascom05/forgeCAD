@@ -31,6 +31,22 @@ pub fn status_look(t: &Theme, status: &str) -> (&'static str, &'static str, Colo
     }
 }
 
+/// The Checks tab's lines (CAM-SIM's panel shows them): each op's name and kind with its
+/// verdict's words and colour, and the run's warnings.
+pub fn check_lines(w: &CamWs, t: &Theme) -> (Vec<(String, String, Color32)>, Vec<String>) {
+    let Some(run) = &w.run else { return (vec![], vec![]) };
+    let ops = run
+        .ops
+        .iter()
+        .map(|o| {
+            let (_, words, c) = status_look(t, &o.status);
+            (format!("{} \u{b7} {}", o.name, o.kind), words.to_string(), c)
+        })
+        .collect();
+    // what is left over is in the tab's issues already, box by box
+    (ops, run.warnings.clone())
+}
+
 /// A state's mark, painted (the UI's font has no check or cross): a disc with a tick, a cross,
 /// a bar; a ring for stale, a ring with a dot for generating, a slashed ring for suppressed.
 pub fn mark(p: &egui::Painter, c: egui::Pos2, t: &Theme, status: &str) {
@@ -3625,9 +3641,11 @@ fn checks_window(
 fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
     let mut close = false;
     let mut apply = false;
-    // within the view's free part (a small screen narrows it)
-    let width = 640.0_f32.min(v.width() - 32.0).max(360.0);
-    let r = egui::Window::new("cam-text")
+    // a panel across the bottom of the view, above the simulation's timeline (UX-LEAD)
+    let ph = (v.height() * 0.38).clamp(220.0, 380.0);
+    let panel = Rect::from_min_max(pos2(v.left() + 8.0, v.bottom() - ph), pos2(v.right() - 8.0, v.bottom() - 4.0));
+    let width = panel.width() - 16.0;
+    let win = egui::Window::new("cam-text")
         .id(egui::Id::unique("cam-text-window"))
         .title_bar(false)
         .collapsible(false)
@@ -3636,8 +3654,10 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(below_chips(v))
+        .constrain_to(below_chips(v));
+    let r = dialog_host(aux_rect(Some(panel)), "text", t, win)
         .show_placed(ctx, places, |ui, places| {
+            ui.set_max_width(width);
             close = head(
                 ui,
                 t,
@@ -3652,7 +3672,7 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
             }
             egui::ScrollArea::vertical()
                 .id_salt("cam-text-scroll")
-                .max_height(420.0)
+                .max_height(ph - 110.0)
                 .show(ui, |ui| {
                     let r = ui.add(
                         egui::TextEdit::multiline(&mut w.text_edit)
@@ -3660,7 +3680,7 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
                             .font(mono(12.0))
                             .code_editor()
                             .desired_width(width - 28.0)
-                            .desired_rows(20),
+                            .desired_rows(8),
                     );
                     places.push(("cam:text:edit".into(), r.rect));
                 });

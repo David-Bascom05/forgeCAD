@@ -129,7 +129,10 @@ fn the_op_dialog_edits_the_text_and_marks_it_stale() {
         .as_mut()
         .unwrap()
         .command(forge_render::shell::cam::Cmd::Edit("prof".into()));
-    h.step();
+    // the sheet docks in the column a frame after it opens: its places settle first
+    for _ in 0..4 {
+        h.step();
+    }
     assert!(h.placed("cam:op:ok").is_some(), "the op dialog");
     // the Passes tab: stock to leave
     let tabs =
@@ -139,6 +142,7 @@ fn the_op_dialog_edits_the_text_and_marks_it_stale() {
         .position(|t| *t == forge_render::shell::cam::schema::Tab::Passes)
         .unwrap();
     assert!(h.click(&format!("cam:op:tab:{k}")));
+    h.step();
     h.step();
     assert!(h.click("cam:op:arg:leave"));
     h.text("0.2");
@@ -703,4 +707,50 @@ fn headless_open(file: &std::path::Path) -> Option<(Headless, std::path::PathBuf
     h.gui.open(file.to_str().unwrap());
     settle(&mut h);
     Some((h, file.to_path_buf()))
+}
+
+/// Checks (the ribbon) opens the simulation's own Checks tab, which carries each op's verdict;
+/// no window floats over the part.
+#[test]
+fn checks_open_in_the_simulations_tab() {
+    let Some((mut h, _)) = open("checks") else { return };
+    // the simulation is built after the run
+    let t0 = std::time::Instant::now();
+    while h.gui.shell.camsim.is_none() && t0.elapsed().as_secs() < 120 {
+        h.until(|g| g.shell.camsim.is_some());
+    }
+    assert!(h.gui.shell.camsim.is_some(), "no simulation");
+    assert!(h.click("tool:Checks"));
+    h.step();
+    h.step();
+    let st = h.gui.shell.camsim.as_deref().unwrap();
+    assert_eq!(st.tab, forge_render::gui_camsim_panel::Tab::Checks);
+    let names: Vec<&str> = st.op_checks.iter().map(|o| o.0.as_str()).collect();
+    assert_eq!(st.op_checks.len(), 5, "{names:?}");
+    assert!(st.op_checks.iter().all(|o| o.1 == "certified"), "{:?}", st.op_checks);
+    assert!(!h.gui.shell.cam.as_ref().unwrap().checks_open);
+    shot(&mut h, "cam-checks-tab");
+}
+
+/// Document Text is a panel across the bottom of the view (above the timeline), not a window
+/// over the part; Apply writes what was typed.
+#[test]
+fn document_text_is_a_bottom_panel() {
+    let Some((mut h, _)) = open("text") else { return };
+    assert!(h.click("tool:Document Text"));
+    h.step();
+    h.step();
+    let v = h.gui.shell.view_rect;
+    let e = h.placed("cam:text:edit").expect("the text");
+    assert!(e.min.y > v.center().y - 40.0 && e.width() > v.width() * 0.6, "{e:?} in {v:?}");
+    shot(&mut h, "cam-text-panel");
+    // typed: the whole text replaced
+    let typed = text(&h).replace("stickout: 32", "stickout: 34");
+    assert!(h.click("cam:text:edit"));
+    h.key_with(egui::Key::A, egui::Modifiers::COMMAND);
+    h.text(&typed);
+    h.step();
+    assert!(h.click("cam:text:apply"));
+    h.step();
+    assert!(text(&h).contains("stickout: 34"), "{}", text(&h));
 }
