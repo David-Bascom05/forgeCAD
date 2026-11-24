@@ -41,14 +41,16 @@ fn a_pointed_hole_is_drilled_to_its_point() {
 
 #[test]
 fn a_counterbore_is_cut_after_the_drill() {
-    // no counterbore tool of 11 mm in the library: the largest end mill under it (flat-10)
-    // pockets its circle to its depth
+    // no counterbore tool of 11 mm in the library: the largest end mill under it pockets its
+    // circle to its depth (which one depends on the library: not pinned)
     let cam = forge_cam_lang::run(&doc("h = drill(op1, f.cbh, plan: \"drill\")"), &dir());
     assert!(cam.errors.is_empty(), "{:?}", cam.errors);
     let o = cam.ops.iter().find(|o| o.name == "h").unwrap();
     assert_eq!(o.status, "built", "{:?}", o.refusal);
     assert!(
-        o.plan.iter().any(|p| p.starts_with("counterbore by flat-10")),
+        o.plan
+            .iter()
+            .any(|p| p.starts_with("counterbore by ") && p.ends_with(" (pocketed, helical entry) to 4")),
         "{:?}",
         o.plan
     );
