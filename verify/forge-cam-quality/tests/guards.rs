@@ -48,6 +48,10 @@ fn measure_all() -> Vec<JobQ> {
         lookahead: None,
     };
     let fs = files();
+    // WASI has no threads: the same measures, one after another
+    if cfg!(target_family = "wasm") {
+        return fs.iter().map(|f| measure(f, &cfg)).collect();
+    }
     std::thread::scope(|s| {
         let hs: Vec<_> = fs.iter().map(|f| s.spawn(|| measure(f, &cfg))).collect();
         hs.into_iter().map(|h| h.join().unwrap()).collect()
