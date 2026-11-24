@@ -488,7 +488,9 @@ impl Shell {
                 .id_salt("cam-details")
                 .auto_shrink([false, false])
                 .show(&mut child, |ui| {
-                    details(ui, &t, &w, &id, r.width(), &mut cmds, &mut places)
+                    details(ui, &t, &w, &id, r.width(), &mut cmds, &mut places);
+                    // the last row clear of the panel's edge when scrolled to the end
+                    ui.add_space(16.0);
                 });
         }
         for c in cmds {
@@ -1269,7 +1271,7 @@ fn op_dialog(
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1503,7 +1505,7 @@ fn setup_dialog(
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1701,7 +1703,7 @@ fn lathe_dialog(
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1796,7 +1798,7 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_post", "Post Process", width, places, "cam:post");
             if progs.is_empty() {
@@ -1972,7 +1974,7 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_tools", "Tool Library", width, places, "cam:tools");
             let mut f = w.tools_filter.clone();
@@ -2222,7 +2224,7 @@ fn section_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(
                 ui,
@@ -2281,7 +2283,7 @@ fn programs_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_sheet", "NC Programs", width, places, "cam:programs");
             if progs.is_empty() {
@@ -2670,7 +2672,7 @@ fn quality_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Toolpath Quality", width, places, "cam:quality");
             // the toolpath's colouring in the view (the simulation view draws it)
@@ -2831,7 +2833,7 @@ fn checks_window(
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Checks", width, places, "cam:checks");
             let Some(run) = &w.run else {
@@ -2893,7 +2895,7 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .fade_in(false)
-        .constrain_to(v.shrink(4.0))
+        .constrain_to(below_chips(v))
         .show_placed(ctx, places, |ui, places| {
             close = head(
                 ui,
@@ -3105,4 +3107,10 @@ fn forge_text(ui: &mut Ui, t: &Theme, text: &str, w: f32) {
     let field = egui::Rect::from_min_max(pos2(r.left() + 12.0, r.top()), pos2(r.right() - 12.0, r.bottom()));
     ui.painter().rect_filled(field, 4.0, t.field);
     ui.painter().galley(pos2(field.left() + 6.0, field.top() + 5.0), g, t.ink);
+}
+
+/// The part of the view a floating window keeps inside: below the view's chip row (Axes, Grid,
+/// Planes, Anchors), 4 px in from the other edges.
+fn below_chips(v: Rect) -> Rect {
+    Rect::from_min_max(pos2(v.left() + 4.0, v.top() + 40.0), pos2(v.right() - 4.0, v.bottom() - 4.0))
 }
