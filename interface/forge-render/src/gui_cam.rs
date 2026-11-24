@@ -78,6 +78,13 @@ impl Gui {
         }
         let Some(w) = &mut self.shell.cam else { return };
         for (path, text) in std::mem::take(&mut w.want_write) {
+            w.write_gen += 1;
+            // a program's `out:` folder made as it is posted
+            if let Some(d) = std::path::Path::new(&path).parent()
+                && !d.as_os_str().is_empty()
+            {
+                let _ = forge_dirs::fs::create_dir_all(d);
+            }
             match forge_dirs::fs::write(&path, text.as_bytes()) {
                 Ok(()) => {
                     if path == w.path {

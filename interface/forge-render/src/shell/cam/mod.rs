@@ -7,6 +7,7 @@
 //! the setup and op selected and a check's witness asked to be located, and `run`'s paths.
 
 pub mod doc;
+pub mod nc;
 pub mod run;
 pub mod schema;
 pub mod turnview;
@@ -62,6 +63,12 @@ pub enum Ask {
     AutoGenerate,
     CheckNow,
     SectionView,
+    /// NC Programs: every program's files with the host's Save As.
+    ExportNc,
+    /// The setup sheet and tool list with the host's Save As.
+    ExportSheet,
+    /// Re-post every program whose file is stale.
+    RepostStale,
 }
 
 impl From<Ask> for Cmd {
@@ -84,6 +91,9 @@ impl From<Ask> for Cmd {
             Ask::AutoGenerate => Cmd::AutoGenerate,
             Ask::CheckNow => Cmd::CheckNow,
             Ask::SectionView => Cmd::SectionView,
+            Ask::ExportNc => Cmd::ExportNc(None),
+            Ask::ExportSheet => Cmd::ExportSheet,
+            Ask::RepostStale => Cmd::RepostStale,
         }
     }
 }
@@ -124,6 +134,14 @@ pub enum Cmd {
     CheckNow,
     /// The turning view, shown or not.
     SectionView,
+    /// Post program NAME (or all) into the document's folder.
+    PostNc(Option<String>),
+    /// The Post Process dialog at the K-th program.
+    PostAt(usize),
+    /// Program NAME's (or all) files with the host's Save As.
+    ExportNc(Option<String>),
+    ExportSheet,
+    RepostStale,
 }
 
 /// The setup dialog's state: the args as edited, by keyword.
@@ -230,6 +248,17 @@ pub struct CamWs {
     pub lib: forge_tooling::Library,
     /// The turning view (a lathe setup in section).
     pub turnview: turnview::TurnView,
+    /// Files for the host's Save As (taken by the host: a dialog natively, a download in the browser).
+    pub export: Option<nc::ExportAsk>,
+    /// Post and export programs not certified in full (their headers say so).
+    pub allow_uncertified: bool,
+    /// Files written so far (the posted states are read again after each).
+    pub write_gen: u64,
+    /// Exports handed to the host so far.
+    pub exported: u64,
+    /// A program setting being typed (its key, the text so far).
+    pub prog_field: Option<(String, String)>,
+    pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
 
 impl CamWs {
@@ -277,6 +306,12 @@ impl CamWs {
                 open: true,
                 ..Default::default()
             },
+            export: None,
+            allow_uncertified: false,
+            write_gen: 0,
+            exported: 0,
+            posted_cache: None,
+            prog_field: None,
         };
         ws.read_parts();
         ws.restale();
@@ -579,6 +614,11 @@ impl CamWs {
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
             Cmd::SectionView => self.turnview.open = !self.turnview.open,
+            Cmd::PostNc(n) => self.post_programs(n.as_deref()),
+            Cmd::PostAt(k) => self.post_dlg = Some(PostDlg { program: k }),
+            Cmd::ExportNc(n) => self.export_programs(n.as_deref()),
+            Cmd::ExportSheet => self.export_sheet(),
+            Cmd::RepostStale => self.repost_stale(),
             // forge-cam-lang checks as it generates: until an on-demand checker of a run's
             // posted paths is exposed, checking now is generating again
             Cmd::CheckNow => {

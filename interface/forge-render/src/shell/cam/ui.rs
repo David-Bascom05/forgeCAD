@@ -164,6 +164,12 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                     w.run.is_some().then_some(Action::Cam(Ask::SetupSheet)),
                     false,
                 ),
+                (
+                    "Export NC",
+                    "cam_post",
+                    w.run.is_some().then_some(Action::Cam(Ask::ExportNc)),
+                    false,
+                ),
                 ("Checks", "cam_check", a(Ask::Checks), w.checks_open),
                 (
                     "Check Now",
@@ -1751,6 +1757,7 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
     let width = 620.0;
     let mut edits: Vec<super::doc::Edit> = vec![];
     let mut write: Option<(String, String)> = None;
+    let (mut post_it, mut export_it): (Option<String>, Option<String>) = (None, None);
     let r = egui::Window::new("cam-post")
         .id(egui::Id::unique("cam-post-window"))
         .title_bar(false)
@@ -1887,9 +1894,13 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                if !text.is_empty() && button(ui, t, "Write NC File", true, "cam:post:write".into(), places) {
-                    let p = w.dir.join(format!("{id}.nc"));
-                    write = Some((p.display().to_string(), text.clone()));
+                // posted as the NC Programs window posts it: named by the statement, refused
+                // when not certified in full unless allowed
+                if !text.is_empty() && button(ui, t, "Post", true, "cam:post:write".into(), places) {
+                    post_it = Some(id.clone());
+                }
+                if !text.is_empty() && button(ui, t, "Export…", false, "cam:post:export".into(), places) {
+                    export_it = Some(id.clone());
                 }
                 if button(ui, t, "Setup Sheet", false, "cam:post:sheet".into(), places)
                     && let Some(r) = &w.run
@@ -1905,6 +1916,12 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
     }
     if let Some(x) = write {
         w.want_write.push(x);
+    }
+    if let Some(n) = post_it {
+        w.post_programs(Some(&n));
+    }
+    if let Some(n) = export_it {
+        w.export_programs(Some(&n));
     }
     if close {
         w.post_dlg = None;
@@ -2169,8 +2186,11 @@ fn section_window(
     r.map(|r| r.response.rect)
 }
 
-/// The NC programs: every program, the setups it posts, its dialect and number, what it made;
-/// a new program over chosen setups; every released program written at once.
+/// The NC programs, Fusion's NC Program manager: every program, the setups it posts, its
+/// dialect and number, what it made, its file (name, folder, extension, header) and whether that
+/// file is posted and current; Post (into the document's folder), Export… (the host's Save As),
+/// Re-post Stale, the setup sheet and tool list. Every setting is an argument of the program's
+/// statement, saved with the document (forge_cam_lang::export).
 fn programs_window(
     ctx: &egui::Context,
     t: &Theme,
@@ -2178,10 +2198,11 @@ fn programs_window(
     w: &mut CamWs,
     places: &mut Places,
 ) -> Option<Rect> {
+    use super::nc::Posted;
     let mut close = false;
-    let width = 600.0;
+    let width = 620.0;
     let mut edits: Vec<super::doc::Edit> = vec![];
-    let mut writes: Vec<(String, String)> = vec![];
+    let mut cmds: Vec<Cmd> = vec![];
     let progs: Vec<super::doc::Stmt> = w
         .stmts
         .iter()
@@ -2190,12 +2211,16 @@ fn programs_window(
         .collect();
     let setups: Vec<String> = w.setups().iter().map(|s| s.name.clone()).collect();
     let lathe = w.turning();
+    let posted = w.posted();
+    let ops_changed = !w.stale.is_empty();
+    let mut field = w.prog_field.take();
+    let mut allow = w.allow_uncertified;
     let r = egui::Window::new("cam-programs")
         .id(egui::Id::unique("cam-programs-window"))
         .title_bar(false)
         .collapsible(false)
         .resizable(false)
-        .default_pos(pos2(v.center().x - width / 2.0, v.top() + 60.0))
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
         .constrain_to(crate::shell::dialog_area(ctx))
@@ -2204,59 +2229,16 @@ fn programs_window(
             if progs.is_empty() {
                 note(ui, "No program yet: a new setup comes with one, or add one below.", width, t.ink2);
             }
-            for p in &progs {
-                let res = w.run.as_ref().and_then(|r| r.programs.iter().find(|x| x.name == p.name)).cloned();
-                heading(ui, t, &p.name, width);
-                // its setups: a check each (the first positional argument: one name or a list)
-                let now = p.pos(0).unwrap_or("").to_string();
-                let had: Vec<String> = now
-                    .trim_matches(|c| c == '[' || c == ']' || c == '(' || c == ')')
-                    .split(',')
-                    .map(|x| x.trim().to_string())
-                    .filter(|x| !x.is_empty())
-                    .collect();
-                let mut want = had.clone();
-                ui.horizontal(|ui| {
-                    ui.add_space(14.0);
-                    ui.label(egui::RichText::new("Setups").font(sans(13.0)).color(t.ink2));
-                    for su in &setups {
-                        let mut on = want.contains(su);
-                        let r = ui.checkbox(&mut on, su.as_str());
-                        places.push((format!("cam:programs:{}:{su}", p.name), r.rect));
-                        if on && !want.contains(su) {
-                            want.push(su.clone());
-                        }
-                        if !on {
-                            want.retain(|x| x != su);
-                        }
-                    }
-                });
-                if want != had && !want.is_empty() {
-                    let ordered: Vec<String> = setups.iter().filter(|s| want.contains(s)).cloned().collect();
-                    let text = if ordered.len() == 1 { ordered[0].clone() } else { format!("[{}]", ordered.join(", ")) };
-                    // a program reads its setups: below the last of them first
-                    let at = |n: &str| w.stmts.iter().position(|x| x.name == n);
-                    if ordered.iter().any(|su| at(su) > at(&p.name)) {
-                        edits.push(super::doc::Edit::Move { id: p.name.clone(), before: None });
-                    }
-                    edits.push(super::doc::Edit::Set { id: p.name.clone(), arg: "#0".into(), text });
-                }
-                let words = format!(
-                    "{} · O{} · {}",
-                    p.arg_str("post").unwrap_or_else(|| "the machine's".into()),
-                    p.arg("number").unwrap_or("?"),
-                    match &res {
-                        Some(r) if r.text.is_some() => format!("{} lines, {}", r.lines, r.certified),
-                        Some(r) => format!("not released: {}", r.error.clone().unwrap_or_default()),
-                        None => "not generated".into(),
-                    }
-                );
-                note(ui, &words, width, if res.as_ref().is_some_and(|r| r.text.is_some()) { t.ink } else { t.warn });
-                if let Some(text) = res.and_then(|r| r.text) {
-                    writes.push((w.dir.join(format!("{}.nc", p.name)).display().to_string(), text));
-                }
+            for (k, p) in progs.iter().enumerate() {
+                program_row(ui, t, w, p, k, &setups, &posted, ops_changed, width, &mut field, &mut edits, &mut cmds, places);
             }
             ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                let r = ui.checkbox(&mut allow, "Allow uncertified (their headers say what was not checked)");
+                places.push(("cam:programs:allow".into(), r.rect));
+            });
+            ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
                 if !setups.is_empty() && button(ui, t, "New Program", false, "cam:programs:new".into(), places) {
@@ -2268,22 +2250,216 @@ fn programs_window(
                         text: format!("{n} = {f}({}, post: \"{post}\", number: {num})", setups[0]),
                     });
                 }
-                if !writes.is_empty() && button(ui, t, "Write All NC Files", true, "cam:programs:write".into(), places) {
-                    w.want_write.extend(writes.clone());
+                let any = w.run.is_some() && !progs.is_empty();
+                if any && button(ui, t, "Post All", true, "cam:programs:write".into(), places) {
+                    cmds.push(Cmd::PostNc(None));
+                }
+                if posted.iter().any(|p| p.1 == Posted::Stale)
+                    && button(ui, t, "Re-post Stale", false, "cam:programs:repost".into(), places)
+                {
+                    cmds.push(Cmd::RepostStale);
+                }
+                if any && button(ui, t, "Export All…", false, "cam:programs:export".into(), places) {
+                    cmds.push(Cmd::ExportNc(None));
+                }
+                if w.run.is_some() && button(ui, t, "Setup Sheet & Tools…", false, "cam:programs:sheet".into(), places) {
+                    cmds.push(Cmd::ExportSheet);
                 }
             });
-            note(ui, "Each program posts its setups in order with one dialect; open Post Process for a program's text and dialect.", width, t.ink2);
+            if let Some(s) = &w.said {
+                note(ui, s, width, t.ink2);
+            }
+            note(
+                ui,
+                "Post writes a program's file beside the document (File, Folder, Ext.); Export… saves a copy where you choose (several in a folder, or a zip in the browser).",
+                width,
+                t.ink2,
+            );
             ui.add_space(8.0);
         });
+    w.prog_field = field;
+    w.allow_uncertified = allow;
     if !edits.is_empty()
         && let Err(e) = w.edits(&edits)
     {
         w.said = Some(e);
     }
+    for c in cmds {
+        w.command(c);
+    }
     if close {
         w.programs_open = false;
     }
     r.map(|r| r.response.rect)
+}
+
+/// One program in the NC Programs window.
+#[allow(clippy::too_many_arguments)]
+fn program_row(
+    ui: &mut Ui,
+    t: &Theme,
+    w: &CamWs,
+    p: &super::doc::Stmt,
+    k: usize,
+    setups: &[String],
+    posted: &[super::nc::PostedRow],
+    ops_changed: bool,
+    width: f32,
+    field: &mut Option<(String, String)>,
+    edits: &mut Vec<super::doc::Edit>,
+    cmds: &mut Vec<Cmd>,
+    places: &mut Places,
+) {
+    use super::nc::Posted;
+    let res = w.run.as_ref().and_then(|r| r.programs.iter().find(|x| x.name == p.name)).cloned();
+    let state = posted.iter().find(|x| x.0 == p.name);
+    // the name, and its file's state as a painted mark
+    let (r, _) = ui.allocate_exact_size(vec2(width, 26.0), Sense::hover());
+    let ink = match state.map(|s| s.1) {
+        Some(Posted::Current) => t.success,
+        Some(Posted::Stale) => t.warn,
+        Some(Posted::Refused) => t.error,
+        _ => t.ink2,
+    };
+    ui.painter().circle_filled(pos2(r.left() + 19.0, r.center().y), 4.0, ink);
+    ui.painter().text(pos2(r.left() + 30.0, r.center().y), Align2::LEFT_CENTER, &p.name, medium(14.0), t.ink);
+    let words = match state {
+        Some((_, s, path)) if !path.is_empty() => format!("{path}: {}", s.words()),
+        Some((_, s, _)) => s.words().to_string(),
+        None => "not generated".into(),
+    };
+    ui.painter().text(pos2(r.right() - 14.0, r.center().y), Align2::RIGHT_CENTER, words, sans(12.0), ink);
+    places.push((format!("cam:programs:{}:state", p.name), r));
+    // its setups: a check each (the first positional argument: one name or a list)
+    let now = p.pos(0).unwrap_or("").to_string();
+    let had: Vec<String> = now
+        .trim_matches(|c| c == '[' || c == ']' || c == '(' || c == ')')
+        .split(',')
+        .map(|x| x.trim().to_string())
+        .filter(|x| !x.is_empty())
+        .collect();
+    let mut want = had.clone();
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("Setups").font(sans(13.0)).color(t.ink2));
+        for su in setups {
+            let mut on = want.contains(su);
+            let r = ui.checkbox(&mut on, su.as_str());
+            places.push((format!("cam:programs:{}:{su}", p.name), r.rect));
+            if on && !want.contains(su) {
+                want.push(su.clone());
+            }
+            if !on {
+                want.retain(|x| x != su);
+            }
+        }
+    });
+    if want != had && !want.is_empty() {
+        let ordered: Vec<String> = setups.iter().filter(|s| want.contains(s)).cloned().collect();
+        let text = if ordered.len() == 1 { ordered[0].clone() } else { format!("[{}]", ordered.join(", ")) };
+        // a program reads its setups: below the last of them first
+        let at = |n: &str| w.stmts.iter().position(|x| x.name == n);
+        if ordered.iter().any(|su| at(su) > at(&p.name)) {
+            edits.push(super::doc::Edit::Move { id: p.name.clone(), before: None });
+        }
+        edits.push(super::doc::Edit::Set { id: p.name.clone(), arg: "#0".into(), text });
+    }
+    let line = format!(
+        "{} · O{} · {}",
+        p.arg_str("post").unwrap_or_else(|| "the machine's".into()),
+        p.arg("number").unwrap_or("?"),
+        match &res {
+            Some(r) if r.text.is_some() => format!("{} lines, certified {}", r.lines, r.certified),
+            Some(r) => format!("not released: {}", r.error.clone().unwrap_or_default()),
+            None => "not generated".into(),
+        }
+    );
+    note(ui, &line, width, if res.as_ref().is_some_and(|r| r.text.is_some()) { t.ink } else { t.warn });
+    if ops_changed && state.is_some_and(|s| s.1 == Posted::Current) {
+        note(ui, "Ops changed since the run: generate, then re-post.", width, t.warn);
+    }
+    // its file: name, folder, extension, header
+    let ext_default = forge_cam_lang::export::ext_of(&p.arg_str("post").unwrap_or_default()).to_string();
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        prog_field(ui, t, "File", 110.0, p, "file", &p.name, field, edits, places);
+        prog_field(ui, t, "Folder", 90.0, p, "out", "beside it", field, edits, places);
+        prog_field(ui, t, "Ext.", 44.0, p, "ext", &ext_default, field, edits, places);
+        prog_field(ui, t, "Comment", 140.0, p, "comment", "header line", field, edits, places);
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        let had = p.arg_str("tools").as_deref() == Some("list");
+        let mut on = had;
+        let r = ui.checkbox(&mut on, "Tool list in header");
+        places.push((format!("cam:programs:{}:tools", p.name), r.rect));
+        if on != had {
+            edits.push(if on {
+                super::doc::Edit::Set { id: p.name.clone(), arg: "tools".into(), text: "\"list\"".into() }
+            } else {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: "tools".into() }
+            });
+        }
+        ui.add_space(12.0);
+        let ok = res.as_ref().is_some_and(|r| r.text.is_some());
+        if ok && button(ui, t, "Post", true, format!("cam:programs:{}:post", p.name), places) {
+            cmds.push(Cmd::PostNc(Some(p.name.clone())));
+        }
+        if ok && button(ui, t, "Export…", false, format!("cam:programs:{}:export", p.name), places) {
+            cmds.push(Cmd::ExportNc(Some(p.name.clone())));
+        }
+        if button(ui, t, "Post Process", false, format!("cam:programs:{}:open", p.name), places) {
+            cmds.push(Cmd::PostAt(k));
+        }
+    });
+    ui.add_space(6.0);
+}
+
+/// A program's export setting `arg` as a short field: the statement's value, written when the
+/// field is left (empty: the default, the argument taken out).
+#[allow(clippy::too_many_arguments)]
+fn prog_field(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    wide: f32,
+    p: &super::doc::Stmt,
+    arg: &str,
+    hint: &str,
+    field: &mut Option<(String, String)>,
+    edits: &mut Vec<super::doc::Edit>,
+    places: &mut Places,
+) {
+    let key = format!("cam:programs:{}:{arg}", p.name);
+    let now = p.arg_str(arg).unwrap_or_default();
+    let mut v = match field {
+        Some((k, b)) if *k == key => b.clone(),
+        _ => now.clone(),
+    };
+    ui.add_space(6.0);
+    ui.label(egui::RichText::new(label).font(sans(12.0)).color(t.ink2));
+    let r = ui.add(
+        egui::TextEdit::singleline(&mut v)
+            .font(sans(12.0))
+            .hint_text(hint)
+            .desired_width(wide)
+            .margin(vec2(5.0, 3.0)),
+    );
+    places.push((key.clone(), r.rect));
+    if r.changed() {
+        *field = Some((key.clone(), v.clone()));
+    }
+    if r.lost_focus() && field.as_ref().is_some_and(|f| f.0 == key) {
+        *field = None;
+        let v = v.trim().replace(['"', '\\'], "");
+        if v != now {
+            edits.push(if v.is_empty() {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: arg.into() }
+            } else {
+                super::doc::Edit::Set { id: p.name.clone(), arg: arg.into(), text: format!("\"{v}\"") }
+            });
+        }
+    }
 }
 
 /// Every op's toolpath quality in one table, each setup's totals, and the programs' time on the

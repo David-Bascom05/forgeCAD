@@ -102,8 +102,11 @@ fn unquote(t: &str) -> String {
     }
 }
 
+/// A call's arguments: keyword (None: positional) and the text as written.
+type Args = Vec<(Option<String>, String)>;
+
 /// The statements `NAME = func(..)` of `src`: name, function, keyword args as written.
-fn calls(src: &str) -> Vec<(String, String, Vec<(Option<String>, String)>)> {
+fn calls(src: &str) -> Vec<(String, String, Args)> {
     let Ok(prog) = syntax::parse(src) else { return vec![] };
     let mut out = vec![];
     for s in &prog {

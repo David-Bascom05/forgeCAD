@@ -59,7 +59,9 @@ closes it:
 
 | Fusion | here | state |
 |---|---|---|
-| NC program manager: list, which setups, post, number, output folder | NC Programs window: every program, its setups (checks), dialect, number, lines, released; New Program; Write All | done |
+| NC program manager: list, which setups, post, number, output folder | NC Programs window: every program, its setups (checks), dialect, number, lines, certification; file name, folder, extension, comment, tool list (statement args); Post / Export… / Re-post Stale; posted/stale per program (nc-export.md) | done |
+| NC program: ops selection, one file per setup, post options (units, decimals, line numbers) | whole setups; one program per setup | LANG (`ops:`) + forge-post args (nc-export.md) |
+| Post to a folder / machine | Export… (native dialog; browser save picker or download, zip for several); send-to-machine designed (nc-export.md) | done (export); send: design |
 | Post preview | NC text in the post dialog | done |
 | Setup sheet (HTML, Excel) | HTML written beside the document; turning: a simple table | done (HTML); Excel not planned |
 | Machining time per op and per setup, feed scale (O4) | per op; per setup in the browser row and its details; the programs' machine-timeline time in the Quality window | done (feed scale: not yet) |

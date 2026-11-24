@@ -153,10 +153,86 @@ fn post_process_shows_the_program_and_writes_it() {
     h.step();
     assert!(h.placed("cam:post:text").is_some());
     shot(&mut h, "cam-post");
+    // the flange's setup is not placed (G5 unchecked): refused until allowed
     assert!(h.click("cam:post:write"));
+    h.step();
+    assert!(!file.with_file_name("prog.nc").exists());
+    let said = h.gui.shell.cam.as_ref().unwrap().said.clone().unwrap_or_default();
+    assert!(said.contains("Allow uncertified"), "{said}");
+    h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
+    assert!(h.click("cam:post:write"));
+    h.step();
     h.step();
     let nc = std::fs::read_to_string(file.with_file_name("prog.nc")).expect("written");
     assert!(nc.lines().count() > 100, "{nc}");
+    assert!(nc.contains("(NOT CERTIFIED IN FULL: except G5"), "stamped");
+}
+
+/// NC Programs: a program's file named and placed by its statement (typed in the window), posted
+/// into the document's folder, current until the ops change, stale after, re-posted; Export… asks
+/// the host's Save As with the same file; the setup sheet and tool list as two files.
+#[test]
+fn nc_programs_post_export_and_go_stale() {
+    use forge_render::shell::cam::nc::Posted;
+    let Some((mut h, file)) = open("nc") else { return };
+    assert!(h.click("tool:NC Programs"));
+    h.step();
+    shot(&mut h, "cam-nc-open");
+    assert!(h.click("cam:programs:allow"));
+    h.step();
+    // the file's name and folder, typed: written to the statement when the field is left
+    assert!(h.click("cam:programs:prog:file"));
+    h.text("flange-1");
+    h.step();
+    assert!(h.click("cam:programs:prog:out"));
+    h.text("nc");
+    h.step();
+    assert!(h.click("cam:programs:prog:tools"));
+    h.step();
+    let t = text(&h);
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(t.contains("file: \"flange-1\""), "{:?} {:?} {}", w.said, w.prog_field, t.lines().filter(|l| l.starts_with("prog")).collect::<String>());
+    assert!(t.contains("tools: \"list\""), "{t}");
+    settle(&mut h);
+    let st = |h: &mut forge_render::gui::Headless| h.gui.shell.cam.as_mut().unwrap().posted();
+    assert!(h.placed("cam:programs:prog:post").is_some());
+    let s = st(&mut h);
+    assert_eq!(s[0].1, Posted::No, "{s:?}");
+    assert!(t.contains("out: \"nc\""), "{t}");
+    assert_eq!(s[0].2, "nc/flange-1.nc");
+    assert!(h.click("cam:programs:prog:post"));
+    h.step();
+    h.step();
+    let nc = std::fs::read_to_string(file.with_file_name("nc").join("flange-1.nc")).expect("posted");
+    assert!(nc.contains("(TOOLS)") && nc.contains("(NOT CERTIFIED IN FULL"), "{nc}");
+    assert_eq!(st(&mut h)[0].1, Posted::Current);
+    shot(&mut h, "cam-nc-programs");
+    // the same file for Export…: the host's Save As is asked
+    assert!(h.click("cam:programs:prog:export"));
+    h.step();
+    let x = h.gui.shell.cam.as_mut().unwrap().export.take().expect("asked");
+    assert_eq!(x.files.len(), 1);
+    assert_eq!(x.files[0].text, nc);
+    assert!(x.dir.ends_with("nc"), "{:?}", x.dir);
+    // an op changed: the run changes, the file is stale; Re-post Stale makes it current
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    w.edit(&forge_render::shell::cam::doc::Edit::Set { id: "prof".into(), arg: "leave".into(), text: "0.2".into() });
+    settle(&mut h);
+    assert_eq!(st(&mut h)[0].1, Posted::Stale);
+    assert!(h.click("cam:programs:repost"));
+    h.step();
+    h.step();
+    assert_eq!(st(&mut h)[0].1, Posted::Current);
+    // the setup sheet and the tool list
+    assert!(h.click("cam:programs:sheet"));
+    h.step();
+    let x = h.gui.shell.cam.as_mut().unwrap().export.take().expect("asked");
+    let names: Vec<&str> = x.files.iter().map(|f| f.path.as_str()).collect();
+    assert_eq!(names, ["flange_cam-sheet.html", "flange_cam-tools.txt"]);
+    assert!(x.files[1].text.starts_with("T1 "), "{}", x.files[1].text);
+    let d = file.with_file_name("exported");
+    let ps = forge_render::shell::cam::nc::write_to(&x.files, &d).unwrap();
+    assert!(ps.iter().all(|p| p.exists()));
 }
 
 #[test]
