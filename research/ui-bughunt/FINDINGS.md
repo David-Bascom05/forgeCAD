@@ -252,6 +252,47 @@ list on main: this branch's new strings add none).
   File > Export STL downloads `gate_frame.stl`, a valid binary STL; Export CSV writes
   `weldments/gate_frame-cutlist.csv` on the serving machine; fails before: no download).
 
+## 17. Esc closed no dialog over the view; Place hung on a fifo beside the assembly (ui/bughunt-3)
+
+- Symptoms, desktop and page alike: Esc left Place Component, Place Joint, Constrain, Free
+  Move/Rotate, Pattern, Mirror and Place from Content Center up, so each stayed open under the
+  next one opened. Separately, Assemble > Place hung the app for good when a folder beside the
+  assembly's held a fifo named `*.fg`. A link there to /dev/zero filled the memory instead.
+- Root causes: `escape_one_level` (shell/mod.rs) runs first in the frame and always takes Esc
+  for its own levels, and none of those levels was one of these dialogs. A dialog that looked for
+  Esc itself (fgdialog.rs, the occurrence editor) never saw it either. Place reads every `.fg`
+  in the folder and in the folders beside it to mark the assemblies, using `read_to_string`.
+- Fixes: three new Esc levels after a feature dialog's. Content Center closes. The occurrence
+  editor closes. The assembly tool's dialog gets its own × (`escape_to` names it, and
+  `dialog_head` answers as if its × was clicked, so each tool cleans up as it does on ×). Place
+  reads with `forge_lang::deps::read_plain`, as the loaders read: plain files only, no links
+  followed, capped.
+- Tests (tests/asm_tools.rs): `escape_closes_the_dialog_up` (five tools and Content Center; fails
+  before: "Place: Esc left its dialog up") and
+  `place_lists_beside_files_without_reading_a_fifo_or_a_device` (a fifo and a /dev/zero link
+  beside the assembly; fails before: the list never comes).
+- Found because other tests leave such fixtures in the temp folder (`fg-read-kinds-*`). The
+  Place dialog of an assembly whose parent folder is the temp folder hung on them.
+
+## 18. Inspect > Wall froze the page for minutes; natively 4.5 minutes for a welded frame (ui/bughunt-3)
+
+- Symptom: Inspect > Wall on `examples/weldments/gate_frame.fg` measures the whole part as soon
+  as it opens. Natively that took 269 s (`forgecad measure F wall` too). In the single-threaded
+  page the job runs on the page's thread, so the tab hung for longer than 5 minutes.
+- Root cause: `forge_agent::measure::wall` tried every triangle against every other one
+  (165,669 triangles: 2.7e10 pairs).
+- Fix: a box tree over the triangles. Each ray tries only the triangles whose boxes it passes
+  through, no further than the thinnest wall found so far. A long sliver goes in as several
+  pieces, so one long box doesn't lie across every ray near it. The tests and the order of the
+  outer loop are unchanged, so the answer is the same to the bit: only triangles that could not
+  be nearer are left out, and the point depends only on the ray and the distance. 269 s ->
+  about 3.5 s.
+- Tests: `measure::tests::the_tree_finds_the_wall_every_pair_does_bit_for_bit` (the old loop
+  kept as the reference: a plate with holes, a tube). Also every example compared old vs new
+  with `forgecad measure F wall exact`: identical.
+- Still open: about 3.5 s natively (likely 2-3x that in wasm) on the single-threaded page's
+  thread. The threaded page and the desktop run it off the UI thread.
+
 ## Open (reported, not fixed here)
 
 
