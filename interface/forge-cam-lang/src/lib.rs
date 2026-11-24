@@ -2837,20 +2837,26 @@ impl Cam {
                     None => Stock { min: plo, max: phi },
                     _ => return Err("stock: box(..), cylinder(..), tube(..) or solid(..)".into()),
                 };
+                // a derived origin (from the stock's box) is snapped to the 0.001 mm grid every
+                // metric dialect posts on (3 or 4 decimals): a coordinate exact in the part's
+                // frame (the stock's bottom, a floor) then posts exact; off the grid it posted
+                // rounded, up to half a step to the wrong side of it. A stated origin is the
+                // user's, kept as given.
+                let snap = |v: [f64; 3]| v.map(|x| (x * 1000.0).round() / 1000.0);
                 let origin = match a.get("origin") {
-                    Some(V::Str(s)) if s == "top-center" => [
+                    Some(V::Str(s)) if s == "top-center" => snap([
                         0.5 * (stock.min[0] + stock.max[0]),
                         0.5 * (stock.min[1] + stock.max[1]),
                         stock.max[2],
-                    ],
-                    Some(V::Str(s)) if s == "top-corner" => [stock.min[0], stock.min[1], stock.max[2]],
+                    ]),
+                    Some(V::Str(s)) if s == "top-corner" => snap([stock.min[0], stock.min[1], stock.max[2]]),
                     Some(v) => tuple3(v)
                         .ok_or("origin: \"top-center\", \"top-corner\" or (x, y, z) in the part's frame")?,
-                    None => [
+                    None => snap([
                         0.5 * (stock.min[0] + stock.max[0]),
                         0.5 * (stock.min[1] + stock.max[1]),
                         stock.max[2],
-                    ],
+                    ]),
                 };
                 let fixture = match a.get("fixture") {
                     None => self.parts[part].hold.clone(),
