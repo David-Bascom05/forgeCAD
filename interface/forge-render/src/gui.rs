@@ -1363,9 +1363,15 @@ impl Gui {
         times.events = now_ms() - t0;
         let mut animating = self.camsim_tick();
         if let Some(v) = &mut self.view {
+            let was = v.nav.camera;
             if v.nav.tick(now_ms()) {
                 v.dirty = true;
                 animating = true;
+            } else if v.nav.camera != was {
+                // a view change's last step (the camera put at its end) is drawn too: a slow frame
+                // can take a change from its start to its end in one tick, and the picture stayed
+                // where it began
+                v.dirty = true;
             }
             if let Some(t) = v.nav.explode_tick(now_ms()) {
                 v.scene.set_explode(t);

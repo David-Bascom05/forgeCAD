@@ -591,6 +591,30 @@ fn a_turning_document_docks_its_section_and_windows_take_turns() {
         assert!(fill > 0.55, "the part fills {fill:.2} of what is left");
     }
     shot(&mut h, "cam-turn-section-framed");
+    {
+        // the part as drawn (not only where the camera says): its light grey pixels in the view,
+        // clear of the Section window. A view change ended in one slow frame was left undrawn.
+        let px = h.gui_pixels();
+        let sec = h.gui.shell.cam.as_ref().unwrap().section_at.expect("the Section window open");
+        let vr = h.gui.shell.view_rect;
+        let (mut x0, mut x1) = (f32::MAX, f32::MIN);
+        for y in (vr.top() as usize + 40..vr.bottom() as usize - 10).step_by(4) {
+            for x in (vr.left() as usize + 5..sec.left() as usize - 4).step_by(2) {
+                let c = px.at(x, y);
+                if c.iter().all(|&v| v > 175) {
+                    x0 = x0.min(x as f32);
+                    x1 = x1.max(x as f32);
+                }
+            }
+        }
+        // centred in what the window leaves (the free rect's centre), not in the whole view
+        assert!(x0 < x1, "the part drawn");
+        let (mid, free_mid) = ((x0 + x1) * 0.5, (vr.left() + sec.left()) * 0.5);
+        assert!(
+            (mid - free_mid).abs() < 0.15 * (sec.left() - vr.left()),
+            "the part drawn {x0}..{x1}, centred at {mid}; what is left's centre is {free_mid}"
+        );
+    }
     assert!(h.click("tool:NC Programs"));
     h.step();
     h.step();
