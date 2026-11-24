@@ -3463,3 +3463,1239 @@ taken = "2026-11-24"
 value = "Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9016860030000"
+type = "reamer"
+dc = 3
+dcon = 4
+oal = 68
+lcf = 12
+nof = 4
+material = "carbide"
+vendor = "Guhring"
+product_id = "9016860030000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+note = "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 3.000 mm H7; tolerance H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "P general"
+group = "P"
+vc = 179.832
+fz = 0.50038
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d1 mm 3.000 (catalogue p.8); webshop 'Nominal diameter 3.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d2 h6 mm 4.000 (catalogue p.8); 'Shank diameter 4.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l1 mm 68.00 (catalogue p.8); 'Total length 68.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l4 mm 12.00 (catalogue p.8); 'Cutting edge length 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "cutting-edge column 4 (catalogue p.8); 'Number of cutting edges 4' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.P general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0197"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9016860040000"
+type = "reamer"
+dc = 4
+dcon = 4
+oal = 68
+lcf = 12
+nof = 4
+material = "carbide"
+vendor = "Guhring"
+product_id = "9016860040000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+note = "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 4.000 mm H7; tolerance H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "P general"
+group = "P"
+vc = 179.832
+fz = 0.65024
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d1 mm 4.000 (catalogue p.8); webshop 'Nominal diameter 4.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d2 h6 mm 4.000 (catalogue p.8); 'Shank diameter 4.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l1 mm 68.00 (catalogue p.8); 'Total length 68.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l4 mm 12.00 (catalogue p.8); 'Cutting edge length 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "cutting-edge column 4 (catalogue p.8); 'Number of cutting edges 4' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.P general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0256"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9016860050000"
+type = "reamer"
+dc = 5
+dcon = 6
+oal = 76
+lcf = 12
+nof = 4
+material = "carbide"
+vendor = "Guhring"
+product_id = "9016860050000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+note = "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 5.000 mm H7; tolerance H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d1 mm 5.000 (catalogue p.8); webshop 'Nominal diameter 5.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d2 h6 mm 6.000 (catalogue p.8); 'Shank diameter 6.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l1 mm 76.00 (catalogue p.8); 'Total length 76.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l4 mm 12.00 (catalogue p.8); 'Cutting edge length 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "cutting-edge column 4 (catalogue p.8); 'Number of cutting edges 4' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+
+[[tool]]
+id = "guhring-9016860060000"
+type = "reamer"
+dc = 6
+dcon = 6
+oal = 76
+lcf = 12
+nof = 4
+material = "carbide"
+vendor = "Guhring"
+product_id = "9016860060000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+note = "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 6.000 mm H7; tolerance H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "P general"
+group = "P"
+vc = 179.832
+fz = 1.19888
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d1 mm 6.000 (catalogue p.8); webshop 'Nominal diameter 6.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d2 h6 mm 6.000 (catalogue p.8); 'Shank diameter 6.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l1 mm 76.00 (catalogue p.8); 'Total length 76.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l4 mm 12.00 (catalogue p.8); 'Cutting edge length 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "cutting-edge column 4 (catalogue p.8); 'Number of cutting edges 4' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.P general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0472"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9016860080000"
+type = "reamer"
+dc = 8
+dcon = 8
+oal = 101
+lcf = 16
+nof = 6
+material = "carbide"
+vendor = "Guhring"
+product_id = "9016860080000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+note = "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 8.000 mm H7; tolerance H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "P general"
+group = "P"
+vc = 179.832
+fz = 1.5494
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d1 mm 8.000 (catalogue p.8); webshop 'Nominal diameter 8.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d2 h6 mm 8.000 (catalogue p.8); 'Shank diameter 8.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l1 mm 101.00 (catalogue p.8); 'Total length 101.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l4 mm 16.00 (catalogue p.8); 'Cutting edge length 16.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "cutting-edge column 6 (catalogue p.8); 'Number of cutting edges 6' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.P general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0610"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9016860100000"
+type = "reamer"
+dc = 10
+dcon = 10
+oal = 101
+lcf = 19
+nof = 6
+material = "carbide"
+vendor = "Guhring"
+product_id = "9016860100000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+note = "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 10.000 mm H7; tolerance H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "P general"
+group = "P"
+vc = 179.832
+fz = 1.89992
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d1 mm 10.000 (catalogue p.8); webshop 'Nominal diameter 10.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d2 h6 mm 10.000 (catalogue p.8); 'Shank diameter 10.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l1 mm 101.00 (catalogue p.8); 'Total length 101.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l4 mm 19.00 (catalogue p.8); 'Cutting edge length 19.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "cutting-edge column 6 (catalogue p.8); 'Number of cutting edges 6' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.P general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0748"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9016860120000"
+type = "reamer"
+dc = 12
+dcon = 12
+oal = 130
+lcf = 19
+nof = 6
+material = "carbide"
+vendor = "Guhring"
+product_id = "9016860120000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+note = "HR 500 solid carbide high-performance reamer, through hole, Series 1686, Ø 12.000 mm H7; tolerance H7 pictogram (catalogue p.8); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "P general"
+group = "P"
+vc = 179.832
+fz = 2.04978
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d1 mm 12.000 (catalogue p.8); webshop 'Nominal diameter 12.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "d2 h6 mm 12.000 (catalogue p.8); 'Shank diameter 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l1 mm 130.00 (catalogue p.8); 'Total length 130.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "l4 mm 19.00 (catalogue p.8); 'Cutting edge length 19.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "cutting-edge column 6 (catalogue p.8); 'Number of cutting edges 6' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=8"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.8); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.P general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0807"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9072860030000"
+type = "reamer"
+dc = 3
+dcon = 4
+oal = 68
+lcf = 12
+nof = 4
+material = "carbide"
+vendor = "Guhring"
+product_id = "9072860030000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 3.000 mm H7; tolerance H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "N general"
+group = "N"
+vc = 260.604
+fz = 0.55118
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d1 mm 3.000 (catalogue p.14); webshop 'Nominal diameter 3.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d2 h6 mm 4.000 (catalogue p.14); 'Shank diameter 4.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l1 mm 68.00 (catalogue p.14); 'Total length 68.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l4 mm 12.00 (catalogue p.14); 'Cutting edge length 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "cutting-edge column 4 (catalogue p.14); 'Number of cutting edges 4' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.N general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9072860040000"
+type = "reamer"
+dc = 4
+dcon = 4
+oal = 68
+lcf = 12
+nof = 4
+material = "carbide"
+vendor = "Guhring"
+product_id = "9072860040000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 4.000 mm H7; tolerance H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "N general"
+group = "N"
+vc = 260.604
+fz = 0.7493
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d1 mm 4.000 (catalogue p.14); webshop 'Nominal diameter 4.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d2 h6 mm 4.000 (catalogue p.14); 'Shank diameter 4.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l1 mm 68.00 (catalogue p.14); 'Total length 68.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l4 mm 12.00 (catalogue p.14); 'Cutting edge length 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "cutting-edge column 4 (catalogue p.14); 'Number of cutting edges 4' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.N general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9072860050000"
+type = "reamer"
+dc = 5
+dcon = 6
+oal = 76
+lcf = 12
+nof = 4
+material = "carbide"
+vendor = "Guhring"
+product_id = "9072860050000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 5.000 mm H7; tolerance H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d1 mm 5.000 (catalogue p.14); webshop 'Nominal diameter 5.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d2 h6 mm 6.000 (catalogue p.14); 'Shank diameter 6.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l1 mm 76.00 (catalogue p.14); 'Total length 76.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l4 mm 12.00 (catalogue p.14); 'Cutting edge length 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "cutting-edge column 4 (catalogue p.14); 'Number of cutting edges 4' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+
+[[tool]]
+id = "guhring-9072860060000"
+type = "reamer"
+dc = 6
+dcon = 6
+oal = 76
+lcf = 12
+nof = 4
+material = "carbide"
+vendor = "Guhring"
+product_id = "9072860060000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 6.000 mm H7; tolerance H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "N general"
+group = "N"
+vc = 260.604
+fz = 1.34874
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d1 mm 6.000 (catalogue p.14); webshop 'Nominal diameter 6.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d2 h6 mm 6.000 (catalogue p.14); 'Shank diameter 6.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l1 mm 76.00 (catalogue p.14); 'Total length 76.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l4 mm 12.00 (catalogue p.14); 'Cutting edge length 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "cutting-edge column 4 (catalogue p.14); 'Number of cutting edges 4' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.N general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9072860080000"
+type = "reamer"
+dc = 8
+dcon = 8
+oal = 101
+lcf = 16
+nof = 6
+material = "carbide"
+vendor = "Guhring"
+product_id = "9072860080000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 8.000 mm H7; tolerance H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "N general"
+group = "N"
+vc = 260.604
+fz = 1.75006
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d1 mm 8.000 (catalogue p.14); webshop 'Nominal diameter 8.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d2 h6 mm 8.000 (catalogue p.14); 'Shank diameter 8.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l1 mm 101.00 (catalogue p.14); 'Total length 101.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l4 mm 16.00 (catalogue p.14); 'Cutting edge length 16.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "cutting-edge column 6 (catalogue p.14); 'Number of cutting edges 6' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.N general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9072860100000"
+type = "reamer"
+dc = 10
+dcon = 10
+oal = 101
+lcf = 19
+nof = 6
+material = "carbide"
+vendor = "Guhring"
+product_id = "9072860100000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 10.000 mm H7; tolerance H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "N general"
+group = "N"
+vc = 260.604
+fz = 2.14884
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d1 mm 10.000 (catalogue p.14); webshop 'Nominal diameter 10.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d2 h6 mm 10.000 (catalogue p.14); 'Shank diameter 10.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l1 mm 101.00 (catalogue p.14); 'Total length 101.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l4 mm 19.00 (catalogue p.14); 'Cutting edge length 19.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "cutting-edge column 6 (catalogue p.14); 'Number of cutting edges 6' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.N general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9072860120000"
+type = "reamer"
+dc = 12
+dcon = 12
+oal = 130
+lcf = 19
+nof = 6
+material = "carbide"
+vendor = "Guhring"
+product_id = "9072860120000"
+real = true
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7286, Ø 12.000 mm H7; tolerance H7 pictogram (catalogue p.14); 'Tolerance class hole H7' (webshop); coolant 'Cooling type Without internal cooling', 'Specification of cooling type Nut am Schaft' (webshop)"
+[[tool.preset]]
+name = "N general"
+group = "N"
+vc = 260.604
+fz = 2.30124
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d1 mm 12.000 (catalogue p.14); webshop 'Nominal diameter 12.000 mm'"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "d2 h6 mm 12.000 (catalogue p.14); 'Shank diameter 12.00 mm' (webshop)"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l1 mm 130.00 (catalogue p.14); 'Total length 130.00 mm' (webshop)"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "l4 mm 19.00 (catalogue p.14); 'Cutting edge length 19.00 mm' (webshop)"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "cutting-edge column 6 (catalogue p.14); 'Number of cutting edges 6' (webshop)"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=14"
+taken = "2026-11-24"
+value = "'Solid carbide' (catalogue p.14); 'Cutting material Solid carbide' (webshop)"
+[[tool.cite]]
+path = "preset.N general"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+
+[[tool]]
+id = "guhring-9003240060000"
+type = "counterbore"
+dc = 6
+dcon = 5
+oal = 71
+lcf = 14
+nof = 3
+material = "hss"
+vendor = "Guhring"
+product_id = "9003240060000"
+real = true
+source = "https://webshop.guehring.de/en/000009003240060000"
+taken = "2026-11-24"
+note = "Counterbore with pilots for fine tolerances/Nominal diameter: 6.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN; pilot_d DIN 4000-81 property G32 = '3,200' in maker's XML_4000 file 9003240060000_prop.xml (property code only, no label in file); screw DIN 4000-81 property C13 = 'M 3' in maker's XML_4000 file 9003240060000_prop.xml; coolant Cooling type Without internal cooling"
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240060000"
+taken = "2026-11-24"
+value = "Nominal diameter 6.000 mm"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240060000"
+taken = "2026-11-24"
+value = "Shank diameter 5.00 mm"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240060000"
+taken = "2026-11-24"
+value = "Total length 71.00 mm"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240060000"
+taken = "2026-11-24"
+value = "Cutting edge length 14.00 mm"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240060000"
+taken = "2026-11-24"
+value = "Number of cutting edges 3"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240060000"
+taken = "2026-11-24"
+value = "Cutting material HSS"
+
+[[tool]]
+id = "guhring-9003240080000"
+type = "counterbore"
+dc = 8
+dcon = 5
+oal = 71
+lcf = 14
+nof = 3
+material = "hss"
+vendor = "Guhring"
+product_id = "9003240080000"
+real = true
+source = "https://webshop.guehring.de/en/000009003240080000"
+taken = "2026-11-24"
+note = "Counterbore with pilots for fine tolerances/Nominal diameter: 8.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN; pilot_d DIN 4000-81 property G32 = '4,300' in maker's XML_4000 file 9003240080000_prop.xml (property code only, no label in file); screw DIN 4000-81 property C13 = 'M 4' in maker's XML_4000 file 9003240080000_prop.xml; coolant Cooling type Without internal cooling"
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240080000"
+taken = "2026-11-24"
+value = "Nominal diameter 8.000 mm"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240080000"
+taken = "2026-11-24"
+value = "Shank diameter 5.00 mm"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240080000"
+taken = "2026-11-24"
+value = "Total length 71.00 mm"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240080000"
+taken = "2026-11-24"
+value = "Cutting edge length 14.00 mm"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240080000"
+taken = "2026-11-24"
+value = "Number of cutting edges 3"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240080000"
+taken = "2026-11-24"
+value = "Cutting material HSS"
+
+[[tool]]
+id = "guhring-9003240100000"
+type = "counterbore"
+dc = 10
+dcon = 8
+oal = 80
+lcf = 18
+nof = 3
+material = "hss"
+vendor = "Guhring"
+product_id = "9003240100000"
+real = true
+source = "https://webshop.guehring.de/en/000009003240100000"
+taken = "2026-11-24"
+note = "Counterbore with pilots for fine tolerances/Nominal diameter: 10.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN; pilot_d DIN 4000-81 property G32 = '5,300' in maker's XML_4000 file 9003240100000_prop.xml (property code only, no label in file); screw DIN 4000-81 property C13 = 'M 5' in maker's XML_4000 file 9003240100000_prop.xml; coolant Cooling type Without internal cooling"
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240100000"
+taken = "2026-11-24"
+value = "Nominal diameter 10.000 mm"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240100000"
+taken = "2026-11-24"
+value = "Shank diameter 8.00 mm"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240100000"
+taken = "2026-11-24"
+value = "Total length 80.00 mm"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240100000"
+taken = "2026-11-24"
+value = "Cutting edge length 18.00 mm"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240100000"
+taken = "2026-11-24"
+value = "Number of cutting edges 3"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240100000"
+taken = "2026-11-24"
+value = "Cutting material HSS"
+
+[[tool]]
+id = "guhring-9003240110000"
+type = "counterbore"
+dc = 11
+dcon = 8
+oal = 80
+lcf = 18
+nof = 3
+material = "hss"
+vendor = "Guhring"
+product_id = "9003240110000"
+real = true
+source = "https://webshop.guehring.de/en/000009003240110000"
+taken = "2026-11-24"
+note = "Counterbore with pilots for fine tolerances/Nominal diameter: 11.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN; pilot_d DIN 4000-81 property G32 = '6,400' in maker's XML_4000 file 9003240110000_prop.xml (property code only, no label in file); screw DIN 4000-81 property C13 = 'M 6' in maker's XML_4000 file 9003240110000_prop.xml; coolant Cooling type Without internal cooling"
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240110000"
+taken = "2026-11-24"
+value = "Nominal diameter 11.000 mm"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240110000"
+taken = "2026-11-24"
+value = "Shank diameter 8.00 mm"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240110000"
+taken = "2026-11-24"
+value = "Total length 80.00 mm"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240110000"
+taken = "2026-11-24"
+value = "Cutting edge length 18.00 mm"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240110000"
+taken = "2026-11-24"
+value = "Number of cutting edges 3"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240110000"
+taken = "2026-11-24"
+value = "Cutting material HSS"
+
+[[tool]]
+id = "guhring-9003240150000"
+type = "counterbore"
+dc = 15
+dcon = 12.5
+oal = 100
+lcf = 22
+nof = 3
+material = "hss"
+vendor = "Guhring"
+product_id = "9003240150000"
+real = true
+source = "https://webshop.guehring.de/en/000009003240150000"
+taken = "2026-11-24"
+note = "Counterbore with pilots for fine tolerances/Nominal diameter: 15.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN; pilot_d DIN 4000-81 property G32 = '8,400' in maker's XML_4000 file 9003240150000_prop.xml (property code only, no label in file); screw DIN 4000-81 property C13 = 'M 8' in maker's XML_4000 file 9003240150000_prop.xml; coolant Cooling type Without internal cooling"
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240150000"
+taken = "2026-11-24"
+value = "Nominal diameter 15.000 mm"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240150000"
+taken = "2026-11-24"
+value = "Shank diameter 12.50 mm"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240150000"
+taken = "2026-11-24"
+value = "Total length 100.00 mm"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240150000"
+taken = "2026-11-24"
+value = "Cutting edge length 22.00 mm"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240150000"
+taken = "2026-11-24"
+value = "Number of cutting edges 3"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240150000"
+taken = "2026-11-24"
+value = "Cutting material HSS"
+
+[[tool]]
+id = "guhring-9003240180000"
+type = "counterbore"
+dc = 18
+dcon = 12.5
+oal = 100
+lcf = 22
+nof = 3
+material = "hss"
+vendor = "Guhring"
+product_id = "9003240180000"
+real = true
+source = "https://webshop.guehring.de/en/000009003240180000"
+taken = "2026-11-24"
+note = "Counterbore with pilots for fine tolerances/Nominal diameter: 18.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN; pilot_d DIN 4000-81 property G32 = '10,500' in maker's XML_4000 file 9003240180000_prop.xml (property code only, no label in file); screw DIN 4000-81 property C13 = 'M 10' in maker's XML_4000 file 9003240180000_prop.xml; coolant Cooling type Without internal cooling"
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240180000"
+taken = "2026-11-24"
+value = "Nominal diameter 18.000 mm"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240180000"
+taken = "2026-11-24"
+value = "Shank diameter 12.50 mm"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240180000"
+taken = "2026-11-24"
+value = "Total length 100.00 mm"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240180000"
+taken = "2026-11-24"
+value = "Cutting edge length 22.00 mm"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240180000"
+taken = "2026-11-24"
+value = "Number of cutting edges 3"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240180000"
+taken = "2026-11-24"
+value = "Cutting material HSS"
+
+[[tool]]
+id = "guhring-9003240200000"
+type = "counterbore"
+dc = 20
+dcon = 12.5
+oal = 100
+lcf = 22
+nof = 3
+material = "hss"
+vendor = "Guhring"
+product_id = "9003240200000"
+real = true
+source = "https://webshop.guehring.de/en/000009003240200000"
+taken = "2026-11-24"
+note = "Counterbore with pilots for fine tolerances/Nominal diameter: 20.000mm/6.000 mm – 20.000 mm/DIN 373/HSS/TiN; pilot_d DIN 4000-81 property G32 = '13,000' in maker's XML_4000 file 9003240200000_prop.xml (property code only, no label in file); screw DIN 4000-81 property C13 = 'M 12' in maker's XML_4000 file 9003240200000_prop.xml; coolant Cooling type Without internal cooling"
+[[tool.cite]]
+path = "dc"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240200000"
+taken = "2026-11-24"
+value = "Nominal diameter 20.000 mm"
+[[tool.cite]]
+path = "dcon"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240200000"
+taken = "2026-11-24"
+value = "Shank diameter 12.50 mm"
+[[tool.cite]]
+path = "oal"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240200000"
+taken = "2026-11-24"
+value = "Total length 100.00 mm"
+[[tool.cite]]
+path = "lcf"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240200000"
+taken = "2026-11-24"
+value = "Cutting edge length 22.00 mm"
+[[tool.cite]]
+path = "nof"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240200000"
+taken = "2026-11-24"
+value = "Number of cutting edges 3"
+[[tool.cite]]
+path = "material"
+status = "published"
+source = "https://webshop.guehring.de/en/000009003240200000"
+taken = "2026-11-24"
+value = "Cutting material HSS"

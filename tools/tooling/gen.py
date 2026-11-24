@@ -776,7 +776,8 @@ def shop_presets(r, kind):
     optimum (Sumitomo min-optimum-max) else the range's low end; the feed as printed."""
     out, seen = [], set()
     for c in r.get("cutting") or []:
-        g = c.get("iso_group")
+        g = (c.get("iso_group") or "")[:1]  # Guhring's material codes (P1.1.1): their ISO letter
+        g = g if g in GROUP_ORDER else None
         fx = c.get("f") or c.get("fz")
         if not g or g in seen or not fx:
             continue
@@ -861,6 +862,9 @@ def shop(vendor, r, outs, skips):
             f["lcf"], f["tp"], f["nof"] = V("apmx"), V("pitch"), V("flutes")
             cites += [P("lcf", "apmx"), P("tp", "pitch"), P("nof", "flutes")]
         else:  # reamer, counterbore
+            if V("lcf") is None:
+                skips[f"{k} without a printed cutting length"] += 1
+                return
             f["lcf"] = V("lcf")
             cites.append(P("lcf", "lcf"))
             nk = "nof" if V("nof") is not None else "flutes"

@@ -1,0 +1,664 @@
+{
+ "maker": "RUKO",
+ "records": [
+  {
+   "kind": "counterbore",
+   "id": "102401T",
+   "name": "Flachsenker, HSS, TiN, DIN 373, mit Zylinderschaft - Gütegrad fein für Durchgangsloch, M3 (RUKO 102 401 T)",
+   "url": "https://ddr456.saas.contentserv.com/admin/ImageServer.php?ID=aabe863155b5540d4a7dfed386870d5b6f29a7b575363db116046c4d54218a1d:26496@ddr456&rand=ce2ba2c9efa5313116a6511d097baa66&download=true&downloadname=RUKO_Senker_de.pdf#page=26",
+   "url_item": "https://ruko.de/de/produkte/senker/flachsenker-din373-hss-tin-zylinderschaft-guetegrad-fein-dgl",
+   "taken": "2026-11-24",
+   "values": {
+    "screw": {
+     "v": "M3",
+     "unit": "text",
+     "stated": "Für Gewinde M3 (catalogue p.122); webshop 'Gewindenennmaß M: M3'"
+    },
+    "dc": {
+     "v": 6.0,
+     "unit": "mm",
+     "stated": "Ø2 mm 6.0 (catalogue p.122); webshop 'Durchmesser 6,0 mm'"
+    },
+    "pilot_d": {
+     "v": 3.2,
+     "unit": "mm",
+     "stated": "Ø1 mm 3.2 (catalogue p.122); webshop 'Zapfendurchmesser 3.20 mm'"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'mit Zylinderschaft und festem Führungszapfen'"
+    },
+    "pilot_grade": {
+     "v": "fine, through hole",
+     "unit": "text",
+     "stated": "'Gütegrad fein für Durchgangsloch'"
+    },
+    "dcon": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Ø3 mm 5.0 (catalogue p.122); webshop 'Schaftdurchmesser 5.00 mm'"
+    },
+    "oal": {
+     "v": 71.0,
+     "unit": "mm",
+     "stated": "L1 mm 71.0 (catalogue p.122); webshop 'Länge 71.00 mm'"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Schneidenanzahl 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Senkwinkel 180°"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Schnittrichtung rechtsschneidend"
+    },
+    "shank": {
+     "v": "cylindrical",
+     "unit": "text",
+     "stated": "Schaft Zylinderschaft"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Werkstoff HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Beschichtung TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "DIN 373"
+    },
+    "application": {
+     "v": "main: steel 900 N/mm², brass, plastics; secondary: steel 1100 N/mm², stainless, bronze, cast iron",
+     "unit": "text",
+     "stated": "Hauptanwendung: Stahl 900 N/mm², Messing, Kunststoffe | Nebenanwendung: Stahl 1.100 N/mm², rostfreier Stahl, Bronze, Gusseisen"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting length (lcf): not printed",
+    "pilot length: not printed",
+    "flute helix: not printed (helical flutes visible in the photo only)",
+    "cutting data (vc, f): not printed; catalogue only says 'Beste Ergebnisse bei niedriger Schnittgeschwindigkeit' and the Anwendungstipp to use low speed",
+    "aluminium suitability: ALU icon is not highlighted for the TiN version (highlighted for the uncoated 102 40x version)"
+   ],
+   "notes": "SAP-Artikelnummer 1000035920; Nettogewicht 14.00 g. Catalogue 'RUKO_Senker_de.pdf' (linked as 'Dokumente' from the ruko.de product page, served from RUKO's contentserv asset host), printed page 122 = PDF page 26. Uncoated HSS twin: 102401 (same dims). Medium grade 102 408 T-102 414 T and tapping-size 102 415 T-102 421 T on the same page. Catalogue p.123 (PDF p.27) prints the DIN 74-2 counterbore table (d1 fein H12, d2 H13, depth t Form K for DIN 912)."
+  },
+  {
+   "kind": "counterbore",
+   "id": "102402T",
+   "name": "Flachsenker, HSS, TiN, DIN 373, mit Zylinderschaft - Gütegrad fein für Durchgangsloch, M4 (RUKO 102 402 T)",
+   "url": "https://ddr456.saas.contentserv.com/admin/ImageServer.php?ID=aabe863155b5540d4a7dfed386870d5b6f29a7b575363db116046c4d54218a1d:26496@ddr456&rand=ce2ba2c9efa5313116a6511d097baa66&download=true&downloadname=RUKO_Senker_de.pdf#page=26",
+   "url_item": "https://ruko.de/de/produkte/senker/flachsenker-din373-hss-tin-zylinderschaft-guetegrad-fein-dgl",
+   "taken": "2026-11-24",
+   "values": {
+    "screw": {
+     "v": "M4",
+     "unit": "text",
+     "stated": "Für Gewinde M4 (catalogue p.122); webshop 'Gewindenennmaß M: M4'"
+    },
+    "dc": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Ø2 mm 8.0 (catalogue p.122); webshop 'Durchmesser 8,0 mm'"
+    },
+    "pilot_d": {
+     "v": 4.3,
+     "unit": "mm",
+     "stated": "Ø1 mm 4.3 (catalogue p.122); webshop 'Zapfendurchmesser 4.30 mm'"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'mit Zylinderschaft und festem Führungszapfen'"
+    },
+    "pilot_grade": {
+     "v": "fine, through hole",
+     "unit": "text",
+     "stated": "'Gütegrad fein für Durchgangsloch'"
+    },
+    "dcon": {
+     "v": 5.0,
+     "unit": "mm",
+     "stated": "Ø3 mm 5.0 (catalogue p.122); webshop 'Schaftdurchmesser 5.00 mm'"
+    },
+    "oal": {
+     "v": 71.0,
+     "unit": "mm",
+     "stated": "L1 mm 71.0 (catalogue p.122); webshop 'Länge 71.00 mm'"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Schneidenanzahl 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Senkwinkel 180°"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Schnittrichtung rechtsschneidend"
+    },
+    "shank": {
+     "v": "cylindrical",
+     "unit": "text",
+     "stated": "Schaft Zylinderschaft"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Werkstoff HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Beschichtung TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "DIN 373"
+    },
+    "application": {
+     "v": "main: steel 900 N/mm², brass, plastics; secondary: steel 1100 N/mm², stainless, bronze, cast iron",
+     "unit": "text",
+     "stated": "Hauptanwendung: Stahl 900 N/mm², Messing, Kunststoffe | Nebenanwendung: Stahl 1.100 N/mm², rostfreier Stahl, Bronze, Gusseisen"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting length (lcf): not printed",
+    "pilot length: not printed",
+    "flute helix: not printed (helical flutes visible in the photo only)",
+    "cutting data (vc, f): not printed; catalogue only says 'Beste Ergebnisse bei niedriger Schnittgeschwindigkeit' and the Anwendungstipp to use low speed",
+    "aluminium suitability: ALU icon is not highlighted for the TiN version (highlighted for the uncoated 102 40x version)"
+   ],
+   "notes": "SAP-Artikelnummer 1000035934; Nettogewicht 16.00 g. Catalogue 'RUKO_Senker_de.pdf' (linked as 'Dokumente' from the ruko.de product page, served from RUKO's contentserv asset host), printed page 122 = PDF page 26. Uncoated HSS twin: 102402 (same dims). Medium grade 102 408 T-102 414 T and tapping-size 102 415 T-102 421 T on the same page. Catalogue p.123 (PDF p.27) prints the DIN 74-2 counterbore table (d1 fein H12, d2 H13, depth t Form K for DIN 912)."
+  },
+  {
+   "kind": "counterbore",
+   "id": "102403T",
+   "name": "Flachsenker, HSS, TiN, DIN 373, mit Zylinderschaft - Gütegrad fein für Durchgangsloch, M5 (RUKO 102 403 T)",
+   "url": "https://ddr456.saas.contentserv.com/admin/ImageServer.php?ID=aabe863155b5540d4a7dfed386870d5b6f29a7b575363db116046c4d54218a1d:26496@ddr456&rand=ce2ba2c9efa5313116a6511d097baa66&download=true&downloadname=RUKO_Senker_de.pdf#page=26",
+   "url_item": "https://ruko.de/de/produkte/senker/flachsenker-din373-hss-tin-zylinderschaft-guetegrad-fein-dgl",
+   "taken": "2026-11-24",
+   "values": {
+    "screw": {
+     "v": "M5",
+     "unit": "text",
+     "stated": "Für Gewinde M5 (catalogue p.122); webshop 'Gewindenennmaß M: M5'"
+    },
+    "dc": {
+     "v": 10.0,
+     "unit": "mm",
+     "stated": "Ø2 mm 10.0 (catalogue p.122); webshop 'Durchmesser 10,0 mm'"
+    },
+    "pilot_d": {
+     "v": 5.3,
+     "unit": "mm",
+     "stated": "Ø1 mm 5.3 (catalogue p.122); webshop 'Zapfendurchmesser 5.30 mm'"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'mit Zylinderschaft und festem Führungszapfen'"
+    },
+    "pilot_grade": {
+     "v": "fine, through hole",
+     "unit": "text",
+     "stated": "'Gütegrad fein für Durchgangsloch'"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Ø3 mm 8.0 (catalogue p.122); webshop 'Schaftdurchmesser 8.00 mm'"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 mm 80.0 (catalogue p.122); webshop 'Länge 80.00 mm'"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Schneidenanzahl 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Senkwinkel 180°"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Schnittrichtung rechtsschneidend"
+    },
+    "shank": {
+     "v": "cylindrical",
+     "unit": "text",
+     "stated": "Schaft Zylinderschaft"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Werkstoff HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Beschichtung TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "DIN 373"
+    },
+    "application": {
+     "v": "main: steel 900 N/mm², brass, plastics; secondary: steel 1100 N/mm², stainless, bronze, cast iron",
+     "unit": "text",
+     "stated": "Hauptanwendung: Stahl 900 N/mm², Messing, Kunststoffe | Nebenanwendung: Stahl 1.100 N/mm², rostfreier Stahl, Bronze, Gusseisen"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting length (lcf): not printed",
+    "pilot length: not printed",
+    "flute helix: not printed (helical flutes visible in the photo only)",
+    "cutting data (vc, f): not printed; catalogue only says 'Beste Ergebnisse bei niedriger Schnittgeschwindigkeit' and the Anwendungstipp to use low speed",
+    "aluminium suitability: ALU icon is not highlighted for the TiN version (highlighted for the uncoated 102 40x version)"
+   ],
+   "notes": "SAP-Artikelnummer 1000035949; Nettogewicht 34.00 g. Catalogue 'RUKO_Senker_de.pdf' (linked as 'Dokumente' from the ruko.de product page, served from RUKO's contentserv asset host), printed page 122 = PDF page 26. Uncoated HSS twin: 102403 (same dims). Medium grade 102 408 T-102 414 T and tapping-size 102 415 T-102 421 T on the same page. Catalogue p.123 (PDF p.27) prints the DIN 74-2 counterbore table (d1 fein H12, d2 H13, depth t Form K for DIN 912)."
+  },
+  {
+   "kind": "counterbore",
+   "id": "102404T",
+   "name": "Flachsenker, HSS, TiN, DIN 373, mit Zylinderschaft - Gütegrad fein für Durchgangsloch, M6 (RUKO 102 404 T)",
+   "url": "https://ddr456.saas.contentserv.com/admin/ImageServer.php?ID=aabe863155b5540d4a7dfed386870d5b6f29a7b575363db116046c4d54218a1d:26496@ddr456&rand=ce2ba2c9efa5313116a6511d097baa66&download=true&downloadname=RUKO_Senker_de.pdf#page=26",
+   "url_item": "https://ruko.de/de/produkte/senker/flachsenker-din373-hss-tin-zylinderschaft-guetegrad-fein-dgl",
+   "taken": "2026-11-24",
+   "values": {
+    "screw": {
+     "v": "M6",
+     "unit": "text",
+     "stated": "Für Gewinde M6 (catalogue p.122); webshop 'Gewindenennmaß M: M6'"
+    },
+    "dc": {
+     "v": 11.0,
+     "unit": "mm",
+     "stated": "Ø2 mm 11.0 (catalogue p.122); webshop 'Durchmesser 11,0 mm'"
+    },
+    "pilot_d": {
+     "v": 6.4,
+     "unit": "mm",
+     "stated": "Ø1 mm 6.4 (catalogue p.122); webshop 'Zapfendurchmesser 6.40 mm'"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'mit Zylinderschaft und festem Führungszapfen'"
+    },
+    "pilot_grade": {
+     "v": "fine, through hole",
+     "unit": "text",
+     "stated": "'Gütegrad fein für Durchgangsloch'"
+    },
+    "dcon": {
+     "v": 8.0,
+     "unit": "mm",
+     "stated": "Ø3 mm 8.0 (catalogue p.122); webshop 'Schaftdurchmesser 8.00 mm'"
+    },
+    "oal": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "L1 mm 80.0 (catalogue p.122); webshop 'Länge 80.00 mm'"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Schneidenanzahl 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Senkwinkel 180°"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Schnittrichtung rechtsschneidend"
+    },
+    "shank": {
+     "v": "cylindrical",
+     "unit": "text",
+     "stated": "Schaft Zylinderschaft"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Werkstoff HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Beschichtung TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "DIN 373"
+    },
+    "application": {
+     "v": "main: steel 900 N/mm², brass, plastics; secondary: steel 1100 N/mm², stainless, bronze, cast iron",
+     "unit": "text",
+     "stated": "Hauptanwendung: Stahl 900 N/mm², Messing, Kunststoffe | Nebenanwendung: Stahl 1.100 N/mm², rostfreier Stahl, Bronze, Gusseisen"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting length (lcf): not printed",
+    "pilot length: not printed",
+    "flute helix: not printed (helical flutes visible in the photo only)",
+    "cutting data (vc, f): not printed; catalogue only says 'Beste Ergebnisse bei niedriger Schnittgeschwindigkeit' and the Anwendungstipp to use low speed",
+    "aluminium suitability: ALU icon is not highlighted for the TiN version (highlighted for the uncoated 102 40x version)"
+   ],
+   "notes": "SAP-Artikelnummer 1000035964; Nettogewicht 34.00 g. Catalogue 'RUKO_Senker_de.pdf' (linked as 'Dokumente' from the ruko.de product page, served from RUKO's contentserv asset host), printed page 122 = PDF page 26. Uncoated HSS twin: 102404 (same dims). Medium grade 102 408 T-102 414 T and tapping-size 102 415 T-102 421 T on the same page. Catalogue p.123 (PDF p.27) prints the DIN 74-2 counterbore table (d1 fein H12, d2 H13, depth t Form K for DIN 912)."
+  },
+  {
+   "kind": "counterbore",
+   "id": "102405T",
+   "name": "Flachsenker, HSS, TiN, DIN 373, mit Zylinderschaft - Gütegrad fein für Durchgangsloch, M8 (RUKO 102 405 T)",
+   "url": "https://ddr456.saas.contentserv.com/admin/ImageServer.php?ID=aabe863155b5540d4a7dfed386870d5b6f29a7b575363db116046c4d54218a1d:26496@ddr456&rand=ce2ba2c9efa5313116a6511d097baa66&download=true&downloadname=RUKO_Senker_de.pdf#page=26",
+   "url_item": "https://ruko.de/de/produkte/senker/flachsenker-din373-hss-tin-zylinderschaft-guetegrad-fein-dgl",
+   "taken": "2026-11-24",
+   "values": {
+    "screw": {
+     "v": "M8",
+     "unit": "text",
+     "stated": "Für Gewinde M8 (catalogue p.122); webshop 'Gewindenennmaß M: M8'"
+    },
+    "dc": {
+     "v": 15.0,
+     "unit": "mm",
+     "stated": "Ø2 mm 15.0 (catalogue p.122); webshop 'Durchmesser 15,0 mm'"
+    },
+    "pilot_d": {
+     "v": 8.4,
+     "unit": "mm",
+     "stated": "Ø1 mm 8.4 (catalogue p.122); webshop 'Zapfendurchmesser 8.40 mm'"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'mit Zylinderschaft und festem Führungszapfen'"
+    },
+    "pilot_grade": {
+     "v": "fine, through hole",
+     "unit": "text",
+     "stated": "'Gütegrad fein für Durchgangsloch'"
+    },
+    "dcon": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "Ø3 mm 12.5 (catalogue p.122); webshop 'Schaftdurchmesser 12.50 mm'"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 mm 100.0 (catalogue p.122); webshop 'Länge 100.00 mm'"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Schneidenanzahl 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Senkwinkel 180°"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Schnittrichtung rechtsschneidend"
+    },
+    "shank": {
+     "v": "cylindrical",
+     "unit": "text",
+     "stated": "Schaft Zylinderschaft"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Werkstoff HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Beschichtung TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "DIN 373"
+    },
+    "application": {
+     "v": "main: steel 900 N/mm², brass, plastics; secondary: steel 1100 N/mm², stainless, bronze, cast iron",
+     "unit": "text",
+     "stated": "Hauptanwendung: Stahl 900 N/mm², Messing, Kunststoffe | Nebenanwendung: Stahl 1.100 N/mm², rostfreier Stahl, Bronze, Gusseisen"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting length (lcf): not printed",
+    "pilot length: not printed",
+    "flute helix: not printed (helical flutes visible in the photo only)",
+    "cutting data (vc, f): not printed; catalogue only says 'Beste Ergebnisse bei niedriger Schnittgeschwindigkeit' and the Anwendungstipp to use low speed",
+    "aluminium suitability: ALU icon is not highlighted for the TiN version (highlighted for the uncoated 102 40x version)"
+   ],
+   "notes": "SAP-Artikelnummer 1000035979; Nettogewicht 84.00 g. Catalogue 'RUKO_Senker_de.pdf' (linked as 'Dokumente' from the ruko.de product page, served from RUKO's contentserv asset host), printed page 122 = PDF page 26. Uncoated HSS twin: 102405 (same dims). Medium grade 102 408 T-102 414 T and tapping-size 102 415 T-102 421 T on the same page. Catalogue p.123 (PDF p.27) prints the DIN 74-2 counterbore table (d1 fein H12, d2 H13, depth t Form K for DIN 912)."
+  },
+  {
+   "kind": "counterbore",
+   "id": "102406T",
+   "name": "Flachsenker, HSS, TiN, DIN 373, mit Zylinderschaft - Gütegrad fein für Durchgangsloch, M10 (RUKO 102 406 T)",
+   "url": "https://ddr456.saas.contentserv.com/admin/ImageServer.php?ID=aabe863155b5540d4a7dfed386870d5b6f29a7b575363db116046c4d54218a1d:26496@ddr456&rand=ce2ba2c9efa5313116a6511d097baa66&download=true&downloadname=RUKO_Senker_de.pdf#page=26",
+   "url_item": "https://ruko.de/de/produkte/senker/flachsenker-din373-hss-tin-zylinderschaft-guetegrad-fein-dgl",
+   "taken": "2026-11-24",
+   "values": {
+    "screw": {
+     "v": "M10",
+     "unit": "text",
+     "stated": "Für Gewinde M 10 (catalogue p.122); webshop 'Gewindenennmaß M: M10'"
+    },
+    "dc": {
+     "v": 18.0,
+     "unit": "mm",
+     "stated": "Ø2 mm 18.0 (catalogue p.122); webshop 'Durchmesser 18,0 mm'"
+    },
+    "pilot_d": {
+     "v": 10.5,
+     "unit": "mm",
+     "stated": "Ø1 mm 10.5 (catalogue p.122); webshop 'Zapfendurchmesser 10.50 mm'"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'mit Zylinderschaft und festem Führungszapfen'"
+    },
+    "pilot_grade": {
+     "v": "fine, through hole",
+     "unit": "text",
+     "stated": "'Gütegrad fein für Durchgangsloch'"
+    },
+    "dcon": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "Ø3 mm 12.5 (catalogue p.122); webshop 'Schaftdurchmesser 12.50 mm'"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 mm 100.0 (catalogue p.122); webshop 'Länge 100.00 mm'"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Schneidenanzahl 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Senkwinkel 180°"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Schnittrichtung rechtsschneidend"
+    },
+    "shank": {
+     "v": "cylindrical",
+     "unit": "text",
+     "stated": "Schaft Zylinderschaft"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Werkstoff HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Beschichtung TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "DIN 373"
+    },
+    "application": {
+     "v": "main: steel 900 N/mm², brass, plastics; secondary: steel 1100 N/mm², stainless, bronze, cast iron",
+     "unit": "text",
+     "stated": "Hauptanwendung: Stahl 900 N/mm², Messing, Kunststoffe | Nebenanwendung: Stahl 1.100 N/mm², rostfreier Stahl, Bronze, Gusseisen"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting length (lcf): not printed",
+    "pilot length: not printed",
+    "flute helix: not printed (helical flutes visible in the photo only)",
+    "cutting data (vc, f): not printed; catalogue only says 'Beste Ergebnisse bei niedriger Schnittgeschwindigkeit' and the Anwendungstipp to use low speed",
+    "aluminium suitability: ALU icon is not highlighted for the TiN version (highlighted for the uncoated 102 40x version)"
+   ],
+   "notes": "SAP-Artikelnummer 1000035619; Nettogewicht 98.00 g. Catalogue 'RUKO_Senker_de.pdf' (linked as 'Dokumente' from the ruko.de product page, served from RUKO's contentserv asset host), printed page 122 = PDF page 26. Uncoated HSS twin: 102406 (same dims). Medium grade 102 408 T-102 414 T and tapping-size 102 415 T-102 421 T on the same page. Catalogue p.123 (PDF p.27) prints the DIN 74-2 counterbore table (d1 fein H12, d2 H13, depth t Form K for DIN 912)."
+  },
+  {
+   "kind": "counterbore",
+   "id": "102407T",
+   "name": "Flachsenker, HSS, TiN, DIN 373, mit Zylinderschaft - Gütegrad fein für Durchgangsloch, M12 (RUKO 102 407 T)",
+   "url": "https://ddr456.saas.contentserv.com/admin/ImageServer.php?ID=aabe863155b5540d4a7dfed386870d5b6f29a7b575363db116046c4d54218a1d:26496@ddr456&rand=ce2ba2c9efa5313116a6511d097baa66&download=true&downloadname=RUKO_Senker_de.pdf#page=26",
+   "url_item": "https://ruko.de/de/produkte/senker/flachsenker-din373-hss-tin-zylinderschaft-guetegrad-fein-dgl",
+   "taken": "2026-11-24",
+   "values": {
+    "screw": {
+     "v": "M12",
+     "unit": "text",
+     "stated": "Für Gewinde M 12 (catalogue p.122); webshop 'Gewindenennmaß M: M12'"
+    },
+    "dc": {
+     "v": 20.0,
+     "unit": "mm",
+     "stated": "Ø2 mm 20.0 (catalogue p.122); webshop 'Durchmesser 20,0 mm'"
+    },
+    "pilot_d": {
+     "v": 13.0,
+     "unit": "mm",
+     "stated": "Ø1 mm 13.0 (catalogue p.122); webshop 'Zapfendurchmesser 13.00 mm'"
+    },
+    "pilot_fixed": {
+     "v": "fixed pilot (not interchangeable)",
+     "unit": "text",
+     "stated": "'mit Zylinderschaft und festem Führungszapfen'"
+    },
+    "pilot_grade": {
+     "v": "fine, through hole",
+     "unit": "text",
+     "stated": "'Gütegrad fein für Durchgangsloch'"
+    },
+    "dcon": {
+     "v": 12.5,
+     "unit": "mm",
+     "stated": "Ø3 mm 12.5 (catalogue p.122); webshop 'Schaftdurchmesser 12.50 mm'"
+    },
+    "oal": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "L1 mm 100.0 (catalogue p.122); webshop 'Länge 100.00 mm'"
+    },
+    "nof": {
+     "v": 3,
+     "unit": "count",
+     "stated": "Schneidenanzahl 3"
+    },
+    "angle": {
+     "v": 180.0,
+     "unit": "deg",
+     "stated": "Senkwinkel 180°"
+    },
+    "hand": {
+     "v": "right",
+     "unit": "text",
+     "stated": "Schnittrichtung rechtsschneidend"
+    },
+    "shank": {
+     "v": "cylindrical",
+     "unit": "text",
+     "stated": "Schaft Zylinderschaft"
+    },
+    "material": {
+     "v": "HSS",
+     "unit": "text",
+     "stated": "Werkstoff HSS"
+    },
+    "coating": {
+     "v": "TiN",
+     "unit": "text",
+     "stated": "Beschichtung TiN"
+    },
+    "standard": {
+     "v": "DIN 373",
+     "unit": "text",
+     "stated": "DIN 373"
+    },
+    "application": {
+     "v": "main: steel 900 N/mm², brass, plastics; secondary: steel 1100 N/mm², stainless, bronze, cast iron",
+     "unit": "text",
+     "stated": "Hauptanwendung: Stahl 900 N/mm², Messing, Kunststoffe | Nebenanwendung: Stahl 1.100 N/mm², rostfreier Stahl, Bronze, Gusseisen"
+    }
+   },
+   "cutting": [],
+   "unknown": [
+    "cutting length (lcf): not printed",
+    "pilot length: not printed",
+    "flute helix: not printed (helical flutes visible in the photo only)",
+    "cutting data (vc, f): not printed; catalogue only says 'Beste Ergebnisse bei niedriger Schnittgeschwindigkeit' and the Anwendungstipp to use low speed",
+    "aluminium suitability: ALU icon is not highlighted for the TiN version (highlighted for the uncoated 102 40x version)"
+   ],
+   "notes": "SAP-Artikelnummer 1000035633; Nettogewicht 110.00 g. Catalogue 'RUKO_Senker_de.pdf' (linked as 'Dokumente' from the ruko.de product page, served from RUKO's contentserv asset host), printed page 122 = PDF page 26. Uncoated HSS twin: 102407 (same dims). Medium grade 102 408 T-102 414 T and tapping-size 102 415 T-102 421 T on the same page. Catalogue p.123 (PDF p.27) prints the DIN 74-2 counterbore table (d1 fein H12, d2 H13, depth t Form K for DIN 912)."
+  }
+ ],
+ "blocked": []
+}

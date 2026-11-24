@@ -424,3 +424,27 @@ fn robbjack_library() {
             .unwrap_or_else(|e| panic!("{}: {e:?}", t.id));
     }
 }
+
+/// H7 reamers (Guhring HR 500: 1686 steel, 7286 aluminium) and DIN 373 counterbores (Guhring
+/// 324) for CAM-CORE's reaming and counterbored holes.
+#[test]
+fn reamers_and_counterbores() {
+    let l = Library::builtin();
+    for d in [3, 4, 5, 6, 8, 10, 12] {
+        for series in ["1686", "7286"] {
+            let id = format!("guhring-90{series}0{d:0>2}0000");
+            let t = l.tool(&id).unwrap_or_else(|e| panic!("{id}: {e:?}"));
+            assert_eq!(t.dc, d as f64, "{id}");
+            assert!(t.real && t.note.contains("H7"), "{id}");
+        }
+    }
+    for (id, d) in [
+        ("guhring-9003240060000", 6.0),
+        ("guhring-9003240110000", 11.0),
+        ("guhring-9003240200000", 20.0),
+    ] {
+        let t = l.tool(id).unwrap();
+        assert_eq!(t.dc, d);
+        t.shape(t.lcf + 2.0, None).unwrap();
+    }
+}
