@@ -553,6 +553,7 @@ dependencies = [
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
+ "forge-tooling",
  "forge-turn",
 ]
 

@@ -96,6 +96,7 @@ pub struct TurnCam {
     tools: Vec<(TurnTool, u32)>,
     setups: Vec<(String, Setup)>,
     paths: Vec<(String, usize, OpPath)>,
+    lib: forge_tooling::Library,
 }
 
 fn named<'a>(a: &'a BTreeMap<String, V>, k: &str) -> Result<&'a V, String> {
@@ -229,8 +230,12 @@ impl TurnCam {
                 Ok(V::Part(self.parts.len() - 1))
             }
             "lathe_tool" => {
-                let id = text(a, "#0", None)?;
-                let t = insert::builtin(&id).map_err(|e| e.to_string())?;
+                let t = if a.contains_key("holder") {
+                    self.tool_of_records(a)?
+                } else {
+                    let id = text(a, "#0", None)?;
+                    insert::builtin(&id).map_err(|e| e.to_string())?
+                };
                 let st = num(a, "t", None)? as u32;
                 self.tools.push((t, st));
                 Ok(V::Tool(self.tools.len() - 1))
@@ -497,6 +502,32 @@ impl TurnCam {
     }
 
     /// The program's text, when every op is certified.
+    /// `lathe_tool(holder: H, insert: I, t: N)`: a holder or boring bar and an insert from the
+    /// tooling library (records by id: the built-in makers' records and the user's and the
+    /// project's, `run_with_library`), assembled by their ISO codes as the built-in tools are.
+    fn tool_of_records(&self, a: &BTreeMap<String, V>) -> Result<TurnTool, String> {
+        let hid = text(a, "holder", None)?;
+        let iid = text(a, "insert", None)?;
+        let h = self
+            .lib
+            .turn_holders
+            .iter()
+            .find(|h| h.id == hid)
+            .ok_or_else(|| format!("no turning holder or bar `{hid}` in the tooling library"))?;
+        let i = self
+            .lib
+            .inserts
+            .iter()
+            .find(|i| i.id == iid)
+            .ok_or_else(|| format!("no insert `{iid}` in the tooling library"))?;
+        let id = format!("{hid} + {iid}");
+        let t = match h.kind {
+            forge_tooling::turning::HolderKind::Holder => insert::turning_tool(&id, &i.code, &h.code, None),
+            forge_tooling::turning::HolderKind::Bar => insert::boring_tool(&id, &i.code, &h.code, None),
+        };
+        t.map_err(|e| e.to_string())
+    }
+
     /// The parts, each as its exact half-profile in (ρ, z) (read-only: for a view).
     pub fn parts(&self) -> &[forge_turn::profile::HalfProfile] {
         &self.parts
@@ -606,16 +637,25 @@ impl TurnCam {
 
 /// Runs a turning document (its file's directory finds the part): the normal path.
 pub fn run(src: &str, dir: &Path) -> TurnCam {
-    run_with(src, dir, false)
+    run_with(src, dir, false, forge_tooling::Library::builtin())
 }
 
 /// `run` with the exact in-process stock and the G4 leftover (`forgecad cam F check`).
 pub fn run_checked(src: &str, dir: &Path) -> TurnCam {
-    run_with(src, dir, true)
+    run_with(src, dir, true, forge_tooling::Library::builtin())
 }
 
-fn run_with(src: &str, dir: &Path, exact: bool) -> TurnCam {
+/// `run` (or, `exact`, `run_checked`) on a given tooling library: the one the user's levels make
+/// (forge-tooling-builder's `library(project, user_cam)`: the project's records over the user's
+/// over the built-in), so inserts and turning holders made in the builder reach
+/// `lathe_tool(holder:, insert:)`.
+pub fn run_with_library(src: &str, dir: &Path, exact: bool, lib: forge_tooling::Library) -> TurnCam {
+    run_with(src, dir, exact, lib)
+}
+
+fn run_with(src: &str, dir: &Path, exact: bool, lib: forge_tooling::Library) -> TurnCam {
     let mut cam = TurnCam {
+        lib,
         exact,
         ok: true,
         errors: vec![],

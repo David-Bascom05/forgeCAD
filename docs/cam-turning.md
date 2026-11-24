@@ -39,6 +39,7 @@ spheres and tori about it. Any other face (a flat, a cross hole) is refused by n
 |---|---|
 | `part("F.fg")` | the part, lowered to its half-profile in (ρ, z) |
 | `lathe_tool("ID", t: N)` | a tool of the built-in library (kernel/forge-turn/data/turning.toml) at station N |
+| `lathe_tool(holder: "H", insert: "I", t: N)` | a holder or boring bar and an insert from the tooling library (forge-tooling's makers' records, and the user's and the project's where the caller passes them: `forge_turn_lang::run_with_library`), assembled by their ISO codes |
 | `chuck(face:, grip:, jaw:, body_r: 80, body_len: 60)` | the three-jaw chuck's envelope as it turns |
 | `lathe_setup(PART, bar: D, front: Z, chuck:, machine:, at:, offsets:, tol: 0.002, clearance: 1, holder_clearance: 0.25, rapid_clearance: 0.2)` | the bar (diameter D, front face at Z); `machine:` a lathe by name; `at:` (the machine Z of the part's Z0) and `offsets:` ((station, x, z), …: each tool's geometry offsets) place the setup, and G5 is then checked on every joint position |
 | `turn_face(op, tool:, to: Z, step:)` | face from the bar's front to Z, the nose centre to the centre line |
