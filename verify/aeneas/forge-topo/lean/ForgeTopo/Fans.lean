@@ -1839,6 +1839,96 @@ theorem vpre_all (H : Sound b) (W : b.WF) : vpre b (allUses b) b.nv = (allUses b
   rw [List.filter_eq_self.2]
   intro c hc; simpa using use_start_lt H W (allUses_use b hc)
 
+theorem frmOf_leaving (b : Body) (items : Slice Usize) (v : Nat)
+    (hlen : items.val.length = (allUses b).length) (hnvA : vpre b (allUses b) b.nv = (allUses b).length)
+    (hv : v < b.nv)
+    (hit : ∀ j < cntQ b (allUses b) v, (items.val[vpre b (allUses b) v + j]!).val =
+        ((allUses b).filter fun c => b.start c == v)[j]!) :
+    frmOf items (vpre b (allUses b) v) (vpre b (allUses b) (v + 1)) = b.leaving v := by
+  have hend : vpre b (allUses b) (v + 1) ≤ (allUses b).length := by rw [← hnvA]; exact vpre_mono b (allUses b) (by omega)
+  rw [vpre_succ] at hend
+  unfold cntQ at hend hit
+  rw [leaving_eq]
+  apply List.ext_getElem
+  · simp [frmOf, vpre_succ, cntQ]; omega
+  · intro j h1 h2
+    have hj : j < cntQ b (allUses b) v := by unfold cntQ; simpa using h2
+    have := hit j hj
+    rw [getElem!_pos _ j h2] at this
+    simp only [frmOf, List.getElem_map, List.getElem_take, List.getElem_drop]
+    rw [← this, getElem!_pos items.val _ (by omega)]
+
+/-- The sink appends the problem it is handed. -/
+def AppendsF {S : Type} (FS : topo_fans.FanSink S) (P : S → List Problem) : Prop :=
+  ∀ (o : S) (v n : Usize), FS.vertex_fans o v n ⦃ o' => P o' = P o ++ [Problem.vertexFans v.val n.val] ⦄
+
+theorem vertices_spec {S : Type} (FS : topo_fans.FanSink S) (P : S → List Problem) (hS : AppendsF FS P)
+    (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (hC : CornersOK b corners)
+    (hnvA : vpre b (allUses b) b.nv = (allUses b).length)
+    (nv : Usize) (hnv : nv.val = b.nv) (off items : alloc.vec.Vec Usize)
+    (hol : off.val.length = b.nv + 1) (hoff : ∀ w ≤ b.nv, (off.val[w]!).val = vpre b (allUses b) w)
+    (hil : items.val.length = (allUses b).length)
+    (hit : ∀ w < b.nv, ∀ j < cntQ b (allUses b) w, (items.val[vpre b (allUses b) w + j]!).val =
+        ((allUses b).filter fun c => b.start c == w)[j]!)
+    (out : S) (seen : alloc.vec.Vec Usize) :
+    topo_fans.fans_loop3 FI FS t out nv off items seen 0#usize ⦃ r => P r = P out ++ b.checkFans corners ⦄ := by
+  set A := allUses b
+  unfold topo_fans.fans_loop3
+  apply loop.spec_decr_nat (fun (y : S × alloc.vec.Vec Usize × Usize) => nv.val - y.2.2.val)
+    (fun y => y.2.2.val ≤ nv.val ∧ P y.1 = P out ++ ((List.range y.2.2.val).filterMap fun v =>
+      let n := (b.fans corners (b.leaving v)).length
+      if n > 1 then some (Problem.vertexFans v n) else none))
+  · rintro ⟨o, sn, v⟩ ⟨hle, ho⟩
+    simp only at hle ho ⊢
+    unfold topo_fans.fans_loop3.body
+    split
+    · rename_i hlt
+      have hlt' : v.val < nv.val := by scalar_tac
+      have hvn : v.val < b.nv := by omega
+      step as ⟨lo, hlo⟩
+      have hlov : lo.val = vpre b A v.val := by rw [hlo, ← getElem!_pos off.val v.val (by omega)]; exact hoff v.val (by omega)
+      step with usize_add_wspec v 1#usize (succ_le_max v nv hlt') as ⟨v1, hv1⟩
+      have hv1v : v1.val = v.val + 1 := by rw [hv1]; exact succ_val v nv hlt'
+      step as ⟨hi, hhi⟩
+      have hhiv : hi.val = vpre b A (v.val + 1) := by
+        rw [hhi, ← getElem!_pos off.val v1.val (by omega), hv1v]; exact hoff _ (by omega)
+      have hderef : (alloc.vec.Vec.deref items).val = items.val := by simp [alloc.vec.Vec.deref]
+      have hmono := vpre_mono b A (show v.val ≤ v.val + 1 by omega)
+      have hend := vpre_mono b A (show v.val + 1 ≤ b.nv by omega)
+      have hfr := frmOf_leaving b (alloc.vec.Vec.deref items) v.val (by rw [hderef]; exact hil) hnvA hvn
+        (by rw [hderef]; exact hit v.val hvn)
+      rw [← hlov, ← hhiv] at hfr
+      step with n_fans_spec FI t R H W hC (alloc.vec.Vec.deref items) lo hi (by omega)
+        (by rw [hderef, hil, hhiv, ← hnvA]; exact hend)
+        (by rw [hfr]; intro x hx; rw [leaving_eq] at hx; exact allUses_use b (List.mem_filter.1 hx).1) sn
+        as ⟨n, sn1, hn⟩
+      rw [hfr] at hn
+      have hacc : ∀ o', P o' = P o ++ (let n := (b.fans corners (b.leaving v.val)).length
+            if n > 1 then some (Problem.vertexFans v.val n) else none).toList →
+          P o' = P out ++ ((List.range (v.val + 1)).filterMap fun v =>
+            let n := (b.fans corners (b.leaving v)).length
+            if n > 1 then some (Problem.vertexFans v n) else none) := by
+        intro o' h; rw [h, filterMap_range_succ, ho, List.append_assoc]
+      split
+      · rename_i hgt
+        have hgt' : (b.fans corners (b.leaving v.val)).length > 1 := by rw [← hn]; scalar_tac
+        step with hS o v n as ⟨o1, ho1⟩
+        rw [hv1v]
+        refine ⟨by omega, hacc o1 ?_, by omega⟩
+        rw [ho1, hn]; simp [hgt']
+      · rename_i hgt
+        have hgt' : ¬ (b.fans corners (b.leaving v.val)).length > 1 := by rw [← hn]; scalar_tac
+        simp only [Std.bind_ok, WP.spec_ok]
+        rw [hv1v]
+        refine ⟨by omega, hacc o ?_, by omega⟩
+        simp [hgt']
+    · rename_i hlt
+      have hv : v.val = nv.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [ho, hv, hnv]; rfl
+  · have h0 : (0#usize).val = 0 := rfl
+    simp [h0]
+
 end sort
 
 end forge_topo
