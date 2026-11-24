@@ -342,7 +342,14 @@ pub fn geometry(
             .markers
             .iter()
             .any(|m| m.severe() && m.op == Some(g.op as usize) && (m.t - st.t).abs() <= g.dt.max(1e-6));
-        draw::tool(&tu.shape, p, fail, &mut solid);
+        match st.sim.looks.get(tool) {
+            Some(lk) => {
+                crate::camsim::tools::draw(lk, p, st.spin, fail, &mut solid);
+                crate::camsim::tools::edges(lk, p, st.spin, &eye, world);
+                crate::camsim::tools::ghost(lk, p, world);
+            }
+            None => draw::tool(&tu.shape, p, fail, &mut solid),
+        }
     }
     // the machine about the part, when its run plays; a body in a collision now, red
     if st.machine
@@ -404,6 +411,7 @@ impl Gui {
             .camsim
             .as_deref_mut()
             .ok_or("no machining document is open")?;
+        let mut refit = false;
         for cmd in cmds.split(';').map(str::trim).filter(|c| !c.is_empty()) {
             let (k, v) = cmd.split_once('=').unwrap_or((cmd, ""));
             let num = || {
@@ -466,6 +474,8 @@ impl Gui {
                     st.jump(f * total);
                 }
                 "machine" => st.machine = on()?,
+                // the simulation's own framing: the stock and the tool's tip now (STANDARD §2)
+                "fit" if v == "sim" => refit = true,
                 "fit" => {
                     // the view on the stock, or on the whole machine about it
                     let mut tris = vec![];
@@ -473,6 +483,19 @@ impl Gui {
                         "machine" => {
                             let mv = st.sim.machine().ok_or("`fit=machine`: no machine run plays")?;
                             mv.draw(st.t, &[], &mut tris);
+                        }
+                        // the tool now, close: its cutting end and the stock about it
+                        "tool" => {
+                            let (tool, p, _) = st.tool_now().ok_or("`fit=tool`: no tool plays now")?;
+                            let tl = &st.sim.cam.sim_tools()[tool].tool;
+                            let r = (0.5 * tl.dc).max(2.0);
+                            let up = tl.lcf.max(4.0 * r);
+                            draw::solid_box(
+                                [p[0] - 1.6 * r, p[1] - 1.6 * r, p[2] - 1.5 * r],
+                                [p[0] + 1.6 * r, p[1] + 1.6 * r, p[2] + up],
+                                [1.0; 3],
+                                &mut tris,
+                            );
                         }
                         _ => {
                             let s = st.sim.setups.get(st.setup_now()).ok_or("no setup")?;
@@ -494,6 +517,7 @@ impl Gui {
                             * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2))
                                 .sqrt();
                         view.nav.camera = super::view_camera(c, r, self.shell.view.parallel, view.size);
+                        view.dirty = true;
                     }
                 }
                 "rapids" => st.rapids = on()?,
@@ -526,6 +550,9 @@ impl Gui {
                 }
                 _ => return Err(format!("`{cmd}`: not a simulation word")),
             }
+        }
+        if refit {
+            self.camsim_fit();
         }
         if let Some(v) = &mut self.view {
             v.dirty = true;
