@@ -15,6 +15,11 @@ on:
     paths: ["verify/forge-cam/**", "kernel/forge-cam*/**", "kernel/forge-tooling/**", "interface/forge-cam-lang/**", ".github/workflows/forge-cam.yml"]
   workflow_dispatch:
 
+# (release builds here are tests and checks, not what ships: the quicker build of 16 codegen units;
+# shipped binaries and the speed gate use [profile.release]'s 1, Cargo.toml)
+env:
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
+
 jobs:
   proofs:
     runs-on: ubuntu-latest
