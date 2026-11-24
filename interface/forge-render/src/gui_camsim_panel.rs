@@ -1333,8 +1333,8 @@ fn display(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
     heading(ui, t, "Playback");
     ui.checkbox(&mut st.follow, "Follow the tool");
     if st.sim.setups.iter().any(|s| s.jaws_for.is_some()) {
-        ui.checkbox(&mut st.jaw_part, "Part in the soft jaws")
-            .on_hover_text("While the soft jaws are cut, the part is not in the machine: shown faint where it will sit in them, if asked. Once they are done it is drawn seated in them.");
+        ui.checkbox(&mut st.jaw_part, "Finished part in jaws")
+            .on_hover_text("Shows the part faint where it will sit, and seated once the jaws are cut");
     }
     ui.checkbox(&mut st.stop_at_markers, "Stop at issues");
     // the toolpath coloured by a measured value: its legend
