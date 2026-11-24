@@ -299,7 +299,8 @@ pub fn libraries(ev: &Eval) -> std::sync::Arc<forge_material::Libraries> {
     }
     crate::deps::materials(ev.dir.as_deref());
     let libs = forge_material::Libraries::cached(ev.dir.as_deref());
-    crate::deps::libraries_used(libs.sources.iter().map(|(f, h)| (f, h)));
+    let used = forge_material::Libraries::sources(ev.dir.as_deref());
+    crate::deps::libraries_used(used.iter().map(|(f, h)| (f, h)));
     libs
 }
 

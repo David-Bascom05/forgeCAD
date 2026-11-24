@@ -73,7 +73,8 @@ pub fn profiles(ev: &crate::eval::Eval) -> Arc<Profiles> {
         crate::deps::tomls(&u);
     }
     let p = Profiles::cached(dir);
-    crate::deps::libraries_used(p.sources.iter().map(|(f, h)| (f, h)));
+    let used = Profiles::sources(dir);
+    crate::deps::libraries_used(used.iter().map(|(f, h)| (f, h)));
     p
 }
 

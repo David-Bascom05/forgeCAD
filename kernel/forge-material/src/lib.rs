@@ -514,9 +514,38 @@ pub struct Set {
 pub struct Libraries {
     pub sets: Vec<Set>,
     pub errors: Vec<(PathBuf, ParseError)>,
-    /// With `cached`: each library file it found, and the hash of its bytes (`None`: it did not
-    /// read), what a build that uses these libraries declares it read.
-    pub sources: Vec<(PathBuf, Option<u128>)>,
+}
+
+/// Each document folder's library files as `cached` last found them, with their hashes; kept
+/// apart from the libraries themselves (and only where there are any) so a part that uses no
+/// library file allocates nothing more than it did.
+pub struct Sources;
+
+/// Folder (`None`: no document folder) and its files.
+pub type SourceTable = std::sync::Mutex<Vec<(Option<PathBuf>, Vec<(PathBuf, Option<u128>)>)>>;
+
+static LIBRARY_SOURCES: SourceTable = std::sync::Mutex::new(Vec::new());
+
+impl Sources {
+    /// After a cache miss for `doc`: its files (an empty list keeps nothing).
+    pub fn keep(table: &SourceTable, doc: &Option<PathBuf>, files: &[(PathBuf, Option<Vec<u8>>)]) {
+        let mut t = table.lock().unwrap_or_else(|e| e.into_inner());
+        if t.iter().any(|x| &x.0 == doc) {
+            t.retain(|x| &x.0 != doc);
+        }
+        if !files.is_empty() {
+            t.push((doc.clone(), sources_of(files)));
+        }
+    }
+
+    /// `doc`'s files as kept (none: an empty Vec, no allocation).
+    pub fn of(table: &SourceTable, doc: Option<&Path>) -> Vec<(PathBuf, Option<u128>)> {
+        let t = table.lock().unwrap_or_else(|e| e.into_inner());
+        t.iter()
+            .find(|x| x.0.as_deref() == doc)
+            .map(|x| x.1.clone())
+            .unwrap_or_default()
+    }
 }
 
 /// Each file and the hash of its bytes, as read (`None`: it did not read).
@@ -584,7 +613,6 @@ impl Libraries {
                 materials: library().to_vec(),
             }],
             errors: vec![],
-            sources: vec![],
         }
     }
 
@@ -620,6 +648,13 @@ impl Libraries {
         out
     }
 
+    /// The library files `cached(doc_dir)` used last, each with the hash of its bytes (`None`: it
+    /// did not read): what a build that uses these libraries declares it read. Empty, and nothing
+    /// allocated, where there are none.
+    pub fn sources(doc_dir: Option<&Path>) -> Vec<(PathBuf, Option<u128>)> {
+        Sources::of(&LIBRARY_SOURCES, doc_dir)
+    }
+
     /// `load`, kept while the library files are unchanged: their names and bytes, read each time
     /// (never their sizes and times, which a replaced file can keep).
     pub fn cached(doc_dir: Option<&Path>) -> Arc<Libraries> {
@@ -645,9 +680,8 @@ impl Libraries {
         if let Some(hit) = c.iter().find(|x| x.0 == key) {
             return hit.1.clone();
         }
-        let mut libs = Libraries::load(doc_dir);
-        libs.sources = sources_of(&key.1);
-        let libs = Arc::new(libs);
+        let libs = Arc::new(Libraries::load(doc_dir));
+        Sources::keep(&LIBRARY_SOURCES, &key.0, &key.1);
         c.retain(|x| x.0.0 != key.0);
         c.push((key, libs.clone()));
         libs

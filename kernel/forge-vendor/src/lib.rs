@@ -1220,10 +1220,9 @@ pub struct Entry {
 pub struct Profiles {
     pub list: Vec<Entry>,
     pub errors: Vec<(PathBuf, ReadError)>,
-    /// With `cached`: each profile file it found, and the hash of its bytes (`None`: it did not
-    /// read), what a build that uses these profiles declares it read.
-    pub sources: Vec<(PathBuf, Option<u128>)>,
 }
+
+static PROFILE_SOURCES: forge_material::SourceTable = std::sync::Mutex::new(Vec::new());
 
 /// The user's folder: `<config>/forgecad/vendors`.
 pub fn user_dir() -> Option<PathBuf> {
@@ -1279,7 +1278,6 @@ impl Profiles {
                 })
                 .collect(),
             errors: vec![],
-            sources: vec![],
         }
     }
 
@@ -1305,6 +1303,12 @@ impl Profiles {
     }
 
     /// `load`, kept while the profile files are unchanged (their names and bytes).
+    /// The profile files `cached(doc_dir)` used last, each with the hash of its bytes (`None`: it
+    /// did not read): what a build that uses these profiles declares it read.
+    pub fn sources(doc_dir: Option<&Path>) -> Vec<(PathBuf, Option<u128>)> {
+        forge_material::Sources::of(&PROFILE_SOURCES, doc_dir)
+    }
+
     pub fn cached(doc_dir: Option<&Path>) -> Arc<Profiles> {
         type Key = (Option<PathBuf>, Vec<(PathBuf, Option<Vec<u8>>)>);
         type Cache = Mutex<Vec<(Key, Arc<Profiles>)>>;
@@ -1327,9 +1331,8 @@ impl Profiles {
         if let Some(hit) = c.iter().find(|x| x.0 == key) {
             return hit.1.clone();
         }
-        let mut p = Profiles::load(doc_dir);
-        p.sources = forge_material::sources_of(&key.1);
-        let p = Arc::new(p);
+        let p = Arc::new(Profiles::load(doc_dir));
+        forge_material::Sources::keep(&PROFILE_SOURCES, &key.0, &key.1);
         c.retain(|x| x.0.0 != key.0);
         c.push((key, p.clone()));
         p
