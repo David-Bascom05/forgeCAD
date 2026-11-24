@@ -1630,9 +1630,16 @@ pub fn note_words(raw: &str) -> String {
         );
     }
     if let Some(i) = raw.find("names only a material group (") {
+        // the group by its name in the tool library's cutting data, never the bare key
         let g = raw[i + 29..].split(')').next().unwrap_or("");
+        static LIB: std::sync::OnceLock<forge_tooling::Library> = std::sync::OnceLock::new();
+        let lib = LIB.get_or_init(forge_tooling::Library::builtin);
+        let group = lib
+            .group(g)
+            .map(|gr| format!(": {}", gr.name))
+            .unwrap_or_default();
         return format!(
-            "The part's material is only a group ({g}). Pick the alloy for realistic feeds and tool life."
+            "The part's material is only a group{group}. Pick the alloy for realistic feeds and tool life."
         );
     }
     raw.to_string()

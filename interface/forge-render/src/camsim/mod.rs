@@ -434,10 +434,23 @@ impl Sim {
                         }
                     }
                 }
-                let t = best
-                    .map(|b| b.1)
+                // the check's own path where it names one with that move, else the nearest
+                let t = (c.move_index < paths.get(c.path).map_or(0, |p| p.moves.len()))
+                    .then(|| self.tl.locate(oi, c.path, c.move_index, 0.5))
+                    .flatten()
+                    .or(best.map(|b| b.1))
                     .or_else(|| self.tl.nearest(oi, c.at))
                     .unwrap_or(self.tl.ops[oi].t0);
+                // an op of several tools (a spot drill, then the drill): the row says whose move
+                let row = match self.tl.pos(t) {
+                    Some((_, seg)) if self.tl.ops[oi].tools.len() > 1 => {
+                        match self.cam.sim_tools().get(self.tl.segs[seg].tool as usize) {
+                            Some(tu) => format!("{} \u{b7} {}", tools::tool_words(tu), check_row(c)),
+                            None => check_row(c),
+                        }
+                    }
+                    _ => check_row(c),
+                };
                 out.push(Marker {
                     op: Some(oi),
                     setup: op.setup,
@@ -446,7 +459,7 @@ impl Sim {
                     at: c.at,
                     t,
                     text: format!("{}: {}", op.name, check_sentence(c)),
-                    row: check_row(c),
+                    row,
                     region: None,
                     planned: false,
                 });

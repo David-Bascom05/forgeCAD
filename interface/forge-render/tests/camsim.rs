@@ -779,11 +779,27 @@ fn the_checks_line_is_in_words() {
         .expect("a rapid into the stock");
     // its row says when, where and how much, not what (the heading does)
     assert!(
-        m.row.starts_with("move ") && m.row.ends_with("mm into the stock"),
+        m.row.contains("move ") && m.row.ends_with("mm into the stock"),
         "{}",
         m.row
     );
     assert!(!m.row.contains("bolts") && !m.row.contains("hits"), "{}", m.row);
+    // the spot drill's pass and the drill's at the same hole are told apart by their tool
+    let rows: Vec<&str> = sim
+        .markers
+        .iter()
+        .filter(|m| m.rule == "rapid_into_stock")
+        .map(|m| m.row.as_str())
+        .collect();
+    assert!(
+        rows.iter()
+            .any(|r| r.starts_with("\u{d8}") && r.contains("spot drill \u{b7} move ")),
+        "{rows:?}"
+    );
+    let mut seen = rows.clone();
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), rows.len(), "no two rows alike: {rows:?}");
     assert!(!line.contains("G3") && !line.contains("pairs"), "{line}");
     // the run's warnings in people's words, the syntax on hover
     use forge_render::gui_camsim_panel::note_words;
@@ -795,7 +811,7 @@ fn the_checks_line_is_in_words() {
     );
     assert_eq!(
         note_words("part `flange.fg` names only a material group (N): name the alloy"),
-        "The part's material is only a group (N). Pick the alloy for realistic feeds and tool life."
+        "The part's material is only a group: non-ferrous (aluminium, copper alloys). Pick the alloy for realistic feeds and tool life."
     );
 }
 
