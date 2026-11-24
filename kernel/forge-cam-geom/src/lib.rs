@@ -22,6 +22,7 @@ pub mod big;
 pub mod boolean;
 pub mod check;
 pub mod contact;
+mod contact_rev;
 pub mod drop;
 pub mod dual;
 pub mod ival;
