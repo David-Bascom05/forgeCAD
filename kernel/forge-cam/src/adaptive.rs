@@ -75,6 +75,8 @@ pub struct Adaptive {
 /// passes (k, d) = CAP_ONE_WAY, two-way CAP_TWO_WAY (whose passes end near the next start, so a
 /// longer retrace still saves the climb).
 pub const CAP_ONE_WAY: (f64, f64) = (10.0, 20.0);
+/// How many starts, in order, are tried for reach at depth before a retract (P1).
+pub const REACH_N: usize = 30;
 pub const CAP_TWO_WAY: (f64, f64) = (20.0, 40.0);
 
 /// The most a pass's heading may turn from the sweep direction (either way).
@@ -439,6 +441,7 @@ pub fn adaptive(
                 .map(|p| [p[0], p[1]])
                 .unwrap_or([0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1])]);
             let mut best: Option<([f64; 2], f64, f64)> = None;
+            let mut order: Vec<([f64; 2], f64, f64)> = Vec::new();
             if entered || open_try {
                 for &p in &cands {
                     if f.disk_has_material(p[0], p[1], z) {
@@ -480,6 +483,24 @@ pub fn adaptive(
                     let d = across.floor() * 1e9 + (p[0] - here[0]).powi(2) + (p[1] - here[1]).powi(2);
                     if best.is_none_or(|(_, bd, _)| d < bd) {
                         best = Some((p, d, sign));
+                    }
+                    order.push((p, d, sign));
+                }
+                // P1 (fto-adaptive.md §11): among the starts reachable at depth (straight in the
+                // cleared area, or by a retrace then straight), the first in that order (the
+                // lowest band across the sweep, then the nearest); none of the first REACH_N in
+                // reach: the first, by a retract
+                // (one-way passes only: two-way passes keep their zigzag order, which already
+                // ends each pass near the next start; P1 there costs more reversals than it saves)
+                if let Some(c) = at.filter(|c| c[2] == z && !prm.two_way) {
+                    order.sort_by(|u, v| u.1.total_cmp(&v.1));
+                    let (k, dd) = if prm.two_way { CAP_TWO_WAY } else { CAP_ONE_WAY };
+                    if let Some(q) = order.iter().take(REACH_N).find(|(q, ..)| {
+                        f.link_clear([c[0], c[1]], *q, z)
+                            || retrace_link(c, *q, &hist, z, &|a, b| f.link_clear(a, b, z), k, dd * f.r)
+                                .is_some()
+                    }) {
+                        best = Some(*q);
                     }
                 }
             } else {
