@@ -286,10 +286,14 @@ impl Field {
                 to: [target[0], target[1], down],
             });
         }
+        // the rest of the way: where the tool's disk meets no material above the level (the map is
+        // a height field: then the whole column is cut away), air: a link at the feed; else into
+        // material at the plunge feed
+        let air = !self.disk_has_material(target[0], target[1], target[2]);
         mv.push(PMove::Line {
             to: target,
-            f: feed.1,
-            phase: Phase::Plunge,
+            f: if air { feed.0 } else { feed.1 },
+            phase: if air { Phase::Link } else { Phase::Plunge },
         });
     }
 
