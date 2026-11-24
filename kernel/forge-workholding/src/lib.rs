@@ -973,6 +973,33 @@ impl Workholding {
         v
     }
 
+    /// One collision body per device body, named "device/body", its prims in the part frame
+    /// with keep-outs applied (forge-machine's `SetupSpec.fixture`: a `Fixture {name, prims}`
+    /// each). A block whose axes are not the frame's is given as is (`Prim::Block` with axes);
+    /// `aligned` turns each into its axis-aligned bound instead (a superset: safe for a clearance
+    /// check, it may report contact the exact block would not).
+    pub fn fixtures(&self, aligned: bool) -> Vec<(String, Vec<Prim>)> {
+        self.bodies()
+            .map(|(p, b)| {
+                let prims = b
+                    .prims
+                    .iter()
+                    .map(|x| {
+                        let g = x.grown(b.keepout);
+                        match g {
+                            Prim::Block { axes, .. } if aligned && axes != geom::IDENT => {
+                                let (lo, hi) = g.bounds();
+                                Prim::aabb(lo, hi)
+                            }
+                            _ => g,
+                        }
+                    })
+                    .collect();
+                (format!("{}/{}", p.name, b.name), prims)
+            })
+            .collect()
+    }
+
     /// Whether a box of leftover stock (min, max) is held: inside a device's held box grown by
     /// `slack` (the fixture clearance: a tool kept that far from the device cannot reach it).
     pub fn held(&self, lo: V3, hi: V3, slack: f64) -> Option<&str> {
