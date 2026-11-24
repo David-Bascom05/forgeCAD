@@ -539,3 +539,398 @@ basis = "the published chuck size plus jaw stand-out (estimate); length an estim
 path = "body.turret"
 status = "estimate"
 basis = "the turret disc (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Spinner U5-620 (out of production: Spinner's site no longer lists it, so no maker page or
+# brochure could be read). The machine of the RPTU/Spinner dataset (ElMoe, CC BY 4.0: "recorded
+# from a Siemens 840D-SL machine control on a five-axis milling machine tool of type 'Spinner
+# U5-620'"). Every value here is from used-machine dealer listings that restate the maker's
+# data, so each is an `estimate` (or a `conflict` where the listings disagree), never `published`.
+# X 620 Y 520 Z 460; B swivel, C 360; 12000 rpm SK40; 32 tools.
+[[machine]]
+name = "spinner-u5-620"
+kind = "table-table"
+control = "siemens"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308 | https://www.machinetools.com/en/models/spinner-u5-620"
+taken = "2026-11-24"
+note = "Out of production; no maker document could be read (spinner.eu.com lists only the U5-630 and later; archived pages not reachable): every value is a dealer listing's restatement, cited estimate, or conflict where they disagree. B tilts the cradle and carries C. Fitted from the dataset's own log (tools/machines/spinner_u5_620_fit.py; estimates fitted from logs, never published): B turns about y and C about z, both negatively (+B right-handed about -y: at B+90 the table top faces -x; +C clockwise seen from above); the C axis stands at the control's machine X 0.18, Y 0.09; the B axis lies on b_x + b_z = 49.48 in machine coordinates, and with B and C taken as intersecting (an assumption: the log holds B only at 0 and 90 under TRAORI, so the rest is confounded with unpublished tool lengths) 49.3 mm above the table top. With the C axis at the record's origin and the table top at machine Z 0 (the log's Z 152.6-610 matches Asset-Trade's nose-to-table 150-610), this record's X and Y are the control's machine coordinates and its Z is machine Z - 610. B range in conflict: Asset-Trade +5 (+50 option) / -110, another listing -5 (-90) / +110, another +60 / -140; -91..+110 used, in the control's sense (what programs command): the dataset's own program Coordinate_system_representation_Achskreuz.mpf (ElMoe, CC BY 4.0) commands G0 B90. on this machine with no transformation active (N10290, N10610, N15330, N15970), and its log reaches B-91 (JOG); Asset-Trade's +5 / -110 fits only with the opposite sign convention. Control: the dataset's programs are Siemens 840D native; `control` stays forge-post's siemens until its 840D dialect lands. Z in conflict: 460 (most listings) vs 420 (one 2008 listing): 460 used. Spindle: 12000 rpm in the listings (a family brochure is reported to give 9000 standard, 12000 optional: not read); power 22 kW peak / 135 N·m (Asset-Trade) vs 19 kW / 121 N·m (another): no power check. Rapid 48 m/min given as one 'feed / rapid' value: per-axis rapids and max cutting feed UNKNOWN. Rotary speeds UNKNOWN. Spindle nose to table 150-610 mm (Asset-Trade) sets the nose at 610 above the table at the top of Z. Tool: 32 pockets, max length 290, diameter 76 (127 with free neighbours), 7 kg (Asset-Trade). Control: Siemens 840D-SL on the dataset's machine (dealer listings also show Heidenhain TNC 620 machines). X and Y ranges: the listed travels placed so the log's machine positions (X -365..90.1, Y -200..224) lie inside, the programs' SUPA home (X-365 Y224) taken as the travels' ends (an assumption); Z 0 is the top of travel (the home Z610). Bodies are single boxes/cylinders, estimates kept large where the tool and part move; the enclosure is not modelled."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-365, 255]
+rapid = 48000
+max_feed = 48000   # max cutting feed UNKNOWN: = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-296, 224]
+rapid = 48000
+max_feed = 48000   # max cutting feed UNKNOWN: = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-460, 0]
+rapid = 48000
+max_feed = 48000   # max cutting feed UNKNOWN: = rapid, no feed clamp
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, -1, 0]   # +B turns the table right-handed about -y: fitted from the log (note)
+pivot = [0, 0, 49.3]   # estimate fitted from the log, B and C taken as intersecting (note)
+range = [-91, 110]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "B"
+side = "table"
+type = "rotary"
+axis = [0, 0, -1]   # +C turns the table clockwise seen from above: fitted from the log (note)
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000   # UNKNOWN (unpublished): a high value keeps t_min a lower bound
+max_feed = 360000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 610]
+rpm = [1, 12000]   # rpm min UNKNOWN: 1 = no lower check
+max = [290, 127]
+interface = "SK40"
+
+[[machine.changer]]
+pockets = 32
+change_s = 0.001   # UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound
+max_tool_kg = 7
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 610]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+part = "parts/spinner/spinner-u5-620/bed.fg"
+link = "base"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-610, -560, -1000]
+max = [610, 560, -600]
+
+[[machine.body]]
+name = "support-l"
+part = "parts/spinner/spinner-u5-620/support-l.fg"
+link = "base"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-380, -560, -590]
+max = [380, -420, 0]
+
+[[machine.body]]
+name = "support-r"
+part = "parts/spinner/spinner-u5-620/support-r.fg"
+link = "base"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-380, 420, -590]
+max = [380, 560, 0]
+
+[[machine.body]]
+name = "cradle"
+part = "parts/spinner/spinner-u5-620/cradle.fg"
+link = "B"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-340, -400, -200]
+max = [340, 400, -80]
+
+[[machine.body]]
+name = "rotary"
+part = "parts/spinner/spinner-u5-620/rotary.fg"
+link = "C"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 360
+h = 80
+
+[[machine.body]]
+name = "nose"
+part = "parts/spinner/spinner-u5-620/nose.fg"
+link = "Z"
+[[machine.body.cyl]]
+base = [0, 0, 610]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+part = "parts/spinner/spinner-u5-620/head.fg"
+link = "Z"
+[[machine.body.box]]
+min = [-150, -150, 760]
+max = [150, 150, 1210]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
+taken = "2026-11-24"
+value = "X travel 620 mm (all listings), placed in the control's machine coordinates: the log's X runs -365.000..90.138 (the programs' SUPA home X-365 taken as the travel's end, an assumption)"
+basis = "travel: a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production); placement: fitted, tools/machines/spinner_u5_620_fit.py on Zenodo 15735480 data_v1_0_1.csv (RPTU/Spinner dataset log, CC BY 4.0; sha256 d7227bad...be580 as fetched 2026-11-24)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318"
+taken = "2026-11-24"
+value = "'Vorschub / Eilgang 48 m/min' (one value for feed and rapid)"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (not stated apart from the rapid): = rapid, no feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
+taken = "2026-11-24"
+value = "Y travel 520 mm (all listings), placed in the control's machine coordinates: the log's Y runs -200.000..224.000 (the programs' SUPA home Y224 taken as the travel's end, an assumption)"
+basis = "travel: a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production); placement: fitted, tools/machines/spinner_u5_620_fit.py on Zenodo 15735480 data_v1_0_1.csv (RPTU/Spinner dataset log, CC BY 4.0; sha256 d7227bad...be580 as fetched 2026-11-24)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318"
+taken = "2026-11-24"
+value = "'Vorschub / Eilgang 48 m/min' (one value for feed and rapid)"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (not stated apart from the rapid): = rapid, no feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "conflict"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
+taken = "2026-11-24"
+value = "Z travel 460 mm used"
+note = "460 mm in most listings (Asset-Trade, Gindumac, used-machines.com); 420 mm in one 2008 listing"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318"
+taken = "2026-11-24"
+value = "'Vorschub / Eilgang 48 m/min' (one value for feed and rapid)"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (not stated apart from the rapid): = rapid, no feed clamp"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "conflict"
+source = "RPTU/Spinner dataset (ElMoe @b8003660, CC BY 4.0) NC_code/Coordinate_system_representation_Achskreuz/Coordinate_system_representation_Achskreuz.mpf N10290 'G0 B90. C0.0' (also N10610, N15330, N15970) | https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
+taken = "2026-11-24"
+value = "-91..+110 deg used, in the control's sense: the dataset's program reaches B+90 on this machine and its log B-91 (JOG, 2024-03-20 07:56:30)"
+note = "listings: '-5 (-90) / +110' (its +110 used; the log reaches -91, past its -90 option); Asset-Trade '+5 (+50) / -110' (fits only with the opposite sign); another 'max 60 / min -140'. +B turns the table right-handed about -y (fitted, joint.B.pivot)"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+source = "tools/machines/spinner_u5_620_fit.py on Zenodo 15735480 data_v1_0_1.csv (RPTU/Spinner dataset log, CC BY 4.0; sha256 d7227bad...be580 as fetched 2026-11-24)"
+taken = "2026-11-24"
+value = "the B axis 49.3 mm above the table top, through the C axis; +B and +C turn the table negatively (axes [0,-1,0], [0,0,-1])"
+basis = "fitted from logs, not published: under TRAORI the log's MCS = R_B R_C BCS + t; per (tool, B, C) group a Kabsch fit (residual median 0.009-0.066 mm in the 4 clean groups, 8 groups mixing states dropped) gives every rotation as R_y(-B) R_z(-C) (within 0.0021; the + senses miss by 2.0); one least-squares fit of the offsets gives b_x + b_z = 49.475 and the C axis at (0.183, 0.088) in machine coordinates (rms 0.142, max 0.333 mm). Only B 0 and 90 occur under TRAORI, so where on the line b_x + b_z = 49.475 the B axis lies is not separable from the (unpublished) tool lengths: B and C are taken as intersecting (b_x = c_x), an assumption, giving b_z = 49.29; the table top is taken at machine Z 0 (the log's Z 152.6..610 matches Asset-Trade's 'spindle nose to table 150-610'), an estimate. Implied gauge lengths 137.0 (ENTFRAESER_D8_N_90GRAD) and 250.1 mm (SCHAFT_D12_N_AP30)"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
+taken = "2026-11-24"
+value = "C 360 deg (a continuous rotary: the format's cyclic range)"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "unknown"
+basis = "UNKNOWN (unpublished): a high value keeps t_min a lower bound"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+source = "tools/machines/spinner_u5_620_fit.py on Zenodo 15735480 data_v1_0_1.csv (RPTU/Spinner dataset log, CC BY 4.0; sha256 d7227bad...be580 as fetched 2026-11-24)"
+taken = "2026-11-24"
+basis = "fitted from logs: the C axis stands at machine X 0.183, Y 0.088 (within 0.3 mm of the record's origin, which this record puts on it); the table centre on it is this record's convention"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
+taken = "2026-11-24"
+value = "12000 rpm max in the listings (rpm min UNKNOWN: 1 = no lower check); a family brochure is reported to give 9000 standard, 12000 optional (not read)"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318"
+taken = "2026-11-24"
+value = "'Min. Abstand Spindelnase - Tisch 150 mm', 'Max. ... 610 mm': the nose 610 mm above the table at the top of Z"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318"
+taken = "2026-11-24"
+value = "'Max. Werkzeuglänge 290 mm', 'Werkzeugdurchmesser 76 mm, bei freien Nachbarplätzen 127 mm'"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "spindle.S1.interface"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
+taken = "2026-11-24"
+value = "SK40 (Asset-Trade: 'Tool Holder SK40'; other listings SK40 or BT40)"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318 | https://www.gindumac.com/product/spinner-u5-620_DE-MIL-SPI-2017-00001 | https://www.used-machines.com/spinner-u5-620/gm-216-40308"
+taken = "2026-11-24"
+value = "32 (Asset-Trade: 'Anzahl der Werkzeugstationen 32'; another listing 54)"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "UNKNOWN (unpublished): 0.001 s (must be > 0), so t_min stays a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "estimate"
+source = "https://www.asset-trade.de/en/universal-machine-centres/spinner-u5-620-5-axis-1020-05131318"
+taken = "2026-11-24"
+value = "'Max. Werkzeugmasse 7 kg'"
+basis = "a used-machine dealer's listing restating the maker's data (no maker document readable: the U5-620 is out of production)"
+
+[[machine.cite]]
+path = "machine.control"
+status = "estimate"
+source = "RPTU/Spinner dataset README (ElMoe, CC BY 4.0, via CAM-MACHINE)"
+taken = "2026-11-24"
+value = "Siemens 840D-SL on the dataset's machine"
+basis = "the RPTU/Spinner dataset README (ElMoe, CC BY 4.0) names the control; dealer listings also show Heidenhain TNC 620 machines"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+basis = "the spindle nose, from the listing's spindle-nose-to-table distance at the top of Z"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table top centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the rotary table: radius 360 (listings give table diameter 650 or 720: the larger, plus margin) (estimate); one box/cylinder, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle nose (estimate); one box/cylinder, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "no source read gives where the machine's own bodies can meet within its travel (stored-stroke or crash zones), and B's pivot is a placeholder; the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
