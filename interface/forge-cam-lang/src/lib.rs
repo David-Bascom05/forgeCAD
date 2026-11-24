@@ -25,6 +25,7 @@
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod holes;
+mod memo;
 pub mod sim;
 
 use forge_agent::json::Json;
@@ -48,6 +49,34 @@ pub static CYCLE_PARAMS: std::sync::Mutex<(f64, f64)> =
     std::sync::Mutex::new((forge_post::PECK_CLEAR, forge_post::CHIP_LIFT));
 
 /// Whether a source is a machining document.
+/// The certifications made by earlier runs of documents in this process (memo.rs).
+static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
+
+/// `ops::certify_fixtured`, taken from an earlier run when every argument is the same (each
+/// number the same number): it is a function of these arguments alone (no clock, file or other
+/// state; the kernel's own memos are by content), so the summary is the one it would make. An
+/// edit to one op re-certifies only the ops whose posted path, tool, target faces, stock
+/// stages, fixture, clearances or tolerance it changed.
+#[allow(clippy::too_many_arguments)]
+fn certify_memo(
+    p: &OpPath,
+    tool: &ops::ToolUse,
+    part: &[Face],
+    stages: &[(usize, Vec<Face>)],
+    fixture: &[Face],
+    fclear: f64,
+    tol: f64,
+    clearance: f64,
+) -> ops::CheckSummary {
+    let key = format!(
+        "certify_fixtured/1 {:?}",
+        (p, tool, part, stages, fixture, fclear, tol, clearance)
+    );
+    CERTIFIED.get_or(key, || {
+        ops::certify_fixtured(p, tool, part, stages, fixture, fclear, tol, clearance)
+    })
+}
+
 pub fn is_machining(src: &str) -> bool {
     match syntax::parse(src) {
         Ok(p) => {
@@ -5149,7 +5178,7 @@ impl Cam {
             None => (vec![support_face(&s.stock)], 0.0),
         };
         let target = self.ops[oi].target.as_ref().unwrap_or(&part.faces);
-        let mut sum = ops::certify_fixtured(
+        let mut sum = certify_memo(
             posted,
             &tool,
             target,
@@ -6152,5 +6181,151 @@ mod staging_tests {
             bad.iter().all(|c| c.move_index == 5 && c.phase == "rapid"),
             "{bad:?}"
         );
+    }
+}
+
+#[cfg(test)]
+mod certify_memo_tests {
+    use super::*;
+    use forge_cam::ops::Stock;
+
+    /// certify_fixtured's arguments.
+    type Args = (
+        OpPath,
+        ToolUse,
+        Vec<Face>,
+        Vec<(usize, Vec<Face>)>,
+        Vec<Face>,
+        f64,
+        f64,
+        f64,
+    );
+
+    fn tool(id: &str, stickout: f64) -> ToolUse {
+        let l = Library::builtin();
+        let t = l.tool(id).unwrap().clone();
+        let shape = t.shape(stickout, Some(l.holder("bt40-er32").unwrap())).unwrap();
+        ToolUse {
+            t: 1,
+            tool: t,
+            holder: Some("bt40-er32".into()),
+            stickout,
+            shape,
+        }
+    }
+
+    fn path(x: f64) -> OpPath {
+        OpPath {
+            tool: 0,
+            start: [x, 5.0, 30.0],
+            moves: vec![
+                PMove::Line {
+                    to: [x, 5.0, 12.0],
+                    f: 300.0,
+                    phase: Phase::Plunge,
+                },
+                PMove::Line {
+                    to: [x + 20.0, 5.0, 12.0],
+                    f: 900.0,
+                    phase: Phase::Cut,
+                },
+                PMove::Rapid {
+                    to: [x + 20.0, 5.0, 30.0],
+                },
+            ],
+            rpm: 8000.0,
+            coolant: forge_post::Coolant::Off,
+        }
+    }
+
+    /// Every argument class is in the key: changing any one of them (the path, the tool, a part
+    /// face, the stock, the fixture, its clearance, the tolerance, the clearance) certifies anew,
+    /// and the summary equals a fresh certification of the changed inputs; the same arguments
+    /// again take the memo. A stale summary (a Clear for inputs it was not made for) is the bug
+    /// this guards.
+    #[test]
+    fn each_input_class_certifies_anew() {
+        let part = Stock {
+            min: [0.0, 0.0, 0.0],
+            max: [40.0, 30.0, 10.0],
+        }
+        .faces();
+        let stock = Stock {
+            min: [-2.0, -2.0, 0.0],
+            max: [42.0, 32.0, 14.0],
+        }
+        .faces();
+        let fix = Stock {
+            min: [-50.0, -50.0, -10.0],
+            max: [90.0, 80.0, 0.0],
+        }
+        .faces();
+        let base = (
+            path(10.0),
+            tool("flat-6", 30.0),
+            part.clone(),
+            vec![(0usize, stock.clone())],
+            fix.clone(),
+            1.0,
+            0.01,
+            2.0,
+        );
+        let run = |a: &Args| certify_memo(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7);
+        let fresh = |a: &Args| ops::certify_fixtured(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7);
+        let same = |x: &ops::CheckSummary, y: &ops::CheckSummary| format!("{x:?}") == format!("{y:?}");
+        let n0 = CERTIFIED.computed();
+        let s0 = run(&base);
+        assert!(same(&s0, &fresh(&base)));
+        let n1 = CERTIFIED.computed();
+        assert!(n1 > n0);
+        // the same again: from the memo
+        let _ = run(&base);
+        // each class changed by a little
+        let mut edits = Vec::new();
+        let mut e = base.clone();
+        e.0 = path(10.000001);
+        edits.push(("path", e));
+        let mut e = base.clone();
+        e.1 = tool("flat-6", 30.5);
+        edits.push(("tool", e));
+        let mut e = base.clone();
+        e.2[3].mu *= 2.0;
+        edits.push(("part face", e));
+        let mut e = base.clone();
+        e.3 = vec![(
+            0,
+            Stock {
+                min: [-2.0, -2.0, 0.0],
+                max: [42.0, 32.0, 13.0],
+            }
+            .faces(),
+        )];
+        edits.push(("stock", e));
+        let mut e = base.clone();
+        e.4 = Stock {
+            min: [-50.0, -50.0, -10.0],
+            max: [90.0, 80.0, 0.5],
+        }
+        .faces();
+        edits.push(("fixture", e));
+        let mut e = base.clone();
+        e.5 = 1.5;
+        edits.push(("fixture clearance", e));
+        let mut e = base.clone();
+        e.6 = 0.02;
+        edits.push(("tolerance", e));
+        let mut e = base.clone();
+        e.7 = 2.5;
+        edits.push(("clearance", e));
+        for (what, e) in &edits {
+            let before = CERTIFIED.computed();
+            let s = run(e);
+            assert!(CERTIFIED.computed() > before, "{what}: not certified anew");
+            assert!(same(&s, &fresh(e)), "{what}: the summary is not the fresh one");
+        }
+        // and the unchanged arguments still from the memo, the same summary
+        let before = CERTIFIED.computed();
+        assert!(same(&run(&base), &s0));
+        assert_eq!(CERTIFIED.computed(), before, "the same arguments certified again");
     }
 }
