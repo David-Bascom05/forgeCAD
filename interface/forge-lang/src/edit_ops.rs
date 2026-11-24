@@ -162,11 +162,12 @@ fn ident(s: &str) -> bool {
 
 /// Whether a document's calls name built-ins only, never a binding: a machining document (its
 /// first statement the bare name `machining`; forge-cam-lang and forge-turn-lang look a call's
-/// head up among their built-ins alone) or a robot document (`robot`, robot.rs likewise), where
+/// head up among their built-ins alone), a robot document (`robot`, robot.rs likewise) or a
+/// bending document (`bending`, forge-bend-lang), where
 /// `drill = drill(..)` binds a name a call also spells. A call's head there is not a use of the
 /// name.
 pub fn calls_closed(prog: &[Stmt]) -> bool {
-    matches!(prog.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "machining" || n == "robot")
+    matches!(prog.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "machining" || n == "robot" || n == "bending")
 }
 
 pub fn precheck_rename(prog: &[Stmt], from: &str, to: &str) -> R<()> {

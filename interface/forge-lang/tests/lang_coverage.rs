@@ -170,7 +170,7 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
         ("assembly-part", owned(asm::PART_NAMES), Model::Own),
         ("assembly-kinds", owned(asm::KINDS), Model::Own),
         ("harness", owned(harness::BUILTINS), Model::Own),
-        ("drawing", owned(drawing::doc::FUNCTIONS), Model::Own),
+        ("drawing", owned(drawing::doc::FUNCTIONS), Model::Closed),
         (
             "cam",
             arms(CAM, "fn call(&mut self, name: &str, f: &str"),
@@ -381,6 +381,15 @@ fn edit_ops() -> BTreeSet<String> {
         enum_variants("interface/forge-lang/src/robot.rs", "pub enum Edit {")
             .into_iter()
             .map(|v| format!("robot::{v}")),
+    );
+    // the drawing document's own edits (a drawing file and a drawing block alike)
+    out.extend(
+        json_ops(
+            "interface/forge-lang/src/drawing/ops.rs",
+            "pub fn from_json(j: &Json) -> Option<DrawOp>",
+        )
+        .into_iter()
+        .map(|o| format!("drawing::{o}")),
     );
     let cli = read("interface/forge-cli/src/fg.rs");
     for line in cli.lines() {
@@ -698,6 +707,7 @@ fn lean_family_lists_are_the_rusts() {
         rust("robot-value"),
         "Families.robotValue"
     );
+    assert_eq!(lean(&src, "drawingFns"), rust("drawing"), "Families.drawingFns");
     let hd: BTreeSet<String> = lean(&src, "headers");
     let words: BTreeSet<String> = headers().into_iter().map(|h| h.0).collect();
     assert!(hd.is_subset(&words), "Families.headers: {hd:?} vs {words:?}");

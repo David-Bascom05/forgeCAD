@@ -215,3 +215,9 @@ open ForgeLang ForgeLang.Counter
 #print axioms Families.checkArgs_extend
 #print axioms Families.checkArgs_new
 #print axioms liftLiteral_at
+#print axioms Builtins.extend_unrefused
+#print axioms Builtins.unrefused_new
+#print axioms Families.drawing_conservative
+#print axioms renD_nested
+#print axioms renD_top
+#print axioms rename_defs
