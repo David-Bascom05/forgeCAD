@@ -242,8 +242,14 @@ fn a_small_window_holds_it_all() {
         forge_render::shell::bendsim::Bar::Compact
     );
     assert!(bar.height() < 80.0, "{bar:?}");
-    assert_eq!(forge_render::shell::bendsim::Bar::for_width(700.0), forge_render::shell::bendsim::Bar::Narrow);
-    assert_eq!(forge_render::shell::bendsim::Bar::for_width(1100.0), forge_render::shell::bendsim::Bar::Wide);
+    assert_eq!(
+        forge_render::shell::bendsim::Bar::for_width(700.0),
+        forge_render::shell::bendsim::Bar::Narrow
+    );
+    assert_eq!(
+        forge_render::shell::bendsim::Bar::for_width(1100.0),
+        forge_render::shell::bendsim::Bar::Wide
+    );
     let view = h.gui.shell.place("env:bendsim:view").expect("the view");
     let dock = h.gui.shell.place("env:bendsim:properties").expect("the sheet");
     assert!(
@@ -357,7 +363,10 @@ fn following_keeps_the_handled_part_in_view() {
             shot(&mut h, "13-following-the-handling");
         }
     }
-    assert!(seen.iter().all(|s| s.1), "the whole part in view at every instant: {seen:?}");
+    assert!(
+        seen.iter().all(|s| s.1),
+        "the whole part in view at every instant: {seen:?}"
+    );
 }
 
 /// No flicker (David): the eye swept round the second bend through the views where the first
@@ -421,8 +430,14 @@ fn see_through_fades_and_never_flickers() {
         ghosted = ghosted.max(now.len());
         was = now;
     }
-    assert!(ghosted > 0, "something stood in front of the bend at some instant");
-    assert!(worst <= step, "a see-through jump of {worst} in one frame (a step is {step})");
+    assert!(
+        ghosted > 0,
+        "something stood in front of the bend at some instant"
+    );
+    assert!(
+        worst <= step,
+        "a see-through jump of {worst} in one frame (a step is {step})"
+    );
 }
 
 /// At 1000 x 700 the view between the browser and the bend's sheet is under 400 px: the play
@@ -430,7 +445,9 @@ fn see_through_fades_and_never_flickers() {
 /// over anything (UX-LEAD, STANDARD.md §5).
 #[test]
 fn a_narrow_view_gets_a_compact_bar() {
-    let Ok(mut h) = Headless::new((1000.0, 700.0), 1.0) else { return };
+    let Ok(mut h) = Headless::new((1000.0, 700.0), 1.0) else {
+        return;
+    };
     h.step();
     enter(&mut h, CHANNEL, "narrow1000", "trumpf-trubend-5130", None);
     {
@@ -453,10 +470,16 @@ fn a_narrow_view_gets_a_compact_bar() {
     let home = view.left() + cube.at.0 / cube.scale;
     for name in ["axes", "grid", "planes", "anchors"] {
         if let Some(r) = h.gui.shell.place(&format!("view:{name}")) {
-            assert!(r.right() < home, "{name} chip {r:?} reaches the home button at {home}");
+            assert!(
+                r.right() < home,
+                "{name} chip {r:?} reaches the home button at {home}"
+            );
         }
     }
-    assert!(h.gui.shell.place("view:axes").is_some(), "the first chips still shown");
+    assert!(
+        h.gui.shell.place("view:axes").is_some(),
+        "the first chips still shown"
+    );
 }
 
 /// Bend 2 as a recording sees it (Follow bend on, coordinator's frame strip): at every instant of
@@ -494,7 +517,10 @@ fn bend_two_followed_shows_the_part() {
         // the part's height on the screen, as a share of the view's (NDC spans 2)
         least = least.min((yhi.min(1.0) - ylo.max(-1.0)) / 2.0);
     }
-    assert!(least > 0.2, "the part only {least:.2} of the view's height at some instant");
+    assert!(
+        least > 0.2,
+        "the part only {least:.2} of the view's height at some instant"
+    );
 }
 
 /// Any part in the way, locally (David): from the Press Overview the press's frame stands
@@ -522,7 +548,56 @@ fn a_press_part_in_the_way_is_seen_through_in_the_window_only() {
     assert!(!press.is_empty(), "a press part seen through: {pieces:?}");
     for p in &press {
         let whole = p.trim_end_matches("#xray");
-        assert!(names.iter().any(|n| n == whole), "{whole} solid round its window piece");
+        assert!(
+            names.iter().any(|n| n == whole),
+            "{whole} solid round its window piece"
+        );
     }
     assert!(!h.gui.bend.ghosts.is_empty());
+}
+
+/// A seen-through body is drawn at its opacity (the coordinator, after RENDER-STUDIO found the
+/// punch's drawn not at all): the same view at 0.13 and at 0.8 differs wherever a ghost is.
+#[test]
+fn a_ghost_is_drawn_at_its_opacity() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "ghost", "trumpf-trubend-5130", None);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.step = 1;
+        b.t = 0.7;
+    }
+    frame(&mut h, Framing::Work);
+    for _ in 0..4 {
+        h.step();
+    }
+    let v = h.gui.view.as_mut().unwrap();
+    let mut c = v.nav.camera;
+    c.yaw = 240f32.to_radians();
+    c.pitch = 25f32.to_radians();
+    v.nav.jump_to(c);
+    let mut at = |h: &mut Headless, o: f32| {
+        h.gui.shell.sheet.bend_sim.as_mut().unwrap().opacity = o;
+        for _ in 0..20 {
+            h.step();
+        }
+        assert!(!h.gui.bend.ghosts.is_empty(), "something seen through at {o}");
+        h.ppm()
+    };
+    let lo = at(&mut h, 0.13);
+    let hi = at(&mut h, 0.8);
+    assert_eq!(lo.len(), hi.len());
+    let differ = lo
+        .chunks(3)
+        .zip(hi.chunks(3))
+        .filter(|(a, b)| a.iter().zip(b.iter()).any(|(x, y)| x.abs_diff(*y) > 8))
+        .count();
+    // a hundredth of the view: the ghosts drawn only where something opaque stood in front of
+    // them (the depth compared the wrong way round) differed in some 600 pixels, drawn they
+    // differ in some 26 000
+    let floor = 1400 * 860 / 100;
+    assert!(
+        differ > floor,
+        "the ghost drawn at its opacity: {differ} pixels differ, under {floor}"
+    );
 }
