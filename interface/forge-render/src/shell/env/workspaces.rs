@@ -94,9 +94,9 @@ impl Environment for MachineBuilder {
         &[(MACHINE_TAB, "Machine Builder")]
     }
 
-    /// Its tools are in its own windows (`machine_ui`); the ribbon holds its way out.
-    fn groups(&self, _s: &Shell, _tab: usize) -> Vec<Group> {
-        vec![]
+    /// The builder's own groups (`machine::groups`: library, check, motion), then Exit.
+    fn groups(&self, s: &Shell, _tab: usize) -> Vec<Group> {
+        super::super::machine::groups(s)
     }
 
     fn still(&self, s: &Shell) -> bool {
