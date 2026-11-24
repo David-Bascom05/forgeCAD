@@ -435,7 +435,7 @@ pub fn adaptive(
     // 750 mm/s^2 for a 6 mm tool, above roughing feeds, so passes keep their feed through turns
     // (and a turn that tight would mostly be the cap swinging the tool round a corner anyway)
     let rmin = 0.5 * tool.tool.dc;
-    let link_margin = LINK_MARGIN_R * 0.5 * tool.tool.dc;
+    let link_margin = std::env::var("FORGE_LINK_MARGIN").ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(LINK_MARGIN_R) * 0.5 * tool.tool.dc;
     // the feed of links through cleared air
     let lf = if prm.link_feed > 0.0 {
         prm.link_feed
@@ -509,7 +509,11 @@ pub fn adaptive(
         let all_cands = cands.clone();
         let mut dir_k = 0usize;
         // crumb passes taken back (see CRUMB_STEPS) until a level would be left incomplete
-        let mut crumbs_now = true;
+        let mut crumbs_now = std::env::var_os("FORGE_ADAPTIVE_NOCRUMB").is_none();
+        // the rounds of sweeps a level has had (each all four directions)
+        let mut rounds = 0usize;
+        let strips_on = std::env::var_os("FORGE_ADAPTIVE_STRIPS").is_some();
+        let max_rounds: usize = std::env::var("FORGE_ADAPTIVE_ROUNDS").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
         sweep_dir = {
             let (sn, cs) = dmath::sin_cos(prm.sweep.to_radians());
             [cs, sn]
@@ -545,8 +549,9 @@ pub fn adaptive(
                 let left_far = left_area(&f, 4.0 * f.r) > 10.0 * f.r * f.r;
                 // with crumbs taken back, any material more than a radius from the walls (beyond
                 // the cleanup rings' reach) sends the level round again with every pass kept
-                let left_near = crumbs_now && dir_k >= 3 && left_area(&f, f.r) > f.r * f.r;
-                if (left_far || left_near) && dir_k >= 3 && crumbs_now {
+                let left_near = dir_k >= 3 && rounds < max_rounds && left_area(&f, f.r) > f.r * f.r;
+                if (left_far && crumbs_now || left_near) && dir_k >= 3 && rounds < max_rounds {
+                    rounds += 1;
                     // every direction tried while crumbs were taken back, material still far
                     // from the walls: the sweeps again with every pass kept (complete first)
                     crumbs_now = false;
@@ -1297,6 +1302,151 @@ pub fn adaptive(
                 }
             } else {
                 small = 0;
+            }
+        }
+        // strips the sweeps left (thinner than 1.2 D, more than r from the walls): each cut by
+        // straight passes along its long axis, from and to parked clear centres, linked by the
+        // rule; a strip with no clear end is left to the rings
+        if strips_on {
+            let g2 = 2.0 * f.map.h;
+            let (lo, hi) = (ip.min, ip.max);
+            let nx = ((hi[0] - lo[0]) / g2).ceil() as usize + 1;
+            let ny = ((hi[1] - lo[1]) / g2).ceil() as usize + 1;
+            let at_c = |i: usize, j: usize| [lo[0] + i as f64 * g2, lo[1] + j as f64 * g2];
+            let mut left = vec![false; nx * ny];
+            for j in 0..ny {
+                for i in 0..nx {
+                    let c = at_c(i, j);
+                    left[j * nx + i] = f.material(c[0], c[1], z) && edge_dist(&f.allowed, c[0], c[1]) > f.r;
+                }
+            }
+            if std::env::var_os("FORGE_ADAPTIVE_ASCII").is_some() {
+                let mut j = ny;
+                while j > 0 {
+                    j -= 1;
+                    if j % 3 != 0 { continue; }
+                    let row: String = (0..nx).step_by(2).map(|i| {
+                        let c = at_c(i, j);
+                        if left[j * nx + i] { '#' } else if !f.ok(c[0], c[1]) { ' ' } else if f.material(c[0], c[1], z) { '+' } else { '.' }
+                    }).collect();
+                    eprintln!("{row}");
+                }
+            }
+            let mut seen = vec![false; nx * ny];
+            for start_k in 0..nx * ny {
+                if !left[start_k] || seen[start_k] {
+                    continue;
+                }
+                // the patch (4-neighbours)
+                let mut comp = vec![start_k];
+                seen[start_k] = true;
+                let mut q = 0;
+                while q < comp.len() {
+                    let k = comp[q];
+                    q += 1;
+                    let (i, j) = (k % nx, k / nx);
+                    let nb = [(i.wrapping_sub(1), j), (i + 1, j), (i, j.wrapping_sub(1)), (i, j + 1)];
+                    for (a, b) in nb {
+                        if a < nx && b < ny && left[b * nx + a] && !seen[b * nx + a] {
+                            seen[b * nx + a] = true;
+                            comp.push(b * nx + a);
+                        }
+                    }
+                }
+                if (comp.len() as f64) * g2 * g2 < 0.5 * f.r * f.r {
+                    continue;
+                }
+                // its principal axis
+                let pts: Vec<[f64; 2]> = comp.iter().map(|&k| at_c(k % nx, k / nx)).collect();
+                let n = pts.len() as f64;
+                let (mx, my) = (
+                    pts.iter().map(|p| p[0]).sum::<f64>() / n,
+                    pts.iter().map(|p| p[1]).sum::<f64>() / n,
+                );
+                let (mut sxx, mut syy, mut sxy) = (0.0, 0.0, 0.0);
+                for p in &pts {
+                    sxx += (p[0] - mx) * (p[0] - mx);
+                    syy += (p[1] - my) * (p[1] - my);
+                    sxy += (p[0] - mx) * (p[1] - my);
+                }
+                let th = 0.5 * dmath::atan2(2.0 * sxy, sxx - syy);
+                let (sn, cs) = dmath::sin_cos(th);
+                let (ax, bx) = ([cs, sn], [-sn, cs]);
+                let proj = |p: &[f64; 2], v: [f64; 2]| (p[0] - mx) * v[0] + (p[1] - my) * v[1];
+                let (amin, amax) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| {
+                    let t = proj(p, ax);
+                    (a.min(t), b.max(t))
+                });
+                let (bmin, bmax) = pts.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| {
+                    let t = proj(p, bx);
+                    (a.min(t), b.max(t))
+                });
+                let w = bmax - bmin;
+                eprintln!("STRIP z {z:.2} n {} area {:.0} len {:.1} w {:.1}", comp.len(), comp.len() as f64 * g2 * g2, amax - amin, w);
+                if w > 1.2 * tool.tool.dc {
+                    continue;
+                }
+                let lines = if w > f.r { 2 } else { 1 };
+                for li in 0..lines {
+                    let b = bmin + (li as f64 + 0.5) * w / lines as f64;
+                    let at_t = |t: f64| [mx + t * ax[0] + b * bx[0], my + t * ax[1] + b * bx[1]];
+                    // its ends: out along the axis to a parked clear centre (within 3 r)
+                    let clear_at = |t: f64| {
+                        let q = at_t(t);
+                        f.ok(q[0], q[1]) && !f.disk_has_material(q[0], q[1], z)
+                    };
+                    let mut t0 = amin - f.r;
+                    while t0 > amin - 4.0 * f.r && !clear_at(t0) {
+                        t0 -= 0.25 * f.r;
+                    }
+                    let mut t1 = amax + f.r;
+                    while t1 < amax + 4.0 * f.r && !clear_at(t1) {
+                        t1 += 0.25 * f.r;
+                    }
+                    if !clear_at(t0) || !clear_at(t1) {
+                        eprintln!("  no clear end {} {}", clear_at(t0), clear_at(t1));
+                        continue;
+                    }
+                    // every centre on it allowed
+                    let (s0, s1) = (at_t(t0), at_t(t1));
+                    let len = t1 - t0;
+                    let ns = (len / f.map.h).ceil().max(1.0) as usize;
+                    if !(0..=ns).all(|k| {
+                        let q = at_t(t0 + len * k as f64 / ns as f64);
+                        f.ok(q[0], q[1])
+                    }) {
+                        eprintln!("  not allowed");
+                        continue;
+                    }
+                    eprintln!("  CUT len {len:.1}");
+                    let target = [s0[0], s0[1], z];
+                    let cur = at.unwrap_or(target);
+                    if cur[2] == z && f.link_clear([cur[0], cur[1]], s0, z) {
+                        mv.push(PMove::Line {
+                            to: target,
+                            f: lf,
+                            phase: Phase::Link,
+                        });
+                    } else {
+                        f.retract_link(&mut mv, cur, target, h.retract, (lf, feed.1), &[]);
+                    }
+                    let mut a = target;
+                    for k in 1..=ns {
+                        let q = at_t(t0 + len * k as f64 / ns as f64);
+                        let q = [q[0], q[1], z];
+                        f.map.sweep(a, q, &f.prof.clone());
+                        moves_at_level.push((a, q));
+                        a = q;
+                    }
+                    let end = [s1[0], s1[1], z];
+                    mv.push(PMove::Line {
+                        to: end,
+                        f: feed.0,
+                        phase: Phase::Cut,
+                    });
+                    at = Some(end);
+                    hist = (end, Vec::new());
+                }
             }
         }
         // every sweep has stopped: material left far from the walls (the wall pass and rings
