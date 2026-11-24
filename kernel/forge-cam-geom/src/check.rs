@@ -118,7 +118,7 @@ fn mul3<T: Num>(a: [T; 3], k: T) -> [T; 3] {
 }
 
 /// (c(t), s(t)): the rational unit circle.
-fn circ<T: Num>(t: T) -> (T, T) {
+pub(crate) fn circ<T: Num>(t: T) -> (T, T) {
     let t2 = t.sqr();
     let den = T::c(1.0).add(t2);
     let c = T::c(1.0).sub(t2).div(den);
@@ -1217,11 +1217,7 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     pg,
                 );
                 let img = f.surf.eval(c.p, c.q);
-                let mvd = if line_or_arc {
-                    0.0
-                } else {
-                    diam(&mv.enclose(c.s))
-                };
+                let mvd = if line_or_arc { 0.0 } else { diam(&mv.enclose(c.s)) };
                 let lip = Ival::pt(w.lo).sub(Ival::pt(diam(&img))).sub(Ival::pt(mvd)).lo;
                 if lip > sd.lo {
                     sd = Ival { lo: lip, hi: sd.hi };
