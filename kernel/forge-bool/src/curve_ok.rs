@@ -54,21 +54,19 @@ mod tests {
     #[test]
     #[should_panic(expected = "outside H.curveOK")]
     fn an_ellipse_with_no_major_radius_is_caught() {
-        let b = with_curve(Curve::Ellipse(Ellipse {
-            frame: Frame::WORLD,
-            major: 0.0,
-            minor: 1.0,
-        }));
+        // a good one made, then spoilt: `Ellipse::new` would refuse it itself
+        let mut el = Ellipse::new(Frame::WORLD, 1.0, 1.0);
+        el.major = 0.0;
+        let b = with_curve(Curve::Ellipse(el));
         debug_check(&[&b]);
     }
 
     #[test]
     #[should_panic(expected = "outside H.curveOK")]
     fn a_parabola_with_no_focal_length_is_caught() {
-        let b = with_curve(Curve::Parabola(forge_geom::Parabola {
-            frame: Frame::WORLD,
-            focal: 0.0,
-        }));
+        let mut pa = forge_geom::Parabola::new(Frame::WORLD, 1.0);
+        pa.focal = 0.0;
+        let b = with_curve(Curve::Parabola(pa));
         debug_check(&[&b]);
     }
 
@@ -76,16 +74,9 @@ mod tests {
     fn a_line_a_good_ellipse_and_a_parabola_opening_the_other_way_pass() {
         let b = with_curve(Curve::Line(Line::new(Point3::ORIGIN, UnitVec3::X)));
         debug_check(&[&b]);
-        let b = with_curve(Curve::Ellipse(Ellipse {
-            frame: Frame::WORLD,
-            major: 2.0,
-            minor: 1.0,
-        }));
+        let b = with_curve(Curve::Ellipse(Ellipse::new(Frame::WORLD, 2.0, 1.0)));
         debug_check(&[&b]);
-        let b = with_curve(Curve::Parabola(forge_geom::Parabola {
-            frame: Frame::WORLD,
-            focal: -0.5,
-        }));
+        let b = with_curve(Curve::Parabola(forge_geom::Parabola::new(Frame::WORLD, -0.5)));
         debug_check(&[&b]);
     }
 }
