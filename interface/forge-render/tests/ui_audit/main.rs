@@ -812,13 +812,26 @@ impl Crawl {
         let screen = Rect::from_min_size(pos2(0.0, 0.0), vec2(self.size.0, self.size.1));
         classify(f, &mut rec, &before, &after, &host, picked, screen, self.noisy);
         let tip = TIP.with(|t| std::mem::take(&mut *t.borrow_mut()));
-        if rec.class == Class::Nothing && !tip.is_empty() {
-            // drawn off, saying why on hover: what STANDARD §7 asks
+        let tip_shot = TIP_SHOT.with(|t| t.borrow_mut().take());
+        // an item that said why it's off, and whose click changed nothing that matters (no
+        // popup, the document and environment as they were): drawn off, as STANDARD §7 asks
+        let still = after.new_layers(&before).is_empty()
+            && after.seq == before.seq
+            && after.dirty == before.dirty
+            && after.env == before.env
+            && after.docs == before.docs;
+        if !tip.is_empty() && still && matches!(rec.class, Class::Nothing | Class::Action | Class::Mode) {
             rec.class = Class::Disabled;
             rec.detail = format!("off: {}", judge::short(&tip));
-            rec.findings.retain(|f| f.rule != "nothing");
-            if let Some(png) = TIP_SHOT.with(|t| t.borrow_mut().take()) {
-                rec.thumb = self.write(&format!("{slug}.hover.png"), &png);
+            rec.findings
+                .retain(|f| !matches!(f.rule, "nothing" | "silent-mode"));
+        }
+        if !tip.is_empty()
+            && let Some(png) = tip_shot
+        {
+            let hover = self.write(&format!("{slug}.hover.png"), &png);
+            if rec.thumb.is_none() {
+                rec.thumb = hover;
             }
         }
         // the popup itself, judged; then whether Esc takes it away
