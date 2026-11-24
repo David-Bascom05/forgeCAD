@@ -65,6 +65,68 @@ impl Drop for Watch {
     }
 }
 
+/// The vendor and material library files a run used (each with the hash of its bytes, `None`:
+/// it did not read), recorded whether or not anything watches: a run declares them in
+/// `Run::libraries`. Taken from what the libraries' loaders read already (their `sources`), so
+/// no file is read for it; a run that uses no library pays a thread-local push and pop.
+pub type Libraries = BTreeMap<PathBuf, Option<u128>>;
+
+thread_local! {
+    static LIBRARIES: RefCell<Vec<Libraries>> = const { RefCell::new(Vec::new()) };
+}
+
+/// Records the libraries used on this thread until `done`.
+pub struct LibWatch(usize);
+
+pub fn libraries() -> LibWatch {
+    LIBRARIES.with(|w| {
+        let mut w = w.borrow_mut();
+        w.push(Libraries::new());
+        LibWatch(w.len())
+    })
+}
+
+impl LibWatch {
+    /// What was used; an enclosing record gets it too.
+    pub fn done(self) -> Libraries {
+        let d = LIBRARIES.with(|w| {
+            let mut w = w.borrow_mut();
+            w.truncate(self.0);
+            w.pop().unwrap_or_default()
+        });
+        libraries_used(&d);
+        std::mem::forget(self);
+        d
+    }
+}
+
+impl Drop for LibWatch {
+    fn drop(&mut self) {
+        LIBRARIES.with(|w| w.borrow_mut().truncate(self.0 - 1));
+    }
+}
+
+/// Whether a library record is open on this thread.
+pub fn recording_libraries() -> bool {
+    LIBRARIES.with(|w| !w.borrow().is_empty())
+}
+
+/// Library files a loader read (`forge_material::Libraries::sources`,
+/// `forge_vendor::Profiles::sources`), into this thread's record.
+pub fn libraries_used<'a>(files: impl IntoIterator<Item = (&'a PathBuf, &'a Option<u128>)>) {
+    let mut files = files.into_iter().peekable();
+    if files.peek().is_none() {
+        return;
+    }
+    LIBRARIES.with(|w| {
+        if let Some(top) = w.borrow_mut().last_mut() {
+            for (p, h) in files {
+                top.insert(p.clone(), *h);
+            }
+        }
+    });
+}
+
 /// What this thread's watch has recorded so far (None: nothing is recording).
 pub fn so_far() -> Option<Deps> {
     WATCHING.with(|w| w.borrow().last().cloned())

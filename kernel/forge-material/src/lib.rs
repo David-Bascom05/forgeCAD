@@ -514,6 +514,17 @@ pub struct Set {
 pub struct Libraries {
     pub sets: Vec<Set>,
     pub errors: Vec<(PathBuf, ParseError)>,
+    /// With `cached`: each library file it found, and the hash of its bytes (`None`: it did not
+    /// read), what a build that uses these libraries declares it read.
+    pub sources: Vec<(PathBuf, Option<u128>)>,
+}
+
+/// Each file and the hash of its bytes, as read (`None`: it did not read).
+pub fn sources_of(files: &[(PathBuf, Option<Vec<u8>>)]) -> Vec<(PathBuf, Option<u128>)> {
+    files
+        .iter()
+        .map(|(f, b)| (f.clone(), b.as_deref().map(forge_math::hash::hash128)))
+        .collect()
 }
 
 /// The user's library folder: `$XDG_CONFIG_HOME/forgecad/materials`, else `~/.config/..`.
@@ -573,6 +584,7 @@ impl Libraries {
                 materials: library().to_vec(),
             }],
             errors: vec![],
+            sources: vec![],
         }
     }
 
@@ -633,7 +645,9 @@ impl Libraries {
         if let Some(hit) = c.iter().find(|x| x.0 == key) {
             return hit.1.clone();
         }
-        let libs = Arc::new(Libraries::load(doc_dir));
+        let mut libs = Libraries::load(doc_dir);
+        libs.sources = sources_of(&key.1);
+        let libs = Arc::new(libs);
         c.retain(|x| x.0.0 != key.0);
         c.push((key, libs.clone()));
         libs

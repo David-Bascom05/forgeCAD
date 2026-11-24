@@ -573,8 +573,12 @@ fn every_argument_list_has_its_rows() {
                     }
                 }
                 for op in ops.intersection(&names) {
-                    if row(&rows, "args", &format!("{kind}::{op}")).is_some_and(|r| r.lean.contains("GAP no list")) {
-                        errs.push(format!("`{kind}::{op}` has a list now: its row's names are the list's, not GAP"));
+                    if row(&rows, "args", &format!("{kind}::{op}"))
+                        .is_some_and(|r| r.lean.contains("GAP no list"))
+                    {
+                        errs.push(format!(
+                            "`{kind}::{op}` has a list now: its row's names are the list's, not GAP"
+                        ));
                     }
                 }
                 let extra: Vec<_> = ops.difference(&names).collect();

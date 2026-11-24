@@ -1220,6 +1220,9 @@ pub struct Entry {
 pub struct Profiles {
     pub list: Vec<Entry>,
     pub errors: Vec<(PathBuf, ReadError)>,
+    /// With `cached`: each profile file it found, and the hash of its bytes (`None`: it did not
+    /// read), what a build that uses these profiles declares it read.
+    pub sources: Vec<(PathBuf, Option<u128>)>,
 }
 
 /// The user's folder: `<config>/forgecad/vendors`.
@@ -1276,6 +1279,7 @@ impl Profiles {
                 })
                 .collect(),
             errors: vec![],
+            sources: vec![],
         }
     }
 
@@ -1323,7 +1327,9 @@ impl Profiles {
         if let Some(hit) = c.iter().find(|x| x.0 == key) {
             return hit.1.clone();
         }
-        let p = Arc::new(Profiles::load(doc_dir));
+        let mut p = Profiles::load(doc_dir);
+        p.sources = forge_material::sources_of(&key.1);
+        let p = Arc::new(p);
         c.retain(|x| x.0.0 != key.0);
         c.push((key, p.clone()));
         p

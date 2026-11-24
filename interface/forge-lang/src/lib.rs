@@ -302,6 +302,10 @@ pub struct Run {
     pub body_chains: Vec<(String, Vec<String>)>,
     /// `Options::asks`, each with what it evaluated to.
     pub asked: Vec<(String, anchors::Asked)>,
+    /// The vendor and material library files the run used (a project's or the user's, never
+    /// ForgeCAD's own), each with the hash of its bytes (`None`: it did not read): inputs of the
+    /// part as much as its text, declared whether or not anything watches (`deps::libraries`).
+    pub libraries: Vec<(std::path::PathBuf, Option<u128>)>,
 }
 
 impl Run {
@@ -529,6 +533,7 @@ fn sum_masses(ms: &[forge_topo::mass::MassProps]) -> forge_topo::mass::MassProps
 }
 
 fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
+    let libraries = deps::libraries();
     let t0 = Instant::now();
     let mut timings = Timings::default();
     // the run before's tree, patched where only a number changed (an edit of one dimension)
@@ -576,6 +581,7 @@ fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
                     components: vec![],
                     body_chains: vec![],
                     asked: vec![],
+                    libraries: vec![],
                 },
                 cache,
             );
@@ -782,6 +788,7 @@ fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
         components: vec![],
         body_chains: vec![],
         asked: vec![],
+        libraries: vec![],
     };
     let mut run = run;
     // a sheet that names no stock is the part's material
@@ -809,6 +816,7 @@ fn run_once(src: &str, opts: Options, mut cache: Cache) -> (Run, Cache) {
     if keep_tree {
         cache.parsed = Some((src.to_string(), prog));
     }
+    run.libraries = libraries.done().into_iter().collect();
     (run, cache)
 }
 

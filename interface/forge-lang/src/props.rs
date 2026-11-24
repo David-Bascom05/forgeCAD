@@ -298,7 +298,9 @@ pub fn libraries(ev: &Eval) -> std::sync::Arc<forge_material::Libraries> {
         return std::sync::Arc::new(forge_material::Libraries::builtin());
     }
     crate::deps::materials(ev.dir.as_deref());
-    forge_material::Libraries::cached(ev.dir.as_deref())
+    let libs = forge_material::Libraries::cached(ev.dir.as_deref());
+    crate::deps::libraries_used(libs.sources.iter().map(|(f, h)| (f, h)));
+    libs
 }
 
 fn text_of(v: &Value) -> Option<String> {
