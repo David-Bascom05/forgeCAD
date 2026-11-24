@@ -49,7 +49,18 @@ fn no_source_writes_a_vertex_tolerance() {
             .lines()
             .map(|line| line.chars().filter(|c| !c.is_whitespace()).collect())
             .collect();
-        // names bound to a vertex held mutably: `let x = &mut ….vertices[…];`
+        // names bound to a vertex held mutably: `let x = &mut ….vertices[…];`, and a loop's
+        // `for x in &mut ….vertices` or `for x in ….vertices.iter_mut()`
+        let looped: Vec<String> = lines
+            .iter()
+            .filter_map(|l| {
+                let rest = l.strip_prefix("for")?;
+                let (x, over) = rest.split_once("in")?;
+                ((over.starts_with("&mut") && over.contains("vertices"))
+                    || over.contains("vertices.iter_mut()"))
+                .then(|| x.trim_start_matches("mut").to_string())
+            })
+            .collect();
         let held: Vec<String> = lines
             .iter()
             .filter(|l| l.starts_with("letmut") || l.starts_with("let"))
@@ -62,6 +73,7 @@ fn no_source_writes_a_vertex_tolerance() {
                 })
             })
             .collect();
+        let held: Vec<String> = held.into_iter().chain(looped).collect();
         for (n, l) in lines.iter().enumerate() {
             if l.starts_with("//") {
                 continue;
@@ -71,7 +83,8 @@ fn no_source_writes_a_vertex_tolerance() {
                 r.split_once(']')
                     .is_some_and(|(_, after)| writes_tol(&format!("§{after}"), "§"))
             });
-            let through = held.iter().any(|x| writes_tol(l, x));
+            // (a write its writer bounds, marked so on the line: `// vertex_tol: bounded below`)
+            let through = held.iter().any(|x| writes_tol(l, x)) && !l.contains("//vertex_tol:bounded");
             if direct || through {
                 bad.push(format!(
                     "{}:{}: {}",
