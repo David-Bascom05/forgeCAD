@@ -107,7 +107,7 @@ fn inspect_and_refusals() {
         ),
     ] {
         let cam = run(body);
-        let all = format!("{:?} {}", cam.errors, cam.json().to_string());
+        let all = format!("{:?} {}", cam.errors, cam.json());
         assert!(all.contains(want), "{body}: {all}");
     }
 }
