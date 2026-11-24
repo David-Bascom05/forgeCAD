@@ -1242,7 +1242,9 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             }
         }
         let s = s.trim();
-        if s.is_empty() || s.contains('%') {
+        // a tape mark or a `%` header/last block (`%NAME G71 *`, `N99999999 %NAME G71 *`); any
+        // other `%` is refused as an unknown word
+        if s.is_empty() || pct_block(s) {
             continue;
         }
         let mut words: Vec<(char, String)> = Vec::new();
@@ -1513,6 +1515,18 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         pos = to;
     }
     Ok(out)
+}
+
+/// A block that is a tape mark or a `%` header: `%`, `%NAME ...`, or `N<digits> %NAME ...`.
+fn pct_block(s: &str) -> bool {
+    let t = s.trim_start();
+    let t = match t.strip_prefix(['N', 'n']) {
+        Some(r) if r.starts_with(|c: char| c.is_ascii_digit()) => {
+            r.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start()
+        }
+        _ => t,
+    };
+    t.starts_with('%')
 }
 
 /// The motion without its null moves (a rapid or feed to where the tool already is), which

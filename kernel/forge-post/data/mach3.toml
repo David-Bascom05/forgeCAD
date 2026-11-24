@@ -35,7 +35,7 @@ cycle_cancel = "G80"
 read_g_ignore = [91.1]
 source = "Using Mach3Mill Rev 1.84-A2 (cited per code)"
 taken = "2026-11-23"
-note = "G91.1 states the incremental arc-centre mode (a configuration otherwise); flood/mist coolant and dwell are refused (machine-configured)"
+note = "G91.1 states the incremental arc-centre mode (a configuration otherwise); flood/mist coolant and dwell are refused (machine-configured). ASSUMPTION in forge-machine only: a G4 in a mach3 program (never posted by us) is interpreted as Fanuc G4 P milliseconds; the real unit is a Config>Logic setting"
 cite_required = true
 
 [[dialect.cite]]

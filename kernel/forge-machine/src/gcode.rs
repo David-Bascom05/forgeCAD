@@ -403,8 +403,10 @@ fn words(
         return Err(ge(line, "an unclosed comment"));
     }
     let s = s.trim();
-    // a tape mark, or a program header / last block such as `%NAME G71 *`
-    if s.is_empty() || s.contains('%') {
+    // a tape mark, or a program header / last block such as `%NAME G71 *` (`N99999999 %NAME G71
+    // *`): skipped only when the block is `%` or starts with it after an optional N word; any
+    // other `%` is refused below as a character where a word belongs
+    if s.is_empty() || pct_block(s) {
         return Ok(None);
     }
     if s.starts_with('/') {
@@ -440,6 +442,18 @@ fn words(
     Ok(Some(out))
 }
 
+/// A block that is a tape mark or a `%` header: `%`, `%NAME ...`, or `N<digits> %NAME ...`.
+pub fn pct_block(s: &str) -> bool {
+    let t = s.trim_start();
+    let t = match t.strip_prefix(['N', 'n']) {
+        Some(r) if r.starts_with(|c: char| c.is_ascii_digit()) => {
+            r.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start()
+        }
+        _ => t,
+    };
+    t.starts_with('%')
+}
+
 /// A value in integer units of 10^-k as a decimal word.
 fn q_text(q: Q, k: u32) -> String {
     let p = pow10(k);
@@ -465,7 +479,8 @@ fn lex_rewrite(
         ws.retain(|(l, v)| *l != 'G' || !g_of(v).is_some_and(|g| lex.g_ignore.contains(&(g as u16))));
     }
     let has_g = |ws: &[(char, String)], g: i64| ws.iter().any(|(l, v)| *l == 'G' && g_of(v) == Some(g * 10));
-    // the dwell's word to P (G4 F seconds; G04 X seconds)
+    // the dwell's word to P (G4 F seconds; G04 X seconds). Every word with that letter in a G4
+    // block is renamed: a dwell block carries no motion, so the letter means only the dwell.
     if lex.dwell_letter != 'P' && has_g(&ws, 4) {
         for w in ws.iter_mut() {
             if w.0 == lex.dwell_letter {
@@ -473,7 +488,8 @@ fn lex_rewrite(
             }
         }
     }
-    // a cycle's P in milliseconds where G4 counts seconds: to seconds for the core
+    // a cycle's P in milliseconds where G4 counts seconds: to seconds for the core. The P counts
+    // whole milliseconds (Siemens' ISO manual: G82 ... P1000 = 1 s); a fraction is refused.
     if lex.cycle_p_ms && [73, 81, 82, 83, 84, 85].iter().any(|g| has_g(&ws, *g)) {
         for w in ws.iter_mut() {
             if w.0 == 'P' {
@@ -496,6 +512,7 @@ fn lex_rewrite(
             .cloned()
             .collect();
         let arc = has_g(&ws, 2) || has_g(&ws, 3);
+        let radius = ws.iter().any(|(l, _)| *l == 'R');
         if !ij.is_empty() && !arc {
             let get = |ch: char| {
                 ij.iter()
@@ -508,7 +525,14 @@ fn lex_rewrite(
             if ws.iter().all(|(l, _)| *l == 'N') {
                 return Ok(None);
             }
-        } else if arc {
+        } else if arc && !radius {
+            // the absolute centre is I J in the XY plane only; G18/G19 (I K, J K) is not modelled
+            if st.core.plane != 17 {
+                return Err(ge(
+                    ln,
+                    "an absolute-centre arc outside G17 is not modelled: post the arc in G17 or with R",
+                ));
+            }
             let (cx, cy) = st.centre.ok_or_else(|| ge(ln, "an arc with no centre defined"))?;
             let at = |ch: char| {
                 c.idx(ch)

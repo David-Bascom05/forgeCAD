@@ -266,3 +266,40 @@ fn interpreter_agrees_with_forge_post_reader() {
     }
     assert_eq!(n, 60 * forge_post::DIALECTS.len());
 }
+
+/// CAM-MACHINE review R1/R2: a `%` is skipped only as a tape mark or a `%` header/last block;
+/// an absolute-centre dialect's R arc keeps its R; an absolute-centre arc outside G17 is refused.
+#[test]
+fn dialect_shell_edges() {
+    let def = &forge_machine::library::builtin()[0];
+    let fanuc = Control::for_dialect(def, "fanuc", 1).unwrap();
+    let f = Dialect::get("fanuc").unwrap();
+    // R1: a block with % inside is refused, by both readers; % alone is a tape mark
+    let bad = "%\nG0 X0. Y0. Z5.\nG1 X10. F100. %\n";
+    assert!(gcode::run(bad, &fanuc).is_err());
+    assert!(forge_post::read(bad, &f).is_err());
+    assert!(gcode::run("%\nG0 X0. Y0. Z5.\n%\n", &fanuc).is_ok());
+    // Heidenhain: the header and the numbered last block are skipped
+    let hc = Control::for_dialect(def, "heidenhain", 1).unwrap();
+    let h = Dialect::get("heidenhain").unwrap();
+    let head = "%P1 G71 *\nN10 G00 X+0 Y+0 Z+5*\n";
+    let tail = "N99999999 %P1 G71 *\n";
+    // R2a: G02 with R after a centre block: no I/J added (the core takes the R arc)
+    let r_arc = format!("{head}N20 I+5 J+0*\nN30 G01 Z-1 F100*\nN40 G02 X+10 Y+0 R+5*\n{tail}");
+    let (blocks, _) = gcode::run(&r_arc, &hc).unwrap_or_else(|e| panic!("line {}: {}", e.line, e.what));
+    let r_ev = blocks.iter().find_map(|b| match &b.ev {
+        Ev::Arc { centre, .. } => Some(centre.clone()),
+        _ => None,
+    });
+    assert!(matches!(r_ev, Some(Centre::R(_))), "{r_ev:?}");
+    // the centre form gives the same arc as the R form here (a half circle about (5, 0))
+    let c_arc = format!("{head}N20 I+5 J+0*\nN30 G01 Z-1 F100*\nN40 G02 X+10 Y+0*\n{tail}");
+    assert!(gcode::run(&c_arc, &hc).is_ok());
+    assert!(forge_post::read(&c_arc, &h).is_ok());
+    // R2b: an absolute-centre arc in G18 is refused (I K / J K are not modelled)
+    let g18 = format!("{head}N20 G18*\nN30 I+5 J+0*\nN40 G02 X+10 Z+5*\n{tail}");
+    let e = gcode::run(&g18, &hc).unwrap_err();
+    assert!(e.what.contains("outside G17"), "{}", e.what);
+    // a stray % in a Heidenhain block is refused too
+    assert!(gcode::run(&format!("{head}N20 G01 X+1 % F100*\n"), &hc).is_err());
+}
