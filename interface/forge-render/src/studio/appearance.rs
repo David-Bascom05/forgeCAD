@@ -278,6 +278,18 @@ impl Appearances {
             .or_else(|| self.all().find(|a| a.families.contains(&m.family)))
     }
 
+    /// Another environment's look: an appearance id (`tool-steel-ground`, `concrete-floor`; case
+    /// and punctuation ignored), or `sheet` / none with a forge-material name for the material's
+    /// default; the raster view's tint (`Appearance::viewport_tint`), none if neither is known.
+    pub fn viewport_tint(&self, id: Option<&str>, material: Option<&str>, colour: Option<[u8; 3]>) -> Option<[f32; 4]> {
+        let by_id = id.filter(|i| *i != "sheet").and_then(|i| self.find(i));
+        let a = by_id.or_else(|| {
+            let m = forge_material::find(material?)?;
+            self.for_material(m)
+        })?;
+        Some(a.viewport_tint(colour))
+    }
+
     /// What a part looks like: its own appearance if it names one, else its material's, else
     /// satin plastic in its colour.
     pub fn resolve(&self, appearance: Option<&str>, material: Option<&forge_material::Material>, colour: Option<[u8; 3]>) -> Bsdf {
@@ -304,8 +316,13 @@ mod tests {
             // a metal has a tint; transparent things are dielectrics
             assert!(a.bsdf.metal == 0.0 || a.bsdf.metal == 1.0, "{}", a.name);
             assert!(!(a.bsdf.metal > 0.0 && a.bsdf.transmission > 0.0), "{}", a.name);
-            // every roughness is marked a stand-in until measured
-            assert_eq!(a.kind_of("rough") == Kind::StandIn || a.name == "Grey card" || a.name == "Rubber, black", true, "{}", a.name);
+            // a roughness is a stand-in unless a measured source gives it (or it is a user's)
+            let r = a.kind_of("rough");
+            assert!(
+                r != Kind::Cited || a.source_of("rough").contains("roughness"),
+                "{}: a cited roughness needs a source that gives one",
+                a.name
+            );
         }
     }
 
@@ -334,6 +351,11 @@ mod tests {
         let paint = apps.find("paint-machine-gloss").expect("BEND-SIM's frames");
         assert_eq!(paint.viewport_tint(Some([0, 255, 0]))[1], 1.0);
         assert_eq!(tool.viewport_tint(None)[3], 1.0);
+        for id in ["steel-black-oxide", "concrete-floor", "highlight-red"] {
+            assert!(apps.viewport_tint(Some(id), None, None).is_some(), "{id}");
+        }
+        let sheet = apps.viewport_tint(Some("sheet"), Some("5052-H32"), None).unwrap();
+        assert_eq!(sheet[3], 1.0, "aluminium sheet is a metal");
     }
 
     #[test]

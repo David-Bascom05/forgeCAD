@@ -440,7 +440,7 @@ family = "other"
 base = [0.18, 0.18, 0.18]
 rough = 0.9
 ior = 1.5
-source = "[PB] Gray Card: 18 % reflectance"
+source = "[PB] Gray Card: 18 % reflectance and roughness"
 
 [[appearance]]
 name = "Studio floor"
@@ -478,3 +478,24 @@ source = "Stand-in: an enamelled machine frame under a light clear; the colour i
 kind_rough = "stand-in"
 kind_coat_rough = "stand-in"
 note = "For BEND-SIM's frames (id paint-machine-gloss); pass the frame's colour."
+
+[[appearance]]
+name = "Concrete floor"
+family = "other"
+base = [0.51, 0.51, 0.51]
+rough = 0.5
+ior = 1.5
+source = "[PB] Concrete: albedo and roughness"
+kind_ior = "stand-in"
+note = "A shop floor (BEND-SIM's id concrete-floor)."
+
+[[appearance]]
+name = "Highlight red"
+family = "other"
+base = [0.8, 0.04, 0.03]
+rough = 0.4
+ior = 1.5
+source = "Not a material: a signal colour for a failing or colliding body (BEND-SIM's id highlight-red)"
+kind_base = "user"
+kind_rough = "user"
+kind_ior = "user"
