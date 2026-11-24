@@ -2205,7 +2205,11 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         new_vertex: vec![None; points.len()],
     };
     let mut emap: Vec<Option<EdgeId>> = vec![None; pieces.len()];
-    let shell = if a.shells.is_empty() { a.add_shell() } else { forge_topo::ShellId(0) };
+    let shell = if a.shells.is_empty() {
+        a.add_shell()
+    } else {
+        forge_topo::ShellId(0)
+    };
     let other_shell =
         a.shells.len() > 1 && specs.iter().any(|s| s.side == 0 && a.face(s.from).shell != shell);
     for &(si, flip) in kept {
@@ -2867,6 +2871,26 @@ fn along_whole(body: &Body, e: EdgeId, curve: &Curve, range: Interval) -> bool {
         let p = curve.eval(range.lo + range.width() * (i as f64 + 0.5) / 8.0);
         edge.curve.eval(edge.curve.closest(p, edge.range)).distance(p) <= reach
     })
+}
+
+/// Whether `curve`, taken as running along curved edge `e` because the surface across `e` holds
+/// it, is another branch: where that surface is the other face's plane, `e` lies in both surfaces,
+/// a branch of their meeting itself, and another branch only meets it (a torus's outer equator
+/// in the plane through its inner one). Along it, with none of its cuts on `e`, `e` was imprinted
+/// whole by its middle, out past the plane face. Out of line: asked only of edges taken as along
+/// (in `trim`, at the test that takes them, any change cost up to 0.6% in code alone).
+#[cold]
+#[inline(never)]
+fn other_branch(body: &Body, e: EdgeId, other: &Surface, curve: &Curve, range: Interval) -> bool {
+    let edge = body.edge(e);
+    let Surface::Plane(p) = other else {
+        return false;
+    };
+    !matches!(edge.curve, Curve::Line(_))
+        && [0.25, 0.75]
+            .iter()
+            .all(|&x| p.distance(edge.curve.eval(edge.range.lo + edge.range.width() * x)) <= tol::LINEAR)
+        && !runs_along(body, e, curve, range)
 }
 
 /// Whether `curve` passes the middle of edge `e`, not just an end.
@@ -3538,6 +3562,15 @@ fn trim_in(
     // sides kept is material meeting itself); along a seam the curve adds no edge at all
     if !along.is_empty() {
         for &(k, e, _) in &along {
+            if other_branch(
+                bodies[k],
+                e,
+                &bodies[1 - k].face(faces[1 - k]).surface,
+                &curve,
+                range,
+            ) {
+                continue;
+            }
             let (body, side) = (bodies[k], sides[k]);
             let edge = body.edge(e);
             let mut marks = vec![edge.range.lo, edge.range.hi];
