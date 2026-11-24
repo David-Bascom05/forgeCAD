@@ -137,6 +137,11 @@ source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc
 taken = "2026-11-23"
 note = "3xD Ratio drills, Series 5510, 6.35 mm"
 [[tool.preset]]
+name = "N general"
+group = "N"
+vc = 309.372
+fz = 0.4064
+[[tool.preset]]
 name = "P general"
 group = "P"
 vc = 144.78
@@ -144,18 +149,48 @@ fz = 0.254
 [[tool.preset]]
 name = "M general"
 group = "M"
-vc = 54.86
+vc = 54.864
 fz = 0.1651
 [[tool.preset]]
 name = "K general"
 group = "K"
-vc = 210.31
+vc = 210.312
 fz = 0.4064
 [[tool.preset]]
-name = "N general"
+name = "S general"
+group = "S"
+vc = 45.72
+fz = 0.127
+[[tool.preset]]
+name = "N general Aluminium and Al-alloys, BHN ≤ 120"
 group = "N"
-vc = 309.37
+vc = 309.372
 fz = 0.4064
+[[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 144.78
+fz = 0.254
+[[tool.preset]]
+name = "P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+group = "P"
+vc = 170.688
+fz = 0.3175
+[[tool.preset]]
+name = "M general Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337"
+group = "M"
+vc = 54.864
+fz = 0.1651
+[[tool.preset]]
+name = "K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+group = "K"
+vc = 210.312
+fz = 0.4064
+[[tool.preset]]
+name = "S general Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255"
+group = "S"
+vc = 45.72
+fz = 0.127
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -199,33 +234,93 @@ source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc
 taken = "2026-11-23"
 value = "Surface: \"F\" icon (name of the surface not spelled out on the page)"
 [[tool.cite]]
+path = "preset.N general"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN ≤ 120; SFM 1015; Feed Rate - IPR 0.0160 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Aluminium and Al-alloys, BHN ≤ 120' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
 taken = "2026-11-23"
-value = "Common structural steels, BHN ≤ 150: SFM 475; Feed Rate - IPR 0.0100 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "Common structural steels, BHN ≤ 150; SFM 475; Feed Rate - IPR 0.0100 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
 taken = "2026-11-23"
-value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337: SFM 180; Feed Rate - IPR 0.0065 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337; SFM 180; Feed Rate - IPR 0.0065 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337' mapped to ISO 513 group M by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
 taken = "2026-11-23"
-value = "Cast iron, HRC ≤ 23, BHN ≤ 242: SFM 690; Feed Rate - IPR 0.0160 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group K by its name; fz is the smallest of a stated range"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 690; Feed Rate - IPR 0.0160 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.N general"
+path = "preset.S general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
 taken = "2026-11-23"
-value = "Aluminium and Al-alloys, BHN ≤ 120: SFM 1015; Feed Rate - IPR 0.0160 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255; SFM 150; Feed Rate - IPR 0.0050 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group S by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Aluminium and Al-alloys, BHN ≤ 120"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN ≤ 120; SFM 1015; Feed Rate - IPR 0.0160 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Aluminium and Al-alloys, BHN ≤ 120' mapped to ISO 513 group N by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN ≤ 150; SFM 475; Feed Rate - IPR 0.0100 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Free-cutting steels, HRC ≤ 25, BHN ≤ 255; SFM 560; Feed Rate - IPR 0.0125 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Free-cutting steels, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M general Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337; SFM 180; Feed Rate - IPR 0.0065 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337' mapped to ISO 513 group M by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 690; Feed Rate - IPR 0.0160 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.S general Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255; SFM 150; Feed Rate - IPR 0.0050 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group S by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "guhring-9055100065300"
@@ -716,6 +811,11 @@ source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc
 taken = "2026-11-23"
 note = "3xD Ratio drills, Series 5510, 9.52 mm"
 [[tool.preset]]
+name = "N general"
+group = "N"
+vc = 309.372
+fz = 0.508
+[[tool.preset]]
 name = "P general"
 group = "P"
 vc = 144.78
@@ -723,18 +823,48 @@ fz = 0.3175
 [[tool.preset]]
 name = "M general"
 group = "M"
-vc = 54.86
+vc = 54.864
 fz = 0.2032
 [[tool.preset]]
 name = "K general"
 group = "K"
-vc = 210.31
+vc = 210.312
 fz = 0.508
 [[tool.preset]]
-name = "N general"
+name = "S general"
+group = "S"
+vc = 45.72
+fz = 0.1651
+[[tool.preset]]
+name = "N general Aluminium and Al-alloys, BHN ≤ 120"
 group = "N"
-vc = 309.37
+vc = 309.372
 fz = 0.508
+[[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 144.78
+fz = 0.3175
+[[tool.preset]]
+name = "P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+group = "P"
+vc = 170.688
+fz = 0.4064
+[[tool.preset]]
+name = "M general Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337"
+group = "M"
+vc = 54.864
+fz = 0.2032
+[[tool.preset]]
+name = "K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+group = "K"
+vc = 210.312
+fz = 0.508
+[[tool.preset]]
+name = "S general Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255"
+group = "S"
+vc = 45.72
+fz = 0.1651
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -778,33 +908,93 @@ source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc
 taken = "2026-11-23"
 value = "Surface: \"F\" icon (name of the surface not spelled out on the page)"
 [[tool.cite]]
+path = "preset.N general"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN ≤ 120; SFM 1015; Feed Rate - IPR 0.0200 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Aluminium and Al-alloys, BHN ≤ 120' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
 taken = "2026-11-23"
-value = "Common structural steels, BHN ≤ 150: SFM 475; Feed Rate - IPR 0.0125 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "Common structural steels, BHN ≤ 150; SFM 475; Feed Rate - IPR 0.0125 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
 taken = "2026-11-23"
-value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337: SFM 180; Feed Rate - IPR 0.0080 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337; SFM 180; Feed Rate - IPR 0.0080 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337' mapped to ISO 513 group M by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
 taken = "2026-11-23"
-value = "Cast iron, HRC ≤ 23, BHN ≤ 242: SFM 690; Feed Rate - IPR 0.0200 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group K by its name; fz is the smallest of a stated range"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 690; Feed Rate - IPR 0.0200 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.N general"
+path = "preset.S general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
 taken = "2026-11-23"
-value = "Aluminium and Al-alloys, BHN ≤ 120: SFM 1015; Feed Rate - IPR 0.0200 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255; SFM 150; Feed Rate - IPR 0.0065 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group S by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.N general Aluminium and Al-alloys, BHN ≤ 120"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN ≤ 120; SFM 1015; Feed Rate - IPR 0.0200 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Aluminium and Al-alloys, BHN ≤ 120' mapped to ISO 513 group N by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN ≤ 150; SFM 475; Feed Rate - IPR 0.0125 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Free-cutting steels, HRC ≤ 25, BHN ≤ 255; SFM 560; Feed Rate - IPR 0.0160 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Free-cutting steels, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M general Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337; SFM 180; Feed Rate - IPR 0.0080 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337' mapped to ISO 513 group M by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 690; Feed Rate - IPR 0.0200 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.S general Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 568)"
+taken = "2026-11-23"
+value = "Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255; SFM 150; Feed Rate - IPR 0.0065 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Ti and Ti-alloys, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group S by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "guhring-9055100100000"
@@ -1474,12 +1664,27 @@ note = "Jobber length drills, Series 651, 9.52 mm"
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 39.62
+vc = 39.624
 fz = 0.254
 [[tool.preset]]
 name = "K general"
 group = "K"
-vc = 39.62
+vc = 39.624
+fz = 0.254
+[[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 39.624
+fz = 0.254
+[[tool.preset]]
+name = "P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+group = "P"
+vc = 39.624
+fz = 0.254
+[[tool.preset]]
+name = "K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+group = "K"
+vc = 39.624
 fz = 0.254
 [[tool.cite]]
 path = "dc"
@@ -1528,15 +1733,41 @@ path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
 taken = "2026-11-23"
-value = "Common structural steels, BHN ≤ 150: SFM 130; Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "Common structural steels, BHN ≤ 150; SFM 130; Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
 taken = "2026-11-23"
-value = "Cast iron, HRC ≤ 23, BHN ≤ 242: SFM 130; Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group K by its name; fz is the smallest of a stated range"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 130; Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN ≤ 150; SFM 130; Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+taken = "2026-11-23"
+value = "Free-cutting steels, HRC ≤ 25, BHN ≤ 255; SFM 130; Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Free-cutting steels, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+taken = "2026-11-23"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 130; Feed Rate - IPR 0.0100 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "guhring-9006510063500"
@@ -1557,12 +1788,27 @@ note = "Jobber length drills, Series 651, 6.35 mm"
 [[tool.preset]]
 name = "P general"
 group = "P"
-vc = 39.62
+vc = 39.624
 fz = 0.2032
 [[tool.preset]]
 name = "K general"
 group = "K"
-vc = 39.62
+vc = 39.624
+fz = 0.2032
+[[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 39.624
+fz = 0.2032
+[[tool.preset]]
+name = "P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+group = "P"
+vc = 39.624
+fz = 0.2032
+[[tool.preset]]
+name = "K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+group = "K"
+vc = 39.624
 fz = 0.2032
 [[tool.cite]]
 path = "dc"
@@ -1611,15 +1857,41 @@ path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
 taken = "2026-11-23"
-value = "Common structural steels, BHN ≤ 150: SFM 130; Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "Common structural steels, BHN ≤ 150; SFM 130; Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
 taken = "2026-11-23"
-value = "Cast iron, HRC ≤ 23, BHN ≤ 242: SFM 130; Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group K by its name; fz is the smallest of a stated range"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 130; Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN ≤ 150; SFM 130; Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+taken = "2026-11-23"
+value = "Free-cutting steels, HRC ≤ 25, BHN ≤ 255; SFM 130; Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Free-cutting steels, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 532)"
+taken = "2026-11-23"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 130; Feed Rate - IPR 0.0080 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "guhring-9006510065300"
@@ -2140,25 +2412,50 @@ source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc
 taken = "2026-11-23"
 note = "90° NC spot drills, Series 557, 6.35 mm"
 [[tool.preset]]
+name = "N general"
+group = "N"
+vc = 70.104
+fz = 0.20066
+[[tool.preset]]
 name = "P general"
 group = "P"
 vc = 30.48
-fz = 0.16
+fz = 0.16002
 [[tool.preset]]
 name = "M general"
 group = "M"
-vc = 6.1
-fz = 0.0787
+vc = 6.096
+fz = 0.07874
 [[tool.preset]]
 name = "K general"
 group = "K"
 vc = 30.48
-fz = 0.16
+fz = 0.16002
 [[tool.preset]]
-name = "N general"
+name = "N general Aluminium and Al-alloys, BHN ≤ 120"
 group = "N"
-vc = 70.1
-fz = 0.2007
+vc = 70.104
+fz = 0.20066
+[[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 30.48
+fz = 0.16002
+[[tool.preset]]
+name = "P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+group = "P"
+vc = 32.004
+fz = 0.16002
+[[tool.preset]]
+name = "M general Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337"
+group = "M"
+vc = 6.096
+fz = 0.07874
+[[tool.preset]]
+name = "K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+group = "K"
+vc = 30.48
+fz = 0.16002
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2196,33 +2493,77 @@ source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc
 taken = "2026-11-23"
 value = "Tool material HSS"
 [[tool.cite]]
+path = "preset.N general"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN ≤ 120; SFM 230; Feed Rate - IPR 0.0079 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Aluminium and Al-alloys, BHN ≤ 120' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
 taken = "2026-11-23"
-value = "Common structural steels, BHN ≤ 150: SFM 100; Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "Common structural steels, BHN ≤ 150; SFM 100; Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
 taken = "2026-11-23"
-value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337: SFM 20; Feed Rate - IPR 0.0031 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337; SFM 20; Feed Rate - IPR 0.0031 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337' mapped to ISO 513 group M by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
 taken = "2026-11-23"
-value = "Cast iron, HRC ≤ 23, BHN ≤ 242: SFM 100; Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group K by its name; fz is the smallest of a stated range"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 100; Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.N general"
+path = "preset.N general Aluminium and Al-alloys, BHN ≤ 120"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
 taken = "2026-11-23"
-value = "Aluminium and Al-alloys, BHN ≤ 120: SFM 230; Feed Rate - IPR 0.0079 at 1/4 in. 6.350 mm"
-basis = "the vendor's material '' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "Aluminium and Al-alloys, BHN ≤ 120; SFM 230; Feed Rate - IPR 0.0079 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Aluminium and Al-alloys, BHN ≤ 120' mapped to ISO 513 group N by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN ≤ 150; SFM 100; Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Free-cutting steels, HRC ≤ 25, BHN ≤ 255; SFM 105; Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Free-cutting steels, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M general Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337; SFM 20; Feed Rate - IPR 0.0031 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337' mapped to ISO 513 group M by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 100; Feed Rate - IPR 0.0063 at 1/4 in. 6.350 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "guhring-9005570080000"
@@ -2292,25 +2633,50 @@ source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc
 taken = "2026-11-23"
 note = "90° NC spot drills, Series 557, 9.52 mm"
 [[tool.preset]]
+name = "N general"
+group = "N"
+vc = 70.104
+fz = 0.31496
+[[tool.preset]]
 name = "P general"
 group = "P"
 vc = 30.48
-fz = 0.2489
+fz = 0.24892
 [[tool.preset]]
 name = "M general"
 group = "M"
-vc = 6.1
-fz = 0.1245
+vc = 6.096
+fz = 0.12446
 [[tool.preset]]
 name = "K general"
 group = "K"
 vc = 30.48
-fz = 0.2489
+fz = 0.24892
 [[tool.preset]]
-name = "N general"
+name = "N general Aluminium and Al-alloys, BHN ≤ 120"
 group = "N"
-vc = 70.1
-fz = 0.315
+vc = 70.104
+fz = 0.31496
+[[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 30.48
+fz = 0.24892
+[[tool.preset]]
+name = "P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+group = "P"
+vc = 32.004
+fz = 0.24892
+[[tool.preset]]
+name = "M general Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337"
+group = "M"
+vc = 6.096
+fz = 0.12446
+[[tool.preset]]
+name = "K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+group = "K"
+vc = 30.48
+fz = 0.24892
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -2348,33 +2714,77 @@ source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc
 taken = "2026-11-23"
 value = "Tool material HSS"
 [[tool.cite]]
+path = "preset.N general"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Aluminium and Al-alloys, BHN ≤ 120; SFM 230; Feed Rate - IPR 0.0124 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Aluminium and Al-alloys, BHN ≤ 120' mapped to ISO 513 group N by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
 path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
 taken = "2026-11-23"
-value = "Common structural steels, BHN ≤ 150: SFM 100; Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group P by its name; fz is the smallest of a stated range"
+value = "Common structural steels, BHN ≤ 150; SFM 100; Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.M general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
 taken = "2026-11-23"
-value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337: SFM 20; Feed Rate - IPR 0.0049 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group M by its name; fz is the smallest of a stated range"
+value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337; SFM 20; Feed Rate - IPR 0.0049 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337' mapped to ISO 513 group M by its name; the group's representative by FEEDS-SPEEDS' preference list"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
 path = "preset.K general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
 taken = "2026-11-23"
-value = "Cast iron, HRC ≤ 23, BHN ≤ 242: SFM 100; Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group K by its name; fz is the smallest of a stated range"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 100; Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name; no material of FEEDS-SPEEDS' preference list is in the source: the group's lowest-vc row"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 [[tool.cite]]
-path = "preset.N general"
+path = "preset.N general Aluminium and Al-alloys, BHN ≤ 120"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
 taken = "2026-11-23"
-value = "Aluminium and Al-alloys, BHN ≤ 120: SFM 230; Feed Rate - IPR 0.0124 at 3/8 in. 9.520 mm"
-basis = "the vendor's material '' mapped to ISO 513 group N by its name; fz is the smallest of a stated range"
+value = "Aluminium and Al-alloys, BHN ≤ 120; SFM 230; Feed Rate - IPR 0.0124 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Aluminium and Al-alloys, BHN ≤ 120' mapped to ISO 513 group N by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Common structural steels, BHN ≤ 150; SFM 100; Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Common structural steels, BHN ≤ 150' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.P general Free-cutting steels, HRC ≤ 25, BHN ≤ 255"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Free-cutting steels, HRC ≤ 25, BHN ≤ 255; SFM 105; Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Free-cutting steels, HRC ≤ 25, BHN ≤ 255' mapped to ISO 513 group P by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.M general Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337; SFM 20; Feed Rate - IPR 0.0049 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Stainless steels, austenitic, HRC ≤ 36, BHN ≤ 337' mapped to ISO 513 group M by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
+[[tool.cite]]
+path = "preset.K general Cast iron, HRC ≤ 23, BHN ≤ 242"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6 (catalog page 520)"
+taken = "2026-11-23"
+value = "Cast iron, HRC ≤ 23, BHN ≤ 242; SFM 100; Feed Rate - IPR 0.0098 at 3/8 in. 9.520 mm"
+basis = "the maker's material 'Cast iron, HRC ≤ 23, BHN ≤ 242' mapped to ISO 513 group K by its name"
+note = "fz is a feed per revolution (mm/rev), as printed for a drill; metric values are exact conversions (SFM x 0.3048 m/min, IPT/IPR x 25.4 mm, in x 25.4 mm)"
 
 [[tool]]
 id = "guhring-9005570100000"
