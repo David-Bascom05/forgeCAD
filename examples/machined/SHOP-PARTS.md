@@ -48,38 +48,52 @@ A threaded hub turned from a Ø66 bar in one chucking.
 
 ## Results (cam/parity)
 
-Measured on cam/parity e11804e6, release build, one run (`forgecad cam F --json`). Native and
+Measured on cam/parity 66d70c79, release build, one run (`forgecad cam F --json`). Native and
 wasm32-wasip1 tests all pass.
 
-### manifold_cam.fg: 146 s in total (p1 145.7 s, almost all certification; p2 3 ms). Refused.
+### manifold_cam.fg: 25.8 s in total (p1 25.4 s, almost all certification; p2 3 ms). Refused.
+
+(At e11804e6: 146 s, with well and crn refused. The section pocket then cut every drilled hole
+of its mid-height section down to `to:`. A dowel's drill point was gouged, and 281k cells went to
+certifying it. Holes that end above the bottom are now left to their own ops: bc164b71.)
 
 | op | result | what blocks it |
 |---|---|---|
 | skim | certified | |
 | rough | not built | the 2.5D section at z = 29 meets the boss's foot fillet: `NotPrism { face: 38 }` (no 3D roughing on this branch) |
 | prof | refused | the holder meets stock (−1.43) on a plunge: stock that `rough` would have removed |
-| well | refused | gouge −0.151 on part face 36 at a plunge (move 17): to investigate |
-| crn | refused | undecided (−inf) on face 38, the torus (the fillet), on a cut |
-| shal | certified | 199,182 cells: the slowest certification |
+| well | certified | 3,519 cells |
+| crn | certified | 23,302 cells |
+| shal | certified | 199,182 cells: most of the time |
 | grv | certified | |
 | bored | refused | NeedTool: no 18.5 mm drill in the library |
 | thr | refused | the library's thread mill has pitch 1; the thread is 1.5 |
 | dwl | refused | NeedTool: no 6 mm drill (the reamer's pilot) |
-| tap | refused | a rapid 0.376 into stock: stock that `rough` would have removed |
+| tap | refused | a rapid 0.088 into stock: stock that `rough` would have removed |
 | brk | certified | |
 | face2, rel | certified | |
 | cbh | refused | NeedTool: no 5.5 mm drill |
 
-### hub_turn.fg: 0.47 s in total. Refused (6 of 13 ops certified).
+### hub_turn.fg: certified in full on claude/cam-turn-hub @f8b0152f (14 ops, 1811 checks, 0.58 s)
 
-| op | result | what blocks it |
+CAM-TURN closed every item below there:
+- hollow parts: the OD and bore ops split at the front face's inner edge;
+- G1 against the part less tol, so a touching tool is provable;
+- `skip:` on the finishes over the grooves;
+- the blade as head + body;
+- new tools `part-3-deep` and `drill-26-4d`.
+
+Its hub_turn.fg uses those tools and `skip:`, so a train that merges both branches takes CAM-TURN's
+hub_turn.fg. On cam/parity alone (without forge-turn's changes) the file here still gives the
+first result: 0.46 s, 6 of 13 ops certified. The refusals were:
+
+| op | result then | what blocked it |
 |---|---|---|
-| face, relf, oring, neck, thr, irel | certified | |
 | drl | refused | undecided (−1e-5) where the drill is the finished hole's size (zero gap) |
 | rough | refused | undecided (−0.8) on moves above the front face next to the bore |
 | fin | refused | "the finish path finds no start over the front face": the part is hollow |
 | back | refused | the left-hand finish passes 0.197 from stock left by the roughing (rapid clearance 0.2) |
 | bor | refused | undecided (−0.4) above the front face, outside the entry chamfer |
-| bfin | refused | undecided (−0.365) where the bore finish meets the inside relief groove (it certifies stopped before the groove) |
+| bfin | refused | undecided (−0.365) where the bore finish meets the inside relief groove |
 | ithr | refused | undecided (−0.05) at the entry chamfer |
-| cut | refused | the part-off blade reaches 25: short of the Ø66 bar's radius 33 (no blade for bars over Ø50) |
+| cut | refused | the part-off blade reaches 25: short of the Ø66 bar's radius 33 |
