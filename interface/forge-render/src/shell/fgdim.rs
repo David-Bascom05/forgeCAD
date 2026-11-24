@@ -285,6 +285,12 @@ fn target_of(feat: &FeatRow, d: &DimRow, src: &str, issues: &[Issue], params: &[
 
 /// The selected feature's number on the part as built (`key`: the build), if its kind has one an
 /// arrow can stand for: on its own faces, as the anchors name them.
+/// A length in the field as a person reads it: the value and its unit, in the part's system
+/// (STANDARD §5: no bare numbers).
+pub fn words(v: f64, units: &str) -> String {
+    super::ux::show(v, super::ux::Qty::Length, super::ux::System::of_doc(units))
+}
+
 pub fn handle(
     feat: &FeatRow,
     src: &str,
@@ -332,6 +338,7 @@ impl Shell {
     /// it's written.
     pub(super) fn fg_dim_ui(&mut self, ctx: &egui::Context) {
         let t = self.theme;
+        let units = self.units;
         let Some((camera, size)) = self.camera else { return };
         let Some(mut e) = self.fg_dim.take() else { return };
         let ppp = ctx.pixels_per_point();
@@ -361,7 +368,7 @@ impl Shell {
             acts.push(FgAct::DimCancel);
             e.dragging = false;
             e.value = e.was;
-            e.text = super::fg::short(e.was);
+            e.text = words(e.was, units);
         }
         let mut hint = None;
         egui::Area::new(egui::Id::unique("fg-dim-arrow"))
@@ -412,7 +419,7 @@ impl Shell {
                         let want = tidy(e.start + (s - e.press) * e.per_mm, mm_per_px);
                         if want != e.value && want > 0.0 {
                             e.value = want;
-                            e.text = super::fg::short(want);
+                            e.text = words(want, units);
                             acts.push(FgAct::DimPreview(e.ops(want)));
                         }
                     }
@@ -486,14 +493,15 @@ impl Shell {
                         .on_hover_text(format!("driven by {}: edit those", by.join(", ")));
                 }
                 let enter = resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
-                if enter && e.text.trim() != super::fg::short(e.was) {
-                    match super::fg::parse_value(&e.text, Dim::Length) {
+                // a bare number in the part's unit; any length unit typed after it is read
+                if enter && e.text.trim() != words(e.was, units) {
+                    match super::fg::parse_in(&e.text, Dim::Length, units) {
                         Some(v) if v.dim == Dim::Length && v.value > 0.0 => {
                             e.error = None;
                             e.value = v.value;
                             acts.push(FgAct::DimCommit(e.ops(v.value)));
                         }
-                        _ => e.error = Some(format!("{:?} is not a length", e.text)),
+                        _ => e.error = Some(format!("{} is not a length: type a number, or one with its unit (12 mm, 0.5 in)", e.text.trim())),
                     }
                 }
                 // the word sits on its own chip: it may be over the part
@@ -572,5 +580,21 @@ mod tests {
             let back = unoct((x * 32767.0).round() as i16, (y * 32767.0).round() as i16);
             assert!(dot3(back, n) > 0.9999, "{n:?} {back:?}");
         }
+    }
+}
+
+#[cfg(test)]
+mod words_tests {
+    use super::words;
+    use forge_lang::values::Dim;
+
+    #[test]
+    fn the_field_says_its_unit_and_reads_one_typed() {
+        assert_eq!(words(12.0, "mm"), "12 mm");
+        assert_eq!(words(12.7, "in"), "0.5 in");
+        let typed = crate::shell::fg::parse_in("0.5 in", Dim::Length, "mm").unwrap();
+        assert!((typed.value - 12.7).abs() < 1e-9);
+        let shown = crate::shell::fg::parse_in(&words(12.0, "mm"), Dim::Length, "mm").unwrap();
+        assert!((shown.value - 12.0).abs() < 1e-9);
     }
 }
