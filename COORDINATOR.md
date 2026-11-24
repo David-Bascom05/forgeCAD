@@ -285,3 +285,24 @@ urdf-export, machines/builder, posts/dialects.
 - Judged exceptions so far: B1 chain patterns seq +0.042%; spine-fans gearbox edit +0.04%.
 - CAM FTO: adaptive is one-direction peels only (TOOLPATH-RESEARCH engineering OK, fto-adaptive.md §9), with a winding test in CI. Closed pockets use offset pocket. Adaptive ships only once it beats offset clear.
 - Data: the Fusion 360 Gallery may be used (David), fetch-only into a git-ignored cache, never committed, with a CI guard.
+
+## 10d. Decisions 2026-11-24 (David)
+- SPEED OVER PROVABILITY: prefer the faster implementation; never reshape Rust for Aeneas if it costs anything;
+  unprovable-now code stays opaque/modelled ("to prove" LEDGER rows). Bits identical + band still required.
+- forge-num (EXACT-CORE session_01WJtawxSK6fJAPG2zYS3k9u): option (b) of research/kernel-merge/report.md —
+  one dependency-free core for exact numbers, Ival, Shewchuk, 2D meets; domain crates stay separate.
+  ZERO speed loss (no strict line slower than main); forge-math predicates/Shewchuk are the reference, moved
+  verbatim with #[inline]; predicates' Big<N> untouched unless benchmarked ≥ as fast. "When in doubt, don't move."
+- Speed-hunting sessions don't do work forge-num will replace (CAM-PERF dropped real.rs/f64-filter → EXACT-CORE).
+- NO ACTIVE PATENTS in the repo (docs, comments, commit msgs). Expired patents may be cited as method sources
+  with expiry date. No FTO/design-around text. TRAIN-CONDUCTOR greps every train. Old research/toolpath-quality
+  branch never merges; use research/toolpath-quality-clean.
+- Adaptive clearing ships OPT-IN (default stays clear); verdict: wins in steel on t_la across accel ×0.5–2,
+  machine-dependent in aluminium.
+- Vendor machine models: commit only with explicit redistribution licence (none found yet); user-supplied
+  "Attach model…" + local cache; CI guard needs licence record. Haas terms need a human read (asked David).
+- ffmpeg: built in CI from source (LGPL + OpenH264 pinned by git commit 8c7008ae…); FIRST WORKFLOW RUN /
+  release needs David's go. Installers fetch it; PNG fallback.
+- CAM fuzz/reliability session: WAIT until the forge-num rebuild lands (David).
+- FreeCAD/Kiri baselines blocked: this session's sandbox refuses running third-party binaries; David's options
+  pending (permission rule for /opt/bench, run them himself, or skip).
