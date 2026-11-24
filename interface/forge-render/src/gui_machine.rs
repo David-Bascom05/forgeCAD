@@ -20,6 +20,12 @@ pub struct MachHost {
     fit: u64,
     /// Each placement's body name and link name.
     bodies: Vec<(String, String)>,
+    /// A library preview's placements' tints (its parts' appearances, then its ghosts).
+    tints: Vec<[f32; 4]>,
+    /// A library preview's ghost labels (world point, words) and its framing.
+    labels: Vec<([f64; 3], String)>,
+    /// A long tool's section and dimensions, for the inset.
+    inset: Option<(Vec<[f64; 2]>, Vec<(String, String)>)>,
 }
 
 fn oct(n: [f32; 3]) -> [i16; 2] {
@@ -126,15 +132,45 @@ fn link_tint(def: &MachineDef, link: &str) -> [f32; 4] {
     }
 }
 
-/// A library record's preview: a pastel, or pale amber when drawn with stand-ins for unknown
-/// values.
-fn preview_tint(ghost: bool) -> [f32; 4] {
-    if ghost {
-        [0.98, 0.80, 0.45, 0.0]
-    } else {
-        let c = crate::palette::PASTEL[0];
-        [c[0], c[1], c[2], 0.0]
+/// A library preview framed (docs/ux/STANDARD.md §2): its bounds, ghosts included, filling about
+/// two thirds of the view's shorter side from the 3/4 view; a long tool (a punch or die set)
+/// seen along its length from its near end, so its section reads.
+fn frame_preview(
+    p: &crate::library_mesh::Preview,
+    parallel: bool,
+    size: (u32, u32),
+) -> crate::camera::Camera {
+    let Some((lo, hi)) = p.bounds() else {
+        return super::view_camera([0.0; 3], 50.0, parallel, size);
+    };
+    let ext = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
+    let mut c = [
+        (lo[0] + hi[0]) / 2.0,
+        (lo[1] + hi[1]) / 2.0,
+        (lo[2] + hi[2]) / 2.0,
+    ];
+    let mut r = (ext[0] * ext[0] + ext[1] * ext[1] + ext[2] * ext[2]).sqrt() / 2.0;
+    let mut along = false;
+    if p.long_axis == Some(1) {
+        let sec = ext[0].max(ext[2]);
+        if ext[1] > 4.0 * sec {
+            // the near end's first stretch, the rest running away from the eye
+            c[1] = hi[1] - 2.0 * sec;
+            r = 2.2 * sec;
+            along = true;
+        }
     }
+    let mut cam = super::view_camera(
+        [c[0] as f32, c[1] as f32, c[2] as f32],
+        (r * 1.3) as f32,
+        parallel,
+        size,
+    );
+    if along {
+        cam.yaw = 62f32.to_radians();
+        cam.pitch = 22f32.to_radians();
+    }
+    cam
 }
 
 const HIT: [f32; 4] = [0.93, 0.25, 0.22, 0.0];
@@ -175,8 +211,8 @@ impl Gui {
             self.mach.fit = 0;
             return;
         };
-        // a tooling record: its revolved outline is the scene (one body on the base)
-        let tooling = m.preview_bodies();
+        // a library record: its preview (its parts from its dimensions, its ghosts) is the scene
+        let tooling = (m.lib != "machine").then_some(());
         let def = match (&tooling, m.def.clone()) {
             (Some(_), _) => forge_machine::library::builtin().remove(0),
             (None, Some(d)) => d,
@@ -184,6 +220,12 @@ impl Gui {
         };
         if m.geom != self.mach.geom {
             self.mach.geom = m.geom;
+            let preview = if tooling.is_some() {
+                m.library_preview()
+            } else {
+                None
+            };
+            self.mach.inset = preview.as_ref().and_then(|p| p.section.clone());
             self.mach.pose = 0;
             // a user's or project's machine: its parts are beside its file; a built-in's are embedded
             let dir = match &m.origin {
@@ -192,12 +234,38 @@ impl Gui {
                 None => None,
             };
             let unsaved_parts = m.parts.clone();
-            let mut meshes: Vec<PartMesh> = if let Some(prev) = &tooling {
-                self.mach.bodies = (0..prev.len())
+            let mut meshes: Vec<PartMesh> = if let Some(prev) = &preview {
+                let mut ms: Vec<PartMesh> = prev.parts.iter().map(|(t, _)| body_mesh(t)).collect();
+                self.mach.tints = prev.parts.iter().map(|(_, l)| l.tint()).collect();
+                // the ghosts: edges only (a dashed outline), on one empty part
+                if !prev.ghosts.is_empty() {
+                    let mut g = crate::machine_mesh::Tris::default();
+                    let at = prev.ghosts[0]
+                        .edges
+                        .first()
+                        .and_then(|e| e.first())
+                        .copied()
+                        .unwrap_or([0.0; 3]);
+                    g.pos.extend([at; 3]);
+                    g.nrm.extend([[0.0, 0.0, 1.0]; 3]);
+                    g.tri.push([0, 1, 2]);
+                    g.edges = prev.ghosts.iter().flat_map(|x| x.edges.iter().cloned()).collect();
+                    g.patches.push((0, 1, 0, 3));
+                    ms.push(body_mesh(&g));
+                    self.mach.tints.push(crate::palette::GREY);
+                }
+                self.mach.labels = prev
+                    .ghosts
+                    .iter()
+                    .filter(|g| !g.label.is_empty())
+                    .map(|g| (g.at, g.label.clone()))
+                    .collect();
+                self.mach.bodies = (0..ms.len())
                     .map(|k| (format!("preview{k}"), "base".into()))
                     .collect();
-                prev.iter().map(body_mesh).collect()
+                ms
             } else {
+                self.mach.labels.clear();
                 def.bodies
                     .iter()
                     .map(|b| {
@@ -228,11 +296,10 @@ impl Gui {
                 }])));
             }
             let info = crate::render::part_info(&meshes);
-            let ghost = m.preview_is_ghost();
             let placements: Vec<Placement> = (0..meshes.len())
                 .map(|k| Placement {
                     tint: if tooling.is_some() {
-                        preview_tint(ghost)
+                        self.mach.tints.get(k).copied().unwrap_or(crate::palette::GREY)
                     } else {
                         def.bodies
                             .get(k)
@@ -270,8 +337,13 @@ impl Gui {
                     }
                     if fresh || m.fit != self.mach.fit {
                         self.mach.fit = m.fit;
-                        let (c, r) = v.scene.bounds();
-                        v.nav.camera = super::view_camera(c, r, self.shell.view.parallel, v.size);
+                        v.nav.camera = match preview.as_ref() {
+                            Some(p) => frame_preview(p, self.shell.view.parallel, v.size),
+                            None => {
+                                let (c, r) = v.scene.bounds();
+                                super::view_camera(c, r, self.shell.view.parallel, v.size)
+                            }
+                        };
                     }
                     v.dirty = true;
                 }
@@ -287,6 +359,24 @@ impl Gui {
                     });
                     self.shell.status = status;
                 }
+            }
+        }
+        // the ghosts' labels where they are on the screen, and the inset, for the panel to draw
+        if let Some(v) = &self.view {
+            let rect = self.shell.view_rect;
+            let px: Vec<(egui::Pos2, String)> = self
+                .mach
+                .labels
+                .iter()
+                .filter_map(|(p, l)| {
+                    crate::gui_camsim_panel::screen_of(&v.nav.camera, v.size, rect, *p)
+                        .map(|q| (q, l.clone()))
+                })
+                .collect();
+            let inset = self.mach.inset.clone();
+            if let Some(m) = &mut self.shell.machine {
+                m.view_labels = px;
+                m.inset = inset;
             }
         }
         let Some(m) = &self.shell.machine else { return };
@@ -310,7 +400,9 @@ impl Gui {
                 v.scene.placements[i].tint = match hit {
                     Some((_, _, true)) => HIT,
                     Some((_, _, false)) => NEAR,
-                    None if tooling.is_some() => preview_tint(m.preview_is_ghost()),
+                    None if tooling.is_some() => {
+                        self.mach.tints.get(i).copied().unwrap_or(crate::palette::GREY)
+                    }
                     None => link_tint(&def, link),
                 };
             }

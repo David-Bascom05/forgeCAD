@@ -165,6 +165,24 @@ impl WorkholdingUi {
         }
     }
 
+    /// The preview from the record's dimensions: a vise or a chuck drawn as one (its parts at
+    /// the record's sizes, what it does not give as ghosts); other kinds as forge-workholding
+    /// places their bodies.
+    pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
+        let r = self.cur.as_ref()?;
+        match r.kind.name() {
+            "vise" | "self_centring" => Some(crate::library_mesh::vise(r)),
+            "chuck" => Some(crate::library_mesh::chuck(r)),
+            _ => {
+                let mut p = crate::library_mesh::Preview::default();
+                for t in self.preview()? {
+                    p.parts.push((t, crate::library_mesh::Look::ToolSteel));
+                }
+                Some(p)
+            }
+        }
+    }
+
     /// The record placed as the check places it, as triangles.
     pub fn preview(&self) -> Option<Vec<crate::machine_mesh::Tris>> {
         let r = self.cur.as_ref()?;

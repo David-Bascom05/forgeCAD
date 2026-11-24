@@ -102,6 +102,10 @@ pub struct MachineUi {
     /// Hosted by the Machine Builder environment: the library is drawn in its browser
     /// (`Shell::machine_side`), not in a floating panel.
     pub in_env: bool,
+    /// A library preview's ghost labels where they are on the screen (the host's, each frame).
+    pub view_labels: Vec<(egui::Pos2, String)>,
+    /// A long tool's section and dimensions, drawn to scale beside the view.
+    pub inset: Option<(Vec<[f64; 2]>, Vec<(String, String)>)>,
     /// Which library the workspace edits: "machine", or a tooling kind ("tool", "holder", ...).
     pub lib: &'static str,
     /// The tooling tab's state, while a tooling kind is chosen.
@@ -161,6 +165,8 @@ impl MachineUi {
             file_in: String::new(),
             filter: String::new(),
             in_env: false,
+            view_labels: Vec::new(),
+            inset: None,
             lib: "machine",
             tooling: None,
             workholding: None,
@@ -925,6 +931,9 @@ impl Shell {
         // in its environment: the library is the browser, the sheet the properties panel; only
         // a machine's jog bar stays over the view (its transport)
         if self.env == Some(super::env::EnvId::MachineBuilder) {
+            if st.lib != "machine" {
+                overlay(ctx, &t, &st, v);
+            }
             if st.lib == "machine" {
                 egui::Window::new("Jog")
                     .id(egui::Id::unique("machine:jog"))
@@ -1102,40 +1111,43 @@ fn tooling_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<
 }
 
 impl MachineUi {
-    /// The scene for a library other than machines: the chosen record's bodies (None: machines;
-    /// Some(empty): nothing to draw).
-    /// Is the preview a ghost (drawn with stand-ins for unknown values)?
-    pub fn preview_is_ghost(&self) -> bool {
-        super::machine_brake::is_brake(self.lib)
-            && self
+    /// The preview of the chosen library record, built from its own dimensions (None:
+    /// machines, drawn from their bodies).
+    pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
+        use crate::library_mesh as lm;
+        let none = || {
+            let mut p = lm::Preview::default();
+            p.ghosts.push(lm::Ghost {
+                edges: lm::dashed_box([-20.0; 3], [20.0; 3]),
+                at: [20.0, 0.0, 20.0],
+                label: "no geometry to draw".into(),
+            });
+            p
+        };
+        Some(match self.lib {
+            "machine" => return None,
+            w if super::machine_brake::is_brake(w) => self
                 .brake
                 .as_ref()
-                .is_some_and(|b| b.preview().is_none() && b.preview_ghost().is_some())
+                .and_then(|b| b.library_preview())
+                .unwrap_or_else(none),
+            "workholding" => self
+                .workholding
+                .as_ref()
+                .and_then(|w| w.library_preview())
+                .unwrap_or_else(none),
+            _ => self
+                .tooling
+                .as_ref()
+                .and_then(|t| t.library_preview())
+                .unwrap_or_else(none),
+        })
     }
 
+    /// The preview's solid bodies (tests, thumbnails).
     pub fn preview_bodies(&self) -> Option<Vec<crate::machine_mesh::Tris>> {
-        match self.lib {
-            "machine" => None,
-            w if super::machine_brake::is_brake(w) => Some(
-                self.brake
-                    .as_ref()
-                    .and_then(|b| b.preview().or_else(|| b.preview_ghost().map(|g| g.0)))
-                    .unwrap_or_default(),
-            ),
-            "workholding" => Some(
-                self.workholding
-                    .as_ref()
-                    .and_then(|w| w.preview())
-                    .unwrap_or_default(),
-            ),
-            _ => Some(
-                self.tooling
-                    .as_ref()
-                    .and_then(|t| t.preview())
-                    .into_iter()
-                    .collect(),
-            ),
-        }
+        self.library_preview()
+            .map(|p| p.parts.into_iter().map(|(t, _)| t).collect())
     }
 }
 
@@ -2387,4 +2399,77 @@ fn brake_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(Strin
         t,
         "The preview is the record's exact section (forge-brake's) drawn along the bed (over its longest segment, at most four times the section's size); a press: its ram, bed and housing as blocks. Amber: stand-in values for unknown ones.",
     ));
+}
+
+/// Over the view of a library record: the ghosts' labels (what the record does not give), and a
+/// long tool's section to scale with its dimensions (docs/ux/STANDARD.md §4).
+fn overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
+    let p = ctx.layer_painter(egui::LayerId::new(
+        egui::Order::Foreground,
+        egui::Id::unique("machine:overlay"),
+    ));
+    let p = p.with_clip_rect(v);
+    for (at, words) in &st.view_labels {
+        let g = p.layout_no_wrap(words.clone(), sans(11.0), t.ink);
+        let box_ = egui::Rect::from_min_size(*at + vec2(14.0, -22.0), g.size() + vec2(10.0, 6.0));
+        p.line_segment([*at, box_.left_bottom()], egui::Stroke::new(1.0, t.ink2));
+        p.circle_filled(*at, 2.5, t.ink2);
+        p.rect_filled(box_, 4.0, t.surface.gamma_multiply(0.92));
+        p.rect_stroke(
+            box_,
+            4.0,
+            egui::Stroke::new(1.0, t.line),
+            egui::StrokeKind::Inside,
+        );
+        p.galley(box_.min + vec2(5.0, 3.0), g, t.ink);
+    }
+    if let Some((outline, dims)) = &st.inset {
+        let r = egui::Rect::from_min_size(pos2(v.left() + 12.0, v.bottom() - 212.0), vec2(220.0, 200.0));
+        p.rect_filled(r, 6.0, t.surface.gamma_multiply(0.95));
+        p.rect_stroke(r, 6.0, egui::Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
+        p.text(
+            r.min + vec2(10.0, 8.0),
+            egui::Align2::LEFT_TOP,
+            "Section (to scale)",
+            semi(11.0),
+            t.ink,
+        );
+        let area = egui::Rect::from_min_max(
+            r.min + vec2(10.0, 28.0),
+            pos2(r.max.x - 10.0, r.max.y - 18.0 - 15.0 * dims.len() as f32),
+        );
+        let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+        for q in outline {
+            lo = [lo[0].min(q[0]), lo[1].min(q[1])];
+            hi = [hi[0].max(q[0]), hi[1].max(q[1])];
+        }
+        if lo[0].is_finite() {
+            let s = (area.width() as f64 / (hi[0] - lo[0]).max(1e-9))
+                .min(area.height() as f64 / (hi[1] - lo[1]).max(1e-9));
+            let c = area.center();
+            let mid = [(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0];
+            let pts: Vec<egui::Pos2> = outline
+                .iter()
+                .map(|q| {
+                    pos2(
+                        c.x + ((q[0] - mid[0]) * s) as f32,
+                        c.y - ((q[1] - mid[1]) * s) as f32,
+                    )
+                })
+                .collect();
+            p.add(egui::Shape::closed_line(pts, egui::Stroke::new(1.5, t.ink)));
+        }
+        for (k, (l, val)) in dims.iter().enumerate() {
+            p.text(
+                pos2(
+                    r.left() + 10.0,
+                    r.bottom() - 10.0 - 15.0 * (dims.len() - 1 - k) as f32,
+                ),
+                egui::Align2::LEFT_BOTTOM,
+                format!("{l}  {val}"),
+                sans(11.0),
+                if val == "unknown" { t.error } else { t.ink2 },
+            );
+        }
+    }
 }

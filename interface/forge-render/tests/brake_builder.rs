@@ -111,11 +111,24 @@ fn punches_dies_presses() {
             .filter
             .clear();
         let m = h.gui.shell.machine.as_ref().unwrap();
-        let drawn = m.preview_bodies().unwrap();
+        // solids from the record's dimensions, and what it does not give as labelled ghosts
+        let p = m.library_preview().unwrap();
         assert!(
-            !drawn.is_empty() && drawn.iter().all(|t| !t.tri.is_empty()),
-            "{w}: nothing drawn"
+            p.parts.iter().all(|(t, _)| !t.tri.is_empty()),
+            "{w}: an empty solid"
         );
+        assert!(!p.parts.is_empty() || !p.ghosts.is_empty(), "{w}: nothing drawn");
+        assert!(
+            p.ghosts.iter().all(|g| g.label.is_empty()
+                || g.label.contains("unknown")
+                || g.label.contains("not in the record")),
+            "{w}: {:?}",
+            p.ghosts.iter().map(|g| &g.label).collect::<Vec<_>>()
+        );
+        if *w != "press" {
+            assert!(!p.parts.is_empty(), "{w}: a published section is drawn solid");
+            assert!(p.section.is_some(), "{w}: its section inset");
+        }
     }
 
     // a press: its unpublished values are "not checked", not failures

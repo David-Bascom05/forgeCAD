@@ -147,6 +147,20 @@ impl ToolingUi {
         };
     }
 
+    /// The preview from the record's dimensions: a cutting tool's fluted length (at its helix
+    /// angle, straight when the record gives none), neck and shank; a turned record's profile.
+    pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
+        let r = self.cur.as_ref()?;
+        let o = dynamic::outline(r)?;
+        Some(match &r.typed {
+            forge_tooling::build::Record::Tool(tl) => {
+                let helix = forge_tooling::toml::num(&r.table, "helix").unwrap_or(0.0);
+                crate::library_mesh::cutter(&o, tl.lcf, tl.nof, helix)
+            }
+            _ => crate::library_mesh::turned(&o),
+        })
+    }
+
     /// The preview: the record's turned outline, revolved; a cutting tool with its flutes drawn
     /// over the fluted length (at its helix angle when the record gives one, else straight).
     pub fn preview(&self) -> Option<crate::machine_mesh::Tris> {

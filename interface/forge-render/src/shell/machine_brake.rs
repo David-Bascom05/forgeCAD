@@ -360,6 +360,82 @@ impl BrakeUi {
         Some(prisms(&secs))
     }
 
+    /// The preview from the record: a punch or die's exact section swept along each of its
+    /// segments, with its section and dimensions for the inset; a press's bed, ram and
+    /// housings; what the record does not give as ghosts.
+    pub fn library_preview(&self) -> Option<crate::library_mesh::Preview> {
+        use crate::library_mesh as lm;
+        let r = self.cur.as_ref()?;
+        if r.kind == "press" {
+            return Some(lm::press(&r.table));
+        }
+        let num = |k: &str| match get(&r.table, k) {
+            Some(Item::Num(x)) => Some(*x),
+            _ => None,
+        };
+        match forge_brake_builder::preview(r) {
+            Ok(secs) => {
+                let segs: Vec<(f64, u32)> = match get(&r.table, "segments") {
+                    Some(Item::Arr(rows)) => rows
+                        .iter()
+                        .filter_map(|x| match x {
+                            Item::Table(t) => match (t.get("length"), t.get("count")) {
+                                (Some(Item::Num(l)), Some(Item::Num(c))) => Some((*l, *c as u32)),
+                                _ => None,
+                            },
+                            _ => None,
+                        })
+                        .collect(),
+                    _ => Vec::new(),
+                };
+                let mut p = lm::brake_tool(&secs, &segs);
+                let outline: Vec<[f64; 2]> = secs.iter().flat_map(|s| s.1.iter().copied()).collect();
+                let keys: &[(&str, &str, &str)] = if r.kind == "die" {
+                    &[
+                        ("V", "v", "mm"),
+                        ("angle", "angle", "°"),
+                        ("radius", "shoulder_radius", "mm"),
+                        ("height", "height", "mm"),
+                    ]
+                } else {
+                    &[
+                        ("height", "height", "mm"),
+                        ("tip radius", "tip_radius", "mm"),
+                        ("tip angle", "tip_angle", "°"),
+                    ]
+                };
+                let dims = keys
+                    .iter()
+                    .map(|(l, k, u)| {
+                        (
+                            l.to_string(),
+                            num(k).map_or("unknown".into(), |x| {
+                                format!("{} {u}", forge_vendor::toml::num(x))
+                            }),
+                        )
+                    })
+                    .collect();
+                p.section = Some((outline, dims));
+                Some(p)
+            }
+            Err(f) => {
+                // no exact section: the envelope the record does give, as a ghost
+                let h = num("height").unwrap_or(100.0);
+                let w = num("width").unwrap_or(h * 0.3);
+                let mut p = lm::Preview::default();
+                p.ghosts.push(lm::Ghost {
+                    edges: lm::dashed_box([-w / 2.0, 0.0, 0.0], [w / 2.0, h * 2.0, h]),
+                    at: [w / 2.0, h, h],
+                    label: format!(
+                        "no section: {}",
+                        f.what.trim_start_matches("unknown: ").to_string() + " · unknown"
+                    ),
+                });
+                Some(p)
+            }
+        }
+    }
+
     /// When the record's working geometry is not all known: its section drawn from the values
     /// it holds and the template's stand-ins for the rest (to be shown as a ghost), and the
     /// values stood in.
