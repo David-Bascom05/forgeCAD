@@ -184,7 +184,9 @@ impl Nat {
         }
         let w = (k / 32) as usize;
         let b = (k % 32) as u32;
-        let mut v = vec![0u32; w];
+        // room for the shifted limbs and a carry, so the pushes below never reallocate
+        let mut v = Vec::with_capacity(w + self.limbs.len() + 1);
+        v.resize(w, 0u32);
         if b == 0 {
             let mut i = 0;
             while i < self.limbs.len() {

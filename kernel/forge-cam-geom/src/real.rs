@@ -84,18 +84,31 @@ impl Dy {
         }
     }
 
-    fn add_mag(a: &Dy, b: &Dy) -> Dy {
-        // same sign assumed by the caller when used for magnitudes
+    /// a + b, with b's sign flipped when `flip` (a − b without negating a copy of b).
+    fn add_mag(a: &Dy, b: &Dy, flip: bool) -> Dy {
+        let bneg = b.neg != flip;
         let e = if a.exp < b.exp { a.exp } else { b.exp };
-        let am = a.mag.shl((a.exp - e) as u64);
-        let bm = b.mag.shl((b.exp - e) as u64);
-        if a.neg == b.neg {
-            return Dy::norm(a.neg, am.add(&bm), e);
+        // only the operand with the larger exponent is shifted (the other is used as it is)
+        let (sa, sb);
+        let am: &Nat = if a.exp == e {
+            &a.mag
+        } else {
+            sa = a.mag.shl((a.exp - e) as u64);
+            &sa
+        };
+        let bm: &Nat = if b.exp == e {
+            &b.mag
+        } else {
+            sb = b.mag.shl((b.exp - e) as u64);
+            &sb
+        };
+        if a.neg == bneg {
+            return Dy::norm(a.neg, am.add(bm), e);
         }
-        match am.cmp(&bm) {
+        match am.cmp(bm) {
             Ordering::Equal => Dy::zero(),
-            Ordering::Greater => Dy::norm(a.neg, am.sub(&bm), e),
-            Ordering::Less => Dy::norm(b.neg, bm.sub(&am), e),
+            Ordering::Greater => Dy::norm(a.neg, am.sub(bm), e),
+            Ordering::Less => Dy::norm(bneg, bm.sub(am), e),
         }
     }
 
@@ -106,11 +119,17 @@ impl Dy {
         if o.is_zero() {
             return self.clone();
         }
-        Dy::add_mag(self, o)
+        Dy::add_mag(self, o, false)
     }
 
     pub fn sub(&self, o: &Dy) -> Dy {
-        self.add(&o.neg())
+        if o.is_zero() {
+            return self.clone();
+        }
+        if self.is_zero() {
+            return o.neg();
+        }
+        Dy::add_mag(self, o, true)
     }
 
     pub fn mul(&self, o: &Dy) -> Dy {
