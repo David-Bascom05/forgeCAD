@@ -69,6 +69,10 @@ impl Gui {
             w.running = Some(text.clone());
             self.shell.status = "Generating: every op posted, read back and certified".into();
             let qslot = w.quality_job.clone();
+            // this run's number: its quality measure stops once a later run starts (an edit
+            // made while it measures), so it never holds the cores the new run needs
+            let runs = w.runs.clone();
+            let mine = runs.fetch_add(1, std::sync::atomic::Ordering::SeqCst) + 1;
             crate::plat::spawn("forge-cam", move || {
                 // the paths shown first, then the quality measured on them (it can take longer
                 // than the run): taken in only while the text is still the run's
@@ -76,8 +80,10 @@ impl Gui {
                 let cam = r.cam.clone();
                 *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
                 waker();
-                if let Some(cam) = cam {
-                    let q = run::measure_cam(&cam);
+                let later = || runs.load(std::sync::atomic::Ordering::SeqCst) != mine;
+                if let Some(cam) = cam
+                    && let Some(q) = run::measure_cam_unless(&cam, &later)
+                {
                     *qslot.lock().unwrap_or_else(|e| e.into_inner()) = Some((text, q));
                     waker();
                 }

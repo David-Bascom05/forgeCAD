@@ -244,6 +244,8 @@ pub struct CamWs {
     pub job: Arc<Mutex<Option<run::Run>>>,
     /// A run's quality measured after the run was shown (the text it is for, and it).
     pub quality_job: Arc<Mutex<Option<(String, forge_cam_quality::JobQ)>>>,
+    /// Runs started: a run's quality measure gives up once a later run has started.
+    pub runs: Arc<std::sync::atomic::AtomicU64>,
     pub auto: bool,
     pub selected: Option<String>,
     pub focus: Focus,
@@ -321,6 +323,7 @@ impl CamWs {
             running: None,
             job: Arc::new(Mutex::new(None)),
             quality_job: Arc::new(Mutex::new(None)),
+            runs: Arc::new(std::sync::atomic::AtomicU64::new(0)),
             auto: true,
             selected: None,
             focus: Focus::default(),

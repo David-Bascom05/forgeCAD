@@ -189,6 +189,14 @@ pub fn measure_cam(cam: &forge_cam_lang::Cam) -> forge_cam_quality::JobQ {
     forge_cam_quality::measure_cam(cam, String::new(), &forge_cam_quality::Config::default())
 }
 
+/// `measure_cam`, given up (None) once `stop` says so (a later run has started).
+pub fn measure_cam_unless(
+    cam: &forge_cam_lang::Cam,
+    stop: &dyn Fn() -> bool,
+) -> Option<forge_cam_quality::JobQ> {
+    forge_cam_quality::measure_cam_unless(cam, String::new(), &forge_cam_quality::Config::default(), stop)
+}
+
 /// `run` without the quality (`measure`): the app shows the paths first and measures after.
 pub fn run_unmeasured(text: &str, dir: &Path) -> Run {
     if forge_turn_lang::is_turning(text) {

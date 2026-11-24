@@ -470,6 +470,14 @@ pub fn coverage(jobs: &[JobQ]) -> String {
 }
 
 pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
+    measure_cam_unless(cam, file, cfg, &|| false).expect("never stopped")
+}
+
+/// `measure_cam`, given up (None) once `stop` says so, asked before each op and before the
+/// timeline: the app measures a run after showing it, and a measure of a run an edit has
+/// replaced is not wanted (nor should it hold the cores the new run needs). Not stopped, it is
+/// `measure_cam`'s job, exactly.
+pub fn measure_cam_unless(cam: &Cam, file: String, cfg: &Config, stop: &dyn Fn() -> bool) -> Option<JobQ> {
     let tools = cam.tool_uses();
     let dmin = cam
         .ops
@@ -493,6 +501,9 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
     let mlib = forge_machine::library::Library::with_builtin();
     let mut maps: Vec<Option<HeightMap>> = Vec::new();
     for op in &cam.ops {
+        if stop() {
+            return None;
+        }
         let Some(sv) = cam.setup_view(op.setup) else {
             continue;
         };
@@ -565,9 +576,12 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             .collect();
         job.ops.push(measure_op(q, &paths, m, group, &curve, cell));
     }
+    if stop() {
+        return None;
+    }
     timeline(cam, cfg, &mlib, &mut job);
     job.ends = maps;
-    job
+    Some(job)
 }
 
 /// One op's paths as measurement needs them.
@@ -733,7 +747,11 @@ pub fn measure_op(
                         // the target at this sample: the op's own (rough's class chip under
                         // 90°), else the group's slot chip
                         let target = if q.fz_class > 0.0 {
-                            if e.phi < 90.0 { q.fz_class_rough } else { q.fz_class }
+                            if e.phi < 90.0 {
+                                q.fz_class_rough
+                            } else {
+                                q.fz_class
+                            }
                         } else {
                             q.fz_target
                         };
@@ -952,13 +970,18 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                 }
                 // FORGE_QUALITY_BREAKDOWN=OP: where that op's time goes, by kind of move
                 if let Ok(want) = std::env::var("FORGE_QUALITY_BREAKDOWN") {
-                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> = Default::default();
+                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> =
+                        Default::default();
                     for (si, sg) in tl.segments.iter().enumerate() {
-                        let Some(Some(k)) = op_of.get(sg.line) else { continue };
+                        let Some(Some(k)) = op_of.get(sg.line) else {
+                            continue;
+                        };
                         if job.ops[*k].name != want {
                             continue;
                         }
-                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0) - sg.q0.get(2).copied().unwrap_or(0.0)).abs();
+                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0)
+                            - sg.q0.get(2).copied().unwrap_or(0.0))
+                        .abs();
                         let dxy = ((sg.q1[0] - sg.q0[0]).powi(2) + (sg.q1[1] - sg.q0[1]).powi(2)).sqrt();
                         let cat = match sg.kind {
                             forge_machine::sim::SegKind::Rapid => "rapid",
@@ -975,7 +998,10 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         e.3 += dxy + dz;
                     }
                     for (c, (n, tm, tl, l)) in acc {
-                        eprintln!("breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}", tl - tm);
+                        eprintln!(
+                            "breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}",
+                            tl - tm
+                        );
                     }
                 }
                 for (si, sg) in tl.segments.iter().enumerate() {
