@@ -231,7 +231,7 @@ fn nodes(ta: (Spine, f64), tb: (Spine, f64)) -> Vec<Node> {
 #[cold]
 #[inline(never)]
 pub fn mend(a: &Surface, b: &Surface, curves: Vec<IntCurve>) -> Vec<IntCurve> {
-    let (Some(ta), Some(tb)) = (tube(a), tube(b)) else {
+    let (Some(ta), Some(tb), false) = (tube(a), tube(b), cfg!(feature = "node-mend-off")) else {
         return curves;
     };
     if !one_plane_fits(ta, tb) {
