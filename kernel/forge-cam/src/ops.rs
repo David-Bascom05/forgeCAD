@@ -214,7 +214,16 @@ fn arc_by_chords(
         return None;
     };
     let ok = |v: f64| v.is_finite() && v.abs() <= 1e100;
-    if !(ok(r) && r > 0.0 && ok(t0) && ok(t1) && t0 <= t1 && ok(limit) && ok(tol) && tol > 0.0) {
+    if !(ok(r)
+        && r > 0.0
+        && ok(t0)
+        && ok(t1)
+        && t0 <= t1
+        && ok(limit)
+        && ok(tol)
+        && tol > 0.0
+        && forge_cam_geom::contact::arc_frame_ok(x, y))
+    {
         return None;
     }
     let h_max = (0.25 * tol / r).sqrt();
