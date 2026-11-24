@@ -1055,6 +1055,14 @@ pub fn adaptive(
                 small = 0;
             }
         }
+        // every sweep has stopped: material left far from the walls (the wall pass and rings
+        // take what is nearer) is reported, never left silently
+        let left = left_area(&f);
+        if left > 10.0 * f.r * f.r {
+            notes.push(format!(
+                "adaptive: at z {z:.3} the passes left {left:.0} mm² uncut away from the walls after every                  sweep (G4 lists it); clear() takes it"
+            ));
+        }
         // a plain offset pass along the walls (rule 5), linked by the same rule
         // and plain offset rings at r + k·r inside it (inner first) where material is left
         // between the passes and the wall band: each ring cut only if its disk meets material,
