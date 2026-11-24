@@ -25,6 +25,7 @@
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod holes;
+pub mod sim;
 
 use forge_agent::json::Json;
 use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolUse};

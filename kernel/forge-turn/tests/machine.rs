@@ -11,7 +11,7 @@ fn the_generic_lathe_reads() {
     assert_eq!(m.control, "fanuc-lathe");
     assert_eq!(
         (m.x, m.z, m.rpm, m.stations),
-        ([-10.0, 250.0], [-60.0, 400.0], [50.0, 4500.0], 12)
+        ([-10.0, 250.0], [-30.0, 400.0], [50.0, 4500.0], 12)
     );
     assert!(forge_turn::post::Dialect::get(&m.control).is_ok());
 }

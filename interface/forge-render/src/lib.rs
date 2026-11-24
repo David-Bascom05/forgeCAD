@@ -4,6 +4,7 @@
 pub mod bench;
 pub mod bindings;
 pub mod camera;
+pub mod camsim;
 pub mod dwgview;
 pub mod explode;
 pub mod livegpu;
@@ -31,6 +32,7 @@ pub mod cache;
 pub mod dragbench;
 pub mod fg;
 pub mod gui;
+pub mod gui_camsim_panel;
 pub mod live;
 pub mod load;
 pub mod measure;
