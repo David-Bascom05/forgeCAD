@@ -1942,6 +1942,7 @@ mod tests {
             holder: None,
             stickout: 30.0,
             shape,
+            probe: false,
         }
     }
 
@@ -1973,7 +1974,7 @@ mod tests {
                 PMove::Rapid { to } => (to, false),
                 PMove::Line { to, phase, .. } => (to, phase == Phase::Cut),
                 PMove::Arc { to, .. } => (to, true),
-                PMove::Cycle { .. } => continue,
+                PMove::Cycle { .. } | PMove::Probe { .. } => continue,
             };
             let cut = cut && !is_link;
             match *mv {
@@ -2276,7 +2277,7 @@ mod tests {
                 for (i, m) in out.path.moves.iter().enumerate() {
                     let to = match *m {
                         PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-                        PMove::Cycle { .. } => continue,
+                        PMove::Cycle { .. } | PMove::Probe { .. } => continue,
                     };
                     let cut = matches!(
                         m,
@@ -2302,7 +2303,7 @@ mod tests {
             for (i, mv) in out.path.moves.iter().enumerate() {
                 let to = match *mv {
                     PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-                    PMove::Cycle { .. } => continue,
+                    PMove::Cycle { .. } | PMove::Probe { .. } => continue,
                 };
                 // arcs by chords
                 if let PMove::Arc { c, cw, .. } = *mv {
@@ -2388,7 +2389,7 @@ mod tests {
             for mv in &out.path.moves {
                 let to = match *mv {
                     PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-                    PMove::Cycle { .. } => continue,
+                    PMove::Cycle { .. } | PMove::Probe { .. } => continue,
                 };
                 // (a retraced arc carries no phase: those are covered by the lemma alone)
                 let link = matches!(
@@ -2474,7 +2475,7 @@ mod tests {
             for (mi, mv) in out.path.moves.iter().enumerate() {
                 let to = match *mv {
                     PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-                    PMove::Cycle { .. } => continue,
+                    PMove::Cycle { .. } | PMove::Probe { .. } => continue,
                 };
                 // a retrace's arcs are links (back along a pass), not steps of a pass
                 let link = out.retraces.iter().any(|&(a, b)| (a..b).contains(&mi));
@@ -2575,11 +2576,11 @@ mod tests {
                 PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => {
                     m.sweep(at, to, &prof);
                 }
-                PMove::Cycle { .. } => {}
+                PMove::Cycle { .. } | PMove::Probe { .. } => {}
             }
             at = match *mv {
                 PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-                PMove::Cycle { .. } => at,
+                PMove::Cycle { .. } | PMove::Probe { .. } => at,
             };
         }
         assert!(steps > 50, "{steps}");
