@@ -57,7 +57,7 @@ theorem loop0_spec (pairs : Slice (U32 × U32)) (n : Nat) (hn : n ≤ U32.max)
       step with union_spec u hu htake hn a b (by omega) (by omega) as ⟨u1, hu1⟩
       step as ⟨j1, hj1⟩
       have hj1v : j1.val = j.val + 1 := by
-        rw [hj1]; exact usize_inc j (Slice.len pairs) (by simpa using hjl)
+        scalar_tac
       refine ⟨by omega, ?_, by omega⟩
       rw [hj1v]
       have e : (pairsOf pairs).take (j.val + 1) = (pairsOf pairs).take j.val ++ [(a.val, b.val)] := by
@@ -134,8 +134,6 @@ theorem loop1_spec (n : Usize) (hn : n.val ≤ U32.max) (p0 : List Nat) (hg0 : G
       have hrr : r.val = ufRoot p0 j.val := by rw [hrv, hru]
       have hrle : ufRoot p0 j.val ≤ j.val := root_le hg0 j.val
       have hrr2 : ufRoot p0 (ufRoot p0 j.val) = ufRoot p0 j.val := root_root hg0 j.val
-      have hj1v : ∀ j1 : Usize, j1 = j.wrapping_add 1#usize → j1.val = j.val + 1 :=
-        fun j1 e => by rw [e]; exact usize_inc j n hjl
       split
       · rename_i heq
         have hroot : ufRoot p0 j.val = j.val := by rw [← hrr]; exact congrArg UScalar.val heq
@@ -143,17 +141,11 @@ theorem loop1_spec (n : Usize) (hn : n.val ≤ U32.max) (p0 : List Nat) (hg0 : G
           as ⟨nu2, hnu2⟩
         step with alloc.vec.Vec.push_spec c nx (by rw [len_of_vals hc]; simp only [classList, List.length_map, List.length_range]; exact lt_usize_max j n hjl)
           as ⟨c2, hc2⟩
+        have hcle := cnt_le (ufRoot p0) j.val
         step as ⟨nx2, hnx2⟩
-        have hnx2v : nx2.val = nx.val + 1 := by
-          rw [hnx2, U32.wrapping_add_val_eq]; apply Nat.mod_eq_of_lt
-          have hc := cnt_le (ufRoot p0) j.val
-          have h1 : (1#u32 : U32).val = 1 := by simp
-          have hs : UScalar.size .U32 = 2 ^ 32 := by simp [U32.size, U32.numBits]
-          have hm : U32.max = 2 ^ 32 - 1 := by simp [U32.max_eq]
-          rw [h1, hs]
-          omega
+        have hnx2v : nx2.val = nx.val + 1 := by omega
         step as ⟨j1, hj1⟩
-        have hj1' := hj1v j1 hj1
+        have hj1' : j1.val = j.val + 1 := by omega
         refine ⟨by omega, hg1, by omega, fun y => by rw [hr1, hru], ?_, ?_, ?_, by omega⟩
         · rw [hj1', vals_push _ _ _ hnu2, hnu]
           simp [numberList, List.range_succ, hroot, hnx]
@@ -181,7 +173,7 @@ theorem loop1_spec (n : Usize) (hn : n.val ≤ U32.max) (p0 : List Nat) (hg0 : G
         step with alloc.vec.Vec.push_spec c cc (by rw [len_of_vals hc]; simp only [classList, List.length_map, List.length_range]; exact lt_usize_max j n hjl)
           as ⟨c2, hc2⟩
         step as ⟨j1, hj1⟩
-        have hj1' := hj1v j1 hj1
+        have hj1' : j1.val = j.val + 1 := by omega
         refine ⟨by omega, hg1, by omega, fun y => by rw [hr1, hru], ?_, ?_, ?_, by omega⟩
         · rw [hj1', hvn2]; simp [numberList, List.range_succ, hroot]
         · rw [hj1', vals_push _ _ _ hc2, hc, hccv]

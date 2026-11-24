@@ -28,6 +28,7 @@ path kernel/forge-material
 path kernel/forge-math
 path kernel/forge-mesh
 path kernel/forge-model
+path kernel/forge-num
 path kernel/forge-ops
 path kernel/forge-par
 path kernel/forge-sheet

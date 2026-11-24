@@ -6,12 +6,12 @@ the proofs are about that translation. They are not about a hand-written Lean mo
 
 | | |
 |---|---|
-| `tools/aeneas/patches/` | `aeneas-f64.patch`, the float bridge's tool side (below), and `aeneas-robust.patch`: when a trait method's signature cannot be translated (several of `Iterator`'s cannot), Aeneas skips it with a warning, as it already does for functions, and skips impls of a trait it could not translate. It used to stop the whole crate. |
-| `tools/aeneas/survey.sh`, `leancheck.sh` | every kernel module translated on its own, and whether the output elaborates in Lean: research/aeneas/SURVEY.md |
+| `tools/aeneas/patches/` | `aeneas-f64.patch`, the float bridge's tool side (below). `aeneas-robust.patch`: when a trait method's signature cannot be translated (several of `Iterator`'s cannot: `where Self: Iterator<Item = &T>`), Aeneas leaves that method out of the trait with a warning, as it already does for a function. The trait itself is kept, and so are the impls of a trait it could not translate. Before, one such method stopped the whole crate or lost `Iterator` for every module. |
+| `tools/aeneas/survey-modules.sh`, `survey.sh`, `leancheck.sh` | every kernel module translated (on its own, or a crate at once), and whether the output elaborates in Lean: research/aeneas/SURVEY.md |
 | `tools/aeneas/setup.sh` | the pinned toolchain: aeneas `2e3d448`, charon `9e193f0` (aeneas's `charon-pin`), OCaml 5.3.0 through opam 2.3.0, charon's own Rust nightly, Lean `v4.36.0`. It also applies `tools/aeneas/patches/`. |
-| `tools/aeneas/translate.sh CRATE [--check]` | translates `kernel/CRATE`, in place and built as release, into `verify/aeneas/CRATE/lean/PKG/{Types,Funs}.lean`. With `--check` it writes nothing and fails if the committed files differ from a fresh translation. |
+| `tools/aeneas/translate.sh CRATE [--check]` | translates `kernel/CRATE`, in place and built as release with overflow checks on, into `verify/aeneas/CRATE/lean/PKG/{Types,Funs}.lean`. With `--check` it writes nothing and fails if the committed files differ from a fresh translation. |
 | `.github/workflows/aeneas.yml` | runs `translate.sh --all --check` on every change to `kernel/` or to these files, then builds the Lean. A proof cannot go stale against the code. |
-| `bridge/` | the float bridge, the Lean library `AeneasF64`: Rust's `f64` is `verify/ieee754`'s binary64 |
+| `bridge/` | the float bridge, the Lean library `AeneasF64`: Rust's `f64` is `verify/ieee754`'s binary64 (`Ops`, `Std`), and std functions Aeneas's library leaves out, defined as std does (`Core`: `Iterator::sum`, `Sum for f64`, `last`, `copied`) |
 | `CRATE/translate.conf` | what to translate (`PKG`, Charon's `--start-from` / `--opaque`) |
 | `CRATE/lean/` | the translation, the definitions of its opaque functions, and the proofs |
 
@@ -68,10 +68,17 @@ Why T holds:
    - The kernel's own results are pinned bit for bit, native against wasm32-wasip1
      (`tools/speed/bits.txt`, `examples/bits`, the platforms CI).
 
+Why release with overflow checks. The shipped build is release, so the translation is too: the
+`#[cfg(debug_assertions)]` checks are not in it, and their conditions become the theorems'
+hypotheses (forge-math's `Relative`, `product_exact`). With overflow checks on, integer
+overflow is a failure in the translation. A theorem that a function returns `ok` therefore also
+proves that the shipped build, which wraps instead, computes the same value.
+
 T is not a Lean axiom, and nothing in Lean can state it. It is the same kind of trust as trust in
 Charon and Aeneas themselves: that the translation means what the compiled code does. The trusted
 base of an L4 proof here is therefore:
-- (a) rustc's MIR, Charon and Aeneas (the patch included) translate faithfully;
+- (a) rustc's MIR, Charon and Aeneas (the patches included) translate faithfully, and the bridge's
+  `Core.lean` says what the pinned std's bodies say;
 - (b) T;
 - (c) Lean's kernel, with the three standard axioms.
 

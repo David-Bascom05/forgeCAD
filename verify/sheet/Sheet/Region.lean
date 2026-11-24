@@ -34,7 +34,9 @@ rational: everything here is over ℚ and every decision is an exact sign. `L` i
    `(a.y > p.y) ≠ (b.y > p.y)` and `(b.y > a.y) = (side(a, b, p) > 0)`. Theorems: invariant
    under rotating the loop's start (`inPoly_rotate`), under reversing it, for every point
    (`crosses_reverse`: `side` is antisymmetric and never `0`), and under translation
-   (`inPoly_translate`).
+   (`inPoly_translate`). It is the shared signed winding number's parity at every point
+   (verify/winding2d; Sheet/Winding.lean `inPoly_wind`), hence Jordan's inside for a simple
+   polygon off its boundary (`inPoly_simple`, from `Winding2d.wind_simple`).
 6. Holes: after `chain` there are no pinches, so the loops are pairwise disjoint. A hole `H` goes
    to the outer loop `O` that holds `H`'s representative vertex and is innermost among those:
    every other outer loop holding it also holds `O`'s representative (`owner`, unique when the
@@ -180,6 +182,26 @@ theorem spreadOk_spec (L : ℚ) {vs : List Vtx} (hn : vs.Nodup) (h : spreadOk L 
     near (2 * L) u.pos v.pos = true := by
   simp only [spreadOk, List.all_eq_true] at h
   exact h u hu v ((Classes.cls_spec hn hu v).mpr huv)
+
+/-- **Condition 8, contour closure, by the one rule**: an exported contour, its pieces as
+`(start, end)` in order, closes when each piece's end and the next piece's start (cyclically) are
+within `2L`, the spread cap. When a class merges distinct points each strip writes its own copy of
+the class point, so the contour closes to within the class's spread, not exactly; when no class
+merges distinct points the ends are one double and the gap is `0` (fix-sheet 8a88dbb measures
+3.6e-15 on the shipped parts, the rounding of the pieces' own ends). -/
+def closes (L : ℚ) (ps : List (P × P)) : Bool :=
+  (List.zip ps (ps.drop 1 ++ ps.take 1)).all fun e => near (2 * L) e.1.2 e.2.1
+
+/-- Consecutive pieces meeting in one vertex class close by `closes`. -/
+theorem closes_of_classes (L : ℚ) {vs : List Vtx} (hn : vs.Nodup) (h : spreadOk L vs = true)
+    (ps : List (P × P))
+    (hmeet : ∀ e ∈ List.zip ps (ps.drop 1 ++ ps.take 1), ∃ u ∈ vs, ∃ v,
+      Classes.Conn (vnear L) vs u v ∧ u.pos = e.1.2 ∧ v.pos = e.2.1) :
+    closes L ps = true := by
+  simp only [closes, List.all_eq_true]
+  intro e he
+  obtain ⟨u, hu, v, huv, h1, h2⟩ := hmeet e he
+  rw [← h1, ← h2]; exact spreadOk_spec L hn h hu huv
 
 /-- region.rs's cap, the class's box diagonal within `2L`, implies the pairwise one. -/
 theorem box_spread (L : ℚ) (lo hi : P) (p q : P)

@@ -31,6 +31,7 @@ const CRATES: [&str; 13] = [
     "forge-sheet",
     "forge-thermo",
     "forge-math",
+    "forge-num",
     "forge-gpu",
     "forge-mesh",
     "forge-harness",

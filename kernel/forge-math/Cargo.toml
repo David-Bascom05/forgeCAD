@@ -7,6 +7,8 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# the exact numbers (Big, Dy) the dyadic geometry in exact.rs is built on
+forge-num = { path = "../forge-num" }
 # the scoped threads every parallel path runs on (a host's spawner where std has none)
 forge-par = { path = "../forge-par" }
 
