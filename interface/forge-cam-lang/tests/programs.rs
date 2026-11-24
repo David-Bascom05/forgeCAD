@@ -129,3 +129,43 @@ fn a_program_carries_its_decimals_and_coolant() {
         cam.errors
     );
 }
+
+/// `split: "setup"` (CAM-UI's export: one file per setup): one program per setup, named
+/// `PROGRAM/SETUP`, numbered on from `number:`, each with its setup's name; each certified as a
+/// program of its own.
+#[test]
+fn a_split_program_is_one_program_per_setup() {
+    let cam = forge_cam_lang::run(
+        &doc(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\nop2 = setup(f, from: op1, machine: m, origin: \"top-center\", tol: 0.01, at: (0, 0, -250))\nback = facing(op2, tool: t1, to: 18, step: 1)\np = program([op1, op2], post: \"fanuc\", number: 10, split: \"setup\")\n",
+        ),
+        &dir(),
+    );
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    assert_eq!(cam.programs.len(), 2);
+    let names: Vec<(&str, Option<&str>)> = cam
+        .programs
+        .iter()
+        .map(|p| (p.name.as_str(), p.setup.as_deref()))
+        .collect();
+    assert_eq!(names, vec![("p/op1", Some("op1")), ("p/op2", Some("op2"))]);
+    let (t0, t1) = (
+        cam.programs[0].text.as_deref().unwrap(),
+        cam.programs[1].text.as_deref().unwrap(),
+    );
+    assert!(
+        t0.contains("O0010") && t0.contains("(skim facing)") && !t0.contains("(back facing)"),
+        "{t0}"
+    );
+    assert!(
+        t1.contains("O0011") && t1.contains("(back facing)") && !t1.contains("(skim facing)"),
+        "{t1}"
+    );
+    assert_eq!(cam.certification(), "full");
+    let e = forge_cam_lang::run(
+        &doc("skim = facing(op1, tool: t1, to: 18, step: 1)\np = program(op1, split: \"op\")\n"),
+        &dir(),
+    )
+    .errors;
+    assert!(e.iter().any(|e| e.contains("split: \"setup\"")), "{e:?}");
+}

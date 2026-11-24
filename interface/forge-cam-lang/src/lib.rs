@@ -205,6 +205,9 @@ pub struct ProgramOut {
     pub setups: Vec<usize>,
     /// The ops it posts, in order (every op of its setups, or those `ops:` names).
     pub ops: Vec<usize>,
+    /// With `split: "setup"`: the one setup this part of the program posts (its name is then
+    /// `PROGRAM/SETUP`).
+    pub setup: Option<String>,
     pub post: String,
     pub text: Option<String>,
     pub lines: usize,
@@ -533,6 +536,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "post",
             "number",
             "ops",
+            "split",
             "decimals",
             "feed_decimals",
             "coolant",
@@ -1880,8 +1884,29 @@ impl Cam {
                     feed_decimals: digits("feed_decimals", 4.0)?,
                     coolant,
                 };
-                let out = self.post(name, &su, sel.as_deref(), &post, number, &opts);
-                self.programs.push(out);
+                // `split: "setup"`: one program per setup, `NAME/SETUP`, numbered on from `number`
+                match a.get("split") {
+                    None => {
+                        let out = self.post(name, &su, sel.as_deref(), &post, number, &opts);
+                        self.programs.push(out);
+                    }
+                    Some(V::Str(x)) if x == "setup" => {
+                        for (k, &si) in su.iter().enumerate() {
+                            let sname = self.setups[si].name.clone();
+                            let mut out = self.post(
+                                &format!("{name}/{sname}"),
+                                &[si],
+                                sel.as_deref(),
+                                &post,
+                                number + k as u32,
+                                &opts,
+                            );
+                            out.setup = Some(sname);
+                            self.programs.push(out);
+                        }
+                    }
+                    Some(_) => return Err("split: \"setup\" (one program per setup)".into()),
+                }
                 Ok(V::Num(0.0))
             }
             _ => Err(format!(
@@ -4290,6 +4315,7 @@ impl Cam {
         let mut po = ProgramOut {
             setups: setups.to_vec(),
             ops: vec![],
+            setup: None,
             name: name.into(),
             post: post.into(),
             text: None,

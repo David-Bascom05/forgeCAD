@@ -25,9 +25,9 @@ fn a_misspelled_argument_is_refused_with_the_nearest() {
     // nothing near: the list
     let e = errors("skim = facing(op1, tool: t1, to: 18, step: 1, colour: 3)\n");
     assert!(
-        e.iter()
-            .any(|e| e
-                .contains("`colour` is not an argument of `facing` (it takes: tool, to, step, leave_axial, vc, rpm")),
+        e.iter().any(|e| e.contains(
+            "`colour` is not an argument of `facing` (it takes: tool, to, step, leave_axial, vc, rpm"
+        )),
         "{e:?}"
     );
     // in an expression built-in, and a positional too many
