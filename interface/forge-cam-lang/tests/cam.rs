@@ -35,11 +35,30 @@ fn the_flange_program_is_certified() {
     // a second setup faces it off)
     assert!(cam.leftover_done, "{:?}", cam.leftover);
     assert!(cam.leftover.iter().all(|l| l.z1 <= 0.0), "{:?}", cam.leftover);
-    // not placed on the machine: released, but not called fully certified
+    // placed on the machine (`at:`): every position within the travel
+    assert_eq!(cam.certification(), "full");
+    // not placed: released, but not called fully certified, and the warning names the fix
+    let cam = forge_cam_lang::run(
+        &doc(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\nprog = program(op1, post: \"fanuc\", number: 1)\n",
+        ),
+        &dir,
+    );
     assert_eq!(cam.certification(), "except G5");
+    let mut j = String::new();
+    cam.json().write(&mut j);
     assert!(
         j.contains("\"certified\":\"except G5 (unchecked: no `at:`)\""),
         "{j}"
+    );
+    assert!(
+        cam.warnings
+            .iter()
+            .any(|w| w.contains("setup `op1` is not placed")
+                && w.contains("fix: add `at: (x, y, z)`")
+                && w.contains("G54")),
+        "{:?}",
+        cam.warnings
     );
 }
 
@@ -594,8 +613,9 @@ fn every_posted_position_is_within_the_machines_travel() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
     let placed = |at: &str| {
+        // (the example is placed at (0, 0, -250): moved for each case)
         src.replace(
-            "origin: \"top-center\", tol: tol)",
+            "origin: \"top-center\", tol: tol, at: (0, 0, -250))",
             &format!("origin: \"top-center\", tol: tol, at: {at})"),
         )
     };
@@ -634,7 +654,7 @@ fn every_posted_position_is_within_the_machines_travel() {
             .any(|c| c.rule == "axis_limit" && c.other.contains("joint Z"))
     }));
     // unplaced: the spans are checked, and the reply says the positions were not
-    let cam = forge_cam_lang::run(&src, &dir);
+    let cam = forge_cam_lang::run(&src.replace(", at: (0, 0, -250))", ")"), &dir);
     assert!(cam.ok);
     assert!(
         cam.warnings.iter().any(|w| w.contains("not placed")),

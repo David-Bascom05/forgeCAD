@@ -894,8 +894,9 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
     for s in &cam.setups {
         if s.at.is_none() {
             cam.warnings.push(format!(
-                "setup `{}` is not placed (`at:` the work offset): G5 checked each axis's span against the travel, not the positions",
-                s.name
+                "setup `{}` is not placed: G5 checked each axis's span against the travel, not the positions; fix: add `at: (x, y, z)` to the setup, the WCS origin in machine coordinates (the work offset G{} holds)",
+                s.name,
+                54 + s.wcs
             ));
         }
     }
