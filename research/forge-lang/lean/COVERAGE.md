@@ -24,7 +24,7 @@ axioms: `lake build`, `lake env lean CheckAxioms.lean` (standard axioms only, no
   family here, is `lang_coverage::shadow_families_bound_nowhere` (every `.fg` that is not a
   machining document or drawing; files already refused with `ShadowsBuiltin` for that name are
   counted, not failed: `research/kernel-audit/audit2/ell.fg` binds `cut`).
-* **Closed** (`machining` documents: forge-cam-lang, forge-turn-lang): a call's head is looked up
+* **Closed** (`machining` documents: forge-cam-lang, forge-turn-lang; `bending` documents: forge-bend-lang): a call's head is looked up
   among the built-ins only, a read among the bindings only; no refusal for binding a built-in's
   name (`drill = drill(..)` is fine). `Families.run_ext_accepted`: adding match arms changes no
   accepted document; `Families.stmt_new_refused`: a document calling a new name was refused
@@ -56,6 +56,7 @@ no family extension changes where a document goes.
 | builtins | `cam-expr` | `box`, `vise`, `cylinder`, `tube`, `solid` | `Cam::eval` (`fname == ..`); closed namespace | `Families.cam_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.families_not_keywords` |
 | builtins | `turn` | `part`, `lathe_tool`, `lathe_setup`, `turn_face`, `turn_rough`, `bore_rough`, `turn_finish`, `turn_groove`, `turn_thread`, `part_off`, `turn_drill`, `lathe_program` | `interface/forge-turn-lang/src/lib.rs` `Turn::call` arms; closed namespace | `Families.turn_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.families_not_keywords`; `LL1.Documents.turning_doc_accepted` |
 | builtins | `turn-expr` | `chuck` | `Turn::eval` (`match fname.as_str()`); closed namespace | `Families.turn_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.families_not_keywords` |
+| builtins | `bend` | `part`, `press`, `tooling`, `station`, `bend`, `setup_sheet`, `program` | `interface/forge-bend-lang/src/lib.rs` `Reader::call` arms (`NAMES` the same); closed namespace; no nested built-ins (`eval` has no call: refused) | `Families.bending_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.families_not_keywords`; `LL1.Documents.bending_doc_accepted` |
 
 ## Document headers and keywords
 
@@ -70,6 +71,7 @@ documents in `examples/machined/` included. Headers that are names add no syntax
 | header | `machining` | | forge-cam-lang `is_machining`, forge-turn-lang `is_turning` (first statement the bare name; turning when a statement calls `lathe_setup`) | `LL1.Documents.milling_doc_accepted`, `LL1.Documents.turning_doc_accepted`, `LL1.Documents.header_glued_refused`, `Families.families_not_keywords`; semantics `Families.run_ext_accepted` |
 | header | `drawing` | | forge-lang `drawing::doc::declared` (and the `drawing` keyword's statement) | `LL1.Unified.accept_drawing_header`, `LL1.Unified.accept_drawing_empty` (on the unified prototype grammar; on `Impl` by `LL1.Impl.grammar_ll1` and parse_diff); semantics `Families.drawing_conservative` |
 | header | `assembly` | | forge-render `is_assembly` (optional first line; an assembly is a file with components or joints) | `LL1.Documents.assembly_header_accepted`, `Families.families_not_keywords`. Semantics: GAP (assembly namespace, see `assembly`) |
+| header | `bending` | | forge-bend-lang `is_bending` (first statement the bare name) | `LL1.Documents.bending_doc_accepted`, `Families.families_not_keywords`; semantics `Families.bending_conservative` |
 | keywords | `syntax::KEYWORDS` | `shared`, `param`, `fn`, `for`, `in`, `if`, `else`, `return`, `expect`, `and`, `or`, `not`, `true`, `false`, `sketch`, `path`, `at`, `component`, `drawing`, `harness` | `interface/forge-lang/src/syntax.rs` (`RESERVED`: `at`, a keyword that texts used as a name) | `LL1.Impl.grammar_ll1`, `LL1.Impl.impl_unambiguous`, `LL1.Impl.source_to_tree`, `LL1.Impl.impl_roundtrip`, `LL1.Driver.rd_eq_run`, `LL1.Lex.word_maximal`, `LL1.Lex.lex_lossless`, `LL1.LexUnits.in_keyword_after_number` |
 
 ## Arguments
@@ -126,6 +128,13 @@ extension so far:
 | args | `cam::scallop` | | `interface/forge-cam-lang/src/lib.rs` `ARGS`: no entry yet, so `check_args` takes any keyword (a misspelled one is ignored) | GAP no list: CAM-3AXIS's ARGS entry (with the 3D ops' `step`/`sample` naming settled); then this row's names are the list's and `FamiliesArgs.misspelled_refused` covers it |
 | args | `cam::rest` | | `interface/forge-cam-lang/src/lib.rs` `ARGS`: no entry yet, so `check_args` takes any keyword (a misspelled one is ignored) | GAP no list: CAM-3AXIS's ARGS entry (with the 3D ops' `step`/`sample` naming settled); then this row's names are the list's and `FamiliesArgs.misspelled_refused` covers it |
 | args | `turn` | | `interface/forge-turn-lang/src/lib.rs` `named_args`: no list yet | GAP: as for `cam`; `FamiliesArgs.misspelled_refused` once a list exists |
+| args | `bend::part` | `#0`, `sheet` | `interface/forge-bend-lang/src/lib.rs` `ARGS` (`check_args`: any other `UnknownArg`, nearest listed) | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused`; extension `FamiliesArgs.checkArgs_extend`, `FamiliesArgs.checkArgs_new` |
+| args | `bend::press` | `#0` | `interface/forge-bend-lang/src/lib.rs` `ARGS` (`check_args`: any other `UnknownArg`, nearest listed) | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused`; extension `FamiliesArgs.checkArgs_extend`, `FamiliesArgs.checkArgs_new` |
+| args | `bend::tooling` | `#0` | `interface/forge-bend-lang/src/lib.rs` `ARGS` (`check_args`: any other `UnknownArg`, nearest listed) | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused`; extension `FamiliesArgs.checkArgs_extend`, `FamiliesArgs.checkArgs_new` |
+| args | `bend::station` | `punch`, `die`, `y`, `length`, `punch_length`, `die_length` | `interface/forge-bend-lang/src/lib.rs` `ARGS` (`check_args`: any other `UnknownArg`, nearest listed) | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused`; extension `FamiliesArgs.checkArgs_extend`, `FamiliesArgs.checkArgs_new` |
+| args | `bend::bend` | `#0`, `at`, `rotate` | `interface/forge-bend-lang/src/lib.rs` `ARGS` (`check_args`: any other `UnknownArg`, nearest listed) | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused`; extension `FamiliesArgs.checkArgs_extend`, `FamiliesArgs.checkArgs_new` |
+| args | `bend::setup_sheet` |  | `interface/forge-bend-lang/src/lib.rs` `ARGS` (`check_args`: any other `UnknownArg`, nearest listed) | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused`; extension `FamiliesArgs.checkArgs_extend`, `FamiliesArgs.checkArgs_new` |
+| args | `bend::program` | `format` | `interface/forge-bend-lang/src/lib.rs` `ARGS` (`check_args`: any other `UnknownArg`, nearest listed) | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused`; extension `FamiliesArgs.checkArgs_extend`, `FamiliesArgs.checkArgs_new` |
 
 ## Edit ops
 
@@ -171,7 +180,7 @@ ops); the text-level theorems (`Print`, `Suppress.suppress_text_closure`) are th
 
 ## Lists of strings that are not names a document resolves
 
-Every other `const` list of strings in forge-lang, forge-cam-lang and forge-turn-lang, and why it
+Every other `const` list of strings in forge-lang, forge-cam-lang, forge-turn-lang and forge-bend-lang, and why it
 is not a family (keyword arguments and members are words after `name:` or `.`, not names in
 scope).
 
@@ -183,6 +192,7 @@ scope).
 | not-names | `interface/forge-lang/src/asm.rs::METRICS` | | an assembly's `expect` metrics: the word after `expect`, not a name in scope | not a namespace |
 | not-names | `interface/forge-lang/src/asm.rs::PLACES` | | calls that make a file an assembly (`has_components`), a subset of the assembly family | not a namespace |
 | not-names | `interface/forge-lang/src/bench.rs::NAMES` | | benchmark part files | not a namespace |
+| not-names | `interface/forge-bend-lang/src/lib.rs::FORMATS` | | press-brake program formats written: the string value of `program(format:)`, not a name in scope | not a namespace |
 | not-names | `interface/forge-lang/src/bendsim.rs::LENGTHS` | | keys of a vendor file (TOML), not .fg | not a namespace |
 | not-names | `interface/forge-lang/src/builtins.rs::CONTROL` | | keyword arguments of `spline` | not a namespace |
 | not-names | `interface/forge-lang/src/builtins.rs::PURE` | | the built-ins that are functions of numbers alone (a subset of `core`), exempt from the magnitude bound (`Bounds.runK_of_run`) | not a namespace |
@@ -231,6 +241,9 @@ scope).
   the nearest name (CAM-CORE's `ARGS` and `named_of`, cam/parity), one `args` row per built-in.
 * A machining document passes over a bare call statement silently (`facing(op1, ..)` with no
   name does nothing, reports nothing): reported to CAM-CORE / CAM-TURN.
+* A bending document likewise (`read` passed `StmtKind::Expr` over, so `bend("left")` with no
+  name was no step and no error): fixed by BEND-SIM (`Unnamed`, test bending::refusals_are_typed;
+  the header word alone is still taken).
 * A `fn`'s name and params may take a built-in's name (no `ShadowsBuiltin`): harmless, they are
   read before built-ins, so no family extension changes them.
 
