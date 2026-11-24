@@ -428,6 +428,73 @@ impl TapRow {
     }
 }
 
+/// Elastic data for a cutting-tool substrate (cutting.toml `[[substrate]]`, cited): Young's
+/// modulus, and the equivalent solid diameter of a fluted section as a fraction of D.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SubstrateData {
+    /// "carbide" | "hss".
+    pub name: String,
+    /// N/mm² (MPa). The low end of a cited range is the one used (more deflection).
+    pub e_mpa: f64,
+    /// Fluted section's equivalent diameter / D.
+    pub de_ratio: f64,
+    pub real: bool,
+    pub cites: Vec<Cite>,
+}
+
+impl SubstrateData {
+    pub fn from_table(t: &Table) -> Result<SubstrateData, LibError> {
+        let name = text(t, "name")
+            .ok_or_else(|| LibError::Missing {
+                record: "[[substrate]]".into(),
+                field: "name",
+                fix: "give `name` (carbide | hss)".into(),
+            })?
+            .to_string();
+        let rec = format!("substrate `{name}`");
+        let n = |k: &'static str| {
+            num(t, k).ok_or_else(|| LibError::Missing {
+                record: rec.clone(),
+                field: k,
+                fix: format!("give `{k}`"),
+            })
+        };
+        let (e_mpa, de_ratio) = (n("e_mpa")?, n("de_ratio")?);
+        let (real, cites) = cite::read(t, &rec, &["e_mpa".to_string(), "de_ratio".to_string()], &["name"])?;
+        Ok(SubstrateData {
+            name,
+            e_mpa,
+            de_ratio,
+            real,
+            cites,
+        })
+    }
+}
+
+/// A tool as a stepped cantilever out of the holder: `stickout` from the holder's face to the
+/// tip, the fluted length `lcf` at the tip (equivalent diameter `de`), the shank (`dcon`) above.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Beam {
+    pub stickout: f64,
+    pub lcf: f64,
+    pub de: f64,
+    pub dcon: f64,
+    pub e_mpa: f64,
+}
+
+/// Tip deflection (mm) of `beam` under a force `f` (N) at the tip (the most deflection a force
+/// anywhere along the flutes gives). Derived (Euler–Bernoulli, moment M(x) = F (L − x) from the
+/// holder's face, unit load at the tip): δ = F/(3E) [(L³ − b³)/I_shank + b³/I_flute],
+/// b = min(lcf, L), I = π d⁴/64. The holder and spindle are taken rigid: their compliance is
+/// not in it.
+pub fn tip_deflection(f: f64, beam: &Beam) -> f64 {
+    let l = beam.stickout.max(0.0);
+    let b = beam.lcf.clamp(0.0, l);
+    let i = |d: f64| std::f64::consts::PI * d.powi(4) / 64.0;
+    let (is, i_f) = (i(beam.dcon.max(1e-9)), i(beam.de.max(1e-9)));
+    f / (3.0 * beam.e_mpa.max(1e-9)) * ((l.powi(3) - b.powi(3)) / is + b.powi(3) / i_f)
+}
+
 /// What the engine was asked for.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Cut {
@@ -818,5 +885,24 @@ mod tests {
         let alpha = forge_math::dmath::acos(1.0 - 2.0 * ap / d);
         let t = contact(d, 0.5 * d, ap, 15.0);
         assert!((t.d_eff - d * forge_math::dmath::sin(alpha + 15f64.to_radians())).abs() < 1e-12);
+    }
+
+    /// A uniform beam reduces to F L³/(3 E I); a stepped one lies between its two uniform bounds.
+    #[test]
+    fn cantilever_deflection() {
+        let e = 600_000.0;
+        let u = Beam {
+            stickout: 40.0,
+            lcf: 40.0,
+            de: 10.0,
+            dcon: 12.0,
+            e_mpa: e,
+        };
+        let i10 = std::f64::consts::PI * 10f64.powi(4) / 64.0;
+        assert!((tip_deflection(500.0, &u) - 500.0 * 40f64.powi(3) / (3.0 * e * i10)).abs() < 1e-15);
+        let stepped = Beam { lcf: 20.0, ..u };
+        let i12 = std::f64::consts::PI * 12f64.powi(4) / 64.0;
+        let d = tip_deflection(500.0, &stepped);
+        assert!(d < tip_deflection(500.0, &u) && d > 500.0 * 40f64.powi(3) / (3.0 * e * i12));
     }
 }

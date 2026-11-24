@@ -14,7 +14,7 @@
 //!
 //! The formulas are feeds.rs's (chip thinning, mean chip, Kienzle power, torque). Power and
 //! torque limits lower the feed only, never ap or ae (patent note: fto-adaptive.md, '607).
-use crate::feeds::{self, Cut, DrillRow, Group, Stock, Substrate, THIN_CAP, TapRow};
+use crate::feeds::{self, Beam, Cut, DrillRow, Group, Stock, Substrate, THIN_CAP, TapRow};
 use crate::{Cite, Preset};
 use std::f64::consts::PI;
 
@@ -88,6 +88,8 @@ pub struct Ask {
     /// Limits: kW, N·m at the spindle; the feed range engagement feed stays in, mm/min.
     pub max_power: Option<f64>,
     pub max_torque: Option<f64>,
+    /// The largest tool deflection allowed, mm (lowers the feed only).
+    pub max_deflection: Option<f64>,
     pub min_feed: Option<f64>,
     pub max_feed: Option<f64>,
 }
@@ -110,6 +112,7 @@ impl Ask {
             lead_in: self.lead_in.or(base.lead_in),
             max_power: self.max_power.or(base.max_power),
             max_torque: self.max_torque.or(base.max_torque),
+            max_deflection: self.max_deflection.or(base.max_deflection),
             min_feed: self.min_feed.or(base.min_feed),
             max_feed: self.max_feed.or(base.max_feed),
         }
@@ -129,6 +132,8 @@ pub struct ToolData<'a> {
     /// maker's preset carries it).
     pub substrate: Substrate,
     pub coating: &'a str,
+    /// The tool as a cantilever out of its holder, where its substrate's modulus is known.
+    pub beam: Option<Beam>,
     /// The tool's cutting data for the part's group, and its cite.
     pub preset: Option<(&'a Preset, Option<&'a Cite>)>,
 }
@@ -203,6 +208,9 @@ pub struct Resolved {
     /// The user's own power and torque limits (kW, N·m), as asked: engagement feed holds them
     /// per sample.
     pub max_power_ask: Option<f64>,
+    pub max_deflection_ask: Option<f64>,
+    /// Tool tip deflection, mm (NaN: not computed): feeds::tip_deflection.
+    pub deflection: f64,
     pub max_torque_ask: Option<f64>,
     /// Power and torque at the upper ends of the material's cited kc1.1/mc ranges (the nominal
     /// values where it cites none).
@@ -469,10 +477,22 @@ pub fn milling_on(
             ap: ap.v,
             ae: ae.v,
         };
-        for (cap, what) in [(ask.max_power, "max power"), (ask.max_torque, "max torque")] {
+        for (cap, what) in [
+            (ask.max_power, "max power"),
+            (ask.max_torque, "max torque"),
+            (ask.max_deflection, "max deflection"),
+        ] {
             let Some(cap) = cap else { continue };
             let f = feeds::at_contact(g, &cut, fz.v, n, ct, d_radial);
-            let now = if what == "max power" { f.power } else { f.torque };
+            let now = match what {
+                "max power" => f.power,
+                "max torque" => f.torque,
+                // the mean tangential force F = 2 Mc/D bends the tool: δ ∝ F ∝ the torque
+                _ => match tool.beam {
+                    Some(b) => feeds::tip_deflection(2000.0 * f.torque / d, &b),
+                    None => continue,
+                },
+            };
             if now > cap && now > 0.0 && g.mc < 1.0 {
                 let s = forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
                 let why = format!("lowered to hold {what} {cap} (was {now:.3})");
@@ -572,6 +592,34 @@ pub fn milling_on(
         },
     };
     let mrr = ap.v * ae.v * vf.v / 1000.0;
+    // tool deflection under the mean tangential force F = 2 Mc / D at the tip (peaks are higher:
+    // the mean is what Kienzle gives); the holder and spindle taken rigid
+    let deflection = match (tool.beam, derived.torque.is_finite()) {
+        (Some(b), true) => feeds::tip_deflection(2000.0 * derived.torque / d, &b),
+        _ => f64::NAN,
+    };
+    checks.push(Check {
+        what: "deflection",
+        verdict: match (deflection.is_finite(), ask.max_deflection) {
+            (true, Some(lim)) if deflection > lim * (1.0 + 1e-9) => Verdict::Fail,
+            (true, Some(_)) => Verdict::Pass,
+            _ => Verdict::NotChecked,
+        },
+        value: deflection,
+        limit: ask.max_deflection.unwrap_or(f64::NAN),
+        unit: "mm",
+        why: if !deflection.is_finite() {
+            if tool.beam.is_none() {
+                "no modulus for the tool's substrate (or no stick-out): not computed".into()
+            } else {
+                "no cutting-force data for the material: not computed".into()
+            }
+        } else if ask.max_deflection.is_none() {
+            "the tool alone under the mean force at its tip (holder and spindle compliance not included); no `max_deflection:` given".into()
+        } else {
+            "the tool alone under the mean force at its tip; holder and spindle compliance not included (not checked)".into()
+        },
+    });
     let power_avail = power_at(spindle.power, n);
     let torque_avail = power_avail.map(|p| torque_of(p, n));
     let kc_note = group.map(|g| format!("kc1.1 {} mc {} (group {}: {})", g.kc1_1, g.mc, g.group, g.source));
@@ -722,7 +770,9 @@ pub fn milling_on(
         max_feed,
         feeds: derived,
         held_chip: ask.feed.is_none() && ask.fz.is_none(),
+        deflection,
         max_power_ask: ask.max_power,
+        max_deflection_ask: ask.max_deflection,
         max_torque_ask: ask.max_torque,
         mrr,
         power_hi,
@@ -1508,6 +1558,7 @@ mod tests {
             re: 0.0,
             substrate: Substrate::Carbide,
             coating: "",
+            beam: None,
             preset: p,
         }
     }
@@ -1948,5 +1999,59 @@ mod tests {
         let (_, rpm, _, _) = tapping(None, Some(400.0), 8.0, 1.25, None, Some(&row), &spindle()).unwrap();
         assert_eq!((rpm.v, rpm.source), (400.0, Source::User));
         assert!(tapping(None, None, 8.0, 1.25, None, None, &spindle()).is_none());
+    }
+
+    /// max_deflection lowers the feed so the tip deflection is the limit, exactly.
+    #[test]
+    fn deflection_reported_and_capped() {
+        let g = group();
+        let beam = Beam {
+            stickout: 60.0,
+            lcf: 30.0,
+            de: 8.0,
+            dcon: 12.7,
+            e_mpa: 550_000.0,
+        };
+        let t = ToolData {
+            beam: Some(beam),
+            ..tool(None)
+        };
+        let ask = Ask {
+            rpm: Some(8000.0),
+            chip: Some(0.08),
+            ae: Some(6.0),
+            ap: Some(20.0),
+            ..Ask::default()
+        };
+        let r = milling(&ask, &t, Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        let want = feeds::tip_deflection(2000.0 * r.feeds.torque / 12.7, &beam);
+        assert!((r.deflection - want).abs() < 1e-15 && r.deflection > 0.0);
+        let c = r.checks.iter().find(|c| c.what == "deflection").unwrap();
+        assert_eq!(c.verdict, Verdict::NotChecked);
+        let lim = 0.5 * r.deflection;
+        let r2 = milling(
+            &Ask {
+                max_deflection: Some(lim),
+                ..ask
+            },
+            &t,
+            Some(&g),
+            &spindle(),
+            (0.0, 0.0),
+        )
+        .unwrap();
+        assert!(
+            (r2.deflection - lim).abs() < 1e-9 * lim,
+            "{} {lim}",
+            r2.deflection
+        );
+        assert_eq!(r2.feed.source, Source::Limited);
+        assert_eq!(
+            r2.checks.iter().find(|c| c.what == "deflection").unwrap().verdict,
+            Verdict::Pass
+        );
+        // no modulus: not computed
+        let r3 = milling(&ask, &tool(None), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        assert!(r3.deflection.is_nan());
     }
 }

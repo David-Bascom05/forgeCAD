@@ -492,6 +492,7 @@ fn feeds_speeds_json(r: &resolve::Resolved) -> Json {
                 ("power_pct", pct(f.power, r.power_avail)),
                 ("torque_nm", n(f.torque)),
                 ("torque_pct", pct(f.torque, r.torque_avail)),
+                ("deflection_mm", n(r.deflection)),
             ]),
         ),
         (
@@ -624,6 +625,7 @@ fn ask_of(m: &BTreeMap<String, V>) -> Result<Ask, String> {
         lead_in: g("lead_in_feed")?,
         max_power: g("max_power")?,
         max_torque: g("max_torque")?,
+        max_deflection: g("max_deflection")?,
         min_feed: g("min_feed")?,
         max_feed: g("max_feed")?,
     };
@@ -2416,6 +2418,14 @@ impl Cam {
                 "max_torque",
             ),
             (spindle_kw, "the spindle's power"),
+            // δ ∝ F = 2 Mc/D: the deflection limit as a torque, then as power at the rpm
+            (
+                r.max_deflection_ask.zip(self.beam_of(ti)).map(|(lim, b)| {
+                    let per_nm = feeds::tip_deflection(2000.0 / t.tool.dc, &b);
+                    lim / per_nm * std::f64::consts::PI * r.rpm.v / 30.0e3
+                }),
+                "max_deflection",
+            ),
         ]
         .into_iter()
         .filter_map(|(c, w)| c.map(|c| (c, w)))
@@ -2615,6 +2625,26 @@ impl Cam {
         })
     }
 
+    /// Tool `ti` as a cantilever out of its holder: its stick-out, flutes at the tip at the
+    /// substrate's equivalent diameter, the shank above; None when the substrate has no
+    /// elastic record (cutting.toml `[[substrate]]`).
+    fn beam_of(&self, ti: usize) -> Option<feeds::Beam> {
+        let t = &self.tools[ti];
+        let sub = match feeds::Substrate::of(&t.tool.material) {
+            feeds::Substrate::Carbide => "carbide",
+            feeds::Substrate::Hss => "hss",
+            _ => return None,
+        };
+        let e = self.lib.substrate(sub)?;
+        Some(feeds::Beam {
+            stickout: t.stickout,
+            lcf: t.tool.lcf,
+            de: e.de_ratio * t.tool.dc,
+            dcon: if t.tool.dcon > 0.0 { t.tool.dcon } else { t.tool.dc },
+            e_mpa: e.e_mpa,
+        })
+    }
+
     /// A stock material by name: (its forge-material name, its ISO 513 group, how they were
     /// found). The group is the material's `[[stock]]` record's, else its family's ISO 513
     /// class; None when the name is unknown or its family has no class.
@@ -2679,6 +2709,7 @@ impl Cam {
                 re: if t.tool.kind == Kind::Bull { t.tool.re } else { 0.0 },
                 substrate: feeds::Substrate::of(&t.tool.material),
                 coating: &t.tool.coating,
+                beam: self.beam_of(ti),
                 preset,
             },
             g,

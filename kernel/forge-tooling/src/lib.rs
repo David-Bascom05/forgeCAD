@@ -609,6 +609,8 @@ pub struct Library {
     pub drilling: Vec<feeds::DrillRow>,
     /// Generic tapping speeds per group and substrate.
     pub tapping: Vec<feeds::TapRow>,
+    /// Elastic data per tool substrate (deflection).
+    pub substrates: Vec<feeds::SubstrateData>,
     pub vises: Vec<Vise>,
     pub jaw_blanks: Vec<JawBlank>,
     pub collets: Vec<Collet>,
@@ -940,6 +942,9 @@ impl Library {
         for r in tables(&t, "group") {
             self.cutting.push(feeds::Group::from_table(r)?);
         }
+        for r in tables(&t, "substrate") {
+            self.substrates.push(feeds::SubstrateData::from_table(r)?);
+        }
         for r in tables(&t, "tap") {
             self.tapping.push(feeds::TapRow::from_table(r)?);
         }
@@ -1046,6 +1051,10 @@ impl Library {
     }
     pub fn group(&self, g: &str) -> Option<&feeds::Group> {
         self.cutting.iter().find(|x| x.group == g || x.name == g)
+    }
+    /// Elastic data for a substrate ("carbide" | "hss").
+    pub fn substrate(&self, name: &str) -> Option<&feeds::SubstrateData> {
+        self.substrates.iter().find(|x| x.name == name)
     }
     /// Generic tapping speed for a group and substrate ("hss" | "carbide").
     pub fn tapping(&self, group: &str, substrate: &str) -> Option<&feeds::TapRow> {

@@ -89,6 +89,7 @@ every `tool(..)` takes these args; an op's value wins over its tool's (kernel/fo
 | `tilt:` | degrees | the tool's tilt toward the feed: a ball's contact moves out to D sin(α + tilt) |
 | `plunge_feed:`, `ramp_feed:`, `lead_in_feed:` | mm/min | entry feeds (default 30%, 30%, 100% of the feed: labelled "no data behind it"). Posted today: the plunge feed (plunges and helical ramps) and the feed; `ramp_feed` and `lead_in_feed` are resolved and reported but not yet posted on their own (forge-cam's `Cut` carries two feeds) |
 | `max_power:`, `max_torque:` | kW, N·m | limits: the feed (only the feed) is lowered to meet them; P ∝ fz^(1−mc), so exactly |
+| `max_deflection:` | mm | the tool's tip deflection limit: the feed (only) is lowered to meet it. δ = F/(3E)[(L³ − b³)/I_shank + b³/I_flute] (stepped cantilever, derived), F = 2 Mc/D the mean tangential force at the tip, L the stick-out, b the flute length, E and the flutes' equivalent diameter from the substrate's cited `[[substrate]]` record; the holder and spindle taken rigid (their compliance not checked). Reported as `derived.deflection_mm` |
 | `min_feed:`, `max_feed:` | mm/min | the feed range (engagement feed stays in it) |
 
 Engagement feed (clear, pocket, contour, slot, facing; not when the user programmed `fz:`/`feed:`):
