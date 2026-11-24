@@ -111,7 +111,16 @@ pub fn popup(s: &Snap, before: &Snap, region: &[Rect], screen: Rect) -> Vec<Find
                 format!("\"{}\" at {:.1} px", short(&t.s), t.size),
             ));
         }
-        if let Some(why) = debug_text(&t.s) {
+        // a name the document gave (a feature's, a component's) is the person's, not a key
+        let named = s.names.iter().any(|n| {
+            t.s.trim() == n
+                || t.s.split_whitespace().all(|w| {
+                    s.names
+                        .iter()
+                        .any(|n| n == w.trim_matches(|c: char| !c.is_alphanumeric() && c != '_'))
+                })
+        });
+        if !named && let Some(why) = debug_text(&t.s) {
             out.push(f("raw-text", true, format!("\"{}\" ({why})", short(&t.s))));
         }
         if visible.is_positive()
