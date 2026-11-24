@@ -982,6 +982,8 @@ fn grbl_tool_changes_stand_at_the_clearance_height() {
             &lines[i.saturating_sub(6)..=i]
         );
     }
+}
+
 /// A statement's `param`s are names its arguments read, and only its own: `param skim.d` is
 /// `skim`'s, `param xskim.d` is not (the owner was once matched by the tail of its debug text,
 /// which matched nothing, so every param was dropped).
