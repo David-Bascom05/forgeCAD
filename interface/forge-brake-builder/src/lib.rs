@@ -318,10 +318,13 @@ pub fn check(r: &Rec) -> Vec<Finding> {
     }
 }
 
+/// A section to draw: its name, its closed outline (x, z), its length along the bed.
+pub type Section = (String, Vec<[f64; 2]>, f64);
+
 /// A preview: each section's closed outline in the press's (x, z) plane, mm, and its length
 /// along the bed (its longest segment, else 100 mm). A press: its frame's housing and beams
 /// as rectangles across the bed.
-pub fn preview(r: &Rec) -> Result<Vec<(String, Vec<[f64; 2]>, f64)>, Finding> {
+pub fn preview(r: &Rec) -> Result<Vec<Section>, Finding> {
     let mut root = Table::default();
     root.set(r.kind, Item::Tables(vec![r.table.clone()]));
     let text = toml::write(&root, INLINE);
