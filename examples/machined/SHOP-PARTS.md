@@ -48,4 +48,58 @@ A threaded hub turned from a Ø66 bar in one chucking.
 
 ## Results (cam/parity)
 
-RESULTS
+Measured on cam/parity (tip of this commit), release build, one run (`forgecad cam F --json`). Native and
+wasm32-wasip1 tests all pass.
+
+### manifold_cam.fg: 21.3 s in total (p1 almost all of it, certification; p2 3 ms). Refused.
+
+(At e11804e6: 146 s, with well and crn refused. The section pocket then cut every drilled hole
+of its mid-height section down to `to:`. A dowel's drill point was gouged, and 281k cells went to
+certifying it. Holes that end above the bottom are now left to their own ops (bc164b71), and so are
+holes and slots the tool only just fits (shal was pocketing the dowels and the groove: 199k cells
+to 103k).)
+
+With CAM-HAAS's catalogue tools (tools/turn-presets @b8d58f49, merged for the run, with t5 the
+Tungaloy MTEC0807C171.5ISO thread mill): 22.4 s, 12 of 15 ops certified. Every refusal left is
+stock that `rough` did not remove.
+
+| op | result | what blocks it |
+|---|---|---|
+| skim | certified | |
+| rough | not built | the 2.5D section at z = 29 meets the boss's foot fillet: `NotPrism { face: 38 }`. Needs 3D roughing (CAM-3AXIS's zlevel) |
+| prof | refused | the holder meets stock (−1.43) on a plunge: stock that `rough` would have removed |
+| well | certified | 3,519 cells |
+| crn | certified | 23,302 cells |
+| shal | certified | 103,298 cells: most of the time (the deep well's top, the shallow pocket, the bore's top) |
+| grv | certified | |
+| bored | certified | Guhring 18.5 drill (tools/turn-presets); refused NeedTool without it |
+| thr | certified | Tungaloy 1.5-pitch thread mill (tools/turn-presets); refused on pitch without it |
+| dwl | refused | a rapid 0.088 into stock that `rough` would have removed. The plan drills 6 directly: no ream for 6H7, because the hole records no fit |
+| tap | refused | the same rapid into the same unremoved stock |
+| brk | certified | |
+| face2, rel | certified | |
+| cbh | certified | Guhring 5.5 drill. The drill stopped 1.28 mm short of the flat floor (e7b3cd87: it was a −0.52 gouge through the floor). The floor's ring and the Ø10 × 5 counterbore are left uncut, said |
+
+### hub_turn.fg: certified in full on claude/cam-turn-hub @f8b0152f (14 ops, 1811 checks, 0.58 s)
+
+CAM-TURN closed every item below there:
+- hollow parts: the OD and bore ops split at the front face's inner edge;
+- G1 against the part less tol, so a touching tool is provable;
+- `skip:` on the finishes over the grooves;
+- the blade as head + body;
+- new tools `part-3-deep` and `drill-26-4d`.
+
+Its hub_turn.fg uses those tools and `skip:`, so a train that merges both branches takes CAM-TURN's
+hub_turn.fg. On cam/parity alone (without forge-turn's changes) the file here still gives the
+first result: 0.46 s, 6 of 13 ops certified. The refusals were:
+
+| op | result then | what blocked it |
+|---|---|---|
+| drl | refused | undecided (−1e-5) where the drill is the finished hole's size (zero gap) |
+| rough | refused | undecided (−0.8) on moves above the front face next to the bore |
+| fin | refused | "the finish path finds no start over the front face": the part is hollow |
+| back | refused | the left-hand finish passes 0.197 from stock left by the roughing (rapid clearance 0.2) |
+| bor | refused | undecided (−0.4) above the front face, outside the entry chamfer |
+| bfin | refused | undecided (−0.365) where the bore finish meets the inside relief groove |
+| ithr | refused | undecided (−0.05) at the entry chamfer |
+| cut | refused | the part-off blade reaches 25: short of the Ø66 bar's radius 33 |

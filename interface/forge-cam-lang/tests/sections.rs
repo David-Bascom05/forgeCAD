@@ -75,3 +75,21 @@ fn a_hole_drilled_from_below_is_drilled_in_the_turned_setup() {
     assert_eq!(o.status, "built", "{:?}", o.refusal);
     let _ = std::fs::remove_dir_all(&tmp);
 }
+
+#[test]
+fn a_section_pocket_leaves_the_holes_that_end_above_its_bottom() {
+    // two_wells: between z 12 and 4 the mid-height section shows both wells; only the deep one
+    // reaches z 4. Cutting the shallow one to 4 would gouge its floor at 7: it is left, said.
+    let src = "machining\nf = part(\"two_wells.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-6\", t: 1, stickout: 30, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 2), origin: \"top-corner\", tol: 0.01, at: (-20, -20, -250))\nwells = pocket(op1, tool: t1, from: 12, to: 4, stepover: 2.4, step: 3)\np = program(op1, post: \"fanuc\", number: 1)\n";
+    let cam = run(src);
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let o = cam.ops.iter().find(|o| o.name == "wells").unwrap();
+    assert_eq!(o.status, "built", "{:?}", o.refusal);
+    assert!(
+        cam.warnings
+            .iter()
+            .any(|w| w.starts_with("wells: 1 of 2 holes in the section end above z 4")),
+        "{:?}",
+        cam.warnings
+    );
+}
