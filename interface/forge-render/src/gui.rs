@@ -26,6 +26,8 @@ mod gui_asm;
 mod gui_asmdrag;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
+#[path = "gui_env.rs"]
+mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
 #[path = "gui_fgmarks.rs"]
@@ -119,6 +121,8 @@ pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
 pub struct Gui {
     pub vers: gui_versions::VersState,
+    /// An environment asked by name (a deep link, `--env`): entered once the document built.
+    pub env_asked: Option<String>,
     pub ctx: egui::Context,
     /// The Agent tab's backend and its turns (`gui_agent.rs`).
     pub agent: gui_agent::AgentHost,
@@ -276,6 +280,7 @@ impl Gui {
         warm_shell.out.clear();
         Gui {
             vers: Default::default(),
+            env_asked: None,
             agent: Default::default(),
             apps: Default::default(),
             speech: Default::default(),
@@ -904,6 +909,18 @@ impl Gui {
                     s.set_toggle(g, !s.toggle(g));
                     continue;
                 }
+                Action::EnterEnv(id) => {
+                    self.env_enter(id);
+                    continue;
+                }
+                Action::ExitEnv => {
+                    self.env_exit();
+                    continue;
+                }
+                Action::Env(id, c) => {
+                    self.shell.env_command(id, c);
+                    continue;
+                }
                 a => a,
             };
             if let Action::PartColours(on) = a {
@@ -1277,6 +1294,7 @@ impl Gui {
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
+        self.env_frame();
         self.fg_hole_guess();
         self.fg_preview();
         if self.explode_tick() {

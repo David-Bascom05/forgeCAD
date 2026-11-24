@@ -2,6 +2,7 @@
 // storage.js. Served by `forgecad web DIR`, the project is DIR on that machine; served as static
 // files, it is kept in this browser (OPFS, else IndexedDB), with import and export.
 //   ?open=PATH       the project file to open first
+//   ?env=NAME        the environment to open it in (thermoform, bendsim, render, ...: shell/env)
 //   ?project=NAME    the browser-kept project (default "default")
 //   ?token=T         `forgecad web`'s token, when it was started with one (kept for the tab)
 //   ?storage=memory  nothing kept (tests)
@@ -158,7 +159,10 @@ const asked = q.get("open");
 // (hundreds of them took a round trip each before it showed)
 await Promise.all([home?.load(), asked && mirror?.loadOne(cleanPath(asked))]);
 // ?noapp: the files and the kernel only, no canvas (the parity test)
-if (!q.has("noapp")) fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
+if (!q.has("noapp")) {
+  fc.start_app(asked ? `${MOUNT}/${cleanPath(asked)}` : undefined, q.get("offscreen") ?? undefined);
+  if (q.get("env")) fc.app_env(q.get("env"));
+}
 say("started");
 const loaded = (async () => {
   await mirror?.load();
