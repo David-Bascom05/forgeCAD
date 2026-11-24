@@ -835,9 +835,12 @@ fn subdivide_pieces(
     // range is kept only where the surface's sign changes across it
     let (mut budget, coarse) = (100_000usize, range.width() / 4096.0);
     let mut leaves: Vec<(f64, f64)> = Vec::new();
+    let mut looked = 0u32;
     while let Some((a, b, lip)) = stack.pop() {
-        // past the operation's work budget the caller refuses whatever comes back: stop at once
-        if crate::budget::over() {
+        // past the operation's work budget the caller refuses whatever comes back: stop (asked
+        // every 256 pieces, so a search that ends soon pays nothing for it)
+        looked = looked.wrapping_add(1);
+        if looked & 255 == 0 && crate::budget::over() {
             break;
         }
         let m = 0.5 * (a + b);
