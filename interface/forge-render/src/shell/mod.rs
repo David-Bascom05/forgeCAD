@@ -780,6 +780,11 @@ impl Shell {
             let d = self.settings.tip_delay;
             ctx.all_styles_mut(|s| s.interaction.tooltip_delay = d);
         }
+        // a hover's text wraps inside the window (egui's 500 is wider than a 480 px one)
+        let tip_w = (ctx.content_rect().width() - 16.0).clamp(200.0, 500.0);
+        if ctx.global_style().spacing.tooltip_width != tip_w {
+            ctx.all_styles_mut(|s| s.spacing.tooltip_width = tip_w);
+        }
         self.places.clear();
         self.view_blocks.clear();
         self.env_sync();

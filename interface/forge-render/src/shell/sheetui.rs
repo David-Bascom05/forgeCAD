@@ -799,11 +799,10 @@ impl Shell {
         units: &str,
     ) {
         section(ui, t, "Catalogue");
-        // lengths in the user's system, the unit in the column's head (STANDARD §5: "Hole · mm")
-        use super::ux::{Qty, System, convert};
+        // each number says what it is, with its unit (ux::show), and where it is from on hover
+        use super::ux::{Qty, System, show};
         let sys = System::of_doc(units);
-        let (_, unit) = convert(1.0, Qty::Length, sys);
-        let len = |v: f64| super::fg::short(convert(v, Qty::Length, sys).0);
+        let len = |v: f64| show(v, Qty::Length, sys);
         let kind = d.field("#0").map_or("nut", |f| f.word());
         let size = d.field("Size").map_or(String::new(), |f| f.num().to_string());
         let mut pick = None;
@@ -811,7 +810,7 @@ impl Shell {
             .striped(true)
             .spacing(vec2(10.0, 2.0))
             .show(ui, |ui| {
-                for h in ["Type".to_string(), "Size".into(), format!("Hole · {unit}"), format!("Edge · {unit}"), "Code".into()] {
+                for h in ["Type", "Size", "Mounting hole", "Edge, at least", "Code"] {
                     ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
                 }
                 ui.end_row();
@@ -830,16 +829,22 @@ impl Shell {
                         pick = Some(k);
                     }
                     ui.label(egui::RichText::new(&row.size).font(mono(11.0)).color(t.ink));
-                    ui.label(
-                        egui::RichText::new(len(row.hole))
-                            .font(mono(11.0))
-                            .color(t.ink),
+                    let from = row.source.as_deref().map_or_else(
+                        || "A placeholder, not a maker's table".to_string(),
+                        |s| format!("From {s}"),
                     );
-                    ui.label(
-                        egui::RichText::new(len(row.edge))
-                            .font(mono(11.0))
-                            .color(t.ink),
-                    );
+                    ui.label(egui::RichText::new(len(row.hole)).font(mono(11.0)).color(t.ink))
+                        .on_hover_text(format!(
+                            "The mounting hole for the {} {}: \u{00d8} {}. {from}.",
+                            row.size,
+                            word.to_lowercase(),
+                            len(row.hole)
+                        ));
+                    ui.label(egui::RichText::new(len(row.edge)).font(mono(11.0)).color(t.ink))
+                        .on_hover_text(format!(
+                            "Keep the hole's centre at least {} from an edge (a bend counts as one). {from}.",
+                            len(row.edge)
+                        ));
                     ui.label(
                         egui::RichText::new(if row.code.is_empty() { "-" } else { &row.code })
                             .font(mono(11.0))
