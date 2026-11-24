@@ -38,6 +38,7 @@ pub mod dragbench;
 pub mod fg;
 pub mod gui;
 pub mod gui_camsim_panel;
+pub mod inputcut;
 pub mod live;
 pub mod load;
 pub mod measure;

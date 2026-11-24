@@ -1,4 +1,6 @@
 //! Codex CLI JSONL, one process per turn, resumed by thread id. Authentication stays in Codex.
+// desktop only: a page starts no CLI (std's threads and sleeps never run there)
+#![cfg_attr(target_arch = "wasm32", allow(clippy::disallowed_methods))]
 use super::{Backend, Event, Out, Watch, claude::Config, clean_env};
 use forge_agent::json::Json;
 use std::collections::HashSet;

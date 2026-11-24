@@ -12,7 +12,7 @@ static SEQ: AtomicU64 = AtomicU64::new(0);
 
 fn temp_beside(path: &Path) -> PathBuf {
     let n = SEQ.fetch_add(1, Ordering::Relaxed);
-    let t = std::time::SystemTime::now()
+    let t = SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.subsec_nanos());
     path.with_file_name(format!("tmp_obj_{}_{n}_{t}", forge_dirs::process_id()))
@@ -97,4 +97,20 @@ pub fn append(path: &Path, line: &[u8]) -> Result<(), Error> {
     let mut f = OpenOptions::new().create(true).append(true).open(path)?;
     f.write_all(line)?;
     Ok(())
+}
+
+// The time of day only keeps temp names apart between processes. A browser page is one process
+// and has no clock std can read (`SystemTime::now` panics there: turning on versions crashed the
+// page), so there the time is always the epoch. (Kept at the end: the lines above don't move.)
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+use std::time::SystemTime;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+struct SystemTime;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+impl SystemTime {
+    fn now() -> std::time::SystemTime {
+        std::time::UNIX_EPOCH
+    }
 }

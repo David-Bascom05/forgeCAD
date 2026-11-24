@@ -1,0 +1,25 @@
+# The browser build's clippy config: the root's (clippy.toml), and std's calls that panic or fail
+# on wasm32-unknown-unknown. Only the wasm32 lint run reads it (web/tests/ci.sh, .github/workflows/
+# web.yml: CLIPPY_CONF_DIR=web/clippy), so code behind cfg(not(target_arch = "wasm32")) is not seen.
+disallowed-methods = [
+  { path = "f64::mul_add", reason = "fused results differ from separate ops; breaks native/wasm equality" },
+  { path = "f64::sin", reason = "use forge_math::dmath::sin" },
+  { path = "f64::cos", reason = "use forge_math::dmath::cos" },
+  { path = "f64::sin_cos", reason = "use forge_math::dmath::sin_cos" },
+  { path = "f64::tan", reason = "use forge_math::dmath" },
+  { path = "f64::asin", reason = "use forge_math::dmath::asin" },
+  { path = "f64::acos", reason = "use forge_math::dmath::acos" },
+  { path = "f64::atan", reason = "use forge_math::dmath::atan" },
+  { path = "f64::atan2", reason = "use forge_math::dmath::atan2" },
+  { path = "f64::cbrt", reason = "use forge_math::dmath::cbrt" },
+  { path = "f64::hypot", reason = "platform libm" },
+  { path = "f64::exp", reason = "platform libm" },
+  { path = "f64::ln", reason = "platform libm" },
+  { path = "f64::powf", reason = "platform libm" },
+  { path = "std::time::Instant::now", reason = "panics in a browser: crate::plat::Instant or forge_math::clock" },
+  { path = "std::time::SystemTime::now", reason = "panics in a browser: forge_math::clock" },
+  { path = "std::thread::spawn", reason = "no threads in a browser (it panics): crate::plat::spawn" },
+  { path = "std::thread::Builder::spawn", reason = "no threads in a browser (it fails): crate::plat::spawn" },
+  { path = "std::thread::sleep", reason = "panics in a browser" },
+  { path = "std::env::temp_dir", reason = "panics in a browser: forge_dirs::temp_dir" },
+]
