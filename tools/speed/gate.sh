@@ -136,9 +136,8 @@ if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   checkout=$PWD
   exec 9>"$src.lock"
   flock 9
-  rm -rf "$src"
-  mkdir "$src"
-  git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -xf - -C "$src"
+  mkdir -p "$src"
+  git ls-files -co --exclude-standard -z | python3 -I "$dir/srcsync.py" "$src"
   (cd "$src" && cargo build -q --release -p forge-model --example regen1 --example bits \
     && cargo build -q --release -p forge-lang --example benchparts) || exit 1
 else
