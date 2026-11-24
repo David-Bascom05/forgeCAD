@@ -62,13 +62,16 @@ pub struct Ghost {
     pub label: String,
 }
 
+/// A section to draw to scale beside the view: its outline (x, z) and its dimensions (name, value).
+pub type Inset = (Vec<[f64; 2]>, Vec<(String, String)>);
+
 /// A record's preview.
 #[derive(Clone, Debug, Default)]
 pub struct Preview {
     pub parts: Vec<(Tris, Look)>,
     pub ghosts: Vec<Ghost>,
     /// A long tool's section, to show to scale beside the view: (outline x z, dimensions).
-    pub section: Option<(Vec<[f64; 2]>, Vec<(String, String)>)>,
+    pub section: Option<Inset>,
     /// Look along the length (a die, a punch, a press): the axis the subject is long on.
     pub long_axis: Option<usize>,
 }
@@ -511,8 +514,10 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
         Some(Item::Num(x)) if *x > 0.0 => Some(*x),
         _ => None,
     };
-    let mut p = Preview::default();
-    p.long_axis = Some(0);
+    let mut p = Preview {
+        long_axis: Some(0),
+        ..Default::default()
+    };
     let bl = g("bed_length");
     let gap = g("housing_gap");
     let oh = g("open_height");
@@ -614,8 +619,10 @@ pub fn press(t: &forge_vendor::toml::Table) -> Preview {
 /// A punch or die: forge-brake's exact sections, each swept along every segment of the set in
 /// turn (segments laid end to end, 2 mm apart), along y.
 pub fn brake_tool(secs: &[forge_brake_builder::Section], segments: &[(f64, u32)]) -> Preview {
-    let mut p = Preview::default();
-    p.long_axis = Some(1);
+    let mut p = Preview {
+        long_axis: Some(1),
+        ..Default::default()
+    };
     let mut lens: Vec<f64> = segments
         .iter()
         .flat_map(|(l, n)| std::iter::repeat_n(*l, *n as usize))

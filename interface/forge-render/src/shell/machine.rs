@@ -105,7 +105,7 @@ pub struct MachineUi {
     /// A library preview's ghost labels where they are on the screen (the host's, each frame).
     pub view_labels: Vec<(egui::Pos2, String)>,
     /// A long tool's section and dimensions, drawn to scale beside the view.
-    pub inset: Option<(Vec<[f64; 2]>, Vec<(String, String)>)>,
+    pub inset: Option<crate::library_mesh::Inset>,
     /// Which library the workspace edits: "machine", or a tooling kind ("tool", "holder", ...).
     pub lib: &'static str,
     /// The tooling tab's state, while a tooling kind is chosen.
@@ -794,6 +794,49 @@ impl MachineUi {
         }
     }
 
+    /// Chooses a record of the library being edited, by its id (a machine by its name).
+    pub fn pick_record(&mut self, id: &str) -> Result<(), String> {
+        let missing = || format!("no `{id}` in {}", lib_title(self.lib));
+        match self.lib {
+            "machine" => {
+                let e = self.cat.get(id).ok_or_else(missing)?;
+                let (d, l, f) = (e.def.clone(), e.level, e.file.clone());
+                self.load(d, Some((l, f)), Vec::new());
+            }
+            "workholding" => {
+                let w = self.workholding.as_mut().ok_or_else(missing)?;
+                let e = w
+                    .entries
+                    .iter()
+                    .find(|e| e.def.name == id)
+                    .cloned()
+                    .ok_or_else(missing)?;
+                w.pick(e);
+            }
+            x if super::machine_brake::is_brake(x) => {
+                let b = self.brake.as_mut().ok_or_else(missing)?;
+                let e = b
+                    .entries
+                    .iter()
+                    .find(|e| e.def.id == id)
+                    .cloned()
+                    .ok_or_else(missing)?;
+                b.pick(e);
+            }
+            _ => {
+                let t = self.tooling.as_mut().ok_or_else(missing)?;
+                let e = t
+                    .entries
+                    .iter()
+                    .find(|e| e.def.id == id)
+                    .cloned()
+                    .ok_or_else(missing)?;
+                t.pick(e);
+            }
+        }
+        Ok(())
+    }
+
     /// A ribbon command, for the library being edited.
     pub fn command(&mut self, c: MachineCmd) {
         let project = self.project.clone();
@@ -1259,6 +1302,7 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
                     .iter()
                     .any(|x| x.to_lowercase().contains(&want))
             };
+            super::lib_form::empty_levels(ui, t, st.cat.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
                 let here: Vec<_> = st
                     .cat
@@ -1266,21 +1310,10 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
                     .iter()
                     .filter(|e| e.level == lv && matches(e))
                     .collect();
-                ui.label(
-                    RichText::new(lv.name().to_uppercase())
-                        .font(semi(10.0))
-                        .color(t.ink2),
-                );
                 if here.is_empty() {
-                    ui.label(small(
-                        t,
-                        match lv {
-                            Level::Project if st.project.is_none() => "  (no part open: no project folder)",
-                            _ if !want.is_empty() => "  none match",
-                            _ => "  none",
-                        },
-                    ));
+                    continue;
                 }
+                super::lib_form::level_head(ui, t, lv.name(), here.len());
                 // by vendor (a built-in file) or by file (the user's, the project's)
                 let mut groups: Vec<String> = here.iter().map(|e| group_of(e)).collect();
                 groups.dedup();
@@ -2441,7 +2474,9 @@ fn overlay(ctx: &egui::Context, t: &Theme, st: &MachineUi, v: egui::Rect) {
         p.galley(box_.min + vec2(5.0, 3.0), g, t.ink);
     }
     if let Some((outline, dims)) = &st.inset {
-        let r = egui::Rect::from_min_size(pos2(v.left() + 12.0, v.bottom() - 212.0), vec2(220.0, 200.0));
+        // a corner of the view: a third of its shorter side, 140 to 220 px
+        let side = (v.width().min(v.height()) / 3.0).clamp(140.0, 220.0);
+        let r = egui::Rect::from_min_size(pos2(v.left() + 12.0, v.bottom() - side - 12.0), vec2(side, side));
         p.rect_filled(r, 6.0, t.surface.gamma_multiply(0.95));
         p.rect_stroke(r, 6.0, egui::Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
         p.text(

@@ -25,7 +25,7 @@ pub struct MachHost {
     /// A library preview's ghost labels (world point, words) and its framing.
     labels: Vec<([f64; 3], String)>,
     /// A long tool's section and dimensions, for the inset.
-    inset: Option<(Vec<[f64; 2]>, Vec<(String, String)>)>,
+    inset: Option<crate::library_mesh::Inset>,
 }
 
 fn oct(n: [f32; 3]) -> [i16; 2] {
@@ -487,8 +487,23 @@ impl Gui {
                 }
                 None => Err(format!("no tab `{name}`")),
             },
+            ["lib", word] => {
+                let all = ["machine", "workholding"]
+                    .into_iter()
+                    .chain(forge_tooling_builder::KINDS.iter().map(|k| k.0))
+                    .chain(forge_brake_builder::KINDS.iter().map(|k| k.0));
+                let found = all.into_iter().find(|k| k == word);
+                match found {
+                    Some(k) => {
+                        m.set_lib(k);
+                        Ok(())
+                    }
+                    None => Err(format!("no library `{word}`")),
+                }
+            }
+            ["rec", id] => m.pick_record(id),
             ["check"] => {
-                m.run_check();
+                m.command(crate::shell::machine::MachineCmd::Check);
                 Ok(())
             }
             ["save", level] => {
@@ -501,7 +516,7 @@ impl Gui {
                 Ok(())
             }
             _ => Err(format!(
-                "`{cmd}`: open | close | pick NAME | template KIND NAME | clone NAME | jog JOINT VALUE | tab NAME | check | save user|project"
+                "`{cmd}`: open | close | lib KIND | rec ID | pick NAME | template KIND NAME | clone NAME | jog JOINT VALUE | tab NAME | check | save user|project"
             )),
         };
         let say = match got {
@@ -513,7 +528,7 @@ impl Gui {
                     .collect();
                 format!(
                     "{}{}{}{}",
-                    m.def.as_ref().map_or("none".to_string(), |d| d.name.clone()),
+                    m.record_name().unwrap_or_else(|| "none".to_string()),
                     m.problem
                         .as_ref()
                         .map_or(String::new(), |p| format!(" refused: {p}")),

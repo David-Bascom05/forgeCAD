@@ -107,7 +107,7 @@ impl Environment for MachineBuilder {
 
     /// The chosen record's sheet, docked right at full height.
     fn properties_width(&self, s: &Shell) -> Option<f32> {
-        s.machine.as_ref().map(|_| 430.0)
+        s.machine.as_ref().map(|_| 360.0)
     }
 
     fn properties(&self, s: &mut Shell, ui: &mut Ui, r: Rect) {

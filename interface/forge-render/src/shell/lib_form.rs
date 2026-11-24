@@ -446,3 +446,76 @@ pub fn num_edit(ui: &mut Ui, x: &mut f64, unit: &str) -> bool {
     ui.add(egui::DragValue::new(x).speed(0.1).max_decimals(4).suffix(sfx))
         .changed()
 }
+
+/// A level's heading in a library list: "Built-in · 236".
+pub fn level_head(ui: &mut Ui, t: &Theme, level: &str, n: usize) {
+    let mut c = level.chars();
+    let name = c.next().map_or(String::new(), |f| {
+        f.to_uppercase().collect::<String>() + c.as_str()
+    });
+    ui.add_space(2.0);
+    ui.label(
+        RichText::new(format!("{name} · {n}"))
+            .font(semi(11.0))
+            .color(t.ink2),
+    );
+}
+
+/// Above a library list with no records of the user's own yet: what to do next.
+pub fn empty_levels(ui: &mut Ui, t: &Theme, any_own: bool) {
+    if !any_own {
+        ui.label(
+            RichText::new("No records of your own yet · derive one from a built-in record, then Save")
+                .font(sans(11.0))
+                .color(t.ink2),
+        );
+    }
+}
+
+/// A count (flutes, jaws, faces): a whole number.
+pub fn int_edit(ui: &mut Ui, x: &mut f64) -> bool {
+    let mut n = x.round() as i64;
+    let ch = ui
+        .add(egui::DragValue::new(&mut n).speed(0.1).range(0..=1000))
+        .changed();
+    if ch {
+        *x = n as f64;
+    }
+    ch
+}
+
+/// Workholding's keys (forge-workholding's schema) as people say them.
+pub fn workholding_label(key: &str) -> String {
+    match key {
+        "body_d" => "Body diameter",
+        "body_len" => "Body length",
+        "jaw_len" => "Jaw length",
+        "jaw_height" => "Jaw height",
+        "grip_min" => "Smallest grip",
+        "grip_max" => "Largest grip",
+        "through_hole" => "Through hole",
+        "max_rpm" => "Max spindle speed",
+        "grip_force" => "Grip force",
+        "clamp_force" => "Clamp force",
+        "max_opening" => "Max opening",
+        "min_opening" => "Min opening",
+        "stud_d" => "Stud diameter",
+        "hole_d" => "Hole diameter",
+        "dowel_d" => "Dowel diameter",
+        "dowel_h" => "Dowel height",
+        "module_d" => "Module diameter",
+        "module_h" => "Module height",
+        "range_min" => "Smallest size held",
+        "range_max" => "Largest size held",
+        "quill_d" => "Quill diameter",
+        "frame_r" => "Frame radius",
+        "nose_d" => "Nose diameter",
+        "nose_len" => "Nose length",
+        "collet_len" => "Collet length",
+        "collet_d" => "Collet diameter",
+        "point_len" => "Point length",
+        "d" => "Diameter",
+        _ => return humanize(key),
+    }
+    .to_string()
+}

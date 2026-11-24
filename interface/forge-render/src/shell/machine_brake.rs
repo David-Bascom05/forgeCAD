@@ -555,6 +555,7 @@ pub fn library(
         .id_salt(("brake:list", st.word))
         .max_height((ui.available_height() - 220.0).max(80.0))
         .show(ui, |ui| {
+            super::lib_form::empty_levels(ui, t, st.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
                 let here: Vec<&Entry<Rec>> = st
                     .entries
@@ -571,15 +572,10 @@ pub fn library(
                             .any(|x| x.to_lowercase().contains(&want))
                     })
                     .collect();
-                ui.label(
-                    RichText::new(lv.name().to_uppercase())
-                        .font(semi(10.0))
-                        .color(t.ink2),
-                );
                 if here.is_empty() {
-                    ui.label(RichText::new("  none").font(sans(11.0)).color(t.ink2));
                     continue;
                 }
+                super::lib_form::level_head(ui, t, lv.name(), here.len());
                 let mut makers: Vec<&str> = here
                     .iter()
                     .map(|e| text(&e.def.table, "maker").unwrap_or("?"))
@@ -681,7 +677,9 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
         }
         (Ty::Text, Some(Item::Str(s))) => {
             let mut s2 = s.clone();
-            let r = ui.add_sized(vec2(160.0, 20.0), egui::TextEdit::singleline(&mut s2));
+            let r = ui
+                .add_sized(vec2(140.0, 20.0), egui::TextEdit::singleline(&mut s2))
+                .on_hover_text(s2.clone());
             (r.lost_focus() && s2 != *s).then_some(Item::Str(s2))
         }
         (Ty::Text, Some(Item::Arr(a))) => {
@@ -709,7 +707,7 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
         (Ty::Choice(ch), Some(Item::Str(s))) => {
             let mut pick = s.clone();
             egui::ComboBox::from_id_salt(("brake:choice", &f.path))
-                .width(160.0)
+                .width(140.0)
                 .selected_text(pick.clone())
                 .show_ui(ui, |ui| {
                     for c in *ch {
@@ -777,7 +775,12 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
                                     for (c, u) in cols.iter() {
                                         if let Some(Item::Num(x)) = tb.get(c) {
                                             let mut x = *x;
-                                            if num_cell(ui, &mut x, u.suffix()) {
+                                            let edited = if *u == forge_library::schema::Unit::None {
+                                                super::lib_form::int_edit(ui, &mut x)
+                                            } else {
+                                                num_cell(ui, &mut x, u.suffix())
+                                            };
+                                            if edited {
                                                 tb.set(c, Item::Num(x));
                                                 ch = true;
                                             }
@@ -950,7 +953,7 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                 .striped(true)
                 .show(ui, |ui| {
                     for (f, label) in here {
-                        lf::name(ui, t, &label, &f.path, f.help, 150.0);
+                        lf::name(ui, t, &label, &f.path, f.help, 118.0);
                         let v = get(&st.table, &f.path);
                         match v {
                             Some(v) => {
@@ -959,7 +962,7 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                                 }
                             }
                             None if f.cited => {
-                                if lf::unknown_slot(ui, t, 160.0) {
+                                if lf::unknown_slot(ui, t, 140.0) {
                                     change = Some(Change::Set(f.clone(), first_value(st.word, f)));
                                 }
                             }
@@ -969,7 +972,7 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                                         egui::Button::new(
                                             RichText::new("not given · add").font(sans(11.0)).color(t.ink2),
                                         )
-                                        .min_size(vec2(160.0, 18.0)),
+                                        .min_size(vec2(140.0, 18.0)),
                                     )
                                     .clicked()
                                 {

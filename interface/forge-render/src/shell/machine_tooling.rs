@@ -211,6 +211,7 @@ pub fn library(
         .id_salt(("tooling:list", st.word))
         .max_height((ui.available_height() - 200.0).max(80.0))
         .show(ui, |ui| {
+            super::lib_form::empty_levels(ui, t, st.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
                 let here: Vec<&Entry<Rec>> = st
                     .entries
@@ -222,15 +223,10 @@ pub fn library(
                                 || e.file.to_lowercase().contains(&want))
                     })
                     .collect();
-                ui.label(
-                    RichText::new(lv.name().to_uppercase())
-                        .font(semi(10.0))
-                        .color(t.ink2),
-                );
                 if here.is_empty() {
-                    ui.label(RichText::new("  none").font(sans(11.0)).color(t.ink2));
                     continue;
                 }
+                super::lib_form::level_head(ui, t, lv.name(), here.len());
                 let n = here.len();
                 egui::CollapsingHeader::new(RichText::new(format!("{} ({n})", st.word)).font(sans(11.0)))
                     .id_salt(("tooling:group", st.word, lv.name()))
@@ -419,22 +415,27 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut ToolingUi) {
                     .striped(true)
                     .show(ui, |ui| {
                         for (k, label) in here {
-                            lf::name(ui, t, &label, k, "", 140.0);
+                            lf::name(ui, t, &label, k, "", 118.0);
                             match st.table.get(k).cloned() {
                                 None => {
-                                    if lf::unknown_slot(ui, t, 180.0) {
+                                    if lf::unknown_slot(ui, t, 140.0) {
                                         edit = Some((k.clone(), Val::Num(1.0)));
                                     }
                                 }
                                 Some(Val::Num(mut x)) => {
-                                    if lf::num_edit(ui, &mut x, unit_of(k).trim()) {
+                                    let ch = if k == "nof" {
+                                        lf::int_edit(ui, &mut x)
+                                    } else {
+                                        lf::num_edit(ui, &mut x, unit_of(k).trim())
+                                    };
+                                    if ch {
                                         edit = Some((k.clone(), Val::Num(x)));
                                     }
                                 }
                                 Some(Val::Str(s0)) if k == "type" && st.word == "tool" => {
                                     let mut s = s0.clone();
                                     egui::ComboBox::from_id_salt("tooling:type")
-                                        .width(180.0)
+                                        .width(140.0)
                                         .selected_text(s.replace('_', " "))
                                         .show_ui(ui, |ui| {
                                             for w in TOOL_TYPES {
@@ -452,7 +453,7 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut ToolingUi) {
                                 Some(Val::Str(mut s)) => {
                                     if ui
                                         .add_sized(
-                                            egui::vec2(180.0, 20.0),
+                                            egui::vec2(140.0, 20.0),
                                             egui::TextEdit::singleline(&mut s),
                                         )
                                         .on_hover_text(s.clone())

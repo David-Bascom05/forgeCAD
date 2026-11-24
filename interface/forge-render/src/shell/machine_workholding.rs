@@ -259,6 +259,7 @@ pub fn library(
         .id_salt("workholding:list")
         .max_height((ui.available_height() - 200.0).max(80.0))
         .show(ui, |ui| {
+            super::lib_form::empty_levels(ui, t, st.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
                 let here: Vec<&Entry<Record>> = st
                     .entries
@@ -271,15 +272,10 @@ pub fn library(
                                 .any(|x| x.to_lowercase().contains(&want))
                     })
                     .collect();
-                ui.label(
-                    RichText::new(lv.name().to_uppercase())
-                        .font(semi(10.0))
-                        .color(t.ink2),
-                );
                 if here.is_empty() {
-                    ui.label(RichText::new("  none").font(sans(11.0)).color(t.ink2));
                     continue;
                 }
+                super::lib_form::level_head(ui, t, lv.name(), here.len());
                 let mut kinds: Vec<&str> = here.iter().map(|e| e.def.kind.name()).collect();
                 kinds.sort();
                 kinds.dedup();
@@ -384,21 +380,26 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                             super::lib_form::name(
                                 ui,
                                 t,
-                                &super::lib_form::humanize(&f.path),
+                                &super::lib_form::workholding_label(&f.path),
                                 &f.path,
                                 f.help,
-                                150.0,
+                                118.0,
                             );
                             match &f.ty {
                                 Ty::Num | Ty::Int => match r.vals.get(&f.path) {
                                     Some(v) => {
                                         let mut x = *v;
-                                        if super::lib_form::num_edit(ui, &mut x, f.unit.suffix()) {
+                                        let ch = if f.ty == Ty::Int {
+                                            super::lib_form::int_edit(ui, &mut x)
+                                        } else {
+                                            super::lib_form::num_edit(ui, &mut x, f.unit.suffix())
+                                        };
+                                        if ch {
                                             set = Some((f.path.clone(), x));
                                         }
                                     }
                                     None => {
-                                        if super::lib_form::unknown_slot(ui, t, 160.0) {
+                                        if super::lib_form::unknown_slot(ui, t, 140.0) {
                                             set = Some((f.path.clone(), 1.0));
                                         }
                                     }
@@ -433,9 +434,10 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                     let mut w = r.words.get(&f.path).cloned().unwrap_or_default();
                                     if ui
                                         .add_sized(
-                                            egui::vec2(160.0, 20.0),
+                                            egui::vec2(140.0, 20.0),
                                             egui::TextEdit::singleline(&mut w),
                                         )
+                                        .on_hover_text(w.clone())
                                         .lost_focus()
                                     {
                                         set_word = Some((f.path.clone(), w));
