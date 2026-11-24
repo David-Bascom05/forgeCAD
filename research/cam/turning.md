@@ -119,3 +119,30 @@ What the checks caught while the examples were written (each now a test, tests/r
    chuck).
 7. Canned cycles (G71/G70/G76) as posted text (today the cycles are expanded into moves, which
    is what G6 reads back and certifies).
+
+## The hub (CAM-CORE's shop test part, examples/machined/hub_turn.fg)
+
+14 ops on a hollow hub from a Ø66 bar; 6 certified at first, all 14 now (certification full, 1811
+checks, 0.58 s; the exact path too). The root causes:
+
+1. OD finish on a hollow part found no start: it looked for the front at the part's least radius
+   (the drilled hole's); it now starts at the front face's inner edge (`cap_left`: the grown
+   part's front cap). The same cap keeps OD rough passes out of the bore (a pass at the grown
+   bore's cylinder sent the right-hand insert down the bore) and bore passes out of the outside.
+2. A drill the size of its hole: gap zero, which the checker cannot prove (its containment
+   argument needs a strictly positive gap). G1 for a cutter is now checked against P ⊖ B_tol with
+   need = leave: the same placements as dist(tool, P) ≥ leave − tol (a point of P ⊖ B_tol has
+   B(y, tol) ⊆ P), and a touching tool is then tol clear. The same held the inside thread (its
+   band edge on the minor bore). Then a real refusal: drill-26's Ø32 shank entered the Ø28 bore on
+   an 86 deep hole; `drill-26-4d` (110 flute) is in the library.
+3. Rough, bore rough and the inside thread above the front face: 1 (the passes) and 2 (zero gap).
+4. Both finishes dove into the relief grooves (the insert's body over the groove's far wall: a
+   real gouge). `skip:` bridges a z range on the far side of the gap (a straight chord cut the
+   shoulder's corner by 0.12: caught, hence the elbow).
+5. The left-hand back chamfer 0.197 from leftover stock: that stock was the stray bore passes'
+   (1); gone with them.
+6. Part-off: no blade reached a Ø66 bar's centre. `part-3-deep` (reach 40); the refusal now names
+   the library's blades that reach. The generic blade model was also wrong for deep blades: its
+   side taper ran the whole reach (closing a 40 mm blade, and narrower than catalogue blades at the
+   back: not a superset, T.model); now a 6 mm head with the side clearance and a straight body at
+   most 0.2 per side narrower (two convex bodies).

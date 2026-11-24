@@ -102,6 +102,8 @@ pub struct TurnTool {
     pub tip_number: u32,
     /// A left-hand tool: the right-hand one mirrored across z (it feeds +z, away from the chuck).
     pub left: bool,
+    /// The largest bar a part-off blade is made for (its maker's), if stated.
+    pub max_bar: Option<f64>,
     pub bodies: Vec<Body>,
     /// Cutting data: m/min, mm/rev, mm depth of cut.
     pub vc: f64,
@@ -544,6 +546,7 @@ pub fn turning_tool(
         tip: [-re, -re],
         tip_number: 3,
         left: false,
+        max_bar: None,
         bodies: vec![insert_body, head, shank_body],
         vc: 200.0,
         f: 0.2,
@@ -717,6 +720,7 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
         tip: [re, -re],
         tip_number: 2,
         left: false,
+        max_bar: None,
         bodies: vec![insert_body, bar_body],
         vc: 180.0,
         f: 0.15,
@@ -725,6 +729,98 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
     };
     Ok(if b.hand == 'L' { mirrored(t) } else { t })
 }
+
+/// A parting or grooving blade from its maker's records: the insert (cutting width w, corner rc,
+/// its length along the blade `head`, side clearance `side_deg`) as a head falling away by the
+/// side clearance; the blade (thickness t_blade, reach, height h) as a rectangle centred on the
+/// insert's width from the tip back to the reach (where the blade truly starts behind the insert,
+/// a superset); the tool block from its record ([h, b, l1]: depth below centre height, width
+/// along z centred on the blade, length along ρ from the reach back) or generic. `max_bar`: the
+/// maker's largest bar.
+pub fn blade_tool(
+    id: &str,
+    kind: Kind,
+    w: f64,
+    rc: f64,
+    head: f64,
+    side_deg: f64,
+    t_blade: f64,
+    reach: f64,
+    h: f64,
+    max_bar: Option<f64>,
+    block: Option<[f64; 3]>,
+) -> Result<TurnTool, ToolError> {
+    if !(w > 2.0 * rc && rc >= 0.0 && reach > 0.0 && t_blade > 2.0 * rc && t_blade <= w && head > 0.0) {
+        return Err(ToolError::Bad {
+            record: id.into(),
+            why: format!("an insert {w} wide (corner {rc}) on a blade {t_blade} thick, reach {reach}"),
+        });
+    }
+    let mut t = groove_tool(id, kind, w, rc, reach, side_deg, h)?;
+    let core_w = w - 2.0 * rc;
+    let hl = head.min(reach);
+    let taper = (tan(side_deg.to_radians()) * hl).min(0.5 * (w - t_blade));
+    let off = 0.5 * (w - t_blade);
+    let insert = Body {
+        name: "blade".into(),
+        cutter: true,
+        core: ccw(vec![[0.0, 0.0], [hl, taper], [hl, core_w - taper], [0.0, core_w]]),
+        r: rc,
+        depth: [0.0, 3.0],
+        relief: tan(7f64.to_radians()),
+        on_axis: false,
+        cyl: None,
+    };
+    let body = Body {
+        name: "blade body".into(),
+        cutter: true,
+        core: ccw(vec![
+            [0.0, off],
+            [reach, off],
+            [reach, core_w - off],
+            [0.0, core_w - off],
+        ]),
+        r: rc,
+        depth: [0.0, h],
+        relief: 0.0,
+        on_axis: false,
+        cyl: None,
+    };
+    let mut holder = t.bodies.pop().expect("the block");
+    if let Some([bh, bb, bl]) = block {
+        // the block: b wide along z about the blade's middle, l1 back along ρ from the reach (the
+        // blade's clamped length beyond the reach lies in it), its depth below centre height
+        let (x0, zm) = (reach + rc, 0.5 * core_w);
+        holder = Body {
+            name: "tool block".into(),
+            core: vec![
+                [x0, zm - 0.5 * bb],
+                [x0 + bl, zm - 0.5 * bb],
+                [x0 + bl, zm + 0.5 * bb],
+                [x0, zm + 0.5 * bb],
+            ],
+            depth: [0.0, bh.max(h)],
+            ..holder
+        };
+    }
+    t.bodies = vec![insert, body, holder];
+    t.code = format!("blade {t_blade} x {reach}, insert {w}");
+    t.max_bar = max_bar;
+    t.source = "the maker's blade and insert records; tool block generic".into();
+    Ok(t)
+}
+
+/// The generic blade: its insert head is BLADE_HEAD long (or the reach, if shorter), falling away
+/// by the side clearance; behind it the blade's sides run straight, at most BLADE_RELIEF in from
+/// the head's on each side (catalogue blades are 0.3–0.5 narrower per side than the insert, so
+/// the model holds them: T.model). Returns (head length, the narrowing per side).
+fn blade_head(reach: f64, side_deg: f64) -> (f64, f64) {
+    let head = BLADE_HEAD.min(reach);
+    (head, (tan(side_deg.to_radians()) * head).min(BLADE_RELIEF))
+}
+
+const BLADE_HEAD: f64 = 6.0;
+const BLADE_RELIEF: f64 = 0.2;
 
 /// A grooving or part-off blade: width w, corner radius rc, reach (depth from the tip to the
 /// blade's holder), side clearance per side in degrees. The reference point is the centre of
@@ -745,9 +841,17 @@ pub fn groove_tool(
         });
     }
     let core_w = w - 2.0 * rc;
-    let taper = tan(side_deg.to_radians()) * reach;
-    // the blade narrows by the side clearance on both sides as it runs back (+ρ) from the tip
-    let core = vec![[0.0, 0.0], [reach, taper], [reach, core_w - taper], [0.0, core_w]];
+    let (head, taper) = blade_head(reach, side_deg);
+    // the insert head narrows by the side clearance on both sides as it runs back (+ρ) from the
+    // tip; behind it the blade runs straight, at most BLADE_RELIEF in from the head on each side
+    // two convex cores: the head (a trapezoid) and the blade behind it (a rectangle)
+    let core = vec![[0.0, 0.0], [head, taper], [head, core_w - taper], [0.0, core_w]];
+    let body_core = vec![
+        [head, taper],
+        [reach, taper],
+        [reach, core_w - taper],
+        [head, core_w - taper],
+    ];
     if core_w - 2.0 * taper <= 0.0 {
         return Err(ToolError::Bad {
             record: id.into(),
@@ -763,6 +867,11 @@ pub fn groove_tool(
         relief: tan(7f64.to_radians()),
         on_axis: false,
         cyl: None,
+    };
+    let blade_body = Body {
+        name: "blade body".into(),
+        core: ccw(body_core),
+        ..blade.clone()
     };
     let holder = Body {
         name: "blade holder".into(),
@@ -791,7 +900,12 @@ pub fn groove_tool(
         tip: [-rc, -rc],
         tip_number: 3,
         left: false,
-        bodies: vec![blade, holder],
+        max_bar: None,
+        bodies: if reach > head {
+            vec![blade, blade_body, holder]
+        } else {
+            vec![blade, holder]
+        },
         vc: 120.0,
         f: 0.06,
         ap: reach,
@@ -846,6 +960,7 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
         tip: [-rt, 0.0],
         tip_number: 8,
         left: false,
+        max_bar: None,
         bodies: vec![tip, holder],
         vc: 100.0,
         f: 0.0,
@@ -876,16 +991,17 @@ pub fn id_groove_tool(
         });
     }
     let core_w = w - 2.0 * rc;
-    let taper = tan(side_deg.to_radians()) * reach;
+    let (head, taper) = blade_head(reach, side_deg);
     if core_w - 2.0 * taper <= 0.0 {
         return Err(ToolError::Bad {
             record: id.into(),
             why: "the side clearance closes the blade".into(),
         });
     }
-    let core = vec![
-        [0.0, 0.0],
-        [0.0, core_w],
+    let core = vec![[0.0, 0.0], [0.0, core_w], [-head, core_w - taper], [-head, taper]];
+    let body_core = vec![
+        [-head, taper],
+        [-head, core_w - taper],
         [-reach, core_w - taper],
         [-reach, taper],
     ];
@@ -898,6 +1014,11 @@ pub fn id_groove_tool(
         relief: tan(7f64.to_radians()),
         on_axis: false,
         cyl: None,
+    };
+    let blade_body = Body {
+        name: "blade body".into(),
+        core: ccw(body_core),
+        ..blade.clone()
     };
     let bar = Body {
         name: "bar".into(),
@@ -925,7 +1046,12 @@ pub fn id_groove_tool(
         tip: [rc, -rc],
         tip_number: 2,
         left: false,
-        bodies: vec![blade, bar],
+        max_bar: None,
+        bodies: if reach > head {
+            vec![blade, blade_body, bar]
+        } else {
+            vec![blade, bar]
+        },
         vc: 100.0,
         f: 0.04,
         ap: reach,
@@ -988,6 +1114,7 @@ pub fn id_thread_tool(
         tip: [rt, 0.0],
         tip_number: 6,
         left: false,
+        max_bar: None,
         bodies: vec![tip, bar],
         vc: 80.0,
         f: 0.0,
@@ -998,6 +1125,18 @@ pub fn id_thread_tool(
 
 /// A drill on the centre line: diameter d, point angle, flute length, shank diameter.
 pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> Result<TurnTool, ToolError> {
+    drill_tool_len(id, d, point_deg, flute, shank, 60.0)
+}
+
+/// `drill_tool` with the shank's length above the flutes (a maker's oal − lcf).
+pub fn drill_tool_len(
+    id: &str,
+    d: f64,
+    point_deg: f64,
+    flute: f64,
+    shank: f64,
+    shank_len: f64,
+) -> Result<TurnTool, ToolError> {
     let r = 0.5 * d;
     let tip_h = r / tan(0.5 * point_deg.to_radians());
     let sr = 0.5 * shank;
@@ -1019,8 +1158,8 @@ pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> R
         core: ccw(vec![
             [-sr, flute],
             [sr, flute],
-            [sr, flute + 60.0],
-            [-sr, flute + 60.0],
+            [sr, flute + shank_len],
+            [-sr, flute + shank_len],
         ]),
         r: 0.0,
         depth: [0.0, 0.0],
@@ -1040,6 +1179,7 @@ pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> R
         tip: [0.0, 0.0],
         tip_number: 0,
         left: false,
+        max_bar: None,
         bodies: vec![flutes, shank_body],
         vc: 25.0,
         f: 0.1,
