@@ -51,6 +51,7 @@ fn usage() -> ExitCode {
          forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
          forgecad mesh FILE.stl|obj|3mf [--json]        (a mesh read and measured: not a B-rep)\n       \
          forgecad tool log add|list|observe|worn|chipped|broken|regrind|predict|run|calibrate ..   (physical tools: wear and life)\n       \
+         forgecad tool|holder|collet|collet_nut|pull_stud|insert|turn_holder list | new ID --from ID [FIELD=VALUE..] [--project] | check ID|FILE   (your own tooling)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
          forgecad workholding list [KIND] | show NAME | schema | new NAME --from X [field=value ..] [--json]   (vises, clamps, plates, chucks, collets)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
@@ -251,6 +252,20 @@ fn main() -> ExitCode {
                 args.iter().any(|a| a == "--project"),
             );
             let o = forge_cam_lang::toollog::run(&env, &mut store, &args[3..]);
+            let _ = write!(std::io::stdout(), "{}", o.out);
+            if !o.err.is_empty() {
+                eprintln!("{}", o.err.trim_end());
+            }
+            ExitCode::from(o.code)
+        }
+        Some(w @ ("tool" | "holder" | "collet" | "collet_nut" | "pull_stud" | "insert" | "turn_holder"))
+            if args.len() >= 3 =>
+        {
+            let env = forge_tooling_builder::cli::Env {
+                project: std::path::PathBuf::from("."),
+                user_cam: forge_tooling_builder::user_cam(),
+            };
+            let o = forge_tooling_builder::cli::run(&env, w, &args[2..]).expect("a tooling kind");
             let _ = write!(std::io::stdout(), "{}", o.out);
             if !o.err.is_empty() {
                 eprintln!("{}", o.err.trim_end());

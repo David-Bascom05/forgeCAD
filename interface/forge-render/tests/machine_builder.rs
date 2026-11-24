@@ -233,6 +233,70 @@ fn make_jog_check_save_and_close() {
         shot(&mut h, &format!("1{k}-template-{}", tp.word()));
     }
 
+    // the tooling libraries in the same workspace: a cutting tool derived from a built-in one,
+    // its length edited (the user's value), checked, saved to the project; a holder shown
+    h.gui.shell.machine.as_mut().unwrap().set_lib("tool");
+    for _ in 0..3 {
+        h.step();
+    }
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        let tu = m.tooling.as_mut().unwrap();
+        let e = tu
+            .entries
+            .iter()
+            .find(|e| e.def.id == "flat-10")
+            .cloned()
+            .unwrap();
+        tu.pick(e);
+    }
+    shot(&mut h, "20-tool-library");
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        let project = m.project.clone();
+        let tu = m.tooling.as_mut().unwrap();
+        tu.new_id = "shop-flat-10".into();
+        tu.derive(project.as_deref());
+        assert_eq!(tu.cur.as_ref().unwrap().id, "shop-flat-10", "{}", tu.message);
+        forge_tooling_builder::dynamic::set_user(&mut tu.table, "oal", forge_tooling::toml::Val::Num(90.0));
+        tu.reread();
+        assert!(tu.problem.is_none(), "{:?}", tu.problem);
+        assert_eq!(
+            forge_tooling_builder::dynamic::status_of(&tu.table, "oal").as_deref(),
+            Some("user")
+        );
+        tu.check(project.as_deref());
+        assert!(tu.findings.is_empty(), "{:?}", tu.findings);
+        tu.save(Level::Project, project.as_deref());
+        assert!(tu.message.starts_with("Saved"), "{}", tu.message);
+    }
+    assert!(dir.join("cam/tools/shop-flat-10.toml").is_file());
+    let (lib, _) = forge_tooling_builder::library(Some(&dir), None);
+    assert_eq!(
+        lib.tools.iter().find(|t| t.id == "shop-flat-10").unwrap().oal,
+        90.0
+    );
+    shot(&mut h, "21-tool-derived");
+    h.gui.shell.machine.as_mut().unwrap().set_lib("holder");
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(
+        h.gui
+            .shell
+            .machine
+            .as_ref()
+            .unwrap()
+            .tooling
+            .as_ref()
+            .unwrap()
+            .preview()
+            .is_some()
+    );
+    shot(&mut h, "22-holder");
+    h.gui.shell.machine.as_mut().unwrap().set_lib("machine");
+    h.step();
+
     // close: the part is back
     h.gui.shell.out.push(Action::MachineBuilder);
     for _ in 0..3 {
