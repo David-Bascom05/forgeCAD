@@ -14,8 +14,14 @@ use forge_cam_geom::check::Move;
 use forge_cam_geom::drop::{Column, gap_clear};
 use forge_cam_geom::ival::Ival;
 
-/// Cells for one face's gap check in a generator's segment test.
-const GAP_BUDGET: usize = 2_000;
+/// Cells for one face's gap check in a generator's segment test. Undecided within it is "not
+/// proven", and the drape splits the chord (short pieces resolve by the closed forms), so the
+/// budget moves only where splits happen, never what is accepted: an accepted chord is one the
+/// search proved Clear, at any budget, and the path is certified after. On the mould core
+/// (2026-11-24): 2000 -> 1000 cells took steep_shallow's generation from 8.50 to 6.49 s and rest's
+/// from 2.83 to 2.41 s, every op's cycle time the same (plan_scurve) and 16 / 4 more blocks of
+/// 9956 / 885; 500 and below began to cost cycle time (+2 s at 500, +9.5 s at 250).
+const GAP_BUDGET: usize = 1_000;
 
 pub struct SurfDrop<'s, 'a> {
     pub sf: &'s Surfacer<'a>,
