@@ -7743,9 +7743,9 @@ mod finish3d_memo_tests {
         let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
         // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/finish3d_memo_test");
-        std::fs::create_dir_all(&dir).unwrap();
-        let part = std::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
-        std::fs::write(dir.join("mold_core.fg"), &part).unwrap();
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("mold_core.fg"), &part).unwrap();
         let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nleft = rest(op1, tool: t2, after: t1, stepover: 3, area: (-30, -24, 30, 24), grid: 1.5)\n";
         let run = |d: &str| {
             let before = super::FINISHED.computed();
@@ -7792,9 +7792,9 @@ mod finish3d_memo_tests {
         }
         let edited = part.replacen("shared bw = 40", "shared bw = 38", 1);
         assert_ne!(edited, part);
-        std::fs::write(dir.join("mold_core.fg"), &edited).unwrap();
+        forge_dirs::fs::write(dir.join("mold_core.fg"), &edited).unwrap();
         assert_eq!(run(doc).0, 1, "part: the paths were not made anew");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
     }
 }
 
@@ -7810,9 +7810,9 @@ mod surfacing_memo_tests {
         let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
         // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
         let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/surfacing_memo_test");
-        std::fs::create_dir_all(&dir).unwrap();
-        let part = std::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
-        std::fs::write(dir.join("mold_core.fg"), &part).unwrap();
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("mold_core.fg"), &part).unwrap();
         let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nfin = parallel(op1, tool: t2, stepover: 6, area: (-12, -9, 12, 9))\n";
         let run = |d: &str| {
             let before = super::SURFACED.computed();
@@ -7846,9 +7846,9 @@ mod surfacing_memo_tests {
         // the part: one of its numbers changed
         let edited = part.replacen("shared bw = 40", "shared bw = 38", 1);
         assert_ne!(edited, part);
-        std::fs::write(dir.join("mold_core.fg"), &edited).unwrap();
+        forge_dirs::fs::write(dir.join("mold_core.fg"), &edited).unwrap();
         assert_eq!(run(doc).0, 1, "part: the path was not made anew");
-        let _ = std::fs::remove_dir_all(&dir);
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
     }
 
     /// The surfacing key leaves out the tool's stickout, holder and number: surf.rs's
@@ -7862,7 +7862,7 @@ mod surfacing_memo_tests {
         use forge_cam::surf::{self, Surfacer};
         use forge_tooling::Library;
         let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
-        let src = std::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
+        let src = forge_dirs::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
         let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
         let faces = forge_cam::lower3d::lower_surfacing(&run.body.unwrap()).unwrap().0;
         let lib = Library::builtin();
