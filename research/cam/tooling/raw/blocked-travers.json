@@ -1,0 +1,10 @@
+{
+ "source": "Travers Tool",
+ "blocked": [
+  {
+   "url": "https://www.travers.com/category/cutting-indexable-inserts",
+   "why": "HTTP 406 with empty body for category and search pages (home page 200) - treated as blocked"
+  }
+ ],
+ "records": []
+}

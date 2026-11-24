@@ -26,10 +26,22 @@
     cross-section, name, angle, radius, height, rated load; the id on hover), only what fits;
   - 08: the stations on the bed, drawn to scale between the housings, each stack in its
     published segments; dragged to place;
-  - 09: the same at 1024 x 700: nothing cut off.
+  - 09: the same at 1024 x 700: nothing cut off;
+  - 10: the view cube's LEFT: down the bend line (the cube is named in the press's frame: LEFT
+    and RIGHT along the bed, FRONT the operator's side, BACK the backgauge's; its home the
+    framed working zone);
+  - 11: see-through: from the operator's side and above, the first flange (already bent) stands
+    between the eye and the second bend and is drawn as a ghost (per body, kept up with the eye;
+    never the walls either side of the bend being made, the tools, or a collision's red), at
+    35 % with its outline drawn;
+  - 12: the cube from above, the operator's side below: TOP reads upright (at the default
+    view's 28 deg the cube's own fade makes TOP faint and foreshortened, not turned).
+  The default view (Home, Follow bend, cube faces) is scaled to the part (David): its bounds
+  through the step, with the punch's last 12 mm and the die's V and shoulders, +15 %; only
+  Press Overview shows the machine.
 - `shots/web-*.png`: interface/forge-render/web/tests/bendsim.cjs in Chromium (software WebGPU),
-  the wasm32 build: the same channel on the library's first press with its maker's tools
-  (TruBend 5085), at the start, the first bend and the second.
+  the wasm32 build (bendsim/env c106089d): the same channel on the library's first press with
+  its maker's tools, at the start, the first bend and the second; the same layout as native.
 - `band-27900c27.txt`: tools/speed/band.py, main f04c533e vs bendsim/env 27900c27, exact
   callgrind on one machine: every strict line <= +0.0000%, strict total -0.0085%; bits.txt
   unchanged.
@@ -49,6 +61,7 @@
 - The flat-pattern link opens the Flat Pattern with bend lines on and names the bend; it does
   not yet pick that one line out.
 - Livery colours are not in the data: the press is RENDER-STUDIO's neutral machine paint; the
-  bend zone's amber is the panel's annotation colour, not an appearance.
+  bend zone's amber is RENDER-STUDIO's signal colour `highlight-bend`, not a material. A sheet
+  whose material the part does not name is drawn a neutral matte slate (no material claimed).
 - The tool library's "fits" filter uses the rules' own sides (tip angle and radius against
   the sharpest bend, die angle) and the clamping system; open height only where it is checked.

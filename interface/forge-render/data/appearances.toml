@@ -452,6 +452,18 @@ source = "Stand-in: a light grey seamless paper sweep"
 kind_base = "stand-in"
 kind_rough = "stand-in"
 
+[[appearance]]
+name = "Carbide"
+family = "metal"
+base = [0.537, 0.536, 0.519]
+metal = 1
+tint = [0.45, 0.409, 0.193]
+rough = 0.2
+source = "Stand-in: [PB] Tungsten's F0 and tint for cemented tungsten carbide (no measured WC data found)"
+kind_base = "stand-in"
+kind_tint = "stand-in"
+kind_rough = "stand-in"
+note = "Cutting inserts and carbide end mills (asked by UX-LEAD for CAM and the Machine Builder)."
 # ---------------------------------------------------------------- machines (asked by BEND-SIM)
 
 [[appearance]]
@@ -496,6 +508,17 @@ base = [0.8, 0.04, 0.03]
 rough = 0.4
 ior = 1.5
 source = "Not a material: a signal colour for a failing or colliding body (BEND-SIM's id highlight-red)"
+kind_base = "user"
+kind_rough = "user"
+kind_ior = "user"
+
+[[appearance]]
+name = "Highlight bend"
+family = "other"
+base = [0.85, 0.52, 0.08]
+rough = 0.4
+ior = 1.5
+source = "Not a material: a signal colour for the bending zone (BEND-SIM's id highlight-bend)"
 kind_base = "user"
 kind_rough = "user"
 kind_ior = "user"

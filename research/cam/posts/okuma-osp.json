@@ -1,0 +1,204 @@
+{
+ "dialect": "okuma-osp",
+ "control": "Okuma OSP-P300M / P500M",
+ "sources": [
+  {
+   "id": "S1",
+   "url": "https://www.okuma.com/files/documents/p300_whitepaper_final_2013_11_22.pdf",
+   "title": "Okuma OSP-P300 white paper",
+   "edition": "2013-11-22, 8 pp",
+   "taken": "2026-11-23"
+  }
+ ],
+ "items": {
+  "program_open": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "program_close": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "comment": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "line_numbers": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "block_end": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "safe_start": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "tool_change": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "tool_length_comp": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "spindle": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "work_offset": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "arc_format": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "rapid_linear": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "feed": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "decimal_point": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "max_digits": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "retract_home": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "coolant": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "dwell": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "drill_G81": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "dwell_drill_G82": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "peck_G83": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "chipbreak_G73": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "rigid_tap_G84": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "bore_G85": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "return_level": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "cycle_cancel": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "peck_depth_word": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "cycle_dwell_units": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "native_language": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "iso_mode_select": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  },
+  "iso_program_start": {
+   "value": null,
+   "status": "UNKNOWN",
+   "note": ""
+  }
+ },
+ "unknown": [
+  "program_open",
+  "program_close",
+  "comment",
+  "line_numbers",
+  "block_end",
+  "safe_start",
+  "tool_change",
+  "tool_length_comp",
+  "spindle",
+  "work_offset",
+  "arc_format",
+  "rapid_linear",
+  "feed",
+  "decimal_point",
+  "max_digits",
+  "retract_home",
+  "coolant",
+  "dwell",
+  "drill_G81",
+  "dwell_drill_G82",
+  "peck_G83",
+  "chipbreak_G73",
+  "rigid_tap_G84",
+  "bore_G85",
+  "return_level",
+  "cycle_cancel",
+  "peck_depth_word",
+  "cycle_dwell_units",
+  "native_language",
+  "iso_mode_select",
+  "iso_program_start"
+ ],
+ "notes": "No openly published Okuma OSP programming manual found. okuma.co.jp/support offers only catalog download (via a form, okuma.satori.site); okuma.com/manuals and the okuma.com manual blog answer 403; manuals are said (search snippet of that blog) to come via distributor request / on-control. The P300 white paper (S1) was fetched and contains no G-code syntax. G15 H, G56, etc. therefore all UNKNOWN; memory says OSP uses G15 H<n> for work-coordinate select and G56 H for length offset, unverified. Third-party copies (manualmachine.com OSP-P200M Programming Manual Pub 5228-E-R9; Scribd G-code lists; wpi.edu OSP-U100M) noted, not used."
+}

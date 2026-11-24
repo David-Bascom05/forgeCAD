@@ -48,11 +48,15 @@ impl Environment for BendSim {
         content::panels(s, ctx);
     }
 
-    fn dock_width(&self, s: &Shell) -> f32 {
+    fn status(&self, s: &Shell) -> Option<String> {
+        content::status(s)
+    }
+
+    fn properties_width(&self, s: &Shell) -> Option<f32> {
         content::dock_width(s)
     }
 
-    fn dock(&self, s: &mut Shell, ui: &mut Ui, r: Rect) {
+    fn properties(&self, s: &mut Shell, ui: &mut Ui, r: Rect) {
         content::dock(s, ui, r);
     }
 

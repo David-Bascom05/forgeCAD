@@ -1,0 +1,21 @@
+name = "forgemachinecore"
+version = "0.1.0"
+defaultTargets = ["ForgeMachineCore"]
+# One Mathlib build, shared with verify/forge-cam and verify/forge-machine (run `lake exe cache get`
+# in verify/forge-cam first).
+packagesDir = "../../../forge-cam/.lake/packages"
+
+# Aeneas's Lean library at the commit tools/aeneas/setup.sh pins (its Mathlib is v4.36.0).
+[[require]]
+name = "aeneas"
+git = "https://github.com/AeneasVerif/aeneas"
+rev = "2e3d4488280bb8a95411db81019a7854a784861f"
+subDir = "backends/lean"
+
+# The spec the translation is proven against: verify/forge-machine (Interp.lean).
+[[require]]
+name = "forgemachine"
+path = "../../../forge-machine"
+
+[[lean_lib]]
+name = "ForgeMachineCore"

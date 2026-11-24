@@ -1,0 +1,14 @@
+[package]
+name = "forge-probe-builder"
+description = "Probing devices (forge-probe's work probes and tool setters) as forge-library kinds for the shared library builder: forms, templates, checks and a turned preview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-library = { path = "../forge-library" }
+forge-probe = { path = "../../kernel/forge-probe" }
+
+[lints]
+workspace = true

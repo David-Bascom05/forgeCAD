@@ -1,0 +1,1733 @@
+{
+ "maker": "Ingersoll Cutting Tools",
+ "taken": "2026-11-24",
+ "source": "Catalogue section 1144_Turning_Tech.pdf (CUTTING DATA FOR ISO TURNING, catalogue pp 1149-1150) + grade markers in 0872_Turning_Inserts.pdf",
+ "rows": [
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8115",
+   "iso_group": "P",
+   "material_stated": "Carbon steel",
+   "vc": {
+    "v": [
+     249.936,
+     399.288
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 820 - 1310"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P10 - P25\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG431MP / WNMG080404MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8125",
+   "iso_group": "P",
+   "material_stated": "Carbon steel",
+   "vc": {
+    "v": [
+     249.936,
+     350.52
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 820 - 1150"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P10 - P25\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT5100",
+   "iso_group": "P",
+   "material_stated": "Carbon steel",
+   "vc": {
+    "v": [
+     158.496,
+     259.08
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 520 - 850"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P20 - P40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT7100",
+   "iso_group": "P",
+   "material_stated": "Carbon steel",
+   "vc": {
+    "v": [
+     118.872,
+     198.12
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 390 - 650"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P35 - P45\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31]); marker groups for this grade: ['P/M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8020",
+   "iso_group": "P",
+   "material_stated": "Carbon steel",
+   "vc": {
+    "v": [
+     140.208,
+     198.12
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 460 - 650"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P30 - P45\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9030",
+   "iso_group": "P",
+   "material_stated": "Carbon steel",
+   "vc": {
+    "v": [
+     259.08,
+     280.416
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 850 - 920"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P15 - P35\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 44, 68, 85]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "VNMG331 / VNMG160404",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "CT3000",
+   "iso_group": "P",
+   "material_stated": "Carbon steel",
+   "vc": {
+    "v": [
+     298.704,
+     451.104
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 980 - 1480"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 39, 44, 74, 93, 99]); marker groups for this grade: ['P/M/K']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT"
+   ],
+   "chipbreaker": null,
+   "grade": "PV3010",
+   "iso_group": "P",
+   "material_stated": "Carbon steel",
+   "vc": {
+    "v": [
+     237.744,
+     451.104
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 780 - 1480"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 93, 99]); marker groups for this grade: ['P/M/K/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT7310",
+   "iso_group": "P",
+   "material_stated": "Structural steel",
+   "vc": {
+    "v": [
+     179.832,
+     280.416
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 590 - 920"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 31, 44, 74, 93, 99]); marker groups for this grade: ['K']. NOTE: on ['CNMG431 / CNMG120404', 'CNMG432MT / CNMG120408MT', 'DNMG431MT / DNMG150404MT', 'DNMG432MT / DNMG150408MT', 'VNMG331 / VNMG160404', 'VNMG332 / VNMG160408', 'CCMT32.51MT / CCMT09T304MT', 'CCMT32.52MT / CCMT09T308MT', 'DCMT32.51MT / DCMT11T304MT', 'DCMT32.52MT / DCMT11T308MT'] the grade marker does not include P."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8115",
+   "iso_group": "P",
+   "material_stated": "Structural steel",
+   "vc": {
+    "v": [
+     170.688,
+     298.704
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 560 - 980"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P10 - P25\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG431MP / WNMG080404MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8125",
+   "iso_group": "P",
+   "material_stated": "Structural steel",
+   "vc": {
+    "v": [
+     149.352,
+     280.416
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 490 - 920"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P10 - P25\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT5100",
+   "iso_group": "P",
+   "material_stated": "Structural steel",
+   "vc": {
+    "v": [
+     140.208,
+     219.456
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 460 - 720"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P20 - P40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT7100",
+   "iso_group": "P",
+   "material_stated": "Structural steel",
+   "vc": {
+    "v": [
+     118.872,
+     179.832
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 390 - 590"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P35 - P45\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31]); marker groups for this grade: ['P/M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8020",
+   "iso_group": "P",
+   "material_stated": "Structural steel",
+   "vc": {
+    "v": [
+     131.064,
+     179.832
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 430 - 590"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P30 - P45\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9030",
+   "iso_group": "P",
+   "material_stated": "Structural steel",
+   "vc": {
+    "v": [
+     170.688,
+     228.6
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 560 - 750"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P15 - P35\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 44, 68, 85]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "VNMG331 / VNMG160404",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "CT3000",
+   "iso_group": "P",
+   "material_stated": "Structural steel",
+   "vc": {
+    "v": [
+     249.936,
+     399.288
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 820 - 1310"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 39, 44, 74, 93, 99]); marker groups for this grade: ['P/M/K']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT"
+   ],
+   "chipbreaker": null,
+   "grade": "PV3010",
+   "iso_group": "P",
+   "material_stated": "Structural steel",
+   "vc": {
+    "v": [
+     249.936,
+     399.288
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 820 - 1310"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 93, 99]); marker groups for this grade: ['P/M/K/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT7310",
+   "iso_group": "P",
+   "material_stated": "High alloyed steel",
+   "vc": {
+    "v": [
+     158.496,
+     249.936
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 520 - 820"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 31, 44, 74, 93, 99]); marker groups for this grade: ['K']. NOTE: on ['CNMG431 / CNMG120404', 'CNMG432MT / CNMG120408MT', 'DNMG431MT / DNMG150404MT', 'DNMG432MT / DNMG150408MT', 'VNMG331 / VNMG160404', 'VNMG332 / VNMG160408', 'CCMT32.51MT / CCMT09T304MT', 'CCMT32.52MT / CCMT09T308MT', 'DCMT32.51MT / DCMT11T304MT', 'DCMT32.52MT / DCMT11T308MT'] the grade marker does not include P."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8115",
+   "iso_group": "P",
+   "material_stated": "High alloyed steel",
+   "vc": {
+    "v": [
+     158.496,
+     249.936
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 520 - 820"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P10 - P25\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG431MP / WNMG080404MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8125",
+   "iso_group": "P",
+   "material_stated": "High alloyed steel",
+   "vc": {
+    "v": [
+     140.208,
+     240.792
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 460 - 790"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P10 - P25\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT5100",
+   "iso_group": "P",
+   "material_stated": "High alloyed steel",
+   "vc": {
+    "v": [
+     140.208,
+     219.456
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 460 - 720"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P20 - P40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT7100",
+   "iso_group": "P",
+   "material_stated": "High alloyed steel",
+   "vc": {
+    "v": [
+     100.584,
+     140.208
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 330 - 460"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P35 - P45\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31]); marker groups for this grade: ['P/M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8020",
+   "iso_group": "P",
+   "material_stated": "High alloyed steel",
+   "vc": {
+    "v": [
+     100.584,
+     158.496
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 330 - 520"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P30 - P45\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9030",
+   "iso_group": "P",
+   "material_stated": "High alloyed steel",
+   "vc": {
+    "v": [
+     118.872,
+     198.12
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 390 - 650"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P15 - P35\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 44, 68, 85]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "VNMG331 / VNMG160404",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "CT3000",
+   "iso_group": "P",
+   "material_stated": "High alloyed steel",
+   "vc": {
+    "v": [
+     219.456,
+     368.808
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 720 - 1210"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 39, 44, 74, 93, 99]); marker groups for this grade: ['P/M/K']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT"
+   ],
+   "chipbreaker": null,
+   "grade": "PV3010",
+   "iso_group": "P",
+   "material_stated": "High alloyed steel",
+   "vc": {
+    "v": [
+     219.456,
+     368.808
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 720 - 1210"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=6",
+   "note": "Turning Tech section (catalogue page 1149), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 93, 99]); marker groups for this grade: ['P/M/K/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT5100",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     149.352,
+     198.12
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 490 - 650"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M15 - M35\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT7100",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     118.872,
+     179.832
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 390 - 590"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M25 - M40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31]); marker groups for this grade: ['P/M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "WNMG432MP / WNMG080408MP"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9215",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     219.456,
+     280.416
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 720 - 920"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M10 - M20\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 43, 44, 68, 85]); marker groups for this grade: ['M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9225",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     198.12,
+     249.936
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 650 - 820"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M15 - M30\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9235",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     179.832,
+     240.792
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 590 - 790"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M25 - M40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT5030",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     149.352,
+     280.416
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 490 - 920"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M05 - M20\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8020",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     100.584,
+     179.832
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 330 - 590"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M30 - M40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9030",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     149.352,
+     240.792
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 490 - 790"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M10 - M30\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 44, 68, 85]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "VNMG331 / VNMG160404",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "CT3000",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     219.456,
+     298.704
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 720 - 980"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 39, 44, 74, 93, 99]); marker groups for this grade: ['P/M/K']. (cermet listed under M with ISO range printed as P05 - P15; the High-alloy-stainless block heads it \"CVD\" - as printed.)"
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT"
+   ],
+   "chipbreaker": null,
+   "grade": "PV3010",
+   "iso_group": "M",
+   "material_stated": "Stainless steel",
+   "vc": {
+    "v": [
+     240.792,
+     320.04
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 790 - 1050"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 93, 99]); marker groups for this grade: ['P/M/K/S']. (cermet listed under M with ISO range printed as P05 - P15; the High-alloy-stainless block heads it \"CVD\" - as printed.)"
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT5100",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     118.872,
+     188.976
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 390 - 620"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M15 - M35\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT7100",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     79.248,
+     158.496
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 260 - 520"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M25 - M40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31]); marker groups for this grade: ['P/M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "WNMG432MP / WNMG080408MP"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9215",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     179.832,
+     249.936
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 590 - 820"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M10 - M20\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 43, 44, 68, 85]); marker groups for this grade: ['M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9225",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     158.496,
+     240.792
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 520 - 790"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M15 - M30\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9235",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     140.208,
+     198.12
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 460 - 650"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M25 - M40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['M']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT5030",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     149.352,
+     240.792
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 490 - 790"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"S05 - S20\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['M/S']. (ISO range printed \"S05 - S20\" in the M block, as printed.)"
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8020",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     100.584,
+     158.496
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 330 - 520"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M30 - M40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP"
+   ],
+   "chipbreaker": null,
+   "grade": "TT9030",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     118.872,
+     188.976
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 390 - 620"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"M10 - M30\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 44, 68, 85]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "VNMG331 / VNMG160404",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "CT3000",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     198.12,
+     298.704
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 650 - 980"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 39, 44, 74, 93, 99]); marker groups for this grade: ['P/M/K']. (cermet listed under M with ISO range printed as P05 - P15; the High-alloy-stainless block heads it \"CVD\" - as printed.)"
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT"
+   ],
+   "chipbreaker": null,
+   "grade": "PV3010",
+   "iso_group": "M",
+   "material_stated": "High alloy stainless steel",
+   "vc": {
+    "v": [
+     210.312,
+     298.704
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 690 - 980"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"P05 - P15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 93, 99]); marker groups for this grade: ['P/M/K/S']. (cermet listed under M with ISO range printed as P05 - P15; the High-alloy-stainless block heads it \"CVD\" - as printed.)"
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "VNMG331 / VNMG160404",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT1300",
+   "iso_group": "K",
+   "material_stated": "Nodular gray cast iron",
+   "vc": {
+    "v": [
+     198.12,
+     451.104
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 650 - 1480"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"K05 - K15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 31, 39, 44, 74, 93, 99]); marker groups for this grade: ['K']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT7310",
+   "iso_group": "K",
+   "material_stated": "Nodular gray cast iron",
+   "vc": {
+    "v": [
+     179.832,
+     381.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 590 - 1250"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"K05 - K15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 31, 44, 74, 93, 99]); marker groups for this grade: ['K']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "VNMG331 / VNMG160404",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "CT3000",
+   "iso_group": "K",
+   "material_stated": "Nodular gray cast iron",
+   "vc": {
+    "v": [
+     179.832,
+     399.288
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 590 - 1310"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"K05 - K15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 39, 44, 74, 93, 99]); marker groups for this grade: ['P/M/K']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT"
+   ],
+   "chipbreaker": null,
+   "grade": "PV3010",
+   "iso_group": "K",
+   "material_stated": "Nodular gray cast iron",
+   "vc": {
+    "v": [
+     219.456,
+     469.392
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 720 - 1540"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"K05 - K15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 93, 99]); marker groups for this grade: ['P/M/K/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "VNMG331 / VNMG160404",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT1300",
+   "iso_group": "K",
+   "material_stated": "Gray cast iron",
+   "vc": {
+    "v": [
+     179.832,
+     399.288
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 590 - 1310"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"K05 - K15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 31, 39, 44, 74, 93, 99]); marker groups for this grade: ['K']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT7310",
+   "iso_group": "K",
+   "material_stated": "Gray cast iron",
+   "vc": {
+    "v": [
+     158.496,
+     381.0
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 520 - 1250"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"K05 - K15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 31, 44, 74, 93, 99]); marker groups for this grade: ['K']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "DNMG431MT / DNMG150404MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "VNMG331 / VNMG160404",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "CT3000",
+   "iso_group": "K",
+   "material_stated": "Gray cast iron",
+   "vc": {
+    "v": [
+     179.832,
+     350.52
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 590 - 1150"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"K05 - K15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 39, 44, 74, 93, 99]); marker groups for this grade: ['P/M/K']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MT / CNMG120408MT",
+    "CCMT32.51MT / CCMT09T304MT",
+    "DCMT32.51MT / DCMT11T304MT"
+   ],
+   "chipbreaker": null,
+   "grade": "PV3010",
+   "iso_group": "K",
+   "material_stated": "Gray cast iron",
+   "vc": {
+    "v": [
+     219.456,
+     399.288
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 720 - 1310"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"K05 - K15\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [31, 93, 99]); marker groups for this grade: ['P/M/K/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG441 / DNMG150604",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "VNMG331 / VNMG160404",
+    "VNMG332 / VNMG160408",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT5100",
+   "iso_group": "S",
+   "material_stated": "High temp. resisting alloys",
+   "vc": {
+    "v": [
+     39.624,
+     79.248
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 130 - 260"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"S15 - S35\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 39, 43, 44, 68, 74, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT5030",
+   "iso_group": "S",
+   "material_stated": "High temp. resisting alloys",
+   "vc": {
+    "v": [
+     39.624,
+     100.584
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 130 - 330"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"S05 - S20\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['M/S']."
+  },
+  {
+   "insert_ids": [
+    "CNMG431 / CNMG120404",
+    "CNMG432MP / CNMG120408MP",
+    "CNMG432MT / CNMG120408MT",
+    "DNMG432MT / DNMG150408MT",
+    "DNMG442MP / DNMG150608MP",
+    "TNMG331MP / TNMG160404MP",
+    "TNMG332MP / TNMG160408MP",
+    "WNMG432MP / WNMG080408MP",
+    "CCMT32.51MT / CCMT09T304MT",
+    "CCMT32.52MT / CCMT09T308MT",
+    "DCMT32.51MT / DCMT11T304MT",
+    "DCMT32.52MT / DCMT11T308MT"
+   ],
+   "chipbreaker": null,
+   "grade": "TT8020",
+   "iso_group": "S",
+   "material_stated": "High temp. resisting alloys",
+   "vc": {
+    "v": [
+     30.48,
+     79.248
+    ],
+    "unit": "m/min",
+    "stated": "Cutting speed SFM 100 - 260"
+   },
+   "f": null,
+   "ap": null,
+   "url": "https://ssl.ingersoll-imc.com/resources/pdf/1144_Turning_Tech.pdf#page=7",
+   "note": "Turning Tech section (catalogue page 1150), \"CUTTING DATA FOR ISO TURNING\", grade-level table (no chipbreaker column); grade ISO range printed \"S30 - S40\". Converted SFM x 0.3048. Inserts matched by the coloured grade marker on their row in 0872_Turning_Inserts.pdf (pages [24, 30, 31, 43, 44, 68, 85, 93, 99]); marker groups for this grade: ['P/M/S']."
+  }
+ ],
+ "missing": [
+  {
+   "insert_id": "CNMG431 / CNMG120404",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. Offered grades with no vc row (uncoated carbide grades named by ISO class): ['K20', 'P20']. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "CNMG432MP / CNMG120408MP",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "CNMG432MT / CNMG120408MT",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "DNMG431MT / DNMG150404MT",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "DNMG432MT / DNMG150408MT",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "DNMG441 / DNMG150604",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "DNMG442MP / DNMG150608MP",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "TNMG331MP / TNMG160404MP",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "TNMG332MP / TNMG160408MP",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "VNMG331 / VNMG160404",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "VNMG332 / VNMG160408",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "WNMG431MP / WNMG080404MP",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['P']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "WNMG432MP / WNMG080408MP",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "CCMT32.51MT / CCMT09T304MT",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "CCMT32.52MT / CCMT09T308MT",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "DCMT32.51MT / DCMT11T304MT",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  },
+  {
+   "insert_id": "DCMT32.52MT / DCMT11T308MT",
+   "why": "vc only from the grade-level ISO table (1144_Turning_Tech.pdf p6-7); no chipbreaker-specific vc printed. Groups with a vc via offered grades: ['K', 'M', 'P', 'S']; N and H have no rows for these grades. feed/ap on the insert page are not printed with vc (see raw record cutting list)."
+  }
+ ],
+ "blocked": []
+}

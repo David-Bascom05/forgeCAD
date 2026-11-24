@@ -1,0 +1,13 @@
+{
+ "vendor": "Sandvik Coromant",
+ "records": [],
+ "blocked": [
+  "https://www.sandvik.coromant.com/en-us/product-details?c=CNMG%2012%2004%2008-PM%20%20%20%204425 -- product pages are a client-rendered Angular app; the HTML holds no product data (same 8.8 kB shell for every URL). Applies to all requested inserts, turning holders (ISO 5608) and boring bars (ISO 6261).",
+  "https://www.sandvik.coromant.com/api/shop/product/getproductdetails -- HTTP 401 (requires sign-in); not pursued.",
+  "https://www.sandvik.coromant.com/api/productsearch/* -- undocumented internal API behind the app; not used (call was refused as unauthorized access in this session).",
+  "https://www.sandvik.coromant.com/en-us/downloads -- catalogue downloads page is also script-rendered; no openly linked turning-catalogue PDF URL could be obtained from static HTML or web search."
+ ],
+ "notes": [
+  "No records: no openly published, statically served Sandvik Coromant page or PDF with the requested insert/holder/boring-bar data was reachable. Distributor pages (cromwell.co.uk, rubix etc.) were out of scope and not used."
+ ]
+}

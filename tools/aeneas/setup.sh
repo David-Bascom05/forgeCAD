@@ -52,13 +52,28 @@ ln -sfn "$H/charon" "$H/aeneas/charon"
 
 say "forge-aeneas patches"
 # tools/aeneas/patches/aeneas-*.patch: f64 support (aeneas-f64: the float bridge's tool side) and
-# robustness (aeneas-robust: one untranslatable trait method no longer stops a crate). Applied once;
-# a tree that already has them is left alone, a tree that has something else stops here.
-for p in "$(cd "$(dirname "$0")" && pwd)"/patches/aeneas-*.patch; do
-  if git -C "$H/aeneas" apply --check "$p" 2>/dev/null; then git -C "$H/aeneas" apply "$p"
-  elif git -C "$H/aeneas" apply -R --check "$p" 2>/dev/null; then :
-  else echo "cannot apply $p to aeneas $AENEAS_REV"; exit 4; fi
-done
+# robustness (aeneas-robust: one untranslatable trait method no longer stops a crate; the loop
+# exits Aeneas does not take are lowered first). tools/aeneas/patches/charon-*.patch: fixes to
+# Charon at its pin (charon-vtable-assoc: a vtable instance's trait reference gets its lifted
+# associated types, so a closure coerced to `&dyn Fn` typechecks). Each tree records the patch set
+# it carries (a hash, in .forge-patches): when the set changes, the tree is reset to its pin and
+# patched afresh, in name order.
+patches() { # TREE GLOB
+  local tree=$1 glob=$2 dir key
+  dir=$(cd "$(dirname "$0")" && pwd)/patches
+  # shellcheck disable=SC2086
+  key=$(cat "$dir"/$glob 2>/dev/null | sha256sum | cut -c1-16)
+  [ "$(cat "$tree/.forge-patches" 2>/dev/null)" = "$key" ] && return 0
+  git -C "$tree" checkout -q -- .
+  for p in "$dir"/$glob; do
+    [ -e "$p" ] || continue
+    git -C "$tree" apply "$p" || { echo "cannot apply $p to $tree"; exit 4; }
+  done
+  echo "$key" > "$tree/.forge-patches"
+}
+patches "$H/aeneas" 'aeneas-*.patch'
+patches "$H/charon" 'charon-*.patch'
+CHARON_KEY="$PIN $(cat "$(cd "$(dirname "$0")" && pwd)"/patches/charon-*.patch 2>/dev/null | sha256sum | cut -c1-16)"
 
 say "opam $OPAM_VERSION, OCaml $OCAML_SWITCH"
 if [ ! -x "$H/bin/opam" ]; then
@@ -77,11 +92,11 @@ say "charon (Rust side; its own pinned nightly)"
 TC=$(sed -n 's/^channel *= *"\(.*\)"/\1/p' "$H/charon/charon/rust-toolchain")
 rustup toolchain install "$TC" --profile minimal -c rustc-dev,llvm-tools,rust-src
 echo "$TC" > "$H/charon-toolchain"
-if [ ! -x "$H/charon/bin/charon" ] || [ "$(cat "$H/charon/bin/.rev" 2>/dev/null)" != "$PIN" ]; then
+if [ ! -x "$H/charon/bin/charon" ] || [ "$(cat "$H/charon/bin/.rev" 2>/dev/null)" != "$CHARON_KEY" ]; then
   (cd "$H/charon/charon" && RUSTUP_TOOLCHAIN=$TC CARGO_TARGET_DIR=$H/charon-target cargo build --release -q)
   mkdir -p "$H/charon/bin"
   cp -f "$H/charon-target/release/charon" "$H/charon-target/release/charon-driver" "$H/charon/bin/"
-  echo "$PIN" > "$H/charon/bin/.rev"
+  echo "$CHARON_KEY" > "$H/charon/bin/.rev"
 fi
 
 say "charon-ml and aeneas (OCaml side)"

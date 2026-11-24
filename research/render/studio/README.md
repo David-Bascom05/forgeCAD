@@ -14,4 +14,5 @@ Design: ../studio.md.
 | 05-turntable-brass.png | eight frames of `--turntable 8`, brass, empty_warehouse_01 (Sergej Majboroda) | `--look Brass --turntable 8 --size 320x200 --spp 64` |
 
 Every picture is denoised (the studio's own variance-guided a-trous filter) unless it says not.
-| 06-render-studio-environment.png | the Render Studio environment in the app (branch render/studio-ui, on ui/environments): its ribbon, the browser (appearance per part, lighting, camera, output) and the view traced live, here 89 samples denoised on llvmpipe | `STUDIO_SHOTS=DIR cargo test --release --test studio_env` |
+| 06-render-studio-environment.png | the Render Studio environment in the app (native, headless, llvmpipe), 1400x860: tray_asm.fg in bead-blasted aluminium and black oxide under the bundled HDRI, 255 samples denoised in the live view | `STUDIO_SHOTS=DIR cargo test --release --test studio_env shots` |
+| 07-render-studio-environment-1024x700.png | the same at 1024x700 | the same |

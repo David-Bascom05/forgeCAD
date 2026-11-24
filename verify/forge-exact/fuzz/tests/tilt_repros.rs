@@ -1,15 +1,18 @@
 //! Two walls crossing at a tiny angle, against the exact reference (research/kernel-audit/
 //! tilt-wrong-ok.md). A is the box [0,L]×[0,10]×[0,10]; B the prism under A's y = 0 wall whose top
 //! wall runs from (0, y0) to (L, y1), extruded 10 (`examples/tilt_probe.rs` prints every answer).
-//! Each test asks that the kernel agree with the reference on one op; each fails today, so each is
-//! ignored with today's kernel answer (`cargo test -p forge-exact-fuzz --test tilt_repros --
-//! --ignored`, after `lake build` in verify/forge-exact). In every case below the reference
-//! answers a solid with no ambiguity notes.
+//! Each test asks that the kernel agree with the reference on one op (`cargo test -p
+//! forge-exact-fuzz --features reference --test tilt_repros`, after `lake build` in
+//! verify/forge-exact). In every case below the reference answers a solid with no ambiguity notes.
 //!
 //! B1: L = 1.6e7 (inside InputSize), y0 = -2e-5, y1 = 6e-5: |n1×n2| = 5e-12 ≤ ANGULAR, so
 //! forge-geom's `plane_plane` decides at a frame origin and says Empty both ways round, though
 //! the walls cross at x = 4e6. B2: y0 = -1.2e-5, y1 = 1.2e-5 (the angle is past ANGULAR and
-//! `plane_plane` returns the crossing line): the root cause is UNKNOWN, downstream of D2.
+//! `plane_plane` returns the crossing line): fixed. The prism's bottom edge, from the crossing to
+//! (L, 1.2e-5), was never imprinted into the box's coplanar bottom face: its three samples lie
+//! within LINEAR of the box's y = 0 edge and its far end is on the box's x = L edge, so `imprint`
+//! read it as running along the boundary. It is now decided 4·LINEAR in from its ends
+//! (boolean.rs `off_near_ends`). B2's tests run (with the reference); B1's stay ignored.
 
 use forge_bool::Op;
 use forge_exact_fuzz::pairs::{kernel_pair, pair_input};
@@ -63,33 +66,54 @@ fn agrees(l: f64, y0: f64, y1: f64, op: Op) {
     );
 }
 
-// B1: plane_plane's parallel branch, L = 1.6e7.
+// B1: plane_plane's parallel branch, L = 1.6e7. Once refusals and a wrong Ok (an invalid body for
+// intersect): fixed (forge-bool ssi.rs `parallel_in`, the two planes decided over the region, and
+// forge-geom intersect.rs `near_parallel_in`, a near-parallel line decided over its range); they
+// agree now.
 #[test]
-#[ignore = "B1: kernel refuses ZeroThickness at (8e6, 2e-5, 0); reference: solid"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn b1_union() {
     agrees(1.6e7, -2e-5, 6e-5, Op::Union);
 }
 #[test]
-#[ignore = "B1: kernel refuses ZeroThickness at (1.6e7, 6e-5, 0); reference: solid"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn b1_subtract() {
     agrees(1.6e7, -2e-5, 6e-5, Op::Subtract);
 }
 #[test]
-#[ignore = "B1: WRONG OK: kernel returns an invalid body (EdgeUses); reference: solid"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn b1_intersect() {
     agrees(1.6e7, -2e-5, 6e-5, Op::Intersect);
 }
 
-// B2: the thin wedge, ±1.2e-5. Wrong Ok at L = 1e5 … 2e6.
+// B2: the thin wedge, ±1.2e-5. Once a wrong Ok at L = 1e5 … 2e6 (an invalid body for intersect),
+// false ZeroThickness refusals there and InconsistentClassification at 1e3, 1e4: fixed (the prism's
+// bottom edge imprinted into the box's coplanar bottom, decided near its ends: boolean.rs
+// `off_near_ends`); they agree now.
 #[test]
-#[ignore = "B2: WRONG OK at L = 1e5, 3e5, 1e6, 2e6: kernel returns an invalid body (EdgeUses); reference: solid"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn b2_intersect_wrong_ok() {
     for l in [1e5, 3e5, 1e6, 2e6] {
         agrees(l, -1.2e-5, 1.2e-5, Op::Intersect);
     }
 }
 #[test]
-#[ignore = "B2: kernel refuses ZeroThickness at L = 1e5 … 2e6; reference: solid"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn b2_union_subtract() {
     for l in [1e5, 3e5, 1e6, 2e6] {
         for op in [Op::Union, Op::Subtract] {
@@ -98,7 +122,10 @@ fn b2_union_subtract() {
     }
 }
 #[test]
-#[ignore = "B2: kernel refuses Internal(InconsistentClassification) at L = 1e3, 1e4 (every op); reference: solid"]
+#[cfg_attr(
+    not(feature = "reference"),
+    ignore = "asks the Lean reference: lake build in verify/forge-exact, then cargo test -p forge-exact-fuzz --features reference"
+)]
 fn b2_small() {
     for l in [1e3, 1e4] {
         for op in [Op::Union, Op::Subtract, Op::Intersect] {

@@ -45,6 +45,8 @@ impl Appearance {
     /// What the normal 3D view (raster, not traced) can show of it today: a placement's tint, base
     /// colour (linear) and metalness, as `scene::Placement::tint` takes it. Other environments
     /// (bend simulation, the machine views) set their placements' tints from this.
+    /// Its roughness and coat ride in the tint's w (`pack_tint`), so the Realistic style shows
+    /// them; the other styles read only the metalness out of it.
     pub fn viewport_tint(&self, colour: Option<[u8; 3]>) -> [f32; 4] {
         let b = self.bsdf_for(colour);
         // glass shows as its tint, a little grey so it reads as a solid
@@ -53,7 +55,7 @@ impl Appearance {
         } else {
             b.base
         };
-        [base.x, base.y, base.z, b.metal]
+        [base.x, base.y, base.z, pack_tint(b.metal, b.rough, b.coat)]
     }
 
     /// The BSDF, in a part's colour (sRGB bytes) when this appearance takes it.
@@ -66,6 +68,28 @@ impl Appearance {
         }
         b
     }
+}
+
+/// A placement tint's w for an appearance (`render.wgsl`'s `look_of`): 2 + metal + 2 coat +
+/// 4 round(roughness x 1000), exact in f32; a w below 2 is the old metalness alone.
+pub fn pack_tint(metal: f32, rough: f32, coat: f32) -> f32 {
+    let m = (metal >= 0.5) as u32;
+    let c = (coat >= 0.5) as u32;
+    let r = (rough.clamp(0.0, 1.0) * 1000.0).round() as u32;
+    (2 + m + 2 * c + 4 * r) as f32
+}
+
+/// `pack_tint` read back: metal, roughness, coat (as the shader reads it).
+pub fn unpack_tint(w: f32) -> (f32, Option<f32>, f32) {
+    if w < 2.0 {
+        return (w, None, 0.0);
+    }
+    let k = (w - 2.0).round() as u32;
+    (
+        (k & 1) as f32,
+        Some((k >> 2) as f32 / 1000.0),
+        ((k >> 1) & 1) as f32,
+    )
 }
 
 pub fn srgb_to_linear(c: u8) -> f32 {
@@ -271,6 +295,32 @@ pub fn library() -> &'static [Appearance] {
     ALL.get_or_init(|| parse(DATA).expect("ForgeCAD's appearances read"))
 }
 
+/// One appearance for a key, for any environment's view: an appearance's name or id
+/// (`tool-steel-ground`, `Aluminium, machined`; case and punctuation ignored), else a
+/// forge-material name or alias (`6061-T6`, `1018`), whose default appearance it is. ForgeCAD's
+/// library; `Appearances::load` has the project's and the user's too.
+pub fn appearance_for(key: &str) -> Option<&'static Appearance> {
+    let n = forge_material::norm(key);
+    library()
+        .iter()
+        .find(|a| forge_material::norm(&a.name) == n)
+        .or_else(|| {
+            let m = forge_material::find(key)?;
+            let names: Vec<String> = std::iter::once(&m.name)
+                .chain(&m.aliases)
+                .map(|s| forge_material::norm(s))
+                .collect();
+            library()
+                .iter()
+                .find(|a| {
+                    a.materials
+                        .iter()
+                        .any(|x| names.contains(&forge_material::norm(x)))
+                })
+                .or_else(|| library().iter().find(|a| a.families.contains(&m.family)))
+        })
+}
+
 /// Libraries searched in order: the project's, the user's, ForgeCAD's.
 #[derive(Clone, Debug, Default)]
 pub struct Appearances {
@@ -409,18 +459,41 @@ mod tests {
     }
 
     #[test]
+    fn any_environment_finds_an_appearance_by_name_id_or_material() {
+        for (key, want) in [
+            ("tool-steel-ground", "Tool steel, ground"),
+            ("Paint, machine gloss", "Paint, machine gloss"),
+            ("carbide", "Carbide"),
+            ("6061-T6", "Aluminium, machined"),
+            ("C36000", "Brass"),
+        ] {
+            assert_eq!(appearance_for(key).map(|a| a.name.as_str()), Some(want), "{key}");
+        }
+        assert!(appearance_for("unobtainium").is_none());
+    }
+
+    #[test]
     fn other_environments_find_theirs_by_id() {
         let apps = Appearances::builtin();
         let tool = apps.find("tool-steel-ground").expect("BEND-SIM's tooling");
         assert_eq!(tool.name, "Tool steel, ground");
         let paint = apps.find("paint-machine-gloss").expect("BEND-SIM's frames");
         assert_eq!(paint.viewport_tint(Some([0, 255, 0]))[1], 1.0);
-        assert_eq!(tool.viewport_tint(None)[3], 1.0);
+        assert_eq!(unpack_tint(tool.viewport_tint(None)[3]), (1.0, Some(0.18), 0.0));
+        for (m, r, c) in [
+            (0.0, 0.0, 0.0),
+            (1.0, 1.0, 1.0),
+            (0.0, 0.35, 1.0),
+            (1.0, 0.03, 0.0),
+        ] {
+            assert_eq!(unpack_tint(pack_tint(m, r, c)), (m, Some(r), c));
+        }
+        assert_eq!(unpack_tint(0.3), (0.3, None, 0.0), "an old tint is its metalness");
         for id in ["steel-black-oxide", "concrete-floor", "highlight-red"] {
             assert!(apps.viewport_tint(Some(id), None, None).is_some(), "{id}");
         }
         let sheet = apps.viewport_tint(Some("sheet"), Some("5052-H32"), None).unwrap();
-        assert_eq!(sheet[3], 1.0, "aluminium sheet is a metal");
+        assert_eq!(unpack_tint(sheet[3]).0, 1.0, "aluminium sheet is a metal");
     }
 
     #[test]

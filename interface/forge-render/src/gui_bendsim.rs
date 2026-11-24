@@ -14,6 +14,9 @@ use forge_brake::scene::{Body, Look, Mesh};
 struct Taken {
     renderer: Renderer,
     scene: Scene,
+    /// The design's view cube naming and home, put back on leaving.
+    orient: crate::viewcube::Orient,
+    home_view: Option<crate::camera::Camera>,
 }
 
 #[derive(Default)]
@@ -32,6 +35,118 @@ pub struct BendView {
     station: Option<u64>,
     /// The press's parts cut away for the framed eye (the Work framing's near walls).
     cut: Vec<String>,
+    /// The step last framed (Follow bend re-frames on a new one).
+    step: Option<usize>,
+    /// The bodies drawn, in placement order: what see-through tests against.
+    bodies: Vec<Body>,
+    /// See-through: the eye and the settings it was worked out for, and the faces drawn as
+    /// ghosts (bodies between the eye and the bend being made).
+    seen: Option<([u32; 3], bool, u32, bool)>,
+    pub ghosts: Vec<crate::render::FaceColour>,
+}
+
+/// The view cube's naming in the simulation: FRONT the operator's side (-x), BACK the
+/// backgauge's, TOP up; LEFT and RIGHT along the bed, so along every bend's line (each is made
+/// along the bed): those faces give the view down the bend line.
+pub fn bend_orient() -> crate::viewcube::Orient {
+    crate::viewcube::Orient::with_face([-1, 0, 0], [0, -1, 0], [0, 0, 1])
+}
+
+/// Does the segment a-b cross the triangle (p, q, r) strictly between its ends? (Moller-Trumbore)
+fn crosses(a: [f32; 3], b: [f32; 3], p: [f32; 3], q: [f32; 3], r: [f32; 3]) -> bool {
+    let sub = |u: [f32; 3], v: [f32; 3]| [u[0] - v[0], u[1] - v[1], u[2] - v[2]];
+    let cross = |u: [f32; 3], v: [f32; 3]| {
+        [
+            u[1] * v[2] - u[2] * v[1],
+            u[2] * v[0] - u[0] * v[2],
+            u[0] * v[1] - u[1] * v[0],
+        ]
+    };
+    let dot = |u: [f32; 3], v: [f32; 3]| u[0] * v[0] + u[1] * v[1] + u[2] * v[2];
+    let d = sub(b, a);
+    let (e1, e2) = (sub(q, p), sub(r, p));
+    let h = cross(d, e2);
+    let det = dot(e1, h);
+    if det.abs() < 1e-9 {
+        return false;
+    }
+    let f = 1.0 / det;
+    let s = sub(a, p);
+    let u = f * dot(s, h);
+    if !(0.0..=1.0).contains(&u) {
+        return false;
+    }
+    let qv = cross(s, e1);
+    let v = f * dot(d, qv);
+    if v < 0.0 || u + v > 1.0 {
+        return false;
+    }
+    let t = f * dot(e2, qv);
+    t > 1e-4 && t < 0.995
+}
+
+/// The bodies to see through from `eye`: the part's own pieces (and with `press`, the frame,
+/// beams and backgauge) that stand between the eye and the bend being made (its zone's corners
+/// and middle) or the punch's contact with the part (its tip's lowest point). Never the bend
+/// zone itself, the tools, or a body drawn red.
+pub fn see_through(bodies: &[Body], eye: [f32; 3], press: bool) -> Vec<usize> {
+    let mut aims: Vec<[f32; 3]> = Vec::new();
+    let zone = bounds(
+        bodies
+            .iter()
+            .filter(|x| x.look == Look::BendZone)
+            .map(|x| &x.mesh),
+    );
+    // the walls either side of the bend being made are the work itself, not what was bent
+    // before it: a piece touching the zone is never seen through
+    let touches = |m: &Mesh| match (zone, m.bounds()) {
+        (Some((zl, zh)), Some((a, c))) => (0..3).all(|k| a[k] <= zh[k] + 0.5 && c[k] >= zl[k] - 0.5),
+        _ => false,
+    };
+    if let Some((lo, hi)) = zone {
+        let mid = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
+        aims.push(mid);
+        for y in [lo[1], hi[1]] {
+            aims.push([mid[0], y, mid[2]]);
+            aims.push([lo[0], y, hi[2]]);
+            aims.push([hi[0], y, hi[2]]);
+        }
+    }
+    for x in bodies
+        .iter()
+        .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
+    {
+        if let Some(p) = x.mesh.pos.iter().min_by(|a, b| a[2].total_cmp(&b[2])) {
+            aims.push(*p);
+        }
+    }
+    if aims.is_empty() {
+        return Vec::new();
+    }
+    bodies
+        .iter()
+        .enumerate()
+        .filter(|(_, x)| !x.hit)
+        .filter(|(_, x)| {
+            (x.look == Look::Sheet && !touches(&x.mesh))
+                || (press && matches!(x.look, Look::Frame | Look::Gauge))
+        })
+        .filter(|(_, x)| {
+            let m = &x.mesh;
+            aims.iter().any(|&aim| {
+                m.tri.iter().any(|t| {
+                    crosses(
+                        eye,
+                        aim,
+                        m.pos[t[0] as usize],
+                        m.pos[t[1] as usize],
+                        m.pos[t[2] as usize],
+                    )
+                })
+            })
+        })
+        .map(|(k, _)| k)
+        .collect()
 }
 
 /// Unit normal to octahedral i16x2 (as tess.rs packs them).
@@ -89,7 +204,7 @@ fn appearances() -> &'static crate::studio::appearance::Appearances {
 /// A body's tint (linear rgb, metalness) from its appearance (forge_brake::scene::Look's id,
 /// RENDER-STUDIO's library): ground tool steel, machine paint (no maker's livery is in the data:
 /// its neutral default), black-oxide backgauge, concrete floor; the sheet in its forge-material's
-/// appearance, or the panel's part blue when the material is not known; failing bodies red.
+/// appearance, or a neutral matte sheet when the material is not known; failing bodies red.
 pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
     let id = if b.hit {
         "highlight-red"
@@ -102,7 +217,9 @@ pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
         appearances().viewport_tint(Some(id), None, None)
     };
     found.unwrap_or(match b.look {
-        Look::Sheet => [0.07, 0.33, 0.81, 0.35],
+        // no material named: a neutral, matte sheet (not the selection's blue, not a metal
+        // the part was never said to be), apart from the ground steel of the tools
+        Look::Sheet => [0.42, 0.47, 0.53, 0.0],
         Look::Tool => [0.66, 0.67, 0.69, 1.0],
         Look::Frame => [0.46, 0.48, 0.50, 0.15],
         Look::Gauge => [0.16, 0.16, 0.17, 0.6],
@@ -143,22 +260,49 @@ pub fn framing(
         Some(e) => e,
         None => bounds(bodies.iter().filter(|x| x.look.is_sheet()).map(|x| &x.mesh))?,
     };
-    let (ylo, yhi) = (lo[1] - 60.0, hi[1] + 60.0);
-    for x in bodies {
-        let on = match how {
-            Framing::Work => {
-                x.look == Look::Tool && (x.name.starts_with("punch:") || x.name.starts_with("die:"))
+    let (ylo, yhi) = (lo[1], hi[1]);
+    let mut grow = |p: [f32; 3]| {
+        for k in 0..3 {
+            lo[k] = lo[k].min(p[k]);
+            hi[k] = hi[k].max(p[k]);
+        }
+    };
+    match how {
+        // the working zone is the part's, scaled to it (David): the punch's tip and the die's V
+        // where they meet it, never the tools' height or the press
+        Framing::Work => {
+            let tip = bodies
+                .iter()
+                .filter(|x| x.name.starts_with("punch:") && x.name.ends_with("/tip"))
+                .flat_map(|x| x.mesh.pos.iter())
+                .map(|p| p[2])
+                .fold(f32::INFINITY, f32::min);
+            for x in bodies.iter().filter(|x| x.look == Look::Tool) {
+                let die = x.name.starts_with("die:");
+                let punch = x.name.starts_with("punch:") && x.name.ends_with("/tip");
+                if !die && !punch {
+                    continue;
+                }
+                let top = x.mesh.pos.iter().map(|p| p[2]).fold(f32::MIN, f32::max);
+                for p in &x.mesh.pos {
+                    // the die's V and shoulders (its top 12 mm); the tip's last 12 mm
+                    let near = if die {
+                        p[2] >= top - 12.0
+                    } else {
+                        p[2] <= tip + 12.0
+                    };
+                    if near && p[1] >= ylo && p[1] <= yhi {
+                        grow(*p);
+                    }
+                }
             }
-            Framing::Overview => !matches!(x.look, Look::Floor),
-        };
-        if let (true, Some((mut a, mut c))) = (on, x.mesh.bounds()) {
-            if how == Framing::Work {
-                a[1] = a[1].max(ylo);
-                c[1] = c[1].min(yhi);
-            }
-            for k in 0..3 {
-                lo[k] = lo[k].min(a[k]);
-                hi[k] = hi[k].max(c[k]);
+        }
+        Framing::Overview => {
+            for x in bodies.iter().filter(|x| !matches!(x.look, Look::Floor)) {
+                if let Some((a, c)) = x.mesh.bounds() {
+                    grow(a);
+                    grow(c);
+                }
             }
         }
     }
@@ -170,13 +314,17 @@ pub fn framing(
     let radius = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
     let mut cam = crate::camera::Camera::fit(center, radius);
     let (yaw, pitch) = match how {
-        Framing::Work => (215f32, 24f32),
+        Framing::Work => (215f32, 28f32),
         Framing::Overview => (220f32, 20f32),
     };
     cam.yaw = yaw.to_radians();
     cam.pitch = pitch.to_radians();
-    // the bounding sphere fills ~70 % of the shorter side
-    cam.dist = cam.fit_dist(radius, size.0.max(1), size.1.max(1)) / 0.7;
+    // the subject's sphere fits the view with a margin of about 15 % (the press: ~70 %)
+    let margin = match how {
+        Framing::Work => 1.15,
+        Framing::Overview => 1.0 / 0.7,
+    };
+    cam.dist = cam.fit_dist(radius, size.0.max(1), size.1.max(1)) * margin;
     Some((cam, lo, hi))
 }
 
@@ -270,6 +418,7 @@ impl Gui {
         let step = b.step.min(n - 1);
         let key = (sim as *const _ as usize, step, b.t.to_bits());
         if self.bend.shown == Some(key) && b.frame.is_none() {
+            self.bendsim_see_through();
             return;
         }
         let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
@@ -284,9 +433,11 @@ impl Gui {
             sim.tooling.station(st.punch, st.die).map(|x| x.y.to_bits())
         };
         let ask = b.frame;
-        let moved = self.bend.framed && self.bend.station != at;
+        // with Follow bend, each new step is framed afresh; otherwise the eye is the user's
+        let moved = self.bend.framed && b.follow && self.bend.step != Some(step);
+        let first = !self.bend.framed;
         let mut eye = None;
-        if !self.bend.framed || ask.is_some() || moved {
+        if first || ask.is_some() || moved {
             let how = ask.unwrap_or(Framing::Work);
             // the part's whole motion through the step, from gauging to the ram's return
             let envelope = match how {
@@ -311,10 +462,15 @@ impl Gui {
                     Framing::Work => cutaway(&bodies, cam.eye(), lo, hi),
                     Framing::Overview => Vec::new(),
                 };
-                eye = Some(cam);
+                if how == Framing::Work {
+                    // the cube's home is the working zone
+                    v.nav.home_view = Some(cam);
+                }
+                eye = Some((cam, first));
             }
             self.bend.framed = true;
             self.bend.station = at;
+            self.bend.step = Some(step);
         }
         if !self.bend.cut.is_empty() {
             bodies.retain(|x| !self.bend.cut.contains(&x.name));
@@ -363,16 +519,24 @@ impl Gui {
                 self.bend.taken = Some(Taken {
                     renderer: old_r,
                     scene: old_s,
+                    orient: v.nav.orient,
+                    home_view: v.nav.home_view.take(),
                 });
+                v.nav.orient = bend_orient();
             }
             self.bend.names = names;
         }
         if let Some(b) = self.shell.sheet.bend_sim.as_mut() {
             b.frame = None;
         }
-        if let Some(cam) = eye {
-            v.nav.jump_to(cam);
+        match eye {
+            // on entry the eye is placed; asked for or followed, it travels there
+            Some((cam, true)) => v.nav.jump_to(cam),
+            Some((cam, false)) => v.nav.go_to(cam),
+            None => {}
         }
+        self.bend.bodies = bodies;
+        self.bend.seen = None;
         // a failure located: the eye turned on its place, at its distance
         if let Some(at) = self.shell.sheet.bend_sim.as_mut().and_then(|b| b.locate.take()) {
             let mut cam = v.nav.camera;
@@ -383,6 +547,60 @@ impl Gui {
         self.bend.ours = Some(v.renderer.geometry());
         self.bend.shown = Some(key);
         v.dirty = true;
+        self.bendsim_see_through();
+    }
+
+    /// See-through, kept up with the eye: the bodies between it and the bend being made drawn
+    /// as ghosts at the panel's opacity; the rest as themselves.
+    fn bendsim_see_through(&mut self) {
+        let Some(v) = &mut self.view else { return };
+        let Some(b) = self.shell.sheet.bend_sim.as_ref() else {
+            return;
+        };
+        let eye = v.nav.camera.eye();
+        let key = (
+            eye.map(f32::to_bits),
+            b.see_through,
+            b.opacity.to_bits(),
+            b.see_press,
+        );
+        if self.bend.seen == Some(key) {
+            return;
+        }
+        self.bend.seen = Some(key);
+        let ghosts = if b.see_through {
+            see_through(&self.bend.bodies, eye, b.see_press)
+        } else {
+            Vec::new()
+        };
+        self.bend.ghosts.clear();
+        let material = b.material.as_deref();
+        // their outlines, for the panel to draw over the view (a ghost must read, not vanish)
+        let outlines: Vec<Vec<[f32; 3]>> = ghosts
+            .iter()
+            .map(|&k| {
+                let m = &self.bend.bodies[k].mesh;
+                let step = (m.pos.len() / 600).max(1);
+                m.pos.iter().step_by(step).copied().collect()
+            })
+            .collect();
+        for k in 0..self.bend.bodies.len() {
+            let on = ghosts.contains(&k);
+            v.scene.set_ghost(k, on);
+            if on {
+                let c = tint(&self.bend.bodies[k], material);
+                let to8 = |x: f32| (x.clamp(0.0, 1.0) * 255.0).round() as u8;
+                self.bend.ghosts.push(crate::render::FaceColour {
+                    placement: k as u32,
+                    face: 0,
+                    rgba: [to8(c[0]), to8(c[1]), to8(c[2]), to8(b.opacity)],
+                });
+            }
+        }
+        v.dirty = true;
+        if let Some(b) = self.shell.sheet.bend_sim.as_mut() {
+            b.outlines = outlines;
+        }
     }
 
     fn bendsim_put_back(&mut self) {
@@ -391,9 +609,15 @@ impl Gui {
         self.bend.shown = None;
         self.bend.names.clear();
         self.bend.ours = None;
+        self.bend.bodies.clear();
+        self.bend.ghosts.clear();
+        self.bend.seen = None;
+        self.bend.step = None;
         if let (Some(t), Some(v)) = (self.bend.taken.take(), &mut self.view) {
             v.renderer = t.renderer;
             v.scene = t.scene;
+            v.nav.orient = t.orient;
+            v.nav.home_view = t.home_view;
             v.renderer.resize(v.size);
             v.nav.fit_all(&v.scene);
             v.dirty = true;

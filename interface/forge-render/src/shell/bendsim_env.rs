@@ -16,11 +16,12 @@ const PLAY: u16 = 102;
 const NEXT: u16 = 103;
 const AGAIN: u16 = 104;
 const OVERVIEW: u16 = 105;
-const WORK: u16 = 106;
 const MACHINE: u16 = 107;
 const SUGGEST: u16 = 108;
 const WRITE: u16 = 109;
 const LAST: u16 = 110;
+const FOLLOW: u16 = 111;
+const SEE: u16 = 112;
 
 fn tool(name: &'static str, icon: &'static str, action: Option<Action>, on: bool) -> Tool {
     Tool {
@@ -79,14 +80,52 @@ pub(super) fn enter(s: &mut Shell) -> Result<(), String> {
         }
         s.sheet.bend_sim = Some(Box::new(b));
     }
+    // the world's axes cross the whole view at the press's scale (STANDARD.md §2): off while in
+    let axes = s.overlays().axes;
+    if let Some(b) = &mut s.sheet.bend_sim
+        && b.axes_was.is_none()
+    {
+        b.axes_was = Some(axes);
+        s.overlays_mut().axes = false;
+    }
     Ok(())
 }
 
 /// Out of it: play stops, the rest kept.
 pub(super) fn exit(s: &mut Shell) {
+    let mut axes = None;
     if let Some(b) = &mut s.sheet.bend_sim {
         b.playing = false;
+        axes = b.axes_was.take();
     }
+    if let Some(a) = axes {
+        s.overlays_mut().axes = a;
+    }
+}
+
+/// The status bar's line: the machine, how many bends, whether the program is feasible.
+pub(super) fn status(s: &Shell) -> Option<String> {
+    let b = s.sheet.bend_sim.as_deref()?;
+    let sim = b.sim.as_ref().ok()?;
+    let machine = match &b.choice.press {
+        Some(id) => b
+            .catalog
+            .as_ref()
+            .and_then(|c| c.as_ref().ok())
+            .and_then(|c| c.press(id))
+            .map_or(id.clone(), |r| format!("{} {}", r.prov.maker, r.model)),
+        None => "stand-in tooling".into(),
+    };
+    let n = sim.plan.steps.len();
+    Some(format!(
+        "Bend Simulation · {machine} · {n} bend{} · {}",
+        if n == 1 { "" } else { "s" },
+        if sim.plan.feasible {
+            "feasible"
+        } else {
+            "no feasible order"
+        }
+    ))
 }
 
 pub(super) fn groups(s: &Shell) -> Vec<Group> {
@@ -148,8 +187,11 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
         ),
         group(
             "View",
-            vec![tool("Part and Tools", "eye", cmd(WORK), false)],
             vec![tool("Press Overview", "zoom", cmd(OVERVIEW), false)],
+            vec![
+                tool("Follow Bend", "eye", cmd(FOLLOW), b.is_some_and(|b| b.follow)),
+                tool("See Through", "hide", cmd(SEE), b.is_some_and(|b| b.see_through)),
+            ],
         ),
     ]
 }
@@ -193,8 +235,8 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
 }
 
 /// The docked properties panel's width: the selected bend's sheet.
-pub(super) fn dock_width(s: &Shell) -> f32 {
-    if s.sheet.bend_sim.is_some() { 340.0 } else { 0.0 }
+pub(super) fn dock_width(s: &Shell) -> Option<f32> {
+    s.sheet.bend_sim.is_some().then_some(340.0)
 }
 
 /// The selected bend's properties, docked at the right.
@@ -212,7 +254,6 @@ pub(super) fn dock(s: &mut Shell, ui: &mut Ui, r: Rect) {
             ui.set_max_width(r.width() - 40.0);
             flat = super::bendsim::bend_sheet(ui, &t, &mut b);
         });
-    s.places.push(("env:bendsim:properties".into(), r));
     s.sheet.bend_sim = Some(b);
     // the flat pattern, its bend lines shown, the bend named (picking one line out is a gap)
     if let Some(bend) = flat {
@@ -230,15 +271,23 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
         && !ctx.egui_wants_keyboard_input()
     {
         let n = b.steps();
-        let (space, left, right, f) = ctx.input(|i| {
+        let (space, left, right, f, home, end) = ctx.input(|i| {
             let k = |key| i.key_pressed(key) && i.modifiers.is_none();
             (
                 k(egui::Key::Space),
                 k(egui::Key::ArrowLeft),
                 k(egui::Key::ArrowRight),
                 k(egui::Key::F),
+                k(egui::Key::Home),
+                k(egui::Key::End),
             )
         });
+        if home {
+            b.go(0);
+        }
+        if end {
+            b.go(n.saturating_sub(1));
+        }
         if space {
             b.play();
         }
@@ -256,8 +305,14 @@ pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
         b.tick(f64::from(ctx.input(|i| i.stable_dt)).min(0.1));
         // playing, or moved from outside (the page, the agent): the view has frames to draw
         let now = (b.step, b.t.to_bits());
-        if b.playing || b.painted != Some(now) {
+        if b.painted != Some(now) {
             b.painted = Some(now);
+            // the new instant's bodies go up this frame; the view's shadows and the panels
+            // settle over the next few
+            b.settle = 6;
+        }
+        if b.playing || b.settle > 0 {
+            b.settle = b.settle.saturating_sub(1);
             ctx.request_repaint();
         }
     }
@@ -270,6 +325,37 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
         return false;
     };
     super::bendsim::overlay(ui, view, b);
+    // what is seen through: its outline, so the ghost reads
+    if let Some((cam, size)) = s.camera
+        && b.see_through
+        && !b.outlines.is_empty()
+    {
+        let m = cam.view(size.0.max(1), size.1.max(1)).matrix;
+        let sx = view.width() / size.0.max(1) as f32;
+        let sy = view.height() / size.1.max(1) as f32;
+        let to = |p: &[f32; 3]| -> Option<egui::Pos2> {
+            let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
+            let w = c(3);
+            (w > 1e-6).then(|| {
+                let (x, y) = (c(0) / w, c(1) / w);
+                egui::pos2(
+                    view.left() + (x + 1.0) * 0.5 * size.0 as f32 * sx,
+                    view.top() + (1.0 - y) * 0.5 * size.1 as f32 * sy,
+                )
+            })
+        };
+        let p = ui.painter_at(view);
+        for o in &b.outlines {
+            let pts: Vec<egui::Pos2> = o.iter().filter_map(to).collect();
+            let hull = hull(pts);
+            if hull.len() > 2 {
+                p.add(egui::Shape::closed_line(
+                    hull,
+                    egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(235, 240, 250, 210)),
+                ));
+            }
+        }
+    }
     let band = Rect::from_min_max(
         egui::pos2(view.left() + 12.0, view.bottom() - 74.0),
         egui::pos2(view.right() - 12.0, view.bottom() - 8.0),
@@ -313,6 +399,13 @@ pub(super) fn command(s: &mut Shell, c: u16) {
         NEXT => b.go((b.step + 1).min(n.saturating_sub(1))),
         PLAY => b.play(),
         LAST => b.go(n.saturating_sub(1)),
+        FOLLOW => {
+            b.follow = !b.follow;
+            if b.follow {
+                b.frame = Some(super::bendsim::Framing::Work);
+            }
+        }
+        SEE => b.see_through = !b.see_through,
         MACHINE => b.pane = super::bendsim::Pane::Setup,
         SUGGEST => {
             b.pane = super::bendsim::Pane::Program;
@@ -324,7 +417,6 @@ pub(super) fn command(s: &mut Shell, c: u16) {
             }
         }
         OVERVIEW => b.frame = Some(super::bendsim::Framing::Overview),
-        WORK => b.frame = Some(super::bendsim::Framing::Work),
         AGAIN => {
             if let Some(fg) = s.fg.as_ref() {
                 let tooling = b.tooling.clone();
@@ -337,4 +429,33 @@ pub(super) fn command(s: &mut Shell, c: u16) {
             }
         }
     }
+}
+
+/// The convex hull of points on the screen (Andrew's monotone chain), counter-clockwise.
+fn hull(mut p: Vec<egui::Pos2>) -> Vec<egui::Pos2> {
+    p.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    p.dedup();
+    if p.len() < 3 {
+        return p;
+    }
+    let cross =
+        |o: egui::Pos2, a: egui::Pos2, b: egui::Pos2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    let mut lower: Vec<egui::Pos2> = Vec::new();
+    for &q in &p {
+        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], q) <= 0.0 {
+            lower.pop();
+        }
+        lower.push(q);
+    }
+    let mut upper: Vec<egui::Pos2> = Vec::new();
+    for &q in p.iter().rev() {
+        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], q) <= 0.0 {
+            upper.pop();
+        }
+        upper.push(q);
+    }
+    lower.pop();
+    upper.pop();
+    lower.extend(upper);
+    lower
 }
