@@ -164,6 +164,7 @@ pub fn tool_use(id: &str, t: u32, g: &ProbeGeom, note: String) -> Result<ToolUse
             oal: top,
             hand: String::new(),
             material: String::new(),
+            coating: String::new(),
             vendor: String::new(),
             product_id: String::new(),
             source: "a touch probe (forge-cam-lang probe()): cuts nothing".into(),
