@@ -293,6 +293,8 @@ pub struct CamWs {
     pub parts: Vec<PartInfo>,
     /// Said to the user (an edit refused, a file written).
     pub said: Option<String>,
+    /// `said` as last put in the shell's status (it is put there once, when it changes).
+    pub said_shown: Option<String>,
     /// The setup sheet and program asked to be written (path, text).
     pub want_write: Vec<(String, String)>,
     /// A rename in the browser: the row and its text.
@@ -381,6 +383,7 @@ impl CamWs {
             undo: vec![],
             redo: vec![],
             parts: vec![],
+            said_shown: None,
             said: None,
             want_write: vec![],
             renaming: None,
