@@ -1,0 +1,11 @@
+name = "forgebool"
+version = "0.1.0"
+defaultTargets = ["ForgeBool"]
+
+# forge-geom's translation, and through it forge-math's and the float bridge.
+[[require]]
+name = "forgegeom"
+path = "../../forge-geom/lean"
+
+[[lean_lib]]
+name = "ForgeBool"
