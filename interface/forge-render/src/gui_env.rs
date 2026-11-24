@@ -35,12 +35,17 @@ impl Gui {
     /// centred in the view, the projection kept as it was.
     fn env_frame_view(&mut self) {
         let Some(v) = &mut self.view else { return };
-        let (c, r) = v.scene.bounds();
-        if r.is_nan() || r <= 0.0 {
-            return;
-        }
-        let subject =
-            crate::frame::Bounds::new([c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r]);
+        // the box the scene shows (as Fit All frames it), else its bounding sphere's
+        let subject = match v.scene.shown_box() {
+            Some((lo, hi)) => crate::frame::Bounds::new(lo, hi),
+            None => {
+                let (c, r) = v.scene.bounds();
+                if r.is_nan() || r <= 0.0 {
+                    return;
+                }
+                crate::frame::Bounds::new([c[0] - r, c[1] - r, c[2] - r], [c[0] + r, c[1] + r, c[2] + r])
+            }
+        };
         let (w, h) = v.nav.size;
         let view = crate::frame::ViewRect::full(w as f32, h as f32);
         let mut cam = crate::frame::frame(subject, view, crate::frame::Framing::default(), &[]).camera;

@@ -142,8 +142,16 @@ fn each_document_keeps_the_environment_it_was_left_in() {
         h.step();
     }
     let cam = h.gui.view.as_ref().unwrap().nav.camera;
-    assert!((cam.yaw.to_degrees() + 45.0).abs() < 0.5, "yaw {}", cam.yaw.to_degrees());
-    assert!((cam.pitch.to_degrees() - 35.26).abs() < 0.5, "pitch {}", cam.pitch.to_degrees());
+    assert!(
+        (cam.yaw.to_degrees() + 45.0).abs() < 0.5,
+        "yaw {}",
+        cam.yaw.to_degrees()
+    );
+    assert!(
+        (cam.pitch.to_degrees() - 35.26).abs() < 0.5,
+        "pitch {}",
+        cam.pitch.to_degrees()
+    );
     assert!(h.gui.shell.place("tool:Finish Render Studio").is_some());
     shot(&mut h, "03-render-studio");
     open(&mut h, b.to_str().unwrap());
