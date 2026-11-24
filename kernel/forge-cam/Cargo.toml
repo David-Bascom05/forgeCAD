@@ -1,0 +1,18 @@
+[package]
+name = "forge-cam"
+description = "ForgeCAD CAM: lowering the exact part to the checker's faces, setups, stock, operations, linking and the certified checks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-cam-geom = { path = "../forge-cam-geom" }
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+forge-tooling = { path = "../forge-tooling" }
+forge-post = { path = "../forge-post" }
+
+[lints]
+workspace = true

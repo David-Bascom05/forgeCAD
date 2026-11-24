@@ -76,14 +76,56 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-cam-geom"
+version = "0.1.0"
+
+[[package]]
+name = "forge-cam-import"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-cam-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-dirs",
+ "forge-lang",
+ "forge-math",
+ "forge-model",
+ "forge-post",
+ "forge-sketch",
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-cam-lang",
  "forge-dirs",
  "forge-geom",
  "forge-import",
  "forge-lang",
+ "forge-machine-lang",
  "forge-material",
  "forge-math",
  "forge-mesh",
@@ -91,6 +133,7 @@ dependencies = [
  "forge-ops",
  "forge-step",
  "forge-topo",
+ "forge-turn-lang",
 ]
 
 [[package]]
@@ -258,6 +301,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-machine"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-machine-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-lang",
+ "forge-machine",
+ "forge-math",
+ "forge-mesh",
+]
+
+[[package]]
 name = "forge-mass"
 version = "0.1.0"
 dependencies = [
@@ -333,6 +395,14 @@ dependencies = [
 [[package]]
 name = "forge-par"
 version = "0.1.0"
+
+[[package]]
+name = "forge-post"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-tooling",
+]
 
 [[package]]
 name = "forge-proof"
@@ -426,6 +496,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-tooling"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-math",
+]
+
+[[package]]
 name = "forge-topo"
 version = "0.1.0"
 dependencies = [
@@ -451,6 +529,29 @@ dependencies = [
  "forge-math",
  "forge-model",
  "forge-topo",
+]
+
+[[package]]
+name = "forge-turn"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-ops",
+ "forge-post",
+ "forge-tooling",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-turn-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam-geom",
+ "forge-lang",
+ "forge-turn",
 ]
 
 [[package]]

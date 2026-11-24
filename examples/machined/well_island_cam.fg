@@ -1,0 +1,13 @@
+machining
+# well_island.fg from the top: face the stock, then pocket the well around the boss (an island the
+# section carries: the pocket's region is the well less the part's section there).
+shared tol = 0.01
+
+f    = part("well_island.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+t2   = tool("flat-6", t: 2, stickout: 26, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)
+skim = facing(op1, tool: t1, to: 12, step: 1)
+well = pocket(op1, tool: t2, from: 12, to: 6, stepover: 2, step: 3, ramp: 3)
+prog = program(op1, post: "fanuc", number: 3001)
