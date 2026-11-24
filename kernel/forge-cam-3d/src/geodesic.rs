@@ -1,8 +1,7 @@
 //! Scallop (constant stepover) finishing: passes a fixed distance apart measured *on the
 //! surface*, as level sets of the distance from the region's boundary.
 //!
-//! Method (plain, published: geodesic parallels; Kimmel & Sethian 1998, Kim 2007; iso-scallop
-//! is reported unclaimed, research unclaimed-methods.md). The distance is Dijkstra's on the grid
+//! Method (published: geodesic parallels; Kimmel & Sethian 1998, Kim 2007). The distance is Dijkstra's on the grid
 //! of CL heights with a 16-neighbour stencil (the knight's moves bring the metrication error
 //! under about 2.6%), each edge weighted by its 3D length over the CL surface. The passes are
 //! the field's level sets every `stepover · (1 − 0.03)` (the stencil's error taken off, so the

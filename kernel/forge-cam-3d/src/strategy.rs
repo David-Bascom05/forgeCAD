@@ -9,7 +9,7 @@
 //!   §2.1). CAM-3AXIS owns the primary Parallel op; this is the same drape, used by
 //!   steep-and-shallow and available for containment-limited passes.
 //! - Radial: spokes about a user point; Spiral: an Archimedean spiral about a user point
-//!   (pattern.rs). Neither grows from a medial axis (US 10,108,172 avoided).
+//!   (pattern.rs).
 //! - Flat area: the heights where the CL surface is flat (a flat face under a flat or bull
 //!   tool), each finished by raster passes at exactly that height, kept where the tool stands on
 //!   the face (its CL band within [z − tol, z]) and each chord proven at that height within half

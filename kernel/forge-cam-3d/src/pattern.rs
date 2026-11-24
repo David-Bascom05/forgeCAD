@@ -4,9 +4,8 @@
 //!   or all one way;
 //! - radial: spokes about a centre, between two radii, at most a given spacing apart at the
 //!   outer radius;
-//! - spiral: an Archimedean spiral about a *point* (r = r0 + pitch·θ/2π), inward or outward. Not
-//!   a spiral grown outward from a medial-axis skeleton used as a hole (Autodesk US 10,108,172:
-//!   avoided by construction, the centre is a single user point).
+//! - spiral: an Archimedean spiral about a single user point (r = r0 + pitch·θ/2π), inward or
+//!   outward.
 //!
 //! Angles are taken through forge_math::dmath (deterministic: native = wasm).
 

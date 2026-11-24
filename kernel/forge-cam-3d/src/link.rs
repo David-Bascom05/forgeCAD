@@ -1,9 +1,9 @@
 //! Linking and ordering of 3D finishing passes.
 //!
-//! A fixed rule, the same shape as TOOLPATH-QUALITY's 2D linking (verify/forge-cam-quality):
-//! never chosen by comparing estimated times (that choice is claimed: SolidCAM US 2025/0284264),
-//! and never a stage that edits generated passes (CNC Software US 12,663,778): links are new moves
-//! between passes, each proven free by the drop-cutter where it is made.
+//! A fixed rule, the same shape as TOOLPATH-QUALITY's 2D linking (verify/forge-cam-quality): the
+//! kind of link follows from the geometry alone (length and proven clearance), in the order
+//! below. Links are new moves between the passes as generated (the passes themselves are not
+//! changed), each proven free by the drop-cutter where it is made.
 //!
 //! From the end a of one pass to the start b of the next:
 //! 1. **stay down**: a straight feed move a → b when it is at most `max_stay` long in xy and the
