@@ -458,14 +458,28 @@ fn label_w(ui: &mut Ui, t: &Theme, s: &str) {
 
 /// The provenance chip and the "?" (mark unknown) of a value.
 fn chip(ui: &mut Ui, c: &Ctx, path: &str, touch: &mut Touch) {
-    let (w, col) = badge(c.t, c.cites, path, c.own);
-    ui.label(RichText::new(w).font(sans(10.0)).color(col))
-        .on_hover_text(path);
-    if ui
-        .small_button("?")
-        .on_hover_text("I don't know this value: mark it UNKNOWN")
-        .clicked()
-    {
+    let (w, _) = badge(c.t, c.cites, path, c.own);
+    let detail = c
+        .cites
+        .cites
+        .iter()
+        .filter(|x| x.path == path)
+        .map(|x| {
+            [
+                x.source.as_str(),
+                x.taken.as_str(),
+                x.basis.as_str(),
+                x.note.as_str(),
+            ]
+            .into_iter()
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join(" · ")
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    let detail = format!("{path}\n{detail}");
+    if super::lib_form::chip(ui, c.t, super::lib_form::Prov::of(Some(&w)), detail.trim(), true) {
         touch.unknown.push(path.to_string());
         touch.any = true;
     }
@@ -925,12 +939,24 @@ fn tooling_library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<
 impl MachineUi {
     /// The scene for a library other than machines: the chosen record's bodies (None: machines;
     /// Some(empty): nothing to draw).
+    /// Is the preview a ghost (drawn with stand-ins for unknown values)?
+    pub fn preview_is_ghost(&self) -> bool {
+        super::machine_brake::is_brake(self.lib)
+            && self
+                .brake
+                .as_ref()
+                .is_some_and(|b| b.preview().is_none() && b.preview_ghost().is_some())
+    }
+
     pub fn preview_bodies(&self) -> Option<Vec<crate::machine_mesh::Tris>> {
         match self.lib {
             "machine" => None,
-            w if super::machine_brake::is_brake(w) => {
-                Some(self.brake.as_ref().and_then(|b| b.preview()).unwrap_or_default())
-            }
+            w if super::machine_brake::is_brake(w) => Some(
+                self.brake
+                    .as_ref()
+                    .and_then(|b| b.preview().or_else(|| b.preview_ghost().map(|g| g.0)))
+                    .unwrap_or_default(),
+            ),
             "workholding" => Some(
                 self.workholding
                     .as_ref()
@@ -1110,7 +1136,17 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
                                 );
                                 txt.push(')');
                             }
-                            let r = ui.selectable_label(on, RichText::new(txt).font(sans(12.0)));
+                            let r = ui
+                                .horizontal(|ui| {
+                                    super::lib_form::thumb(
+                                        ui,
+                                        t,
+                                        &super::lib_form::machine_thumb(&e.def),
+                                        26.0,
+                                    );
+                                    ui.selectable_label(on, RichText::new(txt).font(sans(12.0)))
+                                })
+                                .inner;
                             places.push((format!("machine:pick:{}", e.def.name), r.rect));
                             if r.clicked() {
                                 chosen = Some((e.def.clone(), e.level, e.file.clone()));
@@ -2184,6 +2220,6 @@ fn brake_bar(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(Strin
     });
     ui.label(small(
         t,
-        "The preview is the record's exact section (forge-brake's) drawn along the bed over its longest segment; a press: its ram, bed and housing as blocks.",
+        "The preview is the record's exact section (forge-brake's) drawn along the bed (over its longest segment, at most four times the section's size); a press: its ram, bed and housing as blocks. Amber: stand-in values for unknown ones.",
     ));
 }

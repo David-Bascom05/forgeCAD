@@ -281,7 +281,12 @@ pub fn library(
                             if e.def.standin {
                                 txt.push_str("  · stand-in");
                             }
-                            let r = ui.selectable_label(on, RichText::new(txt).font(sans(12.0)));
+                            let r = ui
+                                .horizontal(|ui| {
+                                    super::lib_form::thumb(ui, t, &thumb(&e.def), 26.0);
+                                    ui.selectable_label(on, RichText::new(txt).font(sans(12.0)))
+                                })
+                                .inner;
                             places.push((format!("workholding:pick:{}", e.def.name), r.rect));
                             if r.clicked() {
                                 chosen = Some((*e).clone());
@@ -328,12 +333,12 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
         ui.label(RichText::new(&r.name).font(semi(14.0)).color(t.ink));
         ui.add_space(6.0);
         ui.label(RichText::new(r.kind.name()).font(sans(11.0)).color(t.ink2));
-        let from = match &st.origin {
-            Some((l, f)) => format!("{} · {f}", l.name()),
-            None => "not saved".into(),
-        };
-        ui.label(RichText::new(from).font(sans(11.0)).color(t.ink2));
     });
+    let from = match &st.origin {
+        Some((l, f)) => format!("{} level · {f}", l.name()),
+        None => "not saved yet".into(),
+    };
+    ui.label(RichText::new(from).font(sans(10.5)).color(t.ink2));
     if !r.vendor.is_empty() || !r.product.is_empty() {
         ui.label(
             RichText::new(format!("{} {}", r.vendor, r.product))
@@ -341,6 +346,7 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                 .color(t.ink2),
         );
     }
+    super::lib_form::legend(ui, t);
     ui.separator();
     let mut set: Option<(String, f64)> = None;
     let mut set_list: Option<(String, Vec<f64>)> = None;
@@ -349,15 +355,22 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
         .id_salt("workholding:form")
         .show(ui, |ui| {
             let fields = forge_workholding_builder::fields(r.kind);
-            for group in ["size", "rated"] {
-                ui.label(RichText::new(group.to_uppercase()).font(semi(10.0)).color(t.ink2));
+            for (group, title) in [("size", "Geometry"), ("rated", "Rating")] {
+                super::lib_form::section(ui, t, title);
                 egui::Grid::new(("workholding:grid", group))
                     .num_columns(3)
+                    .spacing(egui::vec2(8.0, 4.0))
                     .striped(true)
                     .show(ui, |ui| {
                         for f in fields.iter().filter(|f| f.group == group) {
-                            ui.label(RichText::new(&f.path).font(sans(11.5)).color(t.ink2))
-                                .on_hover_text(f.help);
+                            super::lib_form::name(
+                                ui,
+                                t,
+                                &super::lib_form::humanize(&f.path),
+                                &f.path,
+                                f.help,
+                                150.0,
+                            );
                             match &f.ty {
                                 Ty::Num | Ty::Int => match r.vals.get(&f.path) {
                                     Some(v) => {
@@ -375,11 +388,7 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                         }
                                     }
                                     None => {
-                                        if ui
-                                            .small_button("set")
-                                            .on_hover_text("enter this value (yours)")
-                                            .clicked()
-                                        {
+                                        if super::lib_form::unknown_slot(ui, t, 160.0) {
                                             set = Some((f.path.clone(), 1.0));
                                         }
                                     }
@@ -413,23 +422,38 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
                                 _ => {
                                     let mut w = r.words.get(&f.path).cloned().unwrap_or_default();
                                     if ui
-                                        .add(egui::TextEdit::singleline(&mut w).desired_width(120.0))
+                                        .add_sized(
+                                            egui::vec2(160.0, 20.0),
+                                            egui::TextEdit::singleline(&mut w),
+                                        )
                                         .lost_focus()
                                     {
                                         set_word = Some((f.path.clone(), w));
                                     }
                                 }
                             }
-                            let (w, col) = status(t, &r, &f.path);
-                            let w = match &f.need {
-                                forge_library::schema::Need::Optional(_)
-                                    if !r.vals.contains_key(&f.path) && !r.unknown.contains(&f.path) =>
-                                {
-                                    "not given".to_string()
-                                }
-                                _ => w,
-                            };
-                            ui.label(RichText::new(w).font(sans(10.0)).color(col));
+                            let (w, _) = status(t, &r, &f.path);
+                            let not_given = matches!(&f.need, forge_library::schema::Need::Optional(_))
+                                && !r.vals.contains_key(&f.path)
+                                && !r.unknown.contains(&f.path);
+                            if not_given {
+                                ui.label(RichText::new("not given").font(sans(10.5)).color(t.ink2));
+                            } else {
+                                let detail = r
+                                    .cites
+                                    .iter()
+                                    .filter(|c| c.fields.contains(&f.path))
+                                    .map(|c| c.source.clone())
+                                    .collect::<Vec<_>>()
+                                    .join("\n");
+                                super::lib_form::chip(
+                                    ui,
+                                    t,
+                                    super::lib_form::Prov::of(Some(&w)),
+                                    &detail,
+                                    false,
+                                );
+                            }
                             ui.end_row();
                         }
                     });
@@ -464,4 +488,34 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
     {
         st.set_word(&k, &v);
     }
+}
+
+/// A record's thumbnail: its placed bodies seen from the front.
+fn thumb(r: &Record) -> Vec<Vec<[f64; 2]>> {
+    use super::lib_form::{cyl_pts, rect_xz};
+    let Ok(bodies) = forge_workholding_builder::preview(r) else {
+        return Vec::new();
+    };
+    bodies
+        .iter()
+        .flat_map(|(_, prims)| prims.iter())
+        .map(|p| match p {
+            forge_workholding::Prim::Block { o, axes, size } => {
+                let mut pts = Vec::new();
+                for i in 0..8 {
+                    let mut q = *o;
+                    for (k, ax) in axes.iter().enumerate() {
+                        if i >> k & 1 == 1 {
+                            for d in 0..3 {
+                                q[d] += ax[d] * size[k];
+                            }
+                        }
+                    }
+                    pts.push(q);
+                }
+                rect_xz(&pts)
+            }
+            forge_workholding::Prim::Cyl { base, axis, r, h } => rect_xz(&cyl_pts(*base, *axis, *r, *h)),
+        })
+        .collect()
 }

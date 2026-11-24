@@ -141,6 +141,21 @@ and read it again with forge-brake after every edit; a value not held shows UNKN
   (`machine_mesh::prism`, caps ear-clipped); a press as ram, bed and housing blocks.
 - Pictures: library-builder/brake-*.png (tests/brake_builder.rs, `FORGE_UI_SHOTS`).
 
+## 7b. The forms (shell/lib_form.rs)
+
+Every library tab draws its fields the same way: a human label with the raw key on hover
+(`dc` is "Cutting diameter"), grouped in sections (tools: Geometry / Cutting / Holder interface /
+Source; press-brake: Working geometry / Tooling interface / Rating and lengths / Frame / Speeds /
+Backgauge / Source; workholding: Geometry / Rating); a coloured provenance chip per value
+(PUBLISHED, ESTIMATE, UNKNOWN, YOURS, STAND-IN, COPIED, CONFLICT, UNCITED) under a one-line legend,
+clicking it shows the cite (source, date, basis) and offers "mark it unknown"; a value not known
+is a red "unknown · enter value" slot. Lists carry a small outline thumbnail per record (a tool's
+turned silhouette, a press-brake section, a machine's or a fixture's bodies from the front).
+Previews: a cutting tool's flutes drawn over its fluted length at the record's helix angle
+(straight when the record gives none) and its neck (`neck_d`, `reach`) when given; a press-brake
+record with unknown working geometry drawn in amber from the template's stand-ins, the values
+stood in named.
+
 ## 8. Order of work
 
 1. F4 `collide::check_box` on cam/machine (band) — machine travel proofs without the workaround.

@@ -38,6 +38,7 @@ pub mod harness_look;
 pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
+pub mod lib_form;
 pub mod machine;
 pub mod machine_brake;
 mod machine_parts;

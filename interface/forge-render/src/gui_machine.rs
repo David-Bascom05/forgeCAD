@@ -126,6 +126,17 @@ fn link_tint(def: &MachineDef, link: &str) -> [f32; 4] {
     }
 }
 
+/// A library record's preview: a pastel, or pale amber when drawn with stand-ins for unknown
+/// values.
+fn preview_tint(ghost: bool) -> [f32; 4] {
+    if ghost {
+        [0.98, 0.80, 0.45, 0.0]
+    } else {
+        let c = crate::palette::PASTEL[0];
+        [c[0], c[1], c[2], 0.0]
+    }
+}
+
 const HIT: [f32; 4] = [0.93, 0.25, 0.22, 0.0];
 const NEAR: [f32; 4] = [0.98, 0.66, 0.18, 0.0];
 
@@ -217,11 +228,11 @@ impl Gui {
                 }])));
             }
             let info = crate::render::part_info(&meshes);
+            let ghost = m.preview_is_ghost();
             let placements: Vec<Placement> = (0..meshes.len())
                 .map(|k| Placement {
                     tint: if tooling.is_some() {
-                        let c = crate::palette::PASTEL[0];
-                        [c[0], c[1], c[2], 0.0]
+                        preview_tint(ghost)
                     } else {
                         def.bodies
                             .get(k)
@@ -232,6 +243,7 @@ impl Gui {
                 .collect();
             let mut scene = Scene::new(&info, placements);
             scene.set_explode(0.0);
+
             let mut renderer = Renderer::new(
                 self.device.clone(),
                 self.queue.clone(),
@@ -298,6 +310,7 @@ impl Gui {
                 v.scene.placements[i].tint = match hit {
                     Some((_, _, true)) => HIT,
                     Some((_, _, false)) => NEAR,
+                    None if tooling.is_some() => preview_tint(m.preview_is_ghost()),
                     None => link_tint(&def, link),
                 };
             }

@@ -90,8 +90,26 @@ fn punches_dies_presses() {
             .cloned()
             .unwrap_or_else(|| panic!("{w}: no record with a section"));
         let m = h.gui.shell.machine.as_mut().unwrap();
-        m.brake.as_mut().unwrap().pick(e);
+        let b = m.brake.as_mut().unwrap();
+        // the list narrowed to the record's maker: its group open, with thumbnails
+        b.filter = forge_render::shell::machine_brake::get(&e.def.table, "maker")
+            .and_then(|m| match m {
+                Item::Str(s) => s.split_whitespace().next().map(str::to_string),
+                _ => None,
+            })
+            .unwrap_or_default();
+        b.pick(e);
         shot(&mut h, &format!("brake-0-{w}"));
+        h.gui
+            .shell
+            .machine
+            .as_mut()
+            .unwrap()
+            .brake
+            .as_mut()
+            .unwrap()
+            .filter
+            .clear();
         let m = h.gui.shell.machine.as_ref().unwrap();
         let drawn = m.preview_bodies().unwrap();
         assert!(
@@ -164,6 +182,9 @@ fn punches_dies_presses() {
             b.preview().is_none(),
             "a die with unknown working geometry has no exact section"
         );
+        let (ghost, stood) = b.preview_ghost().expect("drawn as a ghost from stand-ins");
+        assert!(!ghost.is_empty());
+        assert_eq!(stood, ["shoulder_radius"]);
     }
     shot(&mut h, "brake-2-die-unknown");
     {

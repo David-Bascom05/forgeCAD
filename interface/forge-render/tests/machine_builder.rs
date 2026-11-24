@@ -245,6 +245,32 @@ fn make_jog_check_save_and_close() {
         tu.pick(e);
     }
     shot(&mut h, "20-tool-library");
+    // a maker's tool with its helix angle: the flutes drawn wound; the list narrowed to its file
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        let tu = m.tooling.as_mut().unwrap();
+        let e = tu
+            .entries
+            .iter()
+            .find(|e| e.def.table.contains_key("helix"))
+            .cloned()
+            .expect("a tool citing its helix");
+        tu.filter = e.def.id.chars().take(4).collect();
+        tu.pick(e);
+        let p = tu.preview().unwrap();
+        assert!(p.edges.len() >= 3, "flute lines drawn");
+    }
+    shot(&mut h, "20b-tool-helix");
+    h.gui
+        .shell
+        .machine
+        .as_mut()
+        .unwrap()
+        .tooling
+        .as_mut()
+        .unwrap()
+        .filter
+        .clear();
     {
         let m = h.gui.shell.machine.as_mut().unwrap();
         let project = m.project.clone();
