@@ -227,21 +227,76 @@ impl<'a> Surfacer<'a> {
     }
 
     /// A fitted arc from a to `to` about c (xy; height linear in the angle) proven clear at
-    /// `limit`: the checker's own pieces of it (`ops::checker_moves`), each by `fit_clear`.
+    /// `limit`, by its chords. The cutter's signed distance to a face is 1-Lipschitz in the
+    /// tool's position, and each point of the arc is within `s` of its chord's point at the same
+    /// fraction (the arc's sweep cut into n equal angles, s ≤ r Δ²/8 widened, at most tol/8).
+    /// So each chord proven, against every face near the arc, by the closed form
+    /// (`contact::clear`) at `limit + s`, or by the column grown by s (`Column::grow`: it holds
+    /// the cutter anywhere within s) at `limit`, proves the arc at `limit`. Undecided: not proven
+    /// (the fitter backs off).
     pub fn fit_arc(&self, a: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool, limit: f64) -> bool {
         let r = ((a[0] - c[0]).powi(2) + (a[1] - c[1]).powi(2)).sqrt();
-        if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite())) {
+        if !(r.is_finite() && r > 0.0 && to.iter().all(|v| v.is_finite()) && limit.is_finite()) {
             return false;
         }
-        let p = OpPath {
-            tool: 0,
-            start: a,
-            moves: vec![PMove::Arc { to, c, cw, f: 1.0 }],
-            rpm: 0.0,
-            coolant: forge_post::Coolant::Off,
+        let tau = std::f64::consts::TAU;
+        let a0 = forge_math::dmath::atan2(a[1] - c[1], a[0] - c[0]);
+        let mut a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
+        if cw {
+            while a1 >= a0 {
+                a1 -= tau;
+            }
+        } else {
+            while a1 <= a0 {
+                a1 += tau;
+            }
+        }
+        let sweep = a1 - a0;
+        // chords of at most Δ = √(tol / r) (sagitta ≤ tol/8), at least one per quarter turn
+        let dmax = (self.tol / r).sqrt().min(0.5 * std::f64::consts::PI);
+        let n = ((sweep.abs() / dmax).ceil() as usize).max(1);
+        if n > 4096 {
+            return false;
+        }
+        let d = sweep.abs() / n as f64;
+        let sag = 1.01 * r * d * d / 8.0 + 1e-12;
+        let at = |k: usize| -> [f64; 3] {
+            if k == 0 {
+                return a;
+            }
+            if k == n {
+                return to;
+            }
+            let t = k as f64 / n as f64;
+            let (sn, cs) = forge_math::dmath::sin_cos(a0 + sweep * t);
+            [c[0] + r * cs, c[1] + r * sn, a[2] + (to[2] - a[2]) * t]
         };
-        let mvs: Vec<Move> = crate::ops::checker_moves(&p).into_iter().map(|m| m.0).collect();
-        self.fit_clear(&mvs, [c[0] - r, c[1] - r], [c[0] + r, c[1] + r], limit)
+        // the column grown by the sagitta (its Minkowski sum with a ball of that radius) holds
+        // the cutter anywhere within it of the chord's point: its gap along the chord bounds the
+        // arc's from below
+        let Some(grown) = self.check.grow(sag) else {
+            return false;
+        };
+        let w = r + grown.r;
+        let idx = self.grid.near(c[0] - w, c[1] - w, c[0] + w, c[1] + w);
+        let lim = limit + sag;
+        for k in 0..n {
+            let mv = Move::Line {
+                a: at(k),
+                b: at(k + 1),
+            };
+            for &i in &idx {
+                let f = &self.faces[i as usize];
+                if forge_cam_geom::contact::clear(&self.cutter, f, &mv, lim).is_some() {
+                    continue;
+                }
+                match drop::gap_move(&grown, f, &mv, limit, self.res, FIT_BUDGET).0 {
+                    Gap::Clear { .. } => {}
+                    _ => return false,
+                }
+            }
+        }
+        true
     }
 
     /// A run of cutting points, from its first, as cutting moves at feed `f`: fitted when `fit`
