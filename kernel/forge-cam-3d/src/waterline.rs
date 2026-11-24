@@ -10,10 +10,10 @@
 //!    loops run climb-wise around a boss for a right-hand spindle: the material on the left);
 //! 3. each crossing on a grid edge is bisected down to `tol_xy`, keeping the free end, so every
 //!    vertex of a pass is a proven-free point within `tol_xy` of the blocked region;
-//! 4. each chord between vertices is proven free (`seg3_below` at z, within tol_xy/2 below);
-//!    a chord that is not is split at its midpoint pushed outward to a free point, and a chord
-//!    whose midpoint lies more than `tol_xy` outside the boundary (it would leave material) is
-//!    split at a point refined onto the boundary.
+//! 4. each chord between vertices is proven free (`seg3_below` at z, within `slack` below,
+//!    tol_xy/2 for the plain op); a chord that is not is split at its midpoint pushed outward to
+//!    a free point, and a chord whose midpoint lies more than `tol_xy` outside the boundary (it
+//!    would leave material) is split at a point refined onto the boundary.
 //!
 //! The guarantee: every emitted move is proven free of gouges by the drop-cutter's own
 //! certificate (step 4). The forge-cam checker certifies the whole path again against the exact
@@ -35,6 +35,21 @@ pub struct Params {
     pub grid: f64,
     /// How close (in xy) a vertex is to the true contour, and the chord's allowed sag outward.
     pub tol_xy: f64,
+    /// How far a chord may dip below the level's CL surface in its proof (half of `tol_xy` for
+    /// the plain op; the op's inner tolerance at most). A contour made far more accurate than
+    /// the tolerance (for a fitter) keeps the tolerance's slack.
+    pub slack: f64,
+}
+
+impl Params {
+    /// The plain op's: a chord proven within half of `tol_xy` below.
+    pub fn new(grid: f64, tol_xy: f64) -> Params {
+        Params {
+            grid,
+            tol_xy,
+            slack: 0.5 * tol_xy,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -305,7 +320,7 @@ fn split(
     // the right-hand normal points to the free side (blocked on the left)
     let nr = [d[1] / len, -d[0] / len];
     let m = [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
-    let ok = seg_free(dc, a, b, z, 0.5 * p.tol_xy);
+    let ok = seg_free(dc, a, b, z, p.slack);
     // sag: a point tol_xy inside the chord's midpoint should be blocked, or the chord is too far
     let inner = [m[0] - nr[0] * p.tol_xy, m[1] - nr[1] * p.tol_xy];
     let close = len <= p.tol_xy || !free(dc, inner, z);
@@ -355,7 +370,6 @@ fn split(
     out.push(q);
     split(dc, q, b, z, p, depth + 1, out)
 }
-
 /// Levels from `top` down to `bottom` (inclusive of bottom) at most `dz` apart, equal steps.
 pub fn levels(top: f64, bottom: f64, dz: f64) -> Vec<f64> {
     if !(dz > 0.0) || !(top > bottom) {
@@ -387,10 +401,7 @@ mod tests {
     #[test]
     fn dome_levels_are_circles_of_the_right_radius() {
         let d = dome();
-        let p = Params {
-            grid: 1.0,
-            tol_xy: 0.002,
-        };
+        let p = Params::new(1.0, 0.002);
         for &z in &[5.0, 10.0, 15.0] {
             let ls = level(&d, z, p).unwrap();
             assert_eq!(ls.len(), 1, "z={z}");
@@ -424,10 +435,7 @@ mod tests {
     #[test]
     fn every_chord_is_proven_free() {
         let d = dome();
-        let p = Params {
-            grid: 2.0,
-            tol_xy: 0.01,
-        };
+        let p = Params::new(2.0, 0.01);
         let ls = level(&d, 8.0, p).unwrap();
         for l in &ls {
             let n = l.pts.len();
@@ -446,10 +454,7 @@ mod tests {
     #[test]
     fn floor_level_and_above_top() {
         let d = dome();
-        let p = Params {
-            grid: 1.0,
-            tol_xy: 0.01,
-        };
+        let p = Params::new(1.0, 0.01);
         assert!(level(&d, 25.0, p).unwrap().is_empty());
         let lv = levels(20.0, 0.0, 3.0);
         assert_eq!(lv.len(), 7);

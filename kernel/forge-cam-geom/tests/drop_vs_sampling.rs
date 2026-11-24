@@ -2,7 +2,7 @@
 //! against the branch and bound alone (the closed forms' reference); the vertical gap of a move
 //! against sampling; the column's containment of each standard cutter; the grown profile.
 use forge_cam_geom::check::{Face, Move, Surf};
-use forge_cam_geom::drop::{Column, Gap, drop, drop_decide, drop_general, gap_move};
+use forge_cam_geom::drop::{Column, Gap, drop, drop_decide, drop_general, gap_clear, gap_move};
 use forge_cam_geom::ival::Ival;
 use forge_cam_geom::tool::{Cutter, assemble};
 
@@ -353,6 +353,66 @@ fn a_cleared_move_is_clear_at_every_sample() {
     }
     println!("moves: {clear} clear, {over} over, {unknown} unknown");
     assert!(clear > 20 && over > 3);
+}
+
+/// `gap_clear` is gap_move's "Clear?" exactly: over moves near the CL, budgets small enough to
+/// run out and resolutions coarse enough to leave cells unsplit, both say Clear or both don't.
+#[test]
+fn gap_clear_is_gap_moves_clear() {
+    let mut rng = Rng(0x9e3779b97f4a7c15);
+    let (mut clear, mut over, mut unknown) = (0, 0, 0);
+    for (_, c) in cutters() {
+        let (col, _) = column(&c);
+        for kind in 0..7 {
+            for _ in 0..6 {
+                let f = face(&mut rng, kind);
+                let a = [rng.r(-4.0, 4.0), rng.r(-4.0, 4.0)];
+                let b = [a[0] + rng.r(-3.0, 3.0), a[1] + rng.r(-3.0, 3.0)];
+                let za = drop(&col, std::slice::from_ref(&f), &[0], a[0], a[1], 1e-3, 60_000).hi;
+                let zb = drop(&col, std::slice::from_ref(&f), &[0], b[0], b[1], 1e-3, 60_000).hi;
+                if !(za.is_finite() && zb.is_finite()) {
+                    continue;
+                }
+                let lift = rng.r(-0.02, 0.05);
+                let mv = Move::Line {
+                    a: [a[0], a[1], za + lift],
+                    b: [b[0], b[1], zb + lift],
+                };
+                let mut runs = vec![
+                    (1e-4, 40),
+                    (1e-4, 400),
+                    (1e-4, 4_000),
+                    (1e-2, 4_000),
+                    (1e-6, 60_000),
+                ];
+                // and each Clear search's own spend as its budget, and one less: the tightest
+                // budgets it can and cannot end Clear within
+                for (res, budget) in runs.clone() {
+                    if let (Gap::Clear { .. }, n) = gap_move(&col, &f, &mv, -0.005, res, budget)
+                        && n > 1
+                    {
+                        runs.push((res, n));
+                        runs.push((res, n - 1));
+                    }
+                }
+                for (res, budget) in runs {
+                    let g = gap_move(&col, &f, &mv, -0.005, res, budget).0;
+                    match g {
+                        Gap::Clear { .. } => clear += 1,
+                        Gap::Over { .. } => over += 1,
+                        Gap::Unknown => unknown += 1,
+                    }
+                    assert_eq!(
+                        gap_clear(&col, &f, &mv, -0.005, res, budget),
+                        matches!(g, Gap::Clear { .. }),
+                        "kind {kind} res {res} budget {budget}: {g:?}"
+                    );
+                }
+            }
+        }
+    }
+    println!("verdicts: {clear} clear, {over} over, {unknown} unknown");
+    assert!(clear > 50 && over > 20 && unknown > 20);
 }
 
 #[test]

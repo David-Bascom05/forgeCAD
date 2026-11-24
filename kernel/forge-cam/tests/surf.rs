@@ -363,3 +363,101 @@ fn zlevel_on_a_curved_part_reaches_the_contour() {
         );
     }
 }
+
+/// A z-level whose every grid node is blocked (under the plate's top over an area wholly on the
+/// plate) has no contour at all: it must block everything, not free it. Roughing the dome down to
+/// −0.5 over such an area certifies, and no pass is made at that level.
+#[test]
+fn zlevel_with_every_node_blocked_cuts_nothing_there() {
+    let faces = dome();
+    let flat = tool("flat-10", 1);
+    let sf = Surfacer::new(&faces, &flat.shape.bodies[0], 0.5, TOL, 0.0).unwrap();
+    let c = Cut {
+        tool: &flat,
+        tidx: 0,
+        h: H,
+        feed: (1500.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
+    };
+    let p = surf::zlevel(&sf, c, [5.0, 5.0, 55.0, 55.0], 12.0, -0.5, 4.0, 4.0, 2.0).unwrap();
+    let low = p.moves.iter().any(|m| match *m {
+        PMove::Line {
+            to,
+            phase: ops::Phase::Cut,
+            ..
+        }
+        | PMove::Arc { to, .. } => to[2] < 0.25,
+        _ => false,
+    });
+    assert!(!low, "a pass at a level under the plate's top");
+    let s = certified(&p, &flat, &faces);
+    assert!(s.clear, "{:?}", s.checks);
+}
+
+/// The column route's closed form for a level arc (check::closed_form's arc site, contact::
+/// clear_arc): a half turn of a ball round the dome's cap 0.5 clear is certified, and the
+/// branch and bound on the same checker pieces never finds a Hit there; the same arc 0.05
+/// inside its contact radius is refused as a gouge (a closed form that cleared it would let it
+/// through).
+#[test]
+fn a_level_arc_round_the_cap_is_cleared_by_its_chords_and_one_into_it_refused() {
+    let faces = dome();
+    let ball = tool("ball-6", 1);
+    // the cap: a sphere of radius 20 about (30, 30, -10); the ball (r 3) at tip height 5 has its
+    // centre at 8, 18 above the sphere's, so it touches at a radius √(23² − 18²) from the axis
+    let touch = (23.0f64 * 23.0 - 18.0 * 18.0).sqrt();
+    let arc = |rho: f64| OpPath {
+        tool: 0,
+        start: [30.0 + rho, 30.0, 5.0],
+        moves: vec![PMove::Arc {
+            to: [30.0 - rho, 30.0, 5.0],
+            c: [30.0, 30.0],
+            cw: false,
+            f: 1000.0,
+        }],
+        rpm: 10000.0,
+        coolant: forge_post::Coolant::Off,
+    };
+    let clear = arc(touch + 0.5);
+    let s = certified(&clear, &ball, &faces);
+    assert!(
+        s.clear,
+        "{:?}",
+        s.checks
+            .iter()
+            .filter(|c| c.verdict != "clear")
+            .take(3)
+            .collect::<Vec<_>>()
+    );
+    let cutter = ball
+        .shape
+        .bodies
+        .iter()
+        .find(|b| b.part == forge_cam_geom::tool::Part::Cutter)
+        .unwrap();
+    let mut by_chords = 0;
+    for (mv, ..) in ops::checker_moves(&clear) {
+        for f in &faces {
+            if let Some(forge_cam_geom::check::Verdict::Clear { lower }) =
+                forge_cam_geom::check::closed_form(cutter, f, &mv, -TOL)
+            {
+                by_chords += 1;
+                let (v, _) = forge_cam_geom::check::certify_bb(cutter, f, &mv, lower - 1e-9, 0.01, 50_000);
+                assert!(
+                    !matches!(v, forge_cam_geom::check::Verdict::Hit { .. }),
+                    "chords clear at {lower}, B&B hits: {v:?}"
+                );
+            }
+        }
+    }
+    assert!(by_chords > 0, "the arc pieces were not cleared by their chords");
+    let into = arc(touch - 0.05);
+    let s = certified(&into, &ball, &faces);
+    assert!(!s.clear, "an arc 0.05 into the cap was certified");
+    assert!(
+        s.checks.iter().any(|c| c.rule == "gouge" && c.verdict == "fail"),
+        "{:?}",
+        s.checks.iter().take(3).collect::<Vec<_>>()
+    );
+}
