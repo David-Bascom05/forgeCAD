@@ -1585,7 +1585,7 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
             let words: Vec<String> = tally(&s.checks).into_iter().map(|x| x.0).collect();
             let badge = p
                 .layout_no_wrap(
-                    format!("Passes · {}", words.join(" · ")),
+                    format!("{} · {}", if plan.feasible { "Passes" } else { "Step 00 passes" }, words.join(" · ")),
                     egui::FontId::proportional(12.0),
                     t.ink,
                 )
@@ -1630,7 +1630,14 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                             }
                             // the word in its own colour (a feasible step passes), the outline warning
                             ui.label(
-                                egui::RichText::new(if ok { "Passes" } else { "Fails" })
+                                // with no feasible order, said of this step only (UX-LEAD: not the
+                                // program passing)
+                                egui::RichText::new(match (plan.feasible, ok) {
+                                    (true, true) => "Passes".to_string(),
+                                    (true, false) => "Fails".to_string(),
+                                    (false, true) => format!("Step {} passes", st.step + 1),
+                                    (false, false) => format!("Step {} fails", st.step + 1),
+                                })
                                     .color(if ok { look::PASS } else { look::FAIL })
                                     .size(12.0),
                             );
@@ -2019,9 +2026,9 @@ pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<St
                     names[b.bend],
                     b.checks
                         .iter()
-                        .map(|c| cards::rule_label(c.rule).to_lowercase())
+                        .map(|c| cards::rule_failed(c.rule))
                         .collect::<Vec<_>>()
-                        .join(", ")
+                        .join("; ")
                 ))
                 .color(look::FAIL),
             )

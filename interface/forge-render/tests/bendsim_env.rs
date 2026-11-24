@@ -1654,7 +1654,7 @@ fn no_feasible_order_is_said_and_bend_one_has_no_previous() {
         h.gui.shell.status.clear();
         click(&mut h, tool);
         let st = h.gui.shell.status.clone();
-        assert!(st.starts_with("No feasible order: bend "), "{tool}: {st:?}");
+        assert!(st.starts_with("No feasible order: bend ") && st.contains("fails: it closes on the punch"), "{tool}: {st:?}");
     }
     shot(&mut h, "ux-no-feasible-order");
     let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();

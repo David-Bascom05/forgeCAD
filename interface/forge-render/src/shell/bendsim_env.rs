@@ -174,13 +174,13 @@ pub(super) fn infeasible(b: &BendSimUi) -> Option<String> {
             .checks
             .iter()
             .filter(|c| !c.pass)
-            .map(|c| super::bendsim_cards::rule_label(c.rule).to_lowercase())
+            .map(|c| super::bendsim_cards::rule_failed(c.rule).to_string())
             .collect();
         format!(
-            "bend {} ({}) fails {} (best tried: {} punch on {} die)",
+            "bend {} ({}) fails: {} (best tried: {} punch on {} die)",
             k.bend + 1,
             sim.names[k.bend],
-            if rules.is_empty() { "its checks".to_string() } else { rules.join(", ") },
+            if rules.is_empty() { "its checks".to_string() } else { rules.join("; ") },
             tool_words(&k.punch),
             tool_words(&k.die)
         )

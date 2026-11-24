@@ -104,6 +104,30 @@ pub fn rule_label(r: fb::Rule) -> &'static str {
     }
 }
 
+/// What a failed check means, as a clause ("it closes on the punch"; UX-LEAD).
+pub fn rule_failed(r: fb::Rule) -> &'static str {
+    use fb::Rule::*;
+    match r {
+        ToolCollision => "it hits a tool",
+        ClosesOnPunch => "it closes on the punch",
+        SelfCollision => "the part meets itself",
+        MinFlange => "a flange is shorter than the die allows",
+        VTooNarrow => "the V is too narrow for it",
+        VDepth => "the V is not deep enough",
+        DieAngle => "the die's angle is too open for the turn",
+        PunchAngle => "the punch's angle is too open for the turn",
+        PunchRadius => "the punch's radius is larger than the bend's",
+        BackgaugeReach => "the backgauge cannot reach a stop",
+        OpenHeight => "the tools leave no room under the open height",
+        Stroke => "the ram's stroke is too short",
+        BedLength => "it does not fit the bed",
+        Segments => "no stack of segments covers it",
+        Tonnage => "it needs more force than the press or tools give",
+        Withdraw => "the punch cannot be withdrawn",
+        Handling => "the operator's move is not clear",
+    }
+}
+
 /// A check's value with its unit: angles in degrees, force in kN, the rest in mm.
 pub fn rule_value(r: fb::Rule, x: f64) -> String {
     match r {
