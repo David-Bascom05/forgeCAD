@@ -1393,7 +1393,7 @@ impl Cam {
                 Ok(V::Setup(self.setups.len() - 1))
             }
             "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "slot" | "thread_mill"
-            | "edge_break" => self.op(name, f, a),
+            | "edge_break" | "bore" => self.op(name, f, a),
             "soft_jaw" => self.soft_jaw(name, a),
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
@@ -2245,6 +2245,117 @@ impl Cam {
         }])
     }
 
+    /// Helical bore (bore.rs): each place of a round hole along −z opened by a helix of `pitch:`
+    /// (default: a 3° ramp at the helix's radius; or `ramp:` degrees), with `finish_leave:` for a
+    /// finishing helix, `spring:`, `leave:`. Certified against the part, which has the hole.
+    #[allow(clippy::too_many_arguments)]
+    fn bore(
+        &self,
+        su: usize,
+        a: &BTreeMap<String, V>,
+        t: &ToolUse,
+        ti: usize,
+        h: Heights,
+        feed: (f64, f64),
+        ax: f64,
+        voids: &mut Vec<(Option<Region>, f64)>,
+    ) -> Result<Vec<OpPath>, String> {
+        let (pi, hn) = match a.get("#1") {
+            Some(V::Holes(p, n)) if *p == self.setups[su].part => (*p, n.clone()),
+            Some(V::Holes(..)) => {
+                return Err(
+                    "the hole is bored from the side it opens on: in a setup that holds the part that way up"
+                        .into(),
+                );
+            }
+            _ => return Err("bore(SETUP, PART.HOLE, tool:, pitch:, finish_leave:, spring:)".into()),
+        };
+        let hole = self.parts[pi]
+            .holes
+            .iter()
+            .find(|x| x.name == hn)
+            .unwrap()
+            .clone();
+        if hole.dir != [0.0, 0.0, -1.0] {
+            return Err(format!("the hole `{hn}` is not along −z: it needs its own setup"));
+        }
+        let leave = get_num(a, "leave", Some(0.0))?;
+        let finish_leave = get_num(a, "finish_leave", Some(0.0))?;
+        if !(finish_leave >= 0.0 && finish_leave.is_finite()) {
+            return Err("finish_leave: a length, 0 or more".into());
+        }
+        let spring = get_num(a, "spring", Some(0.0))?;
+        if spring.fract() != 0.0 || !(0.0..=20.0).contains(&spring) {
+            return Err("spring: a whole number from 0 to 20".into());
+        }
+        let r = 0.5 * hole.d;
+        let rc = r - 0.5 * t.tool.dc - leave;
+        // the pitch of a helix at radius rc ramping at `deg` degrees
+        let at_ramp = |deg: f64| {
+            let (sn, cs) = forge_math::dmath::sin_cos(deg.to_radians());
+            std::f64::consts::TAU * rc.max(1e-3) * sn / cs
+        };
+        let pitch = match (a.get("pitch"), a.get("ramp")) {
+            (Some(_), Some(_)) => return Err("give `pitch:` or `ramp:`, not both".into()),
+            (Some(_), None) => get_num(a, "pitch", None)?,
+            (None, Some(V::Num(x))) if *x > 0.0 && *x <= 30.0 => at_ramp(*x),
+            (None, Some(_)) => return Err("ramp: an angle in degrees, over 0 and at most 30".into()),
+            (None, None) => at_ramp(3.0),
+        };
+        if !(pitch > 0.0 && pitch.is_finite()) {
+            return Err("pitch: a length over 0".into());
+        }
+        let mut paths = vec![];
+        for p in &hole.places {
+            let bottom = match hole.depth {
+                Some(dd) => p[2] - dd,
+                None => self.parts[pi].bbox.0[2] - 0.5,
+            } + ax;
+            paths.push(
+                forge_cam::bore::helical_bore(
+                    [p[0], p[1]],
+                    r,
+                    p[2],
+                    bottom,
+                    ops::Cut {
+                        tool: t,
+                        tidx: ti,
+                        h,
+                        feed,
+                    },
+                    forge_cam::bore::Bore {
+                        pitch,
+                        finish_leave,
+                        spring: spring as usize,
+                        leave,
+                    },
+                )
+                .map_err(|e| match e {
+                    ops::OpError::Region(w) => w,
+                    ops::OpError::ToolTooBig { why, .. } => why,
+                    e => format!("{e:?}"),
+                })?,
+            );
+            // what it clears: the disk the tool sweeps (the hole less `leave`), to the bottom
+            let rr = r - leave;
+            let a0 = p2(p[0] + rr, p[1]);
+            voids.push((
+                Some(Region {
+                    loops: vec![Loop {
+                        segs: vec![Seg::Arc {
+                            a: a0,
+                            b: a0,
+                            c: p2(p[0], p[1]),
+                            ccw: true,
+                        }],
+                    }],
+                }),
+                bottom,
+            ));
+        }
+        Ok(paths)
+    }
+
     /// Edge break (a declared removal, the master's option (a)): the part's top edges at `at:`
     /// (default its top) broken by a 45° chamfer of `size:` s with a 90° chamfer mill. Δ is the
     /// band of the top within s of its edges, below the 45° surface z' = z − s + d, d the
@@ -2646,6 +2757,7 @@ impl Cam {
                 "slot" => "slot",
                 "thread_mill" => "thread_mill",
                 "edge_break" => "edge_break",
+                "bore" => "bore",
                 _ => "drill",
             },
             setup: su,
@@ -2674,6 +2786,11 @@ impl Cam {
             posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
+        for k in ["pitch", "finish_leave"] {
+            if a.contains_key(k) && kind != "bore" {
+                return Err(format!("{kind} does not take `{k}:` (bore does)"));
+            }
+        }
         for k in ["passes", "hand", "starts"] {
             if a.contains_key(k) && kind != "thread_mill" {
                 return Err(format!("{kind} does not take `{k}:` (thread_mill does)"));
@@ -2681,7 +2798,8 @@ impl Cam {
         }
         for k in CONTOUR_ONLY {
             // a thread mill has its own spring passes and lead
-            let thread = kind == "thread_mill" && matches!(k, "spring" | "lead");
+            let thread =
+                kind == "thread_mill" && matches!(k, "spring" | "lead") || kind == "bore" && k == "spring";
             if a.contains_key(k) && kind != "contour" && !thread {
                 return Err(format!("{kind} does not take `{k}:` (contour does)"));
             }
@@ -2718,6 +2836,8 @@ impl Cam {
                 let fd = match kind {
                     "facing" => self.feeds_for(su, t, 0.7 * d, step.min(t.tool.lcf)),
                     "pocket" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
+                    // a helix down a closed hole engages up to the tool's whole width
+                    "bore" => self.feeds_for(su, t, d, step),
                     _ => self.feeds_for(su, t, 0.1 * d, step),
                 };
                 let (vf, vp) = match fd {
@@ -2731,6 +2851,7 @@ impl Cam {
                     "slot" => self.engrave(su, a, t, ti, h, (vf, vp), step, true, &mut voids),
                     "thread_mill" => self.thread_mill(su, a, t, ti, h, (vf, vp), &mut out, &mut voids),
                     "edge_break" => self.edge_break(su, a, t, ti, h, (vf, vp), &mut out),
+                    "bore" => self.bore(su, a, t, ti, h, (vf, vp), ax, &mut voids),
                     "facing" => {
                         let z = get_num(a, "to", Some(part.bbox.1[2]))? + ax;
                         let p = ops::facing(
