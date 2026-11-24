@@ -597,3 +597,25 @@ tip = frame(on: forearm, at: pose(at: (144, 0, 5)))
     assert_eq!(tip.kid("parent").expect("parent").attr("link"), "upper");
     assert!(e.view.links.iter().all(|l| l.name != "forearm"));
 }
+
+#[test]
+fn a_reserved_name_is_not_bound() {
+    for text in [
+        "robot\nnone = 3\n",
+        "robot\nshared hull = 2\n",
+        "robot\nsrc = source(none)\nhull = link()\n",
+    ] {
+        let e = robot::read(text, None).expect_err("refused");
+        assert!(
+            e.iter().any(|x| x.message.starts_with("ReservedName")),
+            "{text}: {e:?}"
+        );
+    }
+    // the words themselves still mean what they mean
+    let r = robot::read(
+        "robot\nsrc = source(none)\na = link()\ncollision(a, hull)\n",
+        None,
+    )
+    .expect("reads");
+    assert_eq!(r.geometry[0].spec, robot::GeoSpec::Hull);
+}

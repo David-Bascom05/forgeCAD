@@ -512,6 +512,20 @@ impl Reader<'_> {
     }
 }
 
+/// Names a robot document's values are read as before any binding (`hull`, `none`): binding one
+/// would be shadowed silently, so it is refused.
+pub const RESERVED: [&str; 2] = ["hull", "none"];
+
+fn reserved(name: &str) -> Result<(), String> {
+    if RESERVED.contains(&name) {
+        return Err(format!(
+            "ReservedName: `{name}` is a robot document's own word ({}); bind another name",
+            RESERVED.join(", ")
+        ));
+    }
+    Ok(())
+}
+
 /// Reads a robot document: every statement, or every statement's error.
 pub fn read(src: &str, dir: Option<&Path>) -> Result<Robot, Vec<RobotError>> {
     let prog = syntax::parse(src).map_err(|e| {
@@ -535,10 +549,12 @@ pub fn read(src: &str, dir: Option<&Path>) -> Result<Robot, Vec<RobotError>> {
         let res: Result<(), String> = (|| {
             match &st.kind {
                 StmtKind::Shared { name, value } => {
+                    reserved(name)?;
                     let v = rd.eval(value, &env)?;
                     env.insert(name.clone(), v);
                 }
                 StmtKind::Assign { name, value } => {
+                    reserved(name)?;
                     let v = match &value.kind {
                         ExprKind::Call(f, args) => match &f.kind {
                             ExprKind::Name(fname) => {
