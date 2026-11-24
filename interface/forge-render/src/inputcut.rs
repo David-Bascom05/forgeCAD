@@ -21,6 +21,27 @@ fn button(e: &egui::Event) -> bool {
     matches!(e, egui::Event::PointerButton { .. })
 }
 
+/// `rest` starts with a press of `button` where it was let go at `at` (moves within egui's click
+/// distance before it): the second click of a double click.
+fn second_click(rest: &[egui::Event], at: egui::Pos2, button: egui::PointerButton) -> bool {
+    const NEAR: f32 = 6.0;
+    for e in rest {
+        match e {
+            egui::Event::PointerMoved(p) if p.distance(at) <= NEAR => {}
+            egui::Event::PointerButton {
+                pressed: true,
+                pos,
+                button: b,
+                ..
+            } => {
+                return *b == button && pos.distance(at) <= NEAR;
+            }
+            _ => return false,
+        }
+    }
+    false
+}
+
 /// How many of `events` one frame takes: all of them, unless a mouse button and the keyboard
 /// both come in them; then up to where the second of the two kinds starts (the rest is the next
 /// frame's). `hold_buttons`: the frame before changed what's where (it asked for another pass at
@@ -39,8 +60,18 @@ pub fn frame_cut(events: &[egui::Event], hold_buttons: bool) -> usize {
         }
         // a frame ends with a button let go: egui takes a click where the pointer is at the
         // frame's end, so a move after it (to the next button) lost the click; and a second click
-        // waits for what the first changes to be laid out (a tab, then the button its panel shows)
-        if matches!(e, egui::Event::PointerButton { pressed: false, .. }) {
+        // waits for what the first changes to be laid out (a tab, then the button its panel shows).
+        // Not a double click's first click: egui counts the second as a double click only within
+        // its delay of the first by the frames' clocks, and the next frame can come later than
+        // that (frames paced to a busy GPU), so the two were read as two single clicks
+        if let egui::Event::PointerButton {
+            pressed: false,
+            pos,
+            button,
+            ..
+        } = e
+            && !second_click(&events[i + 1..], *pos, *button)
+        {
             return i + 1;
         }
         keys |= keyboard(e);
@@ -117,5 +148,49 @@ mod tests {
         ];
         assert_eq!(frame_cut(&two, false), 2);
         assert_eq!(frame_cut(&two[2..], false), 3);
+    }
+
+    #[test]
+    fn a_double_click_is_one_frame() {
+        // press, release, press, release at one place (the page's app_click, or a busy page's
+        // queue): one frame, so egui reads the second as a double click whatever the frames'
+        // clocks. Before: two frames, and a second frame more than egui's 0.3 s after the first
+        // (frames paced to a busy GPU) made it a second single click: no op dialog opened
+        let double = [
+            press(true),
+            press(false),
+            press(true),
+            press(false),
+            egui::Event::PointerGone,
+        ];
+        // (both clicks in the frame; the pointer's leaving is the next's, as after any click)
+        assert_eq!(frame_cut(&double, false), 4);
+        // the second press a few pixels off, a small move between: still one
+        let near = [
+            press(true),
+            press(false),
+            egui::Event::PointerMoved(egui::pos2(3.0, 2.0)),
+            egui::Event::PointerButton {
+                pos: egui::pos2(3.0, 2.0),
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            },
+            press(false),
+        ];
+        assert_eq!(frame_cut(&near, false), 5);
+        // the other button, or typing after the click: cut as before
+        let other = [
+            press(true),
+            press(false),
+            egui::Event::PointerButton {
+                pos: egui::pos2(1.0, 1.0),
+                button: egui::PointerButton::Secondary,
+                pressed: true,
+                modifiers: Default::default(),
+            },
+        ];
+        assert_eq!(frame_cut(&other, false), 2);
+        assert_eq!(frame_cut(&[press(true), press(false), text("x")], false), 2);
     }
 }
