@@ -323,3 +323,70 @@ fn a_manual_tool_post_swaps_by_hand() {
             .any(|u| u.path.ends_with(".stations"))
     );
 }
+
+#[test]
+fn g43_on_a_table_side_z_puts_the_tip_where_a_head_side_z_does() {
+    let head = vmc3();
+    // the same machine with Z moving the table (an HMC's arrangement): Z on the part's chain
+    let zi = head
+        .find("name = \"Z\"\nparent = \"base\"\nside = \"head\"\ntype = \"linear\"\naxis = [0, 0, 1]")
+        .unwrap();
+    let mut table = head.clone();
+    table.replace_range(
+        zi..zi
+            + "name = \"Z\"\nparent = \"base\"\nside = \"head\"\ntype = \"linear\"\naxis = [0, 0, 1]".len(),
+        "name = \"Z\"\nparent = \"X\"\nside = \"table\"\ntype = \"linear\"\naxis = [0, 0, -1]",
+    );
+    let table = table
+        .replace("name = \"S1\"\nlink = \"Z\"", "name = \"S1\"\nlink = \"base\"")
+        .replace(
+            "name = \"spindle\"\nkind = \"tool\"\nlink = \"Z\"",
+            "name = \"spindle\"\nkind = \"tool\"\nlink = \"base\"",
+        )
+        .replace(
+            "name = \"table\"\nkind = \"part\"\nlink = \"X\"",
+            "name = \"table\"\nkind = \"part\"\nlink = \"Z\"",
+        )
+        .replace(
+            "name = \"head\"\nlink = \"Z\"",
+            "name = \"head\"\nlink = \"base\"",
+        )
+        .replace("name = \"table\"\nlink = \"X\"", "name = \"table\"\nlink = \"Z\"");
+    let prog = "G43 H1\nG0 X10. Y-20. Z30.\nG1 Z2. F500.\n";
+    let tips = |src: &str| -> Vec<[f64; 3]> {
+        let m = &MachineDef::parse_all(src).unwrap()[0];
+        assert_eq!(
+            m.joint("Z").unwrap().side == forge_machine::def::Side::Table,
+            src.contains("side = \"table\"\ntype = \"linear\"\naxis = [0, 0, -1]")
+        );
+        let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+        // spindle nose at z 500 at home: Z's word 0 at the table top with a zero-length tool
+        s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+        s.h = vec![(1, 100.0)];
+        s.tools = vec![sim::SimTool {
+            t: 1,
+            name: "e10".into(),
+            tip: [0.0, 0.0, -100.0],
+            body: vec![(5.0, 0.0, 30.0)],
+            cut: sim::Cut::Mill { r: 5.0, corner: 0.0 },
+        }];
+        s.start_tool = Some(1);
+        let tl = sim::simulate(prog, &s).unwrap();
+        tl.segments
+            .iter()
+            .map(|sg| s.tip_in_part(&sg.q1, 1).unwrap().0)
+            .collect()
+    };
+    let (a, b) = (tips(&head), tips(&table));
+    for (p, q) in a.iter().zip(&b) {
+        for k in 0..3 {
+            assert!((p[k] - q[k]).abs() < 1e-9, "{a:?} vs {b:?}");
+        }
+    }
+    // and the tip is where the program says
+    let last = a.last().unwrap();
+    assert!(
+        (last[0] - 10.0).abs() < 1e-9 && (last[1] + 20.0).abs() < 1e-9 && (last[2] - 2.0).abs() < 1e-9,
+        "{last:?}"
+    );
+}

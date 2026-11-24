@@ -1450,8 +1450,11 @@ impl MachineDef {
         }
         if let Some(l) = &self.length_joint {
             match self.joint(l) {
-                Some(j) if j.ty == JointType::Linear && j.side == Side::Head => {}
-                _ => return Err(self.shape(format!("length_joint `{l}` must be a linear head joint"))),
+                // head side (a VMC's Z) or table side (an HMC moving the table to the column):
+                // the joint's value takes H either way, since a table joint's axis is the
+                // table's motion for +word
+                Some(j) if j.ty == JointType::Linear => {}
+                _ => return Err(self.shape(format!("length_joint `{l}` must be a linear joint"))),
             }
         }
         // sides: every joint on a tool mount's chain is head, on a part mount's chain is table

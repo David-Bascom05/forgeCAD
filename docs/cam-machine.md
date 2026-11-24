@@ -36,7 +36,7 @@ what their absence means.
 | control | required | the forge-post dialect its control speaks (machine and control kept apart) |
 | source | required | where the numbers come from; `taken`, `note` optional |
 | clearance | required | least gap (mm) the collision check holds between bodies |
-| length_joint | mills: required | the linear head joint G43 moves (Z); lathes use X/Z offsets instead |
+| length_joint | mills: required | the linear joint G43 moves: a VMC's head Z, or an HMC's table Z (the table moving to the column; its axis is the table's motion for +word, so H acts the same); lathes use X/Z offsets instead |
 | coolants | optional | kinds present: flood mist through air (empty: none declared) |
 | peck_clear, chip_lift | optional | G83's peck clearance and G73's chip-break lift, mm: the control's parameters (Fanuc 5115/5114, Haas settings, Siemens _ZSFR, ...), citable as `machine.peck_clear` / `machine.chip_lift`. Absent: forge-post's 0.5 / 0.2 mm are used and every program with G83/G73 reports them not checked (`sim::unchecked_cycles`) |
 | real | optional | true: a real maker's model; every value must be cited (Provenance). false if absent |
