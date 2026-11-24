@@ -338,6 +338,7 @@ impl MachineUi {
             parts,
             hover: None,
             rows: Vec::new(),
+            fresh: true,
         });
         Ok(())
     }
@@ -1790,28 +1791,27 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             );
         }
     }
+    // the tabs on two fixed rows (seven do not fit the sheet's width on one): none cut, none
+    // hidden behind a scroll
+    for row in [&Tab::ALL[..4], &Tab::ALL[4..]] {
+        ui.horizontal(|ui| {
+            for &tab in row {
+                let r = ui.selectable_label(st.tab == tab, RichText::new(tab.name()).font(sans(12.0)));
+                places.push((format!("machine:tab:{}", tab.name()), r.rect));
+                if r.clicked() {
+                    st.tab = tab;
+                    st.pick = 0;
+                }
+            }
+        });
+    }
+    // the jog under the tabs, so the title and the tabs lead the sheet
     if docked {
         egui::CollapsingHeader::new(RichText::new("MOTION").font(semi(10.5)).color(t.ink2))
             .id_salt("machine:motion")
             .default_open(true)
             .show(ui, |ui| motion(ui, t, st, places));
     }
-    // one line at any width: the strip scrolls sideways rather than wrapping
-    egui::ScrollArea::horizontal()
-        .id_salt("machine:tabs")
-        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                for tab in Tab::ALL {
-                    let r = ui.selectable_label(st.tab == tab, RichText::new(tab.name()).font(sans(12.0)));
-                    places.push((format!("machine:tab:{}", tab.name()), r.rect));
-                    if r.clicked() {
-                        st.tab = tab;
-                        st.pick = 0;
-                    }
-                }
-            });
-        });
     ui.separator();
     let own = matches!(st.origin, Some((Level::User | Level::Project, _)) | None);
     let mut d2 = d.clone();
@@ -2492,6 +2492,8 @@ pub struct Split {
     pub hover: Option<usize>,
     /// Each row where it was last drawn (tests point at them).
     pub rows: Vec<egui::Rect>,
+    /// Just opened: the sheet scrolls it into view on its first frame.
+    pub fresh: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -2773,7 +2775,7 @@ fn tab_bodies(
     let why_off = if !ms.kept {
         "no folder for your library on this system"
     } else {
-        "first fill in Source: where the file came from and your right to use it"
+        "First fill in Source: where the file came from and your right to use it."
     };
     ui.horizontal(|ui| {
         label_w(ui, t, "Source");
@@ -2804,7 +2806,12 @@ fn tab_bodies(
     // a split being set up: each part's picture, its size, the body it goes to
     if let Some(sp) = ms.split.as_mut() {
         ui.add_space(4.0);
-        ui.label(RichText::new("Split into parts").font(semi(12.0)).color(t.ink));
+        let head = ui.label(RichText::new("Split into parts").font(semi(12.0)).color(t.ink));
+        if sp.fresh {
+            // the dialog opens below the fold: bring it into view, or the click seems to do nothing
+            ui.scroll_to_rect(head.rect, Some(egui::Align::TOP));
+            sp.fresh = false;
+        }
         ui.label(small(
             t,
             "Largest first. Give each part the body it moves with, or leave it out. Point at a row to see its part in the view.",

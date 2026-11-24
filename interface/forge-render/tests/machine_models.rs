@@ -219,16 +219,16 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
     // in the view: the dialog's first row under the pointer, its part lit
     m2.tab = Tab::Bodies;
     h.gui.shell.machine = Some(m2);
-    for _ in 0..4 {
+    // it opens scrolled into view: let the scroll settle before pointing at a row
+    for _ in 0..12 {
         h.step();
     }
-    let row = h.gui.shell.machine.as_ref().unwrap().split.as_ref().unwrap().rows[0];
-    h.move_to(row.center().x, row.center().y);
-    for _ in 0..4 {
+    // the scroll animates: follow the row until the pointer is on it
+    for _ in 0..40 {
+        let row = h.gui.shell.machine.as_ref().unwrap().split.as_ref().unwrap().rows[0];
+        h.move_to(row.center().x, row.center().y);
         h.step();
-    }
-    assert_eq!(
-        h.gui
+        if h.gui
             .shell
             .machine
             .as_ref()
@@ -236,9 +236,15 @@ fn a_users_model_is_kept_in_their_library_placed_drawn_and_checked() {
             .split
             .as_ref()
             .unwrap()
-            .hover,
-        Some(0)
-    );
+            .hover
+            == Some(0)
+        {
+            break;
+        }
+    }
+    let row = h.gui.shell.machine.as_ref().unwrap().split.as_ref().unwrap().rows[0];
+    let sp = h.gui.shell.machine.as_ref().unwrap().split.as_ref().unwrap();
+    assert_eq!(sp.hover, Some(0), "row {row:?}, now {:?}", sp.rows.first());
     shot(&mut h, "models-03-split-hover");
     let mut m2 = h.gui.shell.machine.take().unwrap();
     m2.split.as_mut().unwrap().parts[0].dest = None;
