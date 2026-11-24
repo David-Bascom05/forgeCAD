@@ -91,6 +91,19 @@ impl Gui {
             && let Some(st) = self.shell.camsim.as_deref_mut()
         {
             st.take_focus(&f);
+            // the toolpath coloured by what the workspace chose (its run's quality measurement)
+            st.values = f.colour_by.map(|c| {
+                use crate::camsim::draw::Values;
+                let (name, unit, bands) = match c {
+                    crate::shell::cam::ColourBy::ChipLoad => {
+                        ("chip load", "mm, against the op's fz", Values::chip_bands())
+                    }
+                    crate::shell::cam::ColourBy::Engagement => ("engagement", "degrees", Values::engagement_bands()),
+                };
+                // per-move values: forge-cam-quality (w.run.quality) reports per op so far; until
+                // its MoveQ lands every cutting move is grey, "not measured" in the legend
+                Values::of_moves(&st.sim.tl, name, unit, bands, &|_, _, _| None)
+            });
             self.shell.camsim_job.focus = Some(f);
             if let Some(v) = &mut self.view {
                 v.dirty = true;
