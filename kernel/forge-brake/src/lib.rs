@@ -44,6 +44,10 @@ mod wasm_safe {
         let sim = include_str!("sim.rs");
         let at = sim.find("Instant::now").unwrap();
         let before = &sim[..at];
-        assert!(before.rfind("#[cfg(not(target_arch = \"wasm32\"))]").is_some_and(|c| at - c < 200));
+        assert!(
+            before
+                .rfind("#[cfg(not(target_arch = \"wasm32\"))]")
+                .is_some_and(|c| at - c < 200)
+        );
     }
 }
