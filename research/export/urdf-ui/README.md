@@ -14,4 +14,13 @@ lavapipe in the cloud VM):
   value.
 - `03-robot-link.png`: the forearm link selected (bodies, mass, centre of mass, collisions).
 
-Phase 3 is read-only (research/export/urdf-editor.md §8); editing from the panel is phase 4.
+- `04-robot-override-limits.png`: the shoulder's limits overridden from the panel (±45°): the
+  robot document gained `joint(src.shoulder, limit: (-45deg, 45deg), limit_was: (-170deg,
+  170deg))`; the field marked overridden with the source's value; Reset to linked and Apply to
+  assembly beside it; effort, velocity, damping and friction as the export writes them.
+- `05-robot-conflict.png`: the source's elbow limit changed under the robot's override: the
+  export refused with the conflict, Keep and Reset on its row.
+
+The panel's edits are edits of the robot document's text (`forge_lang::robot::edit`), each
+undoable; Apply to assembly writes the source's joint (`SetArg`, one undo step there) and drops
+the robot's override; Export URDF writes NAME_urdf/ beside the document.

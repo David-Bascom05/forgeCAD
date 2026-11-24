@@ -127,3 +127,178 @@ fn a_robot_opens_with_its_panel_and_its_joints_move_the_parts() {
     }
     assert_eq!(rows(&h, "fore"), before, "back to the export pose");
 }
+
+fn robot_text(file: &Path) -> String {
+    std::fs::read_to_string(file).unwrap()
+}
+
+/// Steps until the panel has done what it was asked (its asks taken, the export run again).
+fn settle_panel(h: &mut Headless) {
+    for _ in 0..8 {
+        h.step();
+    }
+    settle(h);
+}
+
+#[test]
+fn the_panel_edits_the_robot_document_and_the_source() {
+    let Ok(mut h) = Headless::new((1600.0, 1000.0), 1.0) else {
+        eprintln!("skipped: no adapter");
+        return;
+    };
+    h.step();
+    let file = copy();
+    let source = file.parent().unwrap().join("arm2.fg");
+    h.gui.open(file.to_str().unwrap());
+    settle(&mut h);
+
+    // the shoulder's limits overridden from the panel: a statement with the source's value kept
+    let p = h.gui.shell.robot.as_mut().expect("panel");
+    let shoulder = p
+        .view
+        .as_ref()
+        .unwrap()
+        .joints
+        .iter()
+        .find(|j| j.name == "shoulder")
+        .unwrap()
+        .clone();
+    p.set_joint(
+        &shoulder,
+        "limit",
+        "(-45deg, 45deg)".into(),
+        Some("(-170deg, 170deg)".into()),
+    );
+    p.sel = Some(Sel::Joint("shoulder".into()));
+    settle_panel(&mut h);
+    let text = robot_text(&file);
+    assert!(
+        text.contains("joint(src.shoulder, limit: (-45deg, 45deg), limit_was: (-170deg, 170deg))"),
+        "{text}"
+    );
+    let p = h.gui.shell.robot.as_ref().expect("panel");
+    assert!(p.error.is_none(), "{:?}", p.error);
+    let sh = p
+        .view
+        .as_ref()
+        .unwrap()
+        .joints
+        .iter()
+        .find(|j| j.name == "shoulder")
+        .unwrap();
+    assert!((sh.limit.unwrap().1 - 45f64.to_radians()).abs() < 1e-12);
+    shot(&mut h, "04-robot-override-limits");
+
+    // undo: the document as it was
+    h.gui
+        .shell
+        .robot
+        .as_mut()
+        .unwrap()
+        .out
+        .push(forge_render::shell::robot_ui::RobotAct::Undo);
+    settle_panel(&mut h);
+    let said = h.gui.shell.robot.as_ref().unwrap().said.clone();
+    assert!(
+        !robot_text(&file).contains("joint(src.shoulder"),
+        "{said}: {}",
+        robot_text(&file)
+    );
+
+    // the source's elbow limits change under the robot's override: a conflict, kept
+    let src = robot_text(&source).replace("param elbow.hi = 135deg", "param elbow.hi = 120deg");
+    std::fs::write(&source, src).unwrap();
+    h.gui.shell.robot.as_mut().unwrap().stale = true;
+    settle_panel(&mut h);
+    let p = h.gui.shell.robot.as_ref().expect("panel");
+    assert_eq!(p.conflicts.len(), 1, "{:?}", p.error);
+    assert_eq!(p.conflicts[0].now, "(-135deg, 120deg)");
+    let c = p.conflicts[0].clone();
+    shot(&mut h, "05-robot-conflict");
+    h.gui
+        .shell
+        .robot
+        .as_mut()
+        .unwrap()
+        .out
+        .push(forge_render::shell::robot_ui::RobotAct::Edit(
+            forge_lang::robot::Edit::Set {
+                line: Some(c.line),
+                call: String::new(),
+                target: String::new(),
+                field: "limit_was".into(),
+                text: c.now.clone(),
+                was: None,
+            },
+        ));
+    settle_panel(&mut h);
+    let p = h.gui.shell.robot.as_ref().expect("panel");
+    assert!(p.conflicts.is_empty() && p.error.is_none(), "{:?}", p.error);
+    assert!(robot_text(&file).contains("limit_was: (-135deg, 120deg)"));
+
+    // the shoulder's effort is the document's actuation(effort: eff), shown as such
+    let p = h.gui.shell.robot.as_ref().expect("panel");
+    let sh = p
+        .view
+        .as_ref()
+        .unwrap()
+        .joints
+        .iter()
+        .find(|j| j.name == "shoulder")
+        .unwrap();
+    assert_eq!((sh.effort, sh.velocity), (Some(5.0), Some(1.0)));
+
+    // the elbow's robot limits written in the assembly: the source changes, the override goes
+    let line = p
+        .overrides
+        .iter()
+        .find(|o| o.1 == "joint(elbow)" && o.2 == "limit")
+        .unwrap()
+        .0;
+    h.gui
+        .shell
+        .robot
+        .as_mut()
+        .unwrap()
+        .out
+        .push(forge_render::shell::robot_ui::RobotAct::Assembly {
+            joint: "elbow".into(),
+            arg: "limit".into(),
+            text: "(-100deg, 100deg)".into(),
+            then: forge_lang::robot::Edit::Reset {
+                line,
+                field: "limit".into(),
+            },
+        });
+    settle_panel(&mut h);
+    let said = h.gui.shell.robot.as_ref().unwrap().said.clone();
+    assert!(robot_text(&source).contains("limit: (-100deg, 100deg)"), "{said}");
+    let text = robot_text(&file);
+    assert!(text.contains("joint(src.elbow, damping: 0.1)"), "{said}: {text}");
+    let p = h.gui.shell.robot.as_ref().expect("panel");
+    assert!(p.error.is_none(), "{:?}", p.error);
+    let el = p
+        .view
+        .as_ref()
+        .unwrap()
+        .joints
+        .iter()
+        .find(|j| j.name == "elbow")
+        .unwrap();
+    assert!(
+        (el.limit.unwrap().1 - 100f64.to_radians()).abs() < 1e-12,
+        "the assembly's own now"
+    );
+
+    // export: the URDF beside the document
+    h.gui
+        .shell
+        .robot
+        .as_mut()
+        .unwrap()
+        .out
+        .push(forge_render::shell::robot_ui::RobotAct::Export);
+    settle_panel(&mut h);
+    let out = file.parent().unwrap().join("arm2_robot_urdf/arm2_robot.urdf");
+    assert!(out.is_file(), "{}", h.gui.shell.robot.as_ref().unwrap().said);
+}

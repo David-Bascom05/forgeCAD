@@ -840,3 +840,180 @@ fn statement(r: &mut Robot, f: &str, a: &Args, line: usize) -> Result<(), String
     let _ = Target::text;
     Ok(())
 }
+
+// ---- edits: what the editor sends ------------------------------------------------------------
+
+/// A change to a robot document's text, as the editor makes it: a field set on an override
+/// statement, or taken off it (back to the source's value). Statements are found by line, or by
+/// their call and first argument as written (`joint`, `src.elbow`); a statement missing is
+/// added at the end.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Edit {
+    /// `field: text` on the statement (replacing the field's value if it has one); with `was`,
+    /// `field_was: was` too.
+    Set {
+        line: Option<usize>,
+        call: String,
+        target: String,
+        field: String,
+        text: String,
+        was: Option<String>,
+    },
+    /// `field` (and `field_was`) off the statement; a statement left with only its target goes.
+    Reset { line: usize, field: String },
+    /// A statement added at the end.
+    Add { text: String },
+    /// The statement on this line taken out.
+    Remove { line: usize },
+}
+
+/// The document's statements as calls: (statement span, call name, its arguments).
+fn calls(src: &str) -> Result<Vec<(crate::syntax::Stmt, String, Vec<Arg>)>, String> {
+    let prog = syntax::parse(src).map_err(|e| format!("{e:?}"))?;
+    Ok(prog
+        .into_iter()
+        .filter_map(|st| {
+            let (f, args) = match &st.kind {
+                StmtKind::Expr(Expr {
+                    kind: ExprKind::Call(f, args),
+                    ..
+                }) => (f, args.clone()),
+                _ => return None,
+            };
+            let ExprKind::Name(n) = &f.kind else { return None };
+            let n = n.clone();
+            Some((st, n, args))
+        })
+        .collect())
+}
+
+/// The text of the statement's line range: from its line's start to its end.
+fn line_span(src: &str, lo: usize) -> (usize, usize) {
+    let start = src[..lo].rfind('\n').map_or(0, |i| i + 1);
+    let end = src[lo..].find('\n').map_or(src.len(), |i| lo + i + 1);
+    (start, end)
+}
+
+/// Applies an edit to a robot document's text: the new text, read back to check it.
+pub fn edit(src: &str, e: &Edit) -> Result<String, String> {
+    let cs = calls(src)?;
+    let on_line = |line: usize| {
+        cs.iter()
+            .find(|c| line_of(src, c.0.span.lo as usize) == line)
+            .ok_or_else(|| format!("no statement on line {line}"))
+    };
+    let out = match e {
+        Edit::Add { text } => {
+            let mut s = src.to_string();
+            if !s.ends_with('\n') {
+                s.push('\n');
+            }
+            s.push_str(text.trim_end());
+            s.push('\n');
+            s
+        }
+        Edit::Remove { line } => {
+            let c = on_line(*line)?;
+            let (a, b) = line_span(src, c.0.span.lo as usize);
+            format!("{}{}", &src[..a], &src[b..])
+        }
+        Edit::Set {
+            line,
+            call,
+            target,
+            field,
+            text,
+            was,
+        } => {
+            let found = match line {
+                Some(l) => Some(on_line(*l)?),
+                None => cs.iter().find(|c| {
+                    c.1 == *call
+                        && c.2.first().is_some_and(|a| {
+                            a.name.is_none()
+                                && src[a.value.span.lo as usize..a.value.span.hi as usize].trim() == target
+                        })
+                }),
+            };
+            let mut fields = vec![(field.clone(), text.clone())];
+            if let Some(w) = was {
+                fields.push((format!("{field}_was"), w.clone()));
+            }
+            match found {
+                None => {
+                    let args: Vec<String> = fields.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+                    let mut s = src.to_string();
+                    if !s.ends_with('\n') {
+                        s.push('\n');
+                    }
+                    s.push_str(&format!("{call}({target}, {})\n", args.join(", ")));
+                    s
+                }
+                Some((st, _, args)) => {
+                    // edits from the end backwards, so earlier offsets hold
+                    let mut changes: Vec<(usize, usize, String)> = vec![];
+                    let close = src[..st.span.hi as usize].rfind(')').ok_or("a call with no )")?;
+                    let mut add = String::new();
+                    for (k, v) in &fields {
+                        match args.iter().find(|a| a.name.as_ref().is_some_and(|n| n.0 == *k)) {
+                            Some(a) => {
+                                changes.push((a.value.span.lo as usize, a.value.span.hi as usize, v.clone()))
+                            }
+                            None => add.push_str(&format!(", {k}: {v}")),
+                        }
+                    }
+                    if !add.is_empty() {
+                        changes.push((close, close, add));
+                    }
+                    changes.sort_by_key(|c| std::cmp::Reverse(c.0));
+                    let mut s = src.to_string();
+                    for (a, b, t) in changes {
+                        s.replace_range(a..b, &t);
+                    }
+                    s
+                }
+            }
+        }
+        Edit::Reset { line, field } => {
+            let (st, _, args) = on_line(*line)?;
+            let was = format!("{field}_was");
+            let gone: Vec<&Arg> = args
+                .iter()
+                .filter(|a| a.name.as_ref().is_some_and(|n| n.0 == *field || n.0 == was))
+                .collect();
+            if gone.is_empty() {
+                return Err(format!("line {line} sets no {field}"));
+            }
+            let named_left = args.iter().filter(|a| a.name.is_some()).count() - gone.len();
+            let positional = args.iter().filter(|a| a.name.is_none()).count();
+            if named_left == 0 && positional <= 1 {
+                // nothing left to override: the statement goes
+                let (a, b) = line_span(src, st.span.lo as usize);
+                format!("{}{}", &src[..a], &src[b..])
+            } else {
+                let mut s = src.to_string();
+                let mut spans: Vec<(usize, usize)> = gone
+                    .iter()
+                    .map(|a| {
+                        let lo = a.name.as_ref().map_or(a.value.span.lo, |n| n.1.lo) as usize;
+                        // with the comma and spaces before it
+                        let before = src[..lo].trim_end();
+                        let lo = if before.ends_with(',') {
+                            before.len() - 1
+                        } else {
+                            lo
+                        };
+                        (lo, a.value.span.hi as usize)
+                    })
+                    .collect();
+                spans.sort_by_key(|x| std::cmp::Reverse(x.0));
+                for (a, b) in spans {
+                    s.replace_range(a..b, "");
+                }
+                s
+            }
+        }
+    };
+    syntax::parse(&out).map_err(|e| format!("the edit leaves the document unreadable: {e:?}"))?;
+    Ok(out)
+}

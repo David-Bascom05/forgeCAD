@@ -1003,7 +1003,7 @@ fn complete(
         root,
         ..
     } = model;
-    ex.view = view_of(&links, &joints, &root);
+    ex.view = view_of(&links, &joints, &root, o);
     let missing: Vec<String> = joints
         .iter()
         .filter(|j| has_limit(j) && (actuation(o, j).0.is_none() || actuation(o, j).1.is_none()))
@@ -3101,6 +3101,10 @@ pub struct ViewJoint {
     pub position: Vec<f64>,
     /// (leader, multiplier, offset), URDF units.
     pub mimic: Option<(String, f64, f64)>,
+    /// Effort and velocity as the export writes them (None: not given), and (damping, friction).
+    pub effort: Option<f64>,
+    pub velocity: Option<f64>,
+    pub dynamics: Option<(f64, f64)>,
 }
 
 /// A turn by `t` about the unit axis `u` (Rodrigues), as a frame at the origin.
@@ -3217,7 +3221,7 @@ fn view_geo(v: &Visual) -> Option<ViewGeo> {
     })
 }
 
-fn view_of(links: &[Wl], joints: &[Wj], root: &str) -> RobotView {
+fn view_of(links: &[Wl], joints: &[Wj], root: &str, o: &Options) -> RobotView {
     RobotView {
         root: root.to_string(),
         links: links
@@ -3248,6 +3252,9 @@ fn view_of(links: &[Wl], joints: &[Wj], root: &str) -> RobotView {
                 limit: j.limit,
                 position: j.position.clone(),
                 mimic: j.mimic.clone(),
+                effort: has_limit(j).then(|| actuation(o, j).0).flatten(),
+                velocity: has_limit(j).then(|| actuation(o, j).1).flatten(),
+                dynamics: j.dynamics,
             })
             .collect(),
     }

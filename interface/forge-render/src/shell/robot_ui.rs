@@ -7,9 +7,29 @@
 use super::Shell;
 use super::placed::Placed;
 use super::theme::{medium, mono, sans};
-use egui::{Color32, RichText, Ui, pos2, vec2};
-use forge_lang::urdf::{Exported, RobotView, UrdfError, ViewJoint};
+use egui::{RichText, Ui, pos2, vec2};
+use forge_lang::robot::Edit;
+use forge_lang::urdf::{Conflict, Exported, RobotView, UrdfError, ViewJoint};
 use std::collections::BTreeMap;
+
+/// What the panel asks of the host, in order.
+#[derive(Clone, Debug, PartialEq)]
+pub enum RobotAct {
+    /// An edit of the robot document's text.
+    Edit(Edit),
+    /// A joint's argument written in the source assembly (`SetArg`), then the robot's override
+    /// of it reset.
+    Assembly {
+        joint: String,
+        arg: String,
+        text: String,
+        then: Edit,
+    },
+    /// The robot document's text as it was before the last edit.
+    Undo,
+    /// The URDF written beside the robot document.
+    Export,
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Sel {
@@ -38,6 +58,16 @@ pub struct RobotPanel {
     pub changed: bool,
     /// The source was solved again: the export runs again.
     pub stale: bool,
+    /// Overrides the source moved under, each to keep or reset.
+    pub conflicts: Vec<Conflict>,
+    /// Asks for the host.
+    pub out: Vec<RobotAct>,
+    /// The document's text before each edit, for Undo.
+    pub undo: Vec<String>,
+    /// Values typed in the selected joint's or link's fields, not yet sent.
+    pub draft: BTreeMap<String, f64>,
+    /// The last thing the host did, said.
+    pub said: String,
     pub open: bool,
 }
 
@@ -59,6 +89,7 @@ impl RobotPanel {
                 self.warnings = e.warnings.clone();
                 self.notes = e.notes.clone();
                 self.error = None;
+                self.conflicts.clear();
                 // values kept for joints that are still there
                 let keep: BTreeMap<String, f64> = self
                     .q
@@ -71,6 +102,10 @@ impl RobotPanel {
                 self.changed = true;
             }
             Err(e) => {
+                self.conflicts = match &e {
+                    UrdfError::Conflicts(cs) => cs.clone(),
+                    _ => vec![],
+                };
                 self.error = Some((e.kind().to_string(), e.text(), e.fixes()));
             }
         }
@@ -116,16 +151,46 @@ impl RobotPanel {
         true
     }
 
+    /// The line of the robot's statement overriding `what` (`joint(elbow)`), if it has one.
+    fn line_of(&self, what: &str) -> Option<usize> {
+        self.overrides.iter().find(|o| o.1 == what).map(|o| o.0)
+    }
+
+    /// How the document names a joint: `src.J` where it is one URDF joint of source joint J,
+    /// else its URDF name as a string.
+    fn joint_target(&self, j: &ViewJoint) -> String {
+        let one = self
+            .view
+            .as_ref()
+            .is_some_and(|v| v.joints.iter().filter(|x| x.of == j.of).count() == 1);
+        if self.source.is_some() && one && !j.of.is_empty() {
+            format!("src.{}", j.of)
+        } else {
+            format!("\"{}\"", j.name)
+        }
+    }
+
+    /// A field of a joint set as an override: on its statement if it has one, else a new one;
+    /// with the source's value recorded (`was`) when the field was linked till now.
+    pub fn set_joint(&mut self, j: &ViewJoint, field: &str, text: String, was: Option<String>) {
+        let what = format!("joint({})", j.name);
+        let overridden = self.overridden(&what, field).is_some();
+        self.out.push(RobotAct::Edit(Edit::Set {
+            line: self.line_of(&what),
+            call: "joint".into(),
+            target: self.joint_target(j),
+            field: field.into(),
+            text,
+            was: if overridden { None } else { was },
+        }));
+    }
+
     fn overridden(&self, what: &str, field: &str) -> Option<&str> {
         self.overrides
             .iter()
             .find(|o| o.1 == what && o.2 == field)
             .map(|o| o.3.as_str())
     }
-}
-
-fn deg(x: f64) -> String {
-    format!("{:.2}°", x.to_degrees())
 }
 
 fn mm(x: f64) -> String {
@@ -187,6 +252,53 @@ impl Shell {
                             }
                         });
                 }
+                for c in p.conflicts.clone() {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            RichText::new(format!("line {}: {} {}", c.line, c.what, c.field))
+                                .font(sans(11.0))
+                                .color(t.ink),
+                        );
+                        if ui
+                            .small_button("Keep")
+                            .on_hover_text(format!("keep {} over the source's new {}", c.set, c.now))
+                            .clicked()
+                        {
+                            p.out.push(RobotAct::Edit(Edit::Set {
+                                line: Some(c.line),
+                                call: String::new(),
+                                target: String::new(),
+                                field: format!("{}_was", c.field),
+                                text: c.now.clone(),
+                                was: None,
+                            }));
+                        }
+                        if ui
+                            .small_button("Reset")
+                            .on_hover_text(format!("take the source's {}", c.now))
+                            .clicked()
+                        {
+                            p.out.push(RobotAct::Edit(Edit::Reset {
+                                line: c.line,
+                                field: c.field.clone(),
+                            }));
+                        }
+                    });
+                }
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(!p.undo.is_empty(), egui::Button::new("Undo"))
+                        .clicked()
+                    {
+                        p.out.push(RobotAct::Undo);
+                    }
+                    if ui.button("Export URDF").clicked() {
+                        p.out.push(RobotAct::Export);
+                    }
+                    if !p.said.is_empty() {
+                        ui.label(RichText::new(&p.said).font(sans(11.0)).color(t.ink2));
+                    }
+                });
                 let Some(view) = p.view.clone() else {
                     ui.label(RichText::new("building…").font(sans(12.0)).color(t.ink2));
                     return;
@@ -212,7 +324,7 @@ impl Shell {
                         ui.add_space(6.0);
                         Self::robot_sliders(ui, &t, &mut p, &view);
                         ui.add_space(6.0);
-                        Self::robot_detail(ui, &t, &p, &view);
+                        Self::robot_detail(ui, &t, &mut p, &view);
                         if !p.warnings.is_empty() || !p.notes.is_empty() {
                             ui.add_space(6.0);
                             ui.label(RichText::new("Checks").font(medium(12.0)).color(t.ink));
@@ -316,32 +428,35 @@ impl Shell {
             });
     }
 
-    fn robot_detail(ui: &mut Ui, t: &super::theme::Theme, p: &RobotPanel, view: &RobotView) {
-        let row = |ui: &mut Ui, k: &str, v: String, linked: Option<&str>| {
+    fn robot_detail(ui: &mut Ui, t: &super::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
+        let mark = |ui: &mut Ui, linked: Option<&str>| {
+            if let Some(l) = linked {
+                let was = if l.is_empty() {
+                    "robot only".to_string()
+                } else {
+                    format!("source: {l}")
+                };
+                ui.label(
+                    RichText::new(format!("overridden ({was})"))
+                        .font(sans(10.0))
+                        .color(t.accent),
+                );
+            } else {
+                ui.label(RichText::new("linked").font(sans(10.0)).color(t.ink2));
+            }
+        };
+        let row = |ui: &mut Ui, k: &str, v: String| {
             ui.label(RichText::new(k).font(sans(11.0)).color(t.ink2));
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(v).font(mono(11.0)).color(t.ink));
-                if let Some(l) = linked {
-                    let was = if l.is_empty() {
-                        "robot".to_string()
-                    } else {
-                        format!("source: {l}")
-                    };
-                    ui.label(
-                        RichText::new(format!("overridden ({was})"))
-                            .font(sans(10.0))
-                            .color(t.accent),
-                    );
-                }
-            });
+            ui.label(RichText::new(v).font(mono(11.0)).color(t.ink));
             ui.end_row();
         };
-        match &p.sel {
+        match p.sel.clone() {
             Some(Sel::Joint(n)) => {
-                let Some(j) = view.joints.iter().find(|j| j.name == *n) else {
+                let Some(j) = view.joints.iter().find(|j| j.name == n).cloned() else {
                     return;
                 };
                 let what = format!("joint({})", j.name);
+                let line = p.line_of(&what);
                 ui.label(
                     RichText::new(format!("Joint {}", j.name))
                         .font(medium(12.0))
@@ -351,44 +466,167 @@ impl Shell {
                     .num_columns(2)
                     .spacing(vec2(10.0, 3.0))
                     .show(ui, |ui| {
-                        row(ui, "type", j.kind.to_string(), p.overridden(&what, "type"));
-                        row(ui, "parent, child", format!("{}, {}", j.parent, j.child), None);
+                        row(ui, "type", j.kind.to_string());
+                        row(ui, "parent, child", format!("{}, {}", j.parent, j.child));
                         let o = j.origin.origin;
                         row(
                             ui,
                             "origin (mm)",
                             format!("{}, {}, {}", mm(o.x), mm(o.y), mm(o.z)),
-                            None,
                         );
                         if let Some(a) = j.axis {
-                            row(
-                                ui,
-                                "axis",
-                                format!("{:.4}, {:.4}, {:.4}", a[0], a[1], a[2]),
-                                p.overridden(&what, "axis"),
-                            );
-                        }
-                        if let Some((lo, hi)) = j.limit {
-                            let s = if j.kind == "prismatic" {
-                                format!("{} … {} mm", mm(lo * 1000.0), mm(hi * 1000.0))
-                            } else {
-                                format!("{} … {}", deg(lo), deg(hi))
-                            };
-                            row(ui, "limits", s, p.overridden(&what, "limit"));
+                            row(ui, "axis", format!("{:.4}, {:.4}, {:.4}", a[0], a[1], a[2]));
                         }
                         if let Some((l, m, off)) = &j.mimic {
-                            row(ui, "mimics", format!("{l} × {m} + {off}"), None);
+                            row(ui, "mimics", format!("{l} × {m} + {off}"));
                         }
-                        for f in ["effort", "velocity", "damping", "friction"] {
-                            if let Some(o) = p.overrides.iter().find(|o| o.1 == what && o.2 == f) {
-                                row(ui, f, o.4.clone(), Some(""));
+                        row(ui, "source joint", j.of.clone());
+                    });
+                // the limits: shown in degrees or mm, sent in the document's units
+                if matches!(j.kind, "revolute" | "prismatic" | "continuous") {
+                    let angular = j.kind != "prismatic";
+                    let k = if angular {
+                        180.0 / std::f64::consts::PI
+                    } else {
+                        1000.0
+                    };
+                    let unit = if angular { "deg" } else { "" };
+                    let txt = |lo: f64, hi: f64| {
+                        let f = |x: f64| format!("{}{unit}", (x * 1e6).round() / 1e6);
+                        format!("({}, {})", f(lo), f(hi))
+                    };
+                    let (lo0, hi0) = j.limit.map_or((-180.0, 180.0), |(a, b)| (a * k, b * k));
+                    let over = p.overridden(&what, "limit").map(str::to_string);
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.label(RichText::new("limits").font(sans(11.0)).color(t.ink2));
+                        mark(ui, over.as_deref());
+                    });
+                    let lo_key = format!("{n}.lo");
+                    let hi_key = format!("{n}.hi");
+                    let mut lo = *p.draft.get(&lo_key).unwrap_or(&lo0);
+                    let mut hi = *p.draft.get(&hi_key).unwrap_or(&hi0);
+                    ui.horizontal(|ui| {
+                        let suffix = if angular { "°" } else { " mm" };
+                        if ui
+                            .add(egui::DragValue::new(&mut lo).speed(0.5).suffix(suffix))
+                            .changed()
+                        {
+                            p.draft.insert(lo_key.clone(), lo);
+                        }
+                        if ui
+                            .add(egui::DragValue::new(&mut hi).speed(0.5).suffix(suffix))
+                            .changed()
+                        {
+                            p.draft.insert(hi_key.clone(), hi);
+                        }
+                        if ui.button("Override").clicked() && lo <= hi {
+                            let was = j.limit.map(|_| txt(lo0, hi0));
+                            p.set_joint(&j, "limit", txt(lo, hi), was);
+                            p.draft.remove(&lo_key);
+                            p.draft.remove(&hi_key);
+                        }
+                    });
+                    if over.is_some()
+                        && let Some(l) = line
+                    {
+                        ui.horizontal(|ui| {
+                            if ui.button("Reset to linked").clicked() {
+                                p.out.push(RobotAct::Edit(Edit::Reset {
+                                    line: l,
+                                    field: "limit".into(),
+                                }));
                             }
+                            // a single-freedom joint's `limit:` (a chain's freedoms have their own words)
+                            if p.source.is_some()
+                                && j.of == j.name
+                                && ui
+                                    .button("Apply to assembly")
+                                    .on_hover_text("write these limits in the source assembly, and drop the robot's override")
+                                    .clicked()
+                            {
+                                p.out.push(RobotAct::Assembly {
+                                    joint: j.of.clone(),
+                                    arg: "limit".into(),
+                                    text: txt(lo0, hi0),
+                                    then: Edit::Reset {
+                                        line: l,
+                                        field: "limit".into(),
+                                    },
+                                });
+                            }
+                        });
+                    }
+                }
+                // what URDF adds: actuation and dynamics, the robot's own
+                ui.add_space(4.0);
+                egui::Grid::new("robot-act")
+                    .num_columns(3)
+                    .spacing(vec2(8.0, 3.0))
+                    .show(ui, |ui| {
+                        for (field, unit) in [
+                            ("effort", "N or N m"),
+                            ("velocity", "m/s or rad/s"),
+                            ("damping", ""),
+                            ("friction", ""),
+                        ] {
+                            if j.position.len() != 1 {
+                                break;
+                            }
+                            let now = p
+                                .overrides
+                                .iter()
+                                .find(|o| o.1 == what && o.2 == field)
+                                .map(|o| o.4.clone());
+                            // what the export writes: the joint's own, the document's actuation(..), or none
+                            let written = match field {
+                                "effort" => j.effort,
+                                "velocity" => j.velocity,
+                                "damping" => j.dynamics.map(|d| d.0),
+                                _ => j.dynamics.map(|d| d.1),
+                            };
+                            let tip = match (&now, field) {
+                                (Some(_), _) => format!("{unit}; this joint's own"),
+                                (None, "effort" | "velocity") if written.is_some() => {
+                                    format!("{unit}; from actuation(..)")
+                                }
+                                (None, "effort" | "velocity") => {
+                                    format!("{unit}; not given: the export refuses (or writes a placeholder)")
+                                }
+                                _ => format!("{unit}; not given (0)"),
+                            };
+                            let ink = if now.is_some() { t.accent } else { t.ink2 };
+                            ui.label(RichText::new(field).font(sans(11.0)).color(ink))
+                                .on_hover_text(tip);
+                            let key = format!("{n}.{field}");
+                            let mut v = *p.draft.get(&key).unwrap_or(&written.unwrap_or(0.0));
+                            if ui
+                                .add(egui::DragValue::new(&mut v).speed(0.1).range(0.0..=f64::MAX))
+                                .changed()
+                            {
+                                p.draft.insert(key.clone(), v);
+                            }
+                            ui.horizontal(|ui| {
+                                if ui.small_button("Set").clicked() {
+                                    p.set_joint(&j, field, format!("{v}"), None);
+                                    p.draft.remove(&key);
+                                }
+                                if now.is_some()
+                                    && let Some(l) = line
+                                    && ui.small_button("Reset").clicked()
+                                {
+                                    p.out.push(RobotAct::Edit(Edit::Reset {
+                                        line: l,
+                                        field: field.into(),
+                                    }));
+                                }
+                            });
+                            ui.end_row();
                         }
-                        row(ui, "source joint", j.of.clone(), None);
                     });
             }
             Some(Sel::Link(n)) => {
-                let Some(l) = view.links.iter().find(|l| l.name == *n) else {
+                let Some(l) = view.links.iter().find(|l| l.name == n).cloned() else {
                     return;
                 };
                 let what = format!("inertial({})", l.name);
@@ -401,21 +639,14 @@ impl Shell {
                     .num_columns(2)
                     .spacing(vec2(10.0, 3.0))
                     .show(ui, |ui| {
-                        row(ui, "bodies", l.bodies.join(" "), None);
-                        row(
-                            ui,
-                            "mass",
-                            l.mass.map_or("none (massless)".into(), |m| format!("{m:.6} kg")),
-                            p.overridden(&what, "mass"),
-                        );
+                        row(ui, "bodies", l.bodies.join(" "));
                         let c = l.com;
                         row(
                             ui,
                             "centre of mass (mm)",
                             format!("{}, {}, {}", mm(c[0]), mm(c[1]), mm(c[2])),
-                            p.overridden(&what, "com"),
                         );
-                        row(ui, "visuals", format!("{}", l.visuals.len()), None);
+                        row(ui, "visuals", format!("{}", l.visuals.len()));
                         let shapes: Vec<String> = l
                             .collisions
                             .iter()
@@ -428,8 +659,57 @@ impl Shell {
                                 forge_lang::urdf::Shape::Sphere(_) => "sphere".into(),
                             })
                             .collect();
-                        row(ui, "collision", shapes.join(", "), None);
+                        row(ui, "collision", shapes.join(", "));
                     });
+                let over = p.overridden(&what, "mass").map(str::to_string);
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new("mass").font(sans(11.0)).color(t.ink2));
+                    mark(ui, over.as_deref());
+                });
+                let key = format!("{n}.mass");
+                let m0 = l.mass.unwrap_or(0.0);
+                let mut m = *p.draft.get(&key).unwrap_or(&m0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(
+                            egui::DragValue::new(&mut m)
+                                .speed(0.001)
+                                .range(1e-9..=f64::MAX)
+                                .suffix(" kg"),
+                        )
+                        .changed()
+                    {
+                        p.draft.insert(key.clone(), m);
+                    }
+                    if !l.dummy && ui.button("Override").clicked() {
+                        let target = match l.bodies.first() {
+                            Some(b) if p.source.is_some() => format!("src.{b}"),
+                            _ => format!("\"{}\"", l.name),
+                        };
+                        p.out.push(RobotAct::Edit(Edit::Set {
+                            line: p.line_of(&what),
+                            call: "inertial".into(),
+                            target,
+                            field: "mass".into(),
+                            text: format!("{m}"),
+                            was: if over.is_some() {
+                                None
+                            } else {
+                                Some(format!("{m0}"))
+                            },
+                        }));
+                        p.draft.remove(&key);
+                    }
+                    if over.is_some()
+                        && let Some(line) = p.line_of(&what)
+                        && ui.button("Reset to linked").clicked()
+                    {
+                        p.out.push(RobotAct::Edit(Edit::Reset {
+                            line,
+                            field: "mass".into(),
+                        }));
+                    }
+                });
             }
             None => {
                 ui.label(
@@ -439,6 +719,5 @@ impl Shell {
                 );
             }
         }
-        let _ = Color32::WHITE;
     }
 }

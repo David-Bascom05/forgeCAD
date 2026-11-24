@@ -144,7 +144,19 @@ impossible inertias refused), `mesh(file, scale:)` (packaged once when a readabl
 the document, else referenced as written, said), visual `material:`/`colour:`, and
 `forgecad import ROBOT.urdf [-o DIR]` (`forge_lang::urdf_import`: its own XML reader; inertials
 turned from their rpy into link axes; what the document cannot carry listed as `# not imported`).
-Not yet: `decimate(n)`, edit ops for robot statements (with the editor).
+Built (phase 3, read-only workspace): `RobotView` (`Exported.view`: links, joints, `place(q)`
+forward kinematics with mimics, `clamp`); in forge-render a robot document opens its source
+with a Robot panel (tree, sliders held in the robot's limits, details with overridden fields
+marked), the parts placed by the robot's own kinematics each frame.
+Built (phase 4, editing, first cut): `forge_lang::robot::edit` (set a field on an override
+statement, recording `FIELD_was` when it was linked; reset a field, the statement going when
+empty; add/remove statements); the panel's limits / effort / velocity / damping / friction /
+mass overrides, Reset to linked, Apply to assembly (SetArg on the source joint, then reset),
+Keep/Reset on conflicts, Undo, Export URDF. Headless tests and screenshots: research/export/urdf-ui/.
+Not yet: `decimate(n)`; 3D overlays (joint axes, frames, limit arcs, centres of mass, collision
+wireframes); drag-in-view; tree editing (merge by drag, re-root, drop, frames) and geometry
+simplification from the panel; Import in the app (the CLI has it); a new robot from an
+assembly from a menu.
 
 ## 8. Order
 1. Exporter on main (this branch; merge train 3).

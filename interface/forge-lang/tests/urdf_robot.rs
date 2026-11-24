@@ -448,3 +448,113 @@ fn the_view_drives_the_robot_as_the_assembly_moves() {
     let up = v.links.iter().find(|l| l.name == "upper").expect("upper");
     assert!((up.com[0] - 60.0).abs() < 1e-9 && up.mass.is_some());
 }
+
+#[test]
+fn edits_set_and_reset_overrides_in_the_text() {
+    use forge_lang::robot::{Edit, edit};
+    let base = doc("joint(src.elbow, damping: 0.1)\n");
+    // a new statement for a joint with none
+    let s = edit(
+        &base,
+        &Edit::Set {
+            line: None,
+            call: "joint".into(),
+            target: "src.shoulder".into(),
+            field: "limit".into(),
+            text: "(-90deg, 90deg)".into(),
+            was: Some("(-170deg, 170deg)".into()),
+        },
+    )
+    .expect("set");
+    assert!(
+        s.ends_with("joint(src.shoulder, limit: (-90deg, 90deg), limit_was: (-170deg, 170deg))\n"),
+        "{s}"
+    );
+    // a field added to the elbow's own statement, then its value replaced
+    let s = edit(
+        &s,
+        &Edit::Set {
+            line: None,
+            call: "joint".into(),
+            target: "src.elbow".into(),
+            field: "effort".into(),
+            text: "3".into(),
+            was: None,
+        },
+    )
+    .expect("add a field");
+    assert!(s.contains("joint(src.elbow, damping: 0.1, effort: 3)\n"), "{s}");
+    let s = edit(
+        &s,
+        &Edit::Set {
+            line: None,
+            call: "joint".into(),
+            target: "src.elbow".into(),
+            field: "damping".into(),
+            text: "0.25".into(),
+            was: None,
+        },
+    )
+    .expect("replace");
+    assert!(s.contains("joint(src.elbow, damping: 0.25, effort: 3)\n"), "{s}");
+    // what the export makes of it
+    let (_, e) = export_with(&s, &|x| x);
+    let e = e.expect("exports");
+    assert!(
+        e.overrides
+            .iter()
+            .any(|o| o.1 == "joint(shoulder)" && o.2 == "limit" && o.3 == "(-170deg, 170deg)")
+    );
+    // reset: the field and its was go; the last field takes the statement with it
+    let line = e
+        .overrides
+        .iter()
+        .find(|o| o.1 == "joint(shoulder)")
+        .expect("shoulder")
+        .0;
+    let s2 = edit(
+        &s,
+        &Edit::Reset {
+            line,
+            field: "limit".into(),
+        },
+    )
+    .expect("reset");
+    assert!(!s2.contains("src.shoulder"), "{s2}");
+    let line = s
+        .lines()
+        .position(|l| l.starts_with("joint(src.elbow"))
+        .expect("elbow")
+        + 1;
+    let s3 = edit(
+        &s,
+        &Edit::Reset {
+            line,
+            field: "damping".into(),
+        },
+    )
+    .expect("reset one");
+    assert!(s3.contains("joint(src.elbow, effort: 3)\n"), "{s3}");
+    // whole statements
+    let s4 = edit(
+        &s3,
+        &Edit::Add {
+            text: "freeze(src.grip, at: 0)".into(),
+        },
+    )
+    .expect("add");
+    assert!(robot::read(&s4, None).expect("reads").freeze.len() == 1);
+    let fl = s4.lines().position(|l| l.starts_with("freeze")).expect("freeze") + 1;
+    let s5 = edit(&s4, &Edit::Remove { line: fl }).expect("remove");
+    assert_eq!(s5, s3);
+    assert!(
+        edit(
+            &s3,
+            &Edit::Reset {
+                line: 1,
+                field: "limit".into()
+            }
+        )
+        .is_err()
+    );
+}
