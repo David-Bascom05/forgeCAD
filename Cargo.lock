@@ -206,6 +206,7 @@ dependencies = [
  "forge-topo",
  "forge-turn-lang",
  "forge-urdf",
+ "forge-wall",
  "forge-workholding-builder",
 ]
 
@@ -723,6 +724,17 @@ dependencies = [
  "forge-dirs",
  "forge-material",
  "forge-sheet",
+]
+
+[[package]]
+name = "forge-wall"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-topo",
 ]
 
 [[package]]

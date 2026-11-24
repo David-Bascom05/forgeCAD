@@ -287,11 +287,18 @@ list on main: this branch's new strings add none).
   outer loop are unchanged, so the answer is the same to the bit: only triangles that could not
   be nearer are left out, and the point depends only on the ray and the distance. 269 s ->
   about 3.5 s.
-- Tests: `measure::tests::the_tree_finds_the_wall_every_pair_does_bit_for_bit` (the old loop
-  kept as the reference: a plate with holes, a tube). Also every example compared old vs new
-  with `forgecad measure F wall exact`: identical.
+- Tests: `forge-wall`'s `the_tree_finds_the_wall_every_pair_does_bit_for_bit`, with
+  `forge_agent::measure::wall` itself as the reference (a plate with holes, a tube; whole and
+  stepped 7 rays at a time). Also every example compared old vs new with
+  `forgecad measure F wall exact`: identical (on one tree; across train 5's merge two parts'
+  geometry changed, and on the merged tree both algorithms agree there too).
+- It lives in its own crate, `interface/forge-wall`, used by the CLI and the app only.
+  forge-agent is as on main. Inside forge-agent it moved how forge-lang's binaries are compiled
+  (forge-lang links forge-agent; its codegen units shifted): a few hundred instructions on some
+  of the speed gate's lines, within the band but over main. Out of it, the gate's binaries are
+  built from main's sources.
 - Then (coordinator): in the single-threaded page Wall no longer measures on open. The panel
-  shows "Measure thinnest wall", and the search (`forge_agent::measure::WallSearch`, `wall`
+  shows "Measure thinnest wall", and the search (`forge_wall::WallSearch`, `wall`
   stepped, the same rays in the same order) then runs 25 ms per frame. The page keeps drawing,
   the panel shows "Working it out... N%", and Cancel stops it. On the desktop and in the
   threaded page it still measures on open, on a worker, which now reports how far it is and
