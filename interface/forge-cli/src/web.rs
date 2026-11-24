@@ -496,12 +496,17 @@ const GIT_DIRS: [&str; 4] = ["objects", "refs", "logs", "forgecad"];
 
 /// `rel` (inside `.git`, already `clean`) is one of forge-git's own.
 fn git_allowed(rel: &Path) -> bool {
+    // as a case-insensitive filesystem (macOS, Windows) reads them: `objects/INFO` is
+    // `objects/info`; and Windows drops a name's trailing dots and spaces, so none may end so
     let parts: Vec<String> = rel
         .components()
-        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .map(|c| c.as_os_str().to_string_lossy().to_ascii_lowercase())
         .collect();
+    if parts.iter().any(|p| p.ends_with('.') || p.ends_with(' ')) {
+        return false;
+    }
     let whole = parts.join("/");
-    if GIT_FILES.contains(&whole.as_str()) {
+    if GIT_FILES.iter().any(|g| g.eq_ignore_ascii_case(&whole)) {
         return true;
     }
     // forge-git's own passing files beside them, which git never runs: a file's lock
@@ -509,7 +514,9 @@ fn git_allowed(rel: &Path) -> bool {
     // config through its check, and nothing in .git is renamed) and a new file's temporary
     // (`tmp_obj_…`)
     if let [one] = parts.as_slice()
-        && (one.strip_suffix(".lock").is_some_and(|f| GIT_FILES.contains(&f))
+        && (one
+            .strip_suffix(".lock")
+            .is_some_and(|f| GIT_FILES.iter().any(|g| g.eq_ignore_ascii_case(f)))
             || one
                 .strip_prefix("tmp_obj_")
                 .is_some_and(|t| !t.is_empty() && t.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')))
@@ -572,6 +579,21 @@ fn place(c: &Config, rel: &Path) -> Result<PathBuf, Response> {
     let real = std::fs::canonicalize(there).map_err(|_| error(404, "not found"))?;
     if !real.starts_with(&c.root) {
         return Err(error(403, "outside the folder"));
+    }
+    // where it really is: a link on the way (`g -> .git`, `x -> .git/hooks`) mustn't reach the
+    // repository's files by another name, around `clean_project`'s allowlist and the config's
+    // check. So a path that goes into .git, or comes out of it, by a link is refused; one that
+    // doesn't is as before
+    let rest = p.strip_prefix(there).unwrap_or(Path::new(""));
+    let real_rel = real.join(rest);
+    let real_rel = real_rel.strip_prefix(&c.root).unwrap_or(&real_rel);
+    let in_git = |q: &Path| {
+        q.components()
+            .next()
+            .is_some_and(|x| x.as_os_str().to_string_lossy().eq_ignore_ascii_case(".git"))
+    };
+    if (in_git(real_rel) || in_git(rel)) && real_rel != rel {
+        return Err(error(403, "a link into or out of the repository's .git"));
     }
     if std::fs::symlink_metadata(&p).is_ok_and(|m| m.file_type().is_symlink())
         && std::fs::canonicalize(&p).is_ok_and(|r| !r.starts_with(&c.root))
@@ -792,7 +814,8 @@ fn write(c: &Config, rel: &Path, q: &Request) -> Response {
     if let Err(r) = precondition(q, &current(&p)) {
         return r;
     }
-    if rel == Path::new(".git/config")
+    // `.git/CONFIG` is the config too where names are case-insensitive
+    if rel.to_string_lossy().eq_ignore_ascii_case(".git/config")
         && let Err(e) = safe_git_config(&q.body)
     {
         return error(403, &e);
@@ -974,6 +997,11 @@ mod tests {
             ".git/objects/info/alternates",
             ".git/info/attributes",
             ".git/commondir.lock",
+            ".git/objects/INFO/alternates",
+            ".git/objects/info./alternates",
+            ".git/objects/info /alternates",
+            ".git/COMMONDIR",
+            ".git/refs/heads/x.",
             ".git/tmp_obj_",
             ".git/info",
             ".git/refs",
@@ -1059,6 +1087,63 @@ mod tests {
         );
         assert_eq!(s, 400);
         assert!(!root.join(".git/hooks/post-commit").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    /// The re-review's: a link in the project into .git (`git clone` makes them happily) must not
+    /// reach the repository's files around the allowlist, nor its config around its check.
+    #[cfg(unix)]
+    #[test]
+    fn no_link_reaches_into_git() {
+        let (at, root) = started(None, true);
+        std::fs::create_dir_all(root.join(".git/hooks")).unwrap();
+        std::os::unix::fs::symlink(".git", root.join("g")).unwrap();
+        std::os::unix::fs::symlink(".git/hooks", root.join("x")).unwrap();
+        std::os::unix::fs::symlink(".git/config", root.join("c.fg")).unwrap();
+        for (m, path) in [
+            ("PUT", "/api/files/g/config"),
+            ("PUT", "/api/files/g/commondir"),
+            ("PUT", "/api/files/x/post-commit"),
+            ("PUT", "/api/files/c.fg"),
+            ("GET", "/api/files/g/config"),
+            ("GET", "/api/files/c.fg"),
+            ("DELETE", "/api/files/c.fg"),
+        ] {
+            let (s, _, _) = call(
+                at,
+                m,
+                path,
+                &[("If-None-Match", "*")],
+                b"[core]\n\tfsmonitor = touch planted\n",
+            );
+            assert!(s == 403 || s == 400, "{m} {path}: {s}");
+        }
+        assert!(!root.join(".git/commondir").exists());
+        assert!(!root.join(".git/hooks/post-commit").exists());
+        assert!(
+            !std::fs::read_to_string(root.join(".git/config"))
+                .unwrap()
+                .contains("fsmonitor")
+        );
+        // nor by a rename onto one
+        let (s, _, _) = call(
+            at,
+            "POST",
+            "/api/rename",
+            &[],
+            br#"{"from":"part.fg","to":"g/commondir"}"#,
+        );
+        assert!(s == 403 || s == 400, "{s}");
+        assert!(root.join("part.fg").exists());
+        // the config by another case, where names are case-insensitive, is checked all the same
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.git/CONFIG",
+            &[("If-None-Match", "*")],
+            b"[core]\n\tfsmonitor = x\n",
+        );
+        assert_eq!(s, 403);
         let _ = std::fs::remove_dir_all(&root);
     }
 
