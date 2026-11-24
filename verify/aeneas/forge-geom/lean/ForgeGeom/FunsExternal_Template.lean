@@ -356,7 +356,7 @@ axiom forge_math.vec.Point3.Insts.CoreOpsArithAddVec3Point3.add
     forge_math.vec.Point3
 
 /-- [forge_geom::intersect::plane_cylinder]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1016:0-1083:1
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1022:0-1089:1
     Visibility: public -/
 axiom intersect.plane_cylinder
   : surface.Plane → surface.Cylinder → Result intersect.SurfaceSurface
