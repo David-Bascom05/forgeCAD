@@ -405,6 +405,15 @@ headline "better than Fusion": a proven chip bound and a feed that follows real 
 
 ## 5. Open questions for David
 
+**Decided by the coordinator (2026-11-24):**
+- (3) **Yes.** Default cutting data = cited tool-maker values, each value with its source (numbers
+  with citations, not copies of documents), plus Klippel et al. 2022 (CC BY 4.0), with
+  attribution in the data files and docs.
+- (4) **Yes.** Machine acceleration and jerk stay UNKNOWN, with a conservative cycle-time range
+  (lower and upper bound) until measured or published.
+
+Items 1 and 2 below are with David.
+
 1. Can you (or a machinist friend) run Fusion on the B1–B7 parts and export the toolpaths? Without
    that, "Fusion level" is tested against Fusion's documented behaviour, not its numbers.
 2. Counsel: fto-adaptive.md ends with specific questions. Adaptive clearing (row 11) waits for
