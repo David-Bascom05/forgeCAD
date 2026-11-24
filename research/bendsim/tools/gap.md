@@ -108,6 +108,25 @@ rule, not the place.
 - Data: Amada HG-ATC brochure 2021 E056-EU03-EN (amada.eu); Trumpf ToolMaster Bend page
   (trumpf.com); change times otherwise UNKNOWN.
 
+### Rank 3b. A certified operator-handling check (added after Phase 2, at UX-LEAD's ask)
+
+Today the operator's move between steps (lift, pull out, turn, push in, set down) is checked with
+the part's bounding boxes and sphere against the press bodies' boxes: a pass is proven, but an
+overlap is only "not proven" (an envelope). With several stations on the bed the loose boxes meet
+the neighbouring stations' punches on most staged parts, so most staged programs show a question
+the user cannot settle.
+- Method: the same branch and bound the bend checks use, over each piece's parameters (u, v, w)
+  and the move's parameter t; the move is a rigid motion (a translation for the lift and the pull,
+  a turn about the part's centre), enclosed on intervals (sin and cos with their bounds) as the
+  bend's motion is; against every station's tools, the ram, the bed, the frame and the backgauge
+  as y-prisms (the existing ToolPb targets). Proven clear, proven hit (a real point at a real
+  instant), or undecided, as every other check; contacts come for free (`crate::contact`).
+- Effort: M (2-3 days: the motion's interval form, its roots, the problem type, tests against the
+  box check where it passes and a brute-force sample where it does not). Prove: the move's
+  enclosure holds every point of the part at every instant of the move.
+- Value: high now that stations are planned: it turns most staged programs' amber rows into
+  answers.
+
 ### Rank 4. (d1) Hemming, two stages
 
 Removes `HemNotSimulated`, the one refusal a shop meets most.
