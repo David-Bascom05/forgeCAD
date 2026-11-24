@@ -6238,11 +6238,46 @@ impl Cam {
                     add(to);
                     at = to;
                 }
-                PMove::Arc { to, c, .. } => {
+                PMove::Arc { to, c, cw, .. } => {
+                    // the arc's own box: its ends, and each axis extreme its sweep passes
+                    // (c ± r on that axis), widened past rounding; the full circle's box when
+                    // the sweep's ends are not resolved
                     let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt() * (1.0 + 1e-12);
-                    add([c[0] - r, c[1] - r, to[2].min(at[2])]);
-                    add([c[0] + r, c[1] + r, to[2].max(at[2])]);
-                    add(to);
+                    let (zl, zh) = (to[2].min(at[2]), to[2].max(at[2]));
+                    add([at[0], at[1], zl]);
+                    add([to[0], to[1], zh]);
+                    let a0 = forge_math::dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                    let a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
+                    let tau = std::f64::consts::TAU;
+                    // the counter-clockwise sweep from its start s to its end e, in [0, τ)
+                    let (st, en) = if cw { (a1, a0) } else { (a0, a1) };
+                    let mut sw = en - st;
+                    while sw < 0.0 {
+                        sw += tau;
+                    }
+                    while sw >= tau {
+                        sw -= tau;
+                    }
+                    // a sweep of (almost) nothing is the whole circle to the control
+                    let full = sw <= 1e-9;
+                    for (q, ext) in [
+                        (0.0, [c[0] + r, c[1], zh]),
+                        (0.5 * std::f64::consts::PI, [c[0], c[1] + r, zh]),
+                        (std::f64::consts::PI, [c[0] - r, c[1], zl]),
+                        (1.5 * std::f64::consts::PI, [c[0], c[1] - r, zl]),
+                    ] {
+                        let mut d = q - st;
+                        while d < 0.0 {
+                            d += tau;
+                        }
+                        while d >= tau {
+                            d -= tau;
+                        }
+                        // within the sweep, or within a few ulps of its ends (taken as within)
+                        if full || d <= sw + 1e-9 || d >= tau - 1e-9 {
+                            add(ext);
+                        }
+                    }
                     at = to;
                 }
                 PMove::Cycle { .. } => {}
