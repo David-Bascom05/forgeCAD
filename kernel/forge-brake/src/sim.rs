@@ -1074,7 +1074,9 @@ impl<'a> StepCtx<'a> {
                     );
                 }
                 let (hit, value, q, at) = match v {
-                    Verdict::Clear { lower, upper } => {
+                    // a near pair is proven to its bound like a clear one: the summary is near
+                    // when the least bound of all is under the limit
+                    Verdict::Clear { lower, upper } | Verdict::Near { lower, upper } => {
                         if upper < lowest.1 {
                             lowest = (lower, upper, el.name.clone());
                         }
@@ -1229,7 +1231,7 @@ impl<'a> StepCtx<'a> {
                     );
                 }
                 match v {
-                    Verdict::Clear { lower, upper } => {
+                    Verdict::Clear { lower, upper } | Verdict::Near { lower, upper } => {
                         if upper < lowest.1 {
                             lowest = (lower, upper);
                         }
@@ -1254,7 +1256,7 @@ impl<'a> StepCtx<'a> {
                                 c.undecided = true;
                                 c.other = Some(self.part_ref(st, [0.0; 4]));
                             }
-                            Verdict::Clear { .. } => unreachable!(),
+                            Verdict::Clear { .. } | Verdict::Near { .. } => unreachable!(),
                         }
                         let _ = quick;
                         return c;
