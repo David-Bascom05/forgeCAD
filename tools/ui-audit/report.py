@@ -56,8 +56,10 @@ def label_findings(r):
     return out
 
 
-P1 = {"crash", "nothing", "page-crash", "page-nothing", "silent-mode"}
-P2 = {"raw-text", "no-unit", "no-reason", "clipped", "off-screen", "no-exit", "error-text", "tiny-text", "empty", "overlap"}
+# UX-LEAD: unreachable is a dead button (off-screen: the crawl can't scroll, so P1 until a review
+# finds a scroll); a lie is P1 (flagged by the visual review in verdicts.tsv as "lie")
+P1 = {"crash", "nothing", "page-crash", "page-nothing", "silent-mode", "off-screen", "off-screen@narrow", "lie"}
+P2 = {"raw-text", "no-unit", "no-reason", "clipped", "no-exit", "error-text", "tiny-text", "empty", "overlap"}
 
 
 def plevel(r, fs):
