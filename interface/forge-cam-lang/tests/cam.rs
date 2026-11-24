@@ -1403,6 +1403,8 @@ fn zlevel_on_a_prism_part_clears_to_the_walls_and_the_margin() {
             retract: 20.0,
         },
         feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     // the stock: 3 over each side, 1 over the top; tool centres a diameter past it
     let (smin, smax) = ([-3.0, -3.0, 0.0], [63.0, 43.0, 13.0]);
@@ -1447,6 +1449,8 @@ fn zlevel_on_a_prism_part_clears_to_the_walls_and_the_margin() {
     // never more than the tool took: the part's section is all still material
     let sec = forge_cam::section::section(&faces, 6.5, 1e-5).unwrap();
     assert!(region_of(&boolean(&sec, &m, Op::Diff).unwrap()).loops.is_empty());
+}
+
 /// forge-cam-3d's finishing ops in the document (steep_shallow, spiral, flat), after z-level
 /// roughing on the mould core: built, every move certified (column route), the spacing derived
 /// from the cusp and reported.
