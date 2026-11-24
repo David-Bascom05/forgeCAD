@@ -108,9 +108,18 @@ fn random_program(r: &mut Lcg, dialect: &str) -> Program {
                 p = [last[0], last[1], clear];
             }
             7 => recs.push(Rec::Dwell(0.5)),
-            8 => recs.push(Rec::Coolant(
-                [Coolant::Flood, Coolant::Mist, Coolant::Off][r.pick(3) as usize],
-            )),
+            8 => {
+                // mist only where the dialect posts it (haas does not: no M07 on Haas)
+                let mist = forge_post::DIALECTS
+                    .iter()
+                    .any(|(n, src)| *n == dialect && src.lines().any(|l| l.starts_with("coolant_mist")));
+                let c = [Coolant::Flood, Coolant::Mist, Coolant::Off][r.pick(3) as usize];
+                recs.push(Rec::Coolant(if c == Coolant::Mist && !mist {
+                    Coolant::Flood
+                } else {
+                    c
+                }));
+            }
             _ => {
                 tool += 1;
                 if dialect != "grbl" {
@@ -244,5 +253,5 @@ fn interpreter_agrees_with_forge_post_reader() {
             n += 1;
         }
     }
-    assert_eq!(n, 240);
+    assert_eq!(n, 60 * forge_post::DIALECTS.len());
 }

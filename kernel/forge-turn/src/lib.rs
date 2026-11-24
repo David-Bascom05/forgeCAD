@@ -17,3 +17,4 @@ pub mod machine;
 pub mod ops;
 pub mod post;
 pub mod profile;
+pub mod stair;

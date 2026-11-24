@@ -181,7 +181,8 @@ fn pocket_mouth_a_hair_above_the_top() {
 /// is a hole 2.3e-3 over the region below the part, and the point that finds its host was put a
 /// thousandth of its 17 long floor off it (1.7e-2): in the region below. The section of the part
 /// went without its hole, the floor's new edge had one face, and the pinch check refused
-/// ZeroThickness where the result is a plain corner.
+/// ZeroThickness where the result is a plain corner. (The probe's step is now held under half the
+/// way to the outer cycles' pieces near it, 587d0859, which also fixed zerothick-groove.fg.)
 #[test]
 fn a_hole_a_hair_over_a_boundary_finds_its_host() {
     let part = suite::fuzz_keep(166, 80);

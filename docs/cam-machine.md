@@ -2,9 +2,11 @@
 
 A machine tool as data: a kinematic tree of joints from the static base, the spindles, turrets
 and tool changer, the mounts where tools and parts attach, and collision bodies. Read by
-`kernel/forge-machine` (`MachineDef::parse_all`); built-in generic machines are in
-`kernel/forge-machine/data/machines.toml`, each body backed by a real part under
-`kernel/forge-machine/parts/`. Search order, as for every CAM library: the project's
+`kernel/forge-machine` (`MachineDef::parse_all`); built-in machines are in
+`kernel/forge-machine/data/machines/<vendor>.toml`, one file per vendor (`generic.toml` holds our
+placeholder machines; build.rs embeds every file in the directory, generic first, then by name;
+a machine name may appear once across them), each body backed by a real part under
+`kernel/forge-machine/parts/<vendor>/<machine>/`. Search order, as for every CAM library: the project's
 `cam/machines/*.toml`, then the user's `~/.config/forgecad/cam/machines/`, then the built-in set; a
 name found earlier hides a later one.
 
@@ -36,6 +38,7 @@ what their absence means.
 | clearance | required | least gap (mm) the collision check holds between bodies |
 | length_joint | mills: required | the linear head joint G43 moves (Z); lathes use X/Z offsets instead |
 | coolants | optional | kinds present: flood mist through air (empty: none declared) |
+| real | optional | true: a real maker's model; every value must be cited (Provenance). false if absent |
 
 ## `[[machine.joint]]`
 
@@ -88,6 +91,29 @@ each; a mill-turn has two part mounts (main, sub).
 primitives envelope), `ignore` (bodies it touches by construction: ways, neighbours). Bodies on one
 link are never checked against each other.
 
+## Provenance: `[[machine.cite]]`
+
+Where each value comes from. A record with `real = true` cites every value `MachineDef::cite_paths`
+lists: per joint `joint.N.range`, `.rapid`, `.max_feed` (and `.accel`, `.pivot` when present); per
+spindle `spindle.N.rpm`, `.nose`, `.max` (and `.curve` with a power curve); per turret
+`turret.N.stations`, `.index_s`, `.center`; `changer.pockets`, `.change_s`, `.max_tool_kg`; every
+`mount.N.at`; every `body.N` (its envelope). Other values may be cited too (`joint.N.axis`,
+`.home`, `spindle.N.interface`, `machine.<anything>` for record-wide facts); a cite naming nothing
+in the record is an error. A path may be cited more than once (sources that agree, or conflict).
+
+| field | | meaning |
+|---|---|---|
+| path | required | the value, as above |
+| status | required | `published` (the source states it), `estimate` (not published: derived as `basis` says), `unknown` (nothing to derive it from), `conflict` (sources disagree) |
+| source | published, conflict: required | URL or document; restate, never copy |
+| taken | with a source: required | YYYY-MM-DD the source was read |
+| value | optional | the source's statement, restated with its units ("30 in (762 mm)") |
+| basis | estimate, unknown: required | how it was derived, and which way it errs |
+| note | conflict: required | what disagrees and which value the record holds |
+
+The record's number is always usable: an estimate or unknown is the *conservative* value (a larger
+collision envelope, a lower rate or acceleration, a smaller travel), never a silent default.
+
 ## Structural checks (`MachineDef::validate`)
 
 Unique names and letters; the tree is acyclic and rooted at the base; every link named exists;
@@ -105,6 +131,34 @@ the second rotary carried by the first); lathes have a diameter X, mills a lengt
 - Mill-turn: part mounts `main` (link C) and `sub` (link C2 on Z2); the milling head's tool mount is
   `bhead` on B.
 
+## Your own machines (the machine builder)
+
+`interface/forge-machine-builder` writes and checks machines so nobody has to write this TOML by
+hand (research/cam/machine-builder.md). The format is the one above; the builder's files are
+canonical (reading one and writing it again gives the same bytes).
+
+```
+forgecad machine list [--json]              every machine the search order sees: level, file,
+                                            and the machines of the same name it hides
+forgecad machine new NAME --template KIND   KIND: vmc3 trunnion head-table lathe mill-turn gantry
+forgecad machine new NAME --from MACHINE    a clone of any machine listed (built-in, user, project)
+     [--project | --user]                   where it is saved (default: the user's folder)
+     [--own | --keep-cites]                 copied values: cited unknown (default), the source's
+                                            cites only, or no cites (the user's own)
+forgecad machine check FILE.toml|NAME [--json] [--no-parts]
+```
+
+A new machine's copied values are cited `status = "unknown"` with a basis naming where they came
+from: they are not this machine's. A value the user enters carries no cite; in a user or project
+file an uncited value is reported as the user's own (status `user`). A clone of a built-in machine
+brings its body parts (`parts/NAME/BODY.fg` beside the file).
+
+`check` reports: the reader's validation; every pair of bodies at home; every pair through travel
+(`proven` clear for all joint values, `hit` with the joint values and a point, `near`, or
+`sampled`: lines swept clear but the poses between them not proven); each body's part inside its
+envelope; the provenance of every value, listing those cited unknown as not checked. Exit 0 ok,
+1 problems, 2 usage.
+
 ## Simulation (posted G-code)
 
 `forge-machine` reads the posted text itself, not the toolpath it came from, and drives the joints
@@ -112,7 +166,7 @@ with it. That is the check Fusion's simulation skips: Fusion simulates the toolp
 post.
 
 ```
-forgecad machine list                       the machines (built in, then cam/machines/*.toml)
+forgecad machine list                       the machines (project, user, built in)
 forgecad machine SETUP.toml [--json]        run a setup: exit 0 ok, 1 refused, 2 error
 ```
 
@@ -124,7 +178,7 @@ pieces into material, the removal summary, and what is claimed.
 
 | part | what it is |
 |---|---|
-| interpreter (gcode.rs) | words to control events in exact integers; agrees with forge-post's reader on its subset (L6, 240 programs × 4 dialects); its Lean spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine, L1) |
+| interpreter (gcode.rs) | words to control events in exact integers; agrees with forge-post's reader on its subset (L6, 60 programs per dialect, every built-in dialect); its Lean spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine, L1) |
 | kinematics (kin.rs) | joint values to link placements, dmath rotations (exact at multiples of 90°), and the same over intervals |
 | timing (sim.rs) | `t_min` a lower bound (feed and axis limits; G95 with G96 integrated exactly on lines, the clamp's bound on arcs); `t_stop` exact stops with trapezoidal acceleration, an estimate |
 | collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused) |

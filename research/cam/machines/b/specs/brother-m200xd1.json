@@ -1,0 +1,143 @@
+{
+ "vendor": "Brother",
+ "model": "M200Xd1",
+ "family": "SPEEDIO M-Xd1 compact multi-tasking (milling + turning)",
+ "source": [
+  "https://machinetool.global.brother/en-eu/all-products/mxd1/m200xd1"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "mill-turn",
+ "architecture": "Vertical BT30 milling spindle over a trunnion: A tilt -30 to +120 deg carrying C turning spindle (DD motor, table dia 140) with a tail-side support; turning with stationary tools in the milling spindle (double plunger lock). Which unit carries X/Y/Z is not stated on the fetched page (memory says table X on Y saddle with Z head on fixed column, unverified).",
+ "control": {
+  "standard": "Brother CNC-D00, 5 axes X,Y,Z,A,C (linear interp 4 axes)",
+  "options": [
+   "-5AX version: CNC-D00v(DB), simultaneous 5-axis"
+  ]
+ },
+ "travel_mm": {
+  "X": 200,
+  "Y": 440,
+  "Z": 305
+ },
+ "rotary": {
+  "A": {
+   "range_deg": [
+    -30,
+    120
+   ],
+   "rapid_rpm": 60,
+   "indexing_or_full": "full; indexing feed 60 rpm; clamp (optional) 695 single / 975 double N·m"
+  },
+  "B": null,
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 200,
+   "indexing_or_full": "full; turning spindle max 2000 rpm, 55 N·m max, 8.7 kW max output, motor 4.2 kW; clamp 345 N·m"
+  }
+ },
+ "spindle_nose_to_table_mm": [
+  150,
+  455
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 40,
+ "rotary_table_dia_mm": 140,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": "Table top per ISO 702-4 table nose No.5 (JIS B6109-2)",
+ "spindle": {
+  "rpm_max": 10000,
+  "rpm_min": 1,
+  "taper_or_interface": "7/24 No.30 (MAS-BT30, pull stud MAS-P30T-2)",
+  "power_kw": {
+   "cont": 7.0,
+   "30min": null,
+   "peak/other": "10.1 (10-min rating); 18.9 max output"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 40
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": "tail-side support on trunnion (load 19 kg: 13 rotating + 6 fixed)",
+ "rapid_m_min": {
+  "X": 50,
+  "Y": 50,
+  "Z": 50,
+  "A_or_B_rpm": 60,
+  "C_rpm": 200
+ },
+ "max_cutting_feed_m_min": 30,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 28,
+  "options": [
+   22
+  ],
+  "tool_to_tool_s": 0.8,
+  "chip_to_chip_s": 1.4,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": 250,
+  "max_tool_kg": 3
+ },
+ "coolant": {
+  "through_spindle": "optional",
+  "notes": "CTS optional (BT dual-contact spindle used with CTS)"
+ },
+ "overall_mm": {
+  "W": 1280,
+  "D": 2667,
+  "H": 2612
+ },
+ "weight_kg": 2700,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "table_height_from_floor_mm",
+  "table_mm"
+ ],
+ "options": [
+  "16,000 rpm spindle (7.4/5.1 kW)",
+  "BIG-PLUS",
+  "CTS",
+  "A-axis clamp (single/double)",
+  "-5AX version",
+  "BV7-870Ad loading system (3,000 kg with it)"
+ ],
+ "notes": "Columns read by position (M200Xd1 & -5AX / M300Xd1 & -5AX). Table-side load 40 kg, tail side 19 kg; load inertia table side 0.29 kg·m², tail 0.04. Tool storage listed as 22/28 (28 shown first; turning tools not in adjacent pods with 28). Tools >=200 mm long may hit jig when magazine turns. Rotary accuracy 28 arcsec, repeatability 16 arcsec. Floor space W x D excludes coolant tank/conveyor. Successor M300Xd2 listed on site (not read in full: same C standard 2,000 rpm/55 N·m, high-torque 1,500 rpm/102 N·m)."
+}
