@@ -1227,7 +1227,7 @@ pub fn zone_entry(def: &MachineDef, z: &crate::def::Zone, sg: &Segment) -> Optio
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rapid(
+pub(crate) fn rapid(
     s: &Setup,
     ln: usize,
     q0: &[f64],

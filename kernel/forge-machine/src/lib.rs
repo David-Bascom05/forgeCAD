@@ -14,6 +14,7 @@
 pub mod collide;
 pub mod def;
 pub mod gcode;
+pub mod homing;
 pub mod kin;
 pub mod library;
 pub mod multi;

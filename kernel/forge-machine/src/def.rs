@@ -464,7 +464,8 @@ pub struct MachineDef {
     /// Tool setters on the table.
     pub setters: Vec<Setter>,
     /// The maker's homing order (`[[machine.homing]] order`): groups of joints, each group homed
-    /// together, the groups in turn; each joint toward its `ref` end. None: not published (a
+    /// together, the groups in turn (joints it does not name afterwards, one at a time, order not
+    /// published); each joint toward its `ref` end. None: not published (a
     /// homing is then a generic reference return, and replies say so). Cite `homing`.
     pub homing: Option<Vec<Vec<String>>>,
     /// A record of a real maker's model: every value in `cite_paths` must be cited.

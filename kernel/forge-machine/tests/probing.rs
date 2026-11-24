@@ -289,3 +289,43 @@ fn inspection_plus_macros_are_read_and_simulated() {
     }
     assert!(sim::timeline_json(&tl).contains("\"measure\""));
 }
+
+#[test]
+fn homing_follows_the_published_order_or_says_it_is_generic() {
+    use forge_machine::homing;
+    let m = builtin().remove(0);
+    let s = Setup::new(&m, Control::for_dialect(&m, "fanuc", 1).unwrap()).unwrap();
+    let from: Vec<f64> = m
+        .joints
+        .iter()
+        .map(|j| j.range.map_or(j.home, |r| 0.5 * (r[0] + r[1])))
+        .collect();
+    let g = homing::home(&s, &from, 0.0);
+    assert!(!g.published);
+    assert_eq!(g.steps.len(), 1);
+    assert!(g.unchecked.iter().any(|u| u.path == "homing"));
+    // Z first, then the rest one at a time; Z to its plus end
+    let text = include_str!("../data/machines/generic.toml");
+    let first = MachineDef::parse_all(text).unwrap()[0].name.clone();
+    let mut defs = MachineDef::parse_all(text).unwrap();
+    let mut d = defs.remove(0);
+    assert_eq!(d.name, first);
+    d.homing = Some(vec![vec!["Z".to_string()]]);
+    let zi = d.joint_index("Z").unwrap();
+    d.joints[zi].reference = Some(1);
+    let s = Setup::new(&d, Control::for_dialect(&d, "fanuc", 1).unwrap()).unwrap();
+    let h = homing::home(&s, &from, 0.0);
+    assert!(h.published);
+    assert_eq!(h.steps[0], vec![zi]);
+    assert_eq!(h.steps.len(), d.joints.len());
+    assert_eq!(h.end[zi], d.joints[zi].range.unwrap()[1]);
+    // the first segment moves Z only
+    let sg = &h.segments[0];
+    for j in 0..d.joints.len() {
+        if j != zi {
+            assert_eq!(sg.q0[j], sg.q1[j]);
+        }
+    }
+    assert!(h.unchecked.iter().any(|u| u.path == "homing.rest"));
+    assert!(!h.unchecked.iter().any(|u| u.path == "joint.Z.ref"));
+}
