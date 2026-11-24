@@ -913,3 +913,59 @@ fn the_handling_frames_on_the_trubend() {
         }
     }
 }
+
+/// A complex part's whole program for David (the coordinator): `BENDSIM_CLIP=DIR` and
+/// `BENDSIM_CLIP_PART=FILE.fg` write 360 frames (12 s at 30 fps) through every bend, flips and
+/// turns included, seeked on the timeline as a recording seeks it; the press the environment
+/// picks if its program is feasible, else the standard tooling alone. Off unless asked.
+#[test]
+#[ignore]
+fn a_complex_part_clip() {
+    let (Ok(dir), Ok(part)) = (std::env::var("BENDSIM_CLIP"), std::env::var("BENDSIM_CLIP_PART")) else {
+        return;
+    };
+    let Some(mut h) = headless() else { return };
+    open(&mut h, &part);
+    click(&mut h, "tab:Environments");
+    click(&mut h, "tool:Bend Simulation");
+    let feasible = |h: &Headless| {
+        h.gui
+            .shell
+            .sheet
+            .bend_sim
+            .as_ref()
+            .and_then(|b| b.sim.as_ref().ok())
+            .is_some_and(|s| s.plan.feasible)
+    };
+    if !feasible(&h) {
+        h.gui
+            .shell
+            .sheet
+            .bend_sim
+            .as_mut()
+            .unwrap()
+            .redo(Choice::default(), "std-eu");
+        for _ in 0..4 {
+            h.step();
+        }
+    }
+    assert!(feasible(&h), "{}", h.gui.shell.status);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        eprintln!("clip on {} {:?}: {} bends", b.tooling, b.choice.press, b.steps());
+    }
+    let tl = h.gui.shell.env_timeline().expect("the timeline");
+    let total = tl.duration(&h.gui.shell);
+    tl.seek(&mut h.gui.shell, 0.0);
+    for _ in 0..20 {
+        h.step();
+    }
+    let n = 360;
+    for i in 0..n {
+        let tl = h.gui.shell.env_timeline().unwrap();
+        tl.seek(&mut h.gui.shell, total * i as f64 / (n - 1) as f64);
+        h.step();
+        std::fs::write(format!("{dir}/frame-{i:04}.ppm"), h.ppm()).unwrap();
+    }
+    eprintln!("clip: {n} frames over {total} s of program");
+}
