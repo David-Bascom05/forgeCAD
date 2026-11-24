@@ -771,43 +771,51 @@ REAL_TOOLS = os.path.join(RAW, "real-tools")
 
 
 def shop_presets(r, kind):
-    """One preset per printed ISO group: the first material the maker prints (its table's lead
-    row; of bracketing diameter columns, the first, the smaller tool's); vc the printed
-    optimum (Sumitomo min-optimum-max) else the range's low end; the feed as printed."""
-    out, seen = [], set()
+    """Per printed ISO group: "<G> general", the first material the maker prints (its table's
+    lead row; of bracketing diameter columns, the first, the smaller tool's), and every row as
+    "<G> general <material>"; vc the printed optimum (Sumitomo min-optimum-max) else the range's
+    low end; the feed as printed."""
+    out, seen, names = [], set(), set()
+
+    def start(c, x):
+        v = x.get("v")
+        if isinstance(v, list) and len(v) == 3 and re.search(r"\d+-\d+-\d+", str(x.get("stated", ""))):
+            return v[1], "the printed optimum (min-optimum-max)"
+        if isinstance(v, list):
+            return min(v), "the low end of the printed range"
+        return v, None
+
     for c in r.get("cutting") or []:
         g = (c.get("iso_group") or "")[:1]  # Guhring's material codes (P1.1.1): their ISO letter
         g = g if g in GROUP_ORDER else None
         fx = c.get("f") or c.get("fz")
-        if not g or g in seen or not fx:
+        if not g or not fx:
             continue
-        def start(x):
-            v = x.get("v")
-            if isinstance(v, list) and len(v) == 3 and "optimum" in str(c.get("material_stated", "")).lower() + str(r.get("notes", "")).lower():
-                return v[1], None
-            if isinstance(v, list) and len(v) == 3 and re.search(r"\d+-\d+-\d+", str(x.get("stated", ""))):
-                return v[1], "the printed optimum (min-optimum-max)"
-            if isinstance(v, list):
-                return min(v), "the low end of the printed range"
-            return v, None
-        vc, vh = start(c["vc"])
-        fz, fh = start(fx)
+        mat = " ".join(str(c.get("material_stated") or "").split())
+        code = c.get("iso_group") if len(str(c.get("iso_group") or "")) > 1 else ""
+        label = " ".join(x for x in (code, mat.split(";")[0]) if x)[:90]
+        todo = ([(f"{g} general", True)] if g not in seen else []) + ([(f"{g} general {label}", False)] if label else [])
         seen.add(g)
-        name = f"{g} general"
-        basis = [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "low end" in h]
-        notes = ["of the maker's materials for this group, the first printed"]
-        notes += [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "optimum" in h]
-        if kind in ("drill", "reamer", "counterbore"):
-            notes.append("fz is the feed per revolution, mm/rev")
-        if re.search(r"column", str(c.get("material_stated", ""))):
-            basis.append("the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed")
-        if re.search(r"\b(SFM|IPR)\b", str(c["vc"].get("stated", "")) + str(fx.get("stated", ""))):
-            notes.append("metric values are exact conversions (SFM x 0.3048, IPR x 25.4)")
-        cite = dict(path=f"preset.{name}", status="estimate" if basis else "published", source=c.get("url") or r["url"],
-                    taken=r.get("taken", TAKEN),
-                    value=f"{c.get('material_stated', '')}; vc {c['vc'].get('stated', '')}; {fx.get('stated', '')}",
-                    basis="; ".join(basis), note="; ".join(notes))
-        out.append(dict(name=name, group=g, vc=vc, fz=fz, cite=cite))
+        vc, vh = start(c, c["vc"])
+        fz, fh = start(c, fx)
+        for name, lead in todo:
+            if name in names:
+                continue
+            names.add(name)
+            basis = [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "low end" in h]
+            notes = (["of the maker's materials for this group, the first printed"] if lead else [])
+            notes += [f"{w} is {h}" for w, h in (("vc", vh), ("feed", fh)) if h and "optimum" in h]
+            if kind in ("drill", "reamer", "counterbore"):
+                notes.append("fz is the feed per revolution, mm/rev")
+            if re.search(r"column", mat):
+                basis.append("the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed")
+            if re.search(r"\b(SFM|IPR)\b", str(c["vc"].get("stated", "")) + str(fx.get("stated", ""))):
+                notes.append("metric values are exact conversions (SFM x 0.3048, IPR x 25.4)")
+            cite = dict(path=f"preset.{name}", status="estimate" if basis else "published",
+                        source=c.get("url") or r["url"], taken=r.get("taken", TAKEN),
+                        value=f"{label}; {mat}; vc {c['vc'].get('stated', '')}; {fx.get('stated', '')}",
+                        basis="; ".join(basis), note="; ".join(notes))
+            out.append(dict(name=name, group=g, vc=vc, fz=fz, cite=cite))
     return out
 
 

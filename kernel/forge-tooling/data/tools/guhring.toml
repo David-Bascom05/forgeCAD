@@ -2912,7 +2912,17 @@ group = "P"
 vc = 79.248
 fz = 0.0889
 [[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 79.248
+fz = 0.0889
+[[tool.preset]]
 name = "N general"
+group = "N"
+vc = 179.832
+fz = 0.127
+[[tool.preset]]
+name = "N general Aluminium and Al-alloys, BHN ≤ 120"
 group = "N"
 vc = 179.832
 fz = 0.127
@@ -2963,17 +2973,33 @@ path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
 taken = "2026-11-24"
-value = "Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 [[tool.cite]]
 path = "preset.N general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
 taken = "2026-11-24"
-value = "Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
+value = "Aluminium and Al-alloys, BHN ≤ 120; Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general Aluminium and Al-alloys, BHN ≤ 120"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Aluminium and Al-alloys, BHN ≤ 120; Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9055180060000"
@@ -2997,7 +3023,17 @@ group = "P"
 vc = 79.248
 fz = 0.0889
 [[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 79.248
+fz = 0.0889
+[[tool.preset]]
 name = "N general"
+group = "N"
+vc = 179.832
+fz = 0.127
+[[tool.preset]]
+name = "N general Aluminium and Al-alloys, BHN ≤ 120"
 group = "N"
 vc = 179.832
 fz = 0.127
@@ -3048,17 +3084,33 @@ path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
 taken = "2026-11-24"
-value = "Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 [[tool.cite]]
 path = "preset.N general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
 taken = "2026-11-24"
-value = "Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
+value = "Aluminium and Al-alloys, BHN ≤ 120; Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general Aluminium and Al-alloys, BHN ≤ 120"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Aluminium and Al-alloys, BHN ≤ 120; Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9055180185000"
@@ -3082,7 +3134,17 @@ group = "P"
 vc = 79.248
 fz = 0.3175
 [[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 79.248
+fz = 0.3175
+[[tool.preset]]
 name = "N general"
+group = "N"
+vc = 179.832
+fz = 0.508
+[[tool.preset]]
+name = "N general Aluminium and Al-alloys, BHN ≤ 120"
 group = "N"
 vc = 179.832
 fz = 0.508
@@ -3133,17 +3195,33 @@ path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
 taken = "2026-11-24"
-value = "Common structural steels, BHN ≤ 150; feed column 3/4 in. (19.050 mm); vc SFM 260; Feed Rate - IPR 3/4 in. 0.0125"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 3/4 in. (19.050 mm); vc SFM 260; Feed Rate - IPR 3/4 in. 0.0125"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 3/4 in. (19.050 mm); vc SFM 260; Feed Rate - IPR 3/4 in. 0.0125"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 [[tool.cite]]
 path = "preset.N general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
 taken = "2026-11-24"
-value = "Aluminium and Al-alloys, BHN ≤ 120; feed column 3/4 in. (19.050 mm); vc SFM 590; Feed Rate - IPR 3/4 in. 0.0200"
+value = "Aluminium and Al-alloys, BHN ≤ 120; Aluminium and Al-alloys, BHN ≤ 120; feed column 3/4 in. (19.050 mm); vc SFM 590; Feed Rate - IPR 3/4 in. 0.0200"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general Aluminium and Al-alloys, BHN ≤ 120"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Aluminium and Al-alloys, BHN ≤ 120; Aluminium and Al-alloys, BHN ≤ 120; feed column 3/4 in. (19.050 mm); vc SFM 590; Feed Rate - IPR 3/4 in. 0.0200"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9011310055000"
@@ -3166,7 +3244,17 @@ group = "P"
 vc = 47.244
 fz = 0.1651
 [[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 47.244
+fz = 0.1651
+[[tool.preset]]
 name = "N general"
+group = "N"
+vc = 94.488
+fz = 0.2032
+[[tool.preset]]
+name = "N general Al cast alloys ≤ 10 % Si, BHN ≤ 180"
 group = "N"
 vc = 94.488
 fz = 0.2032
@@ -3211,17 +3299,33 @@ path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
 taken = "2026-11-24"
-value = "Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 155; Feed Rate - IPR 1/8 in. 0.0065"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 155; Feed Rate - IPR 1/8 in. 0.0065"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
+taken = "2026-11-24"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 155; Feed Rate - IPR 1/8 in. 0.0065"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 [[tool.cite]]
 path = "preset.N general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
 taken = "2026-11-24"
-value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 1/8 in. (3.170 mm); vc SFM 310; Feed Rate - IPR 1/8 in. 0.0080"
+value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 1/8 in. (3.170 mm); vc SFM 310; Feed Rate - IPR 1/8 in. 0.0080"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general Al cast alloys ≤ 10 % Si, BHN ≤ 180"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
+taken = "2026-11-24"
+value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 1/8 in. (3.170 mm); vc SFM 310; Feed Rate - IPR 1/8 in. 0.0080"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9011310060000"
@@ -3244,7 +3348,17 @@ group = "P"
 vc = 47.244
 fz = 0.1651
 [[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 47.244
+fz = 0.1651
+[[tool.preset]]
 name = "N general"
+group = "N"
+vc = 94.488
+fz = 0.2032
+[[tool.preset]]
+name = "N general Al cast alloys ≤ 10 % Si, BHN ≤ 180"
 group = "N"
 vc = 94.488
 fz = 0.2032
@@ -3289,17 +3403,33 @@ path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
 taken = "2026-11-24"
-value = "Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 155; Feed Rate - IPR 1/8 in. 0.0065"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 155; Feed Rate - IPR 1/8 in. 0.0065"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
+taken = "2026-11-24"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 155; Feed Rate - IPR 1/8 in. 0.0065"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 [[tool.cite]]
 path = "preset.N general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
 taken = "2026-11-24"
-value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 1/8 in. (3.170 mm); vc SFM 310; Feed Rate - IPR 1/8 in. 0.0080"
+value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 1/8 in. (3.170 mm); vc SFM 310; Feed Rate - IPR 1/8 in. 0.0080"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general Al cast alloys ≤ 10 % Si, BHN ≤ 180"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
+taken = "2026-11-24"
+value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 1/8 in. (3.170 mm); vc SFM 310; Feed Rate - IPR 1/8 in. 0.0080"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9011310185000"
@@ -3322,7 +3452,17 @@ group = "P"
 vc = 47.244
 fz = 0.4572
 [[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 47.244
+fz = 0.4572
+[[tool.preset]]
 name = "N general"
+group = "N"
+vc = 94.488
+fz = 0.5588
+[[tool.preset]]
+name = "N general Al cast alloys ≤ 10 % Si, BHN ≤ 180"
 group = "N"
 vc = 94.488
 fz = 0.5588
@@ -3367,17 +3507,33 @@ path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
 taken = "2026-11-24"
-value = "Common structural steels, BHN ≤ 150; feed column 3/4 in. (19.050 mm); vc SFM 155; Feed Rate - IPR 3/4 in. 0.0180"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 3/4 in. (19.050 mm); vc SFM 155; Feed Rate - IPR 3/4 in. 0.0180"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
+taken = "2026-11-24"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 3/4 in. (19.050 mm); vc SFM 155; Feed Rate - IPR 3/4 in. 0.0180"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 [[tool.cite]]
 path = "preset.N general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
 taken = "2026-11-24"
-value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 3/4 in. (19.050 mm); vc SFM 310; Feed Rate - IPR 3/4 in. 0.0220"
+value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 3/4 in. (19.050 mm); vc SFM 310; Feed Rate - IPR 3/4 in. 0.0220"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general Al cast alloys ≤ 10 % Si, BHN ≤ 180"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=546"
+taken = "2026-11-24"
+value = "Al cast alloys ≤ 10 % Si, BHN ≤ 180; Al cast alloys ≤ 10 % Si, BHN ≤ 180; feed column 3/4 in. (19.050 mm); vc SFM 310; Feed Rate - IPR 3/4 in. 0.0220"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9055180058000"
@@ -3401,7 +3557,17 @@ group = "P"
 vc = 79.248
 fz = 0.0889
 [[tool.preset]]
+name = "P general Common structural steels, BHN ≤ 150"
+group = "P"
+vc = 79.248
+fz = 0.0889
+[[tool.preset]]
 name = "N general"
+group = "N"
+vc = 179.832
+fz = 0.127
+[[tool.preset]]
+name = "N general Aluminium and Al-alloys, BHN ≤ 120"
 group = "N"
 vc = 179.832
 fz = 0.127
@@ -3452,17 +3618,33 @@ path = "preset.P general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
 taken = "2026-11-24"
-value = "Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general Common structural steels, BHN ≤ 150"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Common structural steels, BHN ≤ 150; Common structural steels, BHN ≤ 150; feed column 1/8 in. (3.170 mm); vc SFM 260; Feed Rate - IPR 1/8 in. 0.0035"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 [[tool.cite]]
 path = "preset.N general"
 status = "estimate"
 source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
 taken = "2026-11-24"
-value = "Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
+value = "Aluminium and Al-alloys, BHN ≤ 120; Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
 basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general Aluminium and Al-alloys, BHN ≤ 120"
+status = "estimate"
+source = "https://guhring.com/Catalogs/CatalogPDF/ad20905b-6a95-4c43-a5f8-f4e9dc45bfb6#page=571"
+taken = "2026-11-24"
+value = "Aluminium and Al-alloys, BHN ≤ 120; Aluminium and Al-alloys, BHN ≤ 120; feed column 1/8 in. (3.170 mm); vc SFM 590; Feed Rate - IPR 1/8 in. 0.0050"
+basis = "the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9016860030000"
@@ -3484,6 +3666,31 @@ name = "P general"
 group = "P"
 vc = 179.832
 fz = 0.50038
+[[tool.preset]]
+name = "P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+group = "P"
+vc = 179.832
+fz = 0.50038
+[[tool.preset]]
+name = "P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+group = "P"
+vc = 179.832
+fz = 0.50038
+[[tool.preset]]
+name = "P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+group = "P"
+vc = 161.544
+fz = 0.50038
+[[tool.preset]]
+name = "P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+group = "P"
+vc = 179.832
+fz = 0.44958
+[[tool.preset]]
+name = "P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+group = "P"
+vc = 179.832
+fz = 0.44958
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -3525,8 +3732,43 @@ path = "preset.P general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
 taken = "2026-11-24"
-value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0197"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0197"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0197"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0197"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; vc SFM 530; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0197"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0177"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0177"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9016860040000"
@@ -3548,6 +3790,31 @@ name = "P general"
 group = "P"
 vc = 179.832
 fz = 0.65024
+[[tool.preset]]
+name = "P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+group = "P"
+vc = 179.832
+fz = 0.65024
+[[tool.preset]]
+name = "P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+group = "P"
+vc = 179.832
+fz = 0.65024
+[[tool.preset]]
+name = "P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+group = "P"
+vc = 161.544
+fz = 0.65024
+[[tool.preset]]
+name = "P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+group = "P"
+vc = 179.832
+fz = 0.59944
+[[tool.preset]]
+name = "P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+group = "P"
+vc = 179.832
+fz = 0.59944
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -3589,8 +3856,43 @@ path = "preset.P general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
 taken = "2026-11-24"
-value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0256"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0256"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0256"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0256"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; vc SFM 530; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0256"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0236"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0236"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9016860050000"
@@ -3664,6 +3966,31 @@ name = "P general"
 group = "P"
 vc = 179.832
 fz = 1.19888
+[[tool.preset]]
+name = "P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+group = "P"
+vc = 179.832
+fz = 1.19888
+[[tool.preset]]
+name = "P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+group = "P"
+vc = 179.832
+fz = 1.19888
+[[tool.preset]]
+name = "P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+group = "P"
+vc = 161.544
+fz = 1.19888
+[[tool.preset]]
+name = "P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+group = "P"
+vc = 179.832
+fz = 1.15062
+[[tool.preset]]
+name = "P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+group = "P"
+vc = 179.832
+fz = 1.15062
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -3705,8 +4032,43 @@ path = "preset.P general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
 taken = "2026-11-24"
-value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0472"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0472"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0472"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0472"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; vc SFM 530; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0472"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0453"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0453"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9016860080000"
@@ -3728,6 +4090,31 @@ name = "P general"
 group = "P"
 vc = 179.832
 fz = 1.5494
+[[tool.preset]]
+name = "P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+group = "P"
+vc = 179.832
+fz = 1.5494
+[[tool.preset]]
+name = "P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+group = "P"
+vc = 179.832
+fz = 1.5494
+[[tool.preset]]
+name = "P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+group = "P"
+vc = 161.544
+fz = 1.5494
+[[tool.preset]]
+name = "P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+group = "P"
+vc = 179.832
+fz = 1.45034
+[[tool.preset]]
+name = "P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+group = "P"
+vc = 179.832
+fz = 1.45034
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -3769,8 +4156,43 @@ path = "preset.P general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
 taken = "2026-11-24"
-value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0610"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0610"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0610"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0610"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; vc SFM 530; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0610"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0571"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0571"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9016860100000"
@@ -3792,6 +4214,31 @@ name = "P general"
 group = "P"
 vc = 179.832
 fz = 1.89992
+[[tool.preset]]
+name = "P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+group = "P"
+vc = 179.832
+fz = 1.89992
+[[tool.preset]]
+name = "P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+group = "P"
+vc = 179.832
+fz = 1.89992
+[[tool.preset]]
+name = "P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+group = "P"
+vc = 161.544
+fz = 1.89992
+[[tool.preset]]
+name = "P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+group = "P"
+vc = 179.832
+fz = 1.75006
+[[tool.preset]]
+name = "P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+group = "P"
+vc = 179.832
+fz = 1.75006
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -3833,8 +4280,43 @@ path = "preset.P general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
 taken = "2026-11-24"
-value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0748"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0748"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0748"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0748"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; vc SFM 530; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0748"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0689"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0689"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9016860120000"
@@ -3856,6 +4338,31 @@ name = "P general"
 group = "P"
 vc = 179.832
 fz = 2.04978
+[[tool.preset]]
+name = "P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+group = "P"
+vc = 179.832
+fz = 2.04978
+[[tool.preset]]
+name = "P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+group = "P"
+vc = 179.832
+fz = 2.04978
+[[tool.preset]]
+name = "P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+group = "P"
+vc = 161.544
+fz = 2.04978
+[[tool.preset]]
+name = "P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+group = "P"
+vc = 179.832
+fz = 1.89992
+[[tool.preset]]
+name = "P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+group = "P"
+vc = 179.832
+fz = 1.89992
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -3897,8 +4404,43 @@ path = "preset.P general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
 taken = "2026-11-24"
-value = "Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0807"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0807"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.1 Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; Unalloyed Steel, Annealed, 0.15 % C, Rm 420 N/mm², 125 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0807"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.3 Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; Unalloyed Steel, Annealed, 0.45 % C, Rm 640 N/mm², 190 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0807"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P1.1.5 Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; Unalloyed Steel, Heat-Treated, 0.45 % C, Rm 850 N/mm², 250 HB; vc SFM 530; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0807"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.1 Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; Low-Alloy Steel, Annealed, Rm 610 N/mm², 180 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0748"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.P general P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=26"
+taken = "2026-11-24"
+value = "P2.1.2 Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; Low-Alloy Steel, Heat-Treated, Rm 930 N/mm², 275 HB; vc SFM 590; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0748"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9072860030000"
@@ -3919,6 +4461,26 @@ note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7
 name = "N general"
 group = "N"
 vc = 260.604
+fz = 0.55118
+[[tool.preset]]
+name = "N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+group = "N"
+vc = 260.604
+fz = 0.55118
+[[tool.preset]]
+name = "N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+group = "N"
+vc = 260.604
+fz = 0.55118
+[[tool.preset]]
+name = "N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+group = "N"
+vc = 260.604
+fz = 0.55118
+[[tool.preset]]
+name = "N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+group = "N"
+vc = 195.072
 fz = 0.55118
 [[tool.cite]]
 path = "dc"
@@ -3961,8 +4523,36 @@ path = "preset.N general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
 taken = "2026-11-24"
-value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB; Wrought Aluminum Alloys, Hardened, 100 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; vc SFM 640; Feed (IPR) by Reamer Diameter, Ø 3 mm column: 0.0217"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9072860040000"
@@ -3983,6 +4573,26 @@ note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7
 name = "N general"
 group = "N"
 vc = 260.604
+fz = 0.7493
+[[tool.preset]]
+name = "N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+group = "N"
+vc = 260.604
+fz = 0.7493
+[[tool.preset]]
+name = "N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+group = "N"
+vc = 260.604
+fz = 0.7493
+[[tool.preset]]
+name = "N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+group = "N"
+vc = 260.604
+fz = 0.7493
+[[tool.preset]]
+name = "N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+group = "N"
+vc = 195.072
 fz = 0.7493
 [[tool.cite]]
 path = "dc"
@@ -4025,8 +4635,36 @@ path = "preset.N general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
 taken = "2026-11-24"
-value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB; Wrought Aluminum Alloys, Hardened, 100 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; vc SFM 640; Feed (IPR) by Reamer Diameter, Ø 4 mm column: 0.0295"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9072860050000"
@@ -4100,6 +4738,26 @@ name = "N general"
 group = "N"
 vc = 260.604
 fz = 1.34874
+[[tool.preset]]
+name = "N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+group = "N"
+vc = 260.604
+fz = 1.34874
+[[tool.preset]]
+name = "N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+group = "N"
+vc = 260.604
+fz = 1.34874
+[[tool.preset]]
+name = "N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+group = "N"
+vc = 260.604
+fz = 1.34874
+[[tool.preset]]
+name = "N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+group = "N"
+vc = 195.072
+fz = 1.34874
 [[tool.cite]]
 path = "dc"
 status = "published"
@@ -4141,8 +4799,36 @@ path = "preset.N general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
 taken = "2026-11-24"
-value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB; Wrought Aluminum Alloys, Hardened, 100 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; vc SFM 640; Feed (IPR) by Reamer Diameter, Ø 6 mm column: 0.0531"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9072860080000"
@@ -4163,6 +4849,26 @@ note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7
 name = "N general"
 group = "N"
 vc = 260.604
+fz = 1.75006
+[[tool.preset]]
+name = "N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+group = "N"
+vc = 260.604
+fz = 1.75006
+[[tool.preset]]
+name = "N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+group = "N"
+vc = 260.604
+fz = 1.75006
+[[tool.preset]]
+name = "N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+group = "N"
+vc = 260.604
+fz = 1.75006
+[[tool.preset]]
+name = "N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+group = "N"
+vc = 195.072
 fz = 1.75006
 [[tool.cite]]
 path = "dc"
@@ -4205,8 +4911,36 @@ path = "preset.N general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
 taken = "2026-11-24"
-value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB; Wrought Aluminum Alloys, Hardened, 100 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; vc SFM 640; Feed (IPR) by Reamer Diameter, Ø 8 mm column: 0.0689"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9072860100000"
@@ -4227,6 +4961,26 @@ note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7
 name = "N general"
 group = "N"
 vc = 260.604
+fz = 2.14884
+[[tool.preset]]
+name = "N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+group = "N"
+vc = 260.604
+fz = 2.14884
+[[tool.preset]]
+name = "N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+group = "N"
+vc = 260.604
+fz = 2.14884
+[[tool.preset]]
+name = "N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+group = "N"
+vc = 260.604
+fz = 2.14884
+[[tool.preset]]
+name = "N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+group = "N"
+vc = 195.072
 fz = 2.14884
 [[tool.cite]]
 path = "dc"
@@ -4269,8 +5023,36 @@ path = "preset.N general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
 taken = "2026-11-24"
-value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB; Wrought Aluminum Alloys, Hardened, 100 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; vc SFM 640; Feed (IPR) by Reamer Diameter, Ø 10 mm column: 0.0846"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9072860120000"
@@ -4291,6 +5073,26 @@ note = "HR 500 ALU solid carbide high-performance reamer, through hole, Series 7
 name = "N general"
 group = "N"
 vc = 260.604
+fz = 2.30124
+[[tool.preset]]
+name = "N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+group = "N"
+vc = 260.604
+fz = 2.30124
+[[tool.preset]]
+name = "N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+group = "N"
+vc = 260.604
+fz = 2.30124
+[[tool.preset]]
+name = "N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+group = "N"
+vc = 260.604
+fz = 2.30124
+[[tool.preset]]
+name = "N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+group = "N"
+vc = 195.072
 fz = 2.30124
 [[tool.cite]]
 path = "dc"
@@ -4333,8 +5135,36 @@ path = "preset.N general"
 status = "published"
 source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
 taken = "2026-11-24"
-value = "Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.1 Wrought Aluminum Alloys, Non-Hardened, 60 HB; Wrought Aluminum Alloys, Non-Hardened, 60 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N1.1.2 Wrought Aluminum Alloys, Hardened, 100 HB; Wrought Aluminum Alloys, Hardened, 100 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.1 Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; Aluminum Casting Alloys, Non-Hardened, ≤ 12 % Si, 75 HB; vc SFM 855; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
+[[tool.cite]]
+path = "preset.N general N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB"
+status = "published"
+source = "https://guhring.com/Catalogs/CatalogPDF/d59958fb-cee1-4ee2-82bc-816ce2b6b551#page=29"
+taken = "2026-11-24"
+value = "N2.1.2 Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; Aluminum Casting Alloys, Hardened, ≤ 12 % Si, 90 HB; vc SFM 640; Feed (IPR) by Reamer Diameter, Ø 12 mm column: 0.0906"
+note = "fz is the feed per revolution, mm/rev; metric values are exact conversions (SFM x 0.3048, IPR x 25.4)"
 
 [[tool]]
 id = "guhring-9003240060000"
