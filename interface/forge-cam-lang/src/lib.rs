@@ -424,8 +424,16 @@ fn get_str(m: &BTreeMap<String, V>, k: &str, default: Option<&str>) -> Result<St
     }
 }
 
-/// Runs a machining document (its file's directory finds the part).
+/// Runs a machining document (its file's directory finds the part) on the built-in library.
 pub fn run(src: &str, dir: &Path) -> Cam {
+    run_with_library(src, dir, Library::builtin())
+}
+
+/// Runs a machining document on a given tooling library: the one the user's levels make
+/// (forge-tooling-builder's `library(project, user_cam)`: the project's records over the user's
+/// over the built-in), so tools, holders and inserts made in the builder reach CAM. The
+/// document's `cam/*.toml` beside it are added on top, as with `run`.
+pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
     let mut cam = Cam {
         leftover: vec![],
         leftover_done: false,
@@ -437,7 +445,7 @@ pub fn run(src: &str, dir: &Path) -> Cam {
         setups: vec![],
         ops: vec![],
         programs: vec![],
-        lib: Library::builtin(),
+        lib,
         jaws: vec![],
     };
     let prog = match syntax::parse(src) {

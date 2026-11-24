@@ -1024,3 +1024,32 @@ fn a_bare_operation_is_refused_with_its_named_form() {
     assert!(cam.errors.is_empty(), "{:?}", cam.errors);
     assert_eq!(cam.ops.len(), 1);
 }
+
+/// A tool made in the builder (a project record, not built in) reaches CAM through the library
+/// the levels make: `run_with_library` takes it; `run` (the built-in library) does not know it.
+#[test]
+fn a_project_tool_is_used_through_the_leveled_library() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let body = "t9 = tool(\"shop-flat-8\", t: 9, stickout: 30, holder: \"bt40-er32\")\nface1 = facing(op1, tool: t9, to: 18, step: 1)\nprog = program(op1, post: \"fanuc\", number: 1)\n";
+    let cam = forge_cam_lang::run(&doc(body), &dir);
+    assert!(!cam.ok);
+    assert!(
+        cam.errors.iter().any(|e| e.contains("shop-flat-8")),
+        "{:?}",
+        cam.errors
+    );
+    // the library forge-tooling-builder's `library(project, user_cam)` returns: the built-in
+    // records with the project's added
+    let mut lib = forge_tooling::Library::builtin();
+    lib.add(
+        "project/cam/tools/shop.toml",
+        "[[tool]]\nid = \"shop-flat-8\"\ntype = \"flat\"\ndc = 8.0\nnof = 3\nlcf = 20.0\ndcon = 8.0\noal = 63.0\nmaterial = \"carbide\"\nsource = \"shop\"\ntaken = \"2026-11-24\"\n",
+    )
+    .unwrap();
+    let cam = forge_cam_lang::run_with_library(&doc(body), &dir, lib);
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    assert_eq!(cam.ops.len(), 1);
+    assert_eq!(cam.ops[0].status, "built", "{:?}", cam.ops[0].refusal);
+    let (txt, _) = cam.program_text().unwrap();
+    assert!(txt.contains("T9 M06"), "{txt}");
+}
