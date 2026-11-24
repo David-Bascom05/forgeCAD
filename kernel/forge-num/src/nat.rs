@@ -825,4 +825,79 @@ mod tests {
             check(v);
         }
     }
+
+    /// Values whose limb counts sit at the inline bound (INLINE - 1, INLINE, INLINE + 1 and
+    /// neighbours), and results that cross it: every operation gives the same limbs whether its
+    /// operands are held inline or on the heap, and the ring and division identities hold.
+    #[test]
+    fn inline_and_heap_agree_at_the_bound() {
+        fn rng(s: &mut u64) -> u64 {
+            *s ^= *s << 13;
+            *s ^= *s >> 7;
+            *s ^= *s << 17;
+            *s
+        }
+        fn pick(s: &mut u64, n: usize) -> Vec<u32> {
+            let mut v = Vec::with_capacity(n);
+            for _ in 0..n {
+                let r = rng(s);
+                v.push(if r.is_multiple_of(5) { u32::MAX } else { r as u32 });
+            }
+            if let Some(t) = v.last_mut()
+                && *t == 0
+            {
+                *t = 1;
+            }
+            v
+        }
+        let mut s = 0x2545_f491_4f6c_dd1du64;
+        let both = |v: &[u32]| {
+            let inline = Nat {
+                limbs: Limbs::from_slice(v),
+            };
+            let heap = Nat {
+                limbs: Limbs::Heap(v.to_vec()),
+            };
+            (inline, heap)
+        };
+        let lo = INLINE - 3;
+        let hi = INLINE + 3;
+        for na in lo..=hi {
+            for nb in 1..=hi {
+                for _ in 0..20 {
+                    let (av, bv) = (pick(&mut s, na), pick(&mut s, nb));
+                    let ((a, ah), (b, bh)) = (both(&av), both(&bv));
+                    let same = |x: Nat, y: Nat| assert_eq!(x.limbs.as_slice(), y.limbs.as_slice());
+                    same(a.add(&b), ah.add(&bh));
+                    same(a.mul(&b), ah.mul(&bh));
+                    let k = rng(&mut s) % 100;
+                    same(a.shl(k), ah.shl(k));
+                    same(a.shr(k), ah.shr(k));
+                    let (mut x, mut y) = (a.clone(), ah.clone());
+                    x.shr_assign(k);
+                    y.shr_assign(k);
+                    same(x, y);
+                    assert_eq!(a.cmp(&b), ah.cmp(&bh));
+                    assert_eq!(a.trailing_zeros(), ah.trailing_zeros());
+                    let (q, r) = a.divrem(&b);
+                    let (qh, rh) = ah.divrem(&bh);
+                    assert_eq!(q.limbs.as_slice(), qh.limbs.as_slice());
+                    assert_eq!(r.limbs.as_slice(), rh.limbs.as_slice());
+                    assert_eq!(q.mul(&b).add(&r), a);
+                    assert_eq!(r.cmp(&b), Ordering::Less);
+                    let (big, small) = if a.cmp(&b) == Ordering::Less {
+                        (&b, &a)
+                    } else {
+                        (&a, &b)
+                    };
+                    assert_eq!(big.sub(small).add(small), *big);
+                    let t = a.isqrt();
+                    assert_eq!(t.limbs.as_slice(), ah.isqrt().limbs.as_slice());
+                    assert!(t.mul(&t).cmp(&a) != Ordering::Greater);
+                    let t1 = t.add(&Nat::from_u64(1));
+                    assert_eq!(t1.mul(&t1).cmp(&a), Ordering::Greater);
+                }
+            }
+        }
+    }
 }
