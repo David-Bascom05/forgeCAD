@@ -351,6 +351,12 @@ impl Q {
         }
     }
     fn add(&self, o: &Q) -> Q {
+        if self.n.is_zero() {
+            return o.clone();
+        }
+        if o.n.is_zero() {
+            return self.clone();
+        }
         if self.d == o.d {
             return Q {
                 n: self.n.add(&o.n),
@@ -363,6 +369,9 @@ impl Q {
         }
     }
     fn mul(&self, o: &Q) -> Q {
+        if self.n.is_zero() || o.n.is_zero() {
+            return Q::zero();
+        }
         Q {
             n: self.n.mul(&o.n),
             d: self.d.mul(&o.d),
@@ -421,6 +430,15 @@ impl Quad {
     /// (a1 + b1√c)(a2 + b2√c) = a1 a2 + b1 b2 c + (a1 b2 + a2 b1)√c.
     fn mul(&self, o: &Quad, c: Option<&Q>) -> Quad {
         match c {
+            // one factor rational: a1 (a2 + b2√c), or (a1 + b1√c) a2
+            Some(_) if self.b.is_zero() && !o.b.is_zero() => Quad {
+                a: self.a.mul(&o.a),
+                b: self.a.mul(&o.b),
+            },
+            Some(_) if o.b.is_zero() && !self.b.is_zero() => Quad {
+                a: self.a.mul(&o.a),
+                b: self.b.mul(&o.a),
+            },
             Some(c) if !(self.b.is_zero() && o.b.is_zero()) => Quad {
                 a: self.a.mul(&o.a).add(&self.b.mul(&o.b).mul(c)),
                 b: self.a.mul(&o.b).add(&o.a.mul(&self.b)),
