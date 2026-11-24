@@ -344,6 +344,56 @@ pub fn ask(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, text: &str) -
     }
 }
 
+/// A part already run (with `anchors` on, and asked `asks`, as a query runs it), kept to answer
+/// queries of it without running it again (`ask_prepared`): for a caller that runs the part
+/// anyway.
+pub struct Prepared(Scene, Vec<String>);
+
+/// `run`'s part, for later queries: a part (not an assembly) that built; None otherwise (ask
+/// anew). `run` must have been run with `anchors` on and asked `asks` (its `Options::asks`).
+pub fn prepare(run: &Run, asks: &[String]) -> Option<Prepared> {
+    if run.asm.as_ref().is_some_and(|a| !a.occurrences.is_empty()) {
+        return None;
+    }
+    let body = run.body.clone()?;
+    let part = part_of(run, &body);
+    Some(Prepared(
+        Scene {
+            items: vec![Item {
+                occ: String::new(),
+                body: Arc::new(body),
+                pose: Frame::WORLD,
+                part: 0,
+            }],
+            parts: vec![part],
+            assembly: false,
+        },
+        asks.to_vec(),
+    ))
+}
+
+/// What `ask` answers of the same part, from its prepared run: for a query whose names are
+/// plain or among the run's asks (`ask`'s scene runs the part with its anchors, asked the
+/// query's other names, and answers from that run; each name is asked on its own, so other
+/// names asked beside it change nothing of its answer). None for one that names more, or
+/// needs more (an unfold, a cut list, DFM, bendsim), or does not parse: those go to `ask`.
+pub fn ask_prepared(p: &Prepared, text: &str) -> Option<Answer> {
+    if words(text).first().is_some_and(|x| x == "bendsim") {
+        return None;
+    }
+    let req = parse(text).ok()?;
+    if req.q == Query::Unfold || req.q == Query::Cutlist || req.q == Query::Dfm {
+        return None;
+    }
+    if refs(&req.q).iter().any(|t| !plain_name(t) && !p.1.contains(t)) {
+        return None;
+    }
+    Some(match answer(&p.0, &req) {
+        Ok(a) => a,
+        Err(e) => Answer::err(e),
+    })
+}
+
 fn part_opts(dir: Option<PathBuf>, root: Option<PathBuf>, asks: Vec<String>) -> Options {
     Options {
         dir,

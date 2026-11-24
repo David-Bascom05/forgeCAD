@@ -197,9 +197,99 @@ struct Field {
     prof: Profile,
     r: f64,
     eps: f64,
+    /// The box (xmin, ymin, xmax, ymax) of every sweep since the start cache last looked: the
+    /// only cells changed (or restored, by a crumb taken back) since then.
+    dirty: [f64; 4],
+    /// The highest map cell of each block of BLOCK × BLOCK cells (built on the first
+    /// `max_in`), a block stale once a sweep's box meets it, refreshed when asked.
+    blocks: std::cell::RefCell<Option<Blocks>>,
 }
 
+/// The cells per side of a `max_in` block.
+const BLOCK: usize = 8;
+
+/// Block maxima of the map (see `Field::blocks`).
+struct Blocks {
+    bnx: usize,
+    max: Vec<f64>,
+    stale: Vec<bool>,
+}
+
+/// No box.
+const NO_BOX: [f64; 4] = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+
 impl Field {
+    /// The map swept along a → b, the box of what changed noted.
+    fn sweep(&mut self, a: [f64; 3], b: [f64; 3]) -> f64 {
+        self.dirty = [
+            self.dirty[0].min(a[0]).min(b[0]),
+            self.dirty[1].min(a[1]).min(b[1]),
+            self.dirty[2].max(a[0]).max(b[0]),
+            self.dirty[3].max(a[1]).max(b[1]),
+        ];
+        let prof = self.prof;
+        let removed = self.map.sweep(a, b, &prof);
+        // the blocks the swept box meets (the tool's radius, a cell more each side): stale
+        if let Some(bl) = self.blocks.get_mut().as_mut() {
+            let m = &self.map;
+            let ci = |v: f64, o: f64| ((v - o) / m.h).floor() as i64;
+            let w = self.r + m.h;
+            let (i0, j0) = (
+                (ci(a[0].min(b[0]) - w, m.x0) - 1).max(0),
+                (ci(a[1].min(b[1]) - w, m.y0) - 1).max(0),
+            );
+            let (i1, j1) = (ci(a[0].max(b[0]) + w, m.x0) + 1, ci(a[1].max(b[1]) + w, m.y0) + 1);
+            if i1 >= 0 && j1 >= 0 {
+                let (i1, j1) = ((i1 as usize).min(m.nx - 1), (j1 as usize).min(m.ny - 1));
+                for bj in j0 as usize / BLOCK..=j1 / BLOCK {
+                    for bi in i0 as usize / BLOCK..=i1 / BLOCK {
+                        bl.stale[bj * bl.bnx + bi] = true;
+                    }
+                }
+            }
+        }
+        removed
+    }
+
+    /// At least the highest map cell of those with index i0..=i1, j0..=j1 (clamped to the grid):
+    /// the highest of the blocks that meet them (−∞ if none).
+    fn max_in(&self, i0: i64, j0: i64, i1: i64, j1: i64) -> f64 {
+        let m = &self.map;
+        let (i0, j0) = (i0.max(0) as usize, j0.max(0) as usize);
+        if i1 < 0 || j1 < 0 || i0 >= m.nx || j0 >= m.ny {
+            return f64::NEG_INFINITY;
+        }
+        let (i1, j1) = ((i1 as usize).min(m.nx - 1), (j1 as usize).min(m.ny - 1));
+        let mut bl = self.blocks.borrow_mut();
+        let b = bl.get_or_insert_with(|| {
+            let bnx = m.nx.div_ceil(BLOCK);
+            let n = bnx * m.ny.div_ceil(BLOCK);
+            Blocks {
+                bnx,
+                max: vec![f64::NEG_INFINITY; n],
+                stale: vec![true; n],
+            }
+        });
+        let mut t = f64::NEG_INFINITY;
+        for bj in j0 / BLOCK..=j1 / BLOCK {
+            for bi in i0 / BLOCK..=i1 / BLOCK {
+                let k = bj * b.bnx + bi;
+                if b.stale[k] {
+                    let mut mx = f64::NEG_INFINITY;
+                    for j in bj * BLOCK..((bj + 1) * BLOCK).min(m.ny) {
+                        for i in bi * BLOCK..((bi + 1) * BLOCK).min(m.nx) {
+                            mx = mx.max(m.z[j * m.nx + i]);
+                        }
+                    }
+                    b.max[k] = mx;
+                    b.stale[k] = false;
+                }
+                t = t.max(b.max[k]);
+            }
+        }
+        t
+    }
+
     fn ok(&self, x: f64, y: f64) -> bool {
         inside(&self.allowed, x, y)
     }
@@ -234,6 +324,20 @@ impl Field {
         let h = self.map.h;
         let rr = self.r + h;
         let n = (rr / h).ceil() as i64;
+        // every sample's cell lies in the box of cells from x − n h to x + n h (one cell more each
+        // side for rounding): none above the level there, no material (`material` needs one)
+        let m = &self.map;
+        let ci = |v: f64, o: f64| ((v - o) / h).floor() as i64;
+        let (rx, ry) = (n as f64 * h, n as f64 * h);
+        if self.max_in(
+            ci(x - rx, m.x0) - 1,
+            ci(y - ry, m.y0) - 1,
+            ci(x + rx, m.x0) + 1,
+            ci(y + ry, m.y0) + 1,
+        ) <= z + self.eps
+        {
+            return false;
+        }
         for j in -n..=n {
             for i in -n..=n {
                 let (dx, dy) = (i as f64 * h, j as f64 * h);
@@ -421,6 +525,8 @@ pub fn adaptive(
         prof,
         r: 0.5 * tool.tool.dc,
         eps: 1e-3,
+        dirty: NO_BOX,
+        blocks: std::cell::RefCell::new(None),
     };
     let cap = prm.phi_max.clamp(5.0, 180.0).to_radians();
     let mut sweep_dir: [f64; 2];
@@ -511,19 +617,33 @@ pub fn adaptive(
             let (sn, cs) = dmath::sin_cos(prm.sweep.to_radians());
             [cs, sn]
         };
+        // each point's distance from the region's edge and whether it is allowed, worked out
+        // once a level (they do not change; the material does), in the scan's own order
+        let edge_cache: std::cell::RefCell<Vec<(f64, bool)>> = std::cell::RefCell::new(Vec::new());
         let left_area = |f: &Field, d: f64| -> f64 {
             let (lo, hi) = (ip.min, ip.max);
             let h = f.map.h;
             let mut a = 0.0;
+            let mut cache = edge_cache.borrow_mut();
+            let mut k = 0usize;
             let mut y = lo[1];
             while y <= hi[1] {
                 let mut x = lo[0];
                 while x <= hi[0] {
                     // (material within a radius of the region's edge is the rings' and the wall
                     // pass's to take)
-                    if f.material(x, y, z) && edge_dist(&f.allowed, x, y) > d && f.ok(x, y) {
-                        a += h * h;
+                    if f.material(x, y, z) {
+                        while cache.len() <= k {
+                            cache.push((f64::NAN, false));
+                        }
+                        if cache[k].0.is_nan() {
+                            cache[k] = (edge_dist(&f.allowed, x, y), f.ok(x, y));
+                        }
+                        if cache[k].0 > d && cache[k].1 {
+                            a += h * h;
+                        }
                     }
+                    k += 1;
                     x += h;
                 }
                 y += h;
@@ -574,6 +694,12 @@ pub fn adaptive(
                 }
             }};
         }
+        // whether each candidate's disk holds material, as last tested: a value stands until a
+        // sweep (or a crumb taken back) comes within its reach (the disk test reads cells within
+        // r + h of the centre, a sweep changes cells within r of its path: 2r + 3h covers both
+        // and the cells' rounding)
+        let mut disk_cache: std::collections::HashMap<(u64, u64), bool> = std::collections::HashMap::new();
+        f.dirty = NO_BOX;
         loop {
             guard += 1;
             if guard > 10_000 {
@@ -587,9 +713,27 @@ pub fn adaptive(
                 .unwrap_or([0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1])]);
             let mut best: Option<([f64; 2], f64, f64)> = None;
             let mut order: Vec<([f64; 2], f64, f64)> = Vec::new();
+            if f.dirty[0] <= f.dirty[2] {
+                let m = 2.0 * f.r + 3.0 * f.map.h;
+                let b = [f.dirty[0] - m, f.dirty[1] - m, f.dirty[2] + m, f.dirty[3] + m];
+                disk_cache.retain(|&(x, y), _| {
+                    let (x, y) = (f64::from_bits(x), f64::from_bits(y));
+                    x < b[0] || y < b[1] || x > b[2] || y > b[3]
+                });
+                f.dirty = NO_BOX;
+            }
             if entered || open_try {
                 for &p in &cands {
-                    if f.disk_has_material(p[0], p[1], z) {
+                    let key = (p[0].to_bits(), p[1].to_bits());
+                    let has = match disk_cache.get(&key) {
+                        Some(&v) => v,
+                        None => {
+                            let v = f.disk_has_material(p[0], p[1], z);
+                            disk_cache.insert(key, v);
+                            v
+                        }
+                    };
+                    if has {
                         continue;
                     }
                     // material just beyond the disk, ahead along the sweep (sign +1) or, two-way,
@@ -751,7 +895,7 @@ pub fn adaptive(
                                         .0,
                                 cur[2] + (zk - cur[2]) * (q - 1) as f64 / 4.0,
                             ];
-                            f.map.sweep(a, b, &f.prof.clone());
+                            f.sweep(a, b);
                             moves_at_level.push((a, b));
                         }
                         mv.push(PMove::Arc {
@@ -777,7 +921,7 @@ pub fn adaptive(
                             let (s2, c2) = dmath::sin_cos(a0 + std::f64::consts::FRAC_PI_2 * q as f64 / 4.0);
                             let a = [p[0] + rh * c1, p[1] + rh * s1, z];
                             let b = [p[0] + rh * c2, p[1] + rh * s2, z];
-                            f.map.sweep(a, b, &f.prof.clone());
+                            f.sweep(a, b);
                             moves_at_level.push((a, b));
                         }
                         mv.push(PMove::Arc {
@@ -790,7 +934,7 @@ pub fn adaptive(
                     cur = [p[0] + rh, p[1], z];
                 } else {
                     let b = [cur[0], cur[1], z];
-                    f.map.sweep(cur, b, &f.prof.clone());
+                    f.sweep(cur, b);
                     mv.push(PMove::Line {
                         to: b,
                         f: feed.1,
@@ -1035,7 +1179,7 @@ pub fn adaptive(
                     break;
                 }
                 let Some((phi, w, q)) = found else { break };
-                let got = f.map.sweep(pos, q, &f.prof.clone());
+                let got = f.sweep(pos, q);
                 removed += got;
                 // a step that removes less than a 0.01 mm strip counts as air: a pass grazing
                 // slivers would otherwise orbit
@@ -1064,6 +1208,7 @@ pub fn adaptive(
             // its link, the sliver left to the cleanup rings below, and counted as a stall
             if crumbs_now && keep <= CRUMB_STEPS {
                 f.map.z = undo_map;
+                *f.blocks.get_mut() = None;
                 mv.truncate(undo.0);
                 hist = undo.1;
                 retraces_log.truncate(undo.2);
@@ -1245,7 +1390,7 @@ pub fn adaptive(
                                     .collect();
                             let first = mv.len();
                             for w in pts.windows(2) {
-                                f.map.sweep(w[0], w[1], &f.prof.clone());
+                                f.sweep(w[0], w[1]);
                                 moves_at_level.push((w[0], w[1]));
                             }
                             fit_pass(&pts, f.r, feed.0, &mut mv);
@@ -1340,7 +1485,7 @@ pub fn adaptive(
                         let pts = polygon(std::slice::from_ref(sg), 0.01);
                         for p in pts.iter().skip(1).chain(std::iter::once(&(b[0], b[1]))) {
                             let q = [p.0, p.1, z];
-                            f.map.sweep(a, q, &f.prof.clone());
+                            f.sweep(a, q);
                             moves_at_level.push((a, q));
                             a = q;
                         }

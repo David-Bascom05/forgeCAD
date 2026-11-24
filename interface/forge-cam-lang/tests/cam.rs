@@ -79,7 +79,7 @@ fn nothing_cuts_below_the_stock_without_workholding() {
         .expect("the support check");
     assert!(c.other.contains("support under the stock"), "{c:?}");
     assert!(
-        o.fix.as_deref().is_some_and(|f| f.contains("below the stock")),
+        o.fix.as_deref().is_some_and(|f| f.contains("below: 0.5")),
         "{:?}",
         o.fix
     );
@@ -1822,9 +1822,10 @@ fn stock_is_a_bar_a_tube_or_a_modelled_solid() {
     ok(&stocked_to("solid(\"blank.fg\")", &tmp, 0.5), "solid");
     let cam = stocked("solid(\"blank.fg\")", &tmp);
     assert!(cam.ops.iter().any(|o| {
-        o.refusal
-            .as_deref()
-            .is_some_and(|r| r.contains("support under the stock"))
+        o.code.as_deref() == Some("fixture_collision")
+            && o.refusal
+                .as_deref()
+                .is_some_and(|r| r.contains("where no workholding is modelled"))
     }));
     // a blank whose section changes with height is not taken
     std::fs::write(
@@ -2122,4 +2123,35 @@ fn a_makers_tool_always_takes_its_own_row() {
             r.vc.v
         );
     }
+}
+
+/// z-level's default floor with no workholding declared: one posting step above the bare
+/// support (it may not touch it), so roughing to the part's bottom certifies; its lowest cut is
+/// that step above the stock's bottom.
+#[test]
+fn zlevel_stops_a_step_above_a_bare_support() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = "machining\nf = part(\"well_island.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: \"top-corner\", tol: 0.01, at: (-200, -150, -250))\nrough = zlevel(op1, tool: t1, step: 4, stepover: 4)\nprog = program(op1, post: \"fanuc\", number: 1004)\n";
+    let cam = forge_cam_lang::run(src, &dir);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    let low = cam.ops[0]
+        .paths
+        .iter()
+        .flat_map(|p| p.moves.iter())
+        .filter_map(|m| match *m {
+            forge_cam::ops::PMove::Line {
+                to,
+                phase: forge_cam::ops::Phase::Cut,
+                ..
+            }
+            | forge_cam::ops::PMove::Arc { to, .. } => Some(to[2]),
+            _ => None,
+        })
+        .fold(f64::INFINITY, f64::min);
+    assert!(low > 0.002 && low < 0.003, "the lowest cut at {low}");
 }
