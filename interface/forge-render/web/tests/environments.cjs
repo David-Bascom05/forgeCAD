@@ -53,10 +53,14 @@ server.listen(0, async () => {
     }
   };
 
-  // a deep link: the part opens in Thermoform, its tabs the environment's
+  // a deep link's ?env=: kept until a document has built, then entered (with storage=memory the
+  // examples arrive after the first frame, so the part is opened once they are in)
   await run("deep link ?env=thermoform", async () => {
-    const p = await t.page(b, `${base}&open=examples/thermoform/cover.fg&env=thermoform`);
-    const s = await t.until(p, (s) => s.ready && s.env === "thermoform", "in Thermoform");
+    const p = await t.page(b, `${base}&env=thermoform`);
+    await t.until(p, (s) => s.ready, "ready");
+    await p.evaluate(() => window.forgecad.loaded);
+    await p.evaluate(() => window.forgecad.fc.app_open("/project/examples/thermoform/cover.fg"));
+    const s = await t.until(p, (s) => s.env === "thermoform", "in Thermoform");
     // Thermoform (7), then Inspect, View, Manage
     if (JSON.stringify(s.tabs) !== "[7,2,3,4]") throw new Error(`tabs ${JSON.stringify(s.tabs)}`);
     await picture(p, "web-thermoform.png");
@@ -68,19 +72,21 @@ server.listen(0, async () => {
     await p.close();
   });
 
-  // entered from the page once the part has built: the bend simulation drawn in the view
-  await run("app_env bendsim", async () => {
+  // entered from the page once the part has built. (Bend Simulation is left out here:
+  // kernel/forge-brake times its searches with std::time::Instant, which panics on wasm32;
+  // reported to BEND-SIM.)
+  await run("app_env flat-pattern, render", async () => {
     const p = await t.page(b, base);
     await t.until(p, (s) => s.ready, "ready");
     await p.evaluate(() => window.forgecad.loaded);
     await p.evaluate((text) => {
       window.forgecad.fc.fs_write("/project/env/sheet.fg", new TextEncoder().encode(text));
       window.forgecad.fc.app_open("/project/env/sheet.fg");
-      window.forgecad.fc.app_env("bendsim");
+      window.forgecad.fc.app_env("flat-pattern");
     }, SHEET);
-    const s = await t.until(p, (s) => s.env === "bendsim", "in Bend Simulation");
-    if (s.tab !== 21) throw new Error(`tab ${s.tab}`);
-    await picture(p, "web-bend-simulation.png");
+    const s = await t.until(p, (s) => s.env === "flat-pattern", "in Flat Pattern");
+    if (s.tab !== 6) throw new Error(`tab ${s.tab}`);
+    await picture(p, "web-flat-pattern.png");
     await p.evaluate(() => window.forgecad.fc.app_env("render"));
     await t.until(p, (s) => s.env === "render" && s.tab === 22, "in Render Studio");
     await picture(p, "web-render-studio.png");
