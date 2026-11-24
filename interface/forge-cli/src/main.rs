@@ -577,13 +577,14 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     }
     // a closed pipe (`| head`) is not an error worth a panic
     let _ = writeln!(std::io::stdout(), "{text}");
-    // cam: 0 fully certified, 3 released but certified except G5 (a setup not placed), 1 refused
+    // cam: 0 fully certified, 3 released but certified except a check (G5: a setup not placed;
+    // G4: the leftover not computed), 1 refused
     if cmd == "cam"
         && r.ok
         && let forge_agent::json::Json::Obj(fs) = &r.json
-        && fs
-            .iter()
-            .any(|(k, v)| k == "certification" && *v == forge_agent::json::Json::Str("except G5".into()))
+        && fs.iter().any(|(k, v)| {
+            k == "certification" && matches!(v, forge_agent::json::Json::Str(c) if c.contains("except"))
+        })
     {
         return ExitCode::from(3);
     }

@@ -193,3 +193,18 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
 
 H.dropLoop is a theorem now, about the exact sets; that the run-time booleans decide the
 inclusion on the exact offsets (arcs, not polylines) is the op's own claim, checked where it runs.
+
+## 3-axis surfacing (Drop.lean, CAM-3AXIS, 2026-11-24): done
+
+The checker of drop.rs (the tool's column, research/cam/phase3.md). 10 theorems, standard axioms.
+- `sd_antitone`, `column_compl_nonempty`, `sd_body_ge_of_column`: a nonempty body inside the
+  column is at least as far from every point as the column, so the column's proven gap holds for
+  the cutter and a shank no wider than it (ops::certify_with).
+- `sd_column_ge_vertical`, `sd_column_ge_radial`: the depth caps gap_move takes.
+- `drop_clear`: a tip above the drop's upper bound keeps the column off the face.
+- `ring_rho_ge`, `ring_bound`, `line_rho_ge`, `line_bound`: spheres, horizontal cylinders and tori
+  about a vertical axis reduce to the vertical plane through the tool's axis (b monotone).
+
+Open: the 1D closed forms' candidates (`disk_drop`, `bowl_drop`, `plane_support`) contain the
+maximum; the sphere bound S − sd(centre) for a convex column (supporting half-space); each
+cutter lies in its column (`Column::of`, L6-tested); the z-map's soundness; L5.

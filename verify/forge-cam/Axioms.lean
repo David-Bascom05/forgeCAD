@@ -90,6 +90,16 @@ import ForgeCam
 #print axioms ForgeCam.Shadow.shadow_cover
 #print axioms ForgeCam.Shadow.shadow_face
 #print axioms ForgeCam.Shadow.certified_clear_gen
+#print axioms ForgeCam.sd_antitone
+#print axioms ForgeCam.column_compl_nonempty
+#print axioms ForgeCam.sd_body_ge_of_column
+#print axioms ForgeCam.sd_column_ge_vertical
+#print axioms ForgeCam.sd_column_ge_radial
+#print axioms ForgeCam.drop_clear
+#print axioms ForgeCam.ring_rho_ge
+#print axioms ForgeCam.ring_bound
+#print axioms ForgeCam.line_rho_ge
+#print axioms ForgeCam.line_bound
 #print axioms ForgeCam.PathEnds.chord_mono
 #print axioms ForgeCam.PathEnds.proj_near
 #print axioms ForgeCam.setDist_of_heights
