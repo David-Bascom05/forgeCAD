@@ -14,9 +14,17 @@ on:
   push:
     branches: [main]
     paths: ["kernel/**", "verify/aeneas/**", "verify/ieee754/**", "tools/aeneas/**",
+      # what the verify/aeneas/*/lean packages require from outside verify/aeneas (lakefile paths)
+      "research/kernel-audit/float-verification/**", "research/spline-loops/fp/**",
+      "verify/forge-exact/**", "verify/forge-machine/**", "verify/forge-cam/**",
+      "verify/forge-topo-check/**", "verify/sheet/**",
       ".github/workflows/aeneas.yml"]
   pull_request:
     paths: ["kernel/**", "verify/aeneas/**", "verify/ieee754/**", "tools/aeneas/**",
+      # what the verify/aeneas/*/lean packages require from outside verify/aeneas (lakefile paths)
+      "research/kernel-audit/float-verification/**", "research/spline-loops/fp/**",
+      "verify/forge-exact/**", "verify/forge-machine/**", "verify/forge-cam/**",
+      "verify/forge-topo-check/**", "verify/sheet/**",
       ".github/workflows/aeneas.yml"]
   workflow_dispatch:
 

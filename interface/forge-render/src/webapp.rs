@@ -749,6 +749,28 @@ fn num(x: f64) -> Json {
 
 /// What the page (and the tests) read of the app: the open document, its last build's word,
 /// exact (the volume's bits too, to compare with a native build's).
+/// The Robot environment as the tests wait on it: up, built, the view fitted, what is selected.
+fn robot_json(g: &Gui) -> Json {
+    let Some(p) = &g.shell.robot else {
+        return Json::Null;
+    };
+    let sel = match &p.sel {
+        Some(crate::shell::robot::Sel::Link(n)) => format!("link:{n}").into(),
+        Some(crate::shell::robot::Sel::Joint(n)) => format!("joint:{n}").into(),
+        None => Json::Null,
+    };
+    Json::obj(vec![
+        ("open", p.open.into()),
+        ("built", p.view.is_some().into()),
+        ("framed", p.framed.into()),
+        (
+            "error",
+            p.error.as_ref().map_or(Json::Null, |e| e.1.clone().into()),
+        ),
+        ("sel", sel),
+    ])
+}
+
 fn state_json(g: &Gui, canvas: Json) -> String {
     let doc = g.fg.as_ref();
     let built = g.last_built.as_ref().map(|b| {
@@ -807,6 +829,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("built", built.unwrap_or(Json::Null)),
         ("camsim", g.camsim_state().unwrap_or(Json::Null)),
         ("cam", cam_json(g)),
+        ("robot", robot_json(g)),
         // a pick of the view in flight (the host draws on until it is answered)
         ("pick_busy", g.pick_busy().into()),
         // where the shell's named things are, for the tests' clicks (`app_click`)
@@ -816,7 +839,12 @@ fn state_json(g: &Gui, canvas: Json) -> String {
                 g.shell
                     .places
                     .iter()
-                    .filter(|(n, _)| n.starts_with("cam:") || n.starts_with("tab:") || n.starts_with("tool:"))
+                    .filter(|(n, _)| {
+                        n.starts_with("cam:")
+                            || n.starts_with("tab:")
+                            || n.starts_with("tool:")
+                            || n.starts_with("robot:")
+                    })
                     .map(|(n, r)| {
                         Json::obj(vec![
                             ("name", n.clone().into()),
@@ -918,7 +946,10 @@ fn cam_json(g: &Gui) -> Json {
         ("text", w.text.clone().into()),
         ("said", w.said.clone().map_or(Json::Null, Json::from)),
         ("exported", (w.exported as f64).into()),
-        ("colour_by", w.focus.colour_by.map_or(Json::Null, |c| format!("{c:?}").into())),
+        (
+            "colour_by",
+            w.focus.colour_by.map_or(Json::Null, |c| format!("{c:?}").into()),
+        ),
         // each program's file as last read: name, state, path
         (
             "posted",

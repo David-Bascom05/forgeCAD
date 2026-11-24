@@ -175,7 +175,8 @@ fn bounds_and_the_acceleration_scale() {
     };
     let (h, one, two) = (at(0.5), at(1.0), at(2.0));
     assert!(h >= one && one >= two, "{h} {one} {two}");
-    assert!(close(one, tl.t_la));
+    // plan gives the segments; the program's t_la adds what t_min spends off them (the dwell)
+    assert!(close(one, tl.seg_la.iter().sum::<f64>()));
     println!(
         "t_min {:.3}  t_la {:.3} (x0.5 {h:.3}, x2 {two:.3})  t_stop {:.3}",
         tl.t_min, tl.t_la, tl.t_stop
@@ -199,6 +200,7 @@ fn scurve_after(prog: &str, a: f64, j: f64) -> f64 {
         accel: [a, 3600.0],
         jerk: [j, 1e6],
         tolerance: 0.02,
+        ..Default::default()
     };
     let (per, _) = lookahead::plan_scurve(&m, &tl, &p);
     tl.segments
@@ -237,6 +239,7 @@ fn an_arc_is_held_to_its_centripetal_limits() {
         accel: [30.0, 3600.0],
         jerk: [1e9, 1e6],
         tolerance: 0.02,
+        ..Default::default()
     };
     let (per, _) = lookahead::plan_scurve(&m, &tl, &p);
     let g = tl
@@ -256,6 +259,7 @@ fn an_arc_is_held_to_its_centripetal_limits() {
         accel: [1e4, 3600.0],
         jerk: [1e3, 1e6],
         tolerance: 0.02,
+        ..Default::default()
     };
     let (per, _) = lookahead::plan_scurve(&m, &tl, &p);
     assert!(
@@ -273,6 +277,7 @@ fn a_records_acceleration_takes_precedence_over_the_assumption_set() {
         accel: [500.0, 3600.0],
         jerk: [1e12, 1e6],
         tolerance: 0.02,
+        ..Default::default()
     };
     let (per, _) = lookahead::plan_scurve(&m, &tl, &p);
     let t: f64 = tl
@@ -286,4 +291,112 @@ fn a_records_acceleration_takes_precedence_over_the_assumption_set() {
         (t - trapezoid(100.0, 0.0, 0.0, 100.0, 3000.0)).abs() < 1e-6,
         "{t}"
     );
+}
+
+/// The whole program: tool changes and dwells (marks, not segments) are in t_la and t_scurve as
+/// in t_min, so the estimates never come out under the bound (CAM-UI's report).
+#[test]
+fn the_program_estimates_count_tool_changes_and_dwells() {
+    let m = builtin_named("generic-vmc3").unwrap();
+    let mut s = Setup::new(&m, Control::for_dialect(&m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -300.0])];
+    s.h = vec![(1, 100.0), (2, 90.0)];
+    let tool = |t: u32| SimTool {
+        t,
+        name: format!("e{t}"),
+        tip: [0.0, 0.0, -100.0],
+        body: vec![(5.0, 0.0, 25.0), (12.0, 25.0, 80.0)],
+        cut: Cut::Mill { r: 5.0, corner: 0.0 },
+    };
+    s.tools = vec![tool(1), tool(2)];
+    s.start_tool = Some(1);
+    let prog = "G43 H1\nG0 X0 Y0 Z10.\nG1 X1. F6000.\nG4 P2000\nG0 Z100.\nT2 M6\nG43 H2\nG0 X0 Y0 Z10.\n\
+                G1 X1. F6000.\nG4 P3000\nG0 Z100.\nT1 M6\nG43 H1\nG0 X2. Y0 Z10.\n";
+    let tl = sim::simulate(prog, &s).unwrap();
+    let on_segments: f64 = tl.segments.iter().map(|g| g.t_min).sum();
+    let off = tl.t_min - on_segments;
+    let change = m.changer.as_ref().and_then(|c| c.change_s).unwrap_or(0.0);
+    // two dwells (5 s) and two changes: off the segments, and counted once each
+    assert!(off >= 5.0 + 2.0 * change - 1e-9, "{off}");
+    assert!(tl.t_min <= tl.t_la + 1e-9, "t_min {} t_la {}", tl.t_min, tl.t_la);
+    assert!(tl.t_min <= tl.t_scurve + 1e-9, "t_min {} t_scurve {}", tl.t_min, tl.t_scurve);
+    let la: f64 = tl.seg_la.iter().sum();
+    let sc: f64 = tl.seg_scurve.iter().sum();
+    assert!(close(tl.t_la, la + off), "{} vs {}", tl.t_la, la + off);
+    assert!(close(tl.t_scurve, sc + off), "{} vs {}", tl.t_scurve, sc + off);
+}
+
+// ---- the control's block cycle and look-ahead depth (record `block_cycle`, `lookahead`)
+
+/// 2000 moves of 0.1 mm at a feed that would take 1 ms each: with a 4 ms block cycle each takes at
+/// least 4 ms, so the run takes at least n × 4 ms; with none (UNKNOWN) the limit is not applied.
+#[test]
+fn a_block_cycle_holds_each_block_to_one_cycle() {
+    let n = 2000;
+    let mut prog = String::from("G1 X0. F6000.\n");
+    for i in 1..=n {
+        prog.push_str(&format!("X{:.1}\n", 0.1 * i as f64));
+    }
+    let (m, tl) = run(&prog);
+    let m = no_accel(m);
+    let base = lookahead::SCurve::default();
+    let on_moves = |per: &[f64]| -> f64 {
+        tl.segments.iter().zip(per).filter(|(g, _)| g.line >= 5).map(|(_, t)| *t).sum()
+    };
+    let free = on_moves(&lookahead::plan_scurve(&m, &tl, &base).0);
+    let cyc = lookahead::SCurve {
+        block_cycle: Some(0.004),
+        ..base
+    };
+    let (per, total) = lookahead::plan_scurve(&m, &tl, &cyc);
+    let moves: Vec<f64> = tl.segments.iter().zip(&per).filter(|(g, _)| g.line >= 5).map(|(_, t)| *t).collect();
+    assert_eq!(moves.len(), n);
+    assert!(moves.iter().all(|t| *t >= 0.004 - 1e-12), "{:?}", &moves[..5]);
+    assert!(total >= n as f64 * 0.004 && on_moves(&per) >= n as f64 * 0.004, "{total}");
+    assert!(free < n as f64 * 0.004, "{free}: the test needs blocks faster than the cycle");
+    // the record's keys reach the program estimate
+    let mut m2 = m.clone();
+    m2.block_cycle = Some(0.004);
+    assert_eq!(lookahead::SCurve::for_machine(&m2).block_cycle, Some(0.004));
+    assert_eq!(lookahead::SCurve::for_machine(&m).block_cycle, None);
+}
+
+/// A shallow look-ahead slows a run of short moves: each block's exit must let the control stop
+/// within the window; with the whole run in view the middle runs at feed.
+#[test]
+fn a_shallow_look_ahead_slows_short_moves() {
+    let mut prog = String::from("G1 X0. F6000.\n");
+    for i in 1..=100 {
+        prog.push_str(&format!("X{:.1}\n", 0.5 * i as f64));
+    }
+    let (m, tl) = run(&prog);
+    let m = no_accel(m);
+    let t = |w: Option<usize>| {
+        lookahead::plan_scurve(
+            &m,
+            &tl,
+            &lookahead::SCurve {
+                window: w,
+                ..Default::default()
+            },
+        )
+        .1
+    };
+    let (all, w50, w5, w1) = (t(None), t(Some(50)), t(Some(5)), t(Some(1)));
+    assert!(all <= w50 + 1e-12 && w50 <= w5 + 1e-12 && w5 <= w1 + 1e-12, "{all} {w50} {w5} {w1}");
+    assert!(w1 > 1.5 * all, "{w1} vs {all}");
+    // a window as long as the run is the whole run
+    assert!(close(t(Some(1000)), all));
+}
+
+#[test]
+fn the_record_keys_parse_and_refuse() {
+    let src = include_str!("../data/machines/generic.toml");
+    let i = src.find("name = \"generic-vmc3\"").unwrap();
+    let with = |extra: &str| format!("{}{}\n{}", &src[..i], extra, &src[i..]);
+    let ok = forge_machine::MachineDef::parse_all(&with("block_cycle = 0.002\nlookahead = 150")).unwrap();
+    assert_eq!((ok[0].block_cycle, ok[0].lookahead), (Some(0.002), Some(150)));
+    for bad in ["block_cycle = 0", "block_cycle = -1", "lookahead = 0", "lookahead = 2.5"] {
+        assert!(forge_machine::MachineDef::parse_all(&with(bad)).is_err(), "{bad}");
+    }
 }

@@ -48,6 +48,7 @@ fn usage() -> ExitCode {
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, parts under DIR, default .; edits only if --writable)\n       \
          forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]   (the browser app on DIR's files)\n       \
          forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fg)\n       \
+         forgecad tool import FILE.json|FILE.tools [--project DIR | --user] [--json]   (a Fusion tool library into your own cam/ tools, cited to the file)\n       \
          forgecad machine SETUP.toml [--json]   (posted G-code on a machine: timeline, collisions, removal)\n       \
          forgecad machine list [--json] | new NAME (--from M | --template T) [--project] | check FILE|NAME [--json]   (your own machines)\n       \
          forgecad mesh FILE.stl|obj|3mf [--json]        (a mesh read and measured: not a B-rep)\n       \
@@ -240,6 +241,7 @@ fn main() -> ExitCode {
         Some("web") => web::main(&args[2..]),
         Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("machine") if args.len() >= 3 => machine(&args[2..]),
+        Some("tool") if args.len() >= 4 && args[2] == "import" => tool_import(&args[3..]),
         Some("mesh") if args.len() >= 3 => mesh(&args[2..]),
         Some("tool") if args.get(2).is_some_and(|w| w == "log") => {
             let env = forge_cam_lang::toollog::Env {
@@ -401,6 +403,127 @@ fn mesh(argv: &[String]) -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// `forgecad tool import FILE`: a Fusion tool library (the JSON, or a `.tools` archive holding
+/// it) imported into the user's own library: the project's `cam/` (default: the current
+/// folder's) or the user level (`--user`: `<config>/forgecad/cam/tools`). Every value is cited to
+/// the file and its library version (`user` cites), presets kept where the file names a material.
+/// Never written into forgecad's own data.
+fn tool_import(argv: &[String]) -> ExitCode {
+    let (mut project, mut user, mut json, mut file) = (".".to_string(), false, false, None);
+    let mut it = argv.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--project" => project = it.next().cloned().unwrap_or(project),
+            "--user" => user = true,
+            "--json" => json = true,
+            _ => file = Some(w.clone()),
+        }
+    }
+    let Some(file) = file else { return usage() };
+    let path = std::path::Path::new(&file);
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .unwrap_or("tools")
+        .to_string();
+    let bytes = match forge_dirs::fs::read(path) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{file}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    // a `.tools` file is a zip holding tools.json
+    let text = if bytes.starts_with(b"PK") {
+        match forge_import::zip::Zip::new(&bytes)
+            .map_err(|e| e.to_string())
+            .and_then(|z| {
+                z.read("tools.json")
+                    .ok_or_else(|| "no tools.json in the archive".to_string())
+            }) {
+            Ok(b) => String::from_utf8_lossy(&b).into_owned(),
+            Err(e) => {
+                eprintln!("{file}: {e}");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        String::from_utf8_lossy(&bytes).into_owned()
+    };
+    let today = forge_machine_builder::cli::today_utc();
+    let imp = match forge_cam_import::fusion_with(
+        &text,
+        &name,
+        &today,
+        forge_cam_import::Opts {
+            cite: true,
+            presets: true,
+            assemblies: false,
+        },
+    ) {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("{file}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let dir = if user {
+        match forge_dirs::config() {
+            Some(c) => c.join("forgecad").join("cam").join("tools"),
+            None => {
+                eprintln!("no user configuration folder on this system: use --project DIR");
+                return ExitCode::FAILURE;
+            }
+        }
+    } else {
+        std::path::Path::new(&project).join("cam")
+    };
+    if dir.components().any(|c| c.as_os_str() == "forge-tooling") {
+        eprintln!("refused: {} is forgecad's own library, not yours", dir.display());
+        return ExitCode::FAILURE;
+    }
+    let stem: String = name
+        .split('.')
+        .next()
+        .unwrap_or("tools")
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let out = dir.join(format!("{stem}.tools.toml"));
+    if let Err(e) = forge_dirs::fs::create_dir_all(&dir).and_then(|_| forge_dirs::fs::write(&out, &imp.toml))
+    {
+        eprintln!("{}: {e}", out.display());
+        return ExitCode::FAILURE;
+    }
+    if json {
+        let j = forge_agent::json::Json::obj(vec![
+            ("ok", true.into()),
+            ("file", forge_agent::json::Json::Str(out.display().to_string())),
+            ("tools", forge_agent::json::Json::Num(imp.tools as f64)),
+            (
+                "warnings",
+                forge_agent::json::Json::Num(imp.warnings.len() as f64),
+            ),
+        ]);
+        println!("{j}");
+    } else {
+        println!("{} tools from {name} into {}", imp.tools, out.display());
+        for w in imp.warnings.iter().take(20) {
+            println!("  warning: {w}");
+        }
+        if imp.warnings.len() > 20 {
+            println!("  ... {} more warnings", imp.warnings.len() - 20);
+        }
+    }
+    ExitCode::SUCCESS
+}
+
 /// Posted G-code simulated on a machine (forge-machine): `list` the machines, or run a setup file.
 fn machine(argv: &[String]) -> ExitCode {
     let envelopes = |def: &forge_machine_lang::MachineDefRef, dir: &std::path::Path| {
@@ -465,6 +588,9 @@ fn import(argv: &[String]) -> ExitCode {
     }
     let Some(file) = file else { return usage() };
     let path = std::path::Path::new(&file);
+    if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("urdf")) {
+        return import_urdf(path, Path::new(&dir), json);
+    }
     let stem = path
         .file_name()
         .and_then(|s| s.to_str())
@@ -623,6 +749,63 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     } else {
         ExitCode::FAILURE
     }
+}
+
+/// `import ROBOT.urdf [-o DIR]`: the URDF as an unlinked robot document, DIR/ROBOT_robot.fg, its
+/// meshes referenced where they are.
+fn import_urdf(path: &Path, dir: &Path, json: bool) -> ExitCode {
+    let stem = path
+        .file_stem()
+        .map_or_else(|| "robot".into(), |s| s.to_string_lossy().into_owned());
+    let out = dir.join(format!("{stem}_robot.fg"));
+    let urdf_dir = path
+        .parent()
+        .map(|p| {
+            std::fs::canonicalize(if p.as_os_str().is_empty() {
+                Path::new(".")
+            } else {
+                p
+            })
+        })
+        .and_then(Result::ok)
+        .unwrap_or_default();
+    let _ = std::fs::create_dir_all(dir);
+    let doc_dir = std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf());
+    let r = std::fs::read_to_string(path)
+        .map_err(|e| e.to_string())
+        .and_then(|x| forge_urdf::import::import(&x, &urdf_dir, &doc_dir));
+    let i = match r {
+        Ok(i) => i,
+        Err(e) => {
+            eprintln!("{}: {e}", path.display());
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(e) = std::fs::write(&out, &i.text) {
+        eprintln!("{}: {e}", out.display());
+        return ExitCode::FAILURE;
+    }
+    if json {
+        println!(
+            "{}",
+            forge_agent::json::Json::obj(vec![
+                ("ok", true.into()),
+                ("file", out.to_string_lossy().as_ref().into()),
+                ("links", i.links.into()),
+                ("joints", i.joints.into()),
+                (
+                    "dropped",
+                    forge_agent::json::Json::Arr(i.dropped.iter().map(|d| d.as_str().into()).collect()),
+                ),
+            ])
+        );
+    } else {
+        println!("wrote {}: {} links, {} joints", out.display(), i.links, i.joints);
+        for d in &i.dropped {
+            println!("not imported: {d}");
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 /// `cam F post`: each program's file written where its statement says (beside the document), or

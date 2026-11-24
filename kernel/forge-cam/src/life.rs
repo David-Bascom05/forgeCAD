@@ -73,6 +73,12 @@ fn scan_entries(path: &OpPath, map: &HeightMap, prof: &Profile, d: f64) -> Vec<E
     let mut at = path.start;
     for (i, mv) in path.moves.iter().enumerate() {
         match *mv {
+            // a probe cuts nothing
+            PMove::Probe { to, back, .. } => {
+                if !back {
+                    at = to;
+                }
+            }
             PMove::Rapid { to } => {
                 m.sweep(at, to, prof);
                 at = to;

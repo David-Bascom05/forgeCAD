@@ -44,7 +44,14 @@ pub enum Cut {
     /// A turning insert's nose: radius rn, its centre at the programmed tip plus `centre`
     /// (radial, axial) in the part's (r, z) plane.
     Nose { rn: f64, centre: [f64; 2] },
+    /// A touch probe's stylus ball of radius r (the tip is the ball's lowest point): it removes
+    /// nothing. On a skip move its first contact with the stock as cut is the trigger; on any
+    /// other move a contact is a crash (removal::MillResult::probe_hits).
+    Probe { r: f64 },
 }
+
+/// The affine tip's start tip and its (joint, column) pairs (`Setup::tip_columns`).
+pub type TipColumns = ([f64; 3], Vec<(usize, [f64; 3])>);
 
 /// The setup: the machine, its control, the mounts used, offsets and tools.
 #[derive(Clone, Debug)]
@@ -72,6 +79,15 @@ pub struct Setup<'a> {
     pub start: Vec<f64>,
     /// The tool in the spindle (or the turret station) at the start.
     pub start_tool: Option<u32>,
+    /// Where skip moves stop: (line, path parameter), from a removal pass's triggers
+    /// (`removal::mill_probing`): a simulation-level estimate against the stock model, not the
+    /// machine's stop (the moves after a skip are still reported not checked, `skip.end`,
+    /// estimated). A skip move with no entry is taken to its end.
+    pub skip_stops: Vec<(usize, f64)>,
+    /// Each tool's cutter radius register (SINUMERIK: its D1's radius), what G41/G42 offsets the
+    /// path by: with the path compensated in CAM, the wear alone; with the contour programmed, the
+    /// radius plus the wear (comp.rs).
+    pub radius: Vec<(u32, f64)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -96,13 +112,24 @@ impl<'a> Setup<'a> {
     /// letters of channel 1, joints starting at home, no tools and no offsets.
     pub fn new(def: &'a MachineDef, control: Control) -> Result<Setup<'a>, SimError> {
         let mut joint_of = Vec::new();
+        // the joint of each letter on the control's channel (Z on channel 2 is the joint Z2)
+        let ch = control.channel;
         for l in &control.letters {
             let j = def
                 .joints
                 .iter()
-                .position(|j| j.letter == l.to_string() || j.letter == format!("{l}1"))
-                .or_else(|| def.joints.iter().position(|j| j.letter.starts_with(*l)))
-                .ok_or_else(|| SimError::Setup(format!("the control's letter {l} drives no joint")))?;
+                .position(|j| {
+                    if ch == 1 {
+                        j.letter == l.to_string() || j.letter == format!("{l}1")
+                    } else {
+                        j.letter == format!("{l}{ch}")
+                    }
+                })
+                .ok_or_else(|| {
+                    SimError::Setup(format!(
+                        "the control's letter {l} drives no joint on channel {ch}"
+                    ))
+                })?;
             joint_of.push(j);
         }
         let tool_mount = def
@@ -132,6 +159,8 @@ impl<'a> Setup<'a> {
             feed_combined: true,
             start: def.joints.iter().map(|j| j.home).collect(),
             start_tool: None,
+            skip_stops: Vec::new(),
+            radius: Vec::new(),
             control,
         })
     }
@@ -140,12 +169,141 @@ impl<'a> Setup<'a> {
         self.tools.iter().find(|x| x.t == t)
     }
 
+    /// Where tool t sits: its gang station, else the setup's tool mount.
+    pub fn mount_for(&self, t: u32) -> Option<&crate::def::Mount> {
+        self.def
+            .gang_mount(t)
+            .or_else(|| self.def.mount(&self.tool_mount))
+    }
+
+    /// `tip_in_part`'s tip along a segment whose rotaries stay put, s ∈ [0, 1] (removal calls it
+    /// thousands of times a move): the lookups and the fixed rotaries done once, the same
+    /// operations otherwise, so the same bits as `tip_in_part(&seg.at(s), t).0`.
+    pub fn tip_along<'s>(&'s self, seg: &'s Segment, t: u32) -> Option<impl Fn(f64) -> [f64; 3] + 's> {
+        use crate::kin;
+        let tool = self.tool(t)?;
+        let m = self.mount_for(t)?;
+        let pm = self
+            .def
+            .mount(&self.part_mount)
+            .filter(|m| m.kind == MountKind::Part)?;
+        let fixed: Vec<bool> = seg.q0.iter().zip(&seg.q1).map(|(a, b)| a == b).collect();
+        let kc = kin::Fixed::new(self.def, &seg.q0, &fixed);
+        let (tl, pl) = (self.def.joint_index(&m.link), self.def.joint_index(&pm.link));
+        let y = kin::cross(pm.dir, pm.xdir);
+        let local = kin::Rigid {
+            r: [
+                [pm.xdir[0], y[0], pm.dir[0]],
+                [pm.xdir[1], y[1], pm.dir[1]],
+                [pm.xdir[2], y[2], pm.dir[2]],
+            ],
+            p: pm.at,
+        };
+        let at = kin::add(m.at, tool.tip);
+        let def = self.def;
+        let buf = std::cell::RefCell::new((vec![0.0; seg.q0.len()], vec![kin::Rigid::ID; def.joints.len()]));
+        Some(move |s: f64| {
+            let mut b = buf.borrow_mut();
+            let (q, p) = &mut *b;
+            seg.at_into(s, q);
+            kc.pose_into(def, q, p);
+            let pick = |i: Option<usize>| match i {
+                Some(i) => p[i],
+                None => kin::Rigid::ID,
+            };
+            let tip = pick(tl).apply(at);
+            let f = pick(pl).then(&local).inverse();
+            f.apply(tip)
+        })
+    }
+
+    /// `tip_along`'s tip in its affine form: with the rotaries put, the tip in the part's frame is
+    /// an affine function of the linear joints, so it is the tip at the segment's start plus, for
+    /// each linear joint that moves, its change times the joint's column (its axis carried into
+    /// the part's frame by the rotations above it, + on the tool's chain, − on the part's, nothing
+    /// when on both). Not the same bits as `tip_along`: within the bound docs/cam-machine.md
+    /// states (Removal: the tip's two forms).
+    pub fn tip_affine<'s>(&'s self, seg: &'s Segment, t: u32) -> Option<impl Fn(f64) -> [f64; 3] + 's> {
+        let (base, cols) = self.tip_columns(seg, t)?;
+        let buf = std::cell::RefCell::new(vec![0.0; seg.q0.len()]);
+        Some(move |s: f64| {
+            let mut q = buf.borrow_mut();
+            seg.at_into(s, &mut q);
+            let mut x = base;
+            for (j, c) in &cols {
+                let d = q[*j] - seg.q0[*j];
+                for i in 0..3 {
+                    x[i] += d * c[i];
+                }
+            }
+            x
+        })
+    }
+
+    /// The affine form's start tip (`tip_along`'s operations at the start's joint values) and the
+    /// moving linear joints' columns.
+    pub fn tip_columns(&self, seg: &Segment, t: u32) -> Option<TipColumns> {
+        use crate::kin;
+        let tool = self.tool(t)?;
+        let m = self.mount_for(t)?;
+        let pm = self
+            .def
+            .mount(&self.part_mount)
+            .filter(|m| m.kind == MountKind::Part)?;
+        let n = self.def.joints.len();
+        if (0..n).any(|j| self.def.joints[j].ty == crate::def::JointType::Rotary && seg.q0[j] != seg.q1[j]) {
+            return None;
+        }
+        let fixed: Vec<bool> = seg.q0.iter().zip(&seg.q1).map(|(a, b)| a == b).collect();
+        let kc = kin::Fixed::new(self.def, &seg.q0, &fixed);
+        let p = kc.pose(self.def, &seg.q0);
+        let (tl, pl) = (self.def.joint_index(&m.link), self.def.joint_index(&pm.link));
+        let y = kin::cross(pm.dir, pm.xdir);
+        let local = kin::Rigid {
+            r: [
+                [pm.xdir[0], y[0], pm.dir[0]],
+                [pm.xdir[1], y[1], pm.dir[1]],
+                [pm.xdir[2], y[2], pm.dir[2]],
+            ],
+            p: pm.at,
+        };
+        let pick = |i: Option<usize>| match i {
+            Some(i) => p[i],
+            None => kin::Rigid::ID,
+        };
+        let f = pick(pl).then(&local).inverse();
+        let base = f.apply(pick(tl).apply(kin::add(m.at, tool.tip)));
+        let chain = |name: &str| match self.def.joint_index(name) {
+            Some(_) => self.def.chain(name),
+            None => Some(Vec::new()),
+        };
+        let (on_tool, on_part) = (chain(&m.link)?, chain(&pm.link)?);
+        let arc = match &seg.path {
+            Path::Arc { a, b, .. } => [Some(*a), Some(*b)],
+            Path::Line => [None, None],
+        };
+        let mut cols = Vec::new();
+        for (j, (jt, fx)) in self.def.joints.iter().zip(&fixed).enumerate() {
+            if jt.ty != crate::def::JointType::Linear || (*fx && !arc.contains(&Some(j))) {
+                continue;
+            }
+            let sign = match (on_tool.contains(&j), on_part.contains(&j)) {
+                (true, false) => 1.0,
+                (false, true) => -1.0,
+                _ => continue,
+            };
+            let up = self.def.joint_index(&jt.parent).map_or(kin::Rigid::ID, |i| p[i]);
+            cols.push((j, kin::scale(f.dir(up.dir(jt.axis)), sign)));
+        }
+        Some((base, cols))
+    }
+
     /// A tool's tip and axis (tip toward the gauge) in the part's frame at joint values q.
     pub fn tip_in_part(&self, q: &[f64], t: u32) -> Option<([f64; 3], [f64; 3])> {
         use crate::kin;
         let tool = self.tool(t)?;
         let p = kin::pose(self.def, q);
-        let m = self.def.mount(&self.tool_mount)?;
+        let m = self.mount_for(t)?;
         let l = kin::link(self.def, &p, &m.link);
         let tip = l.apply(kin::add(m.at, tool.tip));
         let f = kin::part_frame(self.def, &p, &self.part_mount)?.inverse();
@@ -199,6 +357,28 @@ pub struct Segment {
 }
 
 impl Segment {
+    /// `at` into a buffer of q0.len().
+    pub fn at_into(&self, s: f64, q: &mut [f64]) {
+        for (k, (a, b)) in self.q0.iter().zip(&self.q1).enumerate() {
+            q[k] = a + s * (b - a);
+        }
+        if let Path::Arc {
+            a,
+            b,
+            c,
+            r,
+            r1,
+            a0,
+            sweep,
+        } = &self.path
+        {
+            let (sn, cs) = dmath::sin_cos(a0 + s * sweep);
+            let rs = r + s * (r1 - r);
+            q[*a] = c[0] + rs * cs;
+            q[*b] = c[1] + rs * sn;
+        }
+    }
+
     /// Joint values at s ∈ [0, 1].
     pub fn at(&self, s: f64) -> Vec<f64> {
         let mut q: Vec<f64> = self
@@ -229,6 +409,12 @@ impl Segment {
 /// A non-motion happening on the timeline.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Happening {
+    /// A construct read whose effect is the machine's (gcode::Ev::NotModelled): reported by
+    /// `unchecked`.
+    NotModelled {
+        path: String,
+        check: &'static str,
+    },
     ToolChange {
         t: u32,
         seconds: f64,
@@ -255,6 +441,31 @@ pub enum Happening {
     /// M60: the pallet changer swaps the pallet in the machining position.
     PalletChange {
         seconds: f64,
+    },
+    /// A multi-channel wait (sim::multi synchronises the channels at it).
+    Wait {
+        n: u32,
+    },
+    /// A skip (probe) move starts (G38.2–.5 / G31, `code` in tenths): the segment after this mark
+    /// is swept to its programmed end (collision, removal), but the machine stops where the probe
+    /// triggers: its time counts 0 in `t_min`, and the moves after it start from `stop`, the
+    /// path parameter the setup's `skip_stops` gives (a removal pass's trigger), or from the
+    /// segment's end when none is known (reported by `unchecked` as `skip.end`).
+    Skip {
+        code: u16,
+        stop: Option<f64>,
+    },
+    /// A probing macro switched the probe on or off: its small Z move (unpublished) is not
+    /// simulated (`unchecked`: `probe.switch`).
+    ProbeSwitch {
+        on: bool,
+    },
+    /// A single-surface measure macro starts: the segment after this mark is its search, swept
+    /// to `q` past the surface like a skip move (`stop` as for Skip); the machine then returns to
+    /// the start (the search's line, already swept), so the position after it is known. Its
+    /// time is not modelled (0 in t_min; `unchecked`: `probe.measure_time`).
+    Measure {
+        stop: Option<f64>,
     },
 }
 
@@ -314,6 +525,25 @@ pub struct Timeline {
     /// segment in `seg_scurve`. Not a prediction; `t_min` is the guaranteed lower bound beside it.
     pub t_scurve: f64,
     pub seg_scurve: Vec<f64>,
+    /// The moves after a skip (probe) move whose start depends on where the probe stops: each
+    /// with the joints that start, and end, at the skip's stop (collide checks them for every
+    /// stop).
+    pub after_skip: Vec<SkipDep>,
+    /// Skip moves whose following moves could not be described that way (an arc, a move made
+    /// of several segments, another skip before the probed axes are set again): their lines.
+    pub skip_unmodelled: Vec<usize>,
+}
+
+/// A segment after a skip move whose joints depend on the skip's stop u ∈ [0, 1].
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkipDep {
+    /// The skip move's segment index.
+    pub skip: usize,
+    /// The dependent segment's index.
+    pub segment: usize,
+    /// Per joint: starts (ends) at the skip's stop, not at a programmed value.
+    pub start: Vec<bool>,
+    pub end: Vec<bool>,
 }
 
 fn q_to_f(v: i64, k: u32) -> f64 {
@@ -332,13 +562,125 @@ fn trap(v: f64, a: f64) -> f64 {
     }
 }
 
+/// Under SINUMERIK TRAORI with the rotary axes held (3+2): the joints that put the tool tip at
+/// program point `words` (X Y Z, mm), the point taken through the programmable frame `f` about
+/// the work offset's zero into the table's frame (the work offset's zero: where the tip is with
+/// every linear joint at its offset and the rotary joints at machine 0), then through the table's
+/// pose at `q`; the linear joints solved for it (the tool side translates: exact). PGAsl 6.2,
+/// PGsl 12.4.
+#[allow(clippy::too_many_arguments)]
+fn traori_q(
+    s: &Setup,
+    words: &[Option<i64>],
+    q: &[f64],
+    wcs: &[f64],
+    toff: &[f64],
+    f: &[[f64; 3]; 3],
+    l: f64,
+    len: &dyn Fn(i64, usize) -> f64,
+) -> Result<Vec<f64>, String> {
+    let def = s.def;
+    let ix: Vec<usize> = ['X', 'Y', 'Z']
+        .iter()
+        .map(|c| s.control.idx(*c).ok_or("TRAORI needs X, Y and Z"))
+        .collect::<Result<_, _>>()?;
+    let mut w = [0.0; 3];
+    for (k, i) in ix.iter().enumerate() {
+        w[k] = len(words[*i].ok_or("an unknown X, Y or Z under TRAORI")?, *i);
+    }
+    // the work offset's zero in the table's frame
+    let mut qg = q.to_vec();
+    for (i, j) in s.joint_of.iter().enumerate() {
+        if def.joints[*j].ty == JointType::Rotary {
+            if wcs[i] != 0.0 {
+                return Err("a work offset on a rotary axis under TRAORI is not modelled".into());
+            }
+            qg[*j] = 0.0;
+        } else {
+            qg[*j] = wcs[i] + toff[i];
+        }
+    }
+    let (g, _) = crate::kin::tip_in_part(def, &qg, &s.tool_mount, &s.part_mount, l)
+        .ok_or("TRAORI: no tool or part mount")?;
+    let p = [0, 1, 2].map(|r| g[r] + (0..3).map(|c| f[r][c] * w[c]).sum::<f64>());
+    let pose = crate::kin::pose(def, q);
+    let target = crate::kin::part_frame(def, &pose, &s.part_mount)
+        .ok_or("TRAORI: no part mount")?
+        .apply(p);
+    // the tip is affine in the three linear joints: tip(x) = t0 + A x
+    let js: Vec<usize> = ix.iter().map(|i| s.joint_of[*i]).collect();
+    if js.iter().any(|j| def.joints[*j].ty != JointType::Linear) {
+        return Err("TRAORI: X, Y and Z must be linear joints".into());
+    }
+    let tip = |qq: &[f64]| -> Result<[f64; 3], String> {
+        let pz = crate::kin::pose(def, qq);
+        Ok(crate::kin::tool_tip(def, &pz, &s.tool_mount, l)
+            .ok_or("TRAORI: no tool mount")?
+            .0)
+    };
+    let mut q0 = q.to_vec();
+    for j in &js {
+        q0[*j] = 0.0;
+    }
+    let t0 = tip(&q0)?;
+    let mut a = [[0.0; 3]; 3];
+    for (k, j) in js.iter().enumerate() {
+        let mut qe = q0.clone();
+        qe[*j] = 1.0;
+        let te = tip(&qe)?;
+        for r in 0..3 {
+            a[r][k] = te[r] - t0[r];
+        }
+    }
+    let det = |m: &[[f64; 3]; 3]| {
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    };
+    let d = det(&a);
+    if d.abs() < 1e-12 {
+        return Err("TRAORI: X, Y and Z do not span space".into());
+    }
+    let b = [0, 1, 2].map(|r| target[r] - t0[r]);
+    let mut out = q.to_vec();
+    for (k, j) in js.iter().enumerate() {
+        let mut m = a;
+        for r in 0..3 {
+            m[r][k] = b[r];
+        }
+        out[*j] = det(&m) / d;
+    }
+    Ok(out)
+}
+
 /// Runs a program on a setup.
 pub fn simulate(text: &str, s: &Setup) -> Result<Timeline, SimError> {
-    let (blocks, _) = gcode::run(text, &s.control).map_err(SimError::G)?;
+    // a control that calls tools by name (SINUMERIK T="name") takes the setup's names
+    let mut c = s.control.clone();
+    if c.lex.native840d && c.tool_names.is_empty() {
+        c.tool_names = s.tools.iter().map(|t| (t.name.clone(), t.t)).collect();
+    }
+    let (blocks, _) = gcode::run(text, &c).map_err(SimError::G)?;
     simulate_blocks(&blocks, s)
 }
 
 pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError> {
+    // cutter compensation: the tool centre's path in place of the programmed one
+    let compensated;
+    let blocks = if blocks.iter().any(|b| matches!(b.ev, Ev::Comp { .. })) {
+        let ix = match (s.control.idx('X'), s.control.idx('Y')) {
+            (Some(x), Some(y)) => [x, y],
+            _ => return Err(SimError::Setup("cutter compensation needs X and Y".into())),
+        };
+        let radius = |t: u32| s.radius.iter().find(|(n, _)| *n == t).map(|(_, r)| *r);
+        let model = s.control.comp.ok_or_else(|| {
+            SimError::Setup("cutter compensation on a control that does not cite it".into())
+        })?;
+        compensated = crate::comp::apply(blocks, ix, s.control.decimals, s.start_tool, model, &radius)
+            .map_err(|(line, what)| SimError::At { line, what })?;
+        &compensated[..]
+    } else {
+        blocks
+    };
     let def = s.def;
     let n = def.joints.len();
     let k = s.control.decimals;
@@ -362,6 +704,8 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         seg_la: Vec::new(),
         t_scurve: 0.0,
         seg_scurve: Vec::new(),
+        after_skip: Vec::new(),
+        skip_unmodelled: Vec::new(),
     };
     let mut wcs: Vec<f64> = s
         .wcs
@@ -387,40 +731,113 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         .and_then(|lj| s.joint_of.iter().position(|j| def.joints[*j].name == *lj));
     let mut t = 0.0f64;
     let mut t_est = 0.0f64;
+    // a word of letter i in mm (linear) or degrees (rotary): an inch program's linear words are
+    // counts of 10^-k inch, w · 254 · 10^-(k+1) mm
+    let inch = s.control.inch;
+    let len = |w: i64, i: usize| -> f64 {
+        if inch && !s.control.rotary[i] {
+            w.checked_mul(254)
+                .map_or(w as f64 * 25.4 / 10f64.powi(k as i32), |x| q_to_f(x, k + 1))
+        } else {
+            q_to_f(w, k)
+        }
+    };
+    // a feed in mm/min (an inch program's in inch/min)
+    let feed_mm = |f: i64| -> f64 {
+        if inch {
+            f.checked_mul(254)
+                .map_or(f as f64 * 25.4 / 10f64.powi(fk as i32), |x| q_to_f(x, fk + 1))
+        } else {
+            q_to_f(f, fk)
+        }
+    };
+    // an inch program's feed applies to inches: a feed that turns a rotary joint is not modelled
+    let inch_rotary = |q0: &[f64], q1: &[f64], ln: usize| -> Result<(), SimError> {
+        if inch
+            && def
+                .joints
+                .iter()
+                .enumerate()
+                .any(|(j, jt)| jt.ty == JointType::Rotary && q0[j] != q1[j])
+        {
+            return Err(SimError::At {
+                line: ln,
+                what: "a feed move turning a rotary axis in an inch program is not modelled".into(),
+            });
+        }
+        Ok(())
+    };
     // the program position (control letters) to joint values, keeping unspecified joints
-    let to_q = |words: &[Option<i64>], q: &[f64], wcs: &[f64], toff: &[f64]| -> Vec<f64> {
+    let to_q = |words: &[Option<i64>],
+                q: &[f64],
+                wcs: &[f64],
+                toff: &[f64],
+                tr: Option<&[[f64; 3]; 3]>,
+                ln: usize|
+     -> Result<Vec<f64>, SimError> {
+        if let Some(f) = tr {
+            let l = length_letter.map_or(0.0, |li| toff[li]);
+            return traori_q(s, words, q, wcs, toff, f, l, &len)
+                .map_err(|what| SimError::At { line: ln, what });
+        }
         let mut out = q.to_vec();
         for (i, w) in words.iter().enumerate() {
             if let Some(w) = w {
-                let mut v = q_to_f(*w, k);
+                let mut v = len(*w, i);
                 if s.control.diameter == Some(s.control.letters[i]) {
                     v *= 0.5;
                 }
                 out[s.joint_of[i]] = v + wcs[i] + toff[i];
             }
         }
-        out
+        Ok(out)
     };
     let push_seg = |tl: &mut Timeline, t: &mut f64, t_est: &mut f64, seg: Segment| {
         *t += seg.t_min;
         *t_est += seg.t_stop;
         tl.segments.push(seg);
     };
+    // after a skip move: (its segment, the joints still at its unknown stop)
+    let mut follow: Option<(usize, Vec<bool>)> = None;
+    // SINUMERIK TRAORI (3+2): the programmable frame's rotation while it is on
+    let mut traori: Option<[[f64; 3]; 3]> = None;
     for b in blocks {
         let ln = b.line;
         let mark = |tl: &mut Timeline, t: f64, what: Happening| tl.marks.push(Mark { line: ln, t, what });
+        // the joints this event sets to programmed values (absolute words; incremental ones from
+        // an unknown position the interpreter refuses)
+        let named: Option<Vec<usize>> = match &b.ev {
+            Ev::Rapid(w) | Ev::Feed { to: w, .. } => Some(
+                w.iter()
+                    .enumerate()
+                    .filter(|(_, x)| x.is_some())
+                    .map(|(i, _)| s.joint_of[i])
+                    .collect(),
+            ),
+            Ev::Machine(mv) => Some(mv.iter().map(|(i, _)| s.joint_of[*i]).collect()),
+            _ => None,
+        };
+        let is_skip = matches!(b.ev, Ev::Skip { .. });
+        let n0 = tl.segments.len();
         match &b.ev {
             Ev::Rapid(words) => {
-                let q1 = to_q(words, &q, &wcs, &toff);
+                let q1 = to_q(words, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 for seg in rapid(s, ln, &q, &q1, t, tool, spindle, &mut tl) {
                     push_seg(&mut tl, &mut t, &mut t_est, seg);
                 }
                 q = q1;
             }
+            Ev::Frame(fr) => traori = *fr,
+            Ev::Machine(_) | Ev::Home { .. } if traori.is_some() => {
+                return Err(SimError::At {
+                    line: ln,
+                    what: "a machine-coordinate or home move under TRAORI is not modelled".into(),
+                });
+            }
             Ev::Machine(mv) => {
                 let mut q1 = q.clone();
                 for (i, v) in mv {
-                    let mut x = q_to_f(*v, k);
+                    let mut x = len(*v, *i);
                     if s.control.diameter == Some(s.control.letters[*i]) {
                         x *= 0.5;
                     }
@@ -432,7 +849,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 q = q1;
             }
             Ev::Home { via, axes } => {
-                let qv = to_q(via, &q, &wcs, &toff);
+                let qv = to_q(via, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 for seg in rapid(s, ln, &q, &qv, t, tool, spindle, &mut tl) {
                     push_seg(&mut tl, &mut t, &mut t_est, seg);
                 }
@@ -446,8 +863,9 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 }
                 q = qh;
             }
-            Ev::Feed { to, f, mode } => {
-                let q1 = to_q(to, &q, &wcs, &toff);
+            Ev::ProbeSwitch(on) => mark(&mut tl, t, Happening::ProbeSwitch { on: *on }),
+            Ev::Protected { to, f } => {
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 let seg = feed_seg(
                     s,
                     ln,
@@ -456,6 +874,90 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     &q1,
                     Path::Line,
                     q_to_f(*f, fk),
+                    FeedMode::PerMin,
+                    spindle,
+                    css_now,
+                    t,
+                    tool,
+                    &mut tl,
+                )?;
+                push_seg(&mut tl, &mut t, &mut t_est, seg);
+                q = q1;
+            }
+            Ev::Surface { to, .. } => {
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
+                let stop = s
+                    .skip_stops
+                    .iter()
+                    .find(|(l, _)| *l == ln)
+                    .map(|(_, u)| u.clamp(0.0, 1.0));
+                mark(&mut tl, t, Happening::Measure { stop });
+                // the search, swept to its end; its feed is the macro's (not modelled): a nominal
+                // 1 mm/min only to build the segment, its times zeroed
+                let mut seg = feed_seg(
+                    s,
+                    ln,
+                    SegKind::Feed,
+                    &q,
+                    &q1,
+                    Path::Line,
+                    1.0,
+                    FeedMode::PerMin,
+                    spindle,
+                    css_now,
+                    t,
+                    tool,
+                    &mut tl,
+                )?;
+                seg.t_min = 0.0;
+                seg.t_stop = 0.0;
+                push_seg(&mut tl, &mut t, &mut t_est, seg);
+                // back at the start
+            }
+            Ev::Skip { to, f, code } => {
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
+                let stop = s
+                    .skip_stops
+                    .iter()
+                    .find(|(l, _)| *l == ln)
+                    .map(|(_, u)| u.clamp(0.0, 1.0));
+                mark(&mut tl, t, Happening::Skip { code: *code, stop });
+                let mut seg = feed_seg(
+                    s,
+                    ln,
+                    SegKind::Feed,
+                    &q,
+                    &q1,
+                    Path::Line,
+                    q_to_f(*f, fk),
+                    FeedMode::PerMin,
+                    spindle,
+                    css_now,
+                    t,
+                    tool,
+                    &mut tl,
+                )?;
+                // it may trigger at once: 0 is the lower bound; the estimate runs to the stop
+                seg.t_min = 0.0;
+                seg.t_stop *= stop.unwrap_or(1.0);
+                let q_end = match stop {
+                    Some(u) => seg.at(u),
+                    None => q1,
+                };
+                push_seg(&mut tl, &mut t, &mut t_est, seg);
+                q = q_end;
+            }
+            Ev::Feed { to, f, mode } => {
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
+                inch_rotary(&q, &q1, ln)?;
+                let seg = feed_seg(
+                    s,
+                    ln,
+                    SegKind::Feed,
+                    &q,
+                    &q1,
+                    Path::Line,
+                    feed_mm(*f),
                     *mode,
                     spindle,
                     css_now,
@@ -475,7 +977,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 f,
                 mode,
             } => {
-                let q1 = to_q(to, &q, &wcs, &toff);
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 let (la, lb) = match plane {
                     17 => ('X', 'Y'),
                     18 => ('Z', 'X'),
@@ -496,11 +998,36 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                         });
                     }
                 }
+                if let Some(f) = &traori {
+                    // TRAORI: the frame's XY plane must be the machine's (the tool along the
+                    // frame's Z), so the circle stays one in X and Y
+                    let pz = crate::kin::pose(def, &q);
+                    let fz = crate::kin::part_frame(def, &pz, &s.part_mount)
+                        .map(|pf| pf.dir([f[0][2], f[1][2], f[2][2]]))
+                        .unwrap_or([0.0; 3]);
+                    if *plane != 17 || fz[2] < 1.0 - 1e-9 {
+                        return Err(SimError::At {
+                            line: ln,
+                            what: "an arc under TRAORI outside the plane normal to the tool is not modelled"
+                                .into(),
+                        });
+                    }
+                }
                 let (ca, cb, r) = match centre {
+                    // TRAORI: the centre through the frame and the table, as a point is
+                    Centre::Abs([wa, wb]) if traori.is_some() => {
+                        let mut wv = to.clone();
+                        wv[ia] = Some(*wa);
+                        wv[ib] = Some(*wb);
+                        let qc = to_q(&wv, &q, &wcs, &toff, traori.as_ref(), ln)?;
+                        let (ca, cb) = (qc[ja], qc[jb]);
+                        let r = ((sa - ca).powi(2) + (sb - cb).powi(2)).sqrt();
+                        (ca, cb, r)
+                    }
                     // the centre in program units, to joint values as a position's words are
                     Centre::Abs([wa, wb]) => {
                         let wj = |i: usize, w: i64| {
-                            let mut v = q_to_f(w, k);
+                            let mut v = len(w, i);
                             if s.control.diameter == Some(s.control.letters[i]) {
                                 v *= 0.5;
                             }
@@ -511,7 +1038,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                         (ca, cb, r)
                     }
                     Centre::R(rw) => {
-                        let r = q_to_f(*rw, k);
+                        let r = len(*rw, ia);
                         let (dx, dy) = (ea - sa, eb - sb);
                         let d = (dx * dx + dy * dy).sqrt();
                         if d > 2.0 * r.abs() * (1.0 + 1e-12) {
@@ -569,7 +1096,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     &q,
                     &q1,
                     path,
-                    q_to_f(*f, fk),
+                    feed_mm(*f),
                     *mode,
                     spindle,
                     css_now,
@@ -600,6 +1127,25 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                     })?;
             }
             Ev::Comment(c) => mark(&mut tl, t, Happening::Comment(c.clone())),
+            // consumed by comp::apply above
+            Ev::Comp { .. } => {}
+            Ev::NotModelled { path, check } => mark(
+                &mut tl,
+                t,
+                Happening::NotModelled {
+                    path: path.clone(),
+                    check,
+                },
+            ),
+            Ev::Tool { t: tn, offset } if *tn == 0 && s.control.lex.native840d => {
+                // SINUMERIK T0 M6: the spindle emptied (PGsl 4.2.2)
+                let _ = offset;
+                let sec = def.changer.as_ref().and_then(|c| c.change_s).unwrap_or(0.0);
+                mark(&mut tl, t, Happening::ToolChange { t: 0, seconds: sec });
+                t += sec;
+                t_est += sec;
+                tool = None;
+            }
             Ev::Tool { t: tn, offset } => {
                 if s.tool(*tn).is_none() {
                     tl.violations.push(Violation::NoTool { line: ln, t: *tn });
@@ -773,6 +1319,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             Ev::Clamp(c) => rpm_clamp = Some(*c),
             Ev::Coolant(c) => mark(&mut tl, t, Happening::Coolant(*c)),
             Ev::Stop { optional } => mark(&mut tl, t, Happening::Stop { optional: *optional }),
+            Ev::Wait(n) => mark(&mut tl, t, Happening::Wait { n: *n }),
             Ev::Pallet => {
                 let Some(p) = &def.pallets else {
                     return Err(SimError::At {
@@ -800,15 +1347,55 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             }
             Ev::End => mark(&mut tl, t, Happening::End),
         }
+        let n1 = tl.segments.len();
+        if is_skip && n1 > n0 {
+            let k = n1 - 1;
+            if let Some((prev, _)) = follow.take() {
+                // a skip from a stop that depends on an earlier one: neither is modelled
+                tl.skip_unmodelled.push(tl.segments[prev].line);
+                tl.skip_unmodelled.push(tl.segments[k].line);
+            } else {
+                let sg = &tl.segments[k];
+                let mask: Vec<bool> = sg.q0.iter().zip(&sg.q1).map(|(a, b)| a != b).collect();
+                if mask.iter().any(|x| *x) {
+                    follow = Some((k, mask));
+                }
+            }
+        } else if n1 > n0
+            && let Some((k, mask)) = follow.take()
+        {
+            match &named {
+                Some(named) if n1 - n0 == 1 && matches!(tl.segments[n0].path, Path::Line) => {
+                    let end: Vec<bool> = mask
+                        .iter()
+                        .enumerate()
+                        .map(|(j, f)| *f && !named.contains(&j))
+                        .collect();
+                    tl.after_skip.push(SkipDep {
+                        skip: k,
+                        segment: n0,
+                        start: mask,
+                        end: end.clone(),
+                    });
+                    if end.iter().any(|x| *x) {
+                        follow = Some((k, end));
+                    }
+                }
+                _ => tl.skip_unmodelled.push(tl.segments[k].line),
+            }
+        }
     }
     tl.t_min = t;
     tl.t_stop = t_est;
+    // the time t_min spends off the segments (tool changes, dwells, indexes, pallet changes: the
+    // marks), which the planners do not see: added to both, as t_min counts it
+    let off_segments = (t - tl.segments.iter().map(|sg| sg.t_min).sum::<f64>()).max(0.0);
     let (per, total) = crate::lookahead::plan(def, &tl, &crate::lookahead::LookAhead::default());
     tl.seg_la = per;
-    tl.t_la = total;
-    let (per, total) = crate::lookahead::plan_scurve(def, &tl, &crate::lookahead::SCurve::default());
+    tl.t_la = total + off_segments;
+    let (per, total) = crate::lookahead::plan_scurve(def, &tl, &crate::lookahead::SCurve::for_machine(def));
     tl.seg_scurve = per;
-    tl.t_scurve = total;
+    tl.t_scurve = total + off_segments;
     for sg in &tl.segments {
         for z in &def.zones {
             if let Some(sv) = zone_entry(def, z, sg) {
@@ -925,7 +1512,7 @@ pub fn zone_entry(def: &MachineDef, z: &crate::def::Zone, sg: &Segment) -> Optio
 }
 
 #[allow(clippy::too_many_arguments)]
-fn rapid(
+pub(crate) fn rapid(
     s: &Setup,
     ln: usize,
     q0: &[f64],
@@ -1325,8 +1912,28 @@ pub fn timeline_json(tl: &Timeline) -> String {
             Happening::Coolant(c) => format!("\"coolant\",\"mode\":\"{c:?}\""),
             Happening::Stop { optional } => format!("\"stop\",\"optional\":{optional}"),
             Happening::Comment(c) => format!("\"comment\",\"text\":\"{}\"", esc(c)),
+            Happening::NotModelled { path, check } => {
+                format!(
+                    "\"not_modelled\",\"path\":\"{}\",\"check\":\"{}\"",
+                    esc(path),
+                    esc(check)
+                )
+            }
             Happening::End => "\"end\"".into(),
             Happening::PalletChange { seconds } => format!("\"pallet\",\"seconds\":{}", num(*seconds)),
+            Happening::Wait { n } => format!("\"wait\",\"n\":{n}"),
+            Happening::Skip { code, stop } => {
+                let g = match code % 10 {
+                    0 => format!("G{}", code / 10),
+                    d => format!("G{}.{d}", code / 10),
+                };
+                let stop = stop.map_or("null".to_string(), num);
+                format!("\"skip\",\"g\":\"{g}\",\"stop\":{stop}")
+            }
+            Happening::ProbeSwitch { on } => format!("\"probe_switch\",\"on\":{on}"),
+            Happening::Measure { stop } => {
+                format!("\"measure\",\"stop\":{}", stop.map_or("null".to_string(), num))
+            }
         };
         o.push_str(&format!(
             "{{\"line\":{},\"at\":{},\"what\":{what}}}",
@@ -1400,6 +2007,8 @@ pub struct Unchecked {
 pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
     use crate::def::CiteStatus;
     let mut out: Vec<Unchecked> = Vec::new();
+    // skip moves: (line, whether a model trigger set its stop)
+    let mut skips: Vec<(usize, bool)> = Vec::new();
     let mut note = |path: String, known: bool, line: usize, check: &'static str| {
         let why = if !known {
             "unknown"
@@ -1515,11 +2124,40 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
                     );
                 }
             }
+            // where a skip move stops is never known here (the real part's position is what the
+            // probing is for): the moves after it are checked from one stop only
+            Happening::Skip { stop, .. } => skips.push((m.line, stop.is_some())),
+            Happening::NotModelled { path, check } => note(path.clone(), false, m.line, check),
+            // a probing macro's own motion and time are not modelled
+            Happening::ProbeSwitch { .. } => note(
+                "probe.switch".into(),
+                false,
+                m.line,
+                "the probe switch macro's Z move",
+            ),
+            Happening::Measure { .. } => note(
+                "probe.measure_time".into(),
+                false,
+                m.line,
+                "a measuring macro's time",
+            ),
             _ => {}
         }
     }
     for b in &def.bodies {
         note(format!("body.{}", b.name), !b.prims.is_empty(), 0, "collision");
+    }
+    if let Some(&(line, model)) = skips.first() {
+        out.push(Unchecked {
+            path: "skip.end".into(),
+            why: if model { "estimated" } else { "unknown" },
+            line,
+            check: if model {
+                "moves after a skip move, from the stock model's trigger (the part's may differ)"
+            } else {
+                "moves after a skip move, from its programmed end"
+            },
+        });
     }
     out
 }

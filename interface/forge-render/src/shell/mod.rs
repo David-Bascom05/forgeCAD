@@ -53,6 +53,7 @@ pub mod occedit;
 pub mod panel;
 pub(crate) mod placed;
 mod ribbon;
+pub mod robot;
 pub mod settings;
 pub mod sheet;
 mod sheetui;
@@ -407,6 +408,8 @@ pub struct Shell {
     pub new_drawing: Option<drawing::NewDrawing>,
     /// A DWG file is open: AutoCAD's layout instead of the model's (`dwgdoc.rs`).
     pub dwgdoc: Option<dwgdoc::DwgDoc>,
+    /// A robot document is open: its panel beside its source (`robot_ui.rs`).
+    pub robot: Option<robot::RobotPanel>,
     /// A machining document is open: the Manufacture workspace over its part (`cam/`).
     pub cam: Option<cam::CamWs>,
     /// A machining document's toolpath and stock simulation (`gui_camsim_panel.rs`).
@@ -479,6 +482,7 @@ impl Default for Shell {
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            robot: None,
             cam: None,
             camsim: None,
             camsim_job: Default::default(),
@@ -570,6 +574,12 @@ impl Shell {
         let o = self.overlays();
         let mut flip = None;
         let mut places = Vec::new();
+        // short of the view cube: a narrow view (a small window, the properties column open)
+        // shows the switches that fit left of it (all of them stay in Settings)
+        let ppp = ctx.pixels_per_point();
+        let limit = self
+            .cube_place
+            .map_or(self.view_rect.right(), |c| self.view_rect.min.x + c.at.0 / ppp - 8.0);
         let r = egui::Area::new(egui::Id::unique("view-toolbar"))
             .fixed_pos(at)
             .order(egui::Order::Middle)
@@ -579,6 +589,9 @@ impl Shell {
                     for (name, word) in OVERLAY_SWITCHES {
                         let on = o.get(name);
                         let g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(12.0), t.ink));
+                        if ui.cursor().min.x + g.size().x + 18.0 > limit {
+                            break;
+                        }
                         let (r, resp) = ui.allocate_exact_size(vec2(g.size().x + 18.0, 24.0), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, on, word));
                         let p = ui.painter();
