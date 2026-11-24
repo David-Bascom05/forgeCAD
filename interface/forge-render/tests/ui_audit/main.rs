@@ -542,17 +542,25 @@ fn click_tool(h: &mut Headless, group: &str, tool: &str) -> bool {
     if h.gui.shell.place(&format!("tool:{tool}")).is_some() && click_place(h, &format!("tool:{tool}")) {
         return true;
     }
-    // folded: its group's menu, opened (a click may close one left open, so twice at most)
+    open_folded(h, group, tool).is_some() && click_place(h, &format!("tool:{tool}"))
+}
+
+/// A folded group's menu opened (a click may close one left open, so twice at most), and the
+/// tool's row in it, once egui's first, invisible layout frame of the menu is past.
+fn open_folded(h: &mut Headless, group: &str, tool: &str) -> Option<Rect> {
+    let name = format!("tool:{tool}");
+    if let Some(r) = h.gui.shell.place(&name) {
+        return Some(r);
+    }
     for _ in 0..2 {
         if !click_place(h, &format!("ribbon:group:{group}")) {
-            return false;
+            return None;
         }
-        step(h);
-        if h.gui.shell.place(&format!("tool:{tool}")).is_some() {
-            return click_place(h, &format!("tool:{tool}"));
+        if let Some(r) = h.placed(&name) {
+            return Some(r);
         }
     }
-    false
+    None
 }
 
 impl Crawl {
@@ -1291,9 +1299,7 @@ fn classify(
 
 /// Hovers an off tool until its tooltip shows: whether it says why (more than its own name).
 fn disabled_tip(h: &mut Headless, group: &str, tool: &str) -> (String, bool) {
-    let name = format!("tool:{tool}");
-    let Some(r) = h.gui.shell.place(&name) else {
-        let _ = group;
+    let Some(r) = open_folded(h, group, tool) else {
         return ("not placed".into(), false);
     };
     let before = Snap::take(h);

@@ -912,6 +912,7 @@ impl Shell {
         let mw = tools.iter().map(|x| small_width(ui, std::slice::from_ref(x))).fold(160.0, f32::max);
         let at = pos2(r.left(), r.bottom() + 4.0);
         let before = self.out.len();
+        let (placed, mut sizing) = (self.places.len(), false);
         let menu = egui::Area::new(id.with("menu"))
             .fixed_pos(at)
             .order(egui::Order::Foreground)
@@ -923,12 +924,17 @@ impl Shell {
                     .corner_radius(6.0)
                     .inner_margin(4.0)
                     .show(ui, |ui| {
+                        sizing = ui.is_sizing_pass();
                         let (area, _) = ui.allocate_exact_size(vec2(mw, rows * SMALL_H), Sense::hover());
                         for (k, tool) in tools.iter().enumerate() {
                             self.small_button(ui, tool, area.left(), area.top() + k as f32 * SMALL_H, mw);
                         }
                     });
             });
+        // egui's first, invisible frame of a new menu lays it out elsewhere: no places from it
+        if sizing {
+            self.places.truncate(placed);
+        }
         // a tool chosen, or a press elsewhere: the menu closes
         let pressed = ui.input(|i| i.pointer.any_pressed());
         let inside = ui.input(|i| i.pointer.interact_pos()).is_some_and(|q| menu.response.rect.contains(q) || r.contains(q));
