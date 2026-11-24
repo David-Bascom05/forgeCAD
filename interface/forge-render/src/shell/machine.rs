@@ -2588,6 +2588,7 @@ fn tab_bodies(
                 ignore: Vec::new(),
                 clearance: None,
                 passes_stock: false,
+                check: true,
             });
             touch.unknown.push(format!("body.{n}"));
             *pick = d.bodies.len() - 1;
