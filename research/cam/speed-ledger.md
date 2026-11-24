@@ -85,8 +85,7 @@ checked. TRAIN-CONDUCTOR expects a row in any CAM speed PR that moves outputs.
 
   Also the `hop_label` read-back refusal, and the mould certification tests.
 
-TOOLPATH-QUALITY: please add the 2.5D hops and the clear corner blends here. CAM-PERF: please add
-the adaptive caches if any of them moves an output.
+TOOLPATH-QUALITY: please add the 2.5D hops and the clear corner blends here.
 
 ## Identical output
 
@@ -100,3 +99,16 @@ examples against the build before it.
 | The drape's split point reuses the midpoint drop already made | forge-cam-3d drape.rs `refine` | about 1 % | CAM-3D-FINISH |
 | `TrimRef::classify` returns at the first trim piece the box may touch | forge-cam-geom check.rs | with the memo below: the trim test was 36 % of the rest op's instructions | CAM-PERF (b021cf5c) |
 | `Face::holds` memoised per face by the box's bits | check.rs | as above | CAM-PERF (4ef931ed, 0f171d3e) |
+| The adaptive op's (path, voids, notes) memoised by its arguments' full Debug text (`adaptive/1`: region, the Cut destructured field by field, levels, in-process stock, parameters) | forge-cam-lang lib.rs `adaptive_memo` | adaptive rerun 6.0 s -> 13 ms (deep_islands_p_adaptive), 2.2 s -> 7 ms (boss_adaptive) | CAM-PERF (f9f4a115); test `adaptive_memo_tests::each_input_class_clears_anew` (fails with ip, prm or rg out of the key) |
+| A lathe program's certification memoised (`turn-certify/1`: setup, job, posted moves, exact) | forge-turn-lang `certify_memo` | hub_turn rerun 0.37 s -> 25 ms | CAM-PERF (0bf9b496); test `certify_memo_tests::each_input_class_certifies_anew` (fails with any key part out) |
+| The quality measure reads the run only through `CamView`, and the last measure is kept by the view's full Debug text | forge-cam-quality lib.rs, forge-render run.rs | a rerun's measure: manifold 2.4 s, mould_finish 1.6 s -> 4-12 ms | CAM-PERF (0ca759d2); JobQ byte-identical on 43 docs; test `the_kept_measure_is_the_fresh_one` |
+| Each posted path's read-back and certification run in parallel, applied to the ops in the paths' order; memo state (bypass, counts) carried to the threads | forge-cam-lang `post`, forge-memo `Context` | manifold cold 0.81 -> 0.65 s | CAM-PERF (b73025f9); forge-cam-lang tests with forge-math/force_helpers; `work_on_other_threads_counts_and_bypasses_as_the_callers` |
+| An engrave/slot sketch's frame answered from the part's own load (anchors and the cut sketches asked there), not two more runs of the part | forge-cam-lang `frame_of`, forge-lang query.rs `prepare`/`ask_prepared` | manifold rerun 53 -> 46 ms native, about 50 ms in the page | CAM-PERF (fcfea667); test `the_frames_are_the_asked_ones` (word for word against `ask`); debug builds re-ask every frame |
+| The built-in machine definitions parsed once per process | forge-machine library.rs | tens of ms per run in the page | CAM-PERF (34343dc8); test `the_kept_builtins_are_the_parsed_ones` |
+| The threaded page's allocator: heaps looked at quickly before any is flushed; a per-thread cache of small blocks | forge-alloc | page rerun 0.21 -> 0.12 s (manifold) | CAM-PERF (c0c6143f, 34d6cad8); parity.cjs 55/55 on 4 threads; tests `a_quick_look_neither_flushes_nor_grows`, `a_thread_cache_hands_out_each_block_once` |
+
+CAM-PERF's rows were checked byte-identical (the reply's JSON and the posted programs) on 43
+documents: the 14 machining examples and verify/forge-cam-quality's harness. Train 5 already holds
+CAM-PERF's earlier identical-output work (the surfacing, certification, finish3d, engagement,
+section and round-trip memos; the height maps' tiles; the edge table; the kept tool library).
+None of CAM-PERF's changes moves an output.
