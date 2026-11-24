@@ -324,6 +324,35 @@ pub fn milling(
     milling_on(ask, tool, group, None, spindle, nominal)
 }
 
+/// The cut at one engagement sample (TOOL-LIFE, engagement feed): the chip (hex, hm), speed,
+/// power and torque of the tool at `rpm` and `fz` cutting width `ae` at depth `ap` (a ball's or
+/// bull's contact at that depth, tilted `tilt` degrees), with the Kienzle data of `group` (pass
+/// `Stock::apply(group, vc)` for a stock material's own). The same formulas the resolver checks
+/// with (`feeds::at_contact`), so a sample and the op agree.
+pub fn at_sample(
+    group: &Group,
+    tool: &ToolData,
+    rpm: f64,
+    fz: f64,
+    ae: f64,
+    ap: f64,
+    tilt: f64,
+) -> feeds::Feeds {
+    let d = tool.d;
+    let re = if tool.ball { 0.5 * d } else { tool.re };
+    let ct = feeds::contact(d, re, ap, tilt);
+    let d_radial = if re >= 0.5 * d { ct.d_eff } else { d };
+    let cut = Cut {
+        d,
+        flutes: tool.flutes,
+        ball: tool.ball,
+        carbide: tool.substrate == Substrate::Carbide,
+        ap,
+        ae,
+    };
+    feeds::at_contact(group, &cut, fz, rpm, ct, d_radial)
+}
+
 /// A maker's preset states the feed per tooth it programs at its own width and depth (Harvey,
 /// Helical and Lakeshore print IPT per op at a stated RDOC and ADOC), so its chip is that feed
 /// thinned at that engagement: hex = fz · k(ae/D) · sin κ(ap). A preset with no width is read as
@@ -2496,5 +2525,40 @@ mod tests {
         )
         .unwrap();
         assert!(h.spread.is_none() && h.vc.v == g.vc_hss);
+    }
+
+    /// A sample at the op's own width and depth gives the op's own derived cut back; a
+    /// narrower sample thins the chip and lowers the power.
+    #[test]
+    fn at_sample_agrees_with_the_op() {
+        let g = group();
+        let t = ToolData {
+            d: 10.0,
+            flutes: 3,
+            ball: false,
+            re: 0.0,
+            substrate: Substrate::Carbide,
+            coating: "",
+            beam: None,
+            class: None,
+            preset: None,
+            generic: None,
+        };
+        let r = milling(
+            &Ask {
+                ae: Some(4.0),
+                ap: Some(6.0),
+                ..Ask::default()
+            },
+            &t,
+            Some(&g),
+            &spindle(),
+            (0.0, 0.0),
+        )
+        .unwrap();
+        let s = at_sample(&g, &t, r.rpm.v, r.fz.v, 4.0, 6.0, 0.0);
+        assert!((s.hex - r.feeds.hex).abs() < 1e-12 && (s.power - r.feeds.power).abs() < 1e-9);
+        let thin = at_sample(&g, &t, r.rpm.v, r.fz.v, 1.0, 6.0, 0.0);
+        assert!(thin.hex < s.hex && thin.power < s.power);
     }
 }
