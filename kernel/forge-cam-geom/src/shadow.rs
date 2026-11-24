@@ -1,6 +1,6 @@
-//! Closed forms by symmetry, for three kinds of face that are not prisms along z: a plane with a
-//! horizontal direction e in it (a 45° chamfer, a draft), and a cone or a torus with a vertical
-//! axis (a chamfer round an arc, a countersink, a drill point; a fillet round a bore or a boss).
+//! Closed forms by symmetry, for two kinds of face that are not prisms along z: a plane with a
+//! horizontal direction e in it (a 45° chamfer, a draft), and a cone with a vertical axis (a
+//! chamfer round an arc, a countersink, a drill point).
 //!
 //! The checker's quantity is the least, over tool positions A on the move and points P of the
 //! face, of the body's signed distance sd_rz(|P − A| horizontally, P.z − A.z), which is
@@ -14,14 +14,12 @@
 //!   exact distance in the section across the edge;
 //! - the cone: ||P − o| − |A − o|| ≤ |P − A|, o its axis; the face's radius over a cell of t
 //!   against the move's distances from the axis. When the move is an arc about the axis (an
-//!   edge break's corner) that is again the exact distance in the section.
-//! - the torus: the same, its point o + (R + r cos φ)(c x + s y) + r sin φ ax at distance
-//!   |R + r cos φ|·|c x + s y| from the axis and at height o.z + r sin φ ax.z, both functions of
-//!   the tube angle alone (the cone's lemmas with the radius R + r cos φ: Shadow.lean
-//!   `torus_split`). The azimuth is not split: the bound holds over the whole turn, a superset of
-//!   the face. A pocket's arcs about a filleted bore (manifold's `shal`) follow its symmetry: the
-//!   branch and bound took thousands of cells per arc there (the least distance is reached along
-//!   a whole circle), this a few.
+//!   edge break's corner) that is again the exact distance in the section;
+//! - the torus with a vertical axis (a fillet round a boss or a hole) by the same inequality:
+//!   its radius from the axis and its height over a cell of the tube's parameter. An arc about
+//!   the axis is again exact in the section, and an arc whose centre is ε off the axis (a
+//!   posted arc, its centre from rounded words) loses only ε: its distances from the axis are
+//!   within r ± ε.
 //!
 //! The whole move is taken exactly (its line or arc), a piece of it by the box `Move::at`
 //! encloses it in. The search splits the face's t to the resolution against the whole move,
@@ -58,8 +56,8 @@ enum Kind {
         k: f64,
         rf: Ival,
     },
-    /// Radius |big + r cos φ| · |c x + s y| (`rf` as the cone's), height o.z + az r sin φ, with
-    /// φ = φm + ψ, ψ the tube angle of the sloped parameter (q = tan(ψ/2)).
+    /// Radius |big + r cos φ| · |c x + s y| (`rf` the second factor), height o.z + az r sin φ,
+    /// φ = φm + 2 atan q over a cell of q.
     Torus {
         axis: [f64; 2],
         oz: f64,
@@ -72,39 +70,8 @@ enum Kind {
     },
 }
 
-/// |c x + s y| over every angle, enclosed: |c x + s y|² = c²|x|² + s²|y|² + 2cs x·y with
-/// c² + s² = 1, 2|cs| ≤ 1 (Shadow.lean `cone_factor`); None where it may vanish.
-fn radius_factor(x: [f64; 3], y: [f64; 3]) -> Option<Ival> {
-    let xx = p(x[0]).sqr().add(p(x[1]).sqr());
-    let yy = p(y[0]).sqr().add(p(y[1]).sqr());
-    let xy = p(x[0]).mul(p(y[0])).add(p(x[1]).mul(p(y[1]))).abs();
-    let lo = Ival::pt(xx.lo.min(yy.lo)).sub(Ival::pt(xy.hi)).lo;
-    let hi = Ival::pt(xx.hi.max(yy.hi)).add(Ival::pt(xy.hi)).hi;
-    if !(lo > 0.0) {
-        return None;
-    }
-    Some(Ival::new(lo, hi).sqrt())
-}
-
-/// The axis is vertical and the frame horizontal: exact requirements, checked on the stored
-/// numbers.
-fn vertical(ax: [f64; 3], x: [f64; 3], y: [f64; 3]) -> bool {
-    ax[0] == 0.0 && ax[1] == 0.0 && (ax[2] == 1.0 || ax[2] == -1.0) && x[2] == 0.0 && y[2] == 0.0
-}
-
-/// (cos φ, sin φ) over a cell of the tube's parameter, φ = φm + ψ: the rational map's natural
-/// enclosure, meeting [−1, 1] (where every cosine and sine lies).
-fn tube_angle(t: Ival, cm: f64, sm: f64) -> (Ival, Ival) {
-    let (cp, sp) = crate::check::circ(t);
-    let unit = |v: Ival| Ival::new(v.lo.max(-1.0), v.hi.min(1.0));
-    let (cp, sp) = (unit(cp), unit(sp));
-    let cf = cp.mul(p(cm)).sub(sp.mul(p(sm)));
-    let sf = cp.mul(p(sm)).add(sp.mul(p(cm)));
-    (unit(cf), unit(sf))
-}
-
 /// How far an arc's centre may be from a torus's axis, in x and in y, for the torus's bound to be
-/// tried (mm): a pocket's arcs about a bore sit within the offsets' rounding of its axis.
+/// tried (mm): a pocket's arcs about a bore sit within the posted words' rounding of its axis.
 const COAXIAL: f64 = 1e-2;
 
 fn kind(f: &Face) -> Option<(Kind, Ival)> {
@@ -125,6 +92,37 @@ fn kind(f: &Face) -> Option<(Kind, Ival)> {
             let n = [p(-e[1]).div(ne), p(e[0]).div(ne)];
             Some((Kind::Plane { o, e, g, pbox, n }, t))
         }
+        Surf::Cone { o, x, y, ax, r0, k } => {
+            if !(ax[0] == 0.0
+                && ax[1] == 0.0
+                && (ax[2] == 1.0 || ax[2] == -1.0)
+                && x[2] == 0.0
+                && y[2] == 0.0)
+            {
+                return None;
+            }
+            // |c x + s y|² = c²|x|² + s²|y|² + 2cs x·y with c² + s² = 1, 2|cs| ≤ 1
+            let xx = p(x[0]).sqr().add(p(x[1]).sqr());
+            let yy = p(y[0]).sqr().add(p(y[1]).sqr());
+            let xy = p(x[0]).mul(p(y[0])).add(p(x[1]).mul(p(y[1]))).abs();
+            let lo = Ival::pt(xx.lo.min(yy.lo)).sub(Ival::pt(xy.hi)).lo;
+            let hi = Ival::pt(xx.hi.max(yy.hi)).add(Ival::pt(xy.hi)).hi;
+            if !(lo > 0.0) {
+                return None;
+            }
+            let rf = Ival::new(lo, hi).sqrt();
+            Some((
+                Kind::Cone {
+                    axis: [o[0], o[1]],
+                    oz: o[2],
+                    az: ax[2],
+                    r0,
+                    k,
+                    rf,
+                },
+                f.q,
+            ))
+        }
         Surf::Torus {
             o,
             x,
@@ -135,10 +133,19 @@ fn kind(f: &Face) -> Option<(Kind, Ival)> {
             cm,
             sm,
         } => {
-            if !vertical(ax, x, y) {
+            if !(ax[0] == 0.0
+                && ax[1] == 0.0
+                && (ax[2] == 1.0 || ax[2] == -1.0)
+                && x[2] == 0.0
+                && y[2] == 0.0
+                && big.is_finite()
+                && r.is_finite()
+                && cm.is_finite()
+                && sm.is_finite())
+            {
                 return None;
             }
-            let rf = radius_factor(x, y)?;
+            let rf = horizontal_factor(x, y)?;
             Some((
                 Kind::Torus {
                     axis: [o[0], o[1]],
@@ -153,25 +160,22 @@ fn kind(f: &Face) -> Option<(Kind, Ival)> {
                 f.q,
             ))
         }
-        Surf::Cone { o, x, y, ax, r0, k } => {
-            if !vertical(ax, x, y) {
-                return None;
-            }
-            let rf = radius_factor(x, y)?;
-            Some((
-                Kind::Cone {
-                    axis: [o[0], o[1]],
-                    oz: o[2],
-                    az: ax[2],
-                    r0,
-                    k,
-                    rf,
-                },
-                f.q,
-            ))
-        }
         _ => None,
     }
+}
+
+/// An enclosure of |c x + s y| over every angle (c² + s² = 1), x and y horizontal: from
+/// c²|x|² + s²|y|² + 2cs x·y with 2|cs| ≤ 1. None unless it is bounded away from 0.
+fn horizontal_factor(x: [f64; 3], y: [f64; 3]) -> Option<Ival> {
+    let xx = p(x[0]).sqr().add(p(x[1]).sqr());
+    let yy = p(y[0]).sqr().add(p(y[1]).sqr());
+    let xy = p(x[0]).mul(p(y[0])).add(p(x[1]).mul(p(y[1]))).abs();
+    let lo = Ival::pt(xx.lo.min(yy.lo)).sub(Ival::pt(xy.hi)).lo;
+    let hi = Ival::pt(xx.hi.max(yy.hi)).add(Ival::pt(xy.hi)).hi;
+    if !(lo > 0.0 && hi.is_finite()) {
+        return None;
+    }
+    Some(Ival::new(lo, hi).sqrt())
 }
 
 /// The path's xy curve and the tip's heights.
@@ -231,9 +235,11 @@ pub fn clear(
     let Some((kd, t0)) = kind(f) else {
         return (None, 0);
     };
-    // a torus only against an arc about (within COAXIAL of) its axis, where the bound is tight;
-    // elsewhere the branch and bound is tighter and, its tries spent, the faster (a choice of
-    // route only: either proves what it proves)
+    // a torus only against an arc or helix about (within COAXIAL of) its axis, where the bound
+    // is tight; elsewhere it rarely clears, and its tries cost cells before the branch and bound
+    // (manifold's tap: 373k cells, against 33k without them), and where it does clear, the
+    // branch and bound's least is tighter (manifold's grv: −0.0099 against −0.0005). A choice
+    // of route only: either proves what it proves
     if let Kind::Torus { axis, .. } = &kd {
         let about = match *pl {
             Planar::Arc { c, .. } | Planar::Helix { c, .. } => {
@@ -359,11 +365,13 @@ pub fn clear(
                 rf,
                 ..
             } => {
-                // the cone's bound with the radius big + r cos φ, the height r sin φ
-                let (cf, sf) = tube_angle(t, *cm, *sm);
-                let rr = p(*big).add(cf.mul(p(*r))).abs().mul(*rf);
-                let dz = p(*oz).add(sf.mul(p(*r)).mul(p(*az))).sub(pc.zt);
-                (gap(rr, pc.w).unwrap_or(0.0), dz)
+                // cos φ, sin φ over the cell of q (φ = φm + ψ, q = tan(ψ/2))
+                let (cp, sp) = crate::check::circ(t);
+                let cf = cp.mul(p(*cm)).sub(sp.mul(p(*sm)));
+                let sf = cp.mul(p(*sm)).add(sp.mul(p(*cm)));
+                let rad = p(*big).add(p(*r).mul(cf)).abs().mul(*rf);
+                let dz = p(*oz).add(p(*az).mul(p(*r)).mul(sf)).sub(pc.zt);
+                (gap(rad, pc.w).unwrap_or(0.0), dz)
             }
         };
         body.sd_rz(Ival::pt(h.max(0.0)), dz).lo
@@ -378,8 +386,8 @@ pub fn clear(
             .hi
             .max(1.0),
         Kind::Cone { k, rf, .. } => (k.abs() * rf.hi).max(1.0) * 2.0,
-        // dψ/dq = 2 / (1 + q²) ≤ 2: a unit of q moves the tube's point at most 2r
-        Kind::Torus { r, .. } => (2.0 * r.abs()).max(1.0) * 2.0,
+        // a point moves at most 2 r per unit of q (dψ/dq = 2 / (1 + q²))
+        Kind::Torus { r, rf, .. } => (2.0 * r.abs() * rf.hi).max(1.0) * 2.0,
     };
     let size = |s: Ival| -> f64 {
         let b = mv.at(s);

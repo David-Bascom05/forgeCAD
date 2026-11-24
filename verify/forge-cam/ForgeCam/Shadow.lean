@@ -188,6 +188,16 @@ theorem cone_radius (o x y : ForgeCam.DistArc.P) (rr c s : ℝ) :
     simp only [nsq, dot, sc, Prod.fst_add, Prod.snd_add, Prod.fst_sub, Prod.snd_sub]; ring
   rw [this, Real.sqrt_mul (sq_nonneg _), Real.sqrt_sq_eq_abs]
 
+/-- **The torus about a vertical axis** (a fillet round a boss or a hole, shadow.rs `Kind::Torus`):
+its face point is o + (big + r cos φ)(c x + s y) + r sin φ ax horizontally o + (big + r cos φ)(c x
++ s y), at distance |big + r cos φ|·|c x + s y| from the axis: the cone's radius with the radius
+big + r cos φ. Its height o.z + az r sin φ is enclosed directly; `axis_gap` and `cone_factor` then
+give the bound as for the cone. -/
+theorem torus_radius (o x y : ForgeCam.DistArc.P) (big r cf c s : ℝ) :
+    √(nsq (o + sc (big + r * cf) (sc c x + sc s y) - o)) =
+      |big + r * cf| * √(nsq (sc c x + sc s y)) :=
+  cone_radius o x y (big + r * cf) c s
+
 /-- **The axis gap**: the horizontal distance is at least the gap between the two distances from
 the axis. -/
 theorem axis_gap {P A o : ForgeCam.DistArc.P} {a0 a1 b0 b1 : ℝ}
@@ -243,38 +253,6 @@ theorem arc_near (o c ea eb : ForgeCam.DistArc.P) {r g : ℝ} (hok : (Piece.arc 
   have h2 := Real.sqrt_le_sqrt (ptArcSq_le o c _ _ hr hu hv hab hA2)
   rw [show √(nsq (o - A)) = d2 A o from dist_sqrt o A, d2_comm A o] at h2
   linarith
-
-/-! ### S3b: the torus about a vertical axis
-
-The torus's point is o + (R + r cos φ)(c x + s y) + r sin φ ax with φ = φm + ψ. With ax vertical
-and x, y horizontal, its horizontal part is the cone's with the radius rr = R + r cos φ
-(`cone_radius`, `cone_factor`, `axis_gap` hold for any rr), and its height o.z + ax.z r sin φ:
-both functions of ψ alone, so shadow.rs bounds them over a cell of ψ's parameter for the whole
-turn of the azimuth. What is new is the enclosure of (cos φ, sin φ): the rational map gives a
-unit pair (`circ_unit`), turning by φm keeps it unit (`turn_unit`), and each coordinate of a unit
-pair lies in [−1, 1] (`unit_coord`), so shadow.rs's `tube_angle` may meet its enclosures with
-[−1, 1]. -/
-
-/-- The torus's horizontal radius is the cone's with rr = R + r cos φ. -/
-theorem torus_split (o x y : ForgeCam.DistArc.P) (R r cf c s : ℝ) :
-    √(nsq (o + sc (R + r * cf) (sc c x + sc s y) - o)) = |R + r * cf| * √(nsq (sc c x + sc s y)) :=
-  cone_radius o x y (R + r * cf) c s
-
-/-- The rational map of a half-angle tangent is a unit pair (check.rs's `circ`). -/
-theorem circ_unit (t : ℝ) :
-    ((1 - t ^ 2) / (1 + t ^ 2)) ^ 2 + (2 * t / (1 + t ^ 2)) ^ 2 = 1 := by
-  have h : (1 + t ^ 2) ≠ 0 := by positivity
-  field_simp
-  ring
-
-/-- Turning a unit pair by a unit pair keeps it unit: (cos(φm + ψ), sin(φm + ψ)). -/
-theorem turn_unit {cp sp cm sm : ℝ} (h1 : cp ^ 2 + sp ^ 2 = 1) (h2 : cm ^ 2 + sm ^ 2 = 1) :
-    (cp * cm - sp * sm) ^ 2 + (cp * sm + sp * cm) ^ 2 = 1 := by
-  linear_combination (cm ^ 2 + sm ^ 2) * h1 + h2
-
-/-- Each coordinate of a unit pair lies in [−1, 1]. -/
-theorem unit_coord {u v : ℝ} (h : u ^ 2 + v ^ 2 = 1) : -1 ≤ u ∧ u ≤ 1 := by
-  constructor <;> nlinarith [sq_nonneg v, sq_nonneg (u - 1), sq_nonneg (u + 1)]
 
 /-! ### S4: the search, and the clearance -/
 

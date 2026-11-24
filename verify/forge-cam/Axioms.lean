@@ -84,10 +84,6 @@ import ForgeCam
 #print axioms ForgeCam.Shadow.cone_factor
 #print axioms ForgeCam.Shadow.cone_radius
 #print axioms ForgeCam.Shadow.axis_gap
-#print axioms ForgeCam.Shadow.torus_split
-#print axioms ForgeCam.Shadow.circ_unit
-#print axioms ForgeCam.Shadow.turn_unit
-#print axioms ForgeCam.Shadow.unit_coord
 #print axioms ForgeCam.Shadow.line_far
 #print axioms ForgeCam.Shadow.arc_far
 #print axioms ForgeCam.Shadow.arc_near
