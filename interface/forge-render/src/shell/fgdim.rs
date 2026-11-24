@@ -592,6 +592,7 @@ mod words_tests {
     fn the_field_says_its_unit_and_reads_one_typed() {
         assert_eq!(words(12.0, "mm"), "12 mm");
         assert_eq!(words(12.7, "in"), "0.5 in");
+        assert_eq!(words(12.0, "in"), "0.472 in");
         let typed = crate::shell::fg::parse_in("0.5 in", Dim::Length, "mm").unwrap();
         assert!((typed.value - 12.7).abs() < 1e-9);
         let shown = crate::shell::fg::parse_in(&words(12.0, "mm"), Dim::Length, "mm").unwrap();

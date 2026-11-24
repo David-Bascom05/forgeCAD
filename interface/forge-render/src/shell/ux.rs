@@ -70,6 +70,8 @@ pub fn show(v: f64, q: Qty, sys: System) -> String {
     let n = match q {
         Qty::Count => format!("{}", x.round() as i64),
         Qty::Angle => trim_to(x, 2),
+        // inches to the thousandth, as every inch value is shown (0.472 in, not 0.4724 in)
+        Qty::Length if sys == System::Inch => trim_to(x, 3),
         _ => forge_lang::units::trim(x),
     };
     if unit.is_empty() {
@@ -697,6 +699,7 @@ mod tests {
         assert_eq!(show(850.0, Qty::Force, System::Metric), "850 kN");
         assert_eq!(show(10.0, Qty::Length, System::Metric), "10 mm");
         assert_eq!(show(25.4, Qty::Length, System::Inch), "1 in");
+        assert_eq!(show(12.0, Qty::Length, System::Inch), "0.472 in");
         assert_eq!(show(30.0, Qty::Angle, System::Metric), "30°");
         assert_eq!(show(3.0, Qty::Count, System::Inch), "3");
         assert_eq!(show(25.0, Qty::Speed, System::Metric), "25 m/min");
