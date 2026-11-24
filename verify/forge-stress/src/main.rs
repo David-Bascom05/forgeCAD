@@ -289,9 +289,15 @@ impl Ops<'_> {
         // hang them as well as the boolean
         let (r, ms) = self.cx.run(&key, || {
             let t = Instant::now();
+            // what the boolean spends of its work budget: an outer budget it shares, read after
+            // (the distribution of what succeeding ops spend sets OP near the real tail)
+            let outer = forge_geom::budget::scoped(u64::MAX >> 1);
+            let before = forge_geom::budget::left();
             let r = boolean(a, b, how, 9000).map_err(|e| format!("{e:?}"));
+            let spent = before - forge_geom::budget::left();
+            drop(outer);
             let bms = t.elapsed().as_secs_f64() * 1e3;
-            (bms, judge(r))
+            (bms, spent, judge(r))
         });
         match r {
             Res::Skipped => f64::NAN,
@@ -299,13 +305,13 @@ impl Ops<'_> {
                 self.line(op, ms, "panic", "", &m);
                 f64::NAN
             }
-            Res::Done((bms, (st, v, d))) => {
+            Res::Done((bms, spent, (st, v, d))) => {
                 // the boolean's own time; the check of its answer after it is in `all_ms`
                 self.line(
                     op,
                     bms,
                     &st,
-                    &format!(",\"vol\":{},\"all_ms\":{ms:.1}", num(v)),
+                    &format!(",\"vol\":{},\"all_ms\":{ms:.1},\"evals\":{spent}", num(v)),
                     &d,
                 );
                 if st == "empty" { 0.0 } else { v }
