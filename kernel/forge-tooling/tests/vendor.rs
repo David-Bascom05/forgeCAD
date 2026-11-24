@@ -724,3 +724,29 @@ fn reaming_and_counterbore_data() {
     assert!((r.f.v - 0.25).abs() < 1e-12, "{}", r.f.v);
     assert!(r.f.note.contains("reaming data"), "{}", r.f.note);
 }
+
+/// Spindle interfaces (CAM-SIM): cited dimension tables, and every holder's `interface` finds one
+/// (TTS and straight shanks have no table: none is printed).
+#[test]
+fn interfaces_and_holders() {
+    let l = Library::builtin();
+    for id in ["BT30", "BT40", "BT50", "CAT40", "CAT50", "HSK63A", "HSK100A"] {
+        let i = l.interface(id).unwrap_or_else(|| panic!("{id}"));
+        assert!(i.real && i.dim("flange_d").is_some(), "{id}");
+    }
+    let bt40 = l.interface("BT-40").unwrap();
+    assert_eq!(
+        (bt40.dim("gauge_d"), bt40.dim("flange_d")),
+        (Some(44.45), Some(63.0))
+    );
+    assert_eq!(bt40.taper, "7/24");
+    assert_eq!(l.interface("HSK-A63").unwrap().id, "HSK63A");
+    let cat40 = l.interface("CAT40").unwrap();
+    assert!((cat40.dim("gauge_d").unwrap() - 1.75 * 25.4).abs() < 1e-9);
+    assert!(cat40.cites.iter().any(|c| c.status == CiteStatus::Conflict));
+    for h in &l.holders {
+        if !["TTS", "straight"].contains(&h.interface.as_str()) {
+            assert!(l.interface(&h.interface).is_some(), "{}: {}", h.id, h.interface);
+        }
+    }
+}
