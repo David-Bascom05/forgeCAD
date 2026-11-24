@@ -136,3 +136,16 @@ reached from the page are covered by the twiggy check above, not by the lint.
   a project path` to the console only; the status says "History is on: every save is kept" and the
   history is gone on reload. Needs a decision: server allows `.git` writes, or the page says
   versions aren't kept on that backend.
+
+## Swept, nothing found (this round)
+
+In the page (single-threaded build unless said): opening parts and examples; sketching on a face
+(Start Sketch, pick, Rectangle, Finish); SetParam edits, Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z, Ctrl+S
+(saves, browser default suppressed); Versions turn on (after fix 3); Agent send (after fix 4);
+Thermoform tab and Check Forming's panel (Stretch, Webbing, Draft, Simulated wall, probe, Play;
+after fix 7); sheet metal Flat Pattern, DXF export (written beside the part on the machine);
+with origin/bendsim/env merged locally: DFM, and the Environments tab's Bend Simulation, Flat
+Pattern, Thermoform, Render Studio and Drawing (no panics); idle frames, hover picks; HiDPI
+(hidpi.cjs) and first frame (firstframe.cjs) pass; idle/shade/nopanic pass on the threaded
+artifact. Not yet: CAM, URDF/robot panel and `?env=KEY` (not on main), Assemble, Weldments,
+Inspect/Measure, Drawing editing, Markup, file import (STEP/DWG) from the page's picker.
