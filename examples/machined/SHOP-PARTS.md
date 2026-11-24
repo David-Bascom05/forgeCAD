@@ -48,14 +48,16 @@ A threaded hub turned from a Ø66 bar in one chucking.
 
 ## Results (cam/parity)
 
-Measured on cam/parity 66d70c79, release build, one run (`forgecad cam F --json`). Native and
+Measured on cam/parity (tip of this commit), release build, one run (`forgecad cam F --json`). Native and
 wasm32-wasip1 tests all pass.
 
-### manifold_cam.fg: 25.8 s in total (p1 25.4 s, almost all certification; p2 3 ms). Refused.
+### manifold_cam.fg: 21.3 s in total (p1 almost all of it, certification; p2 3 ms). Refused.
 
 (At e11804e6: 146 s, with well and crn refused. The section pocket then cut every drilled hole
 of its mid-height section down to `to:`. A dowel's drill point was gouged, and 281k cells went to
-certifying it. Holes that end above the bottom are now left to their own ops: bc164b71.)
+certifying it. Holes that end above the bottom are now left to their own ops (bc164b71), and so are
+holes and slots the tool only just fits (shal was pocketing the dowels and the groove: 199k cells
+to 103k).)
 
 | op | result | what blocks it |
 |---|---|---|
@@ -64,7 +66,7 @@ certifying it. Holes that end above the bottom are now left to their own ops: bc
 | prof | refused | the holder meets stock (−1.43) on a plunge: stock that `rough` would have removed |
 | well | certified | 3,519 cells |
 | crn | certified | 23,302 cells |
-| shal | certified | 199,182 cells: most of the time |
+| shal | certified | 103,298 cells: most of the time (the deep well's top, the shallow pocket, the bore's top) |
 | grv | certified | |
 | bored | refused | NeedTool: no 18.5 mm drill in the library |
 | thr | refused | the library's thread mill has pitch 1; the thread is 1.5 |
