@@ -593,7 +593,7 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
         // the playback clock runs at feed time (feeds and rapids at their programmed rates): not
         // the cycle time, which the Program tab gives (the bound and the estimate)
         let tip = format!(
-            "{} of {} at feed time: feeds and rapids at their programmed rates, no acceleration or tool changes. Not the cycle time: the Program tab gives that (\u{2265} the least it can take \u{b7} est. an estimate).",
+            "{} of {} at feed time: feeds at their programmed rates, rapids at the machine's rapid rates; no acceleration or tool changes (the cycle time adds them). Not the cycle time: the Program tab gives that (\u{2265} the least it can take \u{b7} est. an estimate).",
             clock(st.t),
             clock(total)
         );
