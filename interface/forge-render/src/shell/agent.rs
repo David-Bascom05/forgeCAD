@@ -1148,32 +1148,40 @@ impl Shell {
     /// The Agent tab: the backend's switcher, what it's working on, the chat, the input.
     pub(super) fn agent_ui(&mut self, ui: &mut Ui, area: Rect) {
         let t = self.theme;
-        // in a page no agent can run (Claude Code and Codex are programs on the computer, speech
-        // its engine; an endpoint isn't reached from the page yet): said plainly, no Send to fail
-        if cfg!(target_arch = "wasm32") {
+        // in a page the agent is the person's own Claude Code, on their machine behind
+        // `forgecad web --agent` (agent/bridge.rs); with no bridge, how to start one
+        #[cfg(target_arch = "wasm32")]
+        let bridged = crate::agent::bridge::ready();
+        #[cfg(not(target_arch = "wasm32"))]
+        let bridged = true;
+        if !bridged {
             ui.scope_builder(
                 egui::UiBuilder::new().max_rect(area.shrink2(vec2(PAD, 12.0))),
                 |ui| {
                     ui.label(
-                        egui::RichText::new("The agent runs in the ForgeCAD desktop app")
+                        egui::RichText::new("Use your own Claude Code here")
                             .font(medium(13.0))
                             .color(t.ink),
                     );
                     ui.add_space(6.0);
                     ui.label(
                         egui::RichText::new(
-                            "Claude Code and Codex are programs on your computer, and talking to the \
-                         agent uses its speech engine: a browser page can start neither, and it \
-                         doesn't reach an OpenAI-compatible endpoint yet. Open this project in the \
-                         ForgeCAD desktop app to use the agent.",
+                            "In the browser, the agent is Claude Code running on your computer, with \
+                             your own Claude plan and settings. On that computer, run this in the \
+                             project folder, then open the link it prints:",
                         )
                         .font(sans(12.0))
                         .color(t.ink2),
                     );
                     ui.add_space(4.0);
-                    // (no download link: the desktop app installs from source)
                     ui.label(
-                        egui::RichText::new("Install it with tools/install.sh (see the README).")
+                        egui::RichText::new("forgecad web . --agent")
+                            .font(mono(12.0))
+                            .color(t.ink),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(
+                        egui::RichText::new("Or open the project in the ForgeCAD desktop app.")
                             .font(sans(11.0))
                             .color(t.ink2),
                     );
@@ -1242,13 +1250,21 @@ impl Shell {
         if self.agent.settings.kind == agent_settings::Kind::ClaudeCode {
             let m = self.agent.mode;
             let other = self.agent.mode_other.clone();
-            let word = other.as_deref().unwrap_or(m.word());
+            // a mode from the person's own settings the tab doesn't set, in words
+            let word = match other.as_deref() {
+                Some("bypassPermissions") => "Permissions bypassed",
+                Some("dontAsk") => "Don't ask",
+                Some("auto") => "Auto",
+                Some(o) => o,
+                None => m.word(),
+            };
             let g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(11.0), t.ink));
             let mw = g.size().x + 14.0;
             let mr = Rect::from_min_size(pos2(chats.left() - 6.0 - mw, bar.top() + 6.0), vec2(mw, 18.0));
             // only where it doesn't cover the backend's name
             if mr.left() > br.right() + 4.0 {
-                let tip = match &other {
+                let tip = match other.as_deref() {
+                    Some("bypassPermissions") => "Your Claude settings bypass permissions: the agent runs every tool without asking. Click to ask first, for this chat".to_string(),
                     Some(o) => format!("Your Claude Code settings' mode, {o} (click for Ask first)"),
                     None => m.tip().to_string(),
                 };

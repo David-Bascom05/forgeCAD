@@ -3,7 +3,9 @@
 //! turn, a file it makes opened. The chat is the app's: it follows the document open.
 
 use super::Gui;
-use crate::agent::claude::{self, ClaudeCode};
+use crate::agent::claude;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::agent::claude::ClaudeCode;
 use crate::agent::openai::{self, OpenAi};
 use crate::agent::{Backend, Doc, Out, Turns, keys, system_prompt, trash_path};
 use crate::shell::agent::{AgentAct, Entry, Event, counts, prompt, undo_label};
@@ -1003,6 +1005,14 @@ impl Gui {
             self.agent.app_tools = Some(tools);
         }
         let mut backend: Box<dyn crate::agent::Backend> = match s.kind {
+            // in the page: the person's own Claude Code, through `forgecad web --agent`
+            #[cfg(target_arch = "wasm32")]
+            Kind::ClaudeCode if crate::agent::bridge::ready() => {
+                Box::new(crate::agent::bridge::Bridge::new(out, file))
+            }
+            #[cfg(target_arch = "wasm32")]
+            Kind::ClaudeCode => Box::new(crate::agent::bridge::Unbridged { out }),
+            #[cfg(not(target_arch = "wasm32"))]
             Kind::ClaudeCode => {
                 let c = ClaudeCode::new(
                     claude::Config {

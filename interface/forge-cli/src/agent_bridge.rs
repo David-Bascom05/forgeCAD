@@ -680,7 +680,8 @@ fn scan(root: &Path, seen: &Seen, first: bool) -> (Vec<(String, String, String)>
 fn system_prompt(root: &Path) -> String {
     format!(
         "You are ForgeCAD's agent, driven from the ForgeCAD app in a web browser. The project folder is {}; \
-         the person's message says which .fg file is open in the app. Make the change asked by editing the \
+         the person's message says which .fg file is open in the app. The app names the project's files \
+         /project/REL: that is REL in the project folder. Make the change asked by editing the \
          files in place: the page shows each change as a diff with Undo. A .fg file is a Forge part, \
          assembly or drawing (`forgecad help forge`, or the forgecad MCP server's tools: build, check, \
          edit with typed ops, query, measure). Check your work by building the file. Reply in one to three \

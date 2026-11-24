@@ -36,8 +36,8 @@ pub fn default_dir() -> Option<PathBuf> {
 }
 
 fn canonical(project: &Path) -> Result<String, String> {
-    project
-        .canonicalize()
+    // the page's filesystem too (std's has no canonicalize in wasm)
+    forge_dirs::fs::canonicalize(project)
         .map(|p| p.display().to_string())
         .map_err(|e| e.to_string())
 }

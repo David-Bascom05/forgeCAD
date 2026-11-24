@@ -4,6 +4,7 @@
 //! one undo step a turn.
 
 pub mod apptools;
+pub mod bridge;
 pub mod claude;
 pub mod codex;
 pub mod conversations;
@@ -85,7 +86,8 @@ impl Watch {
 
     /// Changes to files that were there come first, then new files, each by name.
     pub fn check(&mut self) -> Vec<Event> {
-        let now = std::time::SystemTime::now();
+        // the clock that runs in the page too (std's panics in wasm)
+        let now = forge_math::clock::system_now();
         let mut files: Vec<(PathBuf, u64, Option<std::time::SystemTime>)> = project::files(&self.dir)
             .into_iter()
             .filter_map(|p| {
