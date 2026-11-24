@@ -72,6 +72,10 @@ pub enum Kind {
     /// ID turning and facing with a boring bar (right hand: it feeds toward the chuck, −z, and
     /// out, +ρ); the insert points to +ρ.
     Bore,
+    /// ID grooving: a blade on a bar, plunging +ρ; width along z.
+    IdGroove,
+    /// ID threading: a 60° insert on a bar, pointing +ρ.
+    IdThread,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -96,6 +100,10 @@ pub struct TurnTool {
     /// The tip direction number of the control's nose-radius compensation (1–9; 3 for an OD
     /// right-hand tool).
     pub tip_number: u32,
+    /// A left-hand tool: the right-hand one mirrored across z (it feeds +z, away from the chuck).
+    pub left: bool,
+    /// The largest bar a part-off blade is made for (its maker's), if stated.
+    pub max_bar: Option<f64>,
     pub bodies: Vec<Body>,
     /// Cutting data: m/min, mm/rev, mm depth of cut.
     pub vc: f64,
@@ -179,16 +187,12 @@ pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
         'T' => 60.0,
         'S' => 90.0,
         'R' => 360.0,
-        'W' => {
-            return Err(code_err(
-                code,
-                "the trigon (W) outline is not in this library yet: use C, D, V, T, S or R",
-            ));
-        }
+        // the trigon: three 80° corners and three 160° ones, every side tangent to the IC
+        'W' => 80.0,
         x => {
             return Err(code_err(
                 code,
-                format!("insert shape `{x}` not in this library (C D V T S R)"),
+                format!("insert shape `{x}` not in this library (C D V T S W R)"),
             ));
         }
     };
@@ -211,6 +215,8 @@ pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
         ('C', "12") | ('D', "15") | ('V', "22") | ('T', "22") | ('S', "12") => 12.7,
         ('C', "16") | ('S', "15") | ('T', "27") => 15.875,
         ('C', "19") | ('S', "19") => 19.05,
+        ('W', "06") => 9.525,
+        ('W', "08") => 12.7,
         ('R', s) => s
             .parse::<f64>()
             .map_err(|_| code_err(code, "round insert size: two digits (mm)"))?,
@@ -248,6 +254,8 @@ pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
         let l = match shape {
             'T' => ic * 3f64.sqrt(),
             'S' => ic,
+            // a side between an 80° and a 160° corner: the tangent lengths r·cot 40° + r·cot 80°
+            'W' => 0.5 * ic * (1.0 / tan(40f64.to_radians()) + 1.0 / tan(80f64.to_radians())),
             _ => ic / dmath::sin(e),
         };
         (re, l)
@@ -297,10 +305,10 @@ pub fn decode_holder(code: &str) -> Result<HolderSpec, ToolError> {
         x => return Err(code_err(code, format!("holder style `{x}` not known"))),
     };
     let hand = c[4];
-    if hand != 'R' {
+    if hand != 'R' && hand != 'L' {
         return Err(code_err(
             code,
-            "only right-hand (R) OD holders in this phase: left-hand and boring bars are next",
+            "the hand: right (R) or left (L); neutral (N) holders are not in this library",
         ));
     }
     let h: f64 = c[5..7]
@@ -330,6 +338,38 @@ pub fn decode_holder(code: &str) -> Result<HolderSpec, ToolError> {
         b,
         length,
     })
+}
+
+/// The insert's core (its outline less the nose radius, a convex polygon with its nose corner at
+/// the origin, counter-clockwise), the lead edge leaving the nose at `phi1` degrees from +ρ.
+fn insert_core(ins: &InsertSpec, phi1: f64) -> Vec<[f64; 2]> {
+    let re = ins.re;
+    let d1 = dir(phi1);
+    let d2 = dir(phi1 + ins.eps);
+    match ins.shape {
+        'T' => {
+            let ls = ins.l - 2.0 * re / tan(30f64.to_radians());
+            vec![[0.0, 0.0], sc(d1, ls), sc(d2, ls)]
+        }
+        // the trigon less re: six equal sides (each the side less re·cot 40° and re·cot 80°),
+        // turning left by 20° at a 160° corner and 100° at an 80° one
+        'W' => {
+            let e = ins.l - re * (1.0 / tan(40f64.to_radians()) + 1.0 / tan(80f64.to_radians()));
+            let mut p = [0.0, 0.0];
+            let mut v = vec![p];
+            for t in [0.0, 20.0, 120.0, 140.0, 240.0] {
+                p = add(p, sc(dir(phi1 + t), e));
+                v.push(p);
+            }
+            v
+        }
+        _ => {
+            let ls = ins.l - 2.0 * re / tan(0.5 * ins.eps.to_radians()).max(1e-9);
+            let a = sc(d1, ls);
+            let b = sc(d2, ls);
+            vec![[0.0, 0.0], a, add(a, b), b]
+        }
+    }
 }
 
 /// tan through forge_math::dmath (the platform's libm differs between targets).
@@ -387,7 +427,8 @@ const HOLDER_PAD: f64 = 0.05;
 /// How far a generic seat's corners stand in from the insert's.
 const SEAT_INSET: f64 = 0.5;
 
-/// An OD turning tool from an insert and a right-hand holder: the insert's core (its nose
+/// An OD turning tool from an insert and a holder (a left-hand one is its right-hand twin
+/// mirrored across z, `mirrored`): the insert's core (its nose
 /// corner at the nose centre, the reference point), its body to its thickness below centre
 /// height with the effective clearance `clear_deg` (a negative insert in a negatively inclined
 /// seat: about 6°), and the holder's head and shank.
@@ -425,19 +466,10 @@ pub fn turning_tool(
             "this style and insert leave no clearance at the face",
         ));
     }
-    let (d1, d2) = (dir(phi1), dir(phi2));
     let re = ins.re;
     // the shrunk insert: same angles, sides shorter by the corner allowances; its nose corner
     // is at the nose centre (0, 0)
-    let ls = ins.l - 2.0 * re / tan(0.5 * ins.eps.to_radians()).max(1e-9);
-    let core = match ins.shape {
-        'T' => vec![[0.0, 0.0], sc(d1, ls), sc(d2, ls)],
-        _ => {
-            let a = sc(d1, ls);
-            let b = sc(d2, ls);
-            vec![[0.0, 0.0], a, add(a, b), b]
-        }
-    };
+    let core = insert_core(&ins, phi1);
     let relief = tan((ins.clearance + clear_deg).max(0.0).to_radians());
     let insert_body = Body {
         name: "insert".into(),
@@ -502,7 +534,7 @@ pub fn turning_tool(
         on_axis: false,
         cyl: None,
     };
-    Ok(TurnTool {
+    let t = TurnTool {
         id: id.into(),
         kind: Kind::Turn,
         code: insert.into(),
@@ -513,12 +545,45 @@ pub fn turning_tool(
         pitch: [0.0, 0.0],
         tip: [-re, -re],
         tip_number: 3,
+        left: false,
+        max_bar: None,
         bodies: vec![insert_body, head, shank_body],
         vc: 200.0,
         f: 0.2,
         ap: 2.0,
         source: "decoded from the ISO codes; holder head and f generic: verify with the vendor".into(),
-    })
+    };
+    Ok(if hol.hand == 'L' { mirrored(t) } else { t })
+}
+
+/// The tool mirrored across z (ρ, z) → (ρ, −z): a left-hand tool from its right-hand twin. A
+/// mirror maps a convex core to a convex core and the clearances with it; the edges' angles from
+/// +ρ change sign; the imaginary tip mirrors; the control's tip number with it (3 ↔ 4, 2 ↔ 1).
+pub fn mirrored(mut t: TurnTool) -> TurnTool {
+    for b in &mut t.bodies {
+        // mirrored, then the vertices after the first reversed: counter-clockwise again, the
+        // first vertex (the nose, which the checker's inner point starts from) still first
+        let m: Vec<[f64; 2]> = b.core.iter().map(|p| [p[0], -p[1]]).collect();
+        b.core = m[..1.min(m.len())]
+            .iter()
+            .chain(m[1..].iter().rev())
+            .copied()
+            .collect();
+        if let Some(c) = &mut b.cyl {
+            c.z = [-c.z[1], -c.z[0]];
+        }
+    }
+    t.edges = [-t.edges[0], -t.edges[1]];
+    t.tip = [t.tip[0], -t.tip[1]];
+    t.tip_number = match t.tip_number {
+        3 => 4,
+        4 => 3,
+        2 => 1,
+        1 => 2,
+        n => n,
+    };
+    t.left = !t.left;
+    t
 }
 
 /// An ISO 6261 boring bar, decoded: shank diameter, length, insert shape, style (κr), hand.
@@ -528,6 +593,8 @@ pub struct BarSpec {
     pub length: f64,
     pub shape: char,
     pub kapr: f64,
+    /// R or L: a left-hand bar is its right-hand twin mirrored across z.
+    pub hand: char,
 }
 
 /// `S20R-SCLCR09`, `A16R-SDUCR07`: shank material and diameter, length letter, then clamping,
@@ -581,10 +648,11 @@ pub fn decode_bar(code: &str) -> Result<BarSpec, ToolError> {
         'Q' => 107.5,
         x => return Err(code_err(code, format!("bar style `{x}` not known (L J U F Q)"))),
     };
-    if t[4] != 'R' {
-        return Err(code_err(code, "only right-hand (R) bars in this phase"));
+    if t[4] != 'R' && t[4] != 'L' {
+        return Err(code_err(code, "the hand: right (R) or left (L)"));
     }
     Ok(BarSpec {
+        hand: t[4],
         d,
         length,
         shape: t[1],
@@ -612,16 +680,7 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
     let phi1 = b.kapr - 90.0;
     let phi2 = phi1 + ins.eps;
     let re = ins.re;
-    let ls = ins.l - 2.0 * re / tan(0.5 * ins.eps.to_radians()).max(1e-9);
-    let (d1, d2) = (dir(phi1), dir(phi2));
-    let od = match ins.shape {
-        'T' => vec![[0.0, 0.0], sc(d1, ls), sc(d2, ls)],
-        _ => {
-            let a = sc(d1, ls);
-            let bb = sc(d2, ls);
-            vec![[0.0, 0.0], a, add(a, bb), bb]
-        }
-    };
+    let od = insert_core(&ins, phi1);
     let core: Vec<[f64; 2]> = od.iter().map(|p| [-p[0], p[1]]).collect();
     let relief = tan((ins.clearance + clear_deg).max(0.0).to_radians());
     let f = 0.5 * b.d + 3.0;
@@ -649,7 +708,7 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
             z: [-re, b.length],
         }),
     };
-    Ok(TurnTool {
+    let t = TurnTool {
         id: id.into(),
         kind: Kind::Bore,
         code: insert.into(),
@@ -660,13 +719,108 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
         pitch: [0.0, 0.0],
         tip: [re, -re],
         tip_number: 2,
+        left: false,
+        max_bar: None,
         bodies: vec![insert_body, bar_body],
         vc: 180.0,
         f: 0.15,
         ap: 1.0,
         source: "decoded from the ISO codes; bar f and seat generic: verify with the vendor".into(),
-    })
+    };
+    Ok(if b.hand == 'L' { mirrored(t) } else { t })
 }
+
+/// A parting or grooving blade from its maker's records: the insert (cutting width w, corner rc,
+/// its length along the blade `head`, side clearance `side_deg`) as a head falling away by the
+/// side clearance; the blade (thickness t_blade, reach, height h) as a rectangle centred on the
+/// insert's width from the tip back to the reach (where the blade truly starts behind the insert,
+/// a superset); the tool block from its record ([h, b, l1]: depth below centre height, width
+/// along z centred on the blade, length along ρ from the reach back) or generic. `max_bar`: the
+/// maker's largest bar.
+pub fn blade_tool(
+    id: &str,
+    kind: Kind,
+    w: f64,
+    rc: f64,
+    head: f64,
+    side_deg: f64,
+    t_blade: f64,
+    reach: f64,
+    h: f64,
+    max_bar: Option<f64>,
+    block: Option<[f64; 3]>,
+) -> Result<TurnTool, ToolError> {
+    if !(w > 2.0 * rc && rc >= 0.0 && reach > 0.0 && t_blade > 2.0 * rc && t_blade <= w && head > 0.0) {
+        return Err(ToolError::Bad {
+            record: id.into(),
+            why: format!("an insert {w} wide (corner {rc}) on a blade {t_blade} thick, reach {reach}"),
+        });
+    }
+    let mut t = groove_tool(id, kind, w, rc, reach, side_deg, h)?;
+    let core_w = w - 2.0 * rc;
+    let hl = head.min(reach);
+    let taper = (tan(side_deg.to_radians()) * hl).min(0.5 * (w - t_blade));
+    let off = 0.5 * (w - t_blade);
+    let insert = Body {
+        name: "blade".into(),
+        cutter: true,
+        core: ccw(vec![[0.0, 0.0], [hl, taper], [hl, core_w - taper], [0.0, core_w]]),
+        r: rc,
+        depth: [0.0, 3.0],
+        relief: tan(7f64.to_radians()),
+        on_axis: false,
+        cyl: None,
+    };
+    let body = Body {
+        name: "blade body".into(),
+        cutter: true,
+        core: ccw(vec![
+            [0.0, off],
+            [reach, off],
+            [reach, core_w - off],
+            [0.0, core_w - off],
+        ]),
+        r: rc,
+        depth: [0.0, h],
+        relief: 0.0,
+        on_axis: false,
+        cyl: None,
+    };
+    let mut holder = t.bodies.pop().expect("the block");
+    if let Some([bh, bb, bl]) = block {
+        // the block: b wide along z about the blade's middle, l1 back along ρ from the reach (the
+        // blade's clamped length beyond the reach lies in it), its depth below centre height
+        let (x0, zm) = (reach + rc, 0.5 * core_w);
+        holder = Body {
+            name: "tool block".into(),
+            core: vec![
+                [x0, zm - 0.5 * bb],
+                [x0 + bl, zm - 0.5 * bb],
+                [x0 + bl, zm + 0.5 * bb],
+                [x0, zm + 0.5 * bb],
+            ],
+            depth: [0.0, bh.max(h)],
+            ..holder
+        };
+    }
+    t.bodies = vec![insert, body, holder];
+    t.code = format!("blade {t_blade} x {reach}, insert {w}");
+    t.max_bar = max_bar;
+    t.source = "the maker's blade and insert records; tool block generic".into();
+    Ok(t)
+}
+
+/// The generic blade: its insert head is BLADE_HEAD long (or the reach, if shorter), falling away
+/// by the side clearance; behind it the blade's sides run straight, at most BLADE_RELIEF in from
+/// the head's on each side (catalogue blades are 0.3–0.5 narrower per side than the insert, so
+/// the model holds them: T.model). Returns (head length, the narrowing per side).
+fn blade_head(reach: f64, side_deg: f64) -> (f64, f64) {
+    let head = BLADE_HEAD.min(reach);
+    (head, (tan(side_deg.to_radians()) * head).min(BLADE_RELIEF))
+}
+
+const BLADE_HEAD: f64 = 6.0;
+const BLADE_RELIEF: f64 = 0.2;
 
 /// A grooving or part-off blade: width w, corner radius rc, reach (depth from the tip to the
 /// blade's holder), side clearance per side in degrees. The reference point is the centre of
@@ -687,9 +841,17 @@ pub fn groove_tool(
         });
     }
     let core_w = w - 2.0 * rc;
-    let taper = tan(side_deg.to_radians()) * reach;
-    // the blade narrows by the side clearance on both sides as it runs back (+ρ) from the tip
-    let core = vec![[0.0, 0.0], [reach, taper], [reach, core_w - taper], [0.0, core_w]];
+    let (head, taper) = blade_head(reach, side_deg);
+    // the insert head narrows by the side clearance on both sides as it runs back (+ρ) from the
+    // tip; behind it the blade runs straight, at most BLADE_RELIEF in from the head on each side
+    // two convex cores: the head (a trapezoid) and the blade behind it (a rectangle)
+    let core = vec![[0.0, 0.0], [head, taper], [head, core_w - taper], [0.0, core_w]];
+    let body_core = vec![
+        [head, taper],
+        [reach, taper],
+        [reach, core_w - taper],
+        [head, core_w - taper],
+    ];
     if core_w - 2.0 * taper <= 0.0 {
         return Err(ToolError::Bad {
             record: id.into(),
@@ -705,6 +867,11 @@ pub fn groove_tool(
         relief: tan(7f64.to_radians()),
         on_axis: false,
         cyl: None,
+    };
+    let blade_body = Body {
+        name: "blade body".into(),
+        core: ccw(body_core),
+        ..blade.clone()
     };
     let holder = Body {
         name: "blade holder".into(),
@@ -732,7 +899,13 @@ pub fn groove_tool(
         pitch: [0.0, 0.0],
         tip: [-rc, -rc],
         tip_number: 3,
-        bodies: vec![blade, holder],
+        left: false,
+        max_bar: None,
+        bodies: if reach > head {
+            vec![blade, blade_body, holder]
+        } else {
+            vec![blade, holder]
+        },
         vc: 120.0,
         f: 0.06,
         ap: reach,
@@ -786,6 +959,8 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
         pitch,
         tip: [-rt, 0.0],
         tip_number: 8,
+        left: false,
+        max_bar: None,
         bodies: vec![tip, holder],
         vc: 100.0,
         f: 0.0,
@@ -794,8 +969,174 @@ pub fn thread_tool(id: &str, rt: f64, pitch: [f64; 2], h: f64) -> Result<TurnToo
     })
 }
 
+/// An internal grooving tool: a blade w wide with corners rc, reaching `reach` (the deepest
+/// groove it cuts, from the bar's side) above a bar of diameter `bar_d`. The reference point is
+/// the centre of the corner on the −z side; the blade points +ρ and narrows by the side
+/// clearance as it runs back toward the bar. The bar is a cylinder along z (checked as one, its
+/// exact image per move), its side `reach + rc` below the reference point, from the blade's −z
+/// side for `length`. Generic: verify with the vendor.
+pub fn id_groove_tool(
+    id: &str,
+    w: f64,
+    rc: f64,
+    reach: f64,
+    side_deg: f64,
+    bar_d: f64,
+    length: f64,
+) -> Result<TurnTool, ToolError> {
+    if !(w > 2.0 * rc && rc >= 0.0 && reach > 0.0 && bar_d > 0.0 && length > 0.0) {
+        return Err(ToolError::Bad {
+            record: id.into(),
+            why: format!("a blade {w} wide with corners {rc} and reach {reach} on a bar {bar_d}"),
+        });
+    }
+    let core_w = w - 2.0 * rc;
+    let (head, taper) = blade_head(reach, side_deg);
+    if core_w - 2.0 * taper <= 0.0 {
+        return Err(ToolError::Bad {
+            record: id.into(),
+            why: "the side clearance closes the blade".into(),
+        });
+    }
+    let core = vec![[0.0, 0.0], [0.0, core_w], [-head, core_w - taper], [-head, taper]];
+    let body_core = vec![
+        [-head, taper],
+        [-head, core_w - taper],
+        [-reach, core_w - taper],
+        [-reach, taper],
+    ];
+    let blade = Body {
+        name: "blade".into(),
+        cutter: true,
+        core: ccw(core),
+        r: rc,
+        depth: [0.0, 3.0],
+        relief: tan(7f64.to_radians()),
+        on_axis: false,
+        cyl: None,
+    };
+    let blade_body = Body {
+        name: "blade body".into(),
+        core: ccw(body_core),
+        ..blade.clone()
+    };
+    let bar = Body {
+        name: "bar".into(),
+        cutter: false,
+        core: vec![[0.0, 0.0]],
+        r: 0.0,
+        depth: [0.0, 0.0],
+        relief: 0.0,
+        on_axis: false,
+        cyl: Some(Cyl {
+            dx: -(reach + rc + 0.5 * bar_d),
+            r: 0.5 * bar_d,
+            z: [-rc, length],
+        }),
+    };
+    Ok(TurnTool {
+        id: id.into(),
+        kind: Kind::IdGroove,
+        code: format!("ID blade {w} x {reach} on Ø{bar_d}"),
+        re: rc,
+        edges: [90.0, -90.0],
+        l: reach,
+        width: w,
+        pitch: [0.0, 0.0],
+        tip: [rc, -rc],
+        tip_number: 2,
+        left: false,
+        max_bar: None,
+        bodies: if reach > head {
+            vec![blade, blade_body, bar]
+        } else {
+            vec![blade, bar]
+        },
+        vc: 100.0,
+        f: 0.04,
+        ap: reach,
+        source: "generic ID grooving bar: verify with the vendor".into(),
+    })
+}
+
+/// An internal threading tool: a 60° insert with tip radius rt pointing +ρ, reaching 4 mm above
+/// a bar of diameter `bar_d` (a cylinder along z, from the insert's −z side for `length`). The
+/// reference point is the tip radius's centre. Generic: verify with the vendor.
+pub fn id_thread_tool(
+    id: &str,
+    rt: f64,
+    pitch: [f64; 2],
+    bar_d: f64,
+    length: f64,
+) -> Result<TurnTool, ToolError> {
+    if !(rt >= 0.0 && bar_d > 0.0 && length > 0.0 && pitch[0] > 0.0 && pitch[0] <= pitch[1]) {
+        return Err(ToolError::Bad {
+            record: id.into(),
+            why: format!("an ID thread insert r {rt}, pitch {pitch:?}, on a bar {bar_d}"),
+        });
+    }
+    let reach = 4.0;
+    let side = reach * tan(30f64.to_radians());
+    let core = vec![[0.0, 0.0], [-reach, side], [-reach, -side]];
+    let tip = Body {
+        name: "thread insert".into(),
+        cutter: true,
+        core: ccw(core),
+        r: rt,
+        depth: [0.0, 3.5],
+        relief: tan(8f64.to_radians()),
+        on_axis: false,
+        cyl: None,
+    };
+    let bar = Body {
+        name: "bar".into(),
+        cutter: false,
+        core: vec![[0.0, 0.0]],
+        r: 0.0,
+        depth: [0.0, 0.0],
+        relief: 0.0,
+        on_axis: false,
+        cyl: Some(Cyl {
+            dx: -(reach + rt + 0.5 * bar_d),
+            r: 0.5 * bar_d,
+            z: [-side - rt, length],
+        }),
+    };
+    Ok(TurnTool {
+        id: id.into(),
+        kind: Kind::IdThread,
+        code: format!("ID 60° thread, tip r {rt}, on Ø{bar_d}"),
+        re: rt,
+        edges: [150.0, -150.0],
+        l: reach,
+        width: 2.0 * side,
+        pitch,
+        tip: [rt, 0.0],
+        tip_number: 6,
+        left: false,
+        max_bar: None,
+        bodies: vec![tip, bar],
+        vc: 80.0,
+        f: 0.0,
+        ap: 0.0,
+        source: "generic 60° ID insert and bar: verify with the vendor".into(),
+    })
+}
+
 /// A drill on the centre line: diameter d, point angle, flute length, shank diameter.
 pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> Result<TurnTool, ToolError> {
+    drill_tool_len(id, d, point_deg, flute, shank, 60.0)
+}
+
+/// `drill_tool` with the shank's length above the flutes (a maker's oal − lcf).
+pub fn drill_tool_len(
+    id: &str,
+    d: f64,
+    point_deg: f64,
+    flute: f64,
+    shank: f64,
+    shank_len: f64,
+) -> Result<TurnTool, ToolError> {
     let r = 0.5 * d;
     let tip_h = r / tan(0.5 * point_deg.to_radians());
     let sr = 0.5 * shank;
@@ -817,8 +1158,8 @@ pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> R
         core: ccw(vec![
             [-sr, flute],
             [sr, flute],
-            [sr, flute + 60.0],
-            [-sr, flute + 60.0],
+            [sr, flute + shank_len],
+            [-sr, flute + shank_len],
         ]),
         r: 0.0,
         depth: [0.0, 0.0],
@@ -837,6 +1178,8 @@ pub fn drill_tool(id: &str, d: f64, point_deg: f64, flute: f64, shank: f64) -> R
         pitch: [0.0, 0.0],
         tip: [0.0, 0.0],
         tip_number: 0,
+        left: false,
+        max_bar: None,
         bodies: vec![flutes, shank_body],
         vc: 25.0,
         f: 0.1,
@@ -939,6 +1282,30 @@ fn from_table(r: &Table) -> Result<TurnTool, ToolError> {
             })?;
             boring_tool(&id, ins, bar, toml::num(r, "seat_clearance"))?
         }
+        "id_groove" => id_groove_tool(
+            &id,
+            need("width")?,
+            need("corner")?,
+            need("reach")?,
+            toml::num(r, "side_clearance").unwrap_or(2.0),
+            need("bar_diameter")?,
+            toml::num(r, "length").unwrap_or(150.0),
+        )?,
+        "id_thread" => {
+            let p = toml::nums(r, "pitch")
+                .filter(|v| v.len() == 2)
+                .ok_or(ToolError::Missing {
+                    record: rec.clone(),
+                    field: "pitch",
+                })?;
+            id_thread_tool(
+                &id,
+                need("tip_radius")?,
+                [p[0], p[1]],
+                need("bar_diameter")?,
+                toml::num(r, "length").unwrap_or(150.0),
+            )?
+        }
         "drill" => drill_tool(
             &id,
             need("diameter")?,
@@ -949,7 +1316,7 @@ fn from_table(r: &Table) -> Result<TurnTool, ToolError> {
         x => {
             return Err(ToolError::Bad {
                 record: rec,
-                why: format!("kind `{x}`: turn, bore, groove, part, thread or drill"),
+                why: format!("kind `{x}`: turn, bore, groove, part, thread, id_groove, id_thread or drill"),
             });
         }
     };

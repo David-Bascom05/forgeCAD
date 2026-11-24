@@ -1941,6 +1941,20 @@ impl Tr<'_, '_, '_> {
         let t = d.integer(name, "Type", 0)?;
         let (mut l, mut l2) = (d.flt(name, "Length", 0.0)?, d.flt(name, "Length2", 0.0)?);
         let mid = d.boolean(name, "Midplane")?;
+        // FreeCAD 1.1 says the sides with SideType (0 one, 1 two, 2 symmetric), the second's type
+        // in Type2, and leaves the deprecated Midplane false
+        let (t, mid) = match d.integer(name, "SideType", 0)? {
+            0 => (t, mid),
+            2 => (t, true),
+            1 => match (t, d.integer(name, "Type2", 0)?) {
+                // a length each way: the older TwoLengths
+                (0 | 4, 0) => (4, false),
+                (t, t2) => {
+                    return unsupported(format!("a pad or pocket of two sides, of types {t} and {t2}"));
+                }
+            },
+            s => return unsupported(format!("a pad or pocket of side type {s}")),
+        };
         if d.boolean(name, "UseCustomVector")? {
             // the direction is stored as used, a pocket's too: only Reversed turns it. Length runs
             // along it unless AlongSketchNormal
@@ -2032,8 +2046,11 @@ impl Tr<'_, '_, '_> {
             at,
             dir,
             angle: (!whole).then_some(ang),
-            sym: !whole && d.boolean(name, "Midplane")?,
+            sym: !whole && (d.boolean(name, "Midplane")? || d.integer(name, "SideType", 0)? == 2),
         };
+        if d.integer(name, "SideType", 0)? == 1 {
+            return unsupported("a revolve of two sides");
+        }
         self.profile(name, lab, make, None)
     }
 
@@ -3092,7 +3109,7 @@ pub fn part_files(stem: &str, bodies: &[Body]) -> Vec<String> {
 /// Every body of the file, each translated or not, in the file's order: its PartDesign bodies, then
 /// the ends of older files' chains of features with no body. Err when the file will not read.
 pub fn translate(data: &[u8]) -> Result<Vec<Body>, String> {
-    let zip = Zip::new(data).ok_or("not a zip file")?;
+    let zip = Zip::new(data).map_err(|e| e.to_string())?;
     if zip.size("Document.xml").ok_or("no Document.xml")? > 64 << 20 {
         return Err("a huge document".into());
     }

@@ -18,9 +18,10 @@ use forge_cam_geom::big::Nat;
 use forge_cam_geom::real::Dy;
 use forge_tooling::toml::{self, Table, num, text, texts};
 
-pub const DIALECTS: [(&str, &str); 11] = [
+pub const DIALECTS: [(&str, &str); 12] = [
     ("fanuc", include_str!("../data/fanuc.toml")),
     ("haas", include_str!("../data/haas.toml")),
+    ("haas-hsm", include_str!("../data/haas-hsm.toml")),
     ("linuxcnc", include_str!("../data/linuxcnc.toml")),
     ("grbl", include_str!("../data/grbl.toml")),
     ("siemens", include_str!("../data/siemens.toml")),
@@ -901,7 +902,10 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if code.is_empty() {
                     return Err(PostError::Unsupported {
                         what: format!("coolant {c:?}"),
-                        fix: "choose a coolant the machine has (flood, mist) or none".into(),
+                        fix: format!(
+                            "the {} dialect has no `{key}`: choose a coolant it posts, or none",
+                            d.s("name")
+                        ),
                     });
                 }
                 w.emit(code);

@@ -251,3 +251,115 @@ fn set_arg_names_a_positional_argument_by_its_place() {
     };
     assert_eq!(apply(src, &op).unwrap_err().kind(), "UnknownArg");
 }
+
+/// In a machining document a call names a built-in, never a binding (forge-cam-lang's and
+/// forge-turn-lang's evaluators), so `drill = drill(..)` is legal there; Rename takes the
+/// binding and its reads, never the call's head (it once wrote `holes = holes(..)`).
+#[test]
+fn rename_in_a_machining_document_leaves_call_heads() {
+    use forge_lang::syntax::{ExprKind, StmtKind};
+    let src = "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\ndrill = drill(op1, f.bolts)\nprog = program(op1, after: drill)\n";
+    let op = Op::Rename {
+        from: "drill".into(),
+        to: "holes".into(),
+    };
+    let out = forge_lang::edit::apply(src, &op).unwrap();
+    assert_eq!(
+        out,
+        "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\nholes = drill(op1, f.bolts)\nprog = program(op1, after: holes)\n"
+    );
+    let prog = forge_lang::edit::apply_ast(src, &op).unwrap();
+    let StmtKind::Assign { name, value } = &prog[3].kind else {
+        panic!("an assignment")
+    };
+    assert_eq!(name, "holes");
+    let ExprKind::Call(f, _) = &value.kind else {
+        panic!("a call")
+    };
+    assert!(matches!(&f.kind, ExprKind::Name(n) if n == "drill"));
+    // a part's calls are reads: a function's name is renamed where it is called
+    let part = "fn sq(x) {\n  return x * x\n}\na = sq(2)\n";
+    let out = forge_lang::edit::apply(
+        part,
+        &Op::Rename {
+            from: "sq".into(),
+            to: "sq2".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(out, "fn sq2(x) {\n  return x * x\n}\na = sq2(2)\n");
+}
+
+/// In a machining document a call's head is not a read: deleting, moving or suppressing
+/// `drill = drill(..)` is not held up by, and does not take out, a later statement that only
+/// calls the built-in `drill` (it once refused with StillRead, and Suppress took `d2` too).
+#[test]
+fn a_call_head_in_a_machining_document_is_not_a_read() {
+    let src = "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\ndrill = drill(op1, f.bolts)\nd2 = drill(op1, f.other)\nprog = program(op1, after: drill)\n";
+    let del = apply(
+        "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\ndrill = drill(op1, f.bolts)\nd2 = drill(op1, f.other)\n",
+        &Op::DeleteFeature { id: "drill".into() },
+    )
+    .unwrap();
+    assert_eq!(
+        del,
+        "machining\nf = part(\"flange.fg\")\nop1 = setup(f)\nd2 = drill(op1, f.other)\n"
+    );
+    // a real read still holds it: `prog` reads `drill`
+    assert!(apply(src, &Op::DeleteFeature { id: "drill".into() }).is_err());
+    let sup = apply(src, &Op::Suppress { id: "drill".into() }).unwrap();
+    assert!(sup.contains("\nd2 = drill(op1, f.other)\n"), "{sup}");
+    assert!(sup.contains("#~drill drill = drill(op1, f.bolts)"), "{sup}");
+    assert!(sup.contains("#~drill prog = program(op1, after: drill)"), "{sup}");
+    let mv = apply(
+        src,
+        &Op::MoveFeature {
+            id: "d2".into(),
+            before: Some("drill".into()),
+        },
+    )
+    .unwrap();
+    assert!(
+        mv.contains("d2 = drill(op1, f.other)\ndrill = drill(op1, f.bolts)\n"),
+        "{mv}"
+    );
+    let add = apply(
+        src,
+        &Op::AddFeature {
+            before: Some("drill".into()),
+            text: "d3 = drill(op1, f.third)".into(),
+        },
+    )
+    .unwrap();
+    assert!(
+        add.contains("d3 = drill(op1, f.third)\ndrill = drill(op1, f.bolts)\n"),
+        "{add}"
+    );
+    // a part's call of a function is a read of it
+    let part = "fn sq(x) {\n  return x * x\n}\na = sq(2)\n";
+    assert!(apply(part, &Op::DeleteFeature { id: "sq".into() }).is_err());
+}
+
+/// A robot document's calls are built-ins too (robot.rs): `frame = frame(..)` renamed keeps the
+/// call, and deleting it is not held up by a later call of `frame`.
+#[test]
+fn a_robot_documents_calls_are_built_ins() {
+    let src = "robot\nsrc = source(\"arm.fg\")\nframe = frame(on: src.base)\ntool0 = frame(on: src.tip)\n";
+    let out = apply(
+        src,
+        &Op::Rename {
+            from: "frame".into(),
+            to: "base0".into(),
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        out,
+        "robot\nsrc = source(\"arm.fg\")\nbase0 = frame(on: src.base)\ntool0 = frame(on: src.tip)\n"
+    );
+    let del = apply(src, &Op::DeleteFeature { id: "frame".into() }).unwrap();
+    assert_eq!(
+        del,
+        "robot\nsrc = source(\"arm.fg\")\ntool0 = frame(on: src.tip)\n"
+    );
+}

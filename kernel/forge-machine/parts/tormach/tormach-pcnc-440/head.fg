@@ -1,0 +1,22 @@
+# tormach-pcnc-440 head: nose cylinder and housing back to the column (sizes unpublished)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared ax = 127
+shared ay = 79.375
+shared nz = 306
+shared nr = 54
+shared nh = 119
+shared x0 = 8
+shared y0 = -39.625
+shared z0 = 425
+shared lx = 238
+shared ly = 278
+shared lz = 299
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+housing = extrude(plan, lz)
+sketch nk(on: offset(xy, nz)) {
+  c = circle((ax, ay), nr)
+}
+nose = extrude(nk.c, nh)

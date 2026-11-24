@@ -129,6 +129,26 @@ pub fn parse_path(s: &str) -> Option<Vec<Seg>> {
     Some(out)
 }
 
+/// A refused size's fix (`Options::fit_sizes`): the param driving it, a value built with it,
+/// and, when the search met a refusal below a size that built, where the kernel's answer was
+/// not monotone in the size.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Fit {
+    pub param: ParamKey,
+    pub value: Literal,
+    pub intermittent: Option<Intermittent>,
+}
+
+/// Sizes the search found refused below one that built: from `from` (the least such) up to
+/// `to` (the least refused above the largest built), refused here and there, so the fix is
+/// the largest the search built, not a limit. `why` is the kernel's refusal at `from`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Intermittent {
+    pub from: f64,
+    pub to: f64,
+    pub why: String,
+}
+
 /// A literal value as a param definition writes it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Literal {
@@ -395,6 +415,10 @@ pub enum SyntaxError {
         name: String,
     },
     AssignToNonName {
+        span: Span,
+    },
+    /// Expressions or blocks nested deeper than the parser goes (`syntax::fast::MAX_DEPTH`).
+    TooDeep {
         span: Span,
     },
     KeywordNotName {
@@ -712,7 +736,7 @@ pub enum Error {
         id: String,
         error: forge_model::RegenError,
         /// The largest value of the param driving a refused size that builds (`Options::fit_sizes`).
-        fit: Option<Box<(ParamKey, Literal)>>,
+        fit: Option<Box<Fit>>,
     },
     /// A tapered extrude whose outline closes up before its depth (a lint): built to where it
     /// closes, the pyramid or ridge its walls make, `at` from its sketch where `depth` was asked.
@@ -799,6 +823,12 @@ pub enum Error {
         want: Dim,
         found: Dim,
     },
+    /// A value no part has: not finite, or past `eval::MAX_MAGNITUDE` (1e12 mm or a count) or
+    /// `eval::MAX_ANGLE` (1e5 radians). The kernel's measures and its loops mean nothing there.
+    TooLarge {
+        span: Span,
+        value: f64,
+    },
     /// An edit's value is NaN or infinite: no literal writes it.
     NotFinite {
         param: ParamKey,
@@ -882,6 +912,7 @@ impl Error {
                 | SyntaxError::Expected { span, .. }
                 | SyntaxError::ParamWithoutOwner { span, .. }
                 | SyntaxError::AssignToNonName { span }
+                | SyntaxError::TooDeep { span }
                 | SyntaxError::KeywordNotName { span }
                 | SyntaxError::PositionalAfterKeyword { span }
                 | SyntaxError::ReservedWord { span, .. } => *span,
@@ -893,6 +924,7 @@ impl Error {
             | PositionalId { span, .. }
             | PositionalSelection { span, .. }
             | Fuel { span, .. }
+            | TooLarge { span, .. }
             | ParamOutOfScope { span, .. }
             | WrongType { span, .. }
             | DimMismatch { span, .. }
@@ -1015,6 +1047,7 @@ impl Error {
             ShadowsTopLevel { .. } => "ShadowsTopLevel",
             EditDim { .. } => "EditDim",
             NotFinite { .. } => "NotFinite",
+            TooLarge { .. } => "TooLarge",
             Sheet(e) => e.kind(),
             Thermo(e) => e.kind(),
             Weld(e) => e.kind(),
@@ -1078,8 +1111,8 @@ impl Error {
             EntityStillRead { reader, .. } => vec![Op::DeleteFeature { id: reader.clone() }],
             // a size too big for where it goes: as large as builds
             Build { fit: Some(fit), .. } => vec![Op::SetParam {
-                param: fit.0.clone(),
-                value: fit.1,
+                param: fit.param.clone(),
+                value: fit.value,
             }],
             // as deep as it closes, or as steep as reaches the depth
             TaperCloses { fixes, .. } => fixes
@@ -1126,6 +1159,9 @@ impl Error {
                     format!("param {name} has no owner: `param FEATURE.{name} = ..` or `shared {name} = ..`")
                 }
                 SyntaxError::AssignToNonName { .. } => "only a name can be assigned".into(),
+                SyntaxError::TooDeep { .. } => {
+                    "nested too deep: an expression or block deeper than 400 levels (a chain `a + b + ..` counts each link)".into()
+                }
                 SyntaxError::KeywordNotName { .. } => "a keyword argument is a name".into(),
                 SyntaxError::PositionalAfterKeyword { .. } => {
                     "a positional argument after a keyword one".into()
@@ -1159,7 +1195,11 @@ impl Error {
                 "selection by position (extreme) retargets when unrelated features move; select by role or between faces [{}]",
                 rule.name()
             ),
-            Fuel { func, budget, .. } => format!("{func} ran past its budget of {budget} calls"),
+            Fuel { func, budget, .. } => match func.as_str() {
+                "statements" | "features" => format!("the run makes more than {budget} {func}"),
+                "nested evaluation" => format!("expressions nest more than {budget} deep in evaluation"),
+                _ => format!("{func} ran past its budget of {budget} calls"),
+            },
             UnnamedFeature { kind, rule, .. } => {
                 format!(
                     "a {kind} feature needs a name: `name = {kind}(..)` [{}]",
@@ -1225,7 +1265,19 @@ impl Error {
             }
             SketchKernel { sketch, error, .. } => format!("sketch {sketch}: {}", words(error)),
             SketchProfile { sketch, error, .. } => format!("sketch {sketch}: {}", words(error)),
-            Build { id, error, .. } => format!("{id}: the kernel refused it: {}", regen_text(error)),
+            Build { id, error, fit, .. } => {
+                let mut t = format!("{id}: the kernel refused it: {}", regen_text(error));
+                if let Some(Intermittent { from, to, why }) = fit.as_ref().and_then(|f| f.intermittent.as_ref()) {
+                    let (n, v) = (forge_agent::short, fit.as_ref().map_or(0.0, |f| f.value.value));
+                    t.push_str(&format!(
+                        "; the search for the largest that builds met refusals below sizes that built, the least at {} \
+                         (the kernel: {why}), so up to {} the kernel's answer is not monotone in \
+                         the size: {} is the largest verified, not a limit",
+                        n(*from), n(*to), n(v)
+                    ));
+                }
+                t
+            }
             NoFace { id, role, .. } => format!("{id}.{role:?}: no such face on the part here"),
             NotPlanar { id, role, .. } => format!("{id}.{role:?} is not planar"),
             EmptySelection { .. } => "the selection picks nothing".into(),
@@ -1270,6 +1322,9 @@ impl Error {
             EditDim { param, want, found } => format!("{param} is a {want:?}; the value is a {found:?}"),
             NotFinite { param, value } => {
                 format!("{param} cannot be set to {value}: only a finite number is written")
+            }
+            TooLarge { value, .. } => {
+                format!("{value:e} is past any part's size or count (at most 1e12 mm or items, 1e5 radians)")
             }
             Sheet(e) => e.text(),
             Thermo(e) => e.text(),
@@ -1395,6 +1450,7 @@ impl Error {
             NotFinite { param, value } => {
                 vec![("param", s(&param.to_string())), ("value", s(&value.to_string()))]
             }
+            TooLarge { value, .. } => vec![("value", s(&value.to_string()))],
             UnknownFeature { id } | NotAStatement { id } => vec![("id", s(id))],
             StillRead { name, reader, .. } => vec![("name", s(name)), ("reader", s(reader))],
             EntityStillRead {
@@ -1496,7 +1552,7 @@ impl Warning {
 }
 
 /// A kernel refusal in words: the boolean's own text, else the error's variant names.
-fn regen_text(e: &forge_model::RegenError) -> String {
+pub(crate) fn regen_text(e: &forge_model::RegenError) -> String {
     use forge_model::{EditError, RegenError as G};
     match e {
         G::Boolean { error, .. }

@@ -19,7 +19,7 @@ fn f(h: &mut u64, v: f64) {
     fnv(h, &v.to_bits().to_le_bytes());
 }
 
-const PINNED: u64 = 0x5390c28baa57c9dc;
+const PINNED: u64 = 0xe56f64787979dcd7;
 
 #[test]
 fn the_same_bits_everywhere() {

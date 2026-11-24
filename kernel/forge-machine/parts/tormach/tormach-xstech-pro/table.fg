@@ -1,0 +1,13 @@
+# tormach-xstech-pro table (unpublished)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -148.5
+shared y0 = -137.5
+shared z0 = -39
+shared lx = 297
+shared ly = 275
+shared lz = 38
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

@@ -4,7 +4,7 @@
 //!
 //! This is the offline feed optimisation of GE's US 5,828,574 (1997, expired 2017-05-19): the
 //! swept tool is taken from a model of the stock, the engagement of each move measured, and the
-//! largest feed within the limit chosen (research/cam/patents.md §2.8). The path's geometry is
+//! largest feed within the limit chosen. The path's geometry is
 //! unchanged: a move is only split where its feed changes (lines into collinear pieces, arcs and
 //! helices into pieces of the same circle), and what is posted is certified as before. Feeds are
 //! no part of G1–G4; G5 checks every posted feed against the machine.
@@ -324,7 +324,7 @@ pub struct Sample {
 
 /// What the feeds are set from.
 ///
-/// Per research/cam/toolpath-quality/fto-adaptive.md (design-around D): the feed is set per
+/// The feed is set per
 /// FIXED-LENGTH sample from chip thinning and the chip load; the path is never split where the
 /// engagement changes, there is no abrasion term, and every sample is its own move: samples are
 /// never joined, whatever their feeds (equal F words are simply not repeated when posted).
@@ -386,7 +386,7 @@ fn pieces_n(from: [f64; 3], m: &PMove, n: usize) -> Vec<[f64; 3]> {
 }
 
 /// A move's length (arcs along the helix).
-fn move_len(from: [f64; 3], m: &PMove) -> f64 {
+pub(crate) fn move_len(from: [f64; 3], m: &PMove) -> f64 {
     let d3 = |a: [f64; 3], b: [f64; 3]| {
         ((a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]) + (a[2] - b[2]) * (a[2] - b[2])).sqrt()
     };
@@ -609,7 +609,7 @@ mod tests {
         );
     }
 
-    /// The design-around (fto-adaptive.md D): sample boundaries are fixed by length alone,
+    /// Sample boundaries are fixed by length alone,
     /// whatever the engagement. Every engaged sample of the 52 mm moves ends at a multiple of
     /// 52 / 26 = 2 mm along it, and a run of engagement does not change where they fall.
     #[test]

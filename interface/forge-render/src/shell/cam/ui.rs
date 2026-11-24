@@ -7,7 +7,7 @@ use super::schema::{self, Kind, Tab};
 use super::{Ask, CamWs, Cmd, Locate, OpDlg, SetupDlg};
 use crate::shell::placed::Placed;
 use crate::shell::theme::{Theme, medium, mono, sans};
-use crate::shell::thermo_ui::{button, fact, foot, frame, head, heading, note, row, tabs};
+use crate::shell::thermo_ui::{button, foot, frame, head, heading, note, row, tabs};
 use crate::shell::{Action, Shell, icons};
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 
@@ -94,18 +94,43 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
             false,
         )
     };
-    let of = |g: &str| -> Vec<Button> { schema::OPS.iter().filter(|o| o.group == g).map(op).collect() };
-    let two_d = of("2D");
-    let (big2, small2) = two_d.split_at(3.min(two_d.len()));
+    let of = |g: &str| -> Vec<Button> {
+        schema::OPS
+            .iter()
+            .chain(schema::TURN_OPS)
+            .filter(|o| o.group == g)
+            .map(op)
+            .collect()
+    };
     let generating = w.running.is_some();
-    vec![
-        (
-            "Setup",
-            vec![("New Setup", "cam_setup", a(Ask::NewSetup), false)],
+    // a document is milling or turning (one dispatch per document): its own setup and ops;
+    // an empty one offers both setups
+    let turning = w.turning();
+    let milling = !turning && has_setup;
+    let mut setup = vec![];
+    if !turning {
+        setup.push(("New Setup", "cam_setup", a(Ask::NewSetup), false));
+    }
+    if !milling {
+        setup.push(("New Lathe Setup", "cam_lathe", a(Ask::NewLatheSetup), false));
+    }
+    let mut out = vec![("Setup", setup, vec![])];
+    if turning {
+        let t = of("Turning");
+        let (big, small) = t.split_at(3.min(t.len()));
+        out.push(("Turning", big.to_vec(), small.to_vec()));
+        out.push((
+            "View",
+            vec![("Section View", "cam_lathe", a(Ask::SectionView), w.turnview.open)],
             vec![],
-        ),
-        ("2D", big2.to_vec(), small2.to_vec()),
-        ("Drilling", of("Drilling"), vec![]),
+        ));
+    } else {
+        let two_d = of("2D");
+        let (big2, small2) = two_d.split_at(3.min(two_d.len()));
+        out.push(("2D", big2.to_vec(), small2.to_vec()));
+        out.push(("Drilling", of("Drilling"), vec![]));
+    }
+    out.extend(vec![
         (
             "Actions",
             vec![
@@ -121,12 +146,28 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                     a(Ask::PostProcess),
                     w.post_dlg.is_some(),
                 ),
+                ("NC Programs", "cam_sheet", a(Ask::Programs), w.programs_open),
+                (
+                    "Quality",
+                    "cam_check",
+                    w.run
+                        .as_ref()
+                        .is_some_and(|r| r.quality.is_some())
+                        .then_some(Action::Cam(Ask::Quality)),
+                    w.quality_open,
+                ),
             ],
             vec![
                 (
                     "Setup Sheet",
                     "cam_sheet",
                     w.run.is_some().then_some(Action::Cam(Ask::SetupSheet)),
+                    false,
+                ),
+                (
+                    "Export NC",
+                    "cam_post",
+                    w.run.is_some().then_some(Action::Cam(Ask::ExportNc)),
                     false,
                 ),
                 ("Checks", "cam_check", a(Ask::Checks), w.checks_open),
@@ -136,7 +177,6 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                     (!generating && w.run.is_some()).then_some(Action::Cam(Ask::CheckNow)),
                     false,
                 ),
-                ("Auto Generate", "cam_generate", a(Ask::AutoGenerate), w.auto),
             ],
         ),
         (
@@ -144,7 +184,8 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
             vec![("Tool Library", "cam_tools", a(Ask::ToolLibrary), w.tools_open)],
             vec![("Document Text", "cam_post", a(Ask::ToggleText), w.text_open)],
         ),
-    ]
+    ]);
+    out
 }
 
 /// A one-line number: up to 3 decimals, no trailing zeros.
@@ -157,6 +198,11 @@ pub fn num(x: f64) -> String {
     if s == "-0" { "0".into() } else { s.into() }
 }
 
+/// A time as m:ss.
+fn short_time(s: f64) -> String {
+    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0).floor() as u32)
+}
+
 /// A work offset's word: G54 for the first.
 fn wcs_word(k: u32) -> String {
     if k < 6 {
@@ -167,8 +213,10 @@ fn wcs_word(k: u32) -> String {
 }
 
 fn time(s: f64) -> String {
+    // whole seconds (a 59.6 s rounds to 1:00, not 0:60)
+    let s = s.round();
     if s >= 60.0 {
-        format!("{}:{:02} min", (s / 60.0).floor(), (s % 60.0).round() as u32)
+        format!("{}:{:02} min", (s / 60.0).floor(), (s % 60.0) as u32)
     } else {
         format!("{} s", num(s))
     }
@@ -236,6 +284,18 @@ impl Shell {
                     cert.1,
                 );
                 places.push(("cam:certification".into(), r));
+                // a setting, so a checkbox (the ribbon holds commands)
+                ui.horizontal(|ui| {
+                    ui.add_space(30.0);
+                    let mut auto = w.auto;
+                    let r = ui
+                        .checkbox(&mut auto, egui::RichText::new("Generate as I edit").font(sans(12.0)).color(t.ink2))
+                        .on_hover_text("Each edit generates again: the ops it changed, and those after them in their setup.");
+                    places.push(("cam:auto".into(), r.rect));
+                    if auto != w.auto {
+                        cmds.push(Cmd::AutoGenerate);
+                    }
+                });
                 if w.setups().is_empty() {
                     note(
                         ui,
@@ -265,8 +325,17 @@ impl Shell {
                             (_, "unposted") => b,
                             _ => a,
                         });
+                    let lathe = w.stmt(&su).is_some_and(|s| s.func == "lathe_setup");
                     let label = match w.run.as_ref().and_then(|r| r.setup(&su)) {
-                        Some(s) => format!("{su}  ·  {}", wcs_word(s.offset)),
+                        Some(_) if lathe => format!("{su}  ·  lathe"),
+                        Some(s) => {
+                            let tsum: f64 = w.run.as_ref().map_or(0.0, |r| r.ops.iter().filter(|o| o.setup == su).map(|o| o.time_s).sum());
+                            if tsum > 0.0 {
+                                format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), short_time(tsum))
+                            } else {
+                                format!("{su}  ·  {}", wcs_word(s.offset))
+                            }
+                        }
                         None => su.clone(),
                     };
                     let resp = tree_row(
@@ -351,7 +420,7 @@ impl Shell {
                         let st = match w
                             .run
                             .as_ref()
-                            .and_then(|r| r.programs.iter().find(|x| x.name == p))
+                            .and_then(|r| r.program(&p))
                         {
                             Some(x) if x.error.is_none() && x.text.is_some() => "built",
                             Some(_) => "refused",
@@ -384,12 +453,7 @@ impl Shell {
                     t.ink,
                 );
                 for s in w.tools() {
-                    let label = format!(
-                        "{}  ·  {}  T{}",
-                        s.name,
-                        s.pos(0).map(super::doc::unquote).unwrap_or_default(),
-                        s.arg("t").unwrap_or("?")
-                    );
+                    let label = tool_words(&w, s);
                     let resp = tree_row(
                         ui,
                         &t,
@@ -438,7 +502,8 @@ impl Shell {
     pub(in crate::shell) fn cam_ui(&mut self, ctx: &egui::Context) {
         let Some(mut w) = self.cam.take() else { return };
         let t = self.theme;
-        let v = self.view_rect;
+        // the view less what the simulation's panel and timeline cover: the windows keep inside
+        let v = self.camsim_free(self.view_rect);
         let mut places: Places = vec![];
         let mut blocks: Vec<Rect> = vec![];
         if let Some(mut d) = w.op_dlg.take() {
@@ -458,6 +523,12 @@ impl Shell {
         if w.post_dlg.is_some() {
             blocks.extend(post_window(ctx, &t, v, &mut w, &mut places));
         }
+        if w.quality_open {
+            blocks.extend(quality_window(ctx, &t, v, &mut w, &mut places));
+        }
+        if w.programs_open {
+            blocks.extend(programs_window(ctx, &t, v, &mut w, &mut places));
+        }
         if w.tools_open {
             blocks.extend(tools_window(ctx, &t, v, &mut w, &mut places));
         }
@@ -466,6 +537,9 @@ impl Shell {
         }
         if w.text_open {
             blocks.extend(text_window(ctx, &t, v, &mut w, &mut places));
+        }
+        if w.turning() && w.turnview.open {
+            blocks.extend(section_window(ctx, &t, v, &mut w, &mut places));
         }
         self.view_blocks.extend(blocks);
         self.places.extend(places);
@@ -584,13 +658,81 @@ fn details(
     let run = w.run.as_ref();
     heading(ui, t, &format!("{id} · {}", s.func), width);
     match &s.role {
+        super::doc::Role::Setup if s.func == "lathe_setup" => {
+            let v = |k: &str| s.arg(k).map(str::to_string).unwrap_or_else(|| "—".into());
+            fact(
+                ui,
+                t,
+                "Lathe",
+                &s.arg_str("machine").unwrap_or_else(|| "none".into()),
+                width,
+                t.ink,
+            );
+            fact(
+                ui,
+                t,
+                "Bar",
+                &format!("D {} mm, front at z {}", v("bar"), v("front")),
+                width,
+                t.ink,
+            );
+            fact(ui, t, "Chuck", &v("chuck"), width, t.ink);
+            match s.arg("at") {
+                Some(a) => fact(ui, t, "Z0 at machine Z", a, width, t.ink),
+                None => fact(ui, t, "Placed", "no (G5 spans only)", width, t.ink2),
+            }
+            fact(
+                ui,
+                t,
+                "Tolerance",
+                s.arg("tol").unwrap_or("0.002 (default)"),
+                width,
+                t.ink,
+            );
+            for l in run.map(|r| r.leftover.clone()).unwrap_or_default() {
+                note(
+                    ui,
+                    &format!(
+                        "Left over: r {}…{}, z {}…{} ({})",
+                        num(l.boxes[0][0]),
+                        num(l.boxes[0][2]),
+                        num(l.z[0]),
+                        num(l.z[1]),
+                        l.why
+                    ),
+                    width,
+                    t.ink2,
+                );
+            }
+        }
         super::doc::Role::Setup => {
             let Some(su) = run.and_then(|r| r.setup(id)) else {
                 note(ui, "Generate to see the stock and work offset.", width, t.ink2);
                 return;
             };
-            fact(ui, t, "Machine", &su.machine, width, t.ink);
+            fact(ui, t, "Machine", &machine_words(&su.machine), width, t.ink);
             fact(ui, t, "Work offset", &wcs_word(su.offset), width, t.ink);
+            if let Some(r) = run {
+                let ops: Vec<&super::run::OpRes> = r.ops.iter().filter(|o| o.setup == id).collect();
+                let total: f64 = ops.iter().map(|o| o.time_s).sum();
+                heading(ui, t, &format!("Cycle time {}", time(total)), width);
+                for o in &ops {
+                    fact(
+                        ui,
+                        t,
+                        &format!("  {} · {}", o.name, o.kind),
+                        &time(o.time_s),
+                        width,
+                        t.ink2,
+                    );
+                }
+                note(
+                    ui,
+                    "Feeds and rapids at their programmed rates, tool changes not counted; the machine-timeline time comes with the quality measure.",
+                    width,
+                    t.ink2,
+                );
+            }
             fact(
                 ui,
                 t,
@@ -668,7 +810,7 @@ fn details(
             }
         }
         super::doc::Role::Program => {
-            let Some(p) = run.and_then(|r| r.programs.iter().find(|p| p.name == id)) else {
+            let Some(p) = run.and_then(|r| r.program(id)) else {
                 note(ui, "Generate to post it.", width, t.ink2);
                 return;
             };
@@ -704,7 +846,7 @@ fn details(
             let (_, word, c) = status_look(t, st);
             fact(ui, t, "Status", word, width, c);
             if let Some(o) = run.and_then(|r| r.op(id)) {
-                note(ui, &format!("Assurance: {}", o.assurance.words()), width, t.ink2);
+                fact(ui, t, "Assurance", o.assurance.words(), width, t.ink2);
             }
             if st == "stale" || st == "error" {
                 ui.horizontal(|ui| {
@@ -722,11 +864,10 @@ fn details(
                     ui,
                     t,
                     "Tool",
-                    &format!(
-                        "T{} {tool}, D {}",
-                        o.tool_t.unwrap_or(0),
-                        num(o.tool_d.unwrap_or(0.0))
-                    ),
+                    &match o.tool_d {
+                        Some(d) => format!("T{} {tool}, D {}", o.tool_t.unwrap_or(0), num(d)),
+                        None => format!("T{} {tool}", o.tool_t.unwrap_or(0)),
+                    },
                     width,
                     t.ink,
                 );
@@ -760,44 +901,47 @@ fn details(
                 fact(ui, t, "Power", &format!("{} kW", num(p)), width, t.ink);
             }
             fact(ui, t, "Moves", &o.moves.to_string(), width, t.ink);
-            fact(
-                ui,
-                t,
-                "Cutting · rapid",
-                &format!(
-                    "{} · {} mm",
-                    num(o.length_cut.round()),
-                    num(o.length_rapid.round())
-                ),
-                width,
-                t.ink,
-            );
-            fact(ui, t, "Time", &time(o.time_s), width, t.ink);
-            if let Some(l) = o.least {
+            // lengths and time where the run gives them (turning's reply has none yet)
+            if o.length_cut > 0.0 || o.time_s > 0.0 {
                 fact(
                     ui,
                     t,
-                    "Least cutter distance",
-                    &format!("{} mm", num(l)),
+                    "Cutting · rapid",
+                    &format!(
+                        "{} · {} mm",
+                        num(o.length_cut.round()),
+                        num(o.length_rapid.round())
+                    ),
                     width,
                     t.ink,
                 );
+                fact(ui, t, "Time", &time(o.time_s), width, t.ink);
+            }
+            if let Some(l) = o.least {
                 let tol = run.and_then(|r| r.setup(&o.setup)).map_or(0.0, |s| s.tol);
-                if l.abs() <= tol + 1e-9 {
-                    // a finishing cut touches the wall it finishes by design: a gouge is below −tol
-                    note(
-                        ui,
-                        &format!(
-                            "0 is the cutter on the wall it finishes, as a finishing pass is meant to be; a gouge would be under −{} mm (the setup's tol).",
+                // a finishing cut touches the wall it finishes by design: a gouge is below −tol;
+                // one line, the reason on hover
+                let (words, tip) = if l.abs() <= tol + 1e-9 {
+                    (
+                        format!("{} mm · on its wall", num(l)),
+                        format!(
+                            "The cutter touches the wall it finishes, as a finishing pass is meant to; a gouge would be under −{} mm (the setup's tolerance).",
                             num(tol)
                         ),
-                        width,
-                        t.ink2,
-                    );
-                }
+                    )
+                } else {
+                    (
+                        format!("{} mm", num(l)),
+                        "The least distance the certificate found between the cutter and the part over every posted move.".to_string(),
+                    )
+                };
+                fact_tip(ui, t, "Least cutter distance", &words, &tip, width, t.ink);
             }
             if o.pairs > 0 {
                 fact(ui, t, "Certified pairs", &o.pairs.to_string(), width, t.ink);
+            }
+            if let Some(q) = run.and_then(|r| r.quality(id)) {
+                quality_facts(ui, t, q, width);
             }
             for r in &o.removals {
                 note(ui, &format!("Declared removal: {r}"), width, t.ink2);
@@ -828,6 +972,126 @@ fn details(
             }
         }
         _ => {}
+    }
+}
+
+/// A percentage of a share in [0, 1].
+fn pct(x: f64) -> String {
+    if x.is_finite() {
+        format!("{:.0}%", 100.0 * x)
+    } else {
+        "—".into()
+    }
+}
+
+/// An op's toolpath quality (forge-cam-quality): what its path is like to run.
+fn quality_facts(ui: &mut Ui, t: &Theme, q: &forge_cam_quality::OpQ, width: f32) {
+    heading(ui, t, "Toolpath quality", width);
+    let cut_air = q.t_cut + q.t_air;
+    if q.t_stop > 0.0 {
+        fact(ui, t, "Cycle (machine timeline)", &time(q.t_stop), width, t.ink);
+    }
+    if cut_air > 0.0 {
+        let air = q.t_air / cut_air;
+        fact(
+            ui,
+            t,
+            "Feed time · in air",
+            &format!("{} · {}", time(cut_air), pct(air)),
+            width,
+            if air > 0.3 { t.warn } else { t.ink },
+        );
+    }
+    fact(
+        ui,
+        t,
+        "Retracts · plunges · ramps",
+        &format!("{} · {} · {}", q.retracts, q.plunges, q.ramps),
+        width,
+        if q.plunges > 0 { t.warn } else { t.ink },
+    );
+    if q.side {
+        fact(
+            ui,
+            t,
+            "Engagement max · mean",
+            &format!("{}° · {}°", num(q.phi_max.round()), num(q.phi_mean.round())),
+            width,
+            if q.phi_max > 170.0 { t.warn } else { t.ink },
+        );
+        fact(
+            ui,
+            t,
+            "Climb · conv. · slotting",
+            &format!("{} · {} · {}", pct(q.climb), pct(q.conventional), pct(q.slotting)),
+            width,
+            if q.slotting > 0.05 { t.warn } else { t.ink },
+        );
+        fact(
+            ui,
+            t,
+            "Chip (thinned) mean · max",
+            &format!("{} · {} mm", num(q.hex_mean), num(q.hex_max)),
+            width,
+            t.ink,
+        );
+        fact(
+            ui,
+            t,
+            "Feed per tooth target",
+            &format!("{} mm", num(q.fz_target)),
+            width,
+            t.ink2,
+        );
+        fact(
+            ui,
+            t,
+            "Rubbing · overloaded",
+            &format!("{} · {}", pct(q.thin), pct(q.thick)),
+            width,
+            if q.thin > 0.1 || q.thick > 0.1 {
+                t.warn
+            } else {
+                t.ink
+            },
+        );
+    }
+    if q.mrr > 0.0 {
+        fact(
+            ui,
+            t,
+            "Material removal",
+            &format!("{} cm3/min", num(q.mrr / 1000.0)),
+            width,
+            t.ink,
+        );
+    }
+    if q.p_max > 0.0 {
+        let over = q.p_avail > 0.0 && q.p_max > q.p_avail;
+        let avail = if q.p_avail > 0.0 {
+            format!(" of {} kW", num(q.p_avail))
+        } else {
+            String::new()
+        };
+        fact(
+            ui,
+            t,
+            "Spindle power peak",
+            &format!("{} kW{avail}", num(q.p_max)),
+            width,
+            if over { t.error } else { t.ink },
+        );
+    }
+    if q.rapid_cuts > 0 {
+        note(
+            ui,
+            &format!(
+                "{} rapid move(s) meet material in the measure model",
+                q.rapid_cuts
+            ),
+            width,
+            t.warn,
+        );
     }
 }
 
@@ -964,11 +1228,7 @@ fn op_dialog(
         .tools()
         .iter()
         .map(|s| {
-            let id = s.pos(0).map(super::doc::unquote).unwrap_or_default();
-            (
-                s.name.clone(),
-                format!("{} · T{} · {id}", s.name, s.arg("t").unwrap_or("?")),
-            )
+            (s.name.clone(), tool_words(w, s))
         })
         .collect();
     let part = w.parts.first().cloned().unwrap_or_default();
@@ -1008,7 +1268,8 @@ fn op_dialog(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1038,6 +1299,8 @@ fn op_dialog(
                 match f.kind {
                     Kind::Len => arg_field(ui, t, f.label, &mut val, &hint, "mm", &key, places),
                     Kind::Deg => arg_field(ui, t, f.label, &mut val, &hint, "deg", &key, places),
+                    Kind::Z => arg_field(ui, t, f.label, &mut val, &hint, "mm z", &key, places),
+                    Kind::Count => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
                     Kind::Choice(words) => {
                         let mut items: Vec<(String, String)> = vec![];
                         if !f.required {
@@ -1051,15 +1314,10 @@ fn op_dialog(
                         if let Some(tool) = w.lib.tools.iter().find(|x| {
                             w.stmt(&val).and_then(|s| s.pos(0)).map(super::doc::unquote).as_deref() == Some(x.id.as_str())
                         }) {
-                            fact(ui, t, "Type", tool.kind.name(), DLG_W, t.ink2);
-                            fact(
-                                ui,
-                                t,
-                                "Diameter · flutes · flute length",
-                                &format!("{} · {} · {} mm", num(tool.dc), tool.nof, num(tool.lcf)),
-                                DLG_W,
-                                t.ink2,
-                            );
+                            fact(ui, t, "Type", kind_words(tool.kind), DLG_W, t.ink2);
+                            fact(ui, t, "Diameter", &format!("{} mm", num(tool.dc)), DLG_W, t.ink2);
+                            fact(ui, t, "Flutes", &tool.nof.to_string(), DLG_W, t.ink2);
+                            fact(ui, t, "Flute length", &format!("{} mm", num(tool.lcf)), DLG_W, t.ink2);
                         }
                         ui.horizontal(|ui| {
                             ui.add_space(146.0);
@@ -1134,13 +1392,15 @@ fn op_dialog(
             }
             ui.add_space(2.0);
             note(ui, spec.what, DLG_W, t.ink2);
-            note(ui, &CamWs::op_text(d), DLG_W, t.ink2);
+            forge_text(ui, t, &CamWs::op_text(d), DLG_W);
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
             (ok, cancel, apply) = foot(ui, t, "cam:op", true, places);
         });
     let rect = r.map(|r| r.response.rect);
+    // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
+    ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok || apply {
         let missing: Vec<&str> = spec
             .fields
@@ -1178,6 +1438,9 @@ fn setup_dialog(
     d: &mut SetupDlg,
     places: &mut Places,
 ) -> (bool, Option<Rect>) {
+    if d.lathe {
+        return lathe_dialog(ctx, t, v, w, d, places);
+    }
     let (mut ok, mut cancel, mut close) = (false, false, false);
     let get = |d: &SetupDlg, k: &str| {
         d.args
@@ -1198,18 +1461,14 @@ fn setup_dialog(
         .map(|s| {
             (
                 s.name.clone(),
-                format!(
-                    "{} · {}",
-                    s.name,
-                    s.pos(0).map(super::doc::unquote).unwrap_or_default()
-                ),
+                machine_words(&s.pos(0).map(super::doc::unquote).unwrap_or_default()),
             )
         })
         .collect();
     machines.extend(w.lib.machines.iter().map(|m| {
         (
             format!("machine(\"{}\")", m.name),
-            format!("{} ({}, {})", m.name, m.kind, m.control),
+            format!("{} · {} control", machine_words(&m.name), m.control),
         )
     }));
     let mut fixtures: Vec<(String, String)> = vec![(String::new(), "none".into())];
@@ -1243,7 +1502,8 @@ fn setup_dialog(
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(DLG_W, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             ui.spacing_mut().item_spacing.y = 4.0;
             close = head(
@@ -1277,7 +1537,10 @@ fn setup_dialog(
                     }
                     items.push(("(0, 0, 0)".into(), "Part origin".into()));
                     arg_choice(ui, t, "Origin", &mut o, &items, "cam:setup:origin", places);
-                    arg_field(ui, t, "Origin point", &mut o, "\"top-center\" or (x, y, z)", "", "cam:setup:origin:text", places);
+                    // a point of its own: its numbers (the named origins need none)
+                    if o.trim_start().starts_with('(') {
+                        arg_field(ui, t, "Origin point (x, y, z)", &mut o, "(0, 0, 0)", "mm", "cam:setup:origin:text", places);
+                    }
                     set(d, "origin", o);
                     let mut wcs = get(d, "wcs");
                     let offsets: Vec<(String, String)> = std::iter::once((String::new(), "G54 (default)".to_string()))
@@ -1301,6 +1564,9 @@ fn setup_dialog(
                     let kinds = [
                         ("margin".to_string(), "Box: the part's box plus offsets".to_string()),
                         ("box".to_string(), "Box: fixed size (min, max)".to_string()),
+                        ("cylinder".to_string(), "Cylinder: a bar along z".to_string()),
+                        ("tube".to_string(), "Tube: a bar with a bore".to_string()),
+                        ("solid".to_string(), "From a solid: its own part file".to_string()),
                         ("from".to_string(), "From the earlier setup".to_string()),
                     ];
                     arg_choice(ui, t, "Mode", &mut k, &kinds, "cam:setup:stock", places);
@@ -1314,13 +1580,35 @@ fn setup_dialog(
                             }
                         }
                         "from" => note(ui, "The stock that setup provably left, turned over about x.", DLG_W, t.ink2),
+                        "cylinder" | "tube" => {
+                            let mut rows = vec![("d", "Diameter", "the part's reach + the radial margin")];
+                            if k == "tube" {
+                                rows.push(("id", "Bore diameter", "required"));
+                            }
+                            rows.push(("margin", "Margin (radial, above)", "(2, 1)"));
+                            rows.push(("below", "Below the part", "0"));
+                            for (key, label, hint) in rows {
+                                let mut s = get(d, key);
+                                arg_field(ui, t, label, &mut s, hint, "mm", &format!("cam:setup:{key}"), places);
+                                set(d, key, s);
+                            }
+                            note(ui, "Along z about the part's centre; it must hold the part, band by band, or the setup is refused.", DLG_W, t.ink2);
+                        }
+                        "solid" => {
+                            let mut s = get(d, "file");
+                            arg_field(ui, t, "Stock part file", &mut s, "blank.fg", "", "cam:setup:file", places);
+                            set(d, "file", s);
+                            note(ui, "A prism along z in the part's frame, beside the document.", DLG_W, t.ink2);
+                        }
                         _ => {
                             let mut s = get(d, "margin");
                             arg_field(ui, t, "Offsets (x, y, z)", &mut s, "(3, 3, 2)", "mm", "cam:setup:margin", places);
                             set(d, "margin", s);
+                            let mut s = get(d, "below");
+                            arg_field(ui, t, "Below the part", &mut s, "0", "mm", "cam:setup:below", places);
+                            set(d, "below", s);
                         }
                     }
-                    note(ui, "Cylinder and tube stock and stock from a solid are not in this phase's language yet.", DLG_W, t.ink2);
                 }
                 2 => {
                     for (key, label, hint) in [
@@ -1339,7 +1627,7 @@ fn setup_dialog(
                 }
             }
             if d.tab != 3 {
-                note(ui, &w.setup_text(d), DLG_W, t.ink2);
+                forge_text(ui, t, &w.setup_text(d), DLG_W);
             }
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
@@ -1347,6 +1635,138 @@ fn setup_dialog(
             (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
         });
     let rect = r.map(|r| r.response.rect);
+    // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
+    ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
+    if ok && let Err(e) = w.setup_ok(d) {
+        d.error = Some(e);
+        return (true, rect);
+    }
+    (!(ok || cancel || close), rect)
+}
+
+/// A lathe setup (`lathe_setup`, docs/cam-turning.md): the bar, the chuck, the lathe and where
+/// the work sits on it; the tolerances.
+fn lathe_dialog(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    d: &mut SetupDlg,
+    places: &mut Places,
+) -> (bool, Option<Rect>) {
+    let (mut ok, mut cancel, mut close) = (false, false, false);
+    let get = |d: &SetupDlg, k: &str| {
+        d.args
+            .iter()
+            .find(|a| a.0 == k)
+            .map(|a| a.1.clone())
+            .unwrap_or_default()
+    };
+    let set = |d: &mut SetupDlg, k: &str, v: String| match d.args.iter_mut().find(|a| a.0 == k) {
+        Some(a) => a.1 = v,
+        None => d.args.push((k.to_string(), v)),
+    };
+    let mut machines: Vec<(String, String)> = vec![(String::new(), "none (G5 not checked)".into())];
+    machines.extend(super::lathes().into_iter().map(|m| (format!("\"{m}\""), m)));
+    let mut chucks: Vec<(String, String)> = w
+        .stmts
+        .iter()
+        .filter(|s| s.func == "chuck")
+        .map(|s| {
+            (
+                s.name.clone(),
+                format!(
+                    "{} · {}",
+                    s.name,
+                    s.args
+                        .iter()
+                        .map(|a| a.key.clone().unwrap_or_default() + ": " + &a.text)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            )
+        })
+        .collect();
+    chucks.push((
+        "chuck(face: -70, grip: 30, jaw: 15)".into(),
+        "a new chuck (face −70, grip 30, jaw 15)".into(),
+    ));
+    let new = d.id.is_none();
+    let r = egui::Window::new("cam-lathe")
+        .id(egui::Id::unique("cam-lathe-dialog"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        .fixed_size(vec2(DLG_W, 0.0))
+        .frame(frame(t))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
+        .show_placed(ctx, places, |ui, places| {
+            ui.spacing_mut().item_spacing.y = 4.0;
+            close = head(
+                ui,
+                t,
+                "cam_lathe",
+                &if new { "New Lathe Setup".to_string() } else { format!("Lathe Setup · {}", d.name) },
+                DLG_W,
+                places,
+                "cam:setup",
+            );
+            tabs(ui, t, &["Setup", "Stock", "Tolerances"], &mut d.tab, DLG_W, places, "cam:setup:tab");
+            ui.add_space(4.0);
+            match d.tab {
+                0 => {
+                    let mut name = d.name.clone();
+                    arg_field(ui, t, "Name", &mut name, "", "", "cam:setup:name", places);
+                    d.name = name;
+                    let mut m = get(d, "machine");
+                    arg_choice(ui, t, "Lathe", &mut m, &machines, "cam:setup:machine", places);
+                    set(d, "machine", m);
+                    heading(ui, t, "Work and tools on the machine", DLG_W);
+                    let mut at = get(d, "at");
+                    arg_field(ui, t, "Z0 at machine Z", &mut at, "unplaced: G5 spans only", "mm", "cam:setup:at", places);
+                    set(d, "at", at);
+                    let mut off = get(d, "offsets");
+                    arg_field(ui, t, "Tool offsets", &mut off, "((station, x, z), ...)", "", "cam:setup:offsets", places);
+                    set(d, "offsets", off);
+                    heading(ui, t, "Workholding", DLG_W);
+                    let mut c = get(d, "chuck");
+                    arg_choice(ui, t, "Chuck", &mut c, &chucks, "cam:setup:chuck", places);
+                    set(d, "chuck", c);
+                    note(ui, "The chuck's face (z), grip length and jaw height: its envelope as it turns is what G2 keeps every tool body clear of.", DLG_W, t.ink2);
+                }
+                1 => {
+                    for (key, label, hint, unit) in [
+                        ("bar", "Bar diameter", "required", "mm"),
+                        ("front", "Front face at", "the bar's front face, z", "mm z"),
+                    ] {
+                        let mut x = get(d, key);
+                        arg_field(ui, t, label, &mut x, hint, unit, &format!("cam:setup:{key}"), places);
+                        set(d, key, x);
+                    }
+                    note(ui, "Z is the spindle axis, Z0 where the part puts it; the bar is the stock, its front face the first face cut.", DLG_W, t.ink2);
+                }
+                _ => {
+                    for (key, label, hint) in [
+                        ("tol", "Tolerance", "default 0.002"),
+                        ("clearance", "Fixture clearance", "default 1"),
+                    ] {
+                        let mut x = get(d, key);
+                        arg_field(ui, t, label, &mut x, hint, "mm", &format!("cam:setup:{key}"), places);
+                        set(d, key, x);
+                    }
+                }
+            }
+            forge_text(ui, t, &w.setup_text(d), DLG_W);
+            if let Some(e) = &d.error {
+                note(ui, e, DLG_W, t.error);
+            }
+            (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+        });
+    let rect = r.map(|r| r.response.rect);
+    // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
+    ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok && let Err(e) = w.setup_ok(d) {
         d.error = Some(e);
         return (true, rect);
@@ -1362,9 +1782,11 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .filter(|s| s.role == super::doc::Role::Program)
         .map(|s| s.name.clone())
         .collect();
-    let width = 620.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 620.0_f32.min(v.width() - 32.0).max(360.0);
     let mut edits: Vec<super::doc::Edit> = vec![];
     let mut write: Option<(String, String)> = None;
+    let (mut post_it, mut export_it): (Option<String>, Option<String>) = (None, None);
     let r = egui::Window::new("cam-post")
         .id(egui::Id::unique("cam-post-window"))
         .title_bar(false)
@@ -1373,7 +1795,8 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .default_pos(pos2(v.right() - width - 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_post", "Post Process", width, places, "cam:post");
             if progs.is_empty() {
@@ -1394,10 +1817,18 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
             let id = progs[k].clone();
             let s = w.stmt(&id).cloned().expect("listed");
             let mut post = s.arg("post").unwrap_or("").to_string();
-            let dialects: Vec<(String, String)> = forge_post::DIALECTS
-                .iter()
-                .map(|(n, _)| (format!("\"{n}\""), (*n).to_string()))
-                .collect();
+            // a lathe's program posts with the lathe dialects (forge-turn's)
+            let dialects: Vec<(String, String)> = if s.func == "lathe_program" {
+                ["fanuc-lathe", "haas-lathe", "linuxcnc-lathe"]
+                    .iter()
+                    .map(|n| (format!("\"{n}\""), (*n).to_string()))
+                    .collect()
+            } else {
+                forge_post::DIALECTS
+                    .iter()
+                    .map(|(n, _)| (format!("\"{n}\""), (*n).to_string()))
+                    .collect()
+            };
             let was = post.clone();
             arg_choice(ui, t, "Dialect", &mut post, &dialects, "cam:post:dialect", places);
             if post != was {
@@ -1429,8 +1860,7 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
             let res = w
                 .run
                 .as_ref()
-                .and_then(|r| r.programs.iter().find(|p| p.name == id))
-                .cloned();
+                .and_then(|r| r.program(&id));
             match &res {
                 Some(p) => {
                     fact(
@@ -1493,9 +1923,13 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
             ui.add_space(6.0);
             ui.horizontal(|ui| {
                 ui.add_space(14.0);
-                if !text.is_empty() && button(ui, t, "Write NC File", true, "cam:post:write".into(), places) {
-                    let p = w.dir.join(format!("{id}.nc"));
-                    write = Some((p.display().to_string(), text.clone()));
+                // posted as the NC Programs window posts it: named by the statement, refused
+                // when not certified in full unless allowed
+                if !text.is_empty() && button(ui, t, "Post", true, "cam:post:write".into(), places) {
+                    post_it = Some(id.clone());
+                }
+                if !text.is_empty() && button(ui, t, "Export…", false, "cam:post:export".into(), places) {
+                    export_it = Some(id.clone());
                 }
                 if button(ui, t, "Setup Sheet", false, "cam:post:sheet".into(), places)
                     && let Some(r) = &w.run
@@ -1512,6 +1946,12 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
     if let Some(x) = write {
         w.want_write.push(x);
     }
+    if let Some(n) = post_it {
+        w.post_programs(Some(&n));
+    }
+    if let Some(n) = export_it {
+        w.export_programs(Some(&n));
+    }
     if close {
         w.post_dlg = None;
     }
@@ -1520,17 +1960,19 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
 
 fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
     let mut close = false;
-    let width = 560.0;
+    // within the view (a side panel takes its right): its left, as the other windows open
+    let width = 560.0_f32.min(v.width() - 48.0).max(380.0);
     let mut add: Option<String> = None;
     let r = egui::Window::new("cam-tools")
         .id(egui::Id::unique("cam-tools-window"))
         .title_bar(false)
         .collapsible(false)
         .resizable(false)
-        .default_pos(pos2(v.center().x - width / 2.0, v.top() + 60.0))
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_tools", "Tool Library", width, places, "cam:tools");
             let mut f = w.tools_filter.clone();
@@ -1541,28 +1983,46 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
             w.tools_filter = f.clone();
             let f = f.to_lowercase();
             let used: Vec<String> = w.tools().iter().filter_map(|s| s.pos(0).map(super::doc::unquote)).collect();
+            if w.turning() {
+                lathe_tools(ui, t, width, &f, &used, &mut add, places);
+                ui.add_space(8.0);
+                return;
+            }
             heading(ui, t, "Cutters", width);
-            let (r, _) = ui.allocate_exact_size(vec2(width, 300.0), Sense::hover());
+            // the list gives way on a small view, so the window keeps inside it
+            let list_h = (v.height() - 330.0).clamp(120.0, 300.0);
+            let (r, _) = ui.allocate_exact_size(vec2(width, list_h), Sense::hover());
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
             egui::ScrollArea::vertical().id_salt("cam-tools-list").auto_shrink([false, false]).show(&mut child, |ui| {
                 for tool in &w.lib.tools {
-                    let line = format!(
-                        "{}  ·  {}  ·  D {}  ·  {} fl  ·  flute {}",
-                        tool.id,
-                        tool.kind.name(),
-                        num(tool.dc),
-                        tool.nof,
-                        num(tool.lcf)
-                    );
-                    if !f.is_empty() && !line.to_lowercase().contains(&f) {
+                    // what a machinist reads: the id, the kind in words, Ø, flutes, flute length
+                    let parts = [
+                        tool.id.clone(),
+                        kind_words(tool.kind).to_string(),
+                        format!("Ø{} mm", num(tool.dc)),
+                        format!("{} flutes", tool.nof),
+                        format!("{} mm flute", num(tool.lcf)),
+                    ];
+                    // as much as fits before "Add" on a narrow window, the rest dropped from the end
+                    let room = width - 12.0 - 38.0 - 96.0;
+                    let mut k = parts.len();
+                    let mut line = parts.join("  ·  ");
+                    while k > 2 && ui.painter().layout_no_wrap(line.clone(), sans(12.0), t.ink).size().x > room {
+                        k -= 1;
+                        line = parts[..k].join("  ·  ");
+                    }
+                    let full = parts.join("  ·  ");
+                    if !f.is_empty() && !full.to_lowercase().contains(&f) {
                         continue;
                     }
-                    let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 24.0), Sense::click());
+                    let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 26.0), Sense::click());
+                    let resp = if k < parts.len() { resp.on_hover_text(&full) } else { resp };
                     if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, t.hover);
                     }
                     let inu = used.contains(&tool.id);
-                    ui.painter().text(pos2(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, &line, sans(12.0), t.ink);
+                    tool_glyph(ui.painter(), Rect::from_center_size(pos2(r.left() + 22.0, r.center().y), vec2(12.0, 22.0)), tool.kind, t.ink2);
+                    ui.painter().text(pos2(r.left() + 38.0, r.center().y), Align2::LEFT_CENTER, &line, sans(12.0), t.ink);
                     ui.painter().text(
                         pos2(r.right() - 10.0, r.center().y),
                         Align2::RIGHT_CENTER,
@@ -1576,13 +2036,61 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
                     }
                 }
             });
+            heading(ui, t, "Import a Fusion tool library", width);
+            let mut ip = w.import_path.clone();
+            let mut go = false;
+            row(ui, t, "JSON file", width, 30.0, |ui| {
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut ip)
+                        .font(sans(13.0))
+                        .hint_text("beside the document, e.g. shop.json")
+                        .desired_width(ui.available_width() - 80.0),
+                );
+                places.push(("cam:tools:import:path".into(), r.rect));
+                go = button(ui, t, "Import", true, "cam:tools:import".into(), places);
+            });
+            w.import_path = ip;
+            if go {
+                let f = w.import_path.clone();
+                w.said = Some(match w.import_fusion(&f) {
+                    Ok(m) => m,
+                    Err(e) => format!("import: {e}"),
+                });
+            }
+            if let Some(s) = &w.said {
+                note(ui, s, width, t.ink2);
+            }
             heading(ui, t, "Holders", width);
             for h in &w.lib.holders {
-                fact(ui, t, &h.id, &format!("{} · gauge {} mm · {} rpm", h.interface, num(h.gauge_length), num(h.max_rpm)), width, t.ink);
+                fact(ui, t, &h.id, &format!("{} · gauge {} mm · max {} rpm", h.interface, num(h.gauge_length), grouped(h.max_rpm)), width, t.ink);
             }
-            note(ui, "Built in: generic tools and conservative holders, our own numbers; verify with the vendor. A project adds its own in cam/*.toml beside the document.", width, t.ink2);
+            // one line (a small view keeps it whole); the rest on hover
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(egui::RichText::new("Built in: generic, our own numbers · verify with the vendor").font(sans(12.0)).color(t.ink2))
+                    .on_hover_text("Generic tools and conservative holders, our own numbers: verify with the vendor. A project adds its own in cam/*.toml beside the document.");
+            });
             ui.add_space(8.0);
         });
+    if let Some(id) = add.clone().filter(|_| w.turning()) {
+        // a lathe tool at the next free station
+        let tn = (1..)
+            .find(|k| !w.tools().iter().any(|s| s.arg("t") == Some(&k.to_string())))
+            .unwrap_or(1);
+        let name = super::doc::free_name(&w.stmts, &format!("t{tn}"));
+        let before = w
+            .tools()
+            .last()
+            .and_then(|s| w.stmts.iter().position(|x| x.name == s.name))
+            .and_then(|k| w.stmts.get(k + 1))
+            .or_else(|| w.stmts.iter().find(|s| s.role == super::doc::Role::Setup))
+            .map(|s| s.name.clone());
+        w.edit(&super::doc::Edit::Add {
+            before,
+            text: format!("{name} = lathe_tool(\"{id}\", t: {tn})"),
+        });
+        add = None;
+    }
     if let Some(id) = add {
         let n = w.tools().len() + 1;
         let tn = (1..)
@@ -1623,6 +2131,686 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
     r.map(|r| r.response.rect)
 }
 
+/// The lathe tool library (forge-turn's built-in records): insert, holder or bar, nose radius,
+/// cutting data; Add puts a `lathe_tool(..)` at the next free station.
+#[allow(clippy::too_many_arguments)]
+fn lathe_tools(
+    ui: &mut Ui,
+    t: &Theme,
+    width: f32,
+    f: &str,
+    used: &[String],
+    add: &mut Option<String>,
+    places: &mut Places,
+) {
+    heading(ui, t, "Lathe tools", width);
+    let lib = forge_turn::insert::library(forge_turn::insert::BUILTIN).unwrap_or_default();
+    let (r, _) = ui.allocate_exact_size(vec2(width, 320.0), Sense::hover());
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
+    egui::ScrollArea::vertical()
+        .id_salt("cam-lathe-tools")
+        .auto_shrink([false, false])
+        .show(&mut child, |ui| {
+            for tool in &lib {
+                let line = format!(
+                    "{}  ·  {:?}  ·  {}  ·  r {}  ·  vc {}  ·  f {}",
+                    tool.id,
+                    tool.kind,
+                    tool.code,
+                    num(tool.re),
+                    num(tool.vc),
+                    num(tool.f)
+                );
+                if !f.is_empty() && !line.to_lowercase().contains(f) {
+                    continue;
+                }
+                let (r, resp) = ui.allocate_exact_size(vec2(width - 12.0, 24.0), Sense::click());
+                if resp.hovered() {
+                    ui.painter().rect_filled(r, 0.0, t.hover);
+                }
+                let inu = used.contains(&tool.id);
+                ui.painter().text(
+                    pos2(r.left() + 14.0, r.center().y),
+                    Align2::LEFT_CENTER,
+                    &line,
+                    sans(12.0),
+                    t.ink,
+                );
+                ui.painter().text(
+                    pos2(r.right() - 10.0, r.center().y),
+                    Align2::RIGHT_CENTER,
+                    if inu { "in document" } else { "Add" },
+                    sans(12.0),
+                    if inu { t.ink2 } else { t.accent },
+                );
+                places.push((format!("cam:tools:row:{}", tool.id), r));
+                if resp.clicked() && !inu {
+                    *add = Some(tool.id.clone());
+                }
+            }
+        });
+    note(
+        ui,
+        "Inserts and holders decoded from their ISO codes (kernel/forge-turn/data/turning.toml); holder heads are generic: verify with the vendor.",
+        width,
+        t.ink2,
+    );
+}
+
+/// The turning view's window (turnview.rs), at the view's bottom right.
+fn section_window(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    places: &mut Places,
+) -> Option<Rect> {
+    let mut close = false;
+    // half the view at most, and beside a floating window (620 wide at the view's left) when one
+    // is open
+    let floating = w.programs_open || w.quality_open || w.tools_open || w.checks_open || w.text_open || w.post_dlg.is_some();
+    let room = if floating { v.width() - 620.0 - 64.0 } else { v.width() * 0.5 };
+    let width = 560.0_f32.min(room).max(320.0);
+    let r = egui::Window::new("cam-section")
+        .id(egui::Id::unique("cam-section-window"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        // docked at the view's bottom right: the floating windows open at its top left
+        .pivot(Align2::RIGHT_BOTTOM)
+        .fixed_pos(pos2(v.right() - 16.0, v.bottom() - 16.0))
+        .fixed_size(vec2(width, 0.0))
+        .frame(frame(t))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
+        .show_placed(ctx, places, |ui, places| {
+            close = head(
+                ui,
+                t,
+                "cam_lathe",
+                "Section · radius up, z along the spindle",
+                width,
+                places,
+                "cam:turn",
+            );
+            super::turnview::body(ui, t, w, width, places);
+            ui.add_space(8.0);
+        });
+    if close {
+        w.turnview.open = false;
+    }
+    r.map(|r| r.response.rect)
+}
+
+/// The NC programs, Fusion's NC Program manager: every program, the setups it posts, its
+/// dialect and number, what it made, its file (name, folder, extension, header) and whether that
+/// file is posted and current; Post (into the document's folder), Export… (the host's Save As),
+/// Re-post Stale, the setup sheet and tool list. Every setting is an argument of the program's
+/// statement, saved with the document (forge_cam_lang::export).
+fn programs_window(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    places: &mut Places,
+) -> Option<Rect> {
+    use super::nc::Posted;
+    let mut close = false;
+    // within the view's free part (a small screen narrows it)
+    let width = 620.0_f32.min(v.width() - 32.0).max(360.0);
+    let mut edits: Vec<super::doc::Edit> = vec![];
+    let mut cmds: Vec<Cmd> = vec![];
+    let progs: Vec<super::doc::Stmt> = w
+        .stmts
+        .iter()
+        .filter(|s| s.role == super::doc::Role::Program)
+        .cloned()
+        .collect();
+    let setups: Vec<String> = w.setups().iter().map(|s| s.name.clone()).collect();
+    let lathe = w.turning();
+    let posted = w.posted();
+    let ops_changed = !w.stale.is_empty();
+    let mut field = w.prog_field.take();
+    let mut allow = w.allow_uncertified;
+    let r = egui::Window::new("cam-programs")
+        .id(egui::Id::unique("cam-programs-window"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        .fixed_size(vec2(width, 0.0))
+        .frame(frame(t))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
+        .show_placed(ctx, places, |ui, places| {
+            close = head(ui, t, "cam_sheet", "NC Programs", width, places, "cam:programs");
+            if progs.is_empty() {
+                note(ui, "No program yet: a new setup comes with one, or add one below.", width, t.ink2);
+            }
+            for (k, p) in progs.iter().enumerate() {
+                program_row(ui, t, w, p, k, &setups, &posted, ops_changed, width, &mut field, &mut edits, &mut cmds, places);
+            }
+            // ops no program posts: never on the machine, so not certified
+            let unposted: Vec<String> = w
+                .run
+                .as_ref()
+                .map(|r| r.ops.iter().filter(|o| o.status == "unposted").map(|o| o.name.clone()).collect())
+                .unwrap_or_default();
+            if !unposted.is_empty() {
+                note(
+                    ui,
+                    &format!(
+                        "Posted by no program: {}. Tick it in a program's Ops, or add a New Program for it.",
+                        unposted.join(", ")
+                    ),
+                    width,
+                    t.warn,
+                );
+            }
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                let r = ui.checkbox(&mut allow, "Allow uncertified (their headers say what was not checked)");
+                places.push(("cam:programs:allow".into(), r.rect));
+            });
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                ui.add_space(14.0);
+                if !setups.is_empty() && button(ui, t, "New Program", false, "cam:programs:new".into(), places) {
+                    let n = super::doc::free_name(&w.stmts, &format!("prog{}", progs.len() + 1));
+                    let num = progs.len() + if lathe { 1 } else { 1001 };
+                    let (f, post) = if lathe { ("lathe_program", "fanuc-lathe") } else { ("program", "fanuc") };
+                    edits.push(super::doc::Edit::Add {
+                        before: None,
+                        text: format!("{n} = {f}({}, post: \"{post}\", number: {num})", setups[0]),
+                    });
+                }
+                let any = w.run.is_some() && !progs.is_empty();
+                if any && button(ui, t, "Post All", true, "cam:programs:write".into(), places) {
+                    cmds.push(Cmd::PostNc(None));
+                }
+                if posted.iter().any(|p| p.1 == Posted::Stale)
+                    && button(ui, t, "Re-post Stale", false, "cam:programs:repost".into(), places)
+                {
+                    cmds.push(Cmd::RepostStale);
+                }
+                if any && button(ui, t, "Export All…", false, "cam:programs:export".into(), places) {
+                    cmds.push(Cmd::ExportNc(None));
+                }
+                if w.run.is_some() && button(ui, t, "Setup Sheet & Tools…", false, "cam:programs:sheet".into(), places) {
+                    cmds.push(Cmd::ExportSheet);
+                }
+            });
+            if let Some(s) = &w.said {
+                note(ui, s, width, t.ink2);
+            }
+            note(
+                ui,
+                "Post writes a program's file beside the document (File, Folder, Ext.); Export… saves a copy where you choose (several in a folder, or a zip in the browser).",
+                width,
+                t.ink2,
+            );
+            ui.add_space(8.0);
+        });
+    w.prog_field = field;
+    w.allow_uncertified = allow;
+    if !edits.is_empty()
+        && let Err(e) = w.edits(&edits)
+    {
+        w.said = Some(e);
+    }
+    for c in cmds {
+        w.command(c);
+    }
+    if close {
+        w.programs_open = false;
+    }
+    r.map(|r| r.response.rect)
+}
+
+/// One program in the NC Programs window.
+#[allow(clippy::too_many_arguments)]
+fn program_row(
+    ui: &mut Ui,
+    t: &Theme,
+    w: &CamWs,
+    p: &super::doc::Stmt,
+    k: usize,
+    setups: &[String],
+    posted: &[super::nc::PostedRow],
+    ops_changed: bool,
+    width: f32,
+    field: &mut Option<(String, String)>,
+    edits: &mut Vec<super::doc::Edit>,
+    cmds: &mut Vec<Cmd>,
+    places: &mut Places,
+) {
+    use super::nc::Posted;
+    // the program's parts: itself, or one per setup when split (`NAME/SETUP`)
+    let mine = |n: &str| n == p.name || n.split_once('/').is_some_and(|(x, _)| x == p.name);
+    let res = w.run.as_ref().and_then(|r| r.program(&p.name));
+    let states: Vec<&super::nc::PostedRow> = posted.iter().filter(|x| mine(&x.0)).collect();
+    // the worst part's state stands for the program
+    let rank = |s: Posted| match s {
+        Posted::Refused => 0,
+        Posted::Stale => 1,
+        Posted::No => 2,
+        Posted::Current => 3,
+    };
+    let state = states.iter().min_by_key(|x| rank(x.1)).copied();
+    // the name, and its file's state as a painted mark
+    let (r, _) = ui.allocate_exact_size(vec2(width, 26.0), Sense::hover());
+    let ink = match state.map(|s| s.1) {
+        Some(Posted::Current) => t.success,
+        Some(Posted::Stale) => t.warn,
+        Some(Posted::Refused) => t.error,
+        _ => t.ink2,
+    };
+    ui.painter().circle_filled(pos2(r.left() + 19.0, r.center().y), 4.0, ink);
+    ui.painter().text(pos2(r.left() + 30.0, r.center().y), Align2::LEFT_CENTER, &p.name, medium(14.0), t.ink);
+    let words = match state {
+        Some((_, s, _)) if states.len() > 1 => format!("{} files: {}", states.len(), s.words()),
+        Some((_, s, path)) if !path.is_empty() => format!("{path}: {}", s.words()),
+        Some((_, s, _)) => s.words().to_string(),
+        None => "not generated".into(),
+    };
+    ui.painter().text(pos2(r.right() - 14.0, r.center().y), Align2::RIGHT_CENTER, words, sans(12.0), ink);
+    places.push((format!("cam:programs:{}:state", p.name), r));
+    // its setups: a check each (the first positional argument: one name or a list)
+    let now = p.pos(0).unwrap_or("").to_string();
+    let had: Vec<String> = now
+        .trim_matches(|c| c == '[' || c == ']' || c == '(' || c == ')')
+        .split(',')
+        .map(|x| x.trim().to_string())
+        .filter(|x| !x.is_empty())
+        .collect();
+    let mut want = had.clone();
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        ui.spacing_mut().item_spacing.x = 10.0;
+        ui.label(egui::RichText::new("Setups").font(sans(13.0)).color(t.ink2));
+        for su in setups {
+            let mut on = want.contains(su);
+            let r = ui.checkbox(&mut on, su.as_str());
+            places.push((format!("cam:programs:{}:{su}", p.name), r.rect));
+            if on && !want.contains(su) {
+                want.push(su.clone());
+            }
+            if !on {
+                want.retain(|x| x != su);
+            }
+        }
+    });
+    if want != had && !want.is_empty() {
+        let ordered: Vec<String> = setups.iter().filter(|s| want.contains(s)).cloned().collect();
+        let text = if ordered.len() == 1 { ordered[0].clone() } else { format!("[{}]", ordered.join(", ")) };
+        // a program reads its setups: below the last of them first
+        let at = |n: &str| w.stmts.iter().position(|x| x.name == n);
+        if ordered.iter().any(|su| at(su) > at(&p.name)) {
+            edits.push(super::doc::Edit::Move { id: p.name.clone(), before: None });
+        }
+        edits.push(super::doc::Edit::Set { id: p.name.clone(), arg: "#0".into(), text });
+    }
+    // its ops: every op of its setups unless `ops:` names some (posted in the document's order)
+    let ops: Vec<&super::doc::Stmt> = w
+        .stmts
+        .iter()
+        .filter(|o| o.is_op() && o.setup.as_ref().is_some_and(|su| had.contains(su)))
+        .collect();
+    if ops.len() > 1 {
+        let named: Option<Vec<String>> = p.arg("ops").map(|t| {
+            t.trim_matches(|c| c == '[' || c == ']' || c == '(' || c == ')')
+                .split(',')
+                .map(|x| x.trim().to_string())
+                .filter(|x| !x.is_empty())
+                .collect()
+        });
+        let on_now = |n: &str| named.as_ref().is_none_or(|v| v.iter().any(|x| x == n));
+        let mut pick: Vec<String> = ops.iter().filter(|o| on_now(&o.name)).map(|o| o.name.clone()).collect();
+        ui.horizontal_wrapped(|ui| {
+            ui.add_space(14.0);
+            ui.spacing_mut().item_spacing.x = 10.0;
+            ui.label(egui::RichText::new("Ops").font(sans(13.0)).color(t.ink2));
+            for o in &ops {
+                let mut on = pick.contains(&o.name);
+                let r = ui.checkbox(&mut on, o.name.as_str());
+                places.push((format!("cam:programs:{}:op:{}", p.name, o.name), r.rect));
+                if on != pick.contains(&o.name) {
+                    if on {
+                        pick.push(o.name.clone());
+                    } else {
+                        pick.retain(|x| x != &o.name);
+                    }
+                }
+            }
+        });
+        let was: Vec<String> = ops.iter().filter(|o| on_now(&o.name)).map(|o| o.name.clone()).collect();
+        if pick.len() != was.len() && !pick.is_empty() {
+            let ordered: Vec<String> = ops.iter().filter(|o| pick.contains(&o.name)).map(|o| o.name.clone()).collect();
+            if ordered.len() == ops.len() {
+                edits.push(super::doc::Edit::Unset { id: p.name.clone(), arg: "ops".into() });
+            } else {
+                // a program reads its ops: below the last of them first
+                let at = |n: &str| w.stmts.iter().position(|x| x.name == n);
+                if ordered.iter().any(|o| at(o) > at(&p.name)) {
+                    edits.push(super::doc::Edit::Move { id: p.name.clone(), before: None });
+                }
+                edits.push(super::doc::Edit::Set {
+                    id: p.name.clone(),
+                    arg: "ops".into(),
+                    text: format!("[{}]", ordered.join(", ")),
+                });
+            }
+        }
+    }
+    let line = format!(
+        "{} · O{} · {}",
+        p.arg_str("post").unwrap_or_else(|| "the machine's".into()),
+        p.arg("number").unwrap_or("?"),
+        match &res {
+            Some(r) if r.text.is_some() => format!("{} lines, certified {}", r.lines, r.certified),
+            Some(r) => format!("not released: {}", r.error.clone().unwrap_or_default()),
+            None => "not generated".into(),
+        }
+    );
+    note(ui, &line, width, if res.as_ref().is_some_and(|r| r.text.is_some()) { t.ink } else { t.warn });
+    if ops_changed && state.is_some_and(|s| s.1 == Posted::Current) {
+        note(ui, "Ops changed since the run: generate, then re-post.", width, t.warn);
+    }
+    // its file: name, folder, extension, header
+    let ext_default = forge_cam_lang::export::ext_of(&p.arg_str("post").unwrap_or_default()).to_string();
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        prog_field(ui, t, "File", 110.0, p, "file", &p.name, field, edits, places);
+        prog_field(ui, t, "Folder", 90.0, p, "out", "beside it", field, edits, places);
+        prog_field(ui, t, "Ext.", 44.0, p, "ext", &ext_default, field, edits, places);
+        prog_field(ui, t, "Comment", 140.0, p, "comment", "header line", field, edits, places);
+    });
+    // posting: one file per setup, decimals, coolant (forge-post's options, certified as posted)
+    ui.horizontal_wrapped(|ui| {
+        ui.add_space(14.0);
+        let had = p.arg_str("split").as_deref() == Some("setup");
+        let mut on = had;
+        let r = ui.checkbox(&mut on, "One file per setup");
+        places.push((format!("cam:programs:{}:split", p.name), r.rect));
+        if on != had {
+            edits.push(if on {
+                super::doc::Edit::Set { id: p.name.clone(), arg: "split".into(), text: "\"setup\"".into() }
+            } else {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: "split".into() }
+            });
+        }
+        prog_field(ui, t, "Decimals", 34.0, p, "decimals", "", field, edits, places);
+        prog_field(ui, t, "Feed decimals", 34.0, p, "feed_decimals", "", field, edits, places);
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("Coolant").font(sans(12.0)).color(t.ink2));
+        let now = p.arg_str("coolant").unwrap_or_default();
+        let mut pick = now.clone();
+        let r = egui::ComboBox::from_id_salt(format!("cam-programs-{}-coolant", p.name))
+            .width(70.0)
+            .selected_text(if pick.is_empty() { "post's" } else { pick.as_str() })
+            .show_ui(ui, |ui| {
+                for c in ["", "flood", "mist", "through", "off"] {
+                    ui.selectable_value(&mut pick, c.to_string(), if c.is_empty() { "post's" } else { c });
+                }
+            });
+        places.push((format!("cam:programs:{}:coolant", p.name), r.response.rect));
+        if pick != now {
+            edits.push(if pick.is_empty() {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: "coolant".into() }
+            } else {
+                super::doc::Edit::Set { id: p.name.clone(), arg: "coolant".into(), text: format!("\"{pick}\"") }
+            });
+        }
+    });
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        let had = p.arg_str("tools").as_deref() == Some("list");
+        let mut on = had;
+        let r = ui.checkbox(&mut on, "Tool list in header");
+        places.push((format!("cam:programs:{}:tools", p.name), r.rect));
+        if on != had {
+            edits.push(if on {
+                super::doc::Edit::Set { id: p.name.clone(), arg: "tools".into(), text: "\"list\"".into() }
+            } else {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: "tools".into() }
+            });
+        }
+        ui.add_space(12.0);
+        let ok = res.as_ref().is_some_and(|r| r.text.is_some());
+        if ok && button(ui, t, "Post", true, format!("cam:programs:{}:post", p.name), places) {
+            cmds.push(Cmd::PostNc(Some(p.name.clone())));
+        }
+        if ok && button(ui, t, "Export…", false, format!("cam:programs:{}:export", p.name), places) {
+            cmds.push(Cmd::ExportNc(Some(p.name.clone())));
+        }
+        if button(ui, t, "Post Process", false, format!("cam:programs:{}:open", p.name), places) {
+            cmds.push(Cmd::PostAt(k));
+        }
+    });
+    ui.add_space(6.0);
+}
+
+/// The program arguments that are numbers (written unquoted).
+const NUMBER_ARGS: &[&str] = &["decimals", "feed_decimals"];
+
+/// A program's export setting `arg` as a short field: the statement's value, written when the
+/// field is left (empty: the default, the argument taken out).
+#[allow(clippy::too_many_arguments)]
+fn prog_field(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    wide: f32,
+    p: &super::doc::Stmt,
+    arg: &str,
+    hint: &str,
+    field: &mut Option<(String, String)>,
+    edits: &mut Vec<super::doc::Edit>,
+    places: &mut Places,
+) {
+    let key = format!("cam:programs:{}:{arg}", p.name);
+    let now = p.arg_str(arg).unwrap_or_default();
+    let mut v = match field {
+        Some((k, b)) if *k == key => b.clone(),
+        _ => now.clone(),
+    };
+    ui.add_space(8.0);
+    ui.label(egui::RichText::new(label).font(sans(12.0)).color(t.ink2));
+    ui.add_space(4.0);
+    let r = ui.add(
+        egui::TextEdit::singleline(&mut v)
+            .font(sans(12.0))
+            .hint_text(hint)
+            .desired_width(wide)
+            .margin(vec2(5.0, 3.0)),
+    );
+    places.push((key.clone(), r.rect));
+    if r.changed() {
+        *field = Some((key.clone(), v.clone()));
+    }
+    if r.lost_focus() && field.as_ref().is_some_and(|f| f.0 == key) {
+        *field = None;
+        let v = v.trim().replace(['"', '\\'], "");
+        if v != now {
+            edits.push(if v.is_empty() {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: arg.into() }
+            } else {
+                super::doc::Edit::Set {
+                    id: p.name.clone(),
+                    arg: arg.into(),
+                    // counts are numbers; names and folders are strings
+                    text: if NUMBER_ARGS.contains(&arg) { v.clone() } else { format!("\"{v}\"") },
+                }
+            });
+        }
+    }
+}
+
+/// Every op's toolpath quality in one table, each setup's totals, and the programs' time on the
+/// machine's timeline (forge-cam-quality).
+fn quality_window(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    places: &mut Places,
+) -> Option<Rect> {
+    let mut close = false;
+    // within the view's free part (a small screen narrows it)
+    let width = 720.0_f32.min(v.width() - 32.0).max(360.0);
+    let mut select: Option<String> = None;
+    let mut colour = w.focus.colour_by;
+    let r = egui::Window::new("cam-quality")
+        .id(egui::Id::unique("cam-quality-window"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
+        .fixed_size(vec2(width, 0.0))
+        .frame(frame(t))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
+        .show_placed(ctx, places, |ui, places| {
+            close = head(ui, t, "cam_check", "Toolpath Quality", width, places, "cam:quality");
+            // the toolpath's colouring in the view (the simulation view draws it)
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(egui::RichText::new("Colour toolpath by").font(sans(13.0)).color(t.ink2));
+                use super::ColourBy;
+                for (label, c, key) in [
+                    ("Op", None, "op"),
+                    ("Chip load", Some(ColourBy::ChipLoad), "chip"),
+                    ("Engagement", Some(ColourBy::Engagement), "engagement"),
+                ] {
+                    let r = ui.selectable_label(colour == c, label);
+                    places.push((format!("cam:quality:colour:{key}"), r.rect));
+                    if r.clicked() {
+                        colour = c;
+                    }
+                }
+            });
+            let Some(run) = &w.run else { return };
+            let Some(job) = &run.quality else {
+                note(ui, "Not measured (turning runs are not yet).", width, t.ink2);
+                return;
+            };
+            let cols: [(&str, f32); 10] = [
+                ("op", 110.0),
+                ("feed time", 70.0),
+                ("air", 50.0),
+                ("plunges", 56.0),
+                ("eng. max", 60.0),
+                ("slot", 48.0),
+                ("chip mean", 70.0),
+                ("rub / over", 80.0),
+                ("MRR cm3/min", 86.0),
+                ("kW", 50.0),
+            ];
+            let header = |ui: &mut Ui| {
+                let (r, _) = ui.allocate_exact_size(vec2(width, 22.0), Sense::hover());
+                let mut x = r.left() + 14.0;
+                for (c, wd) in cols {
+                    ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, c, sans(11.0), t.ink2);
+                    x += wd;
+                }
+            };
+            for su in w.setups() {
+                let ops: Vec<&forge_cam_quality::OpQ> = job
+                    .ops
+                    .iter()
+                    .filter(|q| run.op(&q.name).is_some_and(|o| o.setup == su.name))
+                    .collect();
+                if ops.is_empty() {
+                    continue;
+                }
+                let feed: f64 = ops.iter().map(|q| q.t_cut + q.t_air).sum();
+                let air: f64 = ops.iter().map(|q| q.t_air).sum();
+                heading(
+                    ui,
+                    t,
+                    &format!("{} · feed time {} · {} in air", su.name, time(feed), if feed > 0.0 { pct(air / feed) } else { "—".into() }),
+                    width,
+                );
+                header(ui);
+                for q in ops {
+                    let (r, resp) = ui.allocate_exact_size(vec2(width, 22.0), Sense::click());
+                    if resp.hovered() {
+                        ui.painter().rect_filled(r, 0.0, t.hover);
+                    }
+                    if resp.clicked() {
+                        select = Some(q.name.clone());
+                    }
+                    places.push((format!("cam:quality:row:{}", q.name), r));
+                    let side = |s: String| if q.side { s } else { "—".into() };
+                    let cells = [
+                        q.name.clone(),
+                        time(q.t_cut + q.t_air),
+                        if q.t_cut + q.t_air > 0.0 { pct(q.t_air / (q.t_cut + q.t_air)) } else { "—".into() },
+                        q.plunges.to_string(),
+                        side(format!("{}°", num(q.phi_max.round()))),
+                        side(pct(q.slotting)),
+                        side(num(q.hex_mean)),
+                        side(format!("{} / {}", pct(q.thin), pct(q.thick))),
+                        if q.mrr > 0.0 { num((q.mrr / 1000.0 * 10.0).round() / 10.0) } else { "—".into() },
+                        if q.p_max > 0.0 { num((q.p_max * 100.0).round() / 100.0) } else { "—".into() },
+                    ];
+                    let warn = [
+                        false,
+                        false,
+                        q.t_cut + q.t_air > 0.0 && q.t_air / (q.t_cut + q.t_air) > 0.3,
+                        q.plunges > 0,
+                        q.side && q.phi_max > 170.0,
+                        q.side && q.slotting > 0.05,
+                        false,
+                        q.side && (q.thin > 0.1 || q.thick > 0.1),
+                        false,
+                        q.p_avail > 0.0 && q.p_max > q.p_avail,
+                    ];
+                    let mut x = r.left() + 14.0;
+                    for ((c, (_, wd)), wn) in cells.iter().zip(cols).zip(warn) {
+                        ui.painter().text(pos2(x, r.center().y), Align2::LEFT_CENTER, c, mono(11.0), if wn { t.warn } else { t.ink });
+                        x += wd;
+                    }
+                }
+            }
+            if !job.progs.is_empty() {
+                heading(ui, t, "Programs on the machine's timeline", width);
+                for p in &job.progs {
+                    let words = match &p.error {
+                        Some(e) => format!("not timed: {e}"),
+                        None => format!(
+                            "{} with stops ({} at least) · {} tool changes{}",
+                            time(p.t_stop),
+                            time(p.t_min),
+                            p.tool_changes,
+                            if p.accel_missing { " · the machine gives no accelerations" } else { "" }
+                        ),
+                    };
+                    fact(ui, t, &format!("{} on {}", p.name, p.machine), &words, width, if p.error.is_some() { t.warn } else { t.ink });
+                }
+            }
+            note(
+                ui,
+                &format!(
+                    "Measured on a height map of {} mm cells (forge-cam-quality): rubbing is a chip under half the feed per tooth, overloaded over 1.25 times it. Amber: worth a look.",
+                    num(job.cell)
+                ),
+                width,
+                t.ink2,
+            );
+            ui.add_space(8.0);
+        });
+    if let Some(op) = select {
+        w.command(Cmd::Select(op));
+    }
+    w.focus.colour_by = colour;
+    if close {
+        w.quality_open = false;
+    }
+    r.map(|r| r.response.rect)
+}
+
 fn checks_window(
     ctx: &egui::Context,
     t: &Theme,
@@ -1631,7 +2819,8 @@ fn checks_window(
     places: &mut Places,
 ) -> Option<Rect> {
     let mut close = false;
-    let width = 460.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 460.0_f32.min(v.width() - 32.0).max(360.0);
     let mut locate: Option<Locate> = None;
     let r = egui::Window::new("cam-checks")
         .id(egui::Id::unique("cam-checks-window"))
@@ -1641,7 +2830,8 @@ fn checks_window(
         .default_pos(pos2(v.right() - width - 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(ui, t, "cam_check", "Checks", width, places, "cam:checks");
             let Some(run) = &w.run else {
@@ -1692,7 +2882,8 @@ fn checks_window(
 fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &mut Places) -> Option<Rect> {
     let mut close = false;
     let mut apply = false;
-    let width = 640.0;
+    // within the view's free part (a small screen narrows it)
+    let width = 640.0_f32.min(v.width() - 32.0).max(360.0);
     let r = egui::Window::new("cam-text")
         .id(egui::Id::unique("cam-text-window"))
         .title_bar(false)
@@ -1701,7 +2892,8 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
         .default_pos(pos2(v.left() + 24.0, v.top() + 44.0))
         .fixed_size(vec2(width, 0.0))
         .frame(frame(t))
-        .constrain_to(crate::shell::dialog_area(ctx))
+        .fade_in(false)
+        .constrain_to(v.shrink(4.0))
         .show_placed(ctx, places, |ui, places| {
             close = head(
                 ui,
@@ -1757,10 +2949,160 @@ pub fn status_line(w: &CamWs) -> String {
         .run
         .as_ref()
         .map_or(0.0, |r| r.ops.iter().map(|o| o.time_s).sum());
+    let machining = if time > 0.0 {
+        format!(" · {} machining", self::time(time))
+    } else {
+        String::new()
+    };
     format!(
-        "{} · {built}/{n} ops certified · {} machining{}",
+        "{} · {built}/{n} ops certified{machining}{}",
         w.path.rsplit('/').next().unwrap_or(""),
-        self::time(time),
         if w.dirty() { " · unsaved" } else { "" }
     )
+}
+
+/// A tool kind in words.
+fn kind_words(k: forge_tooling::Kind) -> &'static str {
+    use forge_tooling::Kind::*;
+    match k {
+        Flat => "Flat end mill",
+        Ball => "Ball end mill",
+        Bull => "Bull nose end mill",
+        Chamfer => "Chamfer mill",
+        Spot => "Spot drill",
+        Drill => "Drill",
+        Tap => "Tap",
+        ThreadMill => "Thread mill",
+        Reamer => "Reamer",
+        Bore => "Boring bar",
+        Counterbore => "Counterbore",
+        Countersink => "Countersink",
+        Slot => "Slot cutter",
+        Engrave => "Engraver",
+    }
+}
+
+/// A whole number with thin groups of three (15 000).
+fn grouped(v: f64) -> String {
+    let n = v.round() as i64;
+    let s = n.abs().to_string();
+    let mut out = String::new();
+    for (k, c) in s.chars().enumerate() {
+        if k > 0 && (s.len() - k).is_multiple_of(3) {
+            out.push('\u{2009}');
+        }
+        out.push(c);
+    }
+    if n < 0 { format!("-{out}") } else { out }
+}
+
+/// A tool's side silhouette in `r` (shank up, its tip down): flat, ball, point or V.
+fn tool_glyph(p: &egui::Painter, r: Rect, k: forge_tooling::Kind, ink: Color32) {
+    use forge_tooling::Kind::*;
+    let st = Stroke::new(1.2, ink);
+    let (l, rt, top, bot) = (r.left(), r.right(), r.top(), r.bottom());
+    let tip = bot - r.width() * 0.5;
+    // the shank and the flutes' sides
+    p.line_segment([pos2(l, top), pos2(l, tip)], st);
+    p.line_segment([pos2(rt, top), pos2(rt, tip)], st);
+    p.line_segment([pos2(l, top), pos2(rt, top)], st);
+    match k {
+        Ball => {
+            let c = pos2(r.center().x, tip);
+            let n = 8;
+            let pts: Vec<egui::Pos2> = (0..=n)
+                .map(|i| {
+                    let a = std::f32::consts::PI * i as f32 / n as f32;
+                    pos2(c.x - a.cos() * r.width() * 0.5, c.y + a.sin() * r.width() * 0.5)
+                })
+                .collect();
+            p.add(egui::Shape::line(pts, st));
+        }
+        Drill | Spot | Chamfer | Countersink | Engrave => {
+            p.line_segment([pos2(l, tip), pos2(r.center().x, bot)], st);
+            p.line_segment([pos2(rt, tip), pos2(r.center().x, bot)], st);
+        }
+        _ => {
+            p.line_segment([pos2(l, tip), pos2(l, bot)], st);
+            p.line_segment([pos2(rt, tip), pos2(rt, bot)], st);
+            p.line_segment([pos2(l, bot), pos2(rt, bot)], st);
+        }
+    }
+    // flutes
+    p.line_segment([pos2(l, (top + tip) * 0.5), pos2(rt, (top + tip) * 0.5 + 3.0)], Stroke::new(0.8, ink));
+}
+
+/// A document tool as a machinist reads it: "T1 · Flat end mill Ø10" (the library's kind and
+/// diameter; the id when the library has no such tool).
+fn tool_words(w: &CamWs, s: &super::doc::Stmt) -> String {
+    let id = s.pos(0).map(super::doc::unquote).unwrap_or_default();
+    let t = s.arg("t").unwrap_or("?");
+    match w.lib.tools.iter().find(|x| x.id == id) {
+        Some(x) => format!("T{t} · {} Ø{}", kind_words(x.kind), num(x.dc)),
+        None => format!("T{t} · {id}"),
+    }
+}
+
+/// A machine's id in words: "generic-vmc3" → "Generic 3-axis VMC".
+fn machine_words(id: &str) -> String {
+    let words: Vec<String> = id
+        .split(['-', '_'])
+        .filter(|w| !w.is_empty())
+        .map(|w| match w {
+            "vmc3" => "3-axis VMC".to_string(),
+            "vmc4" => "4-axis VMC".to_string(),
+            "vmc5" => "5-axis VMC".to_string(),
+            "hmc" | "vmc" | "cnc" => w.to_uppercase(),
+            w => {
+                let mut c = w.chars();
+                c.next().map(|f| f.to_uppercase().collect::<String>() + c.as_str()).unwrap_or_default()
+            }
+        })
+        .collect();
+    if words.is_empty() { id.to_string() } else { words.join(" ") }
+}
+
+/// A label and its value on one row, the value right-aligned; when the two do not fit side by
+/// side the value takes its own row under the label, right-aligned and wrapped: a value never
+/// draws over its label (docs/ux/STANDARD.md §5).
+fn fact(ui: &mut Ui, t: &Theme, k: &str, v: &str, w: f32, ink: Color32) {
+    fact_r(ui, t, k, v, w, ink);
+}
+
+/// `fact`, its response (for a hover).
+fn fact_r(ui: &mut Ui, t: &Theme, k: &str, v: &str, w: f32, ink: Color32) -> egui::Response {
+    let pad = 14.0;
+    let kg = ui.painter().layout_no_wrap(k.to_string(), sans(12.0), t.ink2);
+    let vg = ui.painter().layout_no_wrap(v.to_string(), mono(12.0), ink);
+    if kg.size().x + vg.size().x + 16.0 <= w - 2.0 * pad {
+        let (r, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
+        ui.painter().galley(pos2(r.left() + pad, r.center().y - kg.size().y * 0.5), kg, t.ink2);
+        ui.painter().galley(pos2(r.right() - pad - vg.size().x, r.center().y - vg.size().y * 0.5), vg, ink);
+        return resp;
+    }
+    // the label, then the value under it (wrapped to the row)
+    let vg = ui.painter().layout(v.to_string(), mono(12.0), ink, w - 2.0 * pad - 12.0);
+    let h = 20.0 + vg.size().y + 2.0;
+    let (r, resp) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+    ui.painter().galley(pos2(r.left() + pad, r.top() + 10.0 - kg.size().y * 0.5), kg, t.ink2);
+    ui.painter().galley(pos2(r.right() - pad - vg.size().x, r.top() + 20.0), vg, ink);
+    resp
+}
+
+/// A fact whose words need a sentence: the row, and the sentence on hover.
+fn fact_tip(ui: &mut Ui, t: &Theme, k: &str, v: &str, tip: &str, w: f32, ink: Color32) {
+    fact_r(ui, t, k, v, w, ink).on_hover_text(tip);
+}
+
+/// The statement a dialog will write, as the document holds it: a muted "Forge text" label and
+/// the line in the code font (the text is the source of truth; this is it, not a caption).
+fn forge_text(ui: &mut Ui, t: &Theme, text: &str, w: f32) {
+    ui.add_space(4.0);
+    let (r, _) = ui.allocate_exact_size(vec2(w, 16.0), Sense::hover());
+    ui.painter().text(pos2(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, "Forge text", sans(11.0), t.ink2);
+    let g = ui.painter().layout(text.to_string(), mono(12.0), t.ink, w - 36.0);
+    let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 10.0), Sense::hover());
+    let field = egui::Rect::from_min_max(pos2(r.left() + 12.0, r.top()), pos2(r.right() - 12.0, r.bottom()));
+    ui.painter().rect_filled(field, 4.0, t.field);
+    ui.painter().galley(pos2(field.left() + 6.0, field.top() + 5.0), g, t.ink);
 }

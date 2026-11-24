@@ -256,8 +256,19 @@ impl Session {
         text.push_str(&match cam.certification() {
             "full" => "certification: full (G1-G6, every position within the machine's travel)\n".to_string(),
             "except G5" => {
-                "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n"
-                    .to_string()
+                let unplaced: Vec<String> = cam
+                    .warnings
+                    .iter()
+                    .filter(|w| w.contains("is not placed"))
+                    .cloned()
+                    .collect();
+                format!(
+                    "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n{}",
+                    unplaced.iter().map(|w| format!("  {w}\n")).collect::<String>()
+                )
+            }
+            "full except G4 (leftover not computed)" => {
+                "certification: full except G4 (G1-G3, G5, G6; the leftover was not computed)\n".to_string()
             }
             c => format!("certification: {c}\n"),
         });
@@ -274,10 +285,47 @@ impl Session {
         })
     }
 
+    /// `cam F post [PROGRAM]`: the programs' files as the app exports them
+    /// (forge_cam_lang::export), named and placed by their statements, relative to the
+    /// document's folder; refused (typed) when a program is not certified in full, unless
+    /// `allow_uncertified`, which stamps each file's header.
+    pub fn cam_post(
+        path: &Path,
+        which: Option<&str>,
+        allow_uncertified: bool,
+    ) -> Result<Vec<forge_cam_lang::export::NcFile>, String> {
+        let src = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+        let progs = if forge_turn_lang::is_turning(&src) {
+            let cam = forge_turn_lang::run(&src, &dir);
+            let cert = cam.certification().to_string();
+            cam.programs
+                .iter()
+                .map(|p| forge_cam_lang::export::ProgIn {
+                    name: p.name.clone(),
+                    post: p.post.clone(),
+                    text: p.text.clone(),
+                    error: p.error.clone(),
+                    certified: if p.text.is_none() { "no".into() } else { cert.clone() },
+                    setup: None,
+                })
+                .collect()
+        } else {
+            forge_cam_lang::run(&src, &dir).export_programs()
+        };
+        forge_cam_lang::export::files(&src, &progs, which, allow_uncertified).map_err(|e| e.text())
+    }
+
     /// `cam F` for a turning document (forge-turn-lang): the same reply schema, its program the
-    /// file when every op is certified.
+    /// file when every op is certified. `cam F check`: with the exact in-process stock and the
+    /// G4 leftover (the normal path keeps the stock as columns, sound by construction).
     fn cam_turn(src: &str, dir: &Path, a: &Args) -> Reply {
-        let cam = forge_turn_lang::run(src, dir);
+        let check = a.words.first().is_some_and(|w| w == "check");
+        let cam = if check {
+            forge_turn_lang::run_checked(src, dir)
+        } else {
+            forge_turn_lang::run(src, dir)
+        };
         let mut text = String::new();
         for e in &cam.errors {
             text.push_str(&format!("error: {e}\n"));
@@ -677,6 +725,9 @@ impl Session {
         {
             return self.export_mesh(a);
         }
+        if a.words.first().is_some_and(|w| w == "urdf") {
+            return self.export_urdf(a);
+        }
         let (run, _) = self.built(&a.file)?;
         if let Some(fmt) = a.words.first().filter(|w| *w == "dxf" || *w == "dwg") {
             let dwg = fmt == "dwg";
@@ -867,6 +918,43 @@ impl Session {
             json: Json::obj(j),
             png: Some(e.bytes),
         })
+    }
+
+    /// `urdf [tol MM] [angle DEG] [effort N] [velocity V] [travel MM] [cut J].. [package NAME]`:
+    /// the part or assembly as a URDF robot (research/export/urdf.md). The reply's bytes are a
+    /// ZIP of `NAME.urdf` and `meshes/*.stl`; a refusal is typed (`kind`, `fixes`).
+    fn export_urdf(&mut self, a: &Args) -> Result<Reply, String> {
+        use forge_lang::urdf;
+        let o = urdf::Options::parse(&a.words)?;
+        let (_, src) = self.read(&a.file)?;
+        let path = self.path(&a.file)?;
+        let dir = path.parent().map(Path::to_path_buf);
+        let opts = Options {
+            dir: dir.clone(),
+            root: self.root.clone(),
+            render: true,
+            kin: true,
+            overlap: false,
+            ..Options::default()
+        };
+        let run = forge_lang::run(&src, opts, Default::default()).0;
+        let name = Path::new(&a.file)
+            .file_stem()
+            .map_or_else(|| "part".into(), |n| n.to_string_lossy().into_owned());
+        match urdf::export(&run, &name, dir.as_deref(), &o) {
+            Ok(e) => Ok(Reply {
+                ok: true,
+                text: e.text(),
+                json: e.json(),
+                png: Some(e.zip),
+            }),
+            Err(e) => Ok(Reply {
+                ok: false,
+                text: format!("error {e}"),
+                json: Json::obj(vec![("ok", false.into()), ("error", e.json())]),
+                png: None,
+            }),
+        }
     }
 
     /// What part B changed from part A: features and params added, removed and changed (with

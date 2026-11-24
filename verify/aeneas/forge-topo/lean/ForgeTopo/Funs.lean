@@ -734,6 +734,1068 @@ def topo_edges.loops
   let nl ← EdgeTopoInst.topoTopoInst.n_loops t
   topo_edges.loops_loop1 EdgeTopoInst topoSinkInst t out1 nl 0#usize
 
+/-- [forge_topo::topo_euler::shell_euler]: loop body 3:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 44:16-60:17
+    Visibility: public -/
+@[rust_loop_body]
+def topo_euler.shell_euler_loop0_loop0_loop0_loop0.body
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (stamp : Std.U32) (first : Std.Usize) (len : Std.Usize)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (e : Std.I64) (v : Std.I64) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.I64 × Std.I64 × Std.Usize) ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec
+    Std.U32) × Std.I64 × Std.I64))
+  := do
+  if k < len
+  then
+    let i ← first + k
+    let ed ← topo_shellShellTopoInst.topoTopoInst.coedge_edge t i
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        edge_at ed
+    let (edge_at1, e1) ←
+      if i1 != stamp
+      then
+        do
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+            Std.U32) edge_at ed
+        let e2 ← e + 1#i64
+        let edge_at2 := index_mut_back stamp
+        ok (edge_at2, e2)
+      else ok (edge_at, e)
+    let (a, b) ← topo_shellShellTopoInst.topoTopoInst.edge_ends t ed
+    let i2 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        vert_at a
+    let (vert_at1, v1) ←
+      if i2 != stamp
+      then
+        do
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+            Std.U32) vert_at a
+        let v2 ← v + 1#i64
+        let vert_at2 := index_mut_back stamp
+        ok (vert_at2, v2)
+      else ok (vert_at, v)
+    let i3 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        vert_at1 b
+    let (vert_at2, v2) ←
+      if i3 != stamp
+      then
+        do
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+            Std.U32) vert_at1 b
+        let v3 ← v1 + 1#i64
+        let vert_at3 := index_mut_back stamp
+        ok (vert_at3, v3)
+      else ok (vert_at1, v1)
+    let k1 ← k + 1#usize
+    ok (cont (edge_at1, vert_at2, e1, v2, k1))
+  else ok (done (edge_at, vert_at, e, v))
+
+/-- [forge_topo::topo_euler::shell_euler]: loop 3:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 44:16-60:17
+    Visibility: public -/
+@[rust_loop]
+def topo_euler.shell_euler_loop0_loop0_loop0_loop0
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (stamp : Std.U32) (e : Std.I64) (v : Std.I64) (first : Std.Usize)
+  (len : Std.Usize) (k : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.I64 ×
+    Std.I64)
+  := do
+  loop
+    (fun (edge_at1, vert_at1, e1, v1, k1) =>
+      topo_euler.shell_euler_loop0_loop0_loop0_loop0.body
+      topo_shellShellTopoInst t stamp first len edge_at1 vert_at1 e1 v1 k1)
+    (edge_at, vert_at, e, v, k)
+
+/-- [forge_topo::topo_euler::shell_euler]: loop body 2:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 38:12-62:13
+    Visibility: public -/
+@[rust_loop_body]
+def topo_euler.shell_euler_loop0_loop0_loop0.body
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (stamp : Std.U32) (face : Std.Usize) (nl : Std.Usize)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (l : Std.I64) (e : Std.I64) (v : Std.I64) (j : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.I64 × Std.I64 × Std.I64 × Std.Usize) ((alloc.vec.Vec Std.U32) ×
+    (alloc.vec.Vec Std.U32) × Std.I64 × Std.I64 × Std.I64))
+  := do
+  if j < nl
+  then
+    let lp ← topo_shellShellTopoInst.topoTopoInst.face_loop t face j
+    let l1 ← l + 1#i64
+    let first ← topo_shellShellTopoInst.topoTopoInst.loop_first t lp
+    let len ← topo_shellShellTopoInst.topoTopoInst.loop_len t lp
+    let (edge_at1, vert_at1, e1, v1) ←
+      topo_euler.shell_euler_loop0_loop0_loop0_loop0 topo_shellShellTopoInst t
+        edge_at vert_at stamp e v first len 0#usize
+    let j1 ← j + 1#usize
+    ok (cont (edge_at1, vert_at1, l1, e1, v1, j1))
+  else ok (done (edge_at, vert_at, l, e, v))
+
+/-- [forge_topo::topo_euler::shell_euler]: loop 2:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 38:12-62:13
+    Visibility: public -/
+@[rust_loop]
+def topo_euler.shell_euler_loop0_loop0_loop0
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (stamp : Std.U32) (l : Std.I64) (e : Std.I64) (v : Std.I64)
+  (face : Std.Usize) (nl : Std.Usize) (j : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.I64 ×
+    Std.I64 × Std.I64)
+  := do
+  loop
+    (fun (edge_at1, vert_at1, l1, e1, v1, j1) =>
+      topo_euler.shell_euler_loop0_loop0_loop0.body topo_shellShellTopoInst t
+      stamp face nl edge_at1 vert_at1 l1 e1 v1 j1)
+    (edge_at, vert_at, l, e, v, j)
+
+/-- [forge_topo::topo_euler::shell_euler]: loop body 1:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 33:8-64:9
+    Visibility: public -/
+@[rust_loop_body]
+def topo_euler.shell_euler_loop0_loop0.body
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (n_faces : Std.Usize) (s : Std.Usize) (stamp : Std.U32) (nf : Std.Usize)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (f : Std.I64) (l : Std.I64) (e : Std.I64) (v : Std.I64) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.I64 × Std.I64 × Std.I64 × Std.I64 × Std.Usize) ((alloc.vec.Vec
+    Std.U32) × (alloc.vec.Vec Std.U32) × Std.I64 × Std.I64 × Std.I64 ×
+    Std.I64))
+  := do
+  if i < nf
+  then
+    let face ← topo_shellShellTopoInst.shell_face t s i
+    let f1 ← f + 1#i64
+    let nl ←
+      if face < n_faces
+      then topo_shellShellTopoInst.topoTopoInst.face_n_loops t face
+      else ok 0#usize
+    let (edge_at1, vert_at1, l1, e1, v1) ←
+      topo_euler.shell_euler_loop0_loop0_loop0 topo_shellShellTopoInst t
+        edge_at vert_at stamp l e v face nl 0#usize
+    let i1 ← i + 1#usize
+    ok (cont (edge_at1, vert_at1, f1, l1, e1, v1, i1))
+  else ok (done (edge_at, vert_at, f, l, e, v))
+
+/-- [forge_topo::topo_euler::shell_euler]: loop 1:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 33:8-64:9
+    Visibility: public -/
+@[rust_loop]
+def topo_euler.shell_euler_loop0_loop0
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (n_faces : Std.Usize) (edge_at : alloc.vec.Vec Std.U32)
+  (vert_at : alloc.vec.Vec Std.U32) (s : Std.Usize) (stamp : Std.U32)
+  (f : Std.I64) (l : Std.I64) (e : Std.I64) (v : Std.I64) (nf : Std.Usize)
+  (i : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.I64 ×
+    Std.I64 × Std.I64 × Std.I64)
+  := do
+  loop
+    (fun (edge_at1, vert_at1, f1, l1, e1, v1, i1) =>
+      topo_euler.shell_euler_loop0_loop0.body topo_shellShellTopoInst t n_faces
+      s stamp nf edge_at1 vert_at1 f1 l1 e1 v1 i1)
+    (edge_at, vert_at, f, l, e, v, i)
+
+/-- [forge_topo::topo_euler::shell_euler]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 25:4-70:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_euler.shell_euler_loop0.body
+  {T : Type _} {S : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T)
+  (EulerSinkInst : topo_euler.EulerSink S) (t : T) (ns : Std.Usize)
+  (n_faces : Std.Usize) (out : S) (edge_at : alloc.vec.Vec Std.U32)
+  (vert_at : alloc.vec.Vec Std.U32) (s : Std.Usize) :
+  Result (ControlFlow (S × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)
+    × Std.Usize) S)
+  := do
+  if s < ns
+  then
+    let stamp ← lift (UScalar.cast .U32 s)
+    let nf ← topo_shellShellTopoInst.shell_n_faces t s
+    let (edge_at1, vert_at1, f, l, e, v) ←
+      topo_euler.shell_euler_loop0_loop0 topo_shellShellTopoInst t n_faces
+        edge_at vert_at s stamp 0#i64 0#i64 0#i64 0#i64 nf 0#usize
+    let i ← v - e
+    let i1 ← 2#i64 * f
+    let i2 ← i + i1
+    let value ← i2 - l
+    let i3 ← value % 2#i64
+    let out1 ←
+      if i3 != 0#i64
+      then EulerSinkInst.shell_euler out s value
+      else
+        if value > 2#i64
+        then EulerSinkInst.shell_euler out s value
+        else ok out
+    let s1 ← s + 1#usize
+    ok (cont (out1, edge_at1, vert_at1, s1))
+  else ok (done out)
+
+/-- [forge_topo::topo_euler::shell_euler]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 25:4-70:5
+    Visibility: public -/
+@[rust_loop]
+def topo_euler.shell_euler_loop0
+  {T : Type _} {S : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T)
+  (EulerSinkInst : topo_euler.EulerSink S) (t : T) (out : S) (ns : Std.Usize)
+  (n_faces : Std.Usize) (edge_at : alloc.vec.Vec Std.U32)
+  (vert_at : alloc.vec.Vec Std.U32) (s : Std.Usize) :
+  Result S
+  := do
+  loop
+    (fun (out1, edge_at1, vert_at1, s1) => topo_euler.shell_euler_loop0.body
+      topo_shellShellTopoInst EulerSinkInst t ns n_faces out1 edge_at1 vert_at1
+      s1)
+    (out, edge_at, vert_at, s)
+
+/-- [forge_topo::topo_euler::shell_euler]:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 19:0-71:1
+    Visibility: public -/
+def topo_euler.shell_euler
+  {T : Type _} {S : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T)
+  (EulerSinkInst : topo_euler.EulerSink S) (t : T) (out : S) :
+  Result S
+  := do
+  let ns ← topo_shellShellTopoInst.n_shells t
+  let n_faces ← topo_shellShellTopoInst.topoTopoInst.n_faces t
+  let i ← topo_shellShellTopoInst.topoTopoInst.n_edges t
+  let edge_at ← alloc.vec.from_elem core.clone.CloneU32 core.num.U32.MAX i
+  let i1 ← topo_shellShellTopoInst.topoTopoInst.n_vertices t
+  let vert_at ← alloc.vec.from_elem core.clone.CloneU32 core.num.U32.MAX i1
+  topo_euler.shell_euler_loop0 topo_shellShellTopoInst EulerSinkInst t out ns
+    n_faces edge_at vert_at 0#usize
+
+/-- [forge_topo::topo_fans::NONE]
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 27:0-27:31 -/
+@[global_simps, irreducible]
+def topo_fans.NONE : Std.Usize := core.num.Usize.MAX
+
+/-- [forge_topo::topo_fans::start]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 30:0-33:1 -/
+def topo_fans.start
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
+  Result Std.Usize
+  := do
+  let i ← FanTopoInst.topoTopoInst.coedge_edge t c
+  let (a, b) ← FanTopoInst.topoTopoInst.edge_ends t i
+  let b1 ← FanTopoInst.coedge_forward t c
+  if b1
+  then ok a
+  else ok b
+
+/-- [forge_topo::topo_fans::stop]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 36:0-39:1 -/
+def topo_fans.stop
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
+  Result Std.Usize
+  := do
+  let i ← FanTopoInst.topoTopoInst.coedge_edge t c
+  let (a, b) ← FanTopoInst.topoTopoInst.edge_ends t i
+  let b1 ← FanTopoInst.coedge_forward t c
+  if b1
+  then ok b
+  else ok a
+
+/-- [forge_topo::topo_fans::face_of]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 42:0-44:1 -/
+def topo_fans.face_of
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
+  Result Std.Usize
+  := do
+  let i ← FanTopoInst.topoTopoInst.coedge_loop t c
+  FanTopoInst.topoTopoInst.loop_face t i
+
+/-- [forge_topo::topo_fans::prev_of]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 48:0-56:1 -/
+def topo_fans.prev_of
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
+  Result Std.Usize
+  := do
+  let l ← FanTopoInst.topoTopoInst.coedge_loop t c
+  let first ← FanTopoInst.topoTopoInst.loop_first t l
+  if c = first
+  then
+    let i ← FanTopoInst.topoTopoInst.loop_len t l
+    let i1 ← first + i
+    i1 - 1#usize
+  else c - 1#usize
+
+/-- [forge_topo::topo_fans::partner]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 65:4-71:5 -/
+@[rust_loop_body]
+def topo_fans.partner_loop.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize)
+  (e : Std.Usize) (n : Std.Usize) (i : Std.Usize) (found : Std.Usize) :
+  Result (ControlFlow (Std.Usize × Std.Usize) Std.Usize)
+  := do
+  if found = topo_fans.NONE
+  then
+    if i < n
+    then
+      let o ← FanTopoInst.topoTopoInst.edge_use t e i
+      let found1 ← if o != c
+                     then ok o
+                     else ok found
+      let i1 ← i + 1#usize
+      ok (cont (i1, found1))
+    else ok (done found)
+  else ok (done found)
+
+/-- [forge_topo::topo_fans::partner]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 65:4-71:5 -/
+@[rust_loop]
+def topo_fans.partner_loop
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize)
+  (e : Std.Usize) (n : Std.Usize) (i : Std.Usize) (found : Std.Usize) :
+  Result Std.Usize
+  := do
+  loop
+    (fun (i1, found1) => topo_fans.partner_loop.body FanTopoInst t c e n i1
+      found1)
+    (i, found)
+
+/-- [forge_topo::topo_fans::partner]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 60:0-73:1 -/
+def topo_fans.partner
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
+  Result Std.Usize
+  := do
+  let e ← FanTopoInst.topoTopoInst.coedge_edge t c
+  let n ← FanTopoInst.topoTopoInst.edge_n_uses t e
+  topo_fans.partner_loop FanTopoInst t c e n 0#usize topo_fans.NONE
+
+/-- [forge_topo::topo_fans::contains]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 79:4-86:1 -/
+@[rust_loop_body]
+def topo_fans.contains_loop.body
+  (xs : Slice Std.Usize) (n : Std.Usize) (x : Std.Usize) (i : Std.Usize) :
+  Result (ControlFlow Std.Usize Bool)
+  := do
+  if i < n
+  then
+    let i1 ← Slice.index_usize xs i
+    if i1 = x
+    then ok (done true)
+    else let i2 ← i + 1#usize
+         ok (cont i2)
+  else ok (done false)
+
+/-- [forge_topo::topo_fans::contains]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 79:4-86:1 -/
+@[rust_loop]
+def topo_fans.contains_loop
+  (xs : Slice Std.Usize) (n : Std.Usize) (x : Std.Usize) (i : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun i1 => topo_fans.contains_loop.body xs n x i1)
+    i
+
+/-- [forge_topo::topo_fans::contains]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 77:0-86:1 -/
+@[reducible]
+def topo_fans.contains
+  (xs : Slice Std.Usize) (n : Std.Usize) (x : Std.Usize) : Result Bool := do
+  topo_fans.contains_loop xs n x 0#usize
+
+/-- [forge_topo::topo_fans::before]: loop body 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 109:16-116:17 -/
+@[rust_loop_body]
+def topo_fans.before_loop0_loop0.body
+  (v : alloc.vec.Vec (Std.Usize × Std.Usize)) (c : Std.Usize)
+  («end» : Std.Usize) (into : Std.Usize) (found : Bool) (j : Std.Usize) :
+  Result (ControlFlow (Std.Usize × Bool × Std.Usize) (Std.Usize × Bool))
+  := do
+  if found
+  then ok (done (into, found))
+  else
+    if j < «end»
+    then
+      let (x, y) ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.Usize
+          × Std.Usize)) v j
+      let (into1, found1) ← if x = c
+                              then ok (y, true)
+                              else ok (into, found)
+      let j1 ← j + 1#usize
+      ok (cont (into1, found1, j1))
+    else ok (done (into, found))
+
+/-- [forge_topo::topo_fans::before]: loop 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 109:16-116:17 -/
+@[rust_loop]
+def topo_fans.before_loop0_loop0
+  (v : alloc.vec.Vec (Std.Usize × Std.Usize)) (c : Std.Usize)
+  (into : Std.Usize) (found : Bool) (j : Std.Usize) («end» : Std.Usize) :
+  Result (Std.Usize × Bool)
+  := do
+  loop
+    (fun (into1, found1, j1) => topo_fans.before_loop0_loop0.body v c «end»
+      into1 found1 j1)
+    (into, found, j)
+
+/-- [forge_topo::topo_fans::before]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 105:8-121:9 -/
+@[rust_loop_body]
+def topo_fans.before_loop0.body
+  (v : alloc.vec.Vec Std.Usize) (v1 : alloc.vec.Vec (Std.Usize × Std.Usize))
+  (v2 : alloc.vec.Vec Std.Usize) (c : Std.Usize) (f : Std.Usize)
+  (nf : Std.Usize) (into : Std.Usize) (found : Bool) (k : Std.Usize) :
+  Result (ControlFlow (Std.Usize × Bool × Std.Usize) (Std.Usize × Bool))
+  := do
+  if k < nf
+  then
+    let i ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize) v k
+    if i = f
+    then
+      let j ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+          v2 k
+      let i1 ← k + 1#usize
+      let «end» ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+          v2 i1
+      let (into1, found1) ←
+        topo_fans.before_loop0_loop0 v1 c into found j «end»
+      ok (cont (into1, found1, nf))
+    else let k1 ← k + 1#usize
+         ok (cont (into, found, k1))
+  else ok (done (into, found))
+
+/-- [forge_topo::topo_fans::before]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 105:8-121:9 -/
+@[rust_loop]
+def topo_fans.before_loop0
+  (v : alloc.vec.Vec Std.Usize) (v1 : alloc.vec.Vec (Std.Usize × Std.Usize))
+  (v2 : alloc.vec.Vec Std.Usize) (c : Std.Usize) (into : Std.Usize)
+  (found : Bool) (f : Std.Usize) (nf : Std.Usize) (k : Std.Usize) :
+  Result (Std.Usize × Bool)
+  := do
+  loop
+    (fun (into1, found1, k1) => topo_fans.before_loop0.body v v1 v2 c f nf
+      into1 found1 k1)
+    (into, found, k)
+
+/-- [forge_topo::topo_fans::before]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 98:0-124:1 -/
+def topo_fans.before
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (closes : topo_fans.Closes) (by_corners : Bool) (c : Std.Usize) :
+  Result Std.Usize
+  := do
+  if by_corners
+  then
+    let f ← topo_fans.face_of FanTopoInst t c
+    let nf := alloc.vec.Vec.len closes.cf
+    let (into, found) ←
+      topo_fans.before_loop0 closes.cf closes.cl closes.cs c 0#usize false f nf
+        0#usize
+    if found
+    then ok into
+    else topo_fans.prev_of FanTopoInst t c
+  else topo_fans.prev_of FanTopoInst t c
+
+/-- [forge_topo::topo_fans::count_fans]: loop body 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 147:12-160:13 -/
+@[rust_loop_body]
+def topo_fans.count_fans_loop0_loop0.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (closes : topo_fans.Closes) (by_corners : Bool)
+  (seen : alloc.vec.Vec Std.Usize) (sl : Std.Usize) (c : Std.Usize) (go : Bool)
+  :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize × Std.Usize ×
+    Bool) ((alloc.vec.Vec Std.Usize) × Std.Usize))
+  := do
+  if go
+  then
+    let s := alloc.vec.Vec.deref seen
+    let b ← topo_fans.contains s sl c
+    if b
+    then ok (done (seen, sl))
+    else
+      let i := alloc.vec.Vec.len seen
+      let seen1 ←
+        if sl < i
+        then
+          do
+          let (_, index_mut_back) ←
+            alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+              Std.Usize) seen sl
+          ok (index_mut_back c)
+        else alloc.vec.Vec.push seen c
+      let sl1 ← sl + 1#usize
+      let i1 ← topo_fans.before FanTopoInst t closes by_corners c
+      let p ← topo_fans.partner FanTopoInst t i1
+      if p = topo_fans.NONE
+      then ok (cont (seen1, sl1, c, false))
+      else ok (cont (seen1, sl1, p, go))
+  else ok (done (seen, sl))
+
+/-- [forge_topo::topo_fans::count_fans]: loop 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 147:12-160:13 -/
+@[rust_loop]
+def topo_fans.count_fans_loop0_loop0
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (closes : topo_fans.Closes) (by_corners : Bool)
+  (seen : alloc.vec.Vec Std.Usize) (sl : Std.Usize) (c : Std.Usize) (go : Bool)
+  :
+  Result ((alloc.vec.Vec Std.Usize) × Std.Usize)
+  := do
+  loop
+    (fun (seen1, sl1, c1, go1) => topo_fans.count_fans_loop0_loop0.body
+      FanTopoInst t closes by_corners seen1 sl1 c1 go1)
+    (seen, sl, c, go)
+
+/-- [forge_topo::topo_fans::count_fans]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 141:4-163:5 -/
+@[rust_loop_body]
+def topo_fans.count_fans_loop0.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (items : Slice Std.Usize) (hi : Std.Usize) (closes : topo_fans.Closes)
+  (by_corners : Bool) (seen : alloc.vec.Vec Std.Usize) (count : Std.Usize)
+  (sl : Std.Usize) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize × Std.Usize ×
+    Std.Usize) ((alloc.vec.Vec Std.Usize) × Std.Usize × Std.Usize))
+  := do
+  if i < hi
+  then
+    let c0 ← Slice.index_usize items i
+    let s := alloc.vec.Vec.deref seen
+    let b ← topo_fans.contains s sl c0
+    if b
+    then let i1 ← i + 1#usize
+         ok (cont (seen, count, sl, i1))
+    else
+      let count1 ← count + 1#usize
+      let (seen1, sl1) ←
+        topo_fans.count_fans_loop0_loop0 FanTopoInst t closes by_corners seen
+          sl c0 true
+      let i1 ← i + 1#usize
+      ok (cont (seen1, count1, sl1, i1))
+  else ok (done (seen, count, sl))
+
+/-- [forge_topo::topo_fans::count_fans]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 141:4-163:5 -/
+@[rust_loop]
+def topo_fans.count_fans_loop0
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (items : Slice Std.Usize) (hi : Std.Usize) (closes : topo_fans.Closes)
+  (by_corners : Bool) (seen : alloc.vec.Vec Std.Usize) (count : Std.Usize)
+  (sl : Std.Usize) (i : Std.Usize) :
+  Result ((alloc.vec.Vec Std.Usize) × Std.Usize × Std.Usize)
+  := do
+  loop
+    (fun (seen1, count1, sl1, i1) => topo_fans.count_fans_loop0.body
+      FanTopoInst t items hi closes by_corners seen1 count1 sl1 i1)
+    (seen, count, sl, i)
+
+/-- [forge_topo::topo_fans::count_fans]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 129:0-165:1 -/
+def topo_fans.count_fans
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (items : Slice Std.Usize) (lo : Std.Usize) (hi : Std.Usize)
+  (closes : topo_fans.Closes) (by_corners : Bool)
+  (seen : alloc.vec.Vec Std.Usize) :
+  Result ((Std.Usize × Std.Usize) × (alloc.vec.Vec Std.Usize))
+  := do
+  let (seen1, count, sl) ←
+    topo_fans.count_fans_loop0 FanTopoInst t items hi closes by_corners seen
+      0#usize 0#usize lo
+  ok ((count, sl), seen1)
+
+/-- [forge_topo::topo_fans::n_fans]: loop body 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 191:12-194:13 -/
+@[rust_loop_body]
+def topo_fans.n_fans_loop0_loop0.body
+  (cr : alloc.vec.Vec (Std.Usize × Std.Usize)) (m : Std.Usize)
+  (v : alloc.vec.Vec (Std.Usize × Std.Usize)) (j : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (Std.Usize × Std.Usize)) × Std.Usize)
+    (alloc.vec.Vec (Std.Usize × Std.Usize)))
+  := do
+  if j < m
+  then
+    let p ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice (Std.Usize ×
+        Std.Usize)) cr j
+    let v1 ← alloc.vec.Vec.push v p
+    let j1 ← j + 1#usize
+    ok (cont (v1, j1))
+  else ok (done v)
+
+/-- [forge_topo::topo_fans::n_fans]: loop 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 191:12-194:13 -/
+@[rust_loop]
+def topo_fans.n_fans_loop0_loop0
+  (v : alloc.vec.Vec (Std.Usize × Std.Usize))
+  (cr : alloc.vec.Vec (Std.Usize × Std.Usize)) (m : Std.Usize) (j : Std.Usize)
+  :
+  Result (alloc.vec.Vec (Std.Usize × Std.Usize))
+  := do
+  loop
+    (fun (v1, j1) => topo_fans.n_fans_loop0_loop0.body cr m v1 j1)
+    (v, j)
+
+/-- [forge_topo::topo_fans::n_fans]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 181:4-198:5 -/
+@[rust_loop_body]
+def topo_fans.n_fans_loop0.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (seen : alloc.vec.Vec Std.Usize) (v : Std.Usize) (ns : Std.Usize)
+  (v1 : alloc.vec.Vec Std.Usize) (v2 : alloc.vec.Vec (Std.Usize × Std.Usize))
+  (v3 : alloc.vec.Vec Std.Usize) (any : Bool) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec (Std.Usize
+    × Std.Usize)) × (alloc.vec.Vec Std.Usize) × Bool × Std.Usize)
+    ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec (Std.Usize × Std.Usize)) ×
+    (alloc.vec.Vec Std.Usize) × Bool))
+  := do
+  if k < ns
+  then
+    let i ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+        seen k
+    let f ← topo_fans.face_of FanTopoInst t i
+    let s := alloc.vec.Vec.deref v1
+    let i1 := alloc.vec.Vec.len v1
+    let b ← topo_fans.contains s i1 f
+    if b
+    then let k1 ← k + 1#usize
+         ok (cont (v1, v2, v3, any, k1))
+    else
+      let v4 ← alloc.vec.Vec.push v1 f
+      let cr ← FanTopoInst.corners t f v
+      let m := alloc.vec.Vec.len cr
+      let any1 ← if m > 0#usize
+                   then ok true
+                   else ok any
+      let v5 ← topo_fans.n_fans_loop0_loop0 v2 cr m 0#usize
+      let i2 := alloc.vec.Vec.len v5
+      let v6 ← alloc.vec.Vec.push v3 i2
+      let k1 ← k + 1#usize
+      ok (cont (v4, v5, v6, any1, k1))
+  else ok (done (v1, v2, v3, any))
+
+/-- [forge_topo::topo_fans::n_fans]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 181:4-198:5 -/
+@[rust_loop]
+def topo_fans.n_fans_loop0
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (seen : alloc.vec.Vec Std.Usize) (v : alloc.vec.Vec Std.Usize)
+  (v1 : alloc.vec.Vec (Std.Usize × Std.Usize)) (v2 : alloc.vec.Vec Std.Usize)
+  (v3 : Std.Usize) (any : Bool) (ns : Std.Usize) (k : Std.Usize) :
+  Result ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec (Std.Usize × Std.Usize))
+    × (alloc.vec.Vec Std.Usize) × Bool)
+  := do
+  loop
+    (fun (v4, v5, v6, any1, k1) => topo_fans.n_fans_loop0.body FanTopoInst t
+      seen v3 ns v4 v5 v6 any1 k1)
+    (v, v1, v2, any, k)
+
+/-- [forge_topo::topo_fans::n_fans]: loop body 3:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 220:16-225:17 -/
+@[rust_loop_body]
+def topo_fans.n_fans_loop1_loop0.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (a : Std.Usize)
+  (e : Std.Usize) (nu : Std.Usize) (used : Bool) (j : Std.Usize) :
+  Result (ControlFlow (Bool × Std.Usize) Bool)
+  := do
+  if j < nu
+  then
+    let i ← FanTopoInst.topoTopoInst.edge_use t e j
+    let used1 ← if i = a
+                  then ok true
+                  else ok used
+    let j1 ← j + 1#usize
+    ok (cont (used1, j1))
+  else ok (done used)
+
+/-- [forge_topo::topo_fans::n_fans]: loop 3:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 220:16-225:17 -/
+@[rust_loop]
+def topo_fans.n_fans_loop1_loop0
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (a : Std.Usize)
+  (e : Std.Usize) (used : Bool) (nu : Std.Usize) (j : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (used1, j1) => topo_fans.n_fans_loop1_loop0.body FanTopoInst t a e nu
+      used1 j1)
+    (used, j)
+
+/-- [forge_topo::topo_fans::n_fans]: loop body 2:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 208:4-234:5 -/
+@[rust_loop_body]
+def topo_fans.n_fans_loop1.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (items : Slice Std.Usize) (hi : Std.Usize) (v : alloc.vec.Vec Std.Usize)
+  (v1 : alloc.vec.Vec (Std.Usize × Std.Usize)) (v2 : alloc.vec.Vec Std.Usize)
+  (v3 : Std.Usize) (nc : Std.Usize) (ne : Std.Usize)
+  (into : alloc.vec.Vec Std.Usize) (ok1 : Bool) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Bool × Std.Usize) Bool)
+  := do
+  if ok1
+  then
+    if i < hi
+    then
+      let i1 ← Slice.index_usize items i
+      let a ←
+        topo_fans.before FanTopoInst t { cf := v, cl := v1, cs := v2 } true i1
+      if a >= nc
+      then let i2 ← i + 1#usize
+           ok (cont (into, false, i2))
+      else
+        let e ← FanTopoInst.topoTopoInst.coedge_edge t a
+        if e >= ne
+        then let i2 ← i + 1#usize
+             ok (cont (into, false, i2))
+        else
+          let i2 ← topo_fans.stop FanTopoInst t a
+          if i2 != v3
+          then let i3 ← i + 1#usize
+               ok (cont (into, false, i3))
+          else
+            let nu ← FanTopoInst.topoTopoInst.edge_n_uses t e
+            let used ←
+              topo_fans.n_fans_loop1_loop0 FanTopoInst t a e false nu 0#usize
+            let (into1, ok2) ←
+              if used
+              then
+                do
+                let s := alloc.vec.Vec.deref into
+                let i3 := alloc.vec.Vec.len into
+                let b ← topo_fans.contains s i3 a
+                if b
+                then ok (into, false)
+                else let into2 ← alloc.vec.Vec.push into a
+                     ok (into2, ok1)
+              else ok (into, false)
+            let i3 ← i + 1#usize
+            ok (cont (into1, ok2, i3))
+    else ok (done ok1)
+  else ok (done ok1)
+
+/-- [forge_topo::topo_fans::n_fans]: loop 2:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 208:4-234:5 -/
+@[rust_loop]
+def topo_fans.n_fans_loop1
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (items : Slice Std.Usize) (hi : Std.Usize) (v : alloc.vec.Vec Std.Usize)
+  (v1 : alloc.vec.Vec (Std.Usize × Std.Usize)) (v2 : alloc.vec.Vec Std.Usize)
+  (v3 : Std.Usize) (nc : Std.Usize) (ne : Std.Usize)
+  (into : alloc.vec.Vec Std.Usize) (ok1 : Bool) (i : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (into1, ok2, i1) => topo_fans.n_fans_loop1.body FanTopoInst t items hi
+      v v1 v2 v3 nc ne into1 ok2 i1)
+    (into, ok1, i)
+
+/-- [forge_topo::topo_fans::n_fans]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 170:0-239:1 -/
+def topo_fans.n_fans
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (items : Slice Std.Usize) (lo : Std.Usize) (hi : Std.Usize)
+  (seen : alloc.vec.Vec Std.Usize) :
+  Result (Std.Usize × (alloc.vec.Vec Std.Usize))
+  := do
+  let ((count, sl), seen1) ←
+    topo_fans.count_fans FanTopoInst t items lo hi
+      {
+        cf := (alloc.vec.Vec.new Std.Usize),
+        cl := (alloc.vec.Vec.new (Std.Usize × Std.Usize)),
+        cs := (alloc.vec.Vec.new Std.Usize)
+      } false seen
+  if count < 2#usize
+  then ok (count, seen1)
+  else
+    let i ← Slice.index_usize items lo
+    let v ← topo_fans.start FanTopoInst t i
+    let v1 ← alloc.vec.Vec.push (alloc.vec.Vec.new Std.Usize) 0#usize
+    let (v2, v3, v4, any) ←
+      topo_fans.n_fans_loop0 FanTopoInst t seen1 (alloc.vec.Vec.new Std.Usize)
+        (alloc.vec.Vec.new (Std.Usize × Std.Usize)) v1 v false sl 0#usize
+    if any
+    then
+      let nc ← FanTopoInst.topoTopoInst.n_coedges t
+      let ne ← FanTopoInst.topoTopoInst.n_edges t
+      let ok1 ←
+        topo_fans.n_fans_loop1 FanTopoInst t items hi v2 v3 v4 v nc ne
+          (alloc.vec.Vec.new Std.Usize) true lo
+      if ok1
+      then
+        let ((count1, _), seen2) ←
+          topo_fans.count_fans FanTopoInst t items lo hi
+            { cf := v2, cl := v3, cs := v4 } true seen1
+        ok (count1, seen2)
+      else ok (count, seen1)
+    else ok (count, seen1)
+
+/-- [forge_topo::topo_fans::fans]: loop body 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 252:8-256:9
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.fans_loop0_loop0.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (e : Std.Usize)
+  (n : Std.Usize) (off : alloc.vec.Vec Std.Usize) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize) (alloc.vec.Vec
+    Std.Usize))
+  := do
+  if i < n
+  then
+    let i1 ← FanTopoInst.topoTopoInst.edge_use t e i
+    let s ← topo_fans.start FanTopoInst t i1
+    let i2 ← s + 1#usize
+    let (i3, index_mut_back) ←
+      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+        off i2
+    let i4 ← i3 + 1#usize
+    let i5 ← i + 1#usize
+    let off1 := index_mut_back i4
+    ok (cont (off1, i5))
+  else ok (done off)
+
+/-- [forge_topo::topo_fans::fans]: loop 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 252:8-256:9
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.fans_loop0_loop0
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  (off : alloc.vec.Vec Std.Usize) (e : Std.Usize) (n : Std.Usize)
+  (i : Std.Usize) :
+  Result (alloc.vec.Vec Std.Usize)
+  := do
+  loop
+    (fun (off1, i1) => topo_fans.fans_loop0_loop0.body FanTopoInst t e n off1
+      i1)
+    (off, i)
+
+/-- [forge_topo::topo_fans::fans]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 249:4-258:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.fans_loop0.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (ne : Std.Usize)
+  (off : alloc.vec.Vec Std.Usize) (e : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize) (alloc.vec.Vec
+    Std.Usize))
+  := do
+  if e < ne
+  then
+    let n ← FanTopoInst.topoTopoInst.edge_n_uses t e
+    let off1 ← topo_fans.fans_loop0_loop0 FanTopoInst t off e n 0#usize
+    let e1 ← e + 1#usize
+    ok (cont (off1, e1))
+  else ok (done off)
+
+/-- [forge_topo::topo_fans::fans]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 249:4-258:5
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.fans_loop0
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (ne : Std.Usize)
+  (off : alloc.vec.Vec Std.Usize) (e : Std.Usize) :
+  Result (alloc.vec.Vec Std.Usize)
+  := do
+  loop
+    (fun (off1, e1) => topo_fans.fans_loop0.body FanTopoInst t ne off1 e1)
+    (off, e)
+
+/-- [forge_topo::topo_fans::fans]: loop body 2:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 260:4-263:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.fans_loop1.body
+  (nv : Std.Usize) (off : alloc.vec.Vec Std.Usize) (v : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize) (alloc.vec.Vec
+    Std.Usize))
+  := do
+  if v < nv
+  then
+    let i ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize) off
+        v
+    let i1 ← v + 1#usize
+    let (i2, index_mut_back) ←
+      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+        off i1
+    let i3 ← i2 + i
+    let off1 := index_mut_back i3
+    ok (cont (off1, i1))
+  else ok (done off)
+
+/-- [forge_topo::topo_fans::fans]: loop 2:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 260:4-263:5
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.fans_loop1
+  (nv : Std.Usize) (off : alloc.vec.Vec Std.Usize) (v : Std.Usize) :
+  Result (alloc.vec.Vec Std.Usize)
+  := do
+  loop
+    (fun (off1, v1) => topo_fans.fans_loop1.body nv off1 v1)
+    (off, v)
+
+/-- [forge_topo::topo_fans::fans]: loop body 4:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 271:8-277:9
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.fans_loop2_loop0.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (e : Std.Usize)
+  (n : Std.Usize) («at» : alloc.vec.Vec Std.Usize)
+  (items : alloc.vec.Vec Std.Usize) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec Std.Usize)
+    × Std.Usize) ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec Std.Usize)))
+  := do
+  if i < n
+  then
+    let c ← FanTopoInst.topoTopoInst.edge_use t e i
+    let s ← topo_fans.start FanTopoInst t c
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+        «at» s
+    let (_, index_mut_back) ←
+      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+        items i1
+    let (i2, index_mut_back1) ←
+      alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+        «at» s
+    let i3 ← i2 + 1#usize
+    let i4 ← i + 1#usize
+    let at1 := index_mut_back1 i3
+    let items1 := index_mut_back c
+    ok (cont (at1, items1, i4))
+  else ok (done («at», items))
+
+/-- [forge_topo::topo_fans::fans]: loop 4:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 271:8-277:9
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.fans_loop2_loop0
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
+  («at» : alloc.vec.Vec Std.Usize) (items : alloc.vec.Vec Std.Usize)
+  (e : Std.Usize) (n : Std.Usize) (i : Std.Usize) :
+  Result ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec Std.Usize))
+  := do
+  loop
+    (fun (at1, items1, i1) => topo_fans.fans_loop2_loop0.body FanTopoInst t e n
+      at1 items1 i1)
+    («at», items, i)
+
+/-- [forge_topo::topo_fans::fans]: loop body 3:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 268:4-279:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.fans_loop2.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (ne : Std.Usize)
+  («at» : alloc.vec.Vec Std.Usize) (items : alloc.vec.Vec Std.Usize)
+  (e : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × (alloc.vec.Vec Std.Usize)
+    × Std.Usize) (alloc.vec.Vec Std.Usize))
+  := do
+  if e < ne
+  then
+    let n ← FanTopoInst.topoTopoInst.edge_n_uses t e
+    let (at1, items1) ←
+      topo_fans.fans_loop2_loop0 FanTopoInst t «at» items e n 0#usize
+    let e1 ← e + 1#usize
+    ok (cont (at1, items1, e1))
+  else ok (done items)
+
+/-- [forge_topo::topo_fans::fans]: loop 3:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 268:4-279:5
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.fans_loop2
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (ne : Std.Usize)
+  («at» : alloc.vec.Vec Std.Usize) (items : alloc.vec.Vec Std.Usize)
+  (e : Std.Usize) :
+  Result (alloc.vec.Vec Std.Usize)
+  := do
+  loop
+    (fun (at1, items1, e1) => topo_fans.fans_loop2.body FanTopoInst t ne at1
+      items1 e1)
+    («at», items, e)
+
+/-- [forge_topo::topo_fans::fans]: loop body 5:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 282:4-288:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.fans_loop3.body
+  {T : Type _} {S : Type _} (FanTopoInst : topo_fans.FanTopo T) (FanSinkInst :
+  topo_fans.FanSink S) (t : T) (nv : Std.Usize) (off : alloc.vec.Vec Std.Usize)
+  (items : alloc.vec.Vec Std.Usize) (out : S) (seen : alloc.vec.Vec Std.Usize)
+  (v : Std.Usize) :
+  Result (ControlFlow (S × (alloc.vec.Vec Std.Usize) × Std.Usize) S)
+  := do
+  if v < nv
+  then
+    let s := alloc.vec.Vec.deref items
+    let i ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize) off
+        v
+    let i1 ← v + 1#usize
+    let i2 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize) off
+        i1
+    let (n, seen1) ← topo_fans.n_fans FanTopoInst t s i i2 seen
+    let out1 ←
+      if n > 1#usize
+      then FanSinkInst.vertex_fans out v n
+      else ok out
+    ok (cont (out1, seen1, i1))
+  else ok (done out)
+
+/-- [forge_topo::topo_fans::fans]: loop 5:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 282:4-288:5
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.fans_loop3
+  {T : Type _} {S : Type _} (FanTopoInst : topo_fans.FanTopo T) (FanSinkInst :
+  topo_fans.FanSink S) (t : T) (out : S) (nv : Std.Usize)
+  (off : alloc.vec.Vec Std.Usize) (items : alloc.vec.Vec Std.Usize)
+  (seen : alloc.vec.Vec Std.Usize) (v : Std.Usize) :
+  Result S
+  := do
+  loop
+    (fun (out1, seen1, v1) => topo_fans.fans_loop3.body FanTopoInst FanSinkInst
+      t nv off items out1 seen1 v1)
+    (out, seen, v)
+
+/-- [forge_topo::topo_fans::fans]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 242:0-289:1
+    Visibility: public -/
+def topo_fans.fans
+  {T : Type _} {S : Type _} (FanTopoInst : topo_fans.FanTopo T) (FanSinkInst :
+  topo_fans.FanSink S) (t : T) (out : S) :
+  Result S
+  := do
+  let nv ← FanTopoInst.topoTopoInst.n_vertices t
+  let ne ← FanTopoInst.topoTopoInst.n_edges t
+  let i ← nv + 1#usize
+  let off ← alloc.vec.from_elem core.clone.CloneUsize 0#usize i
+  let off1 ← topo_fans.fans_loop0 FanTopoInst t ne off 0#usize
+  let off2 ← topo_fans.fans_loop1 nv off1 0#usize
+  let «at» ← alloc.vec.CloneVec.clone core.clone.CloneUsize off2
+  let i1 ←
+    alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize) off2
+      nv
+  let items ← alloc.vec.from_elem core.clone.CloneUsize 0#usize i1
+  let items1 ← topo_fans.fans_loop2 FanTopoInst t ne «at» items 0#usize
+  topo_fans.fans_loop3 FanTopoInst FanSinkInst t out nv off2 items1
+    (alloc.vec.Vec.new Std.Usize) 0#usize
+
 /-- [forge_topo::topo_shell::coedge_face]:
     Source: 'kernel/forge-topo/src/topo_shell.rs', lines 19:0-21:1 -/
 def topo_shell.coedge_face

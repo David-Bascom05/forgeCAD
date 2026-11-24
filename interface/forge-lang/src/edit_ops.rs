@@ -4,7 +4,7 @@
 //! - `Rename {from, to}`: a top-level name and every use of it renamed (bindings, reads, the
 //!   owners of its params); members, labels, keyword-argument names and types are not names
 //!   and stay. For a name that hides a built-in.
-use crate::edit::{bound, mentions};
+use crate::edit::{bound, mentions_in};
 use crate::error::Error;
 use crate::syntax::{self, Arg, Expr, ExprKind, Span, Stmt, StmtKind, TokKind};
 use std::collections::BTreeSet;
@@ -41,7 +41,10 @@ pub fn precheck_set_arg(prog: &[Stmt], id: &str, text: &str) -> R<()> {
         full: Span::default(),
     };
     let later = bound(&prog[k..]);
-    if let Some(n) = mentions(&probe).iter().find(|n| later.contains(*n)) {
+    if let Some(n) = mentions_in(&probe, calls_closed(prog))
+        .iter()
+        .find(|n| later.contains(*n))
+    {
         return Err(Error::StillRead {
             name: n.clone(),
             reader: id.into(),
@@ -157,6 +160,16 @@ fn ident(s: &str) -> bool {
         && c.all(|x| x.is_ascii_alphanumeric() || x == '_')
 }
 
+/// Whether a document's calls name built-ins only, never a binding: a machining document (its
+/// first statement the bare name `machining`; forge-cam-lang and forge-turn-lang look a call's
+/// head up among their built-ins alone), a robot document (`robot`, robot.rs likewise) or a
+/// bending document (`bending`, forge-bend-lang), where
+/// `drill = drill(..)` binds a name a call also spells. A call's head there is not a use of the
+/// name.
+pub fn calls_closed(prog: &[Stmt]) -> bool {
+    matches!(prog.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "machining" || n == "robot" || n == "bending")
+}
+
 pub fn precheck_rename(prog: &[Stmt], from: &str, to: &str) -> R<()> {
     let all = bound(prog);
     if !all.contains(from) {
@@ -169,8 +182,9 @@ pub fn precheck_rename(prog: &[Stmt], from: &str, to: &str) -> R<()> {
     Ok(())
 }
 
-/// The spans of the identifier tokens that are uses or bindings of `from`.
-fn rename_spans(src: &str, from: &str) -> R<Vec<Span>> {
+/// The spans of the identifier tokens that are uses or bindings of `from` (`closed`: a call's head
+/// is a built-in, not a use, as in a machining document).
+fn rename_spans(src: &str, from: &str, closed: bool) -> R<Vec<Span>> {
     let toks = syntax::lex(src)?;
     let op = |i: usize, o: &str| toks.get(i).is_some_and(|t| t.kind == TokKind::Op(leak(o)));
     let mut out = vec![];
@@ -191,7 +205,8 @@ fn rename_spans(src: &str, from: &str) -> R<Vec<Span>> {
                 let metric = i > 0 && toks[i - 1].kind == TokKind::Kw("expect");
                 let key = in_param && depth > 0;
                 let ty = in_fn && prev(":");
-                if !(member || label || metric || key || ty) {
+                let head = closed && op(i + 1, "(");
+                if !(member || label || metric || key || ty || head) {
                     out.push(t.span);
                 }
             }
@@ -214,24 +229,26 @@ fn leak(o: &str) -> &'static str {
 }
 
 pub fn apply_rename(src: &str, from: &str, to: &str) -> R<String> {
+    let closed = syntax::parse(src).is_ok_and(|p| calls_closed(&p));
     let mut out = src.to_string();
-    for sp in rename_spans(src, from)?.iter().rev() {
+    for sp in rename_spans(src, from, closed)?.iter().rev() {
         out.replace_range(sp.lo as usize..sp.hi as usize, to);
     }
     Ok(out)
 }
 
 pub fn ast_rename(prog: &mut [Stmt], from: &str, to: &str) {
+    let closed = calls_closed(prog);
     fn name(n: &mut String, from: &str, to: &str) {
         if n == from {
             *n = to.into();
         }
     }
-    fn ex(e: &mut Expr, from: &str, to: &str) {
+    fn ex(e: &mut Expr, from: &str, to: &str, closed: bool) {
         match &mut e.kind {
             ExprKind::Name(n) => name(n, from, to),
-            ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter_mut().for_each(|x| ex(x, from, to)),
-            ExprKind::Map(xs) => xs.iter_mut().for_each(|x| ex(&mut x.1, from, to)),
+            ExprKind::List(xs) | ExprKind::Tuple(xs) => xs.iter_mut().for_each(|x| ex(x, from, to, closed)),
+            ExprKind::Map(xs) => xs.iter_mut().for_each(|x| ex(&mut x.1, from, to, closed)),
             ExprKind::Comp {
                 item,
                 vars,
@@ -239,46 +256,49 @@ pub fn ast_rename(prog: &mut [Stmt], from: &str, to: &str) {
                 cond,
             } => {
                 vars.iter_mut().for_each(|v| name(v, from, to));
-                ex(item, from, to);
-                ex(iter, from, to);
+                ex(item, from, to, closed);
+                ex(iter, from, to, closed);
                 if let Some(c) = cond {
-                    ex(c, from, to);
+                    ex(c, from, to, closed);
                 }
             }
             ExprKind::Range { lo, hi, .. } | ExprKind::Bin(_, lo, hi) | ExprKind::Index(lo, hi) => {
-                ex(lo, from, to);
-                ex(hi, from, to);
+                ex(lo, from, to, closed);
+                ex(hi, from, to, closed);
             }
-            ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => ex(a, from, to),
+            ExprKind::Neg(a) | ExprKind::Not(a) | ExprKind::Attr(a, _) => ex(a, from, to, closed),
             ExprKind::Call(f, args) => {
-                ex(f, from, to);
-                args.iter_mut().for_each(|a| ex(&mut a.value, from, to));
+                // a machining document's call heads are built-ins, never a binding
+                if !(closed && matches!(f.kind, ExprKind::Name(_))) {
+                    ex(f, from, to, closed);
+                }
+                args.iter_mut().for_each(|a| ex(&mut a.value, from, to, closed));
             }
             ExprKind::If { cond, then, other } => {
-                ex(cond, from, to);
-                ex(then, from, to);
-                ex(other, from, to);
+                ex(cond, from, to, closed);
+                ex(then, from, to, closed);
+                ex(other, from, to, closed);
             }
             _ => {}
         }
     }
-    fn st(s: &mut Stmt, from: &str, to: &str) {
+    fn st(s: &mut Stmt, from: &str, to: &str, closed: bool) {
         match &mut s.kind {
             StmtKind::Shared { name: n, value } => {
                 name(n, from, to);
-                ex(value, from, to);
+                ex(value, from, to, closed);
             }
             StmtKind::Param { owner, value, .. } => {
                 if let Some(o) = owner.first_mut() {
                     name(&mut o.name, from, to);
                 }
-                ex(value, from, to);
+                ex(value, from, to, closed);
             }
             StmtKind::Assign { name: n, value } => {
                 name(n, from, to);
-                ex(value, from, to);
+                ex(value, from, to, closed);
             }
-            StmtKind::Expr(e) | StmtKind::Return(e) => ex(e, from, to),
+            StmtKind::Expr(e) | StmtKind::Return(e) => ex(e, from, to, closed),
             StmtKind::Fn {
                 name: n,
                 params,
@@ -288,43 +308,43 @@ pub fn ast_rename(prog: &mut [Stmt], from: &str, to: &str) {
                 for p in params.iter_mut() {
                     name(&mut p.name, from, to);
                     if let Some(d) = &mut p.default {
-                        ex(d, from, to);
+                        ex(d, from, to, closed);
                     }
                 }
                 std::rc::Rc::make_mut(body)
                     .iter_mut()
-                    .for_each(|b| st(b, from, to));
+                    .for_each(|b| st(b, from, to, closed));
             }
             StmtKind::For { vars, iter, body } => {
                 vars.iter_mut().for_each(|v| name(v, from, to));
-                ex(iter, from, to);
-                body.iter_mut().for_each(|b| st(b, from, to));
+                ex(iter, from, to, closed);
+                body.iter_mut().for_each(|b| st(b, from, to, closed));
             }
             StmtKind::If { cond, then, other } => {
-                ex(cond, from, to);
+                ex(cond, from, to, closed);
                 then.iter_mut()
                     .chain(other.iter_mut().flatten())
-                    .for_each(|b| st(b, from, to));
+                    .for_each(|b| st(b, from, to, closed));
             }
             StmtKind::Block {
                 name: n, args, body, ..
             } => {
                 name(n, from, to);
-                args.iter_mut().for_each(|a| ex(&mut a.value, from, to));
-                body.iter_mut().for_each(|b| st(b, from, to));
+                args.iter_mut().for_each(|a| ex(&mut a.value, from, to, closed));
+                body.iter_mut().for_each(|b| st(b, from, to, closed));
             }
             StmtKind::Expect { args, cmp, .. } => {
-                args.iter_mut().for_each(|a| ex(a, from, to));
+                args.iter_mut().for_each(|a| ex(a, from, to, closed));
                 if let Some((_, v, tol)) = cmp {
-                    ex(v, from, to);
+                    ex(v, from, to, closed);
                     if let Some((t, _)) = tol {
-                        ex(t, from, to);
+                        ex(t, from, to, closed);
                     }
                 }
             }
         }
     }
-    prog.iter_mut().for_each(|s| st(s, from, to));
+    prog.iter_mut().for_each(|s| st(s, from, to, closed));
 }
 
 /// The names a document binds at top level, for callers that suggest a new one.
@@ -380,8 +400,12 @@ pub fn nearest<'a>(name: &str, names: impl Iterator<Item = &'a str>) -> Option<S
         }
         row[b.len()]
     };
+    // (within 2 edits only names within 2 of its length: the rest need no table)
+    let len = name.chars().count();
     names
-        .filter(|n| *n != name)
+        .filter(|n| {
+            *n != name && n.len().abs_diff(name.len()) <= 2 * 4 && n.chars().count().abs_diff(len) <= 2
+        })
         .map(|n| (dist(name, n), builtin(n), n))
         .filter(|(d, _, _)| *d <= 2 && *d < name.chars().count())
         .min()
@@ -425,8 +449,9 @@ pub fn apply_suppress(src: &str, prog: &[Stmt], id: &str) -> R<String> {
     let mut out: BTreeSet<usize> = (j..=k).collect();
     let mut names = bound(&prog[j..=k]);
     names.insert(id.to_string());
+    let closed = calls_closed(prog);
     for m in k + 1..prog.len() {
-        if mentions(&prog[m]).iter().any(|n| names.contains(n)) {
+        if mentions_in(&prog[m], closed).iter().any(|n| names.contains(n)) {
             out.insert(m);
             names.extend(bound(&prog[m..=m]));
         }

@@ -1,0 +1,126 @@
+# A manifold block a shop would quote (manifold_cam.fg machines it): 110 x 70 x 32 aluminium from
+# saw-cut bar, two setups. Top: a deep pocket (18 mm) beside a 1.5 mm wall, its corners R2 (a
+# smaller tool), a round island standing in it; a raised boss with a fillet at its foot (a 3D
+# surface) and an M20x1.5 bore thread-milled through it; a shallow pocket; a groove along a
+# centreline; two reamed 6H7 dowel holes and four M6 tapped holes. Bottom: a relief pocket and
+# two counterbored M5 clearance holes. Outline corners R6.
+# frame: origin at the bottom face's corner, the top face at z = 26, the boss top at z = 32.
+
+shared L = 110
+shared W = 70
+shared t = 26
+shared corner = 6
+
+# the deep pocket and its island
+shared px0 = 1.5
+shared px1 = 45.5
+shared py0 = 10
+shared py1 = 60
+shared pdeep = 18
+shared pcorner = 2
+shared isl_d = 12
+shared isl_h = 12
+
+# the boss and its bore
+shared bx = 82
+shared by = 38
+shared boss_d = 30
+shared boss_h = 6
+shared foot = 3
+
+# the shallow pocket
+shared sx0 = 56
+shared sx1 = 106
+shared sy0 = 4
+shared sy1 = 14
+shared sdeep = 3
+
+# the groove
+shared gx0 = 60
+shared gx1 = 102
+shared gy = 62
+shared gw = 6
+shared gdeep = 4
+
+# the holes
+shared tip = 118deg
+shared bore_d = 18.5
+shared bore_depth = 20
+shared hx0 = 57
+shared hx1 = 104
+shared dowel_d = 6
+shared dowel_depth = 14
+shared tx0 = 60
+shared ty0 = 22
+shared ty1 = 54
+shared tap_depth = 12
+
+# the bottom, in the part's frame (the bottom face's sketch has y = -y)
+shared rx0 = 60
+shared ry0 = 26
+shared rw = 40
+shared rh = 24
+shared rdeep = 2
+shared cx0 = 56
+shared cy = 64
+shared cb_depth = 8
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+block = extrude(plan, t)
+outer = fillet(edges(of: block, along: Z), corner)
+
+sketch bk(on: block.end) {
+  outline = circle((bx, by), boss_d / 2)
+}
+boss = extrude(bk.outline, boss_h)
+boss_foot = fillet(edges(between: (block, boss)), foot)
+
+sketch pk(on: block.end) {
+  w = rect(corner: (px0, py0), size: (px1 - px0, py1 - py0))
+  s = rect(corner: (sx0, sy0), size: (sx1 - sx0, sy1 - sy0))
+}
+well = cut(pk.w, pdeep)
+well_corners = fillet(edges(of: well, along: Z), pcorner)
+shallow = cut(pk.s, sdeep)
+
+# the island: from the well's floor up to isl_h above it
+sketch il(on: well.end) {
+  c = circle(((px0 + px1) / 2, (py0 + py1) / 2), isl_d / 2)
+}
+island = extrude(il.c, isl_h)
+
+sketch gr(on: block.end) {
+  g = slot((gx0, gy), (gx1, gy), gw / 2)
+}
+groove = cut(gr.g, gdeep)
+sketch grl(on: block.end) {
+  centre = line((gx0, gy), (gx1, gy))
+}
+
+sketch bs(on: boss.end) {
+  c = pt(bx, by)
+}
+bore = hole(at: bs.c, thread: "M20x1.5", d: bore_d, depth: bore_depth, point: tip)
+
+sketch hs(on: block.end) {
+  d1 = pt(hx0, by)
+  d2 = pt(hx1, by)
+  t1 = pt(tx0, ty0)
+  t2 = pt(hx1, ty0)
+  t3 = pt(tx0, ty1)
+  t4 = pt(hx1, ty1)
+}
+dowels = hole(at: [hs.d1, hs.d2], d: dowel_d, depth: dowel_depth, point: tip)
+taps = hole(at: [hs.t1, hs.t2, hs.t3, hs.t4], screw: "M6", fit: "tap", depth: tap_depth, point: tip)
+
+# the bottom: a relief pocket and two counterbored clearance holes, from below (its sketch's y
+# runs along the part's -y)
+sketch bot(on: block.start) {
+  r = rect(corner: (rx0, -(ry0 + rh)), size: (rw, rh))
+  h1 = pt(cx0, -cy)
+  h2 = pt(hx1, -cy)
+}
+relief = cut(bot.r, rdeep)
+cb = hole(at: [bot.h1, bot.h2], screw: "M5", seat: "cbore", fit: "normal", depth: cb_depth)

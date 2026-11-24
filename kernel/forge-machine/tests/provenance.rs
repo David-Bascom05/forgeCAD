@@ -186,7 +186,11 @@ fn the_machine_states_its_peck_parameters_and_the_interpreter_uses_them() {
     let text = format!("{blocks:?}");
     assert!(text.contains("-3000") && !text.contains("-3500"), "{text}");
     // stated (on a record that is not a real machine: an estimate, never unknown)
-    assert!(sim::unchecked_cycles(m, prog).iter().all(|u| u.why == "estimated"));
+    assert!(
+        sim::unchecked_cycles(m, prog)
+            .iter()
+            .all(|u| u.why == "estimated")
+    );
     // not stated: forge-post's numbers, and the reply says so
     let g = &forge_machine::library::builtin_named("generic-vmc3").unwrap();
     let u = sim::unchecked_cycles(

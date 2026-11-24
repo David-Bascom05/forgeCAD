@@ -35,11 +35,30 @@ fn the_flange_program_is_certified() {
     // a second setup faces it off)
     assert!(cam.leftover_done, "{:?}", cam.leftover);
     assert!(cam.leftover.iter().all(|l| l.z1 <= 0.0), "{:?}", cam.leftover);
-    // not placed on the machine: released, but not called fully certified
+    // placed on the machine (`at:`): every position within the travel
+    assert_eq!(cam.certification(), "full");
+    // not placed: released, but not called fully certified, and the warning names the fix
+    let cam = forge_cam_lang::run(
+        &doc(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\nprog = program(op1, post: \"fanuc\", number: 1)\n",
+        ),
+        &dir,
+    );
     assert_eq!(cam.certification(), "except G5");
+    let mut j = String::new();
+    cam.json().write(&mut j);
     assert!(
         j.contains("\"certified\":\"except G5 (unchecked: no `at:`)\""),
         "{j}"
+    );
+    assert!(
+        cam.warnings
+            .iter()
+            .any(|w| w.contains("setup `op1` is not placed")
+                && w.contains("fix: add `at: (x, y, z)`")
+                && w.contains("G54")),
+        "{:?}",
+        cam.warnings
     );
 }
 
@@ -594,8 +613,9 @@ fn every_posted_position_is_within_the_machines_travel() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
     let placed = |at: &str| {
+        // (the example is placed at (0, 0, -250): moved for each case)
         src.replace(
-            "origin: \"top-center\", tol: tol)",
+            "origin: \"top-center\", tol: tol, at: (0, 0, -250))",
             &format!("origin: \"top-center\", tol: tol, at: {at})"),
         )
     };
@@ -634,7 +654,7 @@ fn every_posted_position_is_within_the_machines_travel() {
             .any(|c| c.rule == "axis_limit" && c.other.contains("joint Z"))
     }));
     // unplaced: the spans are checked, and the reply says the positions were not
-    let cam = forge_cam_lang::run(&src, &dir);
+    let cam = forge_cam_lang::run(&src.replace(", at: (0, 0, -250))", ")"), &dir);
     assert!(cam.ok);
     assert!(
         cam.warnings.iter().any(|w| w.contains("not placed")),
@@ -1536,4 +1556,329 @@ fn a_group_only_part_is_linted() {
     };
     assert!(!lint(&src));
     assert!(lint(&src.replace("material: \"6061-T6\"", "group: \"N\"")));
+}
+
+/// A tool made in the builder (a project record, not built in) reaches CAM through the library
+/// the levels make: `run_with_library` takes it; `run` (the built-in library) does not know it.
+#[test]
+fn a_project_tool_is_used_through_the_leveled_library() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let body = "t9 = tool(\"shop-flat-8\", t: 9, stickout: 30, holder: \"bt40-er32\")\nface1 = facing(op1, tool: t9, to: 18, step: 1)\nprog = program(op1, post: \"fanuc\", number: 1)\n";
+    let cam = forge_cam_lang::run(&doc(body), &dir);
+    assert!(!cam.ok);
+    assert!(
+        cam.errors.iter().any(|e| e.contains("shop-flat-8")),
+        "{:?}",
+        cam.errors
+    );
+    // the library forge-tooling-builder's `library(project, user_cam)` returns: the built-in
+    // records with the project's added
+    let mut lib = forge_tooling::Library::builtin();
+    lib.add(
+        "project/cam/tools/shop.toml",
+        "[[tool]]\nid = \"shop-flat-8\"\ntype = \"flat\"\ndc = 8.0\nnof = 3\nlcf = 20.0\ndcon = 8.0\noal = 63.0\nmaterial = \"carbide\"\nsource = \"shop\"\ntaken = \"2026-11-24\"\n",
+    )
+    .unwrap();
+    let cam = forge_cam_lang::run_with_library(&doc(body), &dir, lib);
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    assert_eq!(cam.ops.len(), 1);
+    assert_eq!(cam.ops[0].status, "built", "{:?}", cam.ops[0].refusal);
+    let (txt, _) = cam.program_text().unwrap();
+    assert!(txt.contains("T9 M06"), "{txt}");
+}
+
+/// Axial stock to leave raises each floor by it (Fusion's "axial stock to leave"); `leave` stays
+/// the radial stock, on walls. G4 grows the part by the larger of the two. An op without floors
+/// refuses it.
+#[test]
+fn axial_stock_to_leave_raises_the_floors() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let deepest = |extra: &str| {
+        let body = format!(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4{extra})\nprog = program(op1, post: \"fanuc\", number: 1)\n"
+        );
+        let cam = forge_cam_lang::run(&doc(&body), &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        let o = cam.ops.iter().find(|o| o.name == "top").unwrap();
+        assert_eq!(o.status, "built", "{:?}", o.refusal);
+        (o.deepest, o.leave)
+    };
+    let (d0, l0) = deepest("");
+    let (d1, l1) = deepest(", leave: 0.2, leave_axial: 0.5");
+    assert!((d1 - d0 - 0.5).abs() < 1e-9, "{d0} {d1}");
+    assert_eq!((l0, l1), (0.0, 0.5));
+    let cam = forge_cam_lang::run(
+        &doc("bolts = drill(op1, f.bolts, plan: \"auto\", leave_axial: 0.5)\n"),
+        &dir,
+    );
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("`leave_axial` is not an argument of `drill`")),
+        "{:?}",
+        cam.errors
+    );
+}
+
+/// A contour's direction and passes (Fusion parity): with M03 an outside contour is climb by
+/// default, clockwise round the part (G2 at its corners); `direction: "conventional"` runs it
+/// counter-clockwise (G3). `finish: n` radial passes `finish_step` apart, the last at the
+/// contour's own offset, and `spring: n` repeats the last: each a loop at every level, all
+/// certified.
+#[test]
+fn a_contour_takes_its_direction_and_passes() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let run = |extra: &str| {
+        let body = format!(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4)\nprof = contour(op1, tool: t1, side: \"outside\", from: 12, to: -0.5, step: 4{extra})\nprog = program(op1, post: \"fanuc\", number: 1)\n"
+        );
+        let cam = forge_cam_lang::run(&doc(&body), &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        let o = cam.ops.iter().find(|o| o.name == "prof").unwrap();
+        assert_eq!(o.status, "built", "{:?}", o.refusal);
+        let (txt, _) = cam.program_text().unwrap();
+        let prof: String = txt.split("(prof contour)").nth(1).unwrap().to_string();
+        let plunges = o.paths[0]
+            .moves
+            .iter()
+            .filter(|m| {
+                matches!(
+                    m,
+                    forge_cam::ops::PMove::Line {
+                        phase: forge_cam::ops::Phase::Plunge,
+                        ..
+                    }
+                )
+            })
+            .count();
+        (prof.contains("G3 "), prof.contains("G2 "), plunges)
+    };
+    let (g3, g2, n0) = run("");
+    assert!(g2 && !g3, "climb by default: clockwise round the part");
+    let (g3, g2, n1) = run(", direction: \"climb\"");
+    assert!(g2 && !g3);
+    assert_eq!(n1, n0);
+    let (g3, g2, _) = run(", direction: \"conventional\"");
+    assert!(
+        g3 && !g2,
+        "conventional outside: counter-clockwise round the part"
+    );
+    let (_, _, n2) = run(", direction: \"conventional\", finish: 2, finish_step: 0.5, spring: 1");
+    assert_eq!(n2, 3 * n0, "two radial passes and a spring pass at each level");
+    let cam = forge_cam_lang::run(
+        &doc("top = clear(op1, tool: t1, from: 18, to: 12, spring: 1)\n"),
+        &dir,
+    );
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("`spring` is not an argument of `clear`")),
+        "{:?}",
+        cam.errors
+    );
+}
+
+/// Heights as model references (Fusion parity): `from:`/`to:` take a horizontal face of the part
+/// (`f.boss.end`, `f.plate.end`) with an offset (`+ 0.5`), read in the setup's frame; the program
+/// is the one the same heights as numbers give. A reference that is not horizontal, or one in an
+/// argument that is not a height, is refused.
+#[test]
+fn heights_are_model_references() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let text = |body: &str| {
+        let cam = forge_cam_lang::run(&doc(body), &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        assert!(
+            cam.ops.iter().all(|o| o.status == "built"),
+            "{:?}",
+            cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+        );
+        cam.program_text().unwrap().0.to_string()
+    };
+    let prog = "prog = program(op1, post: \"fanuc\", number: 1)\n";
+    let by_number = text(&format!(
+        "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12.5, step: 3, stepover: 4)\n{prog}"
+    ));
+    let by_model = text(&format!(
+        "skim = facing(op1, tool: t1, to: f.boss.end, step: 1)\ntop = clear(op1, tool: t1, from: f.boss.end, to: f.plate.end + 0.5, step: 3, stepover: 4)\n{prog}"
+    ));
+    assert_eq!(by_number, by_model);
+    // turned over (`from:`): the mounting face (z = 0 in the part) is the top, h − z = 18
+    let turned = |to: &str| {
+        let body = format!(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\nprog = program(op1, post: \"fanuc\", number: 1)\nop2 = setup(f, from: op1, machine: m, origin: \"top-center\", tol: 0.01)\nback = facing(op2, tool: t1, to: {to}, step: 1)\nprog2 = program(op2, post: \"fanuc\", number: 2)\n"
+        );
+        let cam = forge_cam_lang::run(&doc(&body), &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        let o = cam.ops.iter().find(|o| o.name == "back").unwrap();
+        (
+            o.status,
+            format!("{:?}", o.paths.iter().map(|p| &p.moves).collect::<Vec<_>>()),
+        )
+    };
+    let (st, a) = turned("18");
+    assert_eq!(st, "built");
+    let (_, b) = turned("f.plate.start");
+    assert_eq!(a, b);
+    for (body, why) in [
+        (
+            "skim = facing(op1, tool: t1, to: f.plan.outline, step: 1)\n",
+            "not",
+        ),
+        (
+            "skim = facing(op1, tool: t1, to: 18, step: f.plate.end)\n",
+            "`step` takes a number, not a model height",
+        ),
+        (
+            "skim = facing(op1, tool: t1, to: f.plate.end * 2, step: 1)\n",
+            "a model height takes only + or − a length",
+        ),
+    ] {
+        let cam = forge_cam_lang::run(&doc(body), &dir);
+        assert!(
+            cam.errors.iter().any(|e| e.contains(why)),
+            "{body}: {:?}",
+            cam.errors
+        );
+    }
+}
+
+fn stocked(stock: &str, dir: &Path) -> forge_cam_lang::Cam {
+    stocked_to(stock, dir, -0.5)
+}
+
+fn stocked_to(stock: &str, dir: &Path, bottom: f64) -> forge_cam_lang::Cam {
+    let src = format!(
+        "machining\nf = part(\"flange.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: {stock}, origin: \"top-center\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepover: 4)\nprof = contour(op1, tool: t1, side: \"outside\", from: 12, to: {bottom}, step: 4)\nprog = program(op1, post: \"fanuc\", number: 1)\n"
+    );
+    forge_cam_lang::run(&src, dir)
+}
+
+/// Stock shapes (Fusion parity): a bar (`cylinder`) or a tube about the part's centre, or the
+/// stock as its own part file (`solid`, a prism along z). The in-process stock is the stock's
+/// own shape (what lies outside it cleared from its bottom up), and each is shown to hold the
+/// part band by band (exact booleans): a bar too thin, or a tube whose bore cuts the part, is
+/// refused with where.
+#[test]
+fn stock_is_a_bar_a_tube_or_a_modelled_solid() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let ok = |cam: &forge_cam_lang::Cam, kind: &str| {
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        assert!(
+            cam.ops.iter().all(|o| o.status == "built"),
+            "{:?}",
+            cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+        );
+        let mut j = String::new();
+        cam.json().write(&mut j);
+        assert!(j.contains(&format!("\"kind\":\"{kind}\"")), "{j}");
+    };
+    // the plate's corners are 40√2 from the centre: the bar is that plus 2 across
+    ok(&stocked("cylinder(margin: (2, 1), below: 3)", &dir), "cylinder");
+    // the bore is 20: a tube's bore of 18 is inside it at every height
+    ok(
+        &stocked("tube(d: 120, id: 18, margin: (0, 1), below: 3)", &dir),
+        "tube",
+    );
+    let cam = stocked("cylinder(d: 100, margin: (0, 1))", &dir);
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("the part is outside the stock")),
+        "{:?}",
+        cam.errors
+    );
+    let cam = stocked("tube(d: 120, id: 22)", &dir);
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("the part is outside the stock")),
+        "{:?}",
+        cam.errors
+    );
+    // the stock modelled: a 90 × 90 plate to z = 19, in the part's frame
+    let tmp = forge_dirs::temp_dir().join(format!("forgecad-stock-{}", forge_dirs::process_id()));
+    std::fs::create_dir_all(&tmp).unwrap();
+    std::fs::copy(dir.join("flange.fg"), tmp.join("flange.fg")).unwrap();
+    std::fs::write(
+        tmp.join("blank.fg"),
+        "sketch s(on: xy) {\n  o = rect(center: (0, 0), size: (90, 90))\n}\nb = extrude(s, 19)\n",
+    )
+    .unwrap();
+    // (flush with the part's bottom: the profile stops above it, or it would cut what holds
+    // the stock)
+    ok(&stocked_to("solid(\"blank.fg\")", &tmp, 0.5), "solid");
+    let cam = stocked("solid(\"blank.fg\")", &tmp);
+    assert!(cam.ops.iter().any(|o| {
+        o.refusal
+            .as_deref()
+            .is_some_and(|r| r.contains("support under the stock"))
+    }));
+    // a blank whose section changes with height is not taken
+    std::fs::write(
+        tmp.join("stepped.fg"),
+        "sketch s(on: xy) {\n  o = rect(center: (0, 0), size: (90, 90))\n}\nb = extrude(s, 10)\nsketch t(on: b.end) {\n  o = rect(center: (0, 0), size: (86, 86))\n}\nc = extrude(t.o, 9)\n",
+    )
+    .unwrap();
+    let cam = stocked_to("solid(\"stepped.fg\")", &tmp, 0.5);
+    assert!(
+        cam.errors.iter().any(|e| e.contains("is not a prism along z")),
+        "{:?}",
+        cam.errors
+    );
+    let _ = std::fs::remove_dir_all(&tmp);
+}
+
+/// A statement's `param`s are names its arguments read, and only its own: `param skim.d` is
+/// `skim`'s, `param xskim.d` is not (the owner was once matched by the tail of its debug text,
+/// which matched nothing, so every param was dropped).
+#[test]
+fn a_statements_params_are_its_own() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let own = forge_cam_lang::run(
+        &doc("param skim.d = 18\nskim = facing(op1, tool: t1, to: d, step: 1)\n"),
+        &dir,
+    );
+    assert!(
+        own.errors.iter().all(|e| !e.contains("unknown name")),
+        "{:?}",
+        own.errors
+    );
+    assert!(own.ops.iter().any(|o| o.name == "skim"), "{:?}", own.errors);
+    let other = forge_cam_lang::run(
+        &doc("param xskim.d = 18\nskim = facing(op1, tool: t1, to: d, step: 1)\n"),
+        &dir,
+    );
+    assert!(
+        other.errors.iter().any(|e| e.contains("unknown name `d`")),
+        "{:?}",
+        other.errors
+    );
+}
+
+/// 3-axis surfacing in the document: the mould core (spheres, cylinders and tori, some lowered
+/// as supersets) roughed by z-level and finished by parallel passes and a pencil pass, every
+/// move certified on the posted path, G1–G6; without the roughing the finishing is refused (its
+/// shank meets stock nobody removed).
+#[test]
+fn the_mould_core_is_surfaced_and_certified() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let head = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 40, holder: \"bt40-er32\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01, at: (-200, -150, -250))\n";
+    let rough = "rough = zlevel(op1, tool: t1, leave: 0.5, down: 3, stepover: 4, area: (-45, -35, 45, 35), grid: 1)\n";
+    let fin = "fin = parallel(op1, tool: t2, stepover: 4, area: (-30, -24, 30, 24))\ncorner = pencil(op1, tool: t2, area: (-30, -24, 30, 24), grid: 1)\n";
+    let prog = "prog = program(op1, post: \"fanuc\", number: 1002)\n";
+    let cam = forge_cam_lang::run(&format!("{head}{rough}{fin}{prog}"), &dir);
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
+    assert!(cam.ops.iter().all(|o| o.status == "built" && o.pairs > 0));
+    // the leftover is not computed for a part outside the 2.5D section: G4 is not claimed
+    assert!(!cam.leftover_done);
+    assert_eq!(cam.certification(), "full except G4 (leftover not computed)");
+    let cam = forge_cam_lang::run(&format!("{head}{fin}{prog}"), &dir);
+    assert!(!cam.ok);
+    assert!(cam.ops.iter().any(|o| o.status == "refused"));
 }

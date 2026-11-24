@@ -17,6 +17,8 @@ forge-cam = { path = "../../kernel/forge-cam" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-material = { path = "../../kernel/forge-material" }
+# tool instances as a library kind (cam/tool-instances/ at the project and user levels)
+forge-library = { path = "../forge-library" }
 forge-post = { path = "../../kernel/forge-post" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-math = { path = "../../kernel/forge-math" }

@@ -7,8 +7,10 @@
 //! the setup and op selected and a check's witness asked to be located, and `run`'s paths.
 
 pub mod doc;
+pub mod nc;
 pub mod run;
 pub mod schema;
+pub mod turnview;
 mod ui;
 pub use ui::{groups, status_line};
 
@@ -39,17 +41,32 @@ pub struct Focus {
     pub stock_at: Option<String>,
     /// The toolpaths shown: every op of the setup, or the selected one only.
     pub only_selected: bool,
+    /// The toolpath coloured by a measured value per move (forge-cam-quality's), drawn by the
+    /// simulation view; None: by op as before.
+    pub colour_by: Option<ColourBy>,
+}
+
+/// A per-move value the toolpath can be coloured by.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColourBy {
+    /// The chip thickness after thinning against the op's target feed per tooth.
+    ChipLoad,
+    /// The engagement angle.
+    Engagement,
 }
 
 /// What the ribbon asks for (an `Action` is Copy: the browser's asks carry names, `Cmd`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ask {
     NewSetup,
+    NewLatheSetup,
     NewOp(&'static str),
     Generate,
     PostProcess,
     SetupSheet,
     ToolLibrary,
+    Programs,
+    Quality,
     Checks,
     Undo,
     Redo,
@@ -57,17 +74,27 @@ pub enum Ask {
     ToggleText,
     AutoGenerate,
     CheckNow,
+    SectionView,
+    /// NC Programs: every program's files with the host's Save As.
+    ExportNc,
+    /// The setup sheet and tool list with the host's Save As.
+    ExportSheet,
+    /// Re-post every program whose file is stale.
+    RepostStale,
 }
 
 impl From<Ask> for Cmd {
     fn from(a: Ask) -> Cmd {
         match a {
             Ask::NewSetup => Cmd::NewSetup,
+            Ask::NewLatheSetup => Cmd::NewLatheSetup,
             Ask::NewOp(f) => Cmd::NewOp(f),
             Ask::Generate => Cmd::Generate,
             Ask::PostProcess => Cmd::PostProcess,
             Ask::SetupSheet => Cmd::SetupSheet,
             Ask::ToolLibrary => Cmd::ToolLibrary,
+            Ask::Programs => Cmd::Programs,
+            Ask::Quality => Cmd::Quality,
             Ask::Checks => Cmd::Checks,
             Ask::Undo => Cmd::Undo,
             Ask::Redo => Cmd::Redo,
@@ -75,6 +102,10 @@ impl From<Ask> for Cmd {
             Ask::ToggleText => Cmd::ToggleText,
             Ask::AutoGenerate => Cmd::AutoGenerate,
             Ask::CheckNow => Cmd::CheckNow,
+            Ask::SectionView => Cmd::SectionView,
+            Ask::ExportNc => Cmd::ExportNc(None),
+            Ask::ExportSheet => Cmd::ExportSheet,
+            Ask::RepostStale => Cmd::RepostStale,
         }
     }
 }
@@ -83,6 +114,8 @@ impl From<Ask> for Cmd {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Cmd {
     NewSetup,
+    /// A lathe setup (turning).
+    NewLatheSetup,
     /// A new op of this built-in in the setup in focus.
     NewOp(&'static str),
     /// Statement `id`'s dialog.
@@ -99,6 +132,8 @@ pub enum Cmd {
     PostProcess,
     SetupSheet,
     ToolLibrary,
+    Programs,
+    Quality,
     Checks,
     Undo,
     Redo,
@@ -109,6 +144,16 @@ pub enum Cmd {
     AutoGenerate,
     /// Run the certified checker now on what is generated (today: a generate, which checks).
     CheckNow,
+    /// The turning view, shown or not.
+    SectionView,
+    /// Post program NAME (or all) into the document's folder.
+    PostNc(Option<String>),
+    /// The Post Process dialog at the K-th program.
+    PostAt(usize),
+    /// Program NAME's (or all) files with the host's Save As.
+    ExportNc(Option<String>),
+    ExportSheet,
+    RepostStale,
 }
 
 /// The setup dialog's state: the args as edited, by keyword.
@@ -119,9 +164,11 @@ pub struct SetupDlg {
     pub name: String,
     pub tab: usize,
     /// keyword → text: machine, origin, tol, clearance, at, fixture, from, stock_kind, margin,
-    /// min, max
+    /// min, max; a lathe's: machine, bar, front, chuck, at, offsets, tol, clearance
     pub args: Vec<(String, String)>,
     pub error: Option<String>,
+    /// A lathe setup (`lathe_setup`, forge-turn-lang).
+    pub lathe: bool,
 }
 
 /// An op dialog's state.
@@ -178,6 +225,8 @@ pub struct CamWs {
     pub stale: Vec<String>,
     /// A run asked of the host, and the one it is making (its text).
     pub want_run: bool,
+    /// A check of the last run asked of the host (Check Now).
+    pub want_check: bool,
     pub running: Option<String>,
     /// Where the host's run lands.
     pub job: Arc<Mutex<Option<run::Run>>>,
@@ -189,6 +238,12 @@ pub struct CamWs {
     pub setup_dlg: Option<SetupDlg>,
     pub post_dlg: Option<PostDlg>,
     pub tools_open: bool,
+    /// The NC programs window.
+    pub programs_open: bool,
+    /// The toolpath quality window.
+    pub quality_open: bool,
+    /// The tool library's import field: a Fusion tool library's file, beside the document.
+    pub import_path: String,
     pub tools_filter: String,
     pub checks_open: bool,
     pub text_open: bool,
@@ -203,6 +258,19 @@ pub struct CamWs {
     /// A rename in the browser: the row and its text.
     pub renaming: Option<(String, String)>,
     pub lib: forge_tooling::Library,
+    /// The turning view (a lathe setup in section).
+    pub turnview: turnview::TurnView,
+    /// Files for the host's Save As (taken by the host: a dialog natively, a download in the browser).
+    pub export: Option<nc::ExportAsk>,
+    /// Post and export programs not certified in full (their headers say so).
+    pub allow_uncertified: bool,
+    /// Files written so far (the posted states are read again after each).
+    pub write_gen: u64,
+    /// Exports handed to the host so far.
+    pub exported: u64,
+    /// A program setting being typed (its key, the text so far).
+    pub prog_field: Option<(String, String)>,
+    pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
 
 impl CamWs {
@@ -211,19 +279,7 @@ impl CamWs {
         let dir = std::path::Path::new(path)
             .parent()
             .map_or_else(|| PathBuf::from("."), std::path::Path::to_path_buf);
-        let mut lib = forge_tooling::Library::builtin();
-        if let Ok(rd) = forge_dirs::fs::read_dir(dir.join("cam")) {
-            let mut files: Vec<PathBuf> = rd
-                .filter_map(|e| e.ok().map(|e| e.path()))
-                .filter(|p| p.extension().is_some_and(|x| x == "toml"))
-                .collect();
-            files.sort();
-            for f in files {
-                if let Ok(s) = forge_dirs::fs::read_to_string(&f) {
-                    let _ = lib.add(&f.display().to_string(), &s);
-                }
-            }
-        }
+        let lib = library(&dir);
         let mut ws = CamWs {
             path: path.to_string(),
             dir,
@@ -233,6 +289,7 @@ impl CamWs {
             run: None,
             stale: vec![],
             want_run: true,
+            want_check: false,
             running: None,
             job: Arc::new(Mutex::new(None)),
             auto: true,
@@ -243,6 +300,9 @@ impl CamWs {
             setup_dlg: None,
             post_dlg: None,
             tools_open: false,
+            programs_open: false,
+            quality_open: false,
+            import_path: String::new(),
             tools_filter: String::new(),
             checks_open: false,
             text_open: false,
@@ -254,6 +314,16 @@ impl CamWs {
             want_write: vec![],
             renaming: None,
             lib,
+            turnview: turnview::TurnView {
+                open: true,
+                ..Default::default()
+            },
+            export: None,
+            allow_uncertified: false,
+            write_gen: 0,
+            exported: 0,
+            posted_cache: None,
+            prog_field: None,
         };
         ws.read_parts();
         ws.restale();
@@ -480,9 +550,10 @@ impl CamWs {
     pub fn command(&mut self, c: Cmd) {
         match c {
             Cmd::NewSetup => self.setup_dlg = Some(self.new_setup_dlg()),
+            Cmd::NewLatheSetup => self.setup_dlg = Some(self.new_lathe_dlg()),
             Cmd::NewOp(func) => match self.setup_now() {
                 Some(su) => self.op_dlg = Some(self.new_op_dlg(func, &su)),
-                None => self.said = Some("make a setup first: Setup ▸ New Setup".into()),
+                None => self.said = Some("make a setup first: Setup > New Setup".into()),
             },
             Cmd::Edit(id) => self.open_dialog(&id),
             Cmd::Select(id) => self.select(&id),
@@ -519,9 +590,10 @@ impl CamWs {
             }
             Cmd::StockAt(op) => self.focus.stock_at = op,
             Cmd::PostProcess => {
-                self.post_dlg = match self.post_dlg {
-                    Some(_) => None,
-                    None => Some(PostDlg::default()),
+                let open = self.post_dlg.is_none();
+                self.close_windows();
+                if open {
+                    self.post_dlg = Some(PostDlg::default());
                 }
             }
             Cmd::SetupSheet => match &self.run {
@@ -531,8 +603,27 @@ impl CamWs {
                 }
                 None => self.said = Some("generate first".into()),
             },
-            Cmd::ToolLibrary => self.tools_open = !self.tools_open,
-            Cmd::Checks => self.checks_open = !self.checks_open,
+            // the floating windows: one at a time (each opens where the last was, over the view)
+            Cmd::ToolLibrary => {
+                let open = !self.tools_open;
+                self.close_windows();
+                self.tools_open = open;
+            }
+            Cmd::Programs => {
+                let open = !self.programs_open;
+                self.close_windows();
+                self.programs_open = open;
+            }
+            Cmd::Quality => {
+                let open = !self.quality_open;
+                self.close_windows();
+                self.quality_open = open;
+            }
+            Cmd::Checks => {
+                let open = !self.checks_open;
+                self.close_windows();
+                self.checks_open = open;
+            }
             Cmd::Undo => {
                 if let Some(t) = self.undo.pop() {
                     self.redo.push(std::mem::replace(&mut self.text, t));
@@ -548,14 +639,31 @@ impl CamWs {
             Cmd::Save => self.want_write.push((self.path.clone(), self.text.clone())),
             Cmd::Text(t) => self.set_text(t),
             Cmd::ToggleText => {
-                self.text_open = !self.text_open;
+                let open = !self.text_open;
+                self.close_windows();
+                self.text_open = open;
                 self.text_edit = self.text.clone();
             }
             Cmd::AutoGenerate => self.auto = !self.auto,
+            Cmd::SectionView => self.turnview.open = !self.turnview.open,
+            Cmd::PostNc(n) => self.post_programs(n.as_deref()),
+            Cmd::PostAt(k) => {
+                self.close_windows();
+                self.post_dlg = Some(PostDlg { program: k });
+            }
+            Cmd::ExportNc(n) => self.export_programs(n.as_deref()),
+            Cmd::ExportSheet => self.export_sheet(),
+            Cmd::RepostStale => self.repost_stale(),
             // forge-cam-lang checks as it generates: until an on-demand checker of a run's
             // posted paths is exposed, checking now is generating again
             Cmd::CheckNow => {
-                self.want_run = true;
+                // a milling run is checked again as posted; anything else is generated (a
+                // turning run checks as it generates)
+                if self.run.as_ref().is_some_and(|r| r.cam.is_some()) && self.stale.is_empty() {
+                    self.want_check = true;
+                } else {
+                    self.want_run = true;
+                }
                 self.checks_open = true;
             }
         }
@@ -616,7 +724,15 @@ impl CamWs {
                     name: id.to_string(),
                     ..Default::default()
                 };
-                d.args = setup_args(&s);
+                d.lathe = s.func == "lathe_setup";
+                d.args = if d.lathe {
+                    s.args
+                        .iter()
+                        .filter_map(|a| a.key.clone().map(|k| (k, a.text.clone())))
+                        .collect()
+                } else {
+                    setup_args(&s)
+                };
                 self.setup_dlg = Some(d);
             }
             Role::Op(func) => {
@@ -667,14 +783,48 @@ impl CamWs {
                 ("origin".into(), "\"top-center\"".into()),
             ],
             error: None,
+            lathe: false,
+        }
+    }
+
+    /// Whether the document is a turning one (its setups are lathe setups).
+    pub fn turning(&self) -> bool {
+        self.stmts.iter().any(|s| s.func == "lathe_setup")
+    }
+
+    fn new_lathe_dlg(&self) -> SetupDlg {
+        let name = doc::free_name(&self.stmts, &format!("op{}", self.setups().len() + 1));
+        let chuck = self.stmts.iter().find(|s| s.func == "chuck").map_or_else(
+            || "chuck(face: -70, grip: 30, jaw: 15)".to_string(),
+            |s| s.name.clone(),
+        );
+        SetupDlg {
+            id: None,
+            name,
+            tab: 0,
+            args: vec![
+                ("machine".into(), "\"generic-lathe\"".into()),
+                ("bar".into(), "32".into()),
+                ("front".into(), "2".into()),
+                ("chuck".into(), chuck),
+            ],
+            error: None,
+            lathe: true,
         }
     }
 
     fn new_op_dlg(&self, func: &str, setup: &str) -> OpDlg {
         let spec = schema::spec(func);
         let base = match func {
-            "facing" => "face",
+            "facing" | "turn_face" => "face",
             "edge_break" => "chamfer",
+            "turn_rough" => "rough",
+            "turn_finish" => "finish",
+            "bore_rough" => "bore",
+            "turn_groove" => "groove",
+            "turn_thread" => "thread",
+            "part_off" => "cut",
+            "turn_drill" => "drilling",
             f => f,
         };
         let name = doc::free_name(&self.stmts, base);
@@ -686,7 +836,13 @@ impl CamWs {
                 .iter()
                 .rev()
                 .find_map(|s| s.arg("tool").map(str::to_string))
-                .or_else(|| self.tools().first().map(|s| s.name.clone()));
+                .or_else(|| {
+                    let lathe = schema::is_turning_op(func);
+                    self.tools()
+                        .iter()
+                        .find(|s| (s.func == "lathe_tool") == lathe)
+                        .map(|s| s.name.clone())
+                });
             if let Some(t) = tool {
                 args.push(("tool".into(), t));
             }
@@ -753,27 +909,10 @@ impl CamWs {
                 let geo_now = get(&d.args, "#1");
                 let geo_was = get(&d.was, "#1");
                 if geo_now.is_empty() != geo_was.is_empty() {
-                    let t = self.text.clone();
-                    let r = doc::apply(
-                        &t,
-                        &Edit::Add {
-                            before: Some(id.clone()),
-                            text: Self::op_text(&OpDlg {
-                                name: "cam_new_".into(),
-                                ..d.clone()
-                            }),
-                        },
-                    )
-                    .and_then(|t| doc::apply(&t, &Edit::Delete { id: id.clone() }))
-                    .and_then(|t| {
-                        doc::apply(
-                            &t,
-                            &Edit::Rename {
-                                from: "cam_new_".into(),
-                                to: id.clone(),
-                            },
-                        )
-                    })?;
+                    // the statement's call written again in place (`ReplaceFeature`)
+                    let full = Self::op_text(d);
+                    let call = full.split_once(" = ").map_or(full.as_str(), |x| x.1).to_string();
+                    let r = doc::replace_call(&self.text, id, &call)?;
                     self.set_text(r);
                 } else {
                     for k in &keys {
@@ -826,22 +965,50 @@ impl CamWs {
                 parts.push(format!("{k}: {v}"));
             }
         }
-        format!("{} = setup({})", d.name, parts.join(", "))
+        let func = if d.lathe { "lathe_setup" } else { "setup" };
+        format!("{} = {func}({})", d.name, parts.join(", "))
     }
 
     pub fn setup_ok(&mut self, d: &SetupDlg) -> Result<(), String> {
         let text = self.setup_text(d);
         match &d.id {
             None => {
+                let mut text = text;
+                let mut es = vec![];
+                // a lathe setup's chuck written as a statement of its own (`chuck(..)` is the
+                // language's value there, not a call a setup argument may hold)
+                if d.lathe
+                    && let Some(c) = Self::setup_kw(d)
+                        .iter()
+                        .find(|(k, v)| *k == "chuck" && v.starts_with("chuck("))
+                        .map(|x| x.1.clone())
+                {
+                    let jaws = doc::free_name(&self.stmts, "jaws");
+                    es.push(Edit::Add {
+                        before: None,
+                        text: format!("{jaws} = {c}"),
+                    });
+                    text = text.replacen(&c, &jaws, 1);
+                }
                 // at the end, so it reads what is above it
-                self.edits(&[Edit::Add { before: None, text }])?;
+                es.push(Edit::Add { before: None, text });
                 // and a program for it, so its ops are posted and certified
-                let n = doc::free_name(&self.stmts, &format!("prog{}", self.setups().len()));
-                let num = 1000 + self.setups().len();
-                self.edits(&[Edit::Add {
+                let n = doc::free_name(&self.stmts, &format!("prog{}", self.setups().len() + 1));
+                let num = if d.lathe {
+                    1 + self.setups().len()
+                } else {
+                    1001 + self.setups().len()
+                };
+                let (func, post) = if d.lathe {
+                    ("lathe_program", "fanuc-lathe")
+                } else {
+                    ("program", "fanuc")
+                };
+                es.push(Edit::Add {
                     before: None,
-                    text: format!("{n} = program({}, post: \"fanuc\", number: {num})", d.name),
-                }])?;
+                    text: format!("{n} = {func}({}, post: \"{post}\", number: {num})", d.name),
+                });
+                self.edits(&es)?;
                 self.select(&d.name);
                 Ok(())
             }
@@ -881,6 +1048,43 @@ impl CamWs {
         }
     }
 
+    /// Whether Esc has a level here to back out of: a dialog or a floating window.
+    pub fn escape_level(&self) -> bool {
+        self.op_dlg.is_some()
+            || self.setup_dlg.is_some()
+            || self.post_dlg.is_some()
+            || self.tools_open
+            || self.programs_open
+            || self.quality_open
+            || self.checks_open
+            || self.text_open
+            || self.renaming.is_some()
+    }
+
+    /// Esc: one level out. A rename or a dialog is cancelled (nothing written), else the
+    /// floating window closes.
+    pub fn escape(&mut self) {
+        if self.renaming.is_some() {
+            self.renaming = None;
+        } else if self.op_dlg.is_some() {
+            self.op_dlg = None;
+        } else if self.setup_dlg.is_some() {
+            self.setup_dlg = None;
+        } else {
+            self.close_windows();
+        }
+    }
+
+    /// Every floating window closed (the dialogs of an op or a setup stay: they are edits).
+    pub fn close_windows(&mut self) {
+        self.post_dlg = None;
+        self.tools_open = false;
+        self.programs_open = false;
+        self.quality_open = false;
+        self.checks_open = false;
+        self.text_open = false;
+    }
+
     /// The setup dialog's keyword arguments, in the order they are written ("" left out).
     pub fn setup_kw(d: &SetupDlg) -> Vec<(&'static str, String)> {
         let get = |k: &str| {
@@ -890,10 +1094,25 @@ impl CamWs {
                 .map(|a| a.1.trim().to_string())
                 .unwrap_or_default()
         };
+        if d.lathe {
+            return LATHE_KW.iter().map(|k| (*k, get(k))).collect();
+        }
+        // a stock call of its keyword arguments that are given
+        let call = |f: &str, keys: &[&str]| {
+            let a: Vec<String> = keys
+                .iter()
+                .filter(|k| !get(k).is_empty())
+                .map(|k| format!("{k}: {}", get(k)))
+                .collect();
+            format!("{f}({})", a.join(", "))
+        };
         let stock = match get("stock_kind").as_str() {
             "box" => format!("box(min: {}, max: {})", get("min"), get("max")),
             "from" => String::new(),
-            _ => format!("box(margin: {})", get("margin")),
+            "cylinder" => call("cylinder", &["d", "margin", "below"]),
+            "tube" => call("tube", &["d", "id", "margin", "below"]),
+            "solid" => format!("solid(\"{}\")", get("file").trim_matches('"')),
+            _ => call("box", &["margin", "below"]),
         };
         let mut out = vec![
             ("from", get("from")),
@@ -947,6 +1166,123 @@ pub fn open_for(part_path: &str) -> Result<CamWs, String> {
     Ok(ws)
 }
 
+/// The tool library a document sees: the built-in one and the project's `cam/*.toml` beside it.
+pub fn library(dir: &std::path::Path) -> forge_tooling::Library {
+    let mut lib = forge_tooling::Library::builtin();
+    if let Ok(rd) = forge_dirs::fs::read_dir(dir.join("cam")) {
+        let mut files: Vec<PathBuf> = rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+            .collect();
+        files.sort();
+        for f in files {
+            if let Ok(s) = forge_dirs::fs::read_to_string(&f) {
+                let _ = lib.add(&f.display().to_string(), &s);
+            }
+        }
+    }
+    lib
+}
+
+impl CamWs {
+    /// A Fusion tool library (its JSON, at `file` beside the document) converted into the
+    /// project's `cam/<name>.toml` (forge-cam-import: read back before it is written), and the
+    /// library reloaded. Says what happened.
+    pub fn import_fusion(&mut self, file: &str) -> Result<String, String> {
+        let src_path = self.dir.join(file.trim());
+        let src =
+            forge_dirs::fs::read_to_string(&src_path).map_err(|e| format!("{}: {e}", src_path.display()))?;
+        let stem = src_path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("fusion")
+            .replace(|c: char| !(c.is_alphanumeric() || c == '-' || c == '_'), "_");
+        let imported = forge_cam_import::fusion(&src, file.trim(), "imported in the app")?;
+        let dir = self.dir.join("cam");
+        let _ = forge_dirs::fs::create_dir_all(&dir);
+        let out = dir.join(format!("{stem}.toml"));
+        forge_dirs::fs::write(&out, imported.toml.as_bytes())
+            .map_err(|e| format!("{}: {e}", out.display()))?;
+        self.lib = library(&self.dir);
+        let mut said = format!("{} tools imported into {}", imported.tools, out.display());
+        if !imported.warnings.is_empty() {
+            said.push_str(&format!(
+                " ({} warnings: {})",
+                imported.warnings.len(),
+                imported.warnings.join("; ")
+            ));
+        }
+        Ok(said)
+    }
+
+    /// Each setup's machining time from the run: (setup, its ops' time, s).
+    pub fn setup_times(&self) -> Vec<(String, f64)> {
+        let Some(r) = &self.run else { return vec![] };
+        self.setups()
+            .iter()
+            .map(|s| {
+                let t: f64 = r.ops.iter().filter(|o| o.setup == s.name).map(|o| o.time_s).sum();
+                (s.name.clone(), t)
+            })
+            .collect()
+    }
+}
+
+/// A lathe setup's keywords, in the order they are written (docs/cam-turning.md).
+pub const LATHE_KW: [&str; 8] = [
+    "bar",
+    "front",
+    "chuck",
+    "machine",
+    "at",
+    "offsets",
+    "tol",
+    "clearance",
+];
+
+/// The lathes of the machine library (forge-machine's built-in definitions).
+pub fn lathes() -> Vec<String> {
+    use forge_machine::def::Kind;
+    forge_machine::library::builtin()
+        .into_iter()
+        .filter(|m| m.kind == Kind::Lathe)
+        .map(|m| m.name)
+        .collect()
+}
+
+/// A call's arguments as written, split at top-level commas: (keyword, text).
+fn call_args(inner: &str) -> Vec<(Option<String>, String)> {
+    let mut out = vec![];
+    let (mut depth, mut start, mut quote) = (0i32, 0usize, false);
+    let mut push = |piece: &str| {
+        let piece = piece.trim();
+        if piece.is_empty() {
+            return;
+        }
+        // `key: value` when the text before the first colon is a name
+        match piece.split_once(':') {
+            Some((k, v)) if k.trim().chars().all(|c| c.is_alphanumeric() || c == '_') && !k.trim().is_empty() => {
+                out.push((Some(k.trim().to_string()), v.trim().to_string()))
+            }
+            _ => out.push((None, piece.to_string())),
+        }
+    };
+    for (i, c) in inner.char_indices() {
+        match c {
+            '"' => quote = !quote,
+            '(' | '[' if !quote => depth += 1,
+            ')' | ']' if !quote => depth -= 1,
+            ',' if depth == 0 && !quote => {
+                push(&inner[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    push(&inner[start..]);
+    out
+}
+
 /// A setup statement's arguments as the dialog edits them.
 pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
     let mut a: Vec<(String, String)> = vec![];
@@ -954,25 +1290,23 @@ pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
         let Some(k) = &x.key else { continue };
         if k == "stock" {
             let t = x.text.trim();
-            if let Some(inner) = t.strip_prefix("box(").and_then(|r| r.strip_suffix(')')) {
-                if let Some(m) = inner.trim().strip_prefix("margin:") {
-                    a.push(("stock_kind".into(), "margin".into()));
-                    a.push(("margin".into(), m.trim().into()));
-                } else {
-                    a.push(("stock_kind".into(), "box".into()));
-                    // min: (..), max: (..)
-                    if let (Some(i), Some(j)) = (inner.find("min:"), inner.find("max:")) {
-                        let (lo, hi) = if i < j { (i, j) } else { (j, i) };
-                        let first = inner[lo..hi].trim().trim_end_matches(',');
-                        let second = inner[hi..].trim();
-                        for part in [first, second] {
-                            if let Some(v) = part.strip_prefix("min:") {
-                                a.push(("min".into(), v.trim().into()));
-                            } else if let Some(v) = part.strip_prefix("max:") {
-                                a.push(("max".into(), v.trim().into()));
-                            }
-                        }
-                    }
+            let Some((head, inner)) = t.split_once('(') else { continue };
+            let inner = inner.strip_suffix(')').unwrap_or(inner);
+            let kws = call_args(inner);
+            let kind = match head.trim() {
+                "box" if kws.iter().any(|(k, _)| k.as_deref() == Some("min")) => "box",
+                "box" => "margin",
+                "cylinder" => "cylinder",
+                "tube" => "tube",
+                "solid" => "solid",
+                _ => continue,
+            };
+            a.push(("stock_kind".into(), kind.into()));
+            for (key, v) in kws {
+                match key {
+                    Some(key) => a.push((key, v)),
+                    None if kind == "solid" => a.push(("file".into(), v.trim_matches('"').to_string())),
+                    None => {}
                 }
             }
             continue;
@@ -989,6 +1323,33 @@ pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each stock shape reads into the setup dialog and is written back as it was.
+    #[test]
+    fn stock_shapes_round_trip_through_the_setup_dialog() {
+        for stock in [
+            "box(margin: (3, 3, 2), below: 3)",
+            "box(min: (-50, -50, 0), max: (50, 50, 25))",
+            "cylinder(d: 60, margin: (2, 1), below: 4)",
+            "cylinder(margin: (2, 1))",
+            "tube(d: 60, id: 20, margin: (1, 1))",
+            "solid(\"blank.fg\")",
+        ] {
+            let text = format!("machining\nf = part(\"p.fg\")\nop1 = setup(f, stock: {stock})\n");
+            let st = doc::read(&text).unwrap();
+            let s = st.iter().find(|s| s.name == "op1").unwrap();
+            let d = SetupDlg {
+                id: Some("op1".into()),
+                name: "op1".into(),
+                tab: 1,
+                args: setup_args(s),
+                error: None,
+                lathe: false,
+            };
+            let kw = CamWs::setup_kw(&d);
+            assert_eq!(kw.iter().find(|k| k.0 == "stock").unwrap().1, stock, "{:?}", d.args);
+        }
+    }
 
     const DOC: &str = "machining
 shared tol = 0.01
@@ -1086,6 +1447,129 @@ prog = program(op1, post: \"fanuc\", number: 1001)
         assert!(forge_cam_lang::is_machining(&w.text));
         assert_eq!(w.stmt("f").and_then(|s| s.pos(0)), Some("\"nameplate.fg\""));
         assert!(w.part_path().is_some_and(|p| p.ends_with("nameplate.fg")));
+    }
+
+    #[test]
+    fn a_lathe_setup_and_its_ops_are_written_as_turning_statements() {
+        let text = "machining\nf  = part(\"shaft.fg\")\nt1 = lathe_tool(\"od-rough-cnmg\", t: 1)\n";
+        let mut w = CamWs::open("/nowhere/shaft_turn.fg", text);
+        w.auto = false;
+        assert!(!w.turning());
+        w.command(Cmd::NewLatheSetup);
+        let mut d = w.setup_dlg.take().unwrap();
+        assert!(d.lathe);
+        d.args.push(("at".into(), "100".into()));
+        w.setup_ok(&d).expect("added");
+        assert!(w.turning());
+        assert!(
+            w.text.contains("jaws = chuck(face: -70, grip: 30, jaw: 15)\n"),
+            "{}",
+            w.text
+        );
+        assert!(
+            w.text.contains(
+                "op1 = lathe_setup(f, bar: 32, front: 2, chuck: jaws, machine: \"generic-lathe\", at: 100)"
+            ),
+            "{}",
+            w.text
+        );
+        assert!(
+            w.text
+                .contains("prog1 = lathe_program(op1, post: \"fanuc-lathe\", number: 1)"),
+            "{}",
+            w.text
+        );
+        assert!(forge_turn_lang::is_turning(&w.text));
+        w.command(Cmd::NewOp("turn_rough"));
+        let mut o = w.op_dlg.take().unwrap();
+        assert_eq!(o.get("tool"), "t1", "a lathe tool");
+        o.set("leave", "0.3".into());
+        o.set("step", "2".into());
+        w.op_ok(&o).expect("added");
+        assert!(
+            w.text
+                .contains("rough = turn_rough(op1, tool: t1, leave: 0.3, step: 2)\nprog1"),
+            "{}",
+            w.text
+        );
+        // the setup edited in place: the bar
+        w.command(Cmd::Edit("op1".into()));
+        let mut d = w.setup_dlg.take().unwrap();
+        assert!(d.lathe);
+        d.args.iter_mut().find(|a| a.0 == "bar").unwrap().1 = "36".into();
+        w.setup_ok(&d).expect("edited");
+        assert!(w.text.contains("lathe_setup(f, bar: 36, front: 2"), "{}", w.text);
+        assert!(lathes().contains(&"generic-lathe".to_string()));
+    }
+
+    #[test]
+    fn a_fusion_library_is_imported_into_the_project() {
+        let dir = std::env::temp_dir().join(format!("fg-cam-import-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("shop.json"),
+            r#"{"version": 36, "data": [
+              {"guid": "a", "type": "flat end mill", "unit": "millimeters", "description": "6mm 3fl",
+               "geometry": {"DC": 6, "LCF": 18, "OAL": 57, "SFDM": 6, "NOF": 3, "LB": 24},
+               "post-process": {"number": 7}, "start-values": {}}]}"#,
+        )
+        .unwrap();
+        let mut w = CamWs::open(dir.join("job.fg").to_str().unwrap(), DOC);
+        let before = w.lib.tools.len();
+        let said = w.import_fusion("shop.json").expect("imported");
+        assert!(said.starts_with("1 tools imported"), "{said}");
+        assert!(dir.join("cam/shop.toml").exists());
+        assert_eq!(w.lib.tools.len(), before + 1);
+        // and a document opened there sees it
+        assert_eq!(library(&dir).tools.len(), before + 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_program_over_two_setups_generates() {
+        let dir = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+        let text = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+        let mut w = CamWs::open(dir.join("flange_cam.fg").to_str().unwrap(), &text);
+        w.auto = false;
+        w.command(Cmd::NewSetup);
+        let d = w.setup_dlg.take().unwrap();
+        w.setup_ok(&d).expect("second setup");
+        // prog posts both
+        // a program reads its setups: refused above op2, made after moving below it
+        assert!(!w.edit(&Edit::Set {
+            id: "prog".into(),
+            arg: "#0".into(),
+            text: "[op1, op2]".into()
+        }));
+        w.edits(&[
+            Edit::Move {
+                id: "prog".into(),
+                before: None,
+            },
+            Edit::Set {
+                id: "prog".into(),
+                arg: "#0".into(),
+                text: "[op1, op2]".into(),
+            },
+        ])
+        .expect("moved and set");
+        assert!(w.text.contains("prog = program([op1, op2], post:"), "{}", w.text);
+        let r = run::run(&w.text, &dir);
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        assert_eq!(
+            r.programs
+                .iter()
+                .find(|p| p.name == "prog")
+                .map(|p| p.text.is_some()),
+            Some(true),
+            "{:?}",
+            r.programs
+        );
+        w.running = Some(r.text.clone());
+        w.ran(r);
+        let times = w.setup_times();
+        assert_eq!(times.len(), 2);
+        assert!(times[0].1 > 0.0);
     }
 
     #[test]

@@ -173,3 +173,15 @@ fn edits_write_and_undo() {
         );
     }
 }
+
+/// Files cut short where the reader indexed past the end (found by verify/forge-read-fuzz).
+#[test]
+fn files_cut_short_are_refused() {
+    for n in 6..0x15 {
+        let mut b = b"AC1015".to_vec();
+        b.resize(n, 0);
+        assert!(forge_dwg::file::read(&b).is_err(), "{n} bytes");
+    }
+    // an object map whose last section ends where its CRC should be
+    assert!(forge_dwg::file::r2000::read_map(&[0, 4, 1, 1], 0, 4).is_err());
+}
