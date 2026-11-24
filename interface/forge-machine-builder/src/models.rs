@@ -251,8 +251,27 @@ pub fn shipped_roots() -> Vec<PathBuf> {
     out
 }
 
-/// A built-in machine's own models folder, where forgecad ships one.
-pub fn shipped_dir(machine: &str) -> Option<PathBuf> {
+/// Whether a file's bytes are a Git LFS pointer (its object not downloaded: the shipped models
+/// are kept out of normal clones, .lfsconfig).
+pub fn is_lfs_pointer(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"version https://git-lfs.github.com/spec/")
+}
+
+/// A shipped models folder whose files are all here (not LFS pointers).
+fn downloaded(d: &Path) -> bool {
+    let Ok(ms) = forge_dirs::fs::read(d.join(INDEX)) else {
+        return false;
+    };
+    !is_lfs_pointer(&ms)
+        && load_in(d).is_ok_and(|m| {
+            m.iter().all(|x| {
+                forge_dirs::fs::read(d.join(&x.file)).is_ok_and(|b| !is_lfs_pointer(&b[..b.len().min(64)]))
+            })
+        })
+}
+
+/// A built-in machine's own models folder, where forgecad ships one, downloaded or not.
+fn shipped_any(machine: &str) -> Option<PathBuf> {
     let name = safe(machine);
     shipped_roots().into_iter().find_map(|r| {
         forge_dirs::fs::read_dir(&r).ok()?.find_map(|e| {
@@ -262,8 +281,68 @@ pub fn shipped_dir(machine: &str) -> Option<PathBuf> {
     })
 }
 
+/// A built-in machine's own models folder, where forgecad ships one and it is downloaded.
+pub fn shipped_dir(machine: &str) -> Option<PathBuf> {
+    shipped_any(machine).filter(|d| downloaded(d))
+}
+
+/// Where forgecad ships models of `machine` that are not downloaded (a clone's LFS pointers): the
+/// folder, and the command that fetches them (`fetch`).
+pub fn not_downloaded(machine: &str) -> Option<(PathBuf, String)> {
+    let d = shipped_any(machine).filter(|d| !downloaded(d))?;
+    Some((d.clone(), format!("forgecad machine model fetch {machine}")))
+}
+
+/// Fetches forgecad's own models of `machine` where they are LFS pointers in a git checkout:
+/// `git lfs pull --include=<its folder>/**` in that checkout. Meanwhile the machine is drawn
+/// from its bodies' envelopes.
+pub fn fetch(machine: &str) -> Result<String, String> {
+    let (d, _) = not_downloaded(machine).ok_or_else(|| {
+        if shipped_dir(machine).is_some() {
+            format!("{machine}'s models are already here")
+        } else {
+            format!("forgecad ships no models of {machine}")
+        }
+    })?;
+    let d = forge_dirs::fs::canonicalize(&d).map_err(|e| format!("{}: {e}", d.display()))?;
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .arg("-C")
+            .arg(&d)
+            .args(args)
+            .output()
+            .map_err(|e| format!("git: {e} (install git and git-lfs to fetch models)"))
+    };
+    let top = git(&["rev-parse", "--show-toplevel"])?;
+    if !top.status.success() {
+        return Err(format!(
+            "{} is not in a git checkout: reinstall forgecad with its models",
+            d.display()
+        ));
+    }
+    let top = PathBuf::from(String::from_utf8_lossy(&top.stdout).trim());
+    let rel = d
+        .strip_prefix(&top)
+        .map_err(|_| "the models folder is outside its checkout".to_string())?;
+    let inc = format!("--include={}/**", rel.to_string_lossy().replace('\\', "/"));
+    let o = git(&["lfs", "pull", &inc])?;
+    if !o.status.success() {
+        return Err(format!(
+            "git lfs pull: {}",
+            String::from_utf8_lossy(&o.stderr).trim()
+        ));
+    }
+    if !downloaded(&d) {
+        return Err(format!(
+            "git lfs pull ran, but {} is still not downloaded",
+            d.display()
+        ));
+    }
+    Ok(format!("{machine}'s models fetched into {}", d.display()))
+}
+
 /// The folder a machine's models are drawn from: the user's, where they have attached any, else
-/// forgecad's own (`shipped_dir`).
+/// forgecad's own where downloaded (`shipped_dir`; `not_downloaded` says when they are not).
 pub fn drawn_dir(user_machines: Option<&Path>, machine: &str) -> Option<PathBuf> {
     user_machines
         .map(|u| dir_in(u, machine))
@@ -518,6 +597,27 @@ mod tests {
         assert!(!forge_dirs::fs::exists(dst.join("head-2.stl")));
         assert_eq!(load_in(&dst).unwrap(), vec![m1]);
         assert!(copy_in(&dst, &src.join("nope.x_t"), &[]).is_err());
+        let _ = forge_dirs::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn an_lfs_pointer_is_not_downloaded() {
+        let tmp = forge_dirs::temp_dir().join(format!("forge-models-lfs-{}", forge_dirs::process_id()));
+        let _ = forge_dirs::fs::remove_dir_all(&tmp);
+        forge_dirs::fs::create_dir_all(&tmp).unwrap();
+        let ptr = "version https://git-lfs.github.com/spec/v1\noid sha256:00\nsize 12\n";
+        // the index itself a pointer (a clone's): not downloaded
+        forge_dirs::fs::write(tmp.join(INDEX), ptr).unwrap();
+        assert!(!downloaded(&tmp));
+        // the index here, a mesh still a pointer: not downloaded; the mesh here: downloaded
+        let mut m = Model::new(Some("table".into()), "table.stl".into());
+        m.from = "x".into();
+        save_in(&tmp, &[m]).unwrap();
+        forge_dirs::fs::write(tmp.join("table.stl"), ptr).unwrap();
+        assert!(!downloaded(&tmp));
+        forge_dirs::fs::write(tmp.join("table.stl"), vec![0u8; 84]).unwrap();
+        assert!(downloaded(&tmp));
+        assert!(is_lfs_pointer(ptr.as_bytes()) && !is_lfs_pointer(b"solid x"));
         let _ = forge_dirs::fs::remove_dir_all(&tmp);
     }
 }

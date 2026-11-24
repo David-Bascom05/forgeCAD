@@ -231,6 +231,13 @@ impl MachineUi {
             .as_ref()
             .and_then(|d| models::drawn_dir(self.user.as_deref(), &d.name));
         self.models_shipped = drawn.clone().filter(|d| Some(d) != user.as_ref());
+        // forgecad's own models of it, left out of this clone (Git LFS): drawn from the
+        // envelopes until fetched
+        if drawn.is_none()
+            && let Some((_, how)) = self.def.as_ref().and_then(|d| models::not_downloaded(&d.name))
+        {
+            self.message = format!("Model not downloaded: drawn from its envelopes. Fetch it with `{how}`");
+        }
         self.models = drawn
             .map(|d| models::load_in(&d))
             .transpose()

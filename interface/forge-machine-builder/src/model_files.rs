@@ -153,6 +153,11 @@ impl Piece {
 /// A model file's pieces (its own coordinates and units): a STEP solid each; an STL's parts that
 /// share no corner each.
 pub fn read(name: &str, bytes: &[u8]) -> Result<Vec<Piece>, String> {
+    if models::is_lfs_pointer(&bytes[..bytes.len().min(64)]) {
+        return Err(format!(
+            "{name}: not downloaded (a Git LFS pointer): `forgecad machine model fetch MACHINE`"
+        ));
+    }
     let out = match Format::of(name)? {
         Format::Stl => {
             let (objs, _) = forge_mesh::read_stl(bytes)
@@ -531,7 +536,8 @@ pub fn ship(
         "# forgecad's own models of this machine, drawn in place of its bodies (collisions use the\n\
          # bodies' envelopes): written by `forgecad machine model ship`; a user's attached models win.\n\n{body}"
     );
-    forge_dirs::fs::write(to_dir.join(models::INDEX), text).map_err(|e| format!("{}: {e}", to_dir.display()))?;
+    forge_dirs::fs::write(to_dir.join(models::INDEX), text)
+        .map_err(|e| format!("{}: {e}", to_dir.display()))?;
     Ok(out)
 }
 

@@ -41,6 +41,7 @@ forgecad machine check FILE.toml|NAME [--json] [--no-parts]\n       \
 forgecad machine model attach MACHINE FILE --from TEXT [--body BODY] [--scale S] [--rotate X,Y,Z] [--offset X,Y,Z]\n       \
 forgecad machine model list|check MACHINE [--json]\n       \
 forgecad machine model remove MACHINE FILE\n       \
+forgecad machine model fetch MACHINE   (forgecad's own models of it, where a clone left them in Git LFS)\n       \
 forgecad machine model ship MACHINE DIR --source TEXT [--cell MM]   (its split models decimated into DIR, for forgecad's own library; display-only bodies 3x coarser)\n       \
 forgecad machine model split MACHINE FILE BODY|-..   (one per part, largest first; - drops it)\n       \
 forgecad machine model split MACHINE FILE PART=BODY..   (by name: the first PART in a part's name gives it BODY; - or no rule drops it)";
@@ -583,6 +584,14 @@ pub fn model(env: &Env, argv: &[String]) -> Out {
                 err: String::new(),
             }
         }
+        "fetch" => match models::fetch(&def.name) {
+            Ok(s) => Out {
+                code: 0,
+                out: s + "\n",
+                err: String::new(),
+            },
+            Err(e) => fail(1, e),
+        },
         "ship" => {
             // the user's split models made forgecad's own: decimated meshes and their index in
             // DIR, for the built-in library (models::shipped_dir)
