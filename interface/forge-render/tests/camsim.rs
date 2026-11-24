@@ -338,6 +338,8 @@ fn the_flanges_posted_program_on_its_machine() {
         m.contacts.contacts.iter().find(|c| matches!(c.verdict, forge_machine::collide::Verdict::Hit { .. }))
     );
     assert!(mv.markers.iter().all(|k| k.verdict != "fail"), "{:?}", mv.markers.first());
+    // the removal check (the stock as cut) is on demand: not run until asked
+    assert!(m.removal.is_none());
     // played as the source: the machine's time, the same stock at the end
     let end_tp = {
         let total = sim.tl.total;

@@ -98,6 +98,13 @@ pub struct MachineRun {
     pub control: forge_machine::gcode::Control,
     pub tl: forge_machine::sim::Timeline,
     pub contacts: forge_machine::collide::Report,
+    /// The stock as the posted code cuts it (forge-machine's removal, on its grid): rapids into
+    /// material and holder or shank pieces into material, in the machine's part frame (less
+    /// `shift` for the document's); Err says why it could not run. None until asked
+    /// (`MachineRun::removal`): it takes seconds to minutes.
+    pub removal: Option<Result<forge_machine::removal::MillResult, String>>,
+    /// The stock box on the machine (its part frame), for the removal.
+    pub stock: ([f64; 3], [f64; 3]),
     /// The workholding as the check took it (part frame on the machine); the stock is left
     /// to the certified checker (it changes as it is cut).
     pub work: Vec<forge_machine::collide::CBody>,
@@ -112,6 +119,16 @@ impl MachineRun {
         s.tools = self.tools.clone();
         s.h = self.h.clone();
         s
+    }
+
+    /// Runs forge-machine's removal on a grid of `step` mm: the stock as the posted code cuts it,
+    /// its rapids and holders into material (slow: seconds to minutes).
+    pub fn removal(&mut self, step: f64) {
+        let r = {
+            let s = self.setup();
+            forge_machine::removal::mill(&s, &self.tl, self.stock.0, self.stock.1, step).map_err(|e| format!("{e:?}"))
+        };
+        self.removal = Some(r);
     }
 
     /// The tool tip in the document's part frame at joint values q, tool t.
@@ -276,6 +293,7 @@ impl Cam {
             }
         }
         let contacts = collide::check(&setup, &tl, &work);
+
         Ok(MachineRun {
             program: prog.name.clone(),
             dialect: prog.post.clone(),
@@ -288,6 +306,8 @@ impl Cam {
             control,
             tl,
             contacts,
+            removal: None,
+            stock: (mv(s.stock.min), mv(s.stock.max)),
             work,
             def,
         })

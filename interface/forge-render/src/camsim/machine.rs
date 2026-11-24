@@ -243,6 +243,12 @@ impl MachineView {
             .collect()
     }
 
+    /// Runs the removal check (the stock as the posted code cuts it) and remakes the markers.
+    pub fn check_removal(&mut self, step: f64) {
+        self.run.removal(step);
+        self.markers = self.markers_of();
+    }
+
     /// The overtravel, collision and other issues the machine run found, as markers.
     fn markers_of(&self) -> Vec<Marker> {
         let mut out = vec![];
@@ -285,6 +291,35 @@ impl MachineView {
                 ),
                 region: None,
             });
+        }
+        // the stock as cut (forge-machine's removal): rapids into it, holders into it
+        if let Some(Ok(r)) = &self.run.removal {
+            let sh = self.run.shift;
+            let doc = |p: [f64; 3]| [p[0] - sh[0], p[1] - sh[1], p[2] - sh[2]];
+            let finds = r
+                .rapid_cuts
+                .iter()
+                .map(|c| (c.line, c.segment, c.depth, c.at, "rapid_into_stock", "a rapid cuts".to_string()))
+                .chain(r.holder_hits.iter().map(|h| {
+                    (h.line, h.segment, h.depth, h.at, "holder_into_stock", format!("tool body piece {} enters", h.piece))
+                }));
+            for (line, seg, depth, at, rule, what) in finds {
+                let Some(g) = segs.get(seg) else { continue };
+                let t = g.t0;
+                out.push(Marker {
+                    op: op_at(t),
+                    setup: self.setup,
+                    rule: rule.into(),
+                    verdict: "fail".into(),
+                    at: doc(at),
+                    t,
+                    text: format!(
+                        "line {line}: {what} the stock as cut, {depth:.3} mm deep (posted program on {})",
+                        self.run.def.name
+                    ),
+                    region: None,
+                });
+            }
         }
         for v in &self.run.tl.violations {
             let (line, text) = match v {

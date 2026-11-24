@@ -199,6 +199,20 @@ impl Sim {
         Ok(())
     }
 
+    /// Runs the playing machine run's removal check (the stock as the posted code cuts it:
+    /// rapids and holders into material) on a grid of `step` mm, and shows its findings.
+    pub fn check_removal(&mut self, step: f64) -> Result<(), String> {
+        let i = self.source.ok_or("no machine run plays")?;
+        match self.machines.get_mut(i) {
+            Some(Ok(m)) => m.check_removal(step),
+            Some(Err(e)) => return Err(e.clone()),
+            None => return Err("no such machine run".into()),
+        }
+        // its markers again, with the toolpath's placed on the machine's time
+        self.set_source(None)?;
+        self.set_source(Some(i))
+    }
+
     /// The machine run playing, if one is.
     pub fn machine(&self) -> Option<&machine::MachineView> {
         self.machines.get(self.source?)?.as_ref().ok()

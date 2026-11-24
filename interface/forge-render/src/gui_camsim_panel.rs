@@ -72,6 +72,8 @@ pub struct CamSimUi {
     pub machine: bool,
     /// The toolpath coloured by a measured value per move (the workspace's colour-by).
     pub values: Option<crate::camsim::draw::Values>,
+    /// The removal check asked for (run on the next frame, off the panel's borrow).
+    pub removal_asked: bool,
     pub follow: bool,
     pub path_width: f32,
     pub tab: Tab,
@@ -111,6 +113,7 @@ impl CamSimUi {
             fixture: true,
             machine: true,
             values: None,
+            removal_asked: false,
             follow: false,
             path_width: 2.0,
             tab: Tab::Program,
@@ -732,6 +735,36 @@ fn source(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme) {
             .small()
             .color(t.ink),
         );
+    }
+    // the stock as the posted code cuts it (forge-machine's removal): on demand, it is slow
+    let removal = st.sim.machine().map(|mv| {
+        mv.run.removal.as_ref().map(|r| match r {
+            Ok(m) => (
+                true,
+                format!(
+                    "Stock as cut: {} rapids and {} holder pieces into material",
+                    m.rapid_cuts.len(),
+                    m.holder_hits.len()
+                ),
+            ),
+            Err(e) => (false, format!("Stock as cut: {e}")),
+        })
+    });
+    match removal {
+        Some(Some((ok, s))) => {
+            ui.label(egui::RichText::new(s).small().color(if ok { t.ink2 } else { t.error }));
+        }
+        Some(None)
+            if ui
+                .small_button("Check the stock as cut")
+                .on_hover_text(
+                    "forge-machine's removal on a 0.5 mm grid: rapids and holders into the material the posted code leaves (slow)",
+                )
+                .clicked() =>
+        {
+            st.removal_asked = true;
+        }
+        _ => {}
     }
 }
 
