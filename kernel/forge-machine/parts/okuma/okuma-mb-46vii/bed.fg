@@ -1,0 +1,14 @@
+# okuma-mb-46vii bed: the base under the saddle; from the floor (estimate) to the saddle ways.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -380
+shared y0 = -560
+shared z0 = -700
+shared L = 760
+shared W = 1530
+shared H = 300
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

@@ -1,0 +1,36 @@
+# A tube (radii 16 and 14 below, 26 tall) counterbored to radius 15, 14 deep; a slot-shaped lug on
+# its side at y = -15 with a hole of radius 2; the counterbore cut again through the lug; then a
+# drill of radius 2 down that hole, its wall coincident with the hole's. The cut stops on
+# Boolean Internal(RetryInvalid), a judge fail. Moved 0.3 off the hole, or without the second
+# counterbore, it builds. Restating a FreeCAD library part (1833f02f.Body023), whose pocket from
+# the hole's edge FreeCAD cuts.
+sketch tube_sk(on: xy) {
+  outer = circle((0, 0), 16.0)
+}
+tube = extrude(tube_sk, 26.0)
+sketch bore_sk(on: xy) {
+  c = circle((0, 0), 15.0)
+}
+bore = cut(bore_sk, -14.0)
+sketch wy(on: xy) {
+  p = pt(0, 1)
+  q = pt(-1, 0)
+  r = pt(1, 0)
+  lug_at = pt(0, -15.0)
+}
+sketch wd(on: offset(xy, 11.0)) {
+  p = pt(12.0, -15.0)
+}
+sketch lug_sk(on: plane(at: wy.lug_at, normal: axis(xy.origin, wy.p), x: axis(xy.origin, wy.r))) {
+  a0 = arc(center: (12.0, -19.0), from: (15.0, -19.0), to: (9.0, -19.0), cw: true)
+  l1 = line((9.0, -19.0), (9.0, -11.0))
+  a2 = arc(center: (12.0, -11.0), from: (9.0, -11.0), to: (15.0, -11.0), cw: true)
+  l3 = line((15.0, -11.0), (15.0, -19.0))
+  h2 = circle((12.0, -11.0), 2.0)
+}
+lug = extrude(lug_sk, 15.0)
+bore2 = cut(bore_sk, -14.0)
+sketch drill_sk(on: plane(at: wd.p, normal: axis(xy.origin, wy.p), x: axis(xy.origin, wy.q))) {
+  c = circle((0, 0), 2.0)
+}
+drill = cut(drill_sk, -15.0)

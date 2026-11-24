@@ -1,0 +1,5 @@
+# count(1e26): the range's end + 1 overflowed i64 (eval.rs). Numbers past 1e12 are refused.
+from: examples/harness/header.fg
+replace: shared n = count(8)
+with: shared n = count(99999999999999999999999999)
+expect: refused

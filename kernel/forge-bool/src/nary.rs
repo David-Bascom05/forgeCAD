@@ -577,12 +577,14 @@ pub fn nary_with(
     // flat faces: the whole history as one pointwise rule, one call of the decide-once core
     #[cfg(feature = "decide_once")]
     if let Some(r) = crate::decide_once::history(tools, ops)? {
+        #[cfg(feature = "certify")]
+        crate::certify::skipped("the decide-once path");
         return Ok(r);
     }
     let mut undecided = None;
     #[cfg(feature = "decisions")]
     let scope = crate::decisions::scope("n-ary", String::from("plain"));
-    let body = nary_body(tools, ops, shapes, batch, threads, root, &mut undecided);
+    let body = nary_noted(tools, ops, shapes, batch, threads, root, &mut undecided);
     #[cfg(feature = "decisions")]
     scope.outcome(crate::decisions::Outcome::of(&body));
     let out = body?;
@@ -643,6 +645,42 @@ pub fn nary_with(
                 at: out.vertex(VertexId(v as u32)).point,
             });
         }
+    }
+    Ok(out)
+}
+
+/// `boolean::apex::sheets_at` for n tools: whether each side's face, at a cone's apex, is kept in
+/// the result, from its sheet's place against every other tool.
+#[cold]
+#[inline(never)]
+fn apex_kept(
+    tools: &[&Body],
+    index: &[Index],
+    ops: &[Op],
+    any_intersect: bool,
+    t: &Touch,
+) -> R<[Option<bool>; 2]> {
+    let n = tools.len();
+    let mut out = [None; 2];
+    for (k, slot) in out.iter_mut().enumerate() {
+        let (sd, f) = (t.sides[k], t.faces[k]);
+        let Some(sheet) = crate::apex::apex_sheet(tools[sd], f, t.at) else {
+            continue;
+        };
+        let refuse = BoolError::ZeroThickness { at: t.at };
+        let sheet = sheet.ok_or(refuse.clone())?;
+        let mut inner = vec![false; n];
+        inner[sd] = true;
+        for j in (0..n).filter(|&j| j != sd) {
+            match crate::apex::where_sheet(tools[j], &index[j], t.at, &sheet) {
+                Some(Where::Inside) => inner[j] = true,
+                Some(_) => {}
+                None => return Err(refuse),
+            }
+        }
+        let mut outer = inner.clone();
+        outer[sd] = false;
+        *slot = Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect));
     }
     Ok(out)
 }
@@ -1144,7 +1182,18 @@ fn nary_body(
                 t.sides, t.faces, t.at
             );
         }
+        // at a cone's apex the face's sheet is its generators, decided in closed form against
+        // every other tool; one that cannot be read there is refused at the point, never guessed
+        let sheets = if t.dir.is_none() && (0..2).any(|k| crate::apex::is_cone(tools[t.sides[k]], t.faces[k]))
+        {
+            apex_kept(tools, &index, ops, any_intersect, t)?
+        } else {
+            [None; 2]
+        };
         let kept = [0, 1].map(|k| {
+            if let Some(w) = sheets[k] {
+                return Some(w);
+            }
             let (sd, f) = (t.sides[k], t.faces[k]);
             local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q))
         });
@@ -3608,4 +3657,24 @@ fn region_points(
         out.extend(step_in(body, f, c, r, fwd, 0.5, step.min(0.05)));
     }
     out
+}
+
+// The certificate's hook (verify/forge-certify), at the end so that with the `certify` feature
+// off every line above is the line it was: off, `nary_noted` is `nary_body`.
+#[cfg(not(feature = "certify"))]
+use self::nary_body as nary_noted;
+
+/// `nary_body`, noting that it gives no certificate.
+#[cfg(feature = "certify")]
+fn nary_noted(
+    tools: &[&Body],
+    ops: &[Op],
+    shapes: Option<&[Shape]>,
+    batch: Option<&dyn Batch>,
+    threads: usize,
+    root: Name,
+    undecided: &mut Option<Point3>,
+) -> R<Body> {
+    crate::certify::skipped("the n-ary boolean");
+    nary_body(tools, ops, shapes, batch, threads, root, undecided)
 }

@@ -1,0 +1,155 @@
+{
+ "vendor": "CHIRON",
+ "model": "FZ 16 S (five axis)",
+ "family": "16 Series",
+ "source": [
+  "https://chiron-group.com/products/16-series",
+  "https://chiron-group.com/storage/technicaldata/en/cg_a4h_machinedata_website_2026_br16.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Mobile-gantry platform (maker wording), single motor spindle, vertical; round axes with direct torque drive ('five axis' variant). Pick-up chain magazine. Axis letters/ranges of rotary unit not published.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 660,
+  "Y": 680,
+  "Z": 500
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12500,
+  "rpm_min": null,
+  "taper_or_interface": "HSK-A63",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 86
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 75,
+  "Y": 75,
+  "Z": 75,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": "X 10, Y 7, Z 8 m/s2",
+ "changer": {
+  "pockets": 42,
+  "options": [
+   "42 - 162 tools"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": 2.4,
+  "max_tool_dia_mm": 78,
+  "max_tool_dia_empty_adjacent_mm": 160,
+  "max_tool_len_mm": 450,
+  "max_tool_kg": 10
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "milling_head",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rotary.A",
+  "rotary.B",
+  "rotary.C",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "table_load_kg",
+  "table_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "spindle up to 20,000 rpm",
+  "torque range 86 - 208 Nm",
+  "speed+ variant",
+  "HSK-100 version shown in machining example (FZ 16 S five axis)",
+  "Variocell UNO automation"
+ ],
+ "notes": "Data sheet is for 'FZ 16' (series sheet 09.2026), given as ranges: spindle 12,500-20,000 rpm and 86-208 Nm -> lower bound recorded, pairing of rpm and torque not stated. Page: workpieces up to 700 mm and 360 kg (series text). Detailed per-variant data only in a login-gated configurator; not used. Control not stated (TouchLine operating system mentioned).",
+ "_not_applicable": [
+  "swing_over_bed_mm",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "chuck_size_in",
+  "bar_capacity_mm",
+  "spindle_nose_type",
+  "sub_spindle",
+  "live_tool",
+  "turret_stations",
+  "turret_index_s",
+  "tailstock"
+ ]
+}

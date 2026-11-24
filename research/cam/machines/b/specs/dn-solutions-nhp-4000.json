@@ -1,0 +1,128 @@
+{
+ "vendor": "DN Solutions",
+ "model": "NHP 4000",
+ "family": "NHP 4000/5000/6300",
+ "source": [
+  "https://www.dn-solutions.com/us/product/machining-center/horizontal/nhp-5000.do"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "hmc",
+ "architecture": "Horizontal machining center, horizontal spindle, pallet table; axis carrying arrangement, B-axis indexing and APC type not on fetched page.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 560,
+  "Y": 640,
+  "Z": 660
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": [
+   400,
+   400
+  ],
+  "change_s": null,
+  "load_kg": 400
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 15000,
+  "rpm_min": null,
+  "taper_or_interface": "ISO #40",
+  "power_kw": {
+   "cont": 18.5,
+   "30min": null,
+   "peak/other": 30
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 230
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 60,
+  "Y": 60,
+  "Z": 60,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 40,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": 2300,
+  "D": 4950,
+  "H": 2690
+ },
+ "weight_kg": 9700,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "pallet.change_s",
+  "pallet.count",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "spindle power 37/22 kW, 303 N·m"
+ ],
+ "notes": "Only DN Solutions US product page summary table ('Max. Spindle Power 30/18.5 {37/22} kW' read as max/cont). Pallet count, pallet change time and spindle-to-pallet distances are NOT on the page; the NHP 4000/5000 catalogue exists on pdf.directindustry.com but that host returned 403, and dn-solutions.com catalogue download is email-gated. Page labels Length/Height/Width; D=Length. Not applicable to this machine kind (left null, not listed in unknown): swing_over_bed_mm, max_turning_dia_mm, max_turning_length_mm, chuck_size_in, bar_capacity_mm, spindle_nose_type, sub_spindle, live_tool, turret_stations, turret_index_s, tailstock, milling_head, rotary, spindle_nose_to_table_mm, table_mm, table_load_kg, rotary_table_dia_mm. Pallet size published as '400 mm' (single figure)."
+}

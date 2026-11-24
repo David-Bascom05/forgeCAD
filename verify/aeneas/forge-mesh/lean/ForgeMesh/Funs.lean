@@ -479,7 +479,7 @@ def cdt.CdtError.Insts.CoreCloneClone : core.clone.Clone cdt.CdtError := {
 }
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Fault}::text]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 84:4-102:5
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 91:4-116:5
     Visibility: public -/
 def cdt.Fault.text (self : cdt.Fault) : Result Str := do
   match self with
@@ -500,9 +500,18 @@ def cdt.Fault.text (self : cdt.Fault) : Result Str := do
   | cdt.Fault.CrossingsTooFine =>
     ok (toStr "crossing chords would take too many points")
   | cdt.Fault.FaceTooFine => ok (toStr "a face would take too many points")
+  | cdt.Fault.OnHull => ok (toStr "a point on the hull")
+  | cdt.Fault.InsertedTwice => ok (toStr "a point inserted twice")
+  | cdt.Fault.OffHull => ok (toStr "a constraint runs off the hull")
+  | cdt.Fault.FaceTooLong => ok (toStr "the face would take too long")
+  | cdt.Fault.Subnormal => ok (toStr "a point\'s coordinate is subnormal")
+  | cdt.Fault.FarFromOrigin =>
+    ok (toStr "points too far from the origin for their spread")
+  | cdt.Fault.StaircaseOffNodes =>
+    ok (toStr "a grid\'s staircase off its placed nodes")
 
 /-- [forge_mesh::cdt::{impl core::fmt::Debug for forge_mesh::cdt::Fault}::fmt]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 106:4-108:5
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 120:4-122:5
     Visibility: public -/
 def cdt.Fault.Insts.CoreFmtDebug.fmt
   (self : cdt.Fault) (f : core.fmt.Formatter) :
@@ -518,7 +527,7 @@ def cdt.Fault.Insts.CoreFmtDebug.fmt
   core.fmt.Formatter.write_fmt f a1
 
 /-- Trait implementation: [forge_mesh::cdt::{impl core::fmt::Debug for forge_mesh::cdt::Fault}]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 105:0-109:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 119:0-123:1 -/
 @[reducible]
 def cdt.Fault.Insts.CoreFmtDebug : core.fmt.Debug cdt.Fault := {
   fmt := cdt.Fault.Insts.CoreFmtDebug.fmt
@@ -784,49 +793,49 @@ def cdt.Fault.Insts.CoreCmpEq : core.cmp.Eq cdt.Fault := {
 }
 
 /-- [forge_mesh::cdt::ROUNDS]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 112:0-112:26 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 126:0-126:26 -/
 @[global_simps, irreducible] def cdt.ROUNDS : Std.Usize := 200#usize
 
 /-- [forge_mesh::cdt::CEILING]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 114:0-114:35
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 128:0-128:35
     Visibility: public -/
 @[global_simps, irreducible]
 def cdt.CEILING : Result Std.Usize := 1#usize <<< 23#i32
 
 /-- [forge_mesh::cdt::SAFETY]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 117:0-117:22 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 131:0-131:22 -/
 @[global_simps, irreducible] def cdt.SAFETY : Std.U64 := 4#u64
 
 /-- [forge_mesh::cdt::NONE]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 118:0-118:27 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 132:0-132:27 -/
 @[global_simps, irreducible] def cdt.NONE : Std.U32 := core.num.U32.MAX
 
 /-- [forge_mesh::cdt::SUPER]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 119:0-119:21 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 133:0-133:21 -/
 @[global_simps, irreducible] def cdt.SUPER : Std.U32 := 3#u32
 
 /-- [forge_mesh::cdt::{impl core::clone::Clone for forge_mesh::cdt::Tri}::clone]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 121:9-121:14
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 135:9-135:14
     Visibility: public -/
 def cdt.Tri.Insts.CoreCloneClone.clone (self : cdt.Tri) : Result cdt.Tri := do
   ok self
 
 /-- Trait implementation: [forge_mesh::cdt::{impl core::clone::Clone for forge_mesh::cdt::Tri}]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 121:9-121:14 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 135:9-135:14 -/
 @[reducible]
 def cdt.Tri.Insts.CoreCloneClone : core.clone.Clone cdt.Tri := {
   clone := cdt.Tri.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [forge_mesh::cdt::{impl core::marker::Copy for forge_mesh::cdt::Tri}]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 121:16-121:20 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 135:16-135:20 -/
 @[reducible]
 def cdt.Tri.Insts.CoreMarkerCopy : core.marker.Copy cdt.Tri := {
   cloneInst := cdt.Tri.Insts.CoreCloneClone
 }
 
 /-- [forge_mesh::cdt::{impl core::fmt::Debug for forge_mesh::cdt::Tri}::fmt]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 121:22-121:27
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 135:22-135:27
     Visibility: public -/
 def cdt.Tri.Insts.CoreFmtDebug.fmt
   (self : cdt.Tri) (f : core.fmt.Formatter) :
@@ -843,26 +852,26 @@ def cdt.Tri.Insts.CoreFmtDebug.fmt
     (toStr "n") dyn1 (toStr "c") dyn2
 
 /-- Trait implementation: [forge_mesh::cdt::{impl core::fmt::Debug for forge_mesh::cdt::Tri}]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 121:22-121:27 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 135:22-135:27 -/
 @[reducible]
 def cdt.Tri.Insts.CoreFmtDebug : core.fmt.Debug cdt.Tri := {
   fmt := cdt.Tri.Insts.CoreFmtDebug.fmt
 }
 
 /-- [forge_mesh::cdt::nx]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 152:0-154:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 169:0-171:1 -/
 def cdt.nx (i : Std.Usize) : Result Std.Usize := do
   let i1 ← i + 1#usize
   i1 % 3#usize
 
 /-- [forge_mesh::cdt::pv]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 155:0-157:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 172:0-174:1 -/
 def cdt.pv (i : Std.Usize) : Result Std.Usize := do
   let i1 ← i + 2#usize
   i1 % 3#usize
 
 /-- [forge_mesh::cdt::crossing]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 159:0-164:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 176:0-181:1 -/
 def cdt.crossing
   (a : Std.U32) (b : Std.U32) (shift : Std.U32) : Result cdt.CdtError := do
   let i ← lift (core.num.U32.wrapping_sub a shift)
@@ -870,7 +879,7 @@ def cdt.crossing
   ok (cdt.CdtError.ConstraintsIntersect i i1)
 
 /-- [forge_mesh::cdt::through]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 167:0-173:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 184:0-190:1 -/
 def cdt.through
   (a : Std.U32) (b : Std.U32) (point : Std.U32) (shift : Std.U32) :
   Result cdt.CdtError
@@ -881,7 +890,7 @@ def cdt.through
   ok (cdt.CdtError.ConstraintThroughPoint i i1 i2)
 
 /-- [forge_mesh::cdt::same_chord]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 176:0-178:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 193:0-195:1 -/
 def cdt.same_chord
   (l : Std.U32) (r : Std.U32) (a : Std.U32) (b : Std.U32) : Result Bool := do
   if l = a
@@ -895,7 +904,7 @@ def cdt.same_chord
        else ok false
 
 /-- [forge_mesh::cdt::find_use]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 186:4-194:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 203:4-211:5 -/
 @[rust_loop_body]
 def cdt.find_use_loop.body
   (uses : Slice (Std.U32 × Std.U32 × Std.U32)) (lo : Std.U32) (hi : Std.U32)
@@ -924,7 +933,7 @@ def cdt.find_use_loop.body
   else ok (done l)
 
 /-- [forge_mesh::cdt::find_use]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 186:4-194:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 203:4-211:5 -/
 @[rust_loop]
 def cdt.find_use_loop
   (uses : Slice (Std.U32 × Std.U32 × Std.U32)) (lo : Std.U32) (hi : Std.U32)
@@ -936,7 +945,7 @@ def cdt.find_use_loop
     (l, r)
 
 /-- [forge_mesh::cdt::find_use]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 182:0-196:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 199:0-213:1 -/
 def cdt.find_use
   (uses : Slice (Std.U32 × Std.U32 × Std.U32)) (a : Std.U32) (b : Std.U32) :
   Result (Std.Usize × Bool)
@@ -956,7 +965,7 @@ def cdt.find_use
   else ok (l, false)
 
 /-- [forge_mesh::cdt::count_use]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 199:0-212:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 216:0-229:1 -/
 def cdt.count_use
   (uses : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32)) (a : Std.U32)
   (b : Std.U32) :
@@ -981,7 +990,7 @@ def cdt.count_use
     else alloc.vec.Vec.insert uses k (lo, hi, 1#u32)
 
 /-- [forge_mesh::cdt::take_uses]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 215:0-218:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 232:0-235:1 -/
 def cdt.take_uses
   (uses : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32)) (a : Std.U32)
   (b : Std.U32) :
@@ -996,7 +1005,7 @@ def cdt.take_uses
   else ok (1#u32, uses)
 
 /-- [forge_mesh::cdt::slot]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 221:0-231:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 238:0-248:1 -/
 def cdt.slot
   (a : Array Std.U32 3#usize) (x : Std.U32) : Result (Option Std.Usize) := do
   let i ← Array.index_usize a 0#usize
@@ -1013,7 +1022,7 @@ def cdt.slot
       else ok none
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::p]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 234:4-236:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 251:4-253:5 -/
 def cdt.Mesh.p
   (self : cdt.Mesh) (v : Std.U32) : Result forge_math.vec.Point2 := do
   let i ← lift (UScalar.cast .Usize v)
@@ -1021,7 +1030,7 @@ def cdt.Mesh.p
     forge_math.vec.Point2) self.pts i
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::write]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 238:4-243:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 255:4-260:5 -/
 def cdt.Mesh.write
   (self : cdt.Mesh) (t : Std.U32) (tri : cdt.Tri) : Result cdt.Mesh := do
   let i ← Array.index_usize tri.v 0#usize
@@ -1050,7 +1059,7 @@ def cdt.Mesh.write
   ok { self with tris := v2, vtri := v3 }
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::relink]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 245:4-252:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 262:4-269:5 -/
 def cdt.Mesh.relink
   (self : cdt.Mesh) (n : Std.U32) (old : Std.U32) (new : Std.U32) :
   Result cdt.Mesh
@@ -1072,13 +1081,13 @@ def cdt.Mesh.relink
   else ok self
 
 /-- [forge_mesh::cdt::RANGE]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1474:0-1474:50
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1569:0-1569:50
     Visibility: public -/
 @[global_simps, irreducible]
 def cdt.RANGE : F64 := F64.Ops.ofBits 5507902344274116608
 
 /-- [forge_mesh::cdt::in_range]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1477:0-1479:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1572:0-1574:1 -/
 def cdt.in_range (p : forge_math.vec.Point2) : Result Bool := do
   let fl ← core.f64.F64.abs p.x
   if F64.Ops.le fl cdt.RANGE
@@ -1087,7 +1096,7 @@ def cdt.in_range (p : forge_math.vec.Point2) : Result Bool := do
   else ok false
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::classify]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 297:4-315:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 316:4-334:5 -/
 def cdt.Mesh.classify
   (self : cdt.Mesh) (t : Std.U32) (p : forge_math.vec.Point2) :
   Result cdt.Location
@@ -1128,13 +1137,13 @@ def cdt.Mesh.classify
             else ok (cdt.Location.Inside t)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::locate]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 266:12-273:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 284:12-291:13 -/
 @[rust_loop_body]
 def cdt.Mesh.locate_loop0_loop0.body
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (t : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (p1 : forge_math.vec.Point2) (step : Std.Usize) (tri : cdt.Tri)
+  (i : Std.U64) (p1 : forge_math.vec.Point2) (step : Std.Usize) (tri : cdt.Tri)
   (next : Std.U32) (k : Std.Usize) :
   Result (ControlFlow (Std.U32 × Std.Usize) Std.U32)
   := do
@@ -1142,10 +1151,10 @@ def cdt.Mesh.locate_loop0_loop0.body
   then
     if k < 3#usize
     then
-      let i ← k + step
-      let i1 ← i % 3#usize
-      let i2 ← cdt.nx i1
-      let i3 ← Array.index_usize tri.v i2
+      let i1 ← k + step
+      let i2 ← i1 % 3#usize
+      let i3 ← cdt.nx i2
+      let i4 ← Array.index_usize tri.v i3
       let a ←
         cdt.Mesh.p
           {
@@ -1155,10 +1164,11 @@ def cdt.Mesh.locate_loop0_loop0.body
             last := t,
             inside := v3,
             stack := v4,
-            hit := p
-          } i3
-      let i4 ← cdt.pv i1
-      let i5 ← Array.index_usize tri.v i4
+            hit := p,
+            walked := i
+          } i4
+      let i5 ← cdt.pv i2
+      let i6 ← Array.index_usize tri.v i5
       let b ←
         cdt.Mesh.p
           {
@@ -1168,16 +1178,17 @@ def cdt.Mesh.locate_loop0_loop0.body
             last := t,
             inside := v3,
             stack := v4,
-            hit := p
-          } i5
+            hit := p,
+            walked := i
+          } i6
       let fl ← forge_math.predicates.orient2d a b p1
       let next1 ←
         if F64.Ops.lt fl (F64.Ops.ofBits 0)
         then
           do
-          let i6 ← Array.index_usize tri.n i1
-          if i6 != cdt.NONE
-          then ok i6
+          let i7 ← Array.index_usize tri.n i2
+          if i7 != cdt.NONE
+          then ok i7
           else ok next
         else ok next
       let k1 ← k + 1#usize
@@ -1186,88 +1197,90 @@ def cdt.Mesh.locate_loop0_loop0.body
   else ok (done next)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::locate]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 266:12-273:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 284:12-291:13 -/
 @[rust_loop]
 def cdt.Mesh.locate_loop0_loop0
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (t : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (p1 : forge_math.vec.Point2) (step : Std.Usize) (tri : cdt.Tri)
+  (i : Std.U64) (p1 : forge_math.vec.Point2) (step : Std.Usize) (tri : cdt.Tri)
   (next : Std.U32) (k : Std.Usize) :
   Result Std.U32
   := do
   loop
-    (fun (next1, k1) => cdt.Mesh.locate_loop0_loop0.body v v1 v2 t v3 v4 p p1
+    (fun (next1, k1) => cdt.Mesh.locate_loop0_loop0.body v v1 v2 t v3 v4 p i p1
       step tri next1 k1)
     (next, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::locate]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 262:8-280:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 279:8-298:9 -/
 @[rust_loop_body]
 def cdt.Mesh.locate_loop0.body
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (t : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (p1 : forge_math.vec.Point2) (limit : Std.Usize) (t1 : Std.U32)
+  (p1 : forge_math.vec.Point2) (limit : Std.Usize) (i : Std.U64) (t1 : Std.U32)
   (step : Std.Usize) (found : Bool) :
-  Result (ControlFlow (Std.U32 × Std.Usize × Bool) (Std.U32 × Bool))
+  Result (ControlFlow (Std.U64 × Std.U32 × Std.Usize × Bool) (Std.U64 ×
+    Std.U32 × Bool))
   := do
   if found
-  then ok (done (t1, found))
+  then ok (done (i, t1, found))
   else
     if step < limit
     then
-      let i ← lift (UScalar.cast .Usize t1)
+      let i1 ← i + 1#u64
+      let i2 ← lift (UScalar.cast .Usize t1)
       let tri ←
         alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri) v1
-          i
+          i2
       let next ←
-        cdt.Mesh.locate_loop0_loop0 v v1 v2 t v3 v4 p p1 step tri cdt.NONE
-          0#usize
+        cdt.Mesh.locate_loop0_loop0 v v1 v2 t v3 v4 p i1 p1 step tri 
+          cdt.NONE 0#usize
       if next = cdt.NONE
-      then ok (cont (t1, step, true))
+      then ok (cont (i1, t1, step, true))
       else let step1 ← step + 1#usize
-           ok (cont (next, step1, found))
-    else ok (done (t1, found))
+           ok (cont (i1, next, step1, found))
+    else ok (done (i, t1, found))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::locate]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 262:8-280:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 279:8-298:9 -/
 @[rust_loop]
 def cdt.Mesh.locate_loop0
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (t : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (p1 : forge_math.vec.Point2) (t1 : Std.U32) (limit : Std.Usize)
+  (i : Std.U64) (p1 : forge_math.vec.Point2) (t1 : Std.U32) (limit : Std.Usize)
   (step : Std.Usize) (found : Bool) :
-  Result (Std.U32 × Bool)
+  Result (Std.U64 × Std.U32 × Bool)
   := do
   loop
-    (fun (t2, step1, found1) => cdt.Mesh.locate_loop0.body v v1 v2 t v3 v4 p p1
-      limit t2 step1 found1)
-    (t1, step, found)
+    (fun (i1, t2, step1, found1) => cdt.Mesh.locate_loop0.body v v1 v2 t v3 v4
+      p p1 limit i1 t2 step1 found1)
+    (i, t1, step, found)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::locate]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 284:12-292:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 303:12-311:13 -/
 @[rust_loop_body]
 def cdt.Mesh.locate_loop1.body
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (p1 : forge_math.vec.Point2) (t : Std.U32) (found : Bool) :
+  (i1 : Std.U64) (p1 : forge_math.vec.Point2) (t : Std.U32) (found : Bool) :
   Result (ControlFlow (Std.U32 × Bool) (Std.U32 × Bool))
   := do
   if found
   then ok (done (t, found))
   else
-    let i1 ← lift (UScalar.cast .Usize t)
-    let i2 := alloc.vec.Vec.len v1
-    if i1 < i2
+    let i2 ← lift (UScalar.cast .Usize t)
+    let i3 := alloc.vec.Vec.len v1
+    if i2 < i3
     then
-      let i3 ← lift (UScalar.cast .Usize t)
+      let i4 ← lift (UScalar.cast .Usize t)
       let tri ←
         alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri) v1
-          i3
-      let i4 ← Array.index_usize tri.v 0#usize
+          i4
+      let i5 ← Array.index_usize tri.v 0#usize
       let a ←
         cdt.Mesh.p
           {
@@ -1277,9 +1290,10 @@ def cdt.Mesh.locate_loop1.body
             last := i,
             inside := v3,
             stack := v4,
-            hit := p
-          } i4
-      let i5 ← Array.index_usize tri.v 1#usize
+            hit := p,
+            walked := i1
+          } i5
+      let i6 ← Array.index_usize tri.v 1#usize
       let b ←
         cdt.Mesh.p
           {
@@ -1289,9 +1303,10 @@ def cdt.Mesh.locate_loop1.body
             last := i,
             inside := v3,
             stack := v4,
-            hit := p
-          } i5
-      let i6 ← Array.index_usize tri.v 2#usize
+            hit := p,
+            walked := i1
+          } i6
+      let i7 ← Array.index_usize tri.v 2#usize
       let c ←
         cdt.Mesh.p
           {
@@ -1301,8 +1316,9 @@ def cdt.Mesh.locate_loop1.body
             last := i,
             inside := v3,
             stack := v4,
-            hit := p
-          } i6
+            hit := p,
+            walked := i1
+          } i7
       let fl ← forge_math.predicates.orient2d b c p1
       if F64.Ops.ge fl (F64.Ops.ofBits 0)
       then
@@ -1321,22 +1337,22 @@ def cdt.Mesh.locate_loop1.body
     else ok (done (t, found))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::locate]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 284:12-292:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 303:12-311:13 -/
 @[rust_loop]
 def cdt.Mesh.locate_loop1
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (p1 : forge_math.vec.Point2) (t : Std.U32) (found : Bool) :
+  (i1 : Std.U64) (p1 : forge_math.vec.Point2) (t : Std.U32) (found : Bool) :
   Result (Std.U32 × Bool)
   := do
   loop
-    (fun (t1, found1) => cdt.Mesh.locate_loop1.body v v1 v2 i v3 v4 p p1 t1
+    (fun (t1, found1) => cdt.Mesh.locate_loop1.body v v1 v2 i v3 v4 p i1 p1 t1
       found1)
     (t, found)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::locate]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 255:4-295:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 272:4-314:5 -/
 def cdt.Mesh.locate
   (self : cdt.Mesh) (p : forge_math.vec.Point2) :
   Result ((Option cdt.Location) × cdt.Mesh)
@@ -1344,26 +1360,31 @@ def cdt.Mesh.locate
   let i := alloc.vec.Vec.len self.tris
   let i1 ← 4#usize * i
   let limit ← i1 + 64#usize
-  let (t, found) ←
+  let (i2, t, found) ←
     cdt.Mesh.locate_loop0 self.pts self.tris self.vtri self.last self.inside
-      self.stack self.hit p self.last limit 0#usize false
+      self.stack self.hit self.walked p self.last limit 0#usize false
   if found
   then
     if found
-    then let l ← cdt.Mesh.classify self t p
-         ok (some l, self)
-    else ok (none, self)
+    then
+      let l ← cdt.Mesh.classify { self with walked := i2 } t p
+      ok (some l, { self with walked := i2 })
+    else ok (none, { self with walked := i2 })
   else
+    let i3 := alloc.vec.Vec.len self.tris
+    let i4 ← lift (UScalar.cast .U64 i3)
+    let i5 ← i2 + i4
     let (t1, found1) ←
       cdt.Mesh.locate_loop1 self.pts self.tris self.vtri self.last self.inside
-        self.stack self.hit p 0#u32 found
+        self.stack self.hit i5 p 0#u32 found
     if found1
-    then let l ← cdt.Mesh.classify self t1 p
-         ok (some l, self)
-    else ok (none, self)
+    then
+      let l ← cdt.Mesh.classify { self with walked := i5 } t1 p
+      ok (some l, { self with walked := i5 })
+    else ok (none, { self with walked := i5 })
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::flip]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 430:4-460:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 454:4-484:5 -/
 def cdt.Mesh.flip
   (self : cdt.Mesh) (t : Std.U32) (i : Std.Usize) :
   Result (Std.U32 × cdt.Mesh)
@@ -1414,7 +1435,7 @@ def cdt.Mesh.flip
   ok (u, self4)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::legalize]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 466:8-482:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 490:8-508:9 -/
 @[rust_loop_body]
 def cdt.Mesh.legalize_loop.body
   (stack : alloc.vec.Vec (Std.U32 × Std.Usize)) (self : cdt.Mesh) :
@@ -1426,45 +1447,46 @@ def cdt.Mesh.legalize_loop.body
   | none => ok (done (self, stack1))
   | some p =>
     let (t, i) := p
-    let i1 ← lift (UScalar.cast .Usize t)
+    let i1 ← self.walked + 1#u64
+    let i2 ← lift (UScalar.cast .Usize t)
     let tt ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
-        self.tris i1
+        self.tris i2
     let u ← Array.index_usize tt.n i
     if u = cdt.NONE
-    then ok (cont (stack1, self))
+    then ok (cont (stack1, { self with walked := i1 }))
     else
       let b ← Array.index_usize tt.c i
       if b
-      then ok (cont (stack1, self))
+      then ok (cont (stack1, { self with walked := i1 }))
       else
-        let i2 ← lift (UScalar.cast .Usize u)
+        let i3 ← lift (UScalar.cast .Usize u)
         let uu ←
           alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
-            self.tris i2
+            self.tris i3
         let o1 ← cdt.slot uu.n t
         match o1 with
-        | none => ok (cont (stack1, self))
+        | none => ok (cont (stack1, { self with walked := i1 }))
         | some j =>
           let q ← Array.index_usize uu.v j
-          let i3 ← Array.index_usize tt.v 0#usize
-          let p1 ← cdt.Mesh.p self i3
-          let i4 ← Array.index_usize tt.v 1#usize
-          let p2 ← cdt.Mesh.p self i4
-          let i5 ← Array.index_usize tt.v 2#usize
-          let p3 ← cdt.Mesh.p self i5
-          let p4 ← cdt.Mesh.p self q
+          let i4 ← Array.index_usize tt.v 0#usize
+          let p1 ← cdt.Mesh.p { self with walked := i1 } i4
+          let i5 ← Array.index_usize tt.v 1#usize
+          let p2 ← cdt.Mesh.p { self with walked := i1 } i5
+          let i6 ← Array.index_usize tt.v 2#usize
+          let p3 ← cdt.Mesh.p { self with walked := i1 } i6
+          let p4 ← cdt.Mesh.p { self with walked := i1 } q
           let b1 ← forge_math.predicates.certainly_in_circle p1 p2 p3 p4
           if b1
           then
-            let (u1, self1) ← cdt.Mesh.flip self t i
+            let (u1, self1) ← cdt.Mesh.flip { self with walked := i1 } t i
             let stack2 ← alloc.vec.Vec.push stack1 (t, 0#usize)
             let stack3 ← alloc.vec.Vec.push stack2 (u1, 0#usize)
             ok (cont (stack3, self1))
-          else ok (cont (stack1, self))
+          else ok (cont (stack1, { self with walked := i1 }))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::legalize]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 466:8-482:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 490:8-508:9 -/
 @[rust_loop]
 def cdt.Mesh.legalize_loop
   (stack : alloc.vec.Vec (Std.U32 × Std.Usize)) (self : cdt.Mesh) :
@@ -1475,7 +1497,7 @@ def cdt.Mesh.legalize_loop
     (stack, self)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::legalize]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 462:4-484:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 486:4-510:5 -/
 def cdt.Mesh.legalize
   (self : cdt.Mesh) (start : Slice (Std.U32 × Std.Usize)) :
   Result cdt.Mesh
@@ -1492,7 +1514,7 @@ def cdt.Mesh.legalize
   ok { self1 with stack := stack3 }
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::split_edge]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 370:4-426:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 394:4-450:5 -/
 def cdt.Mesh.split_edge
   (self : cdt.Mesh) (t : Std.U32) (i : Std.Usize) (p : Std.U32) :
   Result cdt.Mesh
@@ -1584,7 +1606,7 @@ def cdt.Mesh.split_edge
   cdt.Mesh.legalize { self6 with last := t } s
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::split_inside]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 325:4-368:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 349:4-392:5 -/
 def cdt.Mesh.split_inside
   (self : cdt.Mesh) (t : Std.U32) (p : Std.U32) : Result cdt.Mesh := do
   let i ← lift (UScalar.cast .Usize t)
@@ -1653,16 +1675,34 @@ def cdt.Mesh.split_inside
   cdt.Mesh.legalize { self5 with last := t } s
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 317:4-323:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 336:4-347:5 -/
 def cdt.Mesh.insert
-  (self : cdt.Mesh) (v : Std.U32) (loc : cdt.Location) : Result cdt.Mesh := do
+  (self : cdt.Mesh) (v : Std.U32) (loc : cdt.Location) :
+  Result ((core.result.Result Unit cdt.CdtError) × cdt.Mesh)
+  := do
   match loc with
-  | cdt.Location.Inside t => cdt.Mesh.split_inside self t v
-  | cdt.Location.OnEdge t i => cdt.Mesh.split_edge self t i v
-  | cdt.Location.Vertex _ => fail panic
+  | cdt.Location.Inside t =>
+    let self1 ← cdt.Mesh.split_inside self t v
+    ok (core.result.Result.Ok (), self1)
+  | cdt.Location.OnEdge t i =>
+    let i1 ← lift (UScalar.cast .Usize t)
+    let t1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
+        self.tris i1
+    let i2 ← Array.index_usize t1.n i
+    if i2 = cdt.NONE
+    then
+      ok (core.result.Result.Err (cdt.CdtError.Internal cdt.Fault.OnHull),
+        self)
+    else
+      let self1 ← cdt.Mesh.split_edge self t i v
+      ok (core.result.Result.Ok (), self1)
+  | cdt.Location.Vertex _ =>
+    ok (core.result.Result.Err (cdt.CdtError.Internal cdt.Fault.InsertedTwice),
+      self)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::find_edge_counted]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 510:12-531:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 536:12-557:13 -/
 @[rust_loop_body]
 def cdt.Mesh.find_edge_counted_loop0_loop0.body
   (v : alloc.vec.Vec cdt.Tri) (a : Std.U32) (b : Std.U32) (start : Std.U32)
@@ -1719,7 +1759,7 @@ def cdt.Mesh.find_edge_counted_loop0_loop0.body
   else ok (done (steps, found, done1))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::find_edge_counted]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 510:12-531:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 536:12-557:13 -/
 @[rust_loop]
 def cdt.Mesh.find_edge_counted_loop0_loop0
   (v : alloc.vec.Vec cdt.Tri) (a : Std.U32) (b : Std.U32) (steps : Std.U64)
@@ -1734,7 +1774,7 @@ def cdt.Mesh.find_edge_counted_loop0_loop0
     (steps, found, done1, t, on, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::find_edge_counted]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 505:8-533:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 531:8-559:9 -/
 @[rust_loop_body]
 def cdt.Mesh.find_edge_counted_loop0.body
   (v : alloc.vec.Vec cdt.Tri) (a : Std.U32) (b : Std.U32) (start : Std.U32)
@@ -1756,7 +1796,7 @@ def cdt.Mesh.find_edge_counted_loop0.body
     else ok (done (found, steps))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::find_edge_counted]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 505:8-533:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 531:8-559:9 -/
 @[rust_loop]
 def cdt.Mesh.find_edge_counted_loop0
   (v : alloc.vec.Vec cdt.Tri) (a : Std.U32) (b : Std.U32) (steps : Std.U64)
@@ -1771,7 +1811,7 @@ def cdt.Mesh.find_edge_counted_loop0
     (steps, found, done1, pass)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::find_edge_counted]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 497:4-535:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 523:4-561:5 -/
 def cdt.Mesh.find_edge_counted
   (self : cdt.Mesh) (a : Std.U32) (b : Std.U32) (steps : Std.U64) :
   Result ((Option (Std.U32 × Std.Usize)) × Std.U64)
@@ -1783,7 +1823,7 @@ def cdt.Mesh.find_edge_counted
   cdt.Mesh.find_edge_counted_loop0 self.tris a b steps start none false 0#i32
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::find_edge]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 487:4-495:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 513:4-521:5 -/
 def cdt.Mesh.find_edge
   (self : cdt.Mesh) (a : Std.U32) (b : Std.U32) :
   Result (Option (Std.U32 × Std.Usize))
@@ -1795,7 +1835,7 @@ def cdt.Mesh.find_edge
   else ok found
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::has_edge]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 537:4-542:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 563:4-568:5 -/
 def cdt.Mesh.has_edge
   (self : cdt.Mesh) (a : Std.U32) (b : Std.U32) :
   Result (Option (Std.U32 × Std.Usize))
@@ -1806,7 +1846,7 @@ def cdt.Mesh.has_edge
   | some _ => ok o
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::mark]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 915:4-928:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 977:4-990:5 -/
 def cdt.Mesh.mark
   (self : cdt.Mesh) (t : Std.U32) (i : Std.Usize) (err : cdt.CdtError) :
   Result ((core.result.Result Unit cdt.CdtError) × cdt.Mesh)
@@ -1851,29 +1891,29 @@ def cdt.Mesh.mark
     else ok (core.result.Result.Ok (), { self with tris := v })
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 562:8-585:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 588:8-611:9 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_constraint_loop0.body
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (a : Std.U32) (b : Std.U32) (shift : Std.U32) (pa : forge_math.vec.Point2)
-  (pb : forge_math.vec.Point2) (start : Std.U32) (err : Option cdt.CdtError)
-  (t : Std.U32) (cur : Option (Std.U32 × Std.U32 × Std.U32)) (on : Bool)
-  (k : Std.Usize) :
+  (i1 : Std.U64) (a : Std.U32) (b : Std.U32) (shift : Std.U32)
+  (pa : forge_math.vec.Point2) (pb : forge_math.vec.Point2) (start : Std.U32)
+  (err : Option cdt.CdtError) (t : Std.U32)
+  (cur : Option (Std.U32 × Std.U32 × Std.U32)) (on : Bool) (k : Std.Usize) :
   Result (ControlFlow ((Option cdt.CdtError) × Std.U32 × (Option (Std.U32 ×
     Std.U32 × Std.U32)) × Bool × Std.Usize) ((Option cdt.CdtError) ×
     (Option (Std.U32 × Std.U32 × Std.U32))))
   := do
   if on
   then
-    let i1 := alloc.vec.Vec.len v1
-    if k <= i1
+    let i2 := alloc.vec.Vec.len v1
+    if k <= i2
     then
-      let i2 ← lift (UScalar.cast .Usize t)
+      let i3 ← lift (UScalar.cast .Usize t)
       let tt ←
         alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri) v1
-          i2
+          i3
       let o ← cdt.slot tt.v a
       let (err1, t1, cur1, on1) ←
         match o with
@@ -1881,10 +1921,10 @@ def cdt.Mesh.insert_constraint_loop0.body
           ok (some (cdt.CdtError.Internal cdt.Fault.FanLostA), t, cur, on)
         | some ia =>
           do
-          let i3 ← cdt.nx ia
-          let v11 ← Array.index_usize tt.v i3
-          let i4 ← cdt.pv ia
-          let v21 ← Array.index_usize tt.v i4
+          let i4 ← cdt.nx ia
+          let v11 ← Array.index_usize tt.v i4
+          let i5 ← cdt.pv ia
+          let v21 ← Array.index_usize tt.v i5
           let p1 ←
             cdt.Mesh.p
               {
@@ -1894,7 +1934,8 @@ def cdt.Mesh.insert_constraint_loop0.body
                 last := i,
                 inside := v3,
                 stack := v4,
-                hit := p
+                hit := p,
+                walked := i1
               } v11
           let o1 ← forge_math.predicates.orient2d pa pb p1
           let p2 ←
@@ -1906,7 +1947,8 @@ def cdt.Mesh.insert_constraint_loop0.body
                 last := i,
                 inside := v3,
                 stack := v4,
-                hit := p
+                hit := p,
+                walked := i1
               } v21
           let o2 ← forge_math.predicates.orient2d pa pb p2
           if F64.Ops.eq o1 (F64.Ops.ofBits 0)
@@ -1931,35 +1973,35 @@ def cdt.Mesh.insert_constraint_loop0.body
                   let ce ← cdt.through a b v21 shift
                   ok (some ce, t, cur, on)
                 else
-                  let (i5, o3, b1) ←
+                  let (i6, o3, b1) ←
                     if F64.Ops.lt o1 (F64.Ops.ofBits 0)
                     then
                       if F64.Ops.gt o2 (F64.Ops.ofBits 0)
                       then ok (t, some (t, v21, v11), false)
                       else
                         do
-                        let t2 ← Array.index_usize tt.n i3
+                        let t2 ← Array.index_usize tt.n i4
                         ok (t2, cur, t2 != start)
                     else
                       do
-                      let t2 ← Array.index_usize tt.n i3
+                      let t2 ← Array.index_usize tt.n i4
                       ok (t2, cur, t2 != start)
-                  ok (err, i5, o3, b1)
+                  ok (err, i6, o3, b1)
               else
-                let (i5, o3, b1) ←
+                let (i6, o3, b1) ←
                   if F64.Ops.lt o1 (F64.Ops.ofBits 0)
                   then
                     if F64.Ops.gt o2 (F64.Ops.ofBits 0)
                     then ok (t, some (t, v21, v11), false)
                     else
                       do
-                      let t2 ← Array.index_usize tt.n i3
+                      let t2 ← Array.index_usize tt.n i4
                       ok (t2, cur, t2 != start)
                   else
                     do
-                    let t2 ← Array.index_usize tt.n i3
+                    let t2 ← Array.index_usize tt.n i4
                     ok (t2, cur, t2 != start)
-                ok (err, i5, o3, b1)
+                ok (err, i6, o3, b1)
           else
             if F64.Ops.eq o2 (F64.Ops.ofBits 0)
             then
@@ -1973,35 +2015,35 @@ def cdt.Mesh.insert_constraint_loop0.body
                 let ce ← cdt.through a b v21 shift
                 ok (some ce, t, cur, on)
               else
-                let (i5, o3, b1) ←
+                let (i6, o3, b1) ←
                   if F64.Ops.lt o1 (F64.Ops.ofBits 0)
                   then
                     if F64.Ops.gt o2 (F64.Ops.ofBits 0)
                     then ok (t, some (t, v21, v11), false)
                     else
                       do
-                      let t2 ← Array.index_usize tt.n i3
+                      let t2 ← Array.index_usize tt.n i4
                       ok (t2, cur, t2 != start)
                   else
                     do
-                    let t2 ← Array.index_usize tt.n i3
+                    let t2 ← Array.index_usize tt.n i4
                     ok (t2, cur, t2 != start)
-                ok (err, i5, o3, b1)
+                ok (err, i6, o3, b1)
             else
-              let (i5, o3, b1) ←
+              let (i6, o3, b1) ←
                 if F64.Ops.lt o1 (F64.Ops.ofBits 0)
                 then
                   if F64.Ops.gt o2 (F64.Ops.ofBits 0)
                   then ok (t, some (t, v21, v11), false)
                   else
                     do
-                    let t2 ← Array.index_usize tt.n i3
+                    let t2 ← Array.index_usize tt.n i4
                     ok (t2, cur, t2 != start)
                 else
                   do
-                  let t2 ← Array.index_usize tt.n i3
+                  let t2 ← Array.index_usize tt.n i4
                   ok (t2, cur, t2 != start)
-              ok (err, i5, o3, b1)
+              ok (err, i6, o3, b1)
       let on2 ←
         if on1
         then ok (core.option.Option.is_none err1)
@@ -2012,136 +2054,244 @@ def cdt.Mesh.insert_constraint_loop0.body
   else ok (done (err, cur))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 562:8-585:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 588:8-611:9 -/
 @[rust_loop]
 def cdt.Mesh.insert_constraint_loop0
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (a : Std.U32) (b : Std.U32) (shift : Std.U32) (pa : forge_math.vec.Point2)
-  (pb : forge_math.vec.Point2) (err : Option cdt.CdtError) (start : Std.U32)
-  (t : Std.U32) (cur : Option (Std.U32 × Std.U32 × Std.U32)) (on : Bool)
-  (k : Std.Usize) :
+  (i1 : Std.U64) (a : Std.U32) (b : Std.U32) (shift : Std.U32)
+  (pa : forge_math.vec.Point2) (pb : forge_math.vec.Point2)
+  (err : Option cdt.CdtError) (start : Std.U32) (t : Std.U32)
+  (cur : Option (Std.U32 × Std.U32 × Std.U32)) (on : Bool) (k : Std.Usize) :
   Result ((Option cdt.CdtError) × (Option (Std.U32 × Std.U32 × Std.U32)))
   := do
   loop
     (fun (err1, t1, cur1, on1, k1) => cdt.Mesh.insert_constraint_loop0.body v
-      v1 v2 i v3 v4 p a b shift pa pb start err1 t1 cur1 on1 k1)
+      v1 v2 i v3 v4 p i1 a b shift pa pb start err1 t1 cur1 on1 k1)
     (err, t, cur, on, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 596:8-630:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 623:8-669:9 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_constraint_loop1.body
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
-  (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (a : Std.U32) (b : Std.U32)
-  (shift : Std.U32) (pa : forge_math.vec.Point2) (pb : forge_math.vec.Point2)
-  (p : (Std.U32 × Std.U32)) (err : Option cdt.CdtError) (t : Std.U32)
-  (left : Std.U32) (right : Std.U32)
-  (crossed : alloc.vec.Vec (Std.U32 × Std.U32)) (walking : Bool) :
+  (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (i1 : Std.U64) (a : Std.U32)
+  (b : Std.U32) (shift : Std.U32) (pa : forge_math.vec.Point2)
+  (pb : forge_math.vec.Point2) (p : (Std.U32 × Std.U32))
+  (err : Option cdt.CdtError) (t : Std.U32) (left : Std.U32) (right : Std.U32)
+  (crossed : alloc.vec.Vec (Std.U32 × Std.U32)) (walking : Bool)
+  (steps : Std.U64) :
   Result (ControlFlow ((Std.U32 × Std.U32) × (Option cdt.CdtError) × Std.U32
-    × Std.U32 × Std.U32 × (alloc.vec.Vec (Std.U32 × Std.U32)) × Bool)
-    ((Std.U32 × Std.U32) × (Option cdt.CdtError) × (alloc.vec.Vec (Std.U32
-    × Std.U32))))
+    × Std.U32 × Std.U32 × (alloc.vec.Vec (Std.U32 × Std.U32)) × Bool ×
+    Std.U64) ((Std.U32 × Std.U32) × (Option cdt.CdtError) × (alloc.vec.Vec
+    (Std.U32 × Std.U32))))
   := do
   if walking
   then
     let b1 := core.option.Option.is_none err
     if b1
     then
-      let o ←
-        cdt.Mesh.find_edge
-          {
-            pts := v,
-            tris := v1,
-            vtri := v2,
-            last := i,
-            inside := v3,
-            stack := v4,
-            hit := p
-          } right left
-      match o with
-      | none =>
-        ok (cont (p, some (cdt.CdtError.Internal cdt.Fault.WalkLostEdge), t,
-          left, right, crossed, walking))
-      | some p1 =>
-        let (tc, ic) := p1
-        let i1 ← lift (UScalar.cast .Usize tc)
-        let t1 ←
-          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
-            v1 i1
-        let b2 ← Array.index_usize t1.c ic
+      let steps1 ← steps + 1#u64
+      let i2 ← steps1 % 64#u64
+      if i2 = 0#u64
+      then
+        let b2 ← forge_geom.budget.over
         if b2
         then
-          let ce ← cdt.crossing a b shift
-          ok (cont ((left, right), some ce, t, left, right, crossed, walking))
+          ok (cont (p, some (cdt.CdtError.Internal cdt.Fault.BoundaryTooLong),
+            t, left, right, crossed, walking, steps1))
         else
-          let crossed1 ← alloc.vec.Vec.push crossed (left, right)
-          let i2 ← lift (UScalar.cast .Usize tc)
-          let t2 ←
-            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
-              v1 i2
-          let u ← Array.index_usize t2.n ic
-          let i3 ← lift (UScalar.cast .Usize u)
-          let uu ←
+          let o ←
+            cdt.Mesh.find_edge
+              {
+                pts := v,
+                tris := v1,
+                vtri := v2,
+                last := i,
+                inside := v3,
+                stack := v4,
+                hit := p,
+                walked := i1
+              } right left
+          match o with
+          | none =>
+            ok (cont (p, some (cdt.CdtError.Internal cdt.Fault.WalkLostEdge),
+              t, left, right, crossed, walking, steps1))
+          | some p1 =>
+            let (tc, ic) := p1
+            let i3 ← lift (UScalar.cast .Usize tc)
+            let t1 ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                cdt.Tri) v1 i3
+            let b3 ← Array.index_usize t1.c ic
+            if b3
+            then
+              let ce ← cdt.crossing a b shift
+              ok (cont ((left, right), some ce, t, left, right, crossed,
+                walking, steps1))
+            else
+              let crossed1 ← alloc.vec.Vec.push crossed (left, right)
+              let i4 ← lift (UScalar.cast .Usize tc)
+              let t2 ←
+                alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                  cdt.Tri) v1 i4
+              let u ← Array.index_usize t2.n ic
+              if u = cdt.NONE
+              then
+                ok (cont (p, some (cdt.CdtError.Internal cdt.Fault.OffHull), t,
+                  left, right, crossed1, walking, steps1))
+              else
+                let i5 ← lift (UScalar.cast .Usize u)
+                let uu ←
+                  alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                    cdt.Tri) v1 i5
+                let o1 ← cdt.slot uu.n tc
+                match o1 with
+                | none =>
+                  ok (cont (p, some (cdt.CdtError.Internal
+                    cdt.Fault.BrokenLink), t, left, right, crossed1, walking,
+                    steps1))
+                | some j =>
+                  let q ← Array.index_usize uu.v j
+                  if q = b
+                  then
+                    ok (cont (p, err, t, left, right, crossed1, false, steps1))
+                  else
+                    let p2 ←
+                      cdt.Mesh.p
+                        {
+                          pts := v,
+                          tris := v1,
+                          vtri := v2,
+                          last := i,
+                          inside := v3,
+                          stack := v4,
+                          hit := p,
+                          walked := i1
+                        } q
+                    let oq ← forge_math.predicates.orient2d pa pb p2
+                    if F64.Ops.eq oq (F64.Ops.ofBits 0)
+                    then
+                      let ce ← cdt.through a b q shift
+                      ok (cont (p, some ce, u, left, right, crossed1, walking,
+                        steps1))
+                    else
+                      if F64.Ops.gt oq (F64.Ops.ofBits 0)
+                      then
+                        ok (cont (p, err, u, q, right, crossed1, walking,
+                          steps1))
+                      else
+                        ok (cont (p, err, u, left, q, crossed1, walking,
+                          steps1))
+      else
+        let o ←
+          cdt.Mesh.find_edge
+            {
+              pts := v,
+              tris := v1,
+              vtri := v2,
+              last := i,
+              inside := v3,
+              stack := v4,
+              hit := p,
+              walked := i1
+            } right left
+        match o with
+        | none =>
+          ok (cont (p, some (cdt.CdtError.Internal cdt.Fault.WalkLostEdge), t,
+            left, right, crossed, walking, steps1))
+        | some p1 =>
+          let (tc, ic) := p1
+          let i3 ← lift (UScalar.cast .Usize tc)
+          let t1 ←
             alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
               v1 i3
-          let o1 ← cdt.slot uu.n tc
-          match o1 with
-          | none =>
-            ok (cont (p, some (cdt.CdtError.Internal cdt.Fault.BrokenLink), t,
-              left, right, crossed1, walking))
-          | some j =>
-            let q ← Array.index_usize uu.v j
-            if q = b
-            then ok (cont (p, err, t, left, right, crossed1, false))
+          let b2 ← Array.index_usize t1.c ic
+          if b2
+          then
+            let ce ← cdt.crossing a b shift
+            ok (cont ((left, right), some ce, t, left, right, crossed, walking,
+              steps1))
+          else
+            let crossed1 ← alloc.vec.Vec.push crossed (left, right)
+            let i4 ← lift (UScalar.cast .Usize tc)
+            let t2 ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                cdt.Tri) v1 i4
+            let u ← Array.index_usize t2.n ic
+            if u = cdt.NONE
+            then
+              ok (cont (p, some (cdt.CdtError.Internal cdt.Fault.OffHull), t,
+                left, right, crossed1, walking, steps1))
             else
-              let p2 ←
-                cdt.Mesh.p
-                  {
-                    pts := v,
-                    tris := v1,
-                    vtri := v2,
-                    last := i,
-                    inside := v3,
-                    stack := v4,
-                    hit := p
-                  } q
-              let oq ← forge_math.predicates.orient2d pa pb p2
-              if F64.Ops.eq oq (F64.Ops.ofBits 0)
-              then
-                let ce ← cdt.through a b q shift
-                ok (cont (p, some ce, u, left, right, crossed1, walking))
-              else
-                if F64.Ops.gt oq (F64.Ops.ofBits 0)
-                then ok (cont (p, err, u, q, right, crossed1, walking))
-                else ok (cont (p, err, u, left, q, crossed1, walking))
+              let i5 ← lift (UScalar.cast .Usize u)
+              let uu ←
+                alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                  cdt.Tri) v1 i5
+              let o1 ← cdt.slot uu.n tc
+              match o1 with
+              | none =>
+                ok (cont (p, some (cdt.CdtError.Internal cdt.Fault.BrokenLink),
+                  t, left, right, crossed1, walking, steps1))
+              | some j =>
+                let q ← Array.index_usize uu.v j
+                if q = b
+                then
+                  ok (cont (p, err, t, left, right, crossed1, false, steps1))
+                else
+                  let p2 ←
+                    cdt.Mesh.p
+                      {
+                        pts := v,
+                        tris := v1,
+                        vtri := v2,
+                        last := i,
+                        inside := v3,
+                        stack := v4,
+                        hit := p,
+                        walked := i1
+                      } q
+                  let oq ← forge_math.predicates.orient2d pa pb p2
+                  if F64.Ops.eq oq (F64.Ops.ofBits 0)
+                  then
+                    let ce ← cdt.through a b q shift
+                    ok (cont (p, some ce, u, left, right, crossed1, walking,
+                      steps1))
+                  else
+                    if F64.Ops.gt oq (F64.Ops.ofBits 0)
+                    then
+                      ok (cont (p, err, u, q, right, crossed1, walking,
+                        steps1))
+                    else
+                      ok (cont (p, err, u, left, q, crossed1, walking, steps1))
     else ok (done (p, err, crossed))
   else ok (done (p, err, crossed))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 596:8-630:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 623:8-669:9 -/
 @[rust_loop]
 def cdt.Mesh.insert_constraint_loop1
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (a : Std.U32) (b : Std.U32) (shift : Std.U32) (pa : forge_math.vec.Point2)
-  (pb : forge_math.vec.Point2) (err : Option cdt.CdtError) (t : Std.U32)
-  (left : Std.U32) (right : Std.U32)
-  (crossed : alloc.vec.Vec (Std.U32 × Std.U32)) (walking : Bool) :
+  (i1 : Std.U64) (a : Std.U32) (b : Std.U32) (shift : Std.U32)
+  (pa : forge_math.vec.Point2) (pb : forge_math.vec.Point2)
+  (err : Option cdt.CdtError) (t : Std.U32) (left : Std.U32) (right : Std.U32)
+  (crossed : alloc.vec.Vec (Std.U32 × Std.U32)) (walking : Bool)
+  (steps : Std.U64) :
   Result ((Std.U32 × Std.U32) × (Option cdt.CdtError) × (alloc.vec.Vec
     (Std.U32 × Std.U32)))
   := do
   loop
-    (fun (p1, err1, t1, left1, right1, crossed1, walking1) =>
-      cdt.Mesh.insert_constraint_loop1.body v v1 v2 i v3 v4 a b shift pa pb p1
-      err1 t1 left1 right1 crossed1 walking1)
-    (p, err, t, left, right, crossed, walking)
+    (fun (p1, err1, t1, left1, right1, crossed1, walking1, steps1) =>
+      cdt.Mesh.insert_constraint_loop1.body v v1 v2 i v3 v4 i1 a b shift pa pb
+      p1 err1 t1 left1 right1 crossed1 walking1 steps1)
+    (p, err, t, left, right, crossed, walking, steps)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 642:8-701:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 681:8-742:9 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_constraint_loop2.body
   (a : Std.U32) (b : Std.U32) (pa : forge_math.vec.Point2)
@@ -2177,12 +2327,12 @@ def cdt.Mesh.insert_constraint_loop2.body
         else
           do
           let budget2 ← budget - 1#usize
-          let i2 ← budget2 % 1024#usize
+          let i2 ← budget2 % 64#usize
           let o ←
             if i2 = 0#usize
             then
               do
-              let i3 ← 16#u64 * 1024#u64
+              let i3 ← 16#u64 * 64#u64
               forge_geom.budget.spend_many i3
               let b2 ← forge_geom.budget.over
               if b2
@@ -2298,7 +2448,7 @@ def cdt.Mesh.insert_constraint_loop2.body
   else ok (done (self, err, fresh))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 642:8-701:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 681:8-742:9 -/
 @[rust_loop]
 def cdt.Mesh.insert_constraint_loop2
   (self : cdt.Mesh) (a : Std.U32) (b : Std.U32) (pa : forge_math.vec.Point2)
@@ -2316,7 +2466,7 @@ def cdt.Mesh.insert_constraint_loop2
     (self, err, crossed, head, queued, fresh, budget)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop body 4:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 718:12-742:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 763:16-787:17 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_constraint_loop3_loop0.body
   (self : cdt.Mesh) (fresh : alloc.vec.Vec (Std.U32 × Std.U32))
@@ -2378,7 +2528,7 @@ def cdt.Mesh.insert_constraint_loop3_loop0.body
   else ok (done (self, fresh, changed))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop 4:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 718:12-742:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 763:16-787:17 -/
 @[rust_loop]
 def cdt.Mesh.insert_constraint_loop3_loop0
   (self : cdt.Mesh) (fresh : alloc.vec.Vec (Std.U32 × Std.U32))
@@ -2391,41 +2541,54 @@ def cdt.Mesh.insert_constraint_loop3_loop0
     (self, fresh, changed, e)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop body 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 714:8-743:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 755:8-789:9 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_constraint_loop3.body
-  (self : cdt.Mesh) (fresh : alloc.vec.Vec (Std.U32 × Std.U32))
-  (changed : Bool) (rounds : Std.Usize) :
-  Result (ControlFlow (cdt.Mesh × (alloc.vec.Vec (Std.U32 × Std.U32)) × Bool
-    × Std.Usize) (cdt.Mesh × (alloc.vec.Vec (Std.U32 × Std.U32)) ×
-    Std.Usize))
+  (self : cdt.Mesh) (err : Option cdt.CdtError)
+  (fresh : alloc.vec.Vec (Std.U32 × Std.U32)) (changed : Bool)
+  (rounds : Std.Usize) :
+  Result (ControlFlow (cdt.Mesh × (Option cdt.CdtError) × (alloc.vec.Vec
+    (Std.U32 × Std.U32)) × Bool × Std.Usize) (cdt.Mesh × (Option
+    cdt.CdtError) × (alloc.vec.Vec (Std.U32 × Std.U32)) × Std.Usize))
   := do
   if changed
   then
     if rounds < 64#usize
     then
-      let rounds1 ← rounds + 1#usize
-      let (self1, fresh1, changed1) ←
-        cdt.Mesh.insert_constraint_loop3_loop0 self fresh false 0#usize
-      ok (cont (self1, fresh1, changed1, rounds1))
-    else ok (done (self, fresh, rounds))
-  else ok (done (self, fresh, rounds))
+      let b := core.option.Option.is_none err
+      if b
+      then
+        let b1 ← forge_geom.budget.over
+        if b1
+        then
+          ok (cont (self, some (cdt.CdtError.Internal
+            cdt.Fault.BoundaryTooLong), fresh, changed, rounds))
+        else
+          let rounds1 ← rounds + 1#usize
+          let (self1, fresh1, changed1) ←
+            cdt.Mesh.insert_constraint_loop3_loop0 self fresh false 0#usize
+          ok (cont (self1, err, fresh1, changed1, rounds1))
+      else ok (done (self, err, fresh, rounds))
+    else ok (done (self, err, fresh, rounds))
+  else ok (done (self, err, fresh, rounds))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]: loop 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 714:8-743:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 755:8-789:9 -/
 @[rust_loop]
 def cdt.Mesh.insert_constraint_loop3
-  (self : cdt.Mesh) (fresh : alloc.vec.Vec (Std.U32 × Std.U32))
-  (changed : Bool) (rounds : Std.Usize) :
-  Result (cdt.Mesh × (alloc.vec.Vec (Std.U32 × Std.U32)) × Std.Usize)
+  (self : cdt.Mesh) (err : Option cdt.CdtError)
+  (fresh : alloc.vec.Vec (Std.U32 × Std.U32)) (changed : Bool)
+  (rounds : Std.Usize) :
+  Result (cdt.Mesh × (Option cdt.CdtError) × (alloc.vec.Vec (Std.U32 ×
+    Std.U32)) × Std.Usize)
   := do
   loop
-    (fun (self1, fresh1, changed1, rounds1) =>
-      cdt.Mesh.insert_constraint_loop3.body self1 fresh1 changed1 rounds1)
-    (self, fresh, changed, rounds)
+    (fun (self1, err1, fresh1, changed1, rounds1) =>
+      cdt.Mesh.insert_constraint_loop3.body self1 err1 fresh1 changed1 rounds1)
+    (self, err, fresh, changed, rounds)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_constraint]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 548:4-750:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 574:4-799:5 -/
 def cdt.Mesh.insert_constraint
   (self : cdt.Mesh) (a : Std.U32) (b : Std.U32) (shift : Std.U32) :
   Result ((core.result.Result Unit cdt.CdtError) × cdt.Mesh)
@@ -2441,8 +2604,8 @@ def cdt.Mesh.insert_constraint
         self.vtri i
     let (err, cur) ←
       cdt.Mesh.insert_constraint_loop0 self.pts self.tris self.vtri self.last
-        self.inside self.stack self.hit a b shift pa pb none start start none
-        true 0#usize
+        self.inside self.stack self.hit self.walked a b shift pa pb none start
+        start none true 0#usize
     match err with
     | none =>
       match cur with
@@ -2453,8 +2616,9 @@ def cdt.Mesh.insert_constraint
         let (t1, left, right) := t
         let (p, err1, crossed) ←
           cdt.Mesh.insert_constraint_loop1 self.pts self.tris self.vtri
-            self.last self.inside self.stack self.hit a b shift pa pb none t1
-            left right (alloc.vec.Vec.new (Std.U32 × Std.U32)) true
+            self.last self.inside self.stack self.hit self.walked a b shift pa
+            pb none t1 left right (alloc.vec.Vec.new (Std.U32 × Std.U32)) true
+            0#u64
         match err1 with
         | none =>
           let ring := alloc.vec.Vec.len crossed
@@ -2479,17 +2643,21 @@ def cdt.Mesh.insert_constraint
               let cf ← core.result.Result.Insts.CoreOpsTry.branch r
               match cf with
               | core.ops.control_flow.ControlFlow.Continue _ =>
-                let (self3, fresh1, rounds) ←
-                  cdt.Mesh.insert_constraint_loop3 self2 fresh true 0#usize
-                let i4 := alloc.vec.Vec.len fresh1
-                let work ← i4 * rounds
-                if work > 64#usize
-                then
-                  let i5 ← lift (UScalar.cast .U64 work)
-                  let i6 ← 16#u64 * i5
-                  forge_geom.budget.spend_many i6
-                  ok (core.result.Result.Ok (), self3)
-                else ok (core.result.Result.Ok (), self3)
+                let (self3, err3, fresh1, rounds) ←
+                  cdt.Mesh.insert_constraint_loop3 self2 none fresh true
+                    0#usize
+                match err3 with
+                | none =>
+                  let i4 := alloc.vec.Vec.len fresh1
+                  let work ← i4 * rounds
+                  if work > 64#usize
+                  then
+                    let i5 ← lift (UScalar.cast .U64 work)
+                    let i6 ← 16#u64 * i5
+                    forge_geom.budget.spend_many i6
+                    ok (core.result.Result.Ok (), self3)
+                  else ok (core.result.Result.Ok (), self3)
+                | some e => ok (core.result.Result.Err e, self3)
               | core.ops.control_flow.ControlFlow.Break residual =>
                 let r1 ←
                   core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -2504,7 +2672,7 @@ def cdt.Mesh.insert_constraint
     cdt.Mesh.mark { self with hit := (a, b) } t i ce
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::unmark]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 859:4-867:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 908:4-916:5 -/
 def cdt.Mesh.unmark
   (self : cdt.Mesh) (t : Std.U32) (i : Std.Usize) : Result cdt.Mesh := do
   let i1 ← lift (UScalar.cast .Usize t)
@@ -2536,7 +2704,7 @@ def cdt.Mesh.unmark
   else ok { self with tris := v }
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::cut]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 826:4-857:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 875:4-906:5 -/
 def cdt.Mesh.cut
   (self : cdt.Mesh) (a : Std.U32) (b : Std.U32) (l : Std.U32) (r : Std.U32)
   (uses : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32)) :
@@ -2573,20 +2741,40 @@ def cdt.Mesh.cut
         let w ← lift (UScalar.cast .U32 i1)
         let v ← alloc.vec.Vec.push self2.pts x
         let v1 ← alloc.vec.Vec.push self2.vtri 0#u32
-        let self3 ← cdt.Mesh.insert { self2 with pts := v, vtri := v1 } w loc
-        ok (core.result.Result.Ok (w, n), self3, uses1)
+        let (r1, self3) ←
+          cdt.Mesh.insert { self2 with pts := v, vtri := v1 } w loc
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch r1
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue _ =>
+          ok (core.result.Result.Ok (w, n), self3, uses1)
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r2 ←
+            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+              (Std.U32 × Std.U32) (core.convert.FromSame cdt.CdtError)
+              residual
+          ok (r2, self3, uses1)
       | cdt.Location.OnEdge _ _ =>
         let i1 := alloc.vec.Vec.len self2.pts
         let w ← lift (UScalar.cast .U32 i1)
         let v ← alloc.vec.Vec.push self2.pts x
         let v1 ← alloc.vec.Vec.push self2.vtri 0#u32
-        let self3 ← cdt.Mesh.insert { self2 with pts := v, vtri := v1 } w loc
-        ok (core.result.Result.Ok (w, n), self3, uses1)
+        let (r1, self3) ←
+          cdt.Mesh.insert { self2 with pts := v, vtri := v1 } w loc
+        let cf ← core.result.Result.Insts.CoreOpsTry.branch r1
+        match cf with
+        | core.ops.control_flow.ControlFlow.Continue _ =>
+          ok (core.result.Result.Ok (w, n), self3, uses1)
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r2 ←
+            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+              (Std.U32 × Std.U32) (core.convert.FromSame cdt.CdtError)
+              residual
+          ok (r2, self3, uses1)
       | cdt.Location.Vertex w =>
         ok (core.result.Result.Ok (w, n), self2, uses1)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_tangled]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 794:36-798:37 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 843:36-847:37 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_tangled_loop0_loop0.body
   (l : Std.U32) (r : Std.U32) (w : Std.U32) (n : Std.U32)
@@ -2603,7 +2791,7 @@ def cdt.Mesh.insert_tangled_loop0_loop0.body
   else ok (done todo)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_tangled]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 794:36-798:37 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 843:36-847:37 -/
 @[rust_loop]
 def cdt.Mesh.insert_tangled_loop0_loop0
   (todo : alloc.vec.Vec (Std.U32 × Std.U32)) (l : Std.U32) (r : Std.U32)
@@ -2616,7 +2804,7 @@ def cdt.Mesh.insert_tangled_loop0_loop0
     (todo, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_tangled]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 762:8-806:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 811:8-855:9 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_tangled_loop0.body
   (self : cdt.Mesh) (uses : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -2711,7 +2899,7 @@ def cdt.Mesh.insert_tangled_loop0.body
   else ok (done (self, uses, err))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_tangled]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 762:8-806:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 811:8-855:9 -/
 @[rust_loop]
 def cdt.Mesh.insert_tangled_loop0
   (self : cdt.Mesh) (uses : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -2726,7 +2914,7 @@ def cdt.Mesh.insert_tangled_loop0
     (self, uses, budget, todo, err)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_tangled]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 808:8-817:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 857:8-866:9 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_tangled_loop1.body
   (uses : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32)) (self : cdt.Mesh)
@@ -2762,7 +2950,7 @@ def cdt.Mesh.insert_tangled_loop1.body
   else ok (done (self, err))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_tangled]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 808:8-817:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 857:8-866:9 -/
 @[rust_loop]
 def cdt.Mesh.insert_tangled_loop1
   (self : cdt.Mesh) (uses : alloc.vec.Vec (Std.U32 × Std.U32 × Std.U32))
@@ -2775,7 +2963,7 @@ def cdt.Mesh.insert_tangled_loop1
     (self, err, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_tangled]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 755:4-822:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 804:4-871:5 -/
 def cdt.Mesh.insert_tangled
   (self : cdt.Mesh) (chords : alloc.vec.Vec (Std.U32 × Std.U32)) :
   Result ((core.result.Result Unit cdt.CdtError) × cdt.Mesh)
@@ -2795,7 +2983,7 @@ def cdt.Mesh.insert_tangled
   | some e => ok (core.result.Result.Err e, self2)
 
 /-- [forge_mesh::cdt::segment_distance_sq]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1152:0-1164:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1214:0-1226:1 -/
 def cdt.segment_distance_sq
   (p : forge_math.vec.Point2) (a : forge_math.vec.Point2)
   (b : forge_math.vec.Point2) :
@@ -2824,7 +3012,7 @@ def cdt.segment_distance_sq
   forge_math.vec.Vec2.length_sq v1
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::near_constraint]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 907:4-913:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 969:4-975:5 -/
 def cdt.Mesh.near_constraint
   (self : cdt.Mesh) (t : Std.U32) (p : forge_math.vec.Point2) (eps : F64) :
   Result Bool
@@ -2896,7 +3084,7 @@ def cdt.Mesh.near_constraint
       else ok false
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::near_corner]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 899:4-904:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 961:4-966:5 -/
 def cdt.Mesh.near_corner
   (self : cdt.Mesh) (t : Std.U32) (p : forge_math.vec.Point2) (eps : F64) :
   Result Bool
@@ -2929,7 +3117,7 @@ def cdt.Mesh.near_corner
       ok (F64.Ops.le fl4 fl5)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_interior]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 871:4-896:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 920:4-958:5 -/
 def cdt.Mesh.insert_interior
   (self : cdt.Mesh) (p : forge_math.vec.Point2) (eps : F64) :
   Result ((core.result.Result Unit cdt.CdtError) × cdt.Mesh)
@@ -2940,67 +3128,161 @@ def cdt.Mesh.insert_interior
   let cf ← core.result.Result.Insts.CoreOpsTry.branch r
   match cf with
   | core.ops.control_flow.ControlFlow.Continue val =>
-    let (self2, skip) ←
-      match val with
-      | cdt.Location.Inside t =>
-        do
-        let i ← lift (UScalar.cast .Usize t)
-        let b ←
-          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
-            self1.inside i
-        let b1 ←
+    if self1.walked > 65536#u64
+    then
+      let i ← self1.walked / 16#u64
+      forge_geom.budget.spend_many i
+      let b ← forge_geom.budget.over
+      if b
+      then
+        ok (core.result.Result.Err (cdt.CdtError.Internal
+          cdt.Fault.FaceTooLong), { self1 with walked := 0#u64 })
+      else
+        let skip ←
+          match val with
+          | cdt.Location.Inside t =>
+            do
+            let i1 ← lift (UScalar.cast .Usize t)
+            let b1 ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+                self1.inside i1
+            if b1
+            then
+              let b2 ←
+                cdt.Mesh.near_constraint { self1 with walked := 0#u64 } t p eps
+              if b2
+              then ok true
+              else cdt.Mesh.near_corner { self1 with walked := 0#u64 } t p eps
+            else ok true
+          | cdt.Location.OnEdge t i1 =>
+            do
+            let i2 ← lift (UScalar.cast .Usize t)
+            let tt ←
+              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                cdt.Tri) self1.tris i2
+            let u ← Array.index_usize tt.n i1
+            if u = cdt.NONE
+            then ok true
+            else
+              let b1 ← Array.index_usize tt.c i1
+              if b1
+              then ok true
+              else
+                let i3 ← lift (UScalar.cast .Usize t)
+                let b2 ←
+                  alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                    Bool) self1.inside i3
+                if b2
+                then
+                  let b3 ←
+                    cdt.Mesh.near_constraint { self1 with walked := 0#u64 } t p
+                      eps
+                  if b3
+                  then ok true
+                  else
+                    let b4 ←
+                      cdt.Mesh.near_constraint { self1 with walked := 0#u64 } u
+                        p eps
+                    if b4
+                    then ok true
+                    else
+                      let b5 ←
+                        cdt.Mesh.near_corner { self1 with walked := 0#u64 } t p
+                          eps
+                      if b5
+                      then ok true
+                      else
+                        cdt.Mesh.near_corner { self1 with walked := 0#u64 } u p
+                          eps
+                else ok true
+          | cdt.Location.Vertex _ => ok true
+        if skip
+        then ok (core.result.Result.Ok (), { self1 with walked := 0#u64 })
+        else
+          let i1 := alloc.vec.Vec.len self1.pts
+          let v ← lift (UScalar.cast .U32 i1)
+          let v1 ← alloc.vec.Vec.push self1.pts p
+          let v2 ← alloc.vec.Vec.push self1.vtri 0#u32
+          let (r1, self2) ←
+            cdt.Mesh.insert
+              { self1 with pts := v1, vtri := v2, walked := 0#u64 } v val
+          let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+          match cf1 with
+          | core.ops.control_flow.ControlFlow.Continue _ =>
+            ok (core.result.Result.Ok (), self2)
+          | core.ops.control_flow.ControlFlow.Break residual =>
+            let r2 ←
+              core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                Unit (core.convert.FromSame cdt.CdtError) residual
+            ok (r2, self2)
+    else
+      let skip ←
+        match val with
+        | cdt.Location.Inside t =>
+          do
+          let i ← lift (UScalar.cast .Usize t)
+          let b ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+              self1.inside i
           if b
           then
-            do
-            let b2 ← cdt.Mesh.near_constraint self1 t p eps
-            if b2
+            let b1 ← cdt.Mesh.near_constraint self1 t p eps
+            if b1
             then ok true
             else cdt.Mesh.near_corner self1 t p eps
           else ok true
-        ok (self1, b1)
-      | cdt.Location.OnEdge t i =>
-        do
-        let i1 ← lift (UScalar.cast .Usize t)
-        let tt ←
-          alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
-            self1.tris i1
-        let u ← Array.index_usize tt.n i
-        let b ← Array.index_usize tt.c i
-        let b1 ←
-          if b
+        | cdt.Location.OnEdge t i =>
+          do
+          let i1 ← lift (UScalar.cast .Usize t)
+          let tt ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
+              self1.tris i1
+          let u ← Array.index_usize tt.n i
+          if u = cdt.NONE
           then ok true
           else
-            do
-            let i2 ← lift (UScalar.cast .Usize t)
-            let b2 ←
-              alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
-                self1.inside i2
-            if b2
-            then
-              let b3 ← cdt.Mesh.near_constraint self1 t p eps
-              if b3
-              then ok true
-              else
-                let b4 ← cdt.Mesh.near_constraint self1 u p eps
-                if b4
+            let b ← Array.index_usize tt.c i
+            if b
+            then ok true
+            else
+              let i2 ← lift (UScalar.cast .Usize t)
+              let b1 ←
+                alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+                  Bool) self1.inside i2
+              if b1
+              then
+                let b2 ← cdt.Mesh.near_constraint self1 t p eps
+                if b2
                 then ok true
                 else
-                  let b5 ← cdt.Mesh.near_corner self1 t p eps
-                  if b5
+                  let b3 ← cdt.Mesh.near_constraint self1 u p eps
+                  if b3
                   then ok true
-                  else cdt.Mesh.near_corner self1 u p eps
-            else ok true
-        ok (self1, b1)
-      | cdt.Location.Vertex _ => ok (self1, true)
-    if skip
-    then ok (core.result.Result.Ok (), self2)
-    else
-      let i := alloc.vec.Vec.len self2.pts
-      let v ← lift (UScalar.cast .U32 i)
-      let v1 ← alloc.vec.Vec.push self2.pts p
-      let v2 ← alloc.vec.Vec.push self2.vtri 0#u32
-      let self3 ← cdt.Mesh.insert { self2 with pts := v1, vtri := v2 } v val
-      ok (core.result.Result.Ok (), self3)
+                  else
+                    let b4 ← cdt.Mesh.near_corner self1 t p eps
+                    if b4
+                    then ok true
+                    else cdt.Mesh.near_corner self1 u p eps
+              else ok true
+        | cdt.Location.Vertex _ => ok true
+      if skip
+      then ok (core.result.Result.Ok (), self1)
+      else
+        let i := alloc.vec.Vec.len self1.pts
+        let v ← lift (UScalar.cast .U32 i)
+        let v1 ← alloc.vec.Vec.push self1.pts p
+        let v2 ← alloc.vec.Vec.push self1.vtri 0#u32
+        let (r1, self2) ←
+          cdt.Mesh.insert { self1 with pts := v1, vtri := v2 } v val
+        let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
+        match cf1 with
+        | core.ops.control_flow.ControlFlow.Continue _ =>
+          ok (core.result.Result.Ok (), self2)
+        | core.ops.control_flow.ControlFlow.Break residual =>
+          let r2 ←
+            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+              Unit (core.convert.FromSame cdt.CdtError) residual
+          ok (r2, self2)
   | core.ops.control_flow.ControlFlow.Break residual =>
     let r1 ←
       core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
@@ -3008,7 +3290,7 @@ def cdt.Mesh.insert_interior
     ok (r1, self1)
 
 /-- [forge_mesh::cdt::morton::spread]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1142:4-1148:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1204:4-1210:5 -/
 def cdt.morton.spread (v : Std.U32) : Result Std.U64 := do
   let i ← lift (v &&& 65535#u32)
   let v1 ← lift (core.convert.num.FromU64U32.from i)
@@ -3026,7 +3308,7 @@ def cdt.morton.spread (v : Std.U32) : Result Std.U64 := do
   ok (i8 &&& 1431655765#u64)
 
 /-- [forge_mesh::cdt::morton]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1141:0-1150:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1203:0-1212:1 -/
 def cdt.morton (x : Std.U32) (y : Std.U32) : Result Std.U64 := do
   let i ← cdt.morton.spread x
   let i1 ← cdt.morton.spread y
@@ -3034,7 +3316,7 @@ def cdt.morton (x : Std.U32) (y : Std.U32) : Result Std.U64 := do
   ok (i ||| i2)
 
 /-- [forge_mesh::cdt::merge_runs]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1100:8-1109:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1162:8-1171:9 -/
 @[rust_loop_body]
 def cdt.merge_runs_loop0_loop0.body
   (src : Slice Std.U64) (m : Std.Usize) (e : Std.Usize) (dst : Slice Std.U64)
@@ -3078,7 +3360,7 @@ def cdt.merge_runs_loop0_loop0.body
   else ok (done dst)
 
 /-- [forge_mesh::cdt::merge_runs]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1100:8-1109:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1162:8-1171:9 -/
 @[rust_loop]
 def cdt.merge_runs_loop0_loop0
   (src : Slice Std.U64) (dst : Slice Std.U64) (m : Std.Usize) (e : Std.Usize)
@@ -3091,7 +3373,7 @@ def cdt.merge_runs_loop0_loop0
     (dst, i, j, k)
 
 /-- [forge_mesh::cdt::merge_runs]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1096:4-1111:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1158:4-1173:5 -/
 @[rust_loop_body]
 def cdt.merge_runs_loop0.body
   (src : Slice Std.U64) (n : Std.Usize) (w : Std.Usize) (dst : Slice Std.U64)
@@ -3113,7 +3395,7 @@ def cdt.merge_runs_loop0.body
   else ok (done dst)
 
 /-- [forge_mesh::cdt::merge_runs]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1096:4-1111:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1158:4-1173:5 -/
 @[rust_loop]
 def cdt.merge_runs_loop0
   (src : Slice Std.U64) (dst : Slice Std.U64) (n : Std.Usize) (w : Std.Usize)
@@ -3125,7 +3407,7 @@ def cdt.merge_runs_loop0
     (dst, s)
 
 /-- [forge_mesh::cdt::merge_runs]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1094:0-1112:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1156:0-1174:1 -/
 @[reducible]
 def cdt.merge_runs
   (src : Slice Std.U64) (dst : Slice Std.U64) (n : Std.Usize) (w : Std.Usize) :
@@ -3134,7 +3416,7 @@ def cdt.merge_runs
   cdt.merge_runs_loop0 src dst n w 0#usize
 
 /-- [forge_mesh::cdt::sink]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1081:4-1089:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1143:4-1151:5 -/
 @[rust_loop_body]
 def cdt.sink_loop.body
   (s : Std.Usize) (x : Std.U64) (v : alloc.vec.Vec Std.U64) (j : Std.Usize)
@@ -3161,7 +3443,7 @@ def cdt.sink_loop.body
   else ok (done (v, j))
 
 /-- [forge_mesh::cdt::sink]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1081:4-1089:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1143:4-1151:5 -/
 @[rust_loop]
 def cdt.sink_loop
   (v : alloc.vec.Vec Std.U64) (s : Std.Usize) (x : Std.U64) (j : Std.Usize)
@@ -3173,7 +3455,7 @@ def cdt.sink_loop
     (v, j, moving)
 
 /-- [forge_mesh::cdt::sink]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1077:0-1091:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1139:0-1153:1 -/
 def cdt.sink
   (v : alloc.vec.Vec Std.U64) (s : Std.Usize) (i : Std.Usize) :
   Result (alloc.vec.Vec Std.U64)
@@ -3187,7 +3469,7 @@ def cdt.sink
   ok (index_mut_back x)
 
 /-- [forge_mesh::cdt::sort_keys]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1004:8-1007:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1066:8-1069:9 -/
 @[rust_loop_body]
 def cdt.sort_keys_loop0_loop0.body
   (s : Std.Usize) (e : Std.Usize) (v : alloc.vec.Vec Std.U64) (i : Std.Usize) :
@@ -3201,7 +3483,7 @@ def cdt.sort_keys_loop0_loop0.body
   else ok (done v)
 
 /-- [forge_mesh::cdt::sort_keys]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1004:8-1007:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1066:8-1069:9 -/
 @[rust_loop]
 def cdt.sort_keys_loop0_loop0
   (v : alloc.vec.Vec Std.U64) (s : Std.Usize) (e : Std.Usize) (i : Std.Usize) :
@@ -3212,7 +3494,7 @@ def cdt.sort_keys_loop0_loop0
     (v, i)
 
 /-- [forge_mesh::cdt::sort_keys]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1001:4-1009:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1063:4-1071:5 -/
 @[rust_loop_body]
 def cdt.sort_keys_loop0.body
   (n : Std.Usize) (v : alloc.vec.Vec Std.U64) (s : Std.Usize) :
@@ -3231,7 +3513,7 @@ def cdt.sort_keys_loop0.body
   else ok (done v)
 
 /-- [forge_mesh::cdt::sort_keys]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1001:4-1009:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1063:4-1071:5 -/
 @[rust_loop]
 def cdt.sort_keys_loop0
   (v : alloc.vec.Vec Std.U64) (n : Std.Usize) (s : Std.Usize) :
@@ -3242,7 +3524,7 @@ def cdt.sort_keys_loop0
     (v, s)
 
 /-- [forge_mesh::cdt::sort_keys]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1017:8-1025:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1079:8-1087:9 -/
 @[rust_loop_body]
 def cdt.sort_keys_loop1.body
   (n : Std.Usize) (v : alloc.vec.Vec Std.U64) (tmp : alloc.vec.Vec Std.U64)
@@ -3277,7 +3559,7 @@ def cdt.sort_keys_loop1.body
   else ok (done (v, tmp, in_v))
 
 /-- [forge_mesh::cdt::sort_keys]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1017:8-1025:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1079:8-1087:9 -/
 @[rust_loop]
 def cdt.sort_keys_loop1
   (v : alloc.vec.Vec Std.U64) (tmp : alloc.vec.Vec Std.U64) (n : Std.Usize)
@@ -3289,7 +3571,7 @@ def cdt.sort_keys_loop1
     (v, tmp, w, in_v)
 
 /-- [forge_mesh::cdt::sort_keys]: loop body 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1028:12-1031:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1090:12-1093:13 -/
 @[rust_loop_body]
 def cdt.sort_keys_loop2.body
   (tmp : alloc.vec.Vec Std.U64) (n : Std.Usize) (v : alloc.vec.Vec Std.U64)
@@ -3310,7 +3592,7 @@ def cdt.sort_keys_loop2.body
   else ok (done v)
 
 /-- [forge_mesh::cdt::sort_keys]: loop 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1028:12-1031:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1090:12-1093:13 -/
 @[rust_loop]
 def cdt.sort_keys_loop2
   (v : alloc.vec.Vec Std.U64) (tmp : alloc.vec.Vec Std.U64) (n : Std.Usize)
@@ -3322,7 +3604,7 @@ def cdt.sort_keys_loop2
     (v, i)
 
 /-- [forge_mesh::cdt::sort_keys]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 998:0-1034:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1060:0-1096:1 -/
 def cdt.sort_keys
   (v : alloc.vec.Vec Std.U64) (tmp : alloc.vec.Vec Std.U64) :
   Result ((alloc.vec.Vec Std.U64) × (alloc.vec.Vec Std.U64))
@@ -3344,7 +3626,7 @@ def cdt.sort_keys
   else ok (v1, tmp)
 
 /-- [forge_mesh::cdt::grid]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 986:0-992:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1048:0-1054:1 -/
 def cdt.grid (v : F64) (scale : F64) : Result Std.U32 := do
   let x ← lift (F64.Ops.mul v scale)
   let x1 ←
@@ -3358,7 +3640,7 @@ def cdt.grid (v : F64) (scale : F64) : Result Std.U32 := do
   ok (F64.Ops.toUScalar .U32 x2)
 
 /-- [forge_mesh::cdt::brio_order]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 940:4-943:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1002:4-1005:5 -/
 @[rust_loop_body]
 def cdt.brio_order_loop0.body
   (n : Std.Usize) (order : alloc.vec.Vec Std.Usize) (i : Std.Usize) :
@@ -3373,7 +3655,7 @@ def cdt.brio_order_loop0.body
   else ok (done order)
 
 /-- [forge_mesh::cdt::brio_order]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 940:4-943:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1002:4-1005:5 -/
 @[rust_loop]
 def cdt.brio_order_loop0
   (n : Std.Usize) (order : alloc.vec.Vec Std.Usize) (i : Std.Usize) :
@@ -3384,7 +3666,7 @@ def cdt.brio_order_loop0
     (order, i)
 
 /-- [forge_mesh::cdt::brio_order]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 946:4-949:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1008:4-1011:5 -/
 @[rust_loop_body]
 def cdt.brio_order_loop1.body
   (order : alloc.vec.Vec Std.Usize) (rng : forge_math.rng.Rng) (i : Std.Usize)
@@ -3404,7 +3686,7 @@ def cdt.brio_order_loop1.body
   else ok (done order)
 
 /-- [forge_mesh::cdt::brio_order]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 946:4-949:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1008:4-1011:5 -/
 @[rust_loop]
 def cdt.brio_order_loop1
   (order : alloc.vec.Vec Std.Usize) (rng : forge_math.rng.Rng) (i : Std.Usize)
@@ -3416,7 +3698,7 @@ def cdt.brio_order_loop1
     (order, rng, i)
 
 /-- [forge_mesh::cdt::brio_order]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 953:4-957:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1015:4-1019:5 -/
 @[rust_loop_body]
 def cdt.brio_order_loop2.body
   (points : Slice forge_math.vec.Point2) (lo : forge_math.vec.Point2)
@@ -3439,7 +3721,7 @@ def cdt.brio_order_loop2.body
   else ok (done keys)
 
 /-- [forge_mesh::cdt::brio_order]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 953:4-957:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1015:4-1019:5 -/
 @[rust_loop]
 def cdt.brio_order_loop2
   (points : Slice forge_math.vec.Point2) (lo : forge_math.vec.Point2)
@@ -3452,7 +3734,7 @@ def cdt.brio_order_loop2
     (keys, i)
 
 /-- [forge_mesh::cdt::brio_order]: loop body 4:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 969:8-972:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1031:8-1034:9 -/
 @[rust_loop_body]
 def cdt.brio_order_loop3_loop0.body
   (order : alloc.vec.Vec Std.Usize) (keys : alloc.vec.Vec Std.U64)
@@ -3477,7 +3759,7 @@ def cdt.brio_order_loop3_loop0.body
   else ok (done run)
 
 /-- [forge_mesh::cdt::brio_order]: loop 4:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 969:8-972:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1031:8-1034:9 -/
 @[rust_loop]
 def cdt.brio_order_loop3_loop0
   (order : alloc.vec.Vec Std.Usize) (keys : alloc.vec.Vec Std.U64)
@@ -3490,7 +3772,7 @@ def cdt.brio_order_loop3_loop0
     (run, k)
 
 /-- [forge_mesh::cdt::brio_order]: loop body 5:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 975:8-978:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1037:8-1040:9 -/
 @[rust_loop_body]
 def cdt.brio_order_loop3_loop1.body
   (run : alloc.vec.Vec Std.U64) (start : Std.Usize) («end» : Std.Usize)
@@ -3514,7 +3796,7 @@ def cdt.brio_order_loop3_loop1.body
   else ok (done order)
 
 /-- [forge_mesh::cdt::brio_order]: loop 5:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 975:8-978:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1037:8-1040:9 -/
 @[rust_loop]
 def cdt.brio_order_loop3_loop1
   (order : alloc.vec.Vec Std.Usize) (run : alloc.vec.Vec Std.U64)
@@ -3527,7 +3809,7 @@ def cdt.brio_order_loop3_loop1
     (order, k)
 
 /-- [forge_mesh::cdt::brio_order]: loop body 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 962:4-981:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1024:4-1043:5 -/
 @[rust_loop_body]
 def cdt.brio_order_loop3.body
   (n : Std.Usize) (keys : alloc.vec.Vec Std.U64)
@@ -3556,7 +3838,7 @@ def cdt.brio_order_loop3.body
   else ok (done order)
 
 /-- [forge_mesh::cdt::brio_order]: loop 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 962:4-981:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1024:4-1043:5 -/
 @[rust_loop]
 def cdt.brio_order_loop3
   (n : Std.Usize) (order : alloc.vec.Vec Std.Usize)
@@ -3570,7 +3852,7 @@ def cdt.brio_order_loop3
     (order, run, tmp, start, round)
 
 /-- [forge_mesh::cdt::brio_order]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 936:0-983:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 998:0-1045:1 -/
 def cdt.brio_order
   (points : Slice forge_math.vec.Point2) (lo : forge_math.vec.Point2)
   (size : F64) :
@@ -3588,7 +3870,7 @@ def cdt.brio_order
     (alloc.vec.Vec.new Std.U64) 0#usize 16#usize
 
 /-- [forge_mesh::cdt::ascending]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1044:8-1053:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1106:8-1115:9 -/
 @[rust_loop_body]
 def cdt.ascending_loop0.body
   (look : alloc.vec.Vec Std.U64) (n : Std.Usize) (lo : Std.U64) (hi : Std.U64)
@@ -3611,7 +3893,7 @@ def cdt.ascending_loop0.body
   else ok (done (lo, hi))
 
 /-- [forge_mesh::cdt::ascending]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1044:8-1053:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1106:8-1115:9 -/
 @[rust_loop]
 def cdt.ascending_loop0
   (look : alloc.vec.Vec Std.U64) (n : Std.Usize) (lo : Std.U64) (hi : Std.U64)
@@ -3623,7 +3905,7 @@ def cdt.ascending_loop0
     (lo, hi, k)
 
 /-- [forge_mesh::cdt::ascending]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1057:12-1063:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1119:12-1125:13 -/
 @[rust_loop_body]
 def cdt.ascending_loop1.body
   (hi : Std.U64) (look : alloc.vec.Vec Std.U64) (seen : Slice Bool)
@@ -3647,7 +3929,7 @@ def cdt.ascending_loop1.body
   else ok (done (look, seen))
 
 /-- [forge_mesh::cdt::ascending]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1057:12-1063:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1119:12-1125:13 -/
 @[rust_loop]
 def cdt.ascending_loop1
   (look : alloc.vec.Vec Std.U64) (seen : Slice Bool) (hi : Std.U64)
@@ -3659,7 +3941,7 @@ def cdt.ascending_loop1
     (look, seen, t)
 
 /-- [forge_mesh::cdt::ascending]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1066:12-1069:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1128:12-1131:13 -/
 @[rust_loop_body]
 def cdt.ascending_loop2.body
   (look : alloc.vec.Vec Std.U64) (n : Std.Usize) (seen : Slice Bool)
@@ -3678,7 +3960,7 @@ def cdt.ascending_loop2.body
   else ok (done seen)
 
 /-- [forge_mesh::cdt::ascending]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1066:12-1069:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1128:12-1131:13 -/
 @[rust_loop]
 def cdt.ascending_loop2
   (look : alloc.vec.Vec Std.U64) (seen : Slice Bool) (n : Std.Usize)
@@ -3690,7 +3972,7 @@ def cdt.ascending_loop2
     (seen, k)
 
 /-- [forge_mesh::cdt::ascending]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1039:0-1073:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1101:0-1135:1 -/
 def cdt.ascending
   (look : alloc.vec.Vec Std.U64) (seen : Slice Bool)
   (tmp : alloc.vec.Vec Std.U64) :
@@ -3718,7 +4000,7 @@ def cdt.ascending
   else ok (look, seen, tmp)
 
 /-- [forge_mesh::cdt::hilbert]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1121:4-1135:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1183:4-1197:5 -/
 @[rust_loop_body]
 def cdt.hilbert_loop.body
   (x : Std.U32) (y : Std.U32) (d : Std.U64) (s : Std.U32) :
@@ -3753,7 +4035,7 @@ def cdt.hilbert_loop.body
   else ok (done d)
 
 /-- [forge_mesh::cdt::hilbert]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1121:4-1135:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1183:4-1197:5 -/
 @[rust_loop]
 def cdt.hilbert_loop
   (x : Std.U32) (y : Std.U32) (d : Std.U64) (s : Std.U32) :
@@ -3764,13 +4046,13 @@ def cdt.hilbert_loop
     (x, y, d, s)
 
 /-- [forge_mesh::cdt::hilbert]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1118:0-1137:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1180:0-1199:1 -/
 def cdt.hilbert (x : Std.U32) (y : Std.U32) : Result Std.U64 := do
   let s ← 1#u32 <<< 15#i32
   cdt.hilbert_loop x y 0#u64 s
 
 /-- [forge_mesh::cdt::Refine::need]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1183:4-1185:5
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1245:4-1247:5
     Visibility: public -/
 @[trait_default]
 def cdt.Refine.need.default
@@ -3778,28 +4060,28 @@ def cdt.Refine.need.default
   ok none
 
 /-- [forge_mesh::cdt::{impl core::clone::Clone for forge_mesh::cdt::Need}::clone]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1190:9-1190:14
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1252:9-1252:14
     Visibility: public -/
 def cdt.Need.Insts.CoreCloneClone.clone
   (self : cdt.Need) : Result cdt.Need := do
   ok self
 
 /-- Trait implementation: [forge_mesh::cdt::{impl core::clone::Clone for forge_mesh::cdt::Need}]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1190:9-1190:14 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1252:9-1252:14 -/
 @[reducible]
 def cdt.Need.Insts.CoreCloneClone : core.clone.Clone cdt.Need := {
   clone := cdt.Need.Insts.CoreCloneClone.clone
 }
 
 /-- Trait implementation: [forge_mesh::cdt::{impl core::marker::Copy for forge_mesh::cdt::Need}]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1190:16-1190:20 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1252:16-1252:20 -/
 @[reducible]
 def cdt.Need.Insts.CoreMarkerCopy : core.marker.Copy cdt.Need := {
   cloneInst := cdt.Need.Insts.CoreCloneClone
 }
 
 /-- [forge_mesh::cdt::{impl core::fmt::Debug for forge_mesh::cdt::Need}::fmt]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1190:22-1190:27
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1252:22-1252:27
     Visibility: public -/
 def cdt.Need.Insts.CoreFmtDebug.fmt
   (self : cdt.Need) (f : core.fmt.Formatter) :
@@ -3811,21 +4093,21 @@ def cdt.Need.Insts.CoreFmtDebug.fmt
     "chord") dyn (toStr "points") dyn1
 
 /-- Trait implementation: [forge_mesh::cdt::{impl core::fmt::Debug for forge_mesh::cdt::Need}]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1190:22-1190:27 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1252:22-1252:27 -/
 @[reducible]
 def cdt.Need.Insts.CoreFmtDebug : core.fmt.Debug cdt.Need := {
   fmt := cdt.Need.Insts.CoreFmtDebug.fmt
 }
 
 /-- Trait implementation: [forge_mesh::cdt::{impl core::marker::StructuralPartialEq for forge_mesh::cdt::Need}]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1190:29-1190:38 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1252:29-1252:38 -/
 @[reducible]
 def cdt.Need.Insts.CoreMarkerStructuralPartialEq :
   core.marker.StructuralPartialEq cdt.Need := {
 }
 
 /-- [forge_mesh::cdt::{impl core::cmp::PartialEq<forge_mesh::cdt::Need> for forge_mesh::cdt::Need}::eq]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1190:29-1190:38
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1252:29-1252:38
     Visibility: public -/
 def cdt.Need.Insts.CoreCmpPartialEqNeed.eq
   (self : cdt.Need) (other : cdt.Need) : Result Bool := do
@@ -3834,7 +4116,7 @@ def cdt.Need.Insts.CoreCmpPartialEqNeed.eq
   else ok false
 
 /-- Trait implementation: [forge_mesh::cdt::{impl core::cmp::PartialEq<forge_mesh::cdt::Need> for forge_mesh::cdt::Need}]
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1190:29-1190:38 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1252:29-1252:38 -/
 @[reducible]
 def cdt.Need.Insts.CoreCmpPartialEqNeed : core.cmp.PartialEq cdt.Need cdt.Need
   := {
@@ -3842,14 +4124,14 @@ def cdt.Need.Insts.CoreCmpPartialEqNeed : core.cmp.PartialEq cdt.Need cdt.Need
 }
 
 /-- [forge_mesh::cdt::most]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1488:0-1490:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1583:0-1585:1 -/
 def cdt.most (a : F64) (b : F64) : Result F64 := do
   if F64.Ops.gt a b
   then ok a
   else ok b
 
 /-- [forge_mesh::cdt::zip_tri]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1279:0-1301:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1341:0-1363:1 -/
 def cdt.zip_tri
   {R : Type _} (RefineInst : cdt.Refine R)
   (points : Slice forge_math.vec.Point2) (lp : Slice Std.U32) (refine : R)
@@ -3906,7 +4188,7 @@ def cdt.zip_tri
       ok (true, out1)
 
 /-- [forge_mesh::cdt::at]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1274:0-1276:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1336:0-1338:1 -/
 def cdt.at
   (points : Slice forge_math.vec.Point2) (lp : Slice Std.U32) (k : Std.Usize) :
   Result forge_math.vec.Point2
@@ -3918,7 +4200,7 @@ def cdt.at
   Slice.index_usize points i3
 
 /-- [forge_mesh::cdt::zip]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1211:4-1217:5
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1273:4-1279:5
     Visibility: public -/
 @[rust_loop_body]
 def cdt.zip_loop0.body
@@ -3944,7 +4226,7 @@ def cdt.zip_loop0.body
   else ok (done s)
 
 /-- [forge_mesh::cdt::zip]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1211:4-1217:5
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1273:4-1279:5
     Visibility: public -/
 @[rust_loop]
 def cdt.zip_loop0
@@ -3957,7 +4239,7 @@ def cdt.zip_loop0
     (s, k)
 
 /-- [forge_mesh::cdt::zip]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1232:4-1269:5
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1294:4-1331:5
     Visibility: public -/
 @[rust_loop_body]
 def cdt.zip_loop1.body
@@ -4054,7 +4336,7 @@ def cdt.zip_loop1.body
   else ok (done (out, ok1))
 
 /-- [forge_mesh::cdt::zip]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1232:4-1269:5
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1294:4-1331:5
     Visibility: public -/
 @[rust_loop]
 def cdt.zip_loop1
@@ -4070,7 +4352,7 @@ def cdt.zip_loop1
     (out, lower, upper, ok1)
 
 /-- [forge_mesh::cdt::zip]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1203:0-1271:1
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1265:0-1333:1
     Visibility: public -/
 def cdt.zip
   {R : Type _} (RefineInst : cdt.Refine R)
@@ -4119,7 +4401,7 @@ def cdt.zip
     else ok none
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::fan_into]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1873:8-1887:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1977:8-1991:9 -/
 @[rust_loop_body]
 def cdt.Mesh.fan_into_loop.body
   (v : alloc.vec.Vec cdt.Tri) (v1 : Std.U32) (start : Std.U32)
@@ -4182,7 +4464,7 @@ def cdt.Mesh.fan_into_loop.body
   else ok (done (seen, look))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::fan_into]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1873:8-1887:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1977:8-1991:9 -/
 @[rust_loop]
 def cdt.Mesh.fan_into_loop
   (v : alloc.vec.Vec cdt.Tri) (v1 : Std.U32) (seen : Slice Bool)
@@ -4196,7 +4478,7 @@ def cdt.Mesh.fan_into_loop
     (seen, look, t, on, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::fan_into]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1868:4-1888:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1972:4-1992:5 -/
 def cdt.Mesh.fan_into
   (self : cdt.Mesh) (v : Std.U32) (seen : Slice Bool)
   (look : alloc.vec.Vec Std.U64) :
@@ -4209,28 +4491,28 @@ def cdt.Mesh.fan_into
   cdt.Mesh.fan_into_loop self.tris v seen look start start true 0#usize
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::asks]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1840:12-1854:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1944:12-1958:13 -/
 @[rust_loop_body]
 def cdt.Mesh.asks_loop0.body
   {R : Type _} (RefineInst : cdt.Refine R)
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (refine : R) (t : Std.U32) (fresh_from : Std.U32) (seen : Slice Bool)
-  (a : Array Std.U32 3#usize) (a1 : Array Std.U32 3#usize)
+  (i1 : Std.U64) (refine : R) (t : Std.U32) (fresh_from : Std.U32)
+  (seen : Slice Bool) (a : Array Std.U32 3#usize) (a1 : Array Std.U32 3#usize)
   (a2 : Array Bool 3#usize) (split : Slice Bool)
-  (mids : alloc.vec.Vec forge_math.vec.Point2) (i1 : Std.Usize) :
+  (mids : alloc.vec.Vec forge_math.vec.Point2) (i2 : Std.Usize) :
   Result (ControlFlow ((Slice Bool) × (alloc.vec.Vec forge_math.vec.Point2) ×
     Std.Usize) ((Slice Bool) × (alloc.vec.Vec forge_math.vec.Point2)))
   := do
-  if i1 < 3#usize
+  if i2 < 3#usize
   then
-    let u ← Array.index_usize a1 i1
-    let i2 ← cdt.nx i1
-    let va ← Array.index_usize a i2
-    let i3 ← cdt.pv i1
-    let vb ← Array.index_usize a i3
-    let b ← Array.index_usize a2 i1
+    let u ← Array.index_usize a1 i2
+    let i3 ← cdt.nx i2
+    let va ← Array.index_usize a i3
+    let i4 ← cdt.pv i2
+    let vb ← Array.index_usize a i4
+    let b ← Array.index_usize a2 i2
     let (split1, mids1) ←
       if b
       then ok (split, mids)
@@ -4240,14 +4522,14 @@ def cdt.Mesh.asks_loop0.body
           if u < t
           then
             do
-            let i4 ← lift (UScalar.cast .Usize u)
-            let b1 ← Slice.index_usize seen i4
+            let i5 ← lift (UScalar.cast .Usize u)
+            let b1 ← Slice.index_usize seen i5
             if b1
             then
-              let i5 ← lift (UScalar.cast .Usize u)
+              let i6 ← lift (UScalar.cast .Usize u)
               let b2 ←
                 alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
-                  Bool) v3 i5
+                  Bool) v3 i6
               if b2
               then ok (split, mids)
               else
@@ -4256,8 +4538,8 @@ def cdt.Mesh.asks_loop0.body
                   if vb < fresh_from
                   then ok (split, mids)
                   else
-                    let i6 ← va - cdt.SUPER
-                    let i7 ← vb - cdt.SUPER
+                    let i7 ← va - cdt.SUPER
+                    let i8 ← vb - cdt.SUPER
                     let p1 ←
                       cdt.Mesh.p
                         {
@@ -4267,7 +4549,8 @@ def cdt.Mesh.asks_loop0.body
                           last := i,
                           inside := v3,
                           stack := v4,
-                          hit := p
+                          hit := p,
+                          walked := i1
                         } va
                     let p2 ←
                       cdt.Mesh.p
@@ -4278,33 +4561,90 @@ def cdt.Mesh.asks_loop0.body
                           last := i,
                           inside := v3,
                           stack := v4,
-                          hit := p
+                          hit := p,
+                          walked := i1
                         } vb
-                    let b3 ← RefineInst.edge refine i6 i7 p1 p2
+                    let b3 ← RefineInst.edge refine i7 i8 p1 p2
                     if b3
                     then
                       let p3 ←
                         forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                           4602678819172646912)
                       let mids2 ← alloc.vec.Vec.push mids p3
-                      let i8 ← lift (UScalar.cast .Usize t)
+                      let i9 ← lift (UScalar.cast .Usize t)
                       let (_, index_mut_back) ←
-                        Slice.index_mut_usize split i8
+                        Slice.index_mut_usize split i9
                       let s ←
                         if u != cdt.NONE
                         then
                           do
-                          let i9 ← lift (UScalar.cast .Usize u)
-                          let b4 ← Slice.index_usize seen i9
+                          let i10 ← lift (UScalar.cast .Usize u)
+                          let b4 ← Slice.index_usize seen i10
                           if b4
                           then
-                            let i10 ← lift (UScalar.cast .Usize u)
+                            let i11 ← lift (UScalar.cast .Usize u)
                             let split2 := index_mut_back true
-                            Slice.update split2 i10 true
+                            Slice.update split2 i11 true
                           else ok (index_mut_back true)
                         else ok (index_mut_back true)
                       ok (s, mids2)
                     else ok (split, mids)
+                else
+                  let i7 ← va - cdt.SUPER
+                  let i8 ← vb - cdt.SUPER
+                  let p1 ←
+                    cdt.Mesh.p
+                      {
+                        pts := v,
+                        tris := v1,
+                        vtri := v2,
+                        last := i,
+                        inside := v3,
+                        stack := v4,
+                        hit := p,
+                        walked := i1
+                      } va
+                  let p2 ←
+                    cdt.Mesh.p
+                      {
+                        pts := v,
+                        tris := v1,
+                        vtri := v2,
+                        last := i,
+                        inside := v3,
+                        stack := v4,
+                        hit := p,
+                        walked := i1
+                      } vb
+                  let b3 ← RefineInst.edge refine i7 i8 p1 p2
+                  if b3
+                  then
+                    let p3 ←
+                      forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
+                        4602678819172646912)
+                    let mids2 ← alloc.vec.Vec.push mids p3
+                    let i9 ← lift (UScalar.cast .Usize t)
+                    let (_, index_mut_back) ← Slice.index_mut_usize split i9
+                    let s ←
+                      if u != cdt.NONE
+                      then
+                        do
+                        let i10 ← lift (UScalar.cast .Usize u)
+                        let b4 ← Slice.index_usize seen i10
+                        if b4
+                        then
+                          let i11 ← lift (UScalar.cast .Usize u)
+                          let split2 := index_mut_back true
+                          Slice.update split2 i11 true
+                        else ok (index_mut_back true)
+                      else ok (index_mut_back true)
+                    ok (s, mids2)
+                  else ok (split, mids)
+            else
+              if va < fresh_from
+              then
+                if vb < fresh_from
+                then ok (split, mids)
                 else
                   let i6 ← va - cdt.SUPER
                   let i7 ← vb - cdt.SUPER
@@ -4317,7 +4657,8 @@ def cdt.Mesh.asks_loop0.body
                         last := i,
                         inside := v3,
                         stack := v4,
-                        hit := p
+                        hit := p,
+                        walked := i1
                       } va
                   let p2 ←
                     cdt.Mesh.p
@@ -4328,10 +4669,11 @@ def cdt.Mesh.asks_loop0.body
                         last := i,
                         inside := v3,
                         stack := v4,
-                        hit := p
+                        hit := p,
+                        walked := i1
                       } vb
-                  let b3 ← RefineInst.edge refine i6 i7 p1 p2
-                  if b3
+                  let b2 ← RefineInst.edge refine i6 i7 p1 p2
+                  if b2
                   then
                     let p3 ←
                       forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
@@ -4344,8 +4686,8 @@ def cdt.Mesh.asks_loop0.body
                       then
                         do
                         let i9 ← lift (UScalar.cast .Usize u)
-                        let b4 ← Slice.index_usize seen i9
-                        if b4
+                        let b3 ← Slice.index_usize seen i9
+                        if b3
                         then
                           let i10 ← lift (UScalar.cast .Usize u)
                           let split2 := index_mut_back true
@@ -4354,61 +4696,64 @@ def cdt.Mesh.asks_loop0.body
                       else ok (index_mut_back true)
                     ok (s, mids2)
                   else ok (split, mids)
-            else
-              if va < fresh_from
-              then
-                if vb < fresh_from
-                then ok (split, mids)
-                else
-                  let i5 ← va - cdt.SUPER
-                  let i6 ← vb - cdt.SUPER
-                  let p1 ←
-                    cdt.Mesh.p
-                      {
-                        pts := v,
-                        tris := v1,
-                        vtri := v2,
-                        last := i,
-                        inside := v3,
-                        stack := v4,
-                        hit := p
-                      } va
-                  let p2 ←
-                    cdt.Mesh.p
-                      {
-                        pts := v,
-                        tris := v1,
-                        vtri := v2,
-                        last := i,
-                        inside := v3,
-                        stack := v4,
-                        hit := p
-                      } vb
-                  let b2 ← RefineInst.edge refine i5 i6 p1 p2
-                  if b2
-                  then
-                    let p3 ←
-                      forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
-                        4602678819172646912)
-                    let mids2 ← alloc.vec.Vec.push mids p3
-                    let i7 ← lift (UScalar.cast .Usize t)
-                    let (_, index_mut_back) ← Slice.index_mut_usize split i7
-                    let s ←
-                      if u != cdt.NONE
-                      then
-                        do
-                        let i8 ← lift (UScalar.cast .Usize u)
-                        let b3 ← Slice.index_usize seen i8
-                        if b3
-                        then
-                          let i9 ← lift (UScalar.cast .Usize u)
-                          let split2 := index_mut_back true
-                          Slice.update split2 i9 true
-                        else ok (index_mut_back true)
-                      else ok (index_mut_back true)
-                    ok (s, mids2)
-                  else ok (split, mids)
               else
+                let i6 ← va - cdt.SUPER
+                let i7 ← vb - cdt.SUPER
+                let p1 ←
+                  cdt.Mesh.p
+                    {
+                      pts := v,
+                      tris := v1,
+                      vtri := v2,
+                      last := i,
+                      inside := v3,
+                      stack := v4,
+                      hit := p,
+                      walked := i1
+                    } va
+                let p2 ←
+                  cdt.Mesh.p
+                    {
+                      pts := v,
+                      tris := v1,
+                      vtri := v2,
+                      last := i,
+                      inside := v3,
+                      stack := v4,
+                      hit := p,
+                      walked := i1
+                    } vb
+                let b2 ← RefineInst.edge refine i6 i7 p1 p2
+                if b2
+                then
+                  let p3 ←
+                    forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
+                      4602678819172646912)
+                  let mids2 ← alloc.vec.Vec.push mids p3
+                  let i8 ← lift (UScalar.cast .Usize t)
+                  let (_, index_mut_back) ← Slice.index_mut_usize split i8
+                  let s ←
+                    if u != cdt.NONE
+                    then
+                      do
+                      let i9 ← lift (UScalar.cast .Usize u)
+                      let b3 ← Slice.index_usize seen i9
+                      if b3
+                      then
+                        let i10 ← lift (UScalar.cast .Usize u)
+                        let split2 := index_mut_back true
+                        Slice.update split2 i10 true
+                      else ok (index_mut_back true)
+                    else ok (index_mut_back true)
+                  ok (s, mids2)
+                else ok (split, mids)
+          else
+            if va < fresh_from
+            then
+              if vb < fresh_from
+              then ok (split, mids)
+              else
+                do
                 let i5 ← va - cdt.SUPER
                 let i6 ← vb - cdt.SUPER
                 let p1 ←
@@ -4420,7 +4765,8 @@ def cdt.Mesh.asks_loop0.body
                       last := i,
                       inside := v3,
                       stack := v4,
-                      hit := p
+                      hit := p,
+                      walked := i1
                     } va
                 let p2 ←
                   cdt.Mesh.p
@@ -4431,10 +4777,11 @@ def cdt.Mesh.asks_loop0.body
                       last := i,
                       inside := v3,
                       stack := v4,
-                      hit := p
+                      hit := p,
+                      walked := i1
                     } vb
-                let b2 ← RefineInst.edge refine i5 i6 p1 p2
-                if b2
+                let b1 ← RefineInst.edge refine i5 i6 p1 p2
+                if b1
                 then
                   let p3 ←
                     forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
@@ -4447,8 +4794,8 @@ def cdt.Mesh.asks_loop0.body
                     then
                       do
                       let i8 ← lift (UScalar.cast .Usize u)
-                      let b3 ← Slice.index_usize seen i8
-                      if b3
+                      let b2 ← Slice.index_usize seen i8
+                      if b2
                       then
                         let i9 ← lift (UScalar.cast .Usize u)
                         let split2 := index_mut_back true
@@ -4457,65 +4804,10 @@ def cdt.Mesh.asks_loop0.body
                     else ok (index_mut_back true)
                   ok (s, mids2)
                 else ok (split, mids)
-          else
-            if va < fresh_from
-            then
-              if vb < fresh_from
-              then ok (split, mids)
-              else
-                do
-                let i4 ← va - cdt.SUPER
-                let i5 ← vb - cdt.SUPER
-                let p1 ←
-                  cdt.Mesh.p
-                    {
-                      pts := v,
-                      tris := v1,
-                      vtri := v2,
-                      last := i,
-                      inside := v3,
-                      stack := v4,
-                      hit := p
-                    } va
-                let p2 ←
-                  cdt.Mesh.p
-                    {
-                      pts := v,
-                      tris := v1,
-                      vtri := v2,
-                      last := i,
-                      inside := v3,
-                      stack := v4,
-                      hit := p
-                    } vb
-                let b1 ← RefineInst.edge refine i4 i5 p1 p2
-                if b1
-                then
-                  let p3 ←
-                    forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
-                      4602678819172646912)
-                  let mids2 ← alloc.vec.Vec.push mids p3
-                  let i6 ← lift (UScalar.cast .Usize t)
-                  let (_, index_mut_back) ← Slice.index_mut_usize split i6
-                  let s ←
-                    if u != cdt.NONE
-                    then
-                      do
-                      let i7 ← lift (UScalar.cast .Usize u)
-                      let b2 ← Slice.index_usize seen i7
-                      if b2
-                      then
-                        let i8 ← lift (UScalar.cast .Usize u)
-                        let split2 := index_mut_back true
-                        Slice.update split2 i8 true
-                      else ok (index_mut_back true)
-                    else ok (index_mut_back true)
-                  ok (s, mids2)
-                else ok (split, mids)
             else
               do
-              let i4 ← va - cdt.SUPER
-              let i5 ← vb - cdt.SUPER
+              let i5 ← va - cdt.SUPER
+              let i6 ← vb - cdt.SUPER
               let p1 ←
                 cdt.Mesh.p
                   {
@@ -4525,7 +4817,8 @@ def cdt.Mesh.asks_loop0.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } va
               let p2 ←
                 cdt.Mesh.p
@@ -4536,28 +4829,29 @@ def cdt.Mesh.asks_loop0.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } vb
-              let b1 ← RefineInst.edge refine i4 i5 p1 p2
+              let b1 ← RefineInst.edge refine i5 i6 p1 p2
               if b1
               then
                 let p3 ←
                   forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                     4602678819172646912)
                 let mids2 ← alloc.vec.Vec.push mids p3
-                let i6 ← lift (UScalar.cast .Usize t)
-                let (_, index_mut_back) ← Slice.index_mut_usize split i6
+                let i7 ← lift (UScalar.cast .Usize t)
+                let (_, index_mut_back) ← Slice.index_mut_usize split i7
                 let s ←
                   if u != cdt.NONE
                   then
                     do
-                    let i7 ← lift (UScalar.cast .Usize u)
-                    let b2 ← Slice.index_usize seen i7
+                    let i8 ← lift (UScalar.cast .Usize u)
+                    let b2 ← Slice.index_usize seen i8
                     if b2
                     then
-                      let i8 ← lift (UScalar.cast .Usize u)
+                      let i9 ← lift (UScalar.cast .Usize u)
                       let split2 := index_mut_back true
-                      Slice.update split2 i8 true
+                      Slice.update split2 i9 true
                     else ok (index_mut_back true)
                   else ok (index_mut_back true)
                 ok (s, mids2)
@@ -4569,8 +4863,8 @@ def cdt.Mesh.asks_loop0.body
             then ok (split, mids)
             else
               do
-              let i4 ← va - cdt.SUPER
-              let i5 ← vb - cdt.SUPER
+              let i5 ← va - cdt.SUPER
+              let i6 ← vb - cdt.SUPER
               let p1 ←
                 cdt.Mesh.p
                   {
@@ -4580,7 +4874,8 @@ def cdt.Mesh.asks_loop0.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } va
               let p2 ←
                 cdt.Mesh.p
@@ -4591,36 +4886,37 @@ def cdt.Mesh.asks_loop0.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } vb
-              let b1 ← RefineInst.edge refine i4 i5 p1 p2
+              let b1 ← RefineInst.edge refine i5 i6 p1 p2
               if b1
               then
                 let p3 ←
                   forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                     4602678819172646912)
                 let mids2 ← alloc.vec.Vec.push mids p3
-                let i6 ← lift (UScalar.cast .Usize t)
-                let (_, index_mut_back) ← Slice.index_mut_usize split i6
+                let i7 ← lift (UScalar.cast .Usize t)
+                let (_, index_mut_back) ← Slice.index_mut_usize split i7
                 let s ←
                   if u != cdt.NONE
                   then
                     do
-                    let i7 ← lift (UScalar.cast .Usize u)
-                    let b2 ← Slice.index_usize seen i7
+                    let i8 ← lift (UScalar.cast .Usize u)
+                    let b2 ← Slice.index_usize seen i8
                     if b2
                     then
-                      let i8 ← lift (UScalar.cast .Usize u)
+                      let i9 ← lift (UScalar.cast .Usize u)
                       let split2 := index_mut_back true
-                      Slice.update split2 i8 true
+                      Slice.update split2 i9 true
                     else ok (index_mut_back true)
                   else ok (index_mut_back true)
                 ok (s, mids2)
               else ok (split, mids)
           else
             do
-            let i4 ← va - cdt.SUPER
-            let i5 ← vb - cdt.SUPER
+            let i5 ← va - cdt.SUPER
+            let i6 ← vb - cdt.SUPER
             let p1 ←
               cdt.Mesh.p
                 {
@@ -4630,7 +4926,8 @@ def cdt.Mesh.asks_loop0.body
                   last := i,
                   inside := v3,
                   stack := v4,
-                  hit := p
+                  hit := p,
+                  walked := i1
                 } va
             let p2 ←
               cdt.Mesh.p
@@ -4641,78 +4938,79 @@ def cdt.Mesh.asks_loop0.body
                   last := i,
                   inside := v3,
                   stack := v4,
-                  hit := p
+                  hit := p,
+                  walked := i1
                 } vb
-            let b1 ← RefineInst.edge refine i4 i5 p1 p2
+            let b1 ← RefineInst.edge refine i5 i6 p1 p2
             if b1
             then
               let p3 ←
                 forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                   4602678819172646912)
               let mids2 ← alloc.vec.Vec.push mids p3
-              let i6 ← lift (UScalar.cast .Usize t)
-              let (_, index_mut_back) ← Slice.index_mut_usize split i6
+              let i7 ← lift (UScalar.cast .Usize t)
+              let (_, index_mut_back) ← Slice.index_mut_usize split i7
               let s ←
                 if u != cdt.NONE
                 then
                   do
-                  let i7 ← lift (UScalar.cast .Usize u)
-                  let b2 ← Slice.index_usize seen i7
+                  let i8 ← lift (UScalar.cast .Usize u)
+                  let b2 ← Slice.index_usize seen i8
                   if b2
                   then
-                    let i8 ← lift (UScalar.cast .Usize u)
+                    let i9 ← lift (UScalar.cast .Usize u)
                     let split2 := index_mut_back true
-                    Slice.update split2 i8 true
+                    Slice.update split2 i9 true
                   else ok (index_mut_back true)
                 else ok (index_mut_back true)
               ok (s, mids2)
             else ok (split, mids)
-    let i4 ← i1 + 1#usize
-    ok (cont (split1, mids1, i4))
+    let i5 ← i2 + 1#usize
+    ok (cont (split1, mids1, i5))
   else ok (done (split, mids))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::asks]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1840:12-1854:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1944:12-1958:13 -/
 @[rust_loop]
 def cdt.Mesh.asks_loop0
   {R : Type _} (RefineInst : cdt.Refine R)
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (refine : R) (t : Std.U32) (fresh_from : Std.U32) (seen : Slice Bool)
-  (split : Slice Bool) (mids : alloc.vec.Vec forge_math.vec.Point2)
-  (a : Array Std.U32 3#usize) (a1 : Array Std.U32 3#usize)
-  (a2 : Array Bool 3#usize) (i1 : Std.Usize) :
+  (i1 : Std.U64) (refine : R) (t : Std.U32) (fresh_from : Std.U32)
+  (seen : Slice Bool) (split : Slice Bool)
+  (mids : alloc.vec.Vec forge_math.vec.Point2) (a : Array Std.U32 3#usize)
+  (a1 : Array Std.U32 3#usize) (a2 : Array Bool 3#usize) (i2 : Std.Usize) :
   Result ((Slice Bool) × (alloc.vec.Vec forge_math.vec.Point2))
   := do
   loop
-    (fun (split1, mids1, i2) => cdt.Mesh.asks_loop0.body RefineInst v v1 v2 i
-      v3 v4 p refine t fresh_from seen a a1 a2 split1 mids1 i2)
-    (split, mids, i1)
+    (fun (split1, mids1, i3) => cdt.Mesh.asks_loop0.body RefineInst v v1 v2 i
+      v3 v4 p i1 refine t fresh_from seen a a1 a2 split1 mids1 i3)
+    (split, mids, i2)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::asks]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1840:12-1854:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1944:12-1958:13 -/
 @[rust_loop_body]
 def cdt.Mesh.asks_loop1.body
   {R : Type _} (RefineInst : cdt.Refine R)
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (refine : R) (t : Std.U32) (fresh_from : Std.U32) (seen : Slice Bool)
-  (a : Array Std.U32 3#usize) (a1 : Array Std.U32 3#usize)
+  (i1 : Std.U64) (refine : R) (t : Std.U32) (fresh_from : Std.U32)
+  (seen : Slice Bool) (a : Array Std.U32 3#usize) (a1 : Array Std.U32 3#usize)
   (a2 : Array Bool 3#usize) (split : Slice Bool)
-  (mids : alloc.vec.Vec forge_math.vec.Point2) (i1 : Std.Usize) :
+  (mids : alloc.vec.Vec forge_math.vec.Point2) (i2 : Std.Usize) :
   Result (ControlFlow ((Slice Bool) × (alloc.vec.Vec forge_math.vec.Point2) ×
     Std.Usize) ((Slice Bool) × (alloc.vec.Vec forge_math.vec.Point2)))
   := do
-  if i1 < 3#usize
+  if i2 < 3#usize
   then
-    let u ← Array.index_usize a1 i1
-    let i2 ← cdt.nx i1
-    let va ← Array.index_usize a i2
-    let i3 ← cdt.pv i1
-    let vb ← Array.index_usize a i3
-    let b ← Array.index_usize a2 i1
+    let u ← Array.index_usize a1 i2
+    let i3 ← cdt.nx i2
+    let va ← Array.index_usize a i3
+    let i4 ← cdt.pv i2
+    let vb ← Array.index_usize a i4
+    let b ← Array.index_usize a2 i2
     let (split1, mids1) ←
       if b
       then ok (split, mids)
@@ -4722,14 +5020,14 @@ def cdt.Mesh.asks_loop1.body
           if u < t
           then
             do
-            let i4 ← lift (UScalar.cast .Usize u)
-            let b1 ← Slice.index_usize seen i4
+            let i5 ← lift (UScalar.cast .Usize u)
+            let b1 ← Slice.index_usize seen i5
             if b1
             then
-              let i5 ← lift (UScalar.cast .Usize u)
+              let i6 ← lift (UScalar.cast .Usize u)
               let b2 ←
                 alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
-                  Bool) v3 i5
+                  Bool) v3 i6
               if b2
               then ok (split, mids)
               else
@@ -4738,8 +5036,8 @@ def cdt.Mesh.asks_loop1.body
                   if vb < fresh_from
                   then ok (split, mids)
                   else
-                    let i6 ← va - cdt.SUPER
-                    let i7 ← vb - cdt.SUPER
+                    let i7 ← va - cdt.SUPER
+                    let i8 ← vb - cdt.SUPER
                     let p1 ←
                       cdt.Mesh.p
                         {
@@ -4749,7 +5047,8 @@ def cdt.Mesh.asks_loop1.body
                           last := i,
                           inside := v3,
                           stack := v4,
-                          hit := p
+                          hit := p,
+                          walked := i1
                         } va
                     let p2 ←
                       cdt.Mesh.p
@@ -4760,33 +5059,90 @@ def cdt.Mesh.asks_loop1.body
                           last := i,
                           inside := v3,
                           stack := v4,
-                          hit := p
+                          hit := p,
+                          walked := i1
                         } vb
-                    let b3 ← RefineInst.edge refine i6 i7 p1 p2
+                    let b3 ← RefineInst.edge refine i7 i8 p1 p2
                     if b3
                     then
                       let p3 ←
                         forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                           4602678819172646912)
                       let mids2 ← alloc.vec.Vec.push mids p3
-                      let i8 ← lift (UScalar.cast .Usize t)
+                      let i9 ← lift (UScalar.cast .Usize t)
                       let (_, index_mut_back) ←
-                        Slice.index_mut_usize split i8
+                        Slice.index_mut_usize split i9
                       let s ←
                         if u != cdt.NONE
                         then
                           do
-                          let i9 ← lift (UScalar.cast .Usize u)
-                          let b4 ← Slice.index_usize seen i9
+                          let i10 ← lift (UScalar.cast .Usize u)
+                          let b4 ← Slice.index_usize seen i10
                           if b4
                           then
-                            let i10 ← lift (UScalar.cast .Usize u)
+                            let i11 ← lift (UScalar.cast .Usize u)
                             let split2 := index_mut_back true
-                            Slice.update split2 i10 true
+                            Slice.update split2 i11 true
                           else ok (index_mut_back true)
                         else ok (index_mut_back true)
                       ok (s, mids2)
                     else ok (split, mids)
+                else
+                  let i7 ← va - cdt.SUPER
+                  let i8 ← vb - cdt.SUPER
+                  let p1 ←
+                    cdt.Mesh.p
+                      {
+                        pts := v,
+                        tris := v1,
+                        vtri := v2,
+                        last := i,
+                        inside := v3,
+                        stack := v4,
+                        hit := p,
+                        walked := i1
+                      } va
+                  let p2 ←
+                    cdt.Mesh.p
+                      {
+                        pts := v,
+                        tris := v1,
+                        vtri := v2,
+                        last := i,
+                        inside := v3,
+                        stack := v4,
+                        hit := p,
+                        walked := i1
+                      } vb
+                  let b3 ← RefineInst.edge refine i7 i8 p1 p2
+                  if b3
+                  then
+                    let p3 ←
+                      forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
+                        4602678819172646912)
+                    let mids2 ← alloc.vec.Vec.push mids p3
+                    let i9 ← lift (UScalar.cast .Usize t)
+                    let (_, index_mut_back) ← Slice.index_mut_usize split i9
+                    let s ←
+                      if u != cdt.NONE
+                      then
+                        do
+                        let i10 ← lift (UScalar.cast .Usize u)
+                        let b4 ← Slice.index_usize seen i10
+                        if b4
+                        then
+                          let i11 ← lift (UScalar.cast .Usize u)
+                          let split2 := index_mut_back true
+                          Slice.update split2 i11 true
+                        else ok (index_mut_back true)
+                      else ok (index_mut_back true)
+                    ok (s, mids2)
+                  else ok (split, mids)
+            else
+              if va < fresh_from
+              then
+                if vb < fresh_from
+                then ok (split, mids)
                 else
                   let i6 ← va - cdt.SUPER
                   let i7 ← vb - cdt.SUPER
@@ -4799,7 +5155,8 @@ def cdt.Mesh.asks_loop1.body
                         last := i,
                         inside := v3,
                         stack := v4,
-                        hit := p
+                        hit := p,
+                        walked := i1
                       } va
                   let p2 ←
                     cdt.Mesh.p
@@ -4810,10 +5167,11 @@ def cdt.Mesh.asks_loop1.body
                         last := i,
                         inside := v3,
                         stack := v4,
-                        hit := p
+                        hit := p,
+                        walked := i1
                       } vb
-                  let b3 ← RefineInst.edge refine i6 i7 p1 p2
-                  if b3
+                  let b2 ← RefineInst.edge refine i6 i7 p1 p2
+                  if b2
                   then
                     let p3 ←
                       forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
@@ -4826,8 +5184,8 @@ def cdt.Mesh.asks_loop1.body
                       then
                         do
                         let i9 ← lift (UScalar.cast .Usize u)
-                        let b4 ← Slice.index_usize seen i9
-                        if b4
+                        let b3 ← Slice.index_usize seen i9
+                        if b3
                         then
                           let i10 ← lift (UScalar.cast .Usize u)
                           let split2 := index_mut_back true
@@ -4836,61 +5194,64 @@ def cdt.Mesh.asks_loop1.body
                       else ok (index_mut_back true)
                     ok (s, mids2)
                   else ok (split, mids)
-            else
-              if va < fresh_from
-              then
-                if vb < fresh_from
-                then ok (split, mids)
-                else
-                  let i5 ← va - cdt.SUPER
-                  let i6 ← vb - cdt.SUPER
-                  let p1 ←
-                    cdt.Mesh.p
-                      {
-                        pts := v,
-                        tris := v1,
-                        vtri := v2,
-                        last := i,
-                        inside := v3,
-                        stack := v4,
-                        hit := p
-                      } va
-                  let p2 ←
-                    cdt.Mesh.p
-                      {
-                        pts := v,
-                        tris := v1,
-                        vtri := v2,
-                        last := i,
-                        inside := v3,
-                        stack := v4,
-                        hit := p
-                      } vb
-                  let b2 ← RefineInst.edge refine i5 i6 p1 p2
-                  if b2
-                  then
-                    let p3 ←
-                      forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
-                        4602678819172646912)
-                    let mids2 ← alloc.vec.Vec.push mids p3
-                    let i7 ← lift (UScalar.cast .Usize t)
-                    let (_, index_mut_back) ← Slice.index_mut_usize split i7
-                    let s ←
-                      if u != cdt.NONE
-                      then
-                        do
-                        let i8 ← lift (UScalar.cast .Usize u)
-                        let b3 ← Slice.index_usize seen i8
-                        if b3
-                        then
-                          let i9 ← lift (UScalar.cast .Usize u)
-                          let split2 := index_mut_back true
-                          Slice.update split2 i9 true
-                        else ok (index_mut_back true)
-                      else ok (index_mut_back true)
-                    ok (s, mids2)
-                  else ok (split, mids)
               else
+                let i6 ← va - cdt.SUPER
+                let i7 ← vb - cdt.SUPER
+                let p1 ←
+                  cdt.Mesh.p
+                    {
+                      pts := v,
+                      tris := v1,
+                      vtri := v2,
+                      last := i,
+                      inside := v3,
+                      stack := v4,
+                      hit := p,
+                      walked := i1
+                    } va
+                let p2 ←
+                  cdt.Mesh.p
+                    {
+                      pts := v,
+                      tris := v1,
+                      vtri := v2,
+                      last := i,
+                      inside := v3,
+                      stack := v4,
+                      hit := p,
+                      walked := i1
+                    } vb
+                let b2 ← RefineInst.edge refine i6 i7 p1 p2
+                if b2
+                then
+                  let p3 ←
+                    forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
+                      4602678819172646912)
+                  let mids2 ← alloc.vec.Vec.push mids p3
+                  let i8 ← lift (UScalar.cast .Usize t)
+                  let (_, index_mut_back) ← Slice.index_mut_usize split i8
+                  let s ←
+                    if u != cdt.NONE
+                    then
+                      do
+                      let i9 ← lift (UScalar.cast .Usize u)
+                      let b3 ← Slice.index_usize seen i9
+                      if b3
+                      then
+                        let i10 ← lift (UScalar.cast .Usize u)
+                        let split2 := index_mut_back true
+                        Slice.update split2 i10 true
+                      else ok (index_mut_back true)
+                    else ok (index_mut_back true)
+                  ok (s, mids2)
+                else ok (split, mids)
+          else
+            if va < fresh_from
+            then
+              if vb < fresh_from
+              then ok (split, mids)
+              else
+                do
                 let i5 ← va - cdt.SUPER
                 let i6 ← vb - cdt.SUPER
                 let p1 ←
@@ -4902,7 +5263,8 @@ def cdt.Mesh.asks_loop1.body
                       last := i,
                       inside := v3,
                       stack := v4,
-                      hit := p
+                      hit := p,
+                      walked := i1
                     } va
                 let p2 ←
                   cdt.Mesh.p
@@ -4913,10 +5275,11 @@ def cdt.Mesh.asks_loop1.body
                       last := i,
                       inside := v3,
                       stack := v4,
-                      hit := p
+                      hit := p,
+                      walked := i1
                     } vb
-                let b2 ← RefineInst.edge refine i5 i6 p1 p2
-                if b2
+                let b1 ← RefineInst.edge refine i5 i6 p1 p2
+                if b1
                 then
                   let p3 ←
                     forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
@@ -4929,8 +5292,8 @@ def cdt.Mesh.asks_loop1.body
                     then
                       do
                       let i8 ← lift (UScalar.cast .Usize u)
-                      let b3 ← Slice.index_usize seen i8
-                      if b3
+                      let b2 ← Slice.index_usize seen i8
+                      if b2
                       then
                         let i9 ← lift (UScalar.cast .Usize u)
                         let split2 := index_mut_back true
@@ -4939,65 +5302,10 @@ def cdt.Mesh.asks_loop1.body
                     else ok (index_mut_back true)
                   ok (s, mids2)
                 else ok (split, mids)
-          else
-            if va < fresh_from
-            then
-              if vb < fresh_from
-              then ok (split, mids)
-              else
-                do
-                let i4 ← va - cdt.SUPER
-                let i5 ← vb - cdt.SUPER
-                let p1 ←
-                  cdt.Mesh.p
-                    {
-                      pts := v,
-                      tris := v1,
-                      vtri := v2,
-                      last := i,
-                      inside := v3,
-                      stack := v4,
-                      hit := p
-                    } va
-                let p2 ←
-                  cdt.Mesh.p
-                    {
-                      pts := v,
-                      tris := v1,
-                      vtri := v2,
-                      last := i,
-                      inside := v3,
-                      stack := v4,
-                      hit := p
-                    } vb
-                let b1 ← RefineInst.edge refine i4 i5 p1 p2
-                if b1
-                then
-                  let p3 ←
-                    forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
-                      4602678819172646912)
-                  let mids2 ← alloc.vec.Vec.push mids p3
-                  let i6 ← lift (UScalar.cast .Usize t)
-                  let (_, index_mut_back) ← Slice.index_mut_usize split i6
-                  let s ←
-                    if u != cdt.NONE
-                    then
-                      do
-                      let i7 ← lift (UScalar.cast .Usize u)
-                      let b2 ← Slice.index_usize seen i7
-                      if b2
-                      then
-                        let i8 ← lift (UScalar.cast .Usize u)
-                        let split2 := index_mut_back true
-                        Slice.update split2 i8 true
-                      else ok (index_mut_back true)
-                    else ok (index_mut_back true)
-                  ok (s, mids2)
-                else ok (split, mids)
             else
               do
-              let i4 ← va - cdt.SUPER
-              let i5 ← vb - cdt.SUPER
+              let i5 ← va - cdt.SUPER
+              let i6 ← vb - cdt.SUPER
               let p1 ←
                 cdt.Mesh.p
                   {
@@ -5007,7 +5315,8 @@ def cdt.Mesh.asks_loop1.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } va
               let p2 ←
                 cdt.Mesh.p
@@ -5018,28 +5327,29 @@ def cdt.Mesh.asks_loop1.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } vb
-              let b1 ← RefineInst.edge refine i4 i5 p1 p2
+              let b1 ← RefineInst.edge refine i5 i6 p1 p2
               if b1
               then
                 let p3 ←
                   forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                     4602678819172646912)
                 let mids2 ← alloc.vec.Vec.push mids p3
-                let i6 ← lift (UScalar.cast .Usize t)
-                let (_, index_mut_back) ← Slice.index_mut_usize split i6
+                let i7 ← lift (UScalar.cast .Usize t)
+                let (_, index_mut_back) ← Slice.index_mut_usize split i7
                 let s ←
                   if u != cdt.NONE
                   then
                     do
-                    let i7 ← lift (UScalar.cast .Usize u)
-                    let b2 ← Slice.index_usize seen i7
+                    let i8 ← lift (UScalar.cast .Usize u)
+                    let b2 ← Slice.index_usize seen i8
                     if b2
                     then
-                      let i8 ← lift (UScalar.cast .Usize u)
+                      let i9 ← lift (UScalar.cast .Usize u)
                       let split2 := index_mut_back true
-                      Slice.update split2 i8 true
+                      Slice.update split2 i9 true
                     else ok (index_mut_back true)
                   else ok (index_mut_back true)
                 ok (s, mids2)
@@ -5051,8 +5361,8 @@ def cdt.Mesh.asks_loop1.body
             then ok (split, mids)
             else
               do
-              let i4 ← va - cdt.SUPER
-              let i5 ← vb - cdt.SUPER
+              let i5 ← va - cdt.SUPER
+              let i6 ← vb - cdt.SUPER
               let p1 ←
                 cdt.Mesh.p
                   {
@@ -5062,7 +5372,8 @@ def cdt.Mesh.asks_loop1.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } va
               let p2 ←
                 cdt.Mesh.p
@@ -5073,36 +5384,37 @@ def cdt.Mesh.asks_loop1.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } vb
-              let b1 ← RefineInst.edge refine i4 i5 p1 p2
+              let b1 ← RefineInst.edge refine i5 i6 p1 p2
               if b1
               then
                 let p3 ←
                   forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                     4602678819172646912)
                 let mids2 ← alloc.vec.Vec.push mids p3
-                let i6 ← lift (UScalar.cast .Usize t)
-                let (_, index_mut_back) ← Slice.index_mut_usize split i6
+                let i7 ← lift (UScalar.cast .Usize t)
+                let (_, index_mut_back) ← Slice.index_mut_usize split i7
                 let s ←
                   if u != cdt.NONE
                   then
                     do
-                    let i7 ← lift (UScalar.cast .Usize u)
-                    let b2 ← Slice.index_usize seen i7
+                    let i8 ← lift (UScalar.cast .Usize u)
+                    let b2 ← Slice.index_usize seen i8
                     if b2
                     then
-                      let i8 ← lift (UScalar.cast .Usize u)
+                      let i9 ← lift (UScalar.cast .Usize u)
                       let split2 := index_mut_back true
-                      Slice.update split2 i8 true
+                      Slice.update split2 i9 true
                     else ok (index_mut_back true)
                   else ok (index_mut_back true)
                 ok (s, mids2)
               else ok (split, mids)
           else
             do
-            let i4 ← va - cdt.SUPER
-            let i5 ← vb - cdt.SUPER
+            let i5 ← va - cdt.SUPER
+            let i6 ← vb - cdt.SUPER
             let p1 ←
               cdt.Mesh.p
                 {
@@ -5112,7 +5424,8 @@ def cdt.Mesh.asks_loop1.body
                   last := i,
                   inside := v3,
                   stack := v4,
-                  hit := p
+                  hit := p,
+                  walked := i1
                 } va
             let p2 ←
               cdt.Mesh.p
@@ -5123,78 +5436,79 @@ def cdt.Mesh.asks_loop1.body
                   last := i,
                   inside := v3,
                   stack := v4,
-                  hit := p
+                  hit := p,
+                  walked := i1
                 } vb
-            let b1 ← RefineInst.edge refine i4 i5 p1 p2
+            let b1 ← RefineInst.edge refine i5 i6 p1 p2
             if b1
             then
               let p3 ←
                 forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                   4602678819172646912)
               let mids2 ← alloc.vec.Vec.push mids p3
-              let i6 ← lift (UScalar.cast .Usize t)
-              let (_, index_mut_back) ← Slice.index_mut_usize split i6
+              let i7 ← lift (UScalar.cast .Usize t)
+              let (_, index_mut_back) ← Slice.index_mut_usize split i7
               let s ←
                 if u != cdt.NONE
                 then
                   do
-                  let i7 ← lift (UScalar.cast .Usize u)
-                  let b2 ← Slice.index_usize seen i7
+                  let i8 ← lift (UScalar.cast .Usize u)
+                  let b2 ← Slice.index_usize seen i8
                   if b2
                   then
-                    let i8 ← lift (UScalar.cast .Usize u)
+                    let i9 ← lift (UScalar.cast .Usize u)
                     let split2 := index_mut_back true
-                    Slice.update split2 i8 true
+                    Slice.update split2 i9 true
                   else ok (index_mut_back true)
                 else ok (index_mut_back true)
               ok (s, mids2)
             else ok (split, mids)
-    let i4 ← i1 + 1#usize
-    ok (cont (split1, mids1, i4))
+    let i5 ← i2 + 1#usize
+    ok (cont (split1, mids1, i5))
   else ok (done (split, mids))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::asks]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1840:12-1854:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1944:12-1958:13 -/
 @[rust_loop]
 def cdt.Mesh.asks_loop1
   {R : Type _} (RefineInst : cdt.Refine R)
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (refine : R) (t : Std.U32) (fresh_from : Std.U32) (seen : Slice Bool)
-  (split : Slice Bool) (mids : alloc.vec.Vec forge_math.vec.Point2)
-  (a : Array Std.U32 3#usize) (a1 : Array Std.U32 3#usize)
-  (a2 : Array Bool 3#usize) (i1 : Std.Usize) :
+  (i1 : Std.U64) (refine : R) (t : Std.U32) (fresh_from : Std.U32)
+  (seen : Slice Bool) (split : Slice Bool)
+  (mids : alloc.vec.Vec forge_math.vec.Point2) (a : Array Std.U32 3#usize)
+  (a1 : Array Std.U32 3#usize) (a2 : Array Bool 3#usize) (i2 : Std.Usize) :
   Result ((Slice Bool) × (alloc.vec.Vec forge_math.vec.Point2))
   := do
   loop
-    (fun (split1, mids1, i2) => cdt.Mesh.asks_loop1.body RefineInst v v1 v2 i
-      v3 v4 p refine t fresh_from seen a a1 a2 split1 mids1 i2)
-    (split, mids, i1)
+    (fun (split1, mids1, i3) => cdt.Mesh.asks_loop1.body RefineInst v v1 v2 i
+      v3 v4 p i1 refine t fresh_from seen a a1 a2 split1 mids1 i3)
+    (split, mids, i2)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::asks]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1840:12-1854:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1944:12-1958:13 -/
 @[rust_loop_body]
 def cdt.Mesh.asks_loop2.body
   {R : Type _} (RefineInst : cdt.Refine R)
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (refine : R) (t : Std.U32) (fresh_from : Std.U32) (seen : Slice Bool)
-  (a : Array Std.U32 3#usize) (a1 : Array Std.U32 3#usize)
+  (i1 : Std.U64) (refine : R) (t : Std.U32) (fresh_from : Std.U32)
+  (seen : Slice Bool) (a : Array Std.U32 3#usize) (a1 : Array Std.U32 3#usize)
   (a2 : Array Bool 3#usize) (split : Slice Bool)
-  (mids : alloc.vec.Vec forge_math.vec.Point2) (i1 : Std.Usize) :
+  (mids : alloc.vec.Vec forge_math.vec.Point2) (i2 : Std.Usize) :
   Result (ControlFlow ((Slice Bool) × (alloc.vec.Vec forge_math.vec.Point2) ×
     Std.Usize) ((Slice Bool) × (alloc.vec.Vec forge_math.vec.Point2)))
   := do
-  if i1 < 3#usize
+  if i2 < 3#usize
   then
-    let u ← Array.index_usize a1 i1
-    let i2 ← cdt.nx i1
-    let va ← Array.index_usize a i2
-    let i3 ← cdt.pv i1
-    let vb ← Array.index_usize a i3
-    let b ← Array.index_usize a2 i1
+    let u ← Array.index_usize a1 i2
+    let i3 ← cdt.nx i2
+    let va ← Array.index_usize a i3
+    let i4 ← cdt.pv i2
+    let vb ← Array.index_usize a i4
+    let b ← Array.index_usize a2 i2
     let (split1, mids1) ←
       if b
       then ok (split, mids)
@@ -5204,14 +5518,14 @@ def cdt.Mesh.asks_loop2.body
           if u < t
           then
             do
-            let i4 ← lift (UScalar.cast .Usize u)
-            let b1 ← Slice.index_usize seen i4
+            let i5 ← lift (UScalar.cast .Usize u)
+            let b1 ← Slice.index_usize seen i5
             if b1
             then
-              let i5 ← lift (UScalar.cast .Usize u)
+              let i6 ← lift (UScalar.cast .Usize u)
               let b2 ←
                 alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
-                  Bool) v3 i5
+                  Bool) v3 i6
               if b2
               then ok (split, mids)
               else
@@ -5220,8 +5534,8 @@ def cdt.Mesh.asks_loop2.body
                   if vb < fresh_from
                   then ok (split, mids)
                   else
-                    let i6 ← va - cdt.SUPER
-                    let i7 ← vb - cdt.SUPER
+                    let i7 ← va - cdt.SUPER
+                    let i8 ← vb - cdt.SUPER
                     let p1 ←
                       cdt.Mesh.p
                         {
@@ -5231,7 +5545,8 @@ def cdt.Mesh.asks_loop2.body
                           last := i,
                           inside := v3,
                           stack := v4,
-                          hit := p
+                          hit := p,
+                          walked := i1
                         } va
                     let p2 ←
                       cdt.Mesh.p
@@ -5242,33 +5557,90 @@ def cdt.Mesh.asks_loop2.body
                           last := i,
                           inside := v3,
                           stack := v4,
-                          hit := p
+                          hit := p,
+                          walked := i1
                         } vb
-                    let b3 ← RefineInst.edge refine i6 i7 p1 p2
+                    let b3 ← RefineInst.edge refine i7 i8 p1 p2
                     if b3
                     then
                       let p3 ←
                         forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                           4602678819172646912)
                       let mids2 ← alloc.vec.Vec.push mids p3
-                      let i8 ← lift (UScalar.cast .Usize t)
+                      let i9 ← lift (UScalar.cast .Usize t)
                       let (_, index_mut_back) ←
-                        Slice.index_mut_usize split i8
+                        Slice.index_mut_usize split i9
                       let s ←
                         if u != cdt.NONE
                         then
                           do
-                          let i9 ← lift (UScalar.cast .Usize u)
-                          let b4 ← Slice.index_usize seen i9
+                          let i10 ← lift (UScalar.cast .Usize u)
+                          let b4 ← Slice.index_usize seen i10
                           if b4
                           then
-                            let i10 ← lift (UScalar.cast .Usize u)
+                            let i11 ← lift (UScalar.cast .Usize u)
                             let split2 := index_mut_back true
-                            Slice.update split2 i10 true
+                            Slice.update split2 i11 true
                           else ok (index_mut_back true)
                         else ok (index_mut_back true)
                       ok (s, mids2)
                     else ok (split, mids)
+                else
+                  let i7 ← va - cdt.SUPER
+                  let i8 ← vb - cdt.SUPER
+                  let p1 ←
+                    cdt.Mesh.p
+                      {
+                        pts := v,
+                        tris := v1,
+                        vtri := v2,
+                        last := i,
+                        inside := v3,
+                        stack := v4,
+                        hit := p,
+                        walked := i1
+                      } va
+                  let p2 ←
+                    cdt.Mesh.p
+                      {
+                        pts := v,
+                        tris := v1,
+                        vtri := v2,
+                        last := i,
+                        inside := v3,
+                        stack := v4,
+                        hit := p,
+                        walked := i1
+                      } vb
+                  let b3 ← RefineInst.edge refine i7 i8 p1 p2
+                  if b3
+                  then
+                    let p3 ←
+                      forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
+                        4602678819172646912)
+                    let mids2 ← alloc.vec.Vec.push mids p3
+                    let i9 ← lift (UScalar.cast .Usize t)
+                    let (_, index_mut_back) ← Slice.index_mut_usize split i9
+                    let s ←
+                      if u != cdt.NONE
+                      then
+                        do
+                        let i10 ← lift (UScalar.cast .Usize u)
+                        let b4 ← Slice.index_usize seen i10
+                        if b4
+                        then
+                          let i11 ← lift (UScalar.cast .Usize u)
+                          let split2 := index_mut_back true
+                          Slice.update split2 i11 true
+                        else ok (index_mut_back true)
+                      else ok (index_mut_back true)
+                    ok (s, mids2)
+                  else ok (split, mids)
+            else
+              if va < fresh_from
+              then
+                if vb < fresh_from
+                then ok (split, mids)
                 else
                   let i6 ← va - cdt.SUPER
                   let i7 ← vb - cdt.SUPER
@@ -5281,7 +5653,8 @@ def cdt.Mesh.asks_loop2.body
                         last := i,
                         inside := v3,
                         stack := v4,
-                        hit := p
+                        hit := p,
+                        walked := i1
                       } va
                   let p2 ←
                     cdt.Mesh.p
@@ -5292,10 +5665,11 @@ def cdt.Mesh.asks_loop2.body
                         last := i,
                         inside := v3,
                         stack := v4,
-                        hit := p
+                        hit := p,
+                        walked := i1
                       } vb
-                  let b3 ← RefineInst.edge refine i6 i7 p1 p2
-                  if b3
+                  let b2 ← RefineInst.edge refine i6 i7 p1 p2
+                  if b2
                   then
                     let p3 ←
                       forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
@@ -5308,8 +5682,8 @@ def cdt.Mesh.asks_loop2.body
                       then
                         do
                         let i9 ← lift (UScalar.cast .Usize u)
-                        let b4 ← Slice.index_usize seen i9
-                        if b4
+                        let b3 ← Slice.index_usize seen i9
+                        if b3
                         then
                           let i10 ← lift (UScalar.cast .Usize u)
                           let split2 := index_mut_back true
@@ -5318,61 +5692,64 @@ def cdt.Mesh.asks_loop2.body
                       else ok (index_mut_back true)
                     ok (s, mids2)
                   else ok (split, mids)
-            else
-              if va < fresh_from
-              then
-                if vb < fresh_from
-                then ok (split, mids)
-                else
-                  let i5 ← va - cdt.SUPER
-                  let i6 ← vb - cdt.SUPER
-                  let p1 ←
-                    cdt.Mesh.p
-                      {
-                        pts := v,
-                        tris := v1,
-                        vtri := v2,
-                        last := i,
-                        inside := v3,
-                        stack := v4,
-                        hit := p
-                      } va
-                  let p2 ←
-                    cdt.Mesh.p
-                      {
-                        pts := v,
-                        tris := v1,
-                        vtri := v2,
-                        last := i,
-                        inside := v3,
-                        stack := v4,
-                        hit := p
-                      } vb
-                  let b2 ← RefineInst.edge refine i5 i6 p1 p2
-                  if b2
-                  then
-                    let p3 ←
-                      forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
-                        4602678819172646912)
-                    let mids2 ← alloc.vec.Vec.push mids p3
-                    let i7 ← lift (UScalar.cast .Usize t)
-                    let (_, index_mut_back) ← Slice.index_mut_usize split i7
-                    let s ←
-                      if u != cdt.NONE
-                      then
-                        do
-                        let i8 ← lift (UScalar.cast .Usize u)
-                        let b3 ← Slice.index_usize seen i8
-                        if b3
-                        then
-                          let i9 ← lift (UScalar.cast .Usize u)
-                          let split2 := index_mut_back true
-                          Slice.update split2 i9 true
-                        else ok (index_mut_back true)
-                      else ok (index_mut_back true)
-                    ok (s, mids2)
-                  else ok (split, mids)
               else
+                let i6 ← va - cdt.SUPER
+                let i7 ← vb - cdt.SUPER
+                let p1 ←
+                  cdt.Mesh.p
+                    {
+                      pts := v,
+                      tris := v1,
+                      vtri := v2,
+                      last := i,
+                      inside := v3,
+                      stack := v4,
+                      hit := p,
+                      walked := i1
+                    } va
+                let p2 ←
+                  cdt.Mesh.p
+                    {
+                      pts := v,
+                      tris := v1,
+                      vtri := v2,
+                      last := i,
+                      inside := v3,
+                      stack := v4,
+                      hit := p,
+                      walked := i1
+                    } vb
+                let b2 ← RefineInst.edge refine i6 i7 p1 p2
+                if b2
+                then
+                  let p3 ←
+                    forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
+                      4602678819172646912)
+                  let mids2 ← alloc.vec.Vec.push mids p3
+                  let i8 ← lift (UScalar.cast .Usize t)
+                  let (_, index_mut_back) ← Slice.index_mut_usize split i8
+                  let s ←
+                    if u != cdt.NONE
+                    then
+                      do
+                      let i9 ← lift (UScalar.cast .Usize u)
+                      let b3 ← Slice.index_usize seen i9
+                      if b3
+                      then
+                        let i10 ← lift (UScalar.cast .Usize u)
+                        let split2 := index_mut_back true
+                        Slice.update split2 i10 true
+                      else ok (index_mut_back true)
+                    else ok (index_mut_back true)
+                  ok (s, mids2)
+                else ok (split, mids)
+          else
+            if va < fresh_from
+            then
+              if vb < fresh_from
+              then ok (split, mids)
+              else
+                do
                 let i5 ← va - cdt.SUPER
                 let i6 ← vb - cdt.SUPER
                 let p1 ←
@@ -5384,7 +5761,8 @@ def cdt.Mesh.asks_loop2.body
                       last := i,
                       inside := v3,
                       stack := v4,
-                      hit := p
+                      hit := p,
+                      walked := i1
                     } va
                 let p2 ←
                   cdt.Mesh.p
@@ -5395,10 +5773,11 @@ def cdt.Mesh.asks_loop2.body
                       last := i,
                       inside := v3,
                       stack := v4,
-                      hit := p
+                      hit := p,
+                      walked := i1
                     } vb
-                let b2 ← RefineInst.edge refine i5 i6 p1 p2
-                if b2
+                let b1 ← RefineInst.edge refine i5 i6 p1 p2
+                if b1
                 then
                   let p3 ←
                     forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
@@ -5411,8 +5790,8 @@ def cdt.Mesh.asks_loop2.body
                     then
                       do
                       let i8 ← lift (UScalar.cast .Usize u)
-                      let b3 ← Slice.index_usize seen i8
-                      if b3
+                      let b2 ← Slice.index_usize seen i8
+                      if b2
                       then
                         let i9 ← lift (UScalar.cast .Usize u)
                         let split2 := index_mut_back true
@@ -5421,65 +5800,10 @@ def cdt.Mesh.asks_loop2.body
                     else ok (index_mut_back true)
                   ok (s, mids2)
                 else ok (split, mids)
-          else
-            if va < fresh_from
-            then
-              if vb < fresh_from
-              then ok (split, mids)
-              else
-                do
-                let i4 ← va - cdt.SUPER
-                let i5 ← vb - cdt.SUPER
-                let p1 ←
-                  cdt.Mesh.p
-                    {
-                      pts := v,
-                      tris := v1,
-                      vtri := v2,
-                      last := i,
-                      inside := v3,
-                      stack := v4,
-                      hit := p
-                    } va
-                let p2 ←
-                  cdt.Mesh.p
-                    {
-                      pts := v,
-                      tris := v1,
-                      vtri := v2,
-                      last := i,
-                      inside := v3,
-                      stack := v4,
-                      hit := p
-                    } vb
-                let b1 ← RefineInst.edge refine i4 i5 p1 p2
-                if b1
-                then
-                  let p3 ←
-                    forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
-                      4602678819172646912)
-                  let mids2 ← alloc.vec.Vec.push mids p3
-                  let i6 ← lift (UScalar.cast .Usize t)
-                  let (_, index_mut_back) ← Slice.index_mut_usize split i6
-                  let s ←
-                    if u != cdt.NONE
-                    then
-                      do
-                      let i7 ← lift (UScalar.cast .Usize u)
-                      let b2 ← Slice.index_usize seen i7
-                      if b2
-                      then
-                        let i8 ← lift (UScalar.cast .Usize u)
-                        let split2 := index_mut_back true
-                        Slice.update split2 i8 true
-                      else ok (index_mut_back true)
-                    else ok (index_mut_back true)
-                  ok (s, mids2)
-                else ok (split, mids)
             else
               do
-              let i4 ← va - cdt.SUPER
-              let i5 ← vb - cdt.SUPER
+              let i5 ← va - cdt.SUPER
+              let i6 ← vb - cdt.SUPER
               let p1 ←
                 cdt.Mesh.p
                   {
@@ -5489,7 +5813,8 @@ def cdt.Mesh.asks_loop2.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } va
               let p2 ←
                 cdt.Mesh.p
@@ -5500,28 +5825,29 @@ def cdt.Mesh.asks_loop2.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } vb
-              let b1 ← RefineInst.edge refine i4 i5 p1 p2
+              let b1 ← RefineInst.edge refine i5 i6 p1 p2
               if b1
               then
                 let p3 ←
                   forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                     4602678819172646912)
                 let mids2 ← alloc.vec.Vec.push mids p3
-                let i6 ← lift (UScalar.cast .Usize t)
-                let (_, index_mut_back) ← Slice.index_mut_usize split i6
+                let i7 ← lift (UScalar.cast .Usize t)
+                let (_, index_mut_back) ← Slice.index_mut_usize split i7
                 let s ←
                   if u != cdt.NONE
                   then
                     do
-                    let i7 ← lift (UScalar.cast .Usize u)
-                    let b2 ← Slice.index_usize seen i7
+                    let i8 ← lift (UScalar.cast .Usize u)
+                    let b2 ← Slice.index_usize seen i8
                     if b2
                     then
-                      let i8 ← lift (UScalar.cast .Usize u)
+                      let i9 ← lift (UScalar.cast .Usize u)
                       let split2 := index_mut_back true
-                      Slice.update split2 i8 true
+                      Slice.update split2 i9 true
                     else ok (index_mut_back true)
                   else ok (index_mut_back true)
                 ok (s, mids2)
@@ -5533,8 +5859,8 @@ def cdt.Mesh.asks_loop2.body
             then ok (split, mids)
             else
               do
-              let i4 ← va - cdt.SUPER
-              let i5 ← vb - cdt.SUPER
+              let i5 ← va - cdt.SUPER
+              let i6 ← vb - cdt.SUPER
               let p1 ←
                 cdt.Mesh.p
                   {
@@ -5544,7 +5870,8 @@ def cdt.Mesh.asks_loop2.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } va
               let p2 ←
                 cdt.Mesh.p
@@ -5555,36 +5882,37 @@ def cdt.Mesh.asks_loop2.body
                     last := i,
                     inside := v3,
                     stack := v4,
-                    hit := p
+                    hit := p,
+                    walked := i1
                   } vb
-              let b1 ← RefineInst.edge refine i4 i5 p1 p2
+              let b1 ← RefineInst.edge refine i5 i6 p1 p2
               if b1
               then
                 let p3 ←
                   forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                     4602678819172646912)
                 let mids2 ← alloc.vec.Vec.push mids p3
-                let i6 ← lift (UScalar.cast .Usize t)
-                let (_, index_mut_back) ← Slice.index_mut_usize split i6
+                let i7 ← lift (UScalar.cast .Usize t)
+                let (_, index_mut_back) ← Slice.index_mut_usize split i7
                 let s ←
                   if u != cdt.NONE
                   then
                     do
-                    let i7 ← lift (UScalar.cast .Usize u)
-                    let b2 ← Slice.index_usize seen i7
+                    let i8 ← lift (UScalar.cast .Usize u)
+                    let b2 ← Slice.index_usize seen i8
                     if b2
                     then
-                      let i8 ← lift (UScalar.cast .Usize u)
+                      let i9 ← lift (UScalar.cast .Usize u)
                       let split2 := index_mut_back true
-                      Slice.update split2 i8 true
+                      Slice.update split2 i9 true
                     else ok (index_mut_back true)
                   else ok (index_mut_back true)
                 ok (s, mids2)
               else ok (split, mids)
           else
             do
-            let i4 ← va - cdt.SUPER
-            let i5 ← vb - cdt.SUPER
+            let i5 ← va - cdt.SUPER
+            let i6 ← vb - cdt.SUPER
             let p1 ←
               cdt.Mesh.p
                 {
@@ -5594,7 +5922,8 @@ def cdt.Mesh.asks_loop2.body
                   last := i,
                   inside := v3,
                   stack := v4,
-                  hit := p
+                  hit := p,
+                  walked := i1
                 } va
             let p2 ←
               cdt.Mesh.p
@@ -5605,57 +5934,58 @@ def cdt.Mesh.asks_loop2.body
                   last := i,
                   inside := v3,
                   stack := v4,
-                  hit := p
+                  hit := p,
+                  walked := i1
                 } vb
-            let b1 ← RefineInst.edge refine i4 i5 p1 p2
+            let b1 ← RefineInst.edge refine i5 i6 p1 p2
             if b1
             then
               let p3 ←
                 forge_math.vec.Point2.lerp p1 p2 (F64.Ops.ofBits
                   4602678819172646912)
               let mids2 ← alloc.vec.Vec.push mids p3
-              let i6 ← lift (UScalar.cast .Usize t)
-              let (_, index_mut_back) ← Slice.index_mut_usize split i6
+              let i7 ← lift (UScalar.cast .Usize t)
+              let (_, index_mut_back) ← Slice.index_mut_usize split i7
               let s ←
                 if u != cdt.NONE
                 then
                   do
-                  let i7 ← lift (UScalar.cast .Usize u)
-                  let b2 ← Slice.index_usize seen i7
+                  let i8 ← lift (UScalar.cast .Usize u)
+                  let b2 ← Slice.index_usize seen i8
                   if b2
                   then
-                    let i8 ← lift (UScalar.cast .Usize u)
+                    let i9 ← lift (UScalar.cast .Usize u)
                     let split2 := index_mut_back true
-                    Slice.update split2 i8 true
+                    Slice.update split2 i9 true
                   else ok (index_mut_back true)
                 else ok (index_mut_back true)
               ok (s, mids2)
             else ok (split, mids)
-    let i4 ← i1 + 1#usize
-    ok (cont (split1, mids1, i4))
+    let i5 ← i2 + 1#usize
+    ok (cont (split1, mids1, i5))
   else ok (done (split, mids))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::asks]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1840:12-1854:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1944:12-1958:13 -/
 @[rust_loop]
 def cdt.Mesh.asks_loop2
   {R : Type _} (RefineInst : cdt.Refine R)
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (refine : R) (t : Std.U32) (fresh_from : Std.U32) (seen : Slice Bool)
-  (split : Slice Bool) (mids : alloc.vec.Vec forge_math.vec.Point2)
-  (a : Array Std.U32 3#usize) (a1 : Array Std.U32 3#usize)
-  (a2 : Array Bool 3#usize) (i1 : Std.Usize) :
+  (i1 : Std.U64) (refine : R) (t : Std.U32) (fresh_from : Std.U32)
+  (seen : Slice Bool) (split : Slice Bool)
+  (mids : alloc.vec.Vec forge_math.vec.Point2) (a : Array Std.U32 3#usize)
+  (a1 : Array Std.U32 3#usize) (a2 : Array Bool 3#usize) (i2 : Std.Usize) :
   Result ((Slice Bool) × (alloc.vec.Vec forge_math.vec.Point2))
   := do
   loop
-    (fun (split1, mids1, i2) => cdt.Mesh.asks_loop2.body RefineInst v v1 v2 i
-      v3 v4 p refine t fresh_from seen a a1 a2 split1 mids1 i2)
-    (split, mids, i1)
+    (fun (split1, mids1, i3) => cdt.Mesh.asks_loop2.body RefineInst v v1 v2 i
+      v3 v4 p i1 refine t fresh_from seen a a1 a2 split1 mids1 i3)
+    (split, mids, i2)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::asks]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1823:4-1865:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1927:4-1969:5 -/
 def cdt.Mesh.asks
   {R : Type _} (RefineInst : cdt.Refine R) (self : cdt.Mesh) (refine : R)
   (t : Std.U32) (fresh_from : Std.U32) (triangles : Bool) (seen : Slice Bool)
@@ -5693,8 +6023,8 @@ def cdt.Mesh.asks
               else
                 let (split1, mids1) ←
                   cdt.Mesh.asks_loop0 RefineInst self.pts self.tris self.vtri
-                    self.last self.inside self.stack self.hit refine t
-                    fresh_from seen split mids tt.v tt.n tt.c 0#usize
+                    self.last self.inside self.stack self.hit self.walked
+                    refine t fresh_from seen split mids tt.v tt.n tt.c 0#usize
                 if triangles
                 then
                   let i2 ← lift (UScalar.cast .Usize t)
@@ -5741,8 +6071,8 @@ def cdt.Mesh.asks
             else
               let (split1, mids1) ←
                 cdt.Mesh.asks_loop1 RefineInst self.pts self.tris self.vtri
-                  self.last self.inside self.stack self.hit refine t fresh_from
-                  seen split mids tt.v tt.n tt.c 0#usize
+                  self.last self.inside self.stack self.hit self.walked refine
+                  t fresh_from seen split mids tt.v tt.n tt.c 0#usize
               if triangles
               then
                 let i2 ← lift (UScalar.cast .Usize t)
@@ -5789,8 +6119,8 @@ def cdt.Mesh.asks
           else
             let (split1, mids1) ←
               cdt.Mesh.asks_loop2 RefineInst self.pts self.tris self.vtri
-                self.last self.inside self.stack self.hit refine t fresh_from
-                seen split mids tt.v tt.n tt.c 0#usize
+                self.last self.inside self.stack self.hit self.walked refine t
+                fresh_from seen split mids tt.v tt.n tt.c 0#usize
             if triangles
             then
               let i2 ← lift (UScalar.cast .Usize t)
@@ -5835,7 +6165,7 @@ def cdt.Mesh.asks
   else ok (split, mids)
 
 /-- [forge_mesh::cdt::unsettled]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1547:0-1553:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1647:0-1653:1 -/
 def cdt.unsettled
   (rounds : Std.Usize) (mesh : cdt.Mesh) : Result cdt.CdtError := do
   let i := alloc.vec.Vec.len mesh.pts
@@ -5847,7 +6177,7 @@ def cdt.unsettled
   else ok (cdt.CdtError.Unsettled i1 0#u32)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1682:8-1685:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1786:8-1789:9 -/
 @[rust_loop_body]
 def cdt.Mesh.refine_loop0.body
   (v : alloc.vec.Vec cdt.Tri) (look : alloc.vec.Vec Std.U64) (t : Std.Usize) :
@@ -5864,7 +6194,7 @@ def cdt.Mesh.refine_loop0.body
   else ok (done look)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1682:8-1685:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1786:8-1789:9 -/
 @[rust_loop]
 def cdt.Mesh.refine_loop0
   (v : alloc.vec.Vec cdt.Tri) (look : alloc.vec.Vec Std.U64) (t : Std.Usize) :
@@ -5875,7 +6205,7 @@ def cdt.Mesh.refine_loop0
     (look, t)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1749:16-1752:17 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1853:16-1856:17 -/
 @[rust_loop_body]
 def cdt.Mesh.refine_loop1_loop0.body
   (look : alloc.vec.Vec Std.U64) (seen : alloc.vec.Vec Bool) (k : Std.Usize) :
@@ -5897,7 +6227,7 @@ def cdt.Mesh.refine_loop1_loop0.body
   else ok (done seen)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1749:16-1752:17 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1853:16-1856:17 -/
 @[rust_loop]
 def cdt.Mesh.refine_loop1_loop0
   (seen : alloc.vec.Vec Bool) (look : alloc.vec.Vec Std.U64) (k : Std.Usize) :
@@ -5908,28 +6238,28 @@ def cdt.Mesh.refine_loop1_loop0
     (seen, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop body 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1757:16-1761:17 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1861:16-1865:17 -/
 @[rust_loop_body]
 def cdt.Mesh.refine_loop1_loop1.body
   {R : Type _} (RefineInst : cdt.Refine R)
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (refine : R) (fresh_from : Std.U32) (seen : alloc.vec.Vec Bool)
-  (look : alloc.vec.Vec Std.U64) (triangles : Bool)
+  (i1 : Std.U64) (refine : R) (fresh_from : Std.U32)
+  (seen : alloc.vec.Vec Bool) (look : alloc.vec.Vec Std.U64) (triangles : Bool)
   (mids : alloc.vec.Vec forge_math.vec.Point2) (split : alloc.vec.Vec Bool)
   (k : Std.Usize) :
   Result (ControlFlow ((alloc.vec.Vec forge_math.vec.Point2) × (alloc.vec.Vec
     Bool) × Std.Usize) ((alloc.vec.Vec forge_math.vec.Point2) ×
     (alloc.vec.Vec Bool)))
   := do
-  let i1 := alloc.vec.Vec.len look
-  if k < i1
+  let i2 := alloc.vec.Vec.len look
+  if k < i2
   then
-    let i2 ←
+    let i3 ←
       alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U64) look
         k
-    let t ← lift (UScalar.cast .U32 i2)
+    let t ← lift (UScalar.cast .U32 i3)
     let s := alloc.vec.Vec.deref seen
     let (s1, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut split)
     let (s2, mids1) ←
@@ -5941,7 +6271,8 @@ def cdt.Mesh.refine_loop1_loop1.body
           last := i,
           inside := v3,
           stack := v4,
-          hit := p
+          hit := p,
+          walked := i1
         } refine t fresh_from triangles s s1 mids
     let k1 ← k + 1#usize
     let split1 := deref_mut_back s2
@@ -5949,14 +6280,14 @@ def cdt.Mesh.refine_loop1_loop1.body
   else ok (done (mids, split))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1757:16-1761:17 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1861:16-1865:17 -/
 @[rust_loop]
 def cdt.Mesh.refine_loop1_loop1
   {R : Type _} (RefineInst : cdt.Refine R)
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (refine : R) (mids : alloc.vec.Vec forge_math.vec.Point2)
+  (i1 : Std.U64) (refine : R) (mids : alloc.vec.Vec forge_math.vec.Point2)
   (fresh_from : Std.U32) (seen : alloc.vec.Vec Bool)
   (split : alloc.vec.Vec Bool) (look : alloc.vec.Vec Std.U64)
   (triangles : Bool) (k : Std.Usize) :
@@ -5964,11 +6295,11 @@ def cdt.Mesh.refine_loop1_loop1
   := do
   loop
     (fun (mids1, split1, k1) => cdt.Mesh.refine_loop1_loop1.body RefineInst v
-      v1 v2 i v3 v4 p refine fresh_from seen look triangles mids1 split1 k1)
+      v1 v2 i v3 v4 p i1 refine fresh_from seen look triangles mids1 split1 k1)
     (mids, split, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop body 4:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1763:16-1767:17 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1867:16-1871:17 -/
 @[rust_loop_body]
 def cdt.Mesh.refine_loop1_loop2.body
   (look : alloc.vec.Vec Std.U64) (seen : alloc.vec.Vec Bool)
@@ -5997,7 +6328,7 @@ def cdt.Mesh.refine_loop1_loop2.body
   else ok (done (seen, split))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop 4:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1763:16-1767:17 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1867:16-1871:17 -/
 @[rust_loop]
 def cdt.Mesh.refine_loop1_loop2
   (seen : alloc.vec.Vec Bool) (split : alloc.vec.Vec Bool)
@@ -6010,7 +6341,7 @@ def cdt.Mesh.refine_loop1_loop2
     (seen, split, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop body 5:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1777:20-1782:21 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1881:20-1886:21 -/
 @[rust_loop_body]
 def cdt.Mesh.refine_loop1_loop3.body
   (lo : forge_math.vec.Point2) (mids : alloc.vec.Vec forge_math.vec.Point2)
@@ -6038,7 +6369,7 @@ def cdt.Mesh.refine_loop1_loop3.body
   else ok (done (lo, keys))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop 5:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1777:20-1782:21 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1881:20-1886:21 -/
 @[rust_loop]
 def cdt.Mesh.refine_loop1_loop3
   (lo : forge_math.vec.Point2) (mids : alloc.vec.Vec forge_math.vec.Point2)
@@ -6051,7 +6382,7 @@ def cdt.Mesh.refine_loop1_loop3
     (keys, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop body 6:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1785:20-1791:21 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1889:20-1895:21 -/
 @[rust_loop_body]
 def cdt.Mesh.refine_loop1_loop4.body
   (eps : F64) (mids : alloc.vec.Vec forge_math.vec.Point2)
@@ -6085,7 +6416,7 @@ def cdt.Mesh.refine_loop1_loop4.body
   else ok (done (self, err))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop 6:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1785:20-1791:21 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1889:20-1895:21 -/
 @[rust_loop]
 def cdt.Mesh.refine_loop1_loop4
   (self : cdt.Mesh) (eps : F64) (mids : alloc.vec.Vec forge_math.vec.Point2)
@@ -6098,19 +6429,20 @@ def cdt.Mesh.refine_loop1_loop4
     (self, err, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop body 7:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1799:20-1802:21 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1903:20-1906:21 -/
 @[rust_loop_body]
 def cdt.Mesh.refine_loop1_loop5.body
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (seen : alloc.vec.Vec Bool) (look : alloc.vec.Vec Std.U64) (v5 : Std.U32) :
+  (i1 : Std.U64) (seen : alloc.vec.Vec Bool) (look : alloc.vec.Vec Std.U64)
+  (v5 : Std.U32) :
   Result (ControlFlow ((alloc.vec.Vec Bool) × (alloc.vec.Vec Std.U64) ×
     Std.U32) ((alloc.vec.Vec Bool) × (alloc.vec.Vec Std.U64)))
   := do
-  let i1 := alloc.vec.Vec.len v
-  let i2 ← lift (UScalar.cast .U32 i1)
-  if v5 < i2
+  let i2 := alloc.vec.Vec.len v
+  let i3 ← lift (UScalar.cast .U32 i2)
+  if v5 < i3
   then
     let (s, deref_mut_back) ← lift (alloc.vec.Vec.deref_mut seen)
     let (s1, look1) ←
@@ -6122,7 +6454,8 @@ def cdt.Mesh.refine_loop1_loop5.body
           last := i,
           inside := v3,
           stack := v4,
-          hit := p
+          hit := p,
+          walked := i1
         } v5 s look
     let v6 ← v5 + 1#u32
     let seen1 := deref_mut_back s1
@@ -6130,22 +6463,23 @@ def cdt.Mesh.refine_loop1_loop5.body
   else ok (done (seen, look))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop 7:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1799:20-1802:21 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1903:20-1906:21 -/
 @[rust_loop]
 def cdt.Mesh.refine_loop1_loop5
   (v : alloc.vec.Vec forge_math.vec.Point2) (v1 : alloc.vec.Vec cdt.Tri)
   (v2 : alloc.vec.Vec Std.U32) (i : Std.U32) (v3 : alloc.vec.Vec Bool)
   (v4 : alloc.vec.Vec (Std.U32 × Std.Usize)) (p : (Std.U32 × Std.U32))
-  (seen : alloc.vec.Vec Bool) (look : alloc.vec.Vec Std.U64) (v5 : Std.U32) :
+  (i1 : Std.U64) (seen : alloc.vec.Vec Bool) (look : alloc.vec.Vec Std.U64)
+  (v5 : Std.U32) :
   Result ((alloc.vec.Vec Bool) × (alloc.vec.Vec Std.U64))
   := do
   loop
     (fun (seen1, look1, v6) => cdt.Mesh.refine_loop1_loop5.body v v1 v2 i v3 v4
-      p seen1 look1 v6)
+      p i1 seen1 look1 v6)
     (seen, look, v5)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1699:8-1810:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1803:8-1914:9 -/
 @[rust_loop_body]
 def cdt.Mesh.refine_loop1.body
   {R : Type _} (RefineInst : cdt.Refine R) (refine : R) (size : F64)
@@ -6294,8 +6628,8 @@ def cdt.Mesh.refine_loop1.body
             let seen2 ← cdt.Mesh.refine_loop1_loop0 seen1 look 0#usize
             let (mids2, split2) ←
               cdt.Mesh.refine_loop1_loop1 RefineInst self.pts self.tris
-                self.vtri self.last self.inside self.stack self.hit refine
-                mids1 fresh_from seen2 split1 look triangles 0#usize
+                self.vtri self.last self.inside self.stack self.hit self.walked
+                refine mids1 fresh_from seen2 split1 look triangles 0#usize
             let (seen3, split3) ←
               cdt.Mesh.refine_loop1_loop2 seen2 split2 look 0#usize
             let b3 ← alloc.vec.Vec.is_empty mids2
@@ -6342,7 +6676,7 @@ def cdt.Mesh.refine_loop1.body
                   let (seen5, look2) ←
                     cdt.Mesh.refine_loop1_loop5 self1.pts self1.tris 
                       self1.vtri self1.last self1.inside self1.stack 
-                      self1.hit seen4 look1 first_new
+                      self1.hit self1.walked seen4 look1 first_new
                   let (s, deref_mut_back) ←
                     lift (alloc.vec.Vec.deref_mut seen5)
                   let (look3, s1, tmp2) ← cdt.ascending look2 s tmp1
@@ -6403,7 +6737,7 @@ def cdt.Mesh.refine_loop1.body
     else ok (done (self, err, settled))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1699:8-1810:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1803:8-1914:9 -/
 @[rust_loop]
 def cdt.Mesh.refine_loop1
   {R : Type _} (RefineInst : cdt.Refine R) (self : cdt.Mesh) (refine : R)
@@ -6427,7 +6761,7 @@ def cdt.Mesh.refine_loop1
       need, err, settled, stop, round)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::refine]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1664:4-1818:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1768:4-1922:5 -/
 def cdt.Mesh.refine
   {R : Type _} (RefineInst : cdt.Refine R) (self : cdt.Mesh) (refine : R)
   (input : Std.Usize) (lo : forge_math.vec.Point2) (size : F64) (eps : F64)
@@ -6465,7 +6799,7 @@ def cdt.Mesh.refine
   | some e => ok (core.result.Result.Err e, self1)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::flood]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1643:12-1650:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1747:12-1754:13 -/
 @[rust_loop_body]
 def cdt.Mesh.flood_loop0_loop0.body
   (tt : cdt.Tri) (pt : Std.U8) (parity : alloc.vec.Vec Std.U8)
@@ -6503,7 +6837,7 @@ def cdt.Mesh.flood_loop0_loop0.body
   else ok (done (parity, queue))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::flood]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1643:12-1650:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1747:12-1754:13 -/
 @[rust_loop]
 def cdt.Mesh.flood_loop0_loop0
   (parity : alloc.vec.Vec Std.U8) (queue : alloc.vec.Vec Std.U32)
@@ -6516,7 +6850,7 @@ def cdt.Mesh.flood_loop0_loop0
     (parity, queue, i)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::flood]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1637:8-1651:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1741:8-1755:9 -/
 @[rust_loop_body]
 def cdt.Mesh.flood_loop0.body
   (v : alloc.vec.Vec cdt.Tri) (parity : alloc.vec.Vec Std.U8)
@@ -6544,7 +6878,7 @@ def cdt.Mesh.flood_loop0.body
   else ok (done parity)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::flood]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1637:8-1651:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1741:8-1755:9 -/
 @[rust_loop]
 def cdt.Mesh.flood_loop0
   (v : alloc.vec.Vec cdt.Tri) (parity : alloc.vec.Vec Std.U8)
@@ -6557,7 +6891,7 @@ def cdt.Mesh.flood_loop0
     (parity, queue, head)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::flood]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1654:8-1657:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1758:8-1761:9 -/
 @[rust_loop_body]
 def cdt.Mesh.flood_loop1.body
   (nt : Std.Usize) (parity : alloc.vec.Vec Std.U8) (v : alloc.vec.Vec Bool)
@@ -6575,7 +6909,7 @@ def cdt.Mesh.flood_loop1.body
   else ok (done v)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::flood]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1654:8-1657:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1758:8-1761:9 -/
 @[rust_loop]
 def cdt.Mesh.flood_loop1
   (v : alloc.vec.Vec Bool) (nt : Std.Usize) (parity : alloc.vec.Vec Std.U8)
@@ -6587,7 +6921,7 @@ def cdt.Mesh.flood_loop1
     (v, t)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::flood]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1630:4-1658:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1734:4-1762:5 -/
 def cdt.Mesh.flood (self : cdt.Mesh) : Result cdt.Mesh := do
   let nt := alloc.vec.Vec.len self.tris
   let parity ← alloc.vec.from_elem core.clone.CloneU8 2#u8 nt
@@ -6609,7 +6943,7 @@ def cdt.Mesh.flood (self : cdt.Mesh) : Result cdt.Mesh := do
   ok { self with inside := v1 }
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_loops]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1608:12-1619:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1712:12-1723:13 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_loops_loop0_loop0.body
   (b : Bool) (lp : alloc.vec.Vec Std.U32) (self : cdt.Mesh)
@@ -6682,7 +7016,7 @@ def cdt.Mesh.insert_loops_loop0_loop0.body
   else ok (done (self, err))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_loops]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1608:12-1619:13 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1712:12-1723:13 -/
 @[rust_loop]
 def cdt.Mesh.insert_loops_loop0_loop0
   (b : Bool) (self : cdt.Mesh) (err : Option cdt.CdtError)
@@ -6695,7 +7029,7 @@ def cdt.Mesh.insert_loops_loop0_loop0
     (self, err, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_loops]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1602:8-1621:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1706:8-1725:9 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_loops_loop0.body
   (loops : Slice (alloc.vec.Vec Std.U32)) (self : cdt.Mesh)
@@ -6723,7 +7057,7 @@ def cdt.Mesh.insert_loops_loop0.body
   else ok (done (self, err))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_loops]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1602:8-1621:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1706:8-1725:9 -/
 @[rust_loop]
 def cdt.Mesh.insert_loops_loop0
   (self : cdt.Mesh) (loops : Slice (alloc.vec.Vec Std.U32))
@@ -6736,7 +7070,7 @@ def cdt.Mesh.insert_loops_loop0
     (self, err, l)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_loops]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1599:4-1626:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1703:4-1730:5 -/
 def cdt.Mesh.insert_loops
   (self : cdt.Mesh) (loops : Slice (alloc.vec.Vec Std.U32)) :
   Result ((core.result.Result Unit cdt.CdtError) × cdt.Mesh)
@@ -6747,7 +7081,7 @@ def cdt.Mesh.insert_loops
   | some e => ok (core.result.Result.Err e, self1)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_points]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1569:8-1587:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1669:8-1691:9 -/
 @[rust_loop_body]
 def cdt.Mesh.insert_points_loop.body
   (points : Slice forge_math.vec.Point2) (tangled : Bool)
@@ -6780,12 +7114,20 @@ def cdt.Mesh.insert_points_loop.body
           match l with
           | cdt.Location.Inside _ =>
             do
-            let self3 ← cdt.Mesh.insert self1 v l
-            ok (self3, same_as, err)
+            let (r, self3) ← cdt.Mesh.insert self1 v l
+            let o1 ←
+              match r with
+              | core.result.Result.Ok _ => ok err
+              | core.result.Result.Err e => ok (some e)
+            ok (self3, same_as, o1)
           | cdt.Location.OnEdge _ _ =>
             do
-            let self3 ← cdt.Mesh.insert self1 v l
-            ok (self3, same_as, err)
+            let (r, self3) ← cdt.Mesh.insert self1 v l
+            let o1 ←
+              match r with
+              | core.result.Result.Ok _ => ok err
+              | core.result.Result.Err e => ok (some e)
+            ok (self3, same_as, o1)
           | cdt.Location.Vertex w =>
             do
             let (v1, o1) ←
@@ -6810,7 +7152,7 @@ def cdt.Mesh.insert_points_loop.body
   else ok (done (self, same_as, err))
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_points]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1569:8-1587:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1669:8-1691:9 -/
 @[rust_loop]
 def cdt.Mesh.insert_points_loop
   (self : cdt.Mesh) (points : Slice forge_math.vec.Point2) (tangled : Bool)
@@ -6824,7 +7166,7 @@ def cdt.Mesh.insert_points_loop
     (self, same_as, err, k)
 
 /-- [forge_mesh::cdt::{forge_mesh::cdt::Mesh}::insert_points]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1558:4-1596:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1658:4-1700:5 -/
 def cdt.Mesh.insert_points
   (self : cdt.Mesh) (points : Slice forge_math.vec.Point2)
   (lo : forge_math.vec.Point2) (size : F64) (tangled : Bool) :
@@ -6842,7 +7184,7 @@ def cdt.Mesh.insert_points
   | some e => ok (core.result.Result.Err e, self1)
 
 /-- [forge_mesh::cdt::one]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1530:4-1537:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1630:4-1637:5 -/
 @[rust_loop_body]
 def cdt.one_loop.body
   (same_as : Slice Std.U64) (v : Std.U32) (l : Std.Usize) (r : Std.Usize) :
@@ -6863,7 +7205,7 @@ def cdt.one_loop.body
   else ok (done l)
 
 /-- [forge_mesh::cdt::one]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1530:4-1537:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1630:4-1637:5 -/
 @[rust_loop]
 def cdt.one_loop
   (same_as : Slice Std.U64) (v : Std.U32) (l : Std.Usize) (r : Std.Usize) :
@@ -6874,7 +7216,7 @@ def cdt.one_loop
     (l, r)
 
 /-- [forge_mesh::cdt::one]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1528:0-1543:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1628:0-1643:1 -/
 def cdt.one (same_as : Slice Std.U64) (v : Std.U32) : Result Std.U32 := do
   let r := Slice.len same_as
   let l ← cdt.one_loop same_as v 0#usize r
@@ -6890,8 +7232,18 @@ def cdt.one (same_as : Slice Std.U64) (v : Std.U32) : Result Std.U32 := do
     else ok v
   else ok v
 
+/-- [forge_mesh::cdt::subnormal]:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1622:0-1624:1 -/
+def cdt.subnormal (x : F64) : Result Bool := do
+  if F64.Ops.ne x (F64.Ops.ofBits 0)
+  then
+    let fl ← core.f64.F64.abs x
+    let fl1 ← core.f64.F64.MIN_POSITIVE
+    ok (F64.Ops.lt fl fl1)
+  else ok false
+
 /-- [forge_mesh::cdt::bad_input]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1498:4-1504:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1593:4-1599:5 -/
 @[rust_loop_body]
 def cdt.bad_input_loop0.body
   (points : Slice forge_math.vec.Point2) (err : Option cdt.CdtError)
@@ -6927,7 +7279,7 @@ def cdt.bad_input_loop0.body
   else ok (done err)
 
 /-- [forge_mesh::cdt::bad_input]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1498:4-1504:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1593:4-1599:5 -/
 @[rust_loop]
 def cdt.bad_input_loop0
   (points : Slice forge_math.vec.Point2) (err : Option cdt.CdtError)
@@ -6939,7 +7291,7 @@ def cdt.bad_input_loop0
     (err, i)
 
 /-- [forge_mesh::cdt::bad_input]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1512:8-1520:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1607:8-1615:9 -/
 @[rust_loop_body]
 def cdt.bad_input_loop1_loop0.body
   (tangled : Bool) (n : Std.U32) (li : Std.Usize) (lp : alloc.vec.Vec Std.U32)
@@ -6980,7 +7332,7 @@ def cdt.bad_input_loop1_loop0.body
   else ok (done err)
 
 /-- [forge_mesh::cdt::bad_input]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1512:8-1520:9 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1607:8-1615:9 -/
 @[rust_loop]
 def cdt.bad_input_loop1_loop0
   (tangled : Bool) (n : Std.U32) (err : Option cdt.CdtError) (li : Std.Usize)
@@ -6992,7 +7344,7 @@ def cdt.bad_input_loop1_loop0
     (err, k)
 
 /-- [forge_mesh::cdt::bad_input]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1506:4-1522:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1601:4-1617:5 -/
 @[rust_loop_body]
 def cdt.bad_input_loop1.body
   (loops : Slice (alloc.vec.Vec Std.U32)) (tangled : Bool) (n : Std.U32)
@@ -7021,7 +7373,7 @@ def cdt.bad_input_loop1.body
   else ok (done err)
 
 /-- [forge_mesh::cdt::bad_input]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1506:4-1522:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1601:4-1617:5 -/
 @[rust_loop]
 def cdt.bad_input_loop1
   (loops : Slice (alloc.vec.Vec Std.U32)) (tangled : Bool) (n : Std.U32)
@@ -7033,7 +7385,7 @@ def cdt.bad_input_loop1
     (err, li)
 
 /-- [forge_mesh::cdt::bad_input]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1494:0-1524:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1589:0-1619:1 -/
 def cdt.bad_input
   (points : Slice forge_math.vec.Point2)
   (loops : Slice (alloc.vec.Vec Std.U32)) (tangled : Bool) :
@@ -7045,16 +7397,49 @@ def cdt.bad_input
   cdt.bad_input_loop1 loops tangled n err 0#usize
 
 /-- [forge_mesh::cdt::least]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1483:0-1485:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1578:0-1580:1 -/
 def cdt.least (a : F64) (b : F64) : Result F64 := do
   if F64.Ops.lt a b
   then ok a
   else ok b
 
 /-- [forge_mesh::cdt::within]: loop body 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1370:4-1375:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1424:4-1427:5 -/
 @[rust_loop_body]
 def cdt.within_loop0.body
+  (points : Slice forge_math.vec.Point2) (k : Std.Usize) (tiny : Bool) :
+  Result (ControlFlow (Std.Usize × Bool) Bool)
+  := do
+  if tiny
+  then ok (done tiny)
+  else
+    let i := Slice.len points
+    if k < i
+    then
+      let p ← Slice.index_usize points k
+      let b ← cdt.subnormal p.x
+      let tiny1 ← if b
+                    then ok true
+                    else cdt.subnormal p.y
+      let k1 ← k + 1#usize
+      ok (cont (k1, tiny1))
+    else ok (done tiny)
+
+/-- [forge_mesh::cdt::within]: loop 0:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1424:4-1427:5 -/
+@[rust_loop]
+def cdt.within_loop0
+  (points : Slice forge_math.vec.Point2) (k : Std.Usize) (tiny : Bool) :
+  Result Bool
+  := do
+  loop
+    (fun (k1, tiny1) => cdt.within_loop0.body points k1 tiny1)
+    (k, tiny)
+
+/-- [forge_mesh::cdt::within]: loop body 1:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1443:4-1448:5 -/
+@[rust_loop_body]
+def cdt.within_loop1.body
   (points : Slice forge_math.vec.Point2) (lo : forge_math.vec.Point2)
   (hi : forge_math.vec.Point2) (k : Std.Usize) :
   Result (ControlFlow (forge_math.vec.Point2 × forge_math.vec.Point2 ×
@@ -7074,22 +7459,22 @@ def cdt.within_loop0.body
     ok (cont (lo1, hi1, k1))
   else ok (done (lo, hi))
 
-/-- [forge_mesh::cdt::within]: loop 0:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1370:4-1375:5 -/
+/-- [forge_mesh::cdt::within]: loop 1:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1443:4-1448:5 -/
 @[rust_loop]
-def cdt.within_loop0
+def cdt.within_loop1
   (points : Slice forge_math.vec.Point2) (lo : forge_math.vec.Point2)
   (hi : forge_math.vec.Point2) (k : Std.Usize) :
   Result (forge_math.vec.Point2 × forge_math.vec.Point2)
   := do
   loop
-    (fun (lo1, hi1, k1) => cdt.within_loop0.body points lo1 hi1 k1)
+    (fun (lo1, hi1, k1) => cdt.within_loop1.body points lo1 hi1 k1)
     (lo, hi, k)
 
-/-- [forge_mesh::cdt::within]: loop body 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1383:4-1389:5 -/
+/-- [forge_mesh::cdt::within]: loop body 2:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1469:4-1483:5 -/
 @[rust_loop_body]
-def cdt.within_loop1.body
+def cdt.within_loop2.body
   (interior : Slice forge_math.vec.Point2) (fl : F64) (fl1 : F64) (fl2 : F64)
   (fl3 : F64) (kept : alloc.vec.Vec forge_math.vec.Point2) (k : Std.Usize) :
   Result (ControlFlow ((alloc.vec.Vec forge_math.vec.Point2) × Std.Usize)
@@ -7107,40 +7492,48 @@ def cdt.within_loop1.body
         let b1 ← core.f64.F64.is_finite p.y
         if b1
         then
-          if F64.Ops.ge p.x fl
-          then
-            if F64.Ops.le p.x fl2
-            then
-              if F64.Ops.ge p.y fl1
+          let b2 ← cdt.subnormal p.x
+          if b2
+          then ok kept
+          else
+            let b3 ← cdt.subnormal p.y
+            if b3
+            then ok kept
+            else
+              if F64.Ops.ge p.x fl
               then
-                if F64.Ops.le p.y fl3
-                then alloc.vec.Vec.push kept p
+                if F64.Ops.le p.x fl2
+                then
+                  if F64.Ops.ge p.y fl1
+                  then
+                    if F64.Ops.le p.y fl3
+                    then alloc.vec.Vec.push kept p
+                    else ok kept
+                  else ok kept
                 else ok kept
               else ok kept
-            else ok kept
-          else ok kept
         else ok kept
       else ok kept
     let k1 ← k + 1#usize
     ok (cont (kept1, k1))
   else ok (done kept)
 
-/-- [forge_mesh::cdt::within]: loop 1:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1383:4-1389:5 -/
+/-- [forge_mesh::cdt::within]: loop 2:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1469:4-1483:5 -/
 @[rust_loop]
-def cdt.within_loop1
+def cdt.within_loop2
   (interior : Slice forge_math.vec.Point2) (fl : F64) (fl1 : F64) (fl2 : F64)
   (fl3 : F64) (kept : alloc.vec.Vec forge_math.vec.Point2) (k : Std.Usize) :
   Result (alloc.vec.Vec forge_math.vec.Point2)
   := do
   loop
-    (fun (kept1, k1) => cdt.within_loop1.body interior fl fl1 fl2 fl3 kept1 k1)
+    (fun (kept1, k1) => cdt.within_loop2.body interior fl fl1 fl2 fl3 kept1 k1)
     (kept, k)
 
-/-- [forge_mesh::cdt::within]: loop body 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1421:12-1425:13 -/
+/-- [forge_mesh::cdt::within]: loop body 4:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1516:12-1520:13 -/
 @[rust_loop_body]
-def cdt.within_loop2_loop0.body
+def cdt.within_loop3_loop0.body
   (same_as : alloc.vec.Vec Std.U64) (lp : alloc.vec.Vec Std.U32)
   (chords : alloc.vec.Vec (Std.U32 × Std.U32)) (k : Std.Usize) :
   Result (ControlFlow ((alloc.vec.Vec (Std.U32 × Std.U32)) × Std.Usize)
@@ -7171,23 +7564,23 @@ def cdt.within_loop2_loop0.body
     ok (cont (chords1, i1))
   else ok (done chords)
 
-/-- [forge_mesh::cdt::within]: loop 3:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1421:12-1425:13 -/
+/-- [forge_mesh::cdt::within]: loop 4:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1516:12-1520:13 -/
 @[rust_loop]
-def cdt.within_loop2_loop0
+def cdt.within_loop3_loop0
   (same_as : alloc.vec.Vec Std.U64)
   (chords : alloc.vec.Vec (Std.U32 × Std.U32)) (lp : alloc.vec.Vec Std.U32)
   (k : Std.Usize) :
   Result (alloc.vec.Vec (Std.U32 × Std.U32))
   := do
   loop
-    (fun (chords1, k1) => cdt.within_loop2_loop0.body same_as lp chords1 k1)
+    (fun (chords1, k1) => cdt.within_loop3_loop0.body same_as lp chords1 k1)
     (chords, k)
 
-/-- [forge_mesh::cdt::within]: loop body 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1418:8-1427:9 -/
+/-- [forge_mesh::cdt::within]: loop body 3:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1513:8-1522:9 -/
 @[rust_loop_body]
-def cdt.within_loop2.body
+def cdt.within_loop3.body
   (loops : Slice (alloc.vec.Vec Std.U32)) (same_as : alloc.vec.Vec Std.U64)
   (chords : alloc.vec.Vec (Std.U32 × Std.U32)) (l : Std.Usize) :
   Result (ControlFlow ((alloc.vec.Vec (Std.U32 × Std.U32)) × Std.Usize)
@@ -7197,27 +7590,27 @@ def cdt.within_loop2.body
   if l < i
   then
     let lp ← Slice.index_usize loops l
-    let chords1 ← cdt.within_loop2_loop0 same_as chords lp 0#usize
+    let chords1 ← cdt.within_loop3_loop0 same_as chords lp 0#usize
     let l1 ← l + 1#usize
     ok (cont (chords1, l1))
   else ok (done chords)
 
-/-- [forge_mesh::cdt::within]: loop 2:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1418:8-1427:9 -/
+/-- [forge_mesh::cdt::within]: loop 3:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1513:8-1522:9 -/
 @[rust_loop]
-def cdt.within_loop2
+def cdt.within_loop3
   (loops : Slice (alloc.vec.Vec Std.U32)) (same_as : alloc.vec.Vec Std.U64)
   (chords : alloc.vec.Vec (Std.U32 × Std.U32)) (l : Std.Usize) :
   Result (alloc.vec.Vec (Std.U32 × Std.U32))
   := do
   loop
-    (fun (chords1, l1) => cdt.within_loop2.body loops same_as chords1 l1)
+    (fun (chords1, l1) => cdt.within_loop3.body loops same_as chords1 l1)
     (chords, l)
 
-/-- [forge_mesh::cdt::within]: loop body 4:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1438:4-1443:5 -/
+/-- [forge_mesh::cdt::within]: loop body 5:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1533:4-1538:5 -/
 @[rust_loop_body]
-def cdt.within_loop3.body
+def cdt.within_loop4.body
   (eps : F64) (kept : alloc.vec.Vec forge_math.vec.Point2)
   (order : alloc.vec.Vec Std.Usize) (mesh : cdt.Mesh)
   (err : Option cdt.CdtError) (k : Std.Usize) :
@@ -7246,80 +7639,22 @@ def cdt.within_loop3.body
     else ok (done (mesh, err))
   else ok (done (mesh, err))
 
-/-- [forge_mesh::cdt::within]: loop 4:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1438:4-1443:5 -/
+/-- [forge_mesh::cdt::within]: loop 5:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1533:4-1538:5 -/
 @[rust_loop]
-def cdt.within_loop3
+def cdt.within_loop4
   (eps : F64) (kept : alloc.vec.Vec forge_math.vec.Point2) (mesh : cdt.Mesh)
   (order : alloc.vec.Vec Std.Usize) (err : Option cdt.CdtError) (k : Std.Usize)
   :
   Result (cdt.Mesh × (Option cdt.CdtError))
   := do
   loop
-    (fun (mesh1, err1, k1) => cdt.within_loop3.body eps kept order mesh1 err1
+    (fun (mesh1, err1, k1) => cdt.within_loop4.body eps kept order mesh1 err1
       k1)
     (mesh, err, k)
 
-/-- [forge_mesh::cdt::within]: loop body 5:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1454:4-1460:5 -/
-@[rust_loop_body]
-def cdt.within_loop4.body
-  (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
-  (t : Std.Usize) :
-  Result (ControlFlow ((alloc.vec.Vec (Array Std.U32 3#usize)) × Std.Usize)
-    ((alloc.vec.Vec forge_math.vec.Point2) × (alloc.vec.Vec (Array Std.U32
-    3#usize))))
-  := do
-  let i := alloc.vec.Vec.len mesh.tris
-  if t < i
-  then
-    let t1 ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
-        mesh.tris t
-    let b ←
-      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
-        mesh.inside t
-    let triangles1 ←
-      if b
-      then
-        do
-        let i1 ← Array.index_usize t1.v 0#usize
-        if i1 >= cdt.SUPER
-        then
-          let i2 ← Array.index_usize t1.v 1#usize
-          if i2 >= cdt.SUPER
-          then
-            let i3 ← Array.index_usize t1.v 2#usize
-            if i3 >= cdt.SUPER
-            then
-              let i4 ← i1 - cdt.SUPER
-              let i5 ← i2 - cdt.SUPER
-              let i6 ← i3 - cdt.SUPER
-              alloc.vec.Vec.push triangles (Array.make 3#usize [ i4, i5, i6 ] :
-                Array Std.U32 3#usize)
-            else ok triangles
-          else ok triangles
-        else ok triangles
-      else ok triangles
-    let t2 ← t + 1#usize
-    ok (cont (triangles1, t2))
-  else ok (done (mesh.pts, triangles))
-
-/-- [forge_mesh::cdt::within]: loop 5:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1454:4-1460:5 -/
-@[rust_loop]
-def cdt.within_loop4
-  (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
-  (t : Std.Usize) :
-  Result ((alloc.vec.Vec forge_math.vec.Point2) × (alloc.vec.Vec (Array
-    Std.U32 3#usize)))
-  := do
-  loop
-    (fun (triangles1, t1) => cdt.within_loop4.body mesh triangles1 t1)
-    (triangles, t)
-
 /-- [forge_mesh::cdt::within]: loop body 6:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1454:4-1460:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1549:4-1555:5 -/
 @[rust_loop_body]
 def cdt.within_loop5.body
   (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
@@ -7364,7 +7699,7 @@ def cdt.within_loop5.body
   else ok (done (mesh.pts, triangles))
 
 /-- [forge_mesh::cdt::within]: loop 6:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1454:4-1460:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1549:4-1555:5 -/
 @[rust_loop]
 def cdt.within_loop5
   (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
@@ -7377,55 +7712,9 @@ def cdt.within_loop5
     (triangles, t)
 
 /-- [forge_mesh::cdt::within]: loop body 7:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1438:4-1443:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1549:4-1555:5 -/
 @[rust_loop_body]
 def cdt.within_loop6.body
-  (eps : F64) (kept : alloc.vec.Vec forge_math.vec.Point2)
-  (order : alloc.vec.Vec Std.Usize) (mesh : cdt.Mesh)
-  (err : Option cdt.CdtError) (k : Std.Usize) :
-  Result (ControlFlow (cdt.Mesh × (Option cdt.CdtError) × Std.Usize)
-    (cdt.Mesh × (Option cdt.CdtError)))
-  := do
-  let b := core.option.Option.is_none err
-  if b
-  then
-    let i := alloc.vec.Vec.len order
-    if k < i
-    then
-      let i1 ←
-        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize)
-          order k
-      let p ←
-        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
-          forge_math.vec.Point2) kept i1
-      let (r, mesh1) ← cdt.Mesh.insert_interior mesh p eps
-      let err1 ←
-        match r with
-        | core.result.Result.Ok _ => ok err
-        | core.result.Result.Err e => ok (some e)
-      let k1 ← k + 1#usize
-      ok (cont (mesh1, err1, k1))
-    else ok (done (mesh, err))
-  else ok (done (mesh, err))
-
-/-- [forge_mesh::cdt::within]: loop 7:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1438:4-1443:5 -/
-@[rust_loop]
-def cdt.within_loop6
-  (eps : F64) (kept : alloc.vec.Vec forge_math.vec.Point2) (mesh : cdt.Mesh)
-  (order : alloc.vec.Vec Std.Usize) (err : Option cdt.CdtError) (k : Std.Usize)
-  :
-  Result (cdt.Mesh × (Option cdt.CdtError))
-  := do
-  loop
-    (fun (mesh1, err1, k1) => cdt.within_loop6.body eps kept order mesh1 err1
-      k1)
-    (mesh, err, k)
-
-/-- [forge_mesh::cdt::within]: loop body 8:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1454:4-1460:5 -/
-@[rust_loop_body]
-def cdt.within_loop7.body
   (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
   (t : Std.Usize) :
   Result (ControlFlow ((alloc.vec.Vec (Array Std.U32 3#usize)) × Std.Usize)
@@ -7467,21 +7756,67 @@ def cdt.within_loop7.body
     ok (cont (triangles1, t2))
   else ok (done (mesh.pts, triangles))
 
-/-- [forge_mesh::cdt::within]: loop 8:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1454:4-1460:5 -/
+/-- [forge_mesh::cdt::within]: loop 7:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1549:4-1555:5 -/
 @[rust_loop]
-def cdt.within_loop7
+def cdt.within_loop6
   (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
   (t : Std.Usize) :
   Result ((alloc.vec.Vec forge_math.vec.Point2) × (alloc.vec.Vec (Array
     Std.U32 3#usize)))
   := do
   loop
-    (fun (triangles1, t1) => cdt.within_loop7.body mesh triangles1 t1)
+    (fun (triangles1, t1) => cdt.within_loop6.body mesh triangles1 t1)
     (triangles, t)
 
+/-- [forge_mesh::cdt::within]: loop body 8:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1533:4-1538:5 -/
+@[rust_loop_body]
+def cdt.within_loop7.body
+  (eps : F64) (kept : alloc.vec.Vec forge_math.vec.Point2)
+  (order : alloc.vec.Vec Std.Usize) (mesh : cdt.Mesh)
+  (err : Option cdt.CdtError) (k : Std.Usize) :
+  Result (ControlFlow (cdt.Mesh × (Option cdt.CdtError) × Std.Usize)
+    (cdt.Mesh × (Option cdt.CdtError)))
+  := do
+  let b := core.option.Option.is_none err
+  if b
+  then
+    let i := alloc.vec.Vec.len order
+    if k < i
+    then
+      let i1 ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+          order k
+      let p ←
+        alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+          forge_math.vec.Point2) kept i1
+      let (r, mesh1) ← cdt.Mesh.insert_interior mesh p eps
+      let err1 ←
+        match r with
+        | core.result.Result.Ok _ => ok err
+        | core.result.Result.Err e => ok (some e)
+      let k1 ← k + 1#usize
+      ok (cont (mesh1, err1, k1))
+    else ok (done (mesh, err))
+  else ok (done (mesh, err))
+
+/-- [forge_mesh::cdt::within]: loop 8:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1533:4-1538:5 -/
+@[rust_loop]
+def cdt.within_loop7
+  (eps : F64) (kept : alloc.vec.Vec forge_math.vec.Point2) (mesh : cdt.Mesh)
+  (order : alloc.vec.Vec Std.Usize) (err : Option cdt.CdtError) (k : Std.Usize)
+  :
+  Result (cdt.Mesh × (Option cdt.CdtError))
+  := do
+  loop
+    (fun (mesh1, err1, k1) => cdt.within_loop7.body eps kept order mesh1 err1
+      k1)
+    (mesh, err, k)
+
 /-- [forge_mesh::cdt::within]: loop body 9:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1454:4-1460:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1549:4-1555:5 -/
 @[rust_loop_body]
 def cdt.within_loop8.body
   (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
@@ -7526,7 +7861,7 @@ def cdt.within_loop8.body
   else ok (done (mesh.pts, triangles))
 
 /-- [forge_mesh::cdt::within]: loop 9:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1454:4-1460:5 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1549:4-1555:5 -/
 @[rust_loop]
 def cdt.within_loop8
   (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
@@ -7538,8 +7873,66 @@ def cdt.within_loop8
     (fun (triangles1, t1) => cdt.within_loop8.body mesh triangles1 t1)
     (triangles, t)
 
+/-- [forge_mesh::cdt::within]: loop body 10:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1549:4-1555:5 -/
+@[rust_loop_body]
+def cdt.within_loop9.body
+  (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
+  (t : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (Array Std.U32 3#usize)) × Std.Usize)
+    ((alloc.vec.Vec forge_math.vec.Point2) × (alloc.vec.Vec (Array Std.U32
+    3#usize))))
+  := do
+  let i := alloc.vec.Vec.len mesh.tris
+  if t < i
+  then
+    let t1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice cdt.Tri)
+        mesh.tris t
+    let b ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Bool)
+        mesh.inside t
+    let triangles1 ←
+      if b
+      then
+        do
+        let i1 ← Array.index_usize t1.v 0#usize
+        if i1 >= cdt.SUPER
+        then
+          let i2 ← Array.index_usize t1.v 1#usize
+          if i2 >= cdt.SUPER
+          then
+            let i3 ← Array.index_usize t1.v 2#usize
+            if i3 >= cdt.SUPER
+            then
+              let i4 ← i1 - cdt.SUPER
+              let i5 ← i2 - cdt.SUPER
+              let i6 ← i3 - cdt.SUPER
+              alloc.vec.Vec.push triangles (Array.make 3#usize [ i4, i5, i6 ] :
+                Array Std.U32 3#usize)
+            else ok triangles
+          else ok triangles
+        else ok triangles
+      else ok triangles
+    let t2 ← t + 1#usize
+    ok (cont (triangles1, t2))
+  else ok (done (mesh.pts, triangles))
+
+/-- [forge_mesh::cdt::within]: loop 10:
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1549:4-1555:5 -/
+@[rust_loop]
+def cdt.within_loop9
+  (mesh : cdt.Mesh) (triangles : alloc.vec.Vec (Array Std.U32 3#usize))
+  (t : Std.Usize) :
+  Result ((alloc.vec.Vec forge_math.vec.Point2) × (alloc.vec.Vec (Array
+    Std.U32 3#usize)))
+  := do
+  loop
+    (fun (triangles1, t1) => cdt.within_loop9.body mesh triangles1 t1)
+    (triangles, t)
+
 /-- [forge_mesh::cdt::within]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1346:0-1468:1 -/
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1408:0-1563:1 -/
 def cdt.within
   {R : Type _} (RefineInst : cdt.Refine R)
   (points : Slice forge_math.vec.Point2)
@@ -7551,192 +7944,326 @@ def cdt.within
   let o ← cdt.bad_input points loops tangled
   match o with
   | none =>
-    let b ← core.slice.Slice.is_empty points
-    if b
+    let tiny ← cdt.within_loop0 points 0#usize false
+    if tiny
     then
-      ok (core.result.Result.Ok
-        ({
-           points := (alloc.vec.Vec.new forge_math.vec.Point2),
-           triangles := (alloc.vec.Vec.new (Array Std.U32 3#usize))
-         }, true))
+      ok (core.result.Result.Err (cdt.CdtError.Internal cdt.Fault.Subnormal))
     else
-      let fl ← core.f64.F64.INFINITY
-      let lo ← forge_math.vec.Point2.new fl fl
-      let fl1 ← core.f64.F64.NEG_INFINITY
-      let hi ← forge_math.vec.Point2.new fl1 fl1
-      let (lo1, hi1) ← cdt.within_loop0 points lo hi 0#usize
-      let fl2 ← lift (F64.Ops.sub hi1.x lo1.x)
-      let fl3 ← lift (F64.Ops.sub hi1.y lo1.y)
-      let fl4 ← cdt.most fl2 fl3
-      let fl5 ← core.f64.F64.MIN_POSITIVE
-      let size ← cdt.most fl4 fl5
-      let eps ← lift (F64.Ops.mul (F64.Ops.ofBits 4427486594234968593) size)
-      let fl6 ← lift (F64.Ops.add lo1.x hi1.x)
-      let fl7 ← lift (F64.Ops.mul (F64.Ops.ofBits 4602678819172646912) fl6)
-      let fl8 ← lift (F64.Ops.add lo1.y hi1.y)
-      let fl9 ← lift (F64.Ops.mul (F64.Ops.ofBits 4602678819172646912) fl8)
-      let c ← forge_math.vec.Point2.new fl7 fl9
-      let m ← lift (F64.Ops.mul (F64.Ops.ofBits 4636737291354636288) size)
-      let kept ←
-        cdt.within_loop1 interior lo1.x lo1.y hi1.x hi1.y (alloc.vec.Vec.new
-          forge_math.vec.Point2) 0#usize
-      let i ← lift (UScalar.cast .Usize cdt.SUPER)
-      let i1 := Slice.len points
-      let i2 ← i + i1
-      let i3 := alloc.vec.Vec.len kept
-      let i4 ← i2 + i3
-      let pts := alloc.vec.Vec.with_capacity forge_math.vec.Point2 i4
-      let fl10 ← lift (F64.Ops.sub c.x m)
-      let fl11 ← lift (F64.Ops.sub c.y m)
-      let p ← forge_math.vec.Point2.new fl10 fl11
-      let pts1 ← alloc.vec.Vec.push pts p
-      let fl12 ← lift (F64.Ops.add c.x m)
-      let fl13 ← lift (F64.Ops.sub c.y m)
-      let p1 ← forge_math.vec.Point2.new fl12 fl13
-      let pts2 ← alloc.vec.Vec.push pts1 p1
-      let fl14 ← lift (F64.Ops.add c.y m)
-      let p2 ← forge_math.vec.Point2.new c.x fl14
-      let pts3 ← alloc.vec.Vec.push pts2 p2
-      let a := Array.repeat 3#usize cdt.NONE
-      let a1 := Array.repeat 3#usize false
-      let y ←
-        lift (Std.Array.to_slice
-          (Array.make 1#usize [
-             {
-               v := (Array.make 3#usize [ 0#u32, 1#u32, 2#u32 ]),
-               n := a,
-               c := a1
-             }
-             ] : Array cdt.Tri 1#usize))
-      let ret := alloc.slice.Slice.into_vec y
-      let v ← alloc.vec.from_elem core.clone.CloneU32 0#u32 3#usize
-      let pts4 ←
-        alloc.vec.Vec.extend_from_slice
-          forge_math.vec.Point2.Insts.CoreCloneClone pts3 points
-      let i5 := alloc.vec.Vec.len pts4
-      let v1 ← alloc.vec.Vec.resize core.clone.CloneU32 v i5 0#u32
-      let (r, mesh) ←
-        cdt.Mesh.insert_points
-          {
-            pts := pts4,
-            tris := ret,
-            vtri := v1,
-            last := 0#u32,
-            inside := (alloc.vec.Vec.new Bool),
-            stack := (alloc.vec.Vec.new (Std.U32 × Std.Usize)),
-            hit := (cdt.NONE, cdt.NONE)
-          } points lo1 size tangled
-      let cf ← core.result.Result.Insts.CoreOpsTry.branch r
-      match cf with
-      | core.ops.control_flow.ControlFlow.Continue val =>
-        if tangled
+      let b ← core.slice.Slice.is_empty points
+      if b
+      then
+        ok (core.result.Result.Ok
+          ({
+             points := (alloc.vec.Vec.new forge_math.vec.Point2),
+             triangles := (alloc.vec.Vec.new (Array Std.U32 3#usize))
+           }, true))
+      else
+        let fl ← core.f64.F64.INFINITY
+        let lo ← forge_math.vec.Point2.new fl fl
+        let fl1 ← core.f64.F64.NEG_INFINITY
+        let hi ← forge_math.vec.Point2.new fl1 fl1
+        let (lo1, hi1) ← cdt.within_loop1 points lo hi 0#usize
+        let fl2 ← lift (F64.Ops.sub hi1.x lo1.x)
+        let fl3 ← lift (F64.Ops.sub hi1.y lo1.y)
+        let fl4 ← cdt.most fl2 fl3
+        let fl5 ← core.f64.F64.MIN_POSITIVE
+        let size ← cdt.most fl4 fl5
+        let eps ←
+          lift (F64.Ops.mul (F64.Ops.ofBits 4427486594234968593) size)
+        let fl6 ← lift (F64.Ops.add lo1.x hi1.x)
+        let fl7 ← lift (F64.Ops.mul (F64.Ops.ofBits 4602678819172646912) fl6)
+        let fl8 ← lift (F64.Ops.add lo1.y hi1.y)
+        let fl9 ← lift (F64.Ops.mul (F64.Ops.ofBits 4602678819172646912) fl8)
+        let c ← forge_math.vec.Point2.new fl7 fl9
+        let m ← lift (F64.Ops.mul (F64.Ops.ofBits 4636737291354636288) size)
+        let s0 ← lift (F64.Ops.sub c.x m)
+        let s1 ← lift (F64.Ops.add c.x m)
+        let s2 ← lift (F64.Ops.sub c.y m)
+        let s3 ← lift (F64.Ops.add c.y m)
+        let b1 ← core.f64.F64.is_finite s0
+        if b1
         then
-          let chords ←
-            cdt.within_loop2 loops val (alloc.vec.Vec.new (Std.U32 × Std.U32))
-              0#usize
-          let (r1, mesh1) ← cdt.Mesh.insert_tangled mesh chords
-          let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
-          match cf1 with
-          | core.ops.control_flow.ControlFlow.Continue _ =>
-            let mesh2 ← cdt.Mesh.flood mesh1
-            let s := alloc.vec.Vec.deref kept
-            let order ← cdt.brio_order s lo1 size
-            let (mesh3, err) ←
-              cdt.within_loop3 eps kept mesh2 order none 0#usize
-            match err with
-            | none =>
-              match refine with
-              | none =>
-                let (v2, triangles) ←
-                  cdt.within_loop4 mesh3 (alloc.vec.Vec.new (Array Std.U32
-                    3#usize)) 0#usize
-                let i6 ← lift (UScalar.cast .Usize cdt.SUPER)
-                let (v3, _) ←
-                  alloc.vec.Vec.split_off core.clone.CloneGlobal v2 i6
-                ok (core.result.Result.Ok ({ points := v3, triangles }, true))
-              | some refine1 =>
-                let i6 := Slice.len points
-                let i7 := alloc.vec.Vec.len kept
-                let i8 ← i6 + i7
-                let (r2, mesh4) ←
-                  cdt.Mesh.refine RefineInst mesh3 refine1 i8 lo1 size eps
-                    rounds as_far
-                let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
-                match cf2 with
-                | core.ops.control_flow.ControlFlow.Continue val1 =>
-                  let (v2, triangles) ←
-                    cdt.within_loop5 mesh4 (alloc.vec.Vec.new (Array Std.U32
-                      3#usize)) 0#usize
-                  let i9 ← lift (UScalar.cast .Usize cdt.SUPER)
-                  let (v3, _) ←
-                    alloc.vec.Vec.split_off core.clone.CloneGlobal v2 i9
-                  ok (core.result.Result.Ok ({ points := v3, triangles },
-                    val1))
-                | core.ops.control_flow.ControlFlow.Break residual =>
-                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                    (cdt.Triangulation × Bool) (core.convert.FromSame
-                    cdt.CdtError) residual
-            | some e => ok (core.result.Result.Err e)
-          | core.ops.control_flow.ControlFlow.Break residual =>
-            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-              (cdt.Triangulation × Bool) (core.convert.FromSame cdt.CdtError)
-              residual
+          let b2 ← core.f64.F64.is_finite s1
+          if b2
+          then
+            let b3 ← core.f64.F64.is_finite s2
+            if b3
+            then
+              let b4 ← core.f64.F64.is_finite s3
+              if b4
+              then
+                let fl10 ← lift (F64.Ops.sub lo1.x size)
+                if F64.Ops.lt s0 fl10
+                then
+                  let fl11 ← lift (F64.Ops.add hi1.x size)
+                  if F64.Ops.gt s1 fl11
+                  then
+                    let fl12 ← lift (F64.Ops.sub lo1.y size)
+                    if F64.Ops.lt s2 fl12
+                    then
+                      let fl13 ← lift (F64.Ops.add hi1.y size)
+                      if F64.Ops.gt s3 fl13
+                      then
+                        let fl14 ← core.f64.F64.abs c.x
+                        let fl15 ← core.f64.F64.abs c.y
+                        let fl16 ← cdt.most fl14 fl15
+                        let fl17 ←
+                          lift (F64.Ops.mul (F64.Ops.ofBits
+                            4786511204640096256) size)
+                        if F64.Ops.gt fl16 fl17
+                        then
+                          ok (core.result.Result.Err (cdt.CdtError.Internal
+                            cdt.Fault.FarFromOrigin))
+                        else
+                          let fl18 ← core.f64.F64.abs s0
+                          let fl19 ← core.f64.F64.abs s1
+                          let fl20 ← cdt.most fl18 fl19
+                          let fl21 ← core.f64.F64.abs s2
+                          let fl22 ← core.f64.F64.abs s3
+                          let fl23 ← cdt.most fl21 fl22
+                          let fl24 ← cdt.most fl20 fl23
+                          if F64.Ops.gt fl24 cdt.RANGE
+                          then
+                            ok (core.result.Result.Err (cdt.CdtError.Internal
+                              cdt.Fault.FarFromOrigin))
+                          else
+                            let kept ←
+                              cdt.within_loop2 interior lo1.x lo1.y hi1.x 
+                                hi1.y (alloc.vec.Vec.new forge_math.vec.Point2)
+                                0#usize
+                            let i ← lift (UScalar.cast .Usize cdt.SUPER)
+                            let i1 := Slice.len points
+                            let i2 ← i + i1
+                            let i3 := alloc.vec.Vec.len kept
+                            let i4 ← i2 + i3
+                            let pts :=
+                              alloc.vec.Vec.with_capacity forge_math.vec.Point2
+                                i4
+                            let fl25 ← lift (F64.Ops.sub c.x m)
+                            let fl26 ← lift (F64.Ops.sub c.y m)
+                            let p ← forge_math.vec.Point2.new fl25 fl26
+                            let pts1 ← alloc.vec.Vec.push pts p
+                            let fl27 ← lift (F64.Ops.add c.x m)
+                            let fl28 ← lift (F64.Ops.sub c.y m)
+                            let p1 ← forge_math.vec.Point2.new fl27 fl28
+                            let pts2 ← alloc.vec.Vec.push pts1 p1
+                            let fl29 ← lift (F64.Ops.add c.y m)
+                            let p2 ← forge_math.vec.Point2.new c.x fl29
+                            let pts3 ← alloc.vec.Vec.push pts2 p2
+                            let a := Array.repeat 3#usize cdt.NONE
+                            let a1 := Array.repeat 3#usize false
+                            let y ←
+                              lift (Std.Array.to_slice
+                                (Array.make 1#usize [
+                                   {
+                                     v :=
+                                       (Array.make 3#usize [
+                                         0#u32, 1#u32, 2#u32
+                                         ]),
+                                     n := a,
+                                     c := a1
+                                   }
+                                   ] : Array cdt.Tri 1#usize))
+                            let ret := alloc.slice.Slice.into_vec y
+                            let v ←
+                              alloc.vec.from_elem core.clone.CloneU32 0#u32
+                                3#usize
+                            let pts4 ←
+                              alloc.vec.Vec.extend_from_slice
+                                forge_math.vec.Point2.Insts.CoreCloneClone pts3
+                                points
+                            let i5 := alloc.vec.Vec.len pts4
+                            let v1 ←
+                              alloc.vec.Vec.resize core.clone.CloneU32 v i5
+                                0#u32
+                            let (r, mesh) ←
+                              cdt.Mesh.insert_points
+                                {
+                                  pts := pts4,
+                                  tris := ret,
+                                  vtri := v1,
+                                  last := 0#u32,
+                                  inside := (alloc.vec.Vec.new Bool),
+                                  stack :=
+                                    (alloc.vec.Vec.new (Std.U32 × Std.Usize)),
+                                  hit := (cdt.NONE, cdt.NONE),
+                                  walked := 0#u64
+                                } points lo1 size tangled
+                            let cf ←
+                              core.result.Result.Insts.CoreOpsTry.branch r
+                            match cf with
+                            | core.ops.control_flow.ControlFlow.Continue val =>
+                              if tangled
+                              then
+                                let chords ←
+                                  cdt.within_loop3 loops val (alloc.vec.Vec.new
+                                    (Std.U32 × Std.U32)) 0#usize
+                                let (r1, mesh1) ←
+                                  cdt.Mesh.insert_tangled mesh chords
+                                let cf1 ←
+                                  core.result.Result.Insts.CoreOpsTry.branch r1
+                                match cf1 with
+                                | core.ops.control_flow.ControlFlow.Continue _
+                                  =>
+                                  let mesh2 ← cdt.Mesh.flood mesh1
+                                  let s := alloc.vec.Vec.deref kept
+                                  let order ← cdt.brio_order s lo1 size
+                                  let (mesh3, err) ←
+                                    cdt.within_loop4 eps kept mesh2 order none
+                                      0#usize
+                                  match err with
+                                  | none =>
+                                    match refine with
+                                    | none =>
+                                      let (v2, triangles) ←
+                                        cdt.within_loop5 mesh3
+                                          (alloc.vec.Vec.new (Array Std.U32
+                                          3#usize)) 0#usize
+                                      let i6 ←
+                                        lift (UScalar.cast .Usize cdt.SUPER)
+                                      let (v3, _) ←
+                                        alloc.vec.Vec.split_off
+                                          core.clone.CloneGlobal v2 i6
+                                      ok (core.result.Result.Ok
+                                        ({ points := v3, triangles }, true))
+                                    | some refine1 =>
+                                      let i6 := Slice.len points
+                                      let i7 := alloc.vec.Vec.len kept
+                                      let i8 ← i6 + i7
+                                      let (r2, mesh4) ←
+                                        cdt.Mesh.refine RefineInst mesh3
+                                          refine1 i8 lo1 size eps rounds as_far
+                                      let cf2 ←
+                                        core.result.Result.Insts.CoreOpsTry.branch
+                                          r2
+                                      match cf2 with
+                                      |
+                                        core.ops.control_flow.ControlFlow.Continue
+                                        val1 =>
+                                        let (v2, triangles) ←
+                                          cdt.within_loop6 mesh4
+                                            (alloc.vec.Vec.new (Array Std.U32
+                                            3#usize)) 0#usize
+                                        let i9 ←
+                                          lift (UScalar.cast .Usize cdt.SUPER)
+                                        let (v3, _) ←
+                                          alloc.vec.Vec.split_off
+                                            core.clone.CloneGlobal v2 i9
+                                        ok (core.result.Result.Ok
+                                          ({ points := v3, triangles }, val1))
+                                      | core.ops.control_flow.ControlFlow.Break
+                                        residual =>
+                                        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                                          (cdt.Triangulation × Bool)
+                                          (core.convert.FromSame cdt.CdtError)
+                                          residual
+                                  | some e => ok (core.result.Result.Err e)
+                                | core.ops.control_flow.ControlFlow.Break
+                                  residual =>
+                                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                                    (cdt.Triangulation × Bool)
+                                    (core.convert.FromSame cdt.CdtError)
+                                    residual
+                              else
+                                let (r1, mesh1) ←
+                                  cdt.Mesh.insert_loops mesh loops
+                                let cf1 ←
+                                  core.result.Result.Insts.CoreOpsTry.branch r1
+                                match cf1 with
+                                | core.ops.control_flow.ControlFlow.Continue _
+                                  =>
+                                  let mesh2 ← cdt.Mesh.flood mesh1
+                                  let s := alloc.vec.Vec.deref kept
+                                  let order ← cdt.brio_order s lo1 size
+                                  let (mesh3, err) ←
+                                    cdt.within_loop7 eps kept mesh2 order none
+                                      0#usize
+                                  match err with
+                                  | none =>
+                                    match refine with
+                                    | none =>
+                                      let (v2, triangles) ←
+                                        cdt.within_loop8 mesh3
+                                          (alloc.vec.Vec.new (Array Std.U32
+                                          3#usize)) 0#usize
+                                      let i6 ←
+                                        lift (UScalar.cast .Usize cdt.SUPER)
+                                      let (v3, _) ←
+                                        alloc.vec.Vec.split_off
+                                          core.clone.CloneGlobal v2 i6
+                                      ok (core.result.Result.Ok
+                                        ({ points := v3, triangles }, true))
+                                    | some refine1 =>
+                                      let i6 := Slice.len points
+                                      let i7 := alloc.vec.Vec.len kept
+                                      let i8 ← i6 + i7
+                                      let (r2, mesh4) ←
+                                        cdt.Mesh.refine RefineInst mesh3
+                                          refine1 i8 lo1 size eps rounds as_far
+                                      let cf2 ←
+                                        core.result.Result.Insts.CoreOpsTry.branch
+                                          r2
+                                      match cf2 with
+                                      |
+                                        core.ops.control_flow.ControlFlow.Continue
+                                        val1 =>
+                                        let (v2, triangles) ←
+                                          cdt.within_loop9 mesh4
+                                            (alloc.vec.Vec.new (Array Std.U32
+                                            3#usize)) 0#usize
+                                        let i9 ←
+                                          lift (UScalar.cast .Usize cdt.SUPER)
+                                        let (v3, _) ←
+                                          alloc.vec.Vec.split_off
+                                            core.clone.CloneGlobal v2 i9
+                                        ok (core.result.Result.Ok
+                                          ({ points := v3, triangles }, val1))
+                                      | core.ops.control_flow.ControlFlow.Break
+                                        residual =>
+                                        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                                          (cdt.Triangulation × Bool)
+                                          (core.convert.FromSame cdt.CdtError)
+                                          residual
+                                  | some e => ok (core.result.Result.Err e)
+                                | core.ops.control_flow.ControlFlow.Break
+                                  residual =>
+                                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                                    (cdt.Triangulation × Bool)
+                                    (core.convert.FromSame cdt.CdtError)
+                                    residual
+                            | core.ops.control_flow.ControlFlow.Break residual
+                              =>
+                              core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
+                                (cdt.Triangulation × Bool)
+                                (core.convert.FromSame cdt.CdtError) residual
+                      else
+                        ok (core.result.Result.Err (cdt.CdtError.Internal
+                          cdt.Fault.FarFromOrigin))
+                    else
+                      ok (core.result.Result.Err (cdt.CdtError.Internal
+                        cdt.Fault.FarFromOrigin))
+                  else
+                    ok (core.result.Result.Err (cdt.CdtError.Internal
+                      cdt.Fault.FarFromOrigin))
+                else
+                  ok (core.result.Result.Err (cdt.CdtError.Internal
+                    cdt.Fault.FarFromOrigin))
+              else
+                ok (core.result.Result.Err (cdt.CdtError.Internal
+                  cdt.Fault.FarFromOrigin))
+            else
+              ok (core.result.Result.Err (cdt.CdtError.Internal
+                cdt.Fault.FarFromOrigin))
+          else
+            ok (core.result.Result.Err (cdt.CdtError.Internal
+              cdt.Fault.FarFromOrigin))
         else
-          let (r1, mesh1) ← cdt.Mesh.insert_loops mesh loops
-          let cf1 ← core.result.Result.Insts.CoreOpsTry.branch r1
-          match cf1 with
-          | core.ops.control_flow.ControlFlow.Continue _ =>
-            let mesh2 ← cdt.Mesh.flood mesh1
-            let s := alloc.vec.Vec.deref kept
-            let order ← cdt.brio_order s lo1 size
-            let (mesh3, err) ←
-              cdt.within_loop6 eps kept mesh2 order none 0#usize
-            match err with
-            | none =>
-              match refine with
-              | none =>
-                let (v2, triangles) ←
-                  cdt.within_loop7 mesh3 (alloc.vec.Vec.new (Array Std.U32
-                    3#usize)) 0#usize
-                let i6 ← lift (UScalar.cast .Usize cdt.SUPER)
-                let (v3, _) ←
-                  alloc.vec.Vec.split_off core.clone.CloneGlobal v2 i6
-                ok (core.result.Result.Ok ({ points := v3, triangles }, true))
-              | some refine1 =>
-                let i6 := Slice.len points
-                let i7 := alloc.vec.Vec.len kept
-                let i8 ← i6 + i7
-                let (r2, mesh4) ←
-                  cdt.Mesh.refine RefineInst mesh3 refine1 i8 lo1 size eps
-                    rounds as_far
-                let cf2 ← core.result.Result.Insts.CoreOpsTry.branch r2
-                match cf2 with
-                | core.ops.control_flow.ControlFlow.Continue val1 =>
-                  let (v2, triangles) ←
-                    cdt.within_loop8 mesh4 (alloc.vec.Vec.new (Array Std.U32
-                      3#usize)) 0#usize
-                  let i9 ← lift (UScalar.cast .Usize cdt.SUPER)
-                  let (v3, _) ←
-                    alloc.vec.Vec.split_off core.clone.CloneGlobal v2 i9
-                  ok (core.result.Result.Ok ({ points := v3, triangles },
-                    val1))
-                | core.ops.control_flow.ControlFlow.Break residual =>
-                  core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-                    (cdt.Triangulation × Bool) (core.convert.FromSame
-                    cdt.CdtError) residual
-            | some e => ok (core.result.Result.Err e)
-          | core.ops.control_flow.ControlFlow.Break residual =>
-            core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-              (cdt.Triangulation × Bool) (core.convert.FromSame cdt.CdtError)
-              residual
-      | core.ops.control_flow.ControlFlow.Break residual =>
-        core.result.Result.Insts.CoreOpsTry_traitFromResidualResult.from_residual
-          (cdt.Triangulation × Bool) (core.convert.FromSame cdt.CdtError)
-          residual
+          ok (core.result.Result.Err (cdt.CdtError.Internal
+            cdt.Fault.FarFromOrigin))
   | some e => ok (core.result.Result.Err e)
 
 /-- [forge_mesh::cdt::triangulate_within]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1317:0-1328:1
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1379:0-1390:1
     Visibility: public -/
 def cdt.triangulate_within
   {R : Type _} (RefineInst : cdt.Refine R)
@@ -7754,7 +8281,7 @@ def cdt.triangulate_within
   | core.result.Result.Err e => ok (core.result.Result.Err e)
 
 /-- [forge_mesh::cdt::triangulate_refined]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1305:0-1312:1
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1367:0-1374:1
     Visibility: public -/
 def cdt.triangulate_refined
   {R : Type _} (RefineInst : cdt.Refine R)
@@ -7766,7 +8293,7 @@ def cdt.triangulate_refined
   cdt.triangulate_within RefineInst points loops interior refine false
 
 /-- [forge_mesh::cdt::triangulate_as_far]:
-    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1333:0-1341:1
+    Source: 'kernel/forge-mesh/src/cdt.rs', lines 1395:0-1403:1
     Visibility: public -/
 def cdt.triangulate_as_far
   {R : Type _} (RefineInst : cdt.Refine R)

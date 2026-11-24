@@ -399,8 +399,12 @@ pub fn nearest<'a>(name: &str, names: impl Iterator<Item = &'a str>) -> Option<S
         }
         row[b.len()]
     };
+    // (within 2 edits only names within 2 of its length: the rest need no table)
+    let len = name.chars().count();
     names
-        .filter(|n| *n != name)
+        .filter(|n| {
+            *n != name && n.len().abs_diff(name.len()) <= 2 * 4 && n.chars().count().abs_diff(len) <= 2
+        })
         .map(|n| (dist(name, n), builtin(n), n))
         .filter(|(d, _, _)| *d <= 2 && *d < name.chars().count())
         .min()

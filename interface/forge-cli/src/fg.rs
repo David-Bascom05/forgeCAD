@@ -282,9 +282,15 @@ impl Session {
     }
 
     /// `cam F` for a turning document (forge-turn-lang): the same reply schema, its program the
-    /// file when every op is certified.
+    /// file when every op is certified. `cam F check`: with the exact in-process stock and the
+    /// G4 leftover (the normal path keeps the stock as columns, sound by construction).
     fn cam_turn(src: &str, dir: &Path, a: &Args) -> Reply {
-        let cam = forge_turn_lang::run(src, dir);
+        let check = a.words.first().is_some_and(|w| w == "check");
+        let cam = if check {
+            forge_turn_lang::run_checked(src, dir)
+        } else {
+            forge_turn_lang::run(src, dir)
+        };
         let mut text = String::new();
         for e in &cam.errors {
             text.push_str(&format!("error: {e}\n"));

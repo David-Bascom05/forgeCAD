@@ -311,10 +311,19 @@ pub fn dist(s: &Sec, t: &Sec) -> Ival {
             let o2 = cross(u, sub2(d, a));
             let o3 = cross(v, sub2(a, c));
             let o4 = cross(v, sub2(b, c));
+            // or one beyond the other along its direction (a line across it separates them:
+            // what decides collinear segments; Dist2.lean `beyond`)
+            let (uu, vv) = (dot(u, u), dot(v, v));
+            let (p1, p2) = (dot(u, sub2(c, a)), dot(u, sub2(d, a)));
+            let (p3, p4) = (dot(v, sub2(a, c)), dot(v, sub2(b, c)));
             let apart = (o1.lo > 0.0 && o2.lo > 0.0)
                 || (o1.hi < 0.0 && o2.hi < 0.0)
                 || (o3.lo > 0.0 && o4.lo > 0.0)
-                || (o3.hi < 0.0 && o4.hi < 0.0);
+                || (o3.hi < 0.0 && o4.hi < 0.0)
+                || (p1.lo > uu.hi && p2.lo > uu.hi)
+                || (p1.hi < 0.0 && p2.hi < 0.0)
+                || (p3.lo > vv.hi && p4.lo > vv.hi)
+                || (p3.hi < 0.0 && p4.hi < 0.0);
             let cross_sure = ((o1.lo > 0.0 && o2.hi < 0.0) || (o1.hi < 0.0 && o2.lo > 0.0))
                 && ((o3.lo > 0.0 && o4.hi < 0.0) || (o3.hi < 0.0 && o4.lo > 0.0));
             if !apart {
@@ -1045,5 +1054,54 @@ mod gap_tests {
             let spacing = std::f64::consts::FRAC_PI_2 / 4000.0 + g / 100.0;
             assert!(d.lo <= m + spacing, "q {q:?}: lo {} vs trim {m}", d.lo);
         }
+    }
+}
+
+#[cfg(test)]
+mod collinear_tests {
+    use super::*;
+
+    /// Collinear segments apart along their line: the low end is their gap (it was 0, sound but
+    /// loose: neither is on one side of the other's line). Overlapping ones: 0.
+    #[test]
+    fn collinear_segments_apart_have_their_gap() {
+        let s = Sec::Seg {
+            a: [0.0, 0.0],
+            b: [1.0, 0.0],
+        };
+        for (t, gap) in [
+            (
+                Sec::Seg {
+                    a: [3.0, 0.0],
+                    b: [4.0, 0.0],
+                },
+                2.0,
+            ),
+            (
+                Sec::Seg {
+                    a: [-2.5, 0.0],
+                    b: [-4.0, 0.0],
+                },
+                2.5,
+            ),
+            (
+                Sec::Seg {
+                    a: [3.0, 3.0],
+                    b: [4.0, 4.0],
+                },
+                (2.0f64 * 2.0 + 3.0 * 3.0).sqrt(),
+            ),
+        ] {
+            let d = dist(&s, &t);
+            assert!(d.lo > 0.0 && d.lo <= gap && gap - d.lo < 1e-12, "{d:?} vs {gap}");
+        }
+        let d = dist(
+            &s,
+            &Sec::Seg {
+                a: [0.5, 0.0],
+                b: [2.0, 0.0],
+            },
+        );
+        assert_eq!(d.lo, 0.0);
     }
 }
