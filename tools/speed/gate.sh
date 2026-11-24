@@ -101,15 +101,51 @@ cargo build -q --release -p forge-lang --example benchparts
 bin="$target/release/examples"
 if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
   # (the binaries at a path of one length whatever the checkout, and the fixed getrandom)
+  # (the directory's path reaches each counted process in argv[0], LD_PRELOAD and
+  # FORGE_BENCH_PARTS: its LENGTH moves the counts (tour seq: 9,441,701 from a 22-character
+  # directory, 9,436,604 from 14, 9,437,129 from 41), its letters do not. Always this one form)
+  fill() {
+    cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$1/"
+    mkdir "$1/parts"
+    cp interface/forge-lang/parts/bench/*.fg "$1/parts/"
+    cc -O2 -shared -fPIC -o "$1/fixedrandom.so" "$dir/fixedrandom.c"
+  }
   gatedir=$(mktemp -d /tmp/forge-gate.XXXXXX)
   trap 'rm -rf "$gatedir"' EXIT
-  cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$gatedir/"
-  mkdir "$gatedir/parts"
-  cp interface/forge-lang/parts/bench/*.fg "$gatedir/parts/"
-  cc -O2 -shared -fPIC -o "$gatedir/fixedrandom.so" "$dir/fixedrandom.c"
+  case $gatedir in
+    /tmp/forge-gate.??????) ;;
+    *) echo "gate dir $gatedir is not /tmp/forge-gate.XXXXXX: its length would move the counts" >&2; exit 64 ;;
+  esac
+  fill "$gatedir"
+  # GATE_SELFTEST=1: the counts do not depend on which gate directory they are made in (nor on the
+  # checkout's: workspace crates embed their sources' paths relative). A second directory of the
+  # same form counts the process alone and one small part's line; any difference fails the gate
+  if [ "${GATE_SELFTEST:-0}" = 1 ]; then
+    other=$(mktemp -d /tmp/forge-gate.XXXXXX)
+    fill "$other"
+    for a in "noop" "tour seq"; do
+      # shellcheck disable=SC2086
+      x=$(bin=$gatedir; count "$bin/regen1" $a)
+      # shellcheck disable=SC2086
+      y=$(bin=$other; count "$bin/regen1" $a)
+      echo "self-test regen1 $a: $x in $gatedir, $y in $other"
+      if [ -z "$x" ] || [ "$x" != "$y" ]; then
+        rm -rf "$other"
+        echo "self-test FAILED: the count depends on the gate directory" >&2
+        exit 65
+      fi
+    done
+    rm -rf "$other"
+  fi
   bin=$gatedir
 fi
 now=$(mktemp)
+# each binary's process alone (its start, std's runtime and the loader's work, nothing built):
+# band.py takes it off that binary's whole-process lines, so a strict line is not charged with
+# start-up work that moves with the binary's layout (glibc reading /proc/self/maps for the main
+# thread's stack guard, say), which on the smallest lines is several hundredths of a percent
+echo "noop regen1 $(count "$bin/regen1" noop)" >> "$now"
+echo "noop benchparts $(count "$bin/benchparts" noop)" >> "$now"
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
     n=$(count "$bin/regen1" $p $m)

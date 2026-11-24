@@ -172,3 +172,4 @@ import ForgeCurved
 #print axioms ForgeCurved.PifNear.touch_inside_on_eq_outside
 #print axioms ForgeCurved.PifNear.touch_inside_inside_differs
 #print axioms ForgeCurved.PifNear.touch_inside_on_ne_outside
+#print axioms ForgeCurved.PlaceMerge.merge_within
