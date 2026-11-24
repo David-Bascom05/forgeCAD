@@ -283,7 +283,8 @@ mod tests {
     #[test]
     fn text_records_join_and_lose_their_padding() {
         let t = unwrap_text(b"T51 : a b  \r\n c1\n2 ");
-        assert_eq!(t, b"T51 : a b c12 ".to_vec());
+        // the last record too: its padding goes, and the file's last token ends it
+        assert_eq!(t, b"T51 : a b c12".to_vec());
     }
 
     #[test]

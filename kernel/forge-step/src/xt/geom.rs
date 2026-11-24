@@ -566,11 +566,12 @@ impl<'s> Geo<'s> {
                 if !(b > tol::LINEAR && a >= b) {
                     return refuse(idx, ty, format!("radii {a} and {b}"));
                 }
-                Ok(Curve::Ellipse(Ellipse {
-                    frame: self.frame(&n, "centre", "normal", "x_axis")?,
-                    major: a,
-                    minor: b,
-                }))
+                // finite, a >= b > 0 checked above: Ellipse::new's condition
+                Ok(Curve::Ellipse(Ellipse::new(
+                    self.frame(&n, "centre", "normal", "x_axis")?,
+                    a,
+                    b,
+                )))
             }
             134 => {
                 let s = self.nurbs_curve(idx, n.p("nurbs"), false)?;

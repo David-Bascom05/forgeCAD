@@ -1,6 +1,6 @@
 //! A model the user attached to a machine (forge_machine_builder::models): its file read to
-//! triangles in its own coordinates (STEP and IGES through forge-step, meshed as the app meshes a
-//! file's body; STL as it is), kept per file, and placed in the base frame at home.
+//! triangles in its own coordinates (STEP, IGES and Parasolid through forge-step, meshed as the app
+//! meshes a file's body; STL as it is), kept per file, and placed in the base frame at home.
 use crate::machine_mesh::Tris;
 use forge_machine_builder::models::{Format, Model};
 use std::collections::HashMap;
@@ -43,7 +43,7 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Tris, String> {
             }
             done(t, name)
         }
-        Format::Step | Format::Iges => {
+        Format::Step | Format::Iges | Format::Parasolid => {
             let imp = forge_step::import(bytes, &forge_step::Limits::default())
                 .map_err(|_| format!("{name}: not a model this reads"))?;
             let mut t = Tris::default();
@@ -149,7 +149,8 @@ mod tests {
         let p = placed(&t, &m);
         assert_eq!(p.pos[1], [25.4, 0.0, 100.0]);
         assert_eq!(placed_points(&t, &m).len(), 3);
-        assert!(read("part.x_t", stl).unwrap_err().contains("STEP"));
+        // an STL's bytes under a Parasolid name: read as what its name says, and refused
+        assert!(read("part.x_t", stl).unwrap_err().contains("not a model this reads"));
         assert!(read("empty.stl", b"solid x\nendsolid x\n").is_err());
     }
 }
