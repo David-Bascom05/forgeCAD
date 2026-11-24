@@ -7,7 +7,7 @@ use super::schema::{self, Kind, Tab};
 use super::{Ask, CamWs, Cmd, Locate, OpDlg, SetupDlg};
 use crate::shell::placed::Placed;
 use crate::shell::theme::{Theme, medium, mono, sans};
-use crate::shell::thermo_ui::{button, fact, foot, frame, head, heading, note, row, tabs};
+use crate::shell::thermo_ui::{button, foot, frame, head, heading, note, row, tabs};
 use crate::shell::{Action, Shell, icons};
 use egui::{Align2, Color32, Rect, Sense, Stroke, Ui, pos2, vec2};
 
@@ -1314,15 +1314,10 @@ fn op_dialog(
                         if let Some(tool) = w.lib.tools.iter().find(|x| {
                             w.stmt(&val).and_then(|s| s.pos(0)).map(super::doc::unquote).as_deref() == Some(x.id.as_str())
                         }) {
-                            fact(ui, t, "Type", tool.kind.name(), DLG_W, t.ink2);
-                            fact(
-                                ui,
-                                t,
-                                "Diameter · flutes · flute length",
-                                &format!("{} · {} · {} mm", num(tool.dc), tool.nof, num(tool.lcf)),
-                                DLG_W,
-                                t.ink2,
-                            );
+                            fact(ui, t, "Type", kind_words(tool.kind), DLG_W, t.ink2);
+                            fact(ui, t, "Diameter", &format!("{} mm", num(tool.dc)), DLG_W, t.ink2);
+                            fact(ui, t, "Flutes", &tool.nof.to_string(), DLG_W, t.ink2);
+                            fact(ui, t, "Flute length", &format!("{} mm", num(tool.lcf)), DLG_W, t.ink2);
                         }
                         ui.horizontal(|ui| {
                             ui.add_space(146.0);
@@ -1397,7 +1392,7 @@ fn op_dialog(
             }
             ui.add_space(2.0);
             note(ui, spec.what, DLG_W, t.ink2);
-            note(ui, &CamWs::op_text(d), DLG_W, t.ink2);
+            forge_text(ui, t, &CamWs::op_text(d), DLG_W);
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
@@ -1632,7 +1627,7 @@ fn setup_dialog(
                 }
             }
             if d.tab != 3 {
-                note(ui, &w.setup_text(d), DLG_W, t.ink2);
+                forge_text(ui, t, &w.setup_text(d), DLG_W);
             }
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
@@ -1763,7 +1758,7 @@ fn lathe_dialog(
                     }
                 }
             }
-            note(ui, &w.setup_text(d), DLG_W, t.ink2);
+            forge_text(ui, t, &w.setup_text(d), DLG_W);
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
@@ -2069,7 +2064,12 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
             for h in &w.lib.holders {
                 fact(ui, t, &h.id, &format!("{} · gauge {} mm · max {} rpm", h.interface, num(h.gauge_length), grouped(h.max_rpm)), width, t.ink);
             }
-            note(ui, "Built in: generic tools and conservative holders, our own numbers; verify with the vendor. A project adds its own in cam/*.toml beside the document.", width, t.ink2);
+            // one line (a small view keeps it whole); the rest on hover
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                ui.label(egui::RichText::new("Built in: generic, our own numbers · verify with the vendor").font(sans(12.0)).color(t.ink2))
+                    .on_hover_text("Generic tools and conservative holders, our own numbers: verify with the vendor. A project adds its own in cam/*.toml beside the document.");
+            });
             ui.add_space(8.0);
         });
     if let Some(id) = add.clone().filter(|_| w.turning()) {
@@ -2314,7 +2314,7 @@ fn programs_window(
                 places.push(("cam:programs:allow".into(), r.rect));
             });
             ui.add_space(4.0);
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.add_space(14.0);
                 if !setups.is_empty() && button(ui, t, "New Program", false, "cam:programs:new".into(), places) {
                     let n = super::doc::free_name(&w.stmts, &format!("prog{}", progs.len() + 1));
@@ -2427,6 +2427,7 @@ fn program_row(
     let mut want = had.clone();
     ui.horizontal(|ui| {
         ui.add_space(14.0);
+        ui.spacing_mut().item_spacing.x = 10.0;
         ui.label(egui::RichText::new("Setups").font(sans(13.0)).color(t.ink2));
         for su in setups {
             let mut on = want.contains(su);
@@ -2468,6 +2469,7 @@ fn program_row(
         let mut pick: Vec<String> = ops.iter().filter(|o| on_now(&o.name)).map(|o| o.name.clone()).collect();
         ui.horizontal_wrapped(|ui| {
             ui.add_space(14.0);
+            ui.spacing_mut().item_spacing.x = 10.0;
             ui.label(egui::RichText::new("Ops").font(sans(13.0)).color(t.ink2));
             for o in &ops {
                 let mut on = pick.contains(&o.name);
@@ -2539,7 +2541,7 @@ fn program_row(
             });
         }
         prog_field(ui, t, "Decimals", 34.0, p, "decimals", "", field, edits, places);
-        prog_field(ui, t, "Feed dec.", 34.0, p, "feed_decimals", "", field, edits, places);
+        prog_field(ui, t, "Feed decimals", 34.0, p, "feed_decimals", "", field, edits, places);
         ui.add_space(6.0);
         ui.label(egui::RichText::new("Coolant").font(sans(12.0)).color(t.ink2));
         let now = p.arg_str("coolant").unwrap_or_default();
@@ -2613,8 +2615,9 @@ fn prog_field(
         Some((k, b)) if *k == key => b.clone(),
         _ => now.clone(),
     };
-    ui.add_space(6.0);
+    ui.add_space(8.0);
     ui.label(egui::RichText::new(label).font(sans(12.0)).color(t.ink2));
+    ui.add_space(4.0);
     let r = ui.add(
         egui::TextEdit::singleline(&mut v)
             .font(sans(12.0))
@@ -3059,10 +3062,47 @@ fn machine_words(id: &str) -> String {
     if words.is_empty() { id.to_string() } else { words.join(" ") }
 }
 
+/// A label and its value on one row, the value right-aligned; when the two do not fit side by
+/// side the value takes its own row under the label, right-aligned and wrapped: a value never
+/// draws over its label (docs/ux/STANDARD.md §5).
+fn fact(ui: &mut Ui, t: &Theme, k: &str, v: &str, w: f32, ink: Color32) {
+    fact_r(ui, t, k, v, w, ink);
+}
+
+/// `fact`, its response (for a hover).
+fn fact_r(ui: &mut Ui, t: &Theme, k: &str, v: &str, w: f32, ink: Color32) -> egui::Response {
+    let pad = 14.0;
+    let kg = ui.painter().layout_no_wrap(k.to_string(), sans(12.0), t.ink2);
+    let vg = ui.painter().layout_no_wrap(v.to_string(), mono(12.0), ink);
+    if kg.size().x + vg.size().x + 16.0 <= w - 2.0 * pad {
+        let (r, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
+        ui.painter().galley(pos2(r.left() + pad, r.center().y - kg.size().y * 0.5), kg, t.ink2);
+        ui.painter().galley(pos2(r.right() - pad - vg.size().x, r.center().y - vg.size().y * 0.5), vg, ink);
+        return resp;
+    }
+    // the label, then the value under it (wrapped to the row)
+    let vg = ui.painter().layout(v.to_string(), mono(12.0), ink, w - 2.0 * pad - 12.0);
+    let h = 20.0 + vg.size().y + 2.0;
+    let (r, resp) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+    ui.painter().galley(pos2(r.left() + pad, r.top() + 10.0 - kg.size().y * 0.5), kg, t.ink2);
+    ui.painter().galley(pos2(r.right() - pad - vg.size().x, r.top() + 20.0), vg, ink);
+    resp
+}
+
 /// A fact whose words need a sentence: the row, and the sentence on hover.
 fn fact_tip(ui: &mut Ui, t: &Theme, k: &str, v: &str, tip: &str, w: f32, ink: Color32) {
-    let (r, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
-    ui.painter().text(pos2(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, k, sans(12.0), t.ink2);
-    ui.painter().text(pos2(r.right() - 14.0, r.center().y), Align2::RIGHT_CENTER, v, mono(12.0), ink);
-    resp.on_hover_text(tip);
+    fact_r(ui, t, k, v, w, ink).on_hover_text(tip);
+}
+
+/// The statement a dialog will write, as the document holds it: a muted "Forge text" label and
+/// the line in the code font (the text is the source of truth; this is it, not a caption).
+fn forge_text(ui: &mut Ui, t: &Theme, text: &str, w: f32) {
+    ui.add_space(4.0);
+    let (r, _) = ui.allocate_exact_size(vec2(w, 16.0), Sense::hover());
+    ui.painter().text(pos2(r.left() + 14.0, r.center().y), Align2::LEFT_CENTER, "Forge text", sans(11.0), t.ink2);
+    let g = ui.painter().layout(text.to_string(), mono(12.0), t.ink, w - 36.0);
+    let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 10.0), Sense::hover());
+    let field = egui::Rect::from_min_max(pos2(r.left() + 12.0, r.top()), pos2(r.right() - 12.0, r.bottom()));
+    ui.painter().rect_filled(field, 4.0, t.field);
+    ui.painter().galley(pos2(field.left() + 6.0, field.top() + 5.0), g, t.ink);
 }
