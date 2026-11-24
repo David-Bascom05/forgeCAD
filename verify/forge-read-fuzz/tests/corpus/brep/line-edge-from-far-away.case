@@ -1,0 +1,6 @@
+# A line's edge from -1e308: the mesh's constraint walk stepped through the hull's missing neighbour
+# (cdt.rs index u32::MAX). Running off the hull is an error.
+from: verify/forge-read-fuzz/seeds/strike.brep
+replace: \n1  21 0 0 2.77\n
+with: \n1  21 0 -1.E308 2.77\n
+max-ms: 5000

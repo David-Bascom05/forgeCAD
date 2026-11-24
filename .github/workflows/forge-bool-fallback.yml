@@ -58,6 +58,7 @@ jobs:
         if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: verify/forge-bool-fallback
         run: |
+          set -o pipefail
           lake build 2>&1 | tee build.log
           if [ "$GITHUB_EVENT_NAME" = push ]; then exit 0; fi  # main: the build above is what is saved; the checks below ran on the pull request
           grep -q "Build completed successfully" build.log
@@ -67,6 +68,7 @@ jobs:
         if: ${{ github.event_name != 'push' }}
         working-directory: verify/forge-bool-fallback
         run: |
+          set -o pipefail
           lake env lean Axioms.lean | tee axioms.txt
           n=$(grep -c -E "depends on axioms|does not depend on any axioms" axioms.txt)
           [ "$n" -eq "$(grep -c '^#print axioms' Axioms.lean)" ] || { echo "::error::axiom report incomplete"; exit 1; }

@@ -1,0 +1,128 @@
+{
+ "vendor": "Okuma",
+ "model": "LB2000 EX II",
+ "family": "LB EX",
+ "source": [
+  "https://www.okuma.eu/products/by-process/turning/lb-series/lb2000-ex-ii/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe",
+ "architecture": null,
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": null,
+  "Y": null,
+  "Z": null
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 470,
+ "max_turning_length_mm": 300,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 6000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": 7.5,
+   "30min": null,
+   "peak/other": "11 kW (rating period not stated)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": null,
+ "tailstock": "ball-screw driven (series prose)",
+ "rapid_m_min": {
+  "X": 25,
+  "Y": null,
+  "Z": 30,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "bar_capacity_mm",
+  "chuck_size_in",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "swing_over_bed_mm",
+  "travel_mm.X",
+  "travel_mm.Z",
+  "turret_index_s",
+  "weight_kg"
+ ],
+ "options": [
+  "turning length 500",
+  "5000 rpm spindle",
+  "motor 15/11 or 22/15 kW",
+  "M, W, MY, MW variants, OGL loader"
+ ],
+ "notes": "okuma.eu summary; rapids X 25 / Z 30 m/min from the series description on the same page."
+}

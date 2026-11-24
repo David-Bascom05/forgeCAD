@@ -17,6 +17,11 @@ fn the_shaft_turns() {
     assert_eq!(cam.ops.len(), 5);
     assert!(cam.ops.iter().all(|o| o.status == "built"));
     let text = cam.program_text().unwrap();
+    assert_eq!(cam.report.as_ref().unwrap().stock_model, "columns");
+    // and with the exact stock: the same verdicts, and the leftover (the shoulder's corner)
+    let exact = forge_turn_lang::run_checked(&src, &d);
+    assert!(exact.ok && exact.report.as_ref().unwrap().leftover_done);
+    assert_eq!(exact.report.as_ref().unwrap().leftover.len(), 1);
     assert!(text.contains("G32") && text.contains("G96") && text.contains("T0505"));
 }
 
@@ -57,4 +62,42 @@ fn a_negative_leave_is_refused() {
         "{:?}",
         cam.errors
     );
+}
+
+#[test]
+fn the_nut_is_bored_grooved_and_threaded_inside() {
+    let d = dir();
+    let src = std::fs::read_to_string(d.join("nut_turn.fg")).unwrap();
+    let cam = forge_turn_lang::run(&src, &d);
+    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops);
+    assert_eq!(cam.certification(), "full");
+    assert_eq!(cam.ops.len(), 6);
+    let text = cam.program_text().unwrap();
+    // the relief groove to Ø32 and the thread's last pass at the major diameter, on the
+    // imaginary tip
+    assert!(
+        text.contains("X32. F0.04") && text.contains("G32 X30. Z-20.5 F1.5"),
+        "{text}"
+    );
+    // finishing the bore on through the relief groove: the boring insert's trailing edge would
+    // run up through the groove's top wall
+    let through = src.replace("to: -18.5", "to: -30");
+    let cam = forge_turn_lang::run(&through, &d);
+    assert!(!cam.ok && cam.ops.iter().any(|o| o.name == "fin" && o.status == "refused"));
+}
+
+#[test]
+fn the_collar_back_chamfer_is_finished_left_hand() {
+    let d = dir();
+    let src = std::fs::read_to_string(d.join("collar_turn.fg")).unwrap();
+    let cam = forge_turn_lang::run(&src, &d);
+    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops);
+    assert_eq!(cam.certification(), "full");
+    let text = cam.program_text().unwrap();
+    assert!(text.contains("T0909") && text.contains("Z-15.6"), "{text}");
+    // the right-hand profiling tool on down the chamfer instead: its trailing edge meets the collar
+    let rh = src.replace("to: -16)\nneck", "to: -21)\nneck");
+    assert_ne!(rh, src);
+    let cam = forge_turn_lang::run(&rh, &d);
+    assert!(!cam.ok && cam.ops.iter().any(|o| o.name == "fin" && o.status == "refused"));
 }

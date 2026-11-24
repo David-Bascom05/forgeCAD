@@ -261,6 +261,37 @@ pub struct Body {
     pub ignore: Vec<String>,
 }
 
+/// How a cited value stands (docs/cam-machine.md, "Provenance").
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CiteStatus {
+    /// Stated by the source.
+    Published,
+    /// Not published: a conservative value derived as `basis` says (larger envelope, lower rate).
+    Estimate,
+    /// Nothing to derive it from: the value is a conservative stand-in, `basis` says which way.
+    Unknown,
+    /// Sources disagree: every value is cited, the record holds the conservative one.
+    Conflict,
+}
+
+/// Where one value of a machine record comes from.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Cite {
+    /// The value cited: `joint.X.range`, `spindle.S1.rpm`, `changer.pockets`, `body.table`, ...
+    /// (MachineDef::cite_paths lists those a real record must cite).
+    pub path: String,
+    pub status: CiteStatus,
+    /// A URL or document (published, conflict); may be empty for estimate/unknown.
+    pub source: String,
+    /// When the source was read (YYYY-MM-DD); required with a source.
+    pub taken: String,
+    /// The source's own statement of the value, restated (e.g. "30 in (762 mm)").
+    pub value: String,
+    /// How an estimate was derived or why it is unknown; required for those.
+    pub basis: String,
+    pub note: String,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct MachineDef {
     pub name: String,
@@ -282,6 +313,9 @@ pub struct MachineDef {
     pub coolants: Vec<String>,
     /// Least gap between two bodies the collision check holds, mm.
     pub clearance: f64,
+    /// A record of a real maker's model: every value in `cite_paths` must be cited.
+    pub real: bool,
+    pub cites: Vec<Cite>,
 }
 
 fn rec_err(record: &str, field: &'static str, fix: &str) -> DefError {
@@ -801,7 +835,76 @@ impl MachineDef {
                 });
             }
         }
+        let mut cites = Vec::new();
+        for c in tables(t, "cite") {
+            let path = need_text(
+                c,
+                &format!("{m} cite"),
+                "path",
+                "give `path`, e.g. \"joint.X.range\"",
+            )?
+            .to_string();
+            let rec = format!("{m} cite `{path}`");
+            let status = pick(
+                c,
+                &rec,
+                "status",
+                &[
+                    ("published", CiteStatus::Published),
+                    ("estimate", CiteStatus::Estimate),
+                    ("unknown", CiteStatus::Unknown),
+                    ("conflict", CiteStatus::Conflict),
+                ],
+                "published | estimate | unknown | conflict",
+            )?;
+            let source = text(c, "source").unwrap_or("").to_string();
+            let taken = text(c, "taken").unwrap_or("").to_string();
+            let basis = text(c, "basis").unwrap_or("").to_string();
+            let note = text(c, "note").unwrap_or("").to_string();
+            match status {
+                CiteStatus::Published | CiteStatus::Conflict if source.is_empty() => {
+                    return Err(rec_err(
+                        &rec,
+                        "source",
+                        "give `source`, the URL or document the value is from",
+                    ));
+                }
+                CiteStatus::Estimate | CiteStatus::Unknown if basis.is_empty() => {
+                    return Err(rec_err(
+                        &rec,
+                        "basis",
+                        "say how the value was derived (estimate) or which way it errs (unknown)",
+                    ));
+                }
+                CiteStatus::Conflict if note.is_empty() => {
+                    return Err(rec_err(
+                        &rec,
+                        "note",
+                        "say what the sources disagree on and which value the record holds",
+                    ));
+                }
+                _ => {}
+            }
+            if !source.is_empty() && taken.is_empty() {
+                return Err(rec_err(
+                    &rec,
+                    "taken",
+                    "give `taken = \"YYYY-MM-DD\"`, when the source was read",
+                ));
+            }
+            cites.push(Cite {
+                value: text(c, "value").unwrap_or("").to_string(),
+                path,
+                status,
+                source,
+                taken,
+                basis,
+                note,
+            });
+        }
         let def = MachineDef {
+            real: boolean(t, "real").unwrap_or(false),
+            cites,
             kind,
             control,
             source,
@@ -819,7 +922,100 @@ impl MachineDef {
             name,
         };
         def.validate()?;
+        def.validate_cites()?;
         Ok(def)
+    }
+
+    /// The values a `real = true` record must cite: per joint its range, rapid and max_feed (and
+    /// accel and pivot when given), per spindle rpm, nose and max (and the power curve when
+    /// given), per turret stations, index_s and center, the changer's three numbers, every
+    /// mount's `at` and every body's envelope.
+    pub fn cite_paths(&self) -> Vec<String> {
+        let mut out = Vec::new();
+        for j in &self.joints {
+            for f in ["range", "rapid", "max_feed"] {
+                out.push(format!("joint.{}.{f}", j.name));
+            }
+            if j.accel.is_some() {
+                out.push(format!("joint.{}.accel", j.name));
+            }
+            if j.ty == JointType::Rotary {
+                out.push(format!("joint.{}.pivot", j.name));
+            }
+        }
+        for s in &self.spindles {
+            for f in ["rpm", "nose", "max"] {
+                out.push(format!("spindle.{}.{f}", s.name));
+            }
+            if !s.power.is_empty() {
+                out.push(format!("spindle.{}.curve", s.name));
+            }
+        }
+        for t in &self.turrets {
+            for f in ["stations", "index_s", "center"] {
+                out.push(format!("turret.{}.{f}", t.name));
+            }
+        }
+        if self.changer.is_some() {
+            for f in ["pockets", "change_s", "max_tool_kg"] {
+                out.push(format!("changer.{f}"));
+            }
+        }
+        for mt in &self.mounts {
+            out.push(format!("mount.{}.at", mt.name));
+        }
+        for b in &self.bodies {
+            out.push(format!("body.{}", b.name));
+        }
+        out
+    }
+
+    /// Provenance: every cite names a value of this record; a `real` record cites every value
+    /// of `cite_paths`.
+    pub fn validate_cites(&self) -> Result<(), DefError> {
+        let paths = self.cite_paths();
+        // values a record may cite beyond the required ones
+        let extra = |p: &str| -> bool {
+            let mut it = p.splitn(3, '.');
+            match (it.next(), it.next(), it.next()) {
+                (Some("joint"), Some(n), Some(f)) => {
+                    self.joint(n).is_some() && ["axis", "home", "accel", "pivot"].contains(&f)
+                }
+                (Some("spindle"), Some(n), Some(f)) => {
+                    self.spindles.iter().any(|s| s.name == n) && ["axis", "interface", "curve"].contains(&f)
+                }
+                (Some("turret"), Some(n), Some(_)) => self.turrets.iter().any(|t| t.name == n),
+                (Some("mount"), Some(n), Some(_)) => self.mount(n).is_some(),
+                (Some("machine"), Some(_), None) => true,
+                _ => false,
+            }
+        };
+        for c in &self.cites {
+            if !paths.contains(&c.path) && !extra(&c.path) {
+                return Err(DefError::Bad {
+                    record: format!("machine `{}` cite `{}`", self.name, c.path),
+                    field: "path",
+                    why: format!("names no value of this record; cite one of: {}", paths.join(", ")),
+                });
+            }
+        }
+        if self.real {
+            let missing: Vec<&String> = paths
+                .iter()
+                .filter(|p| !self.cites.iter().any(|c| &c.path == *p))
+                .collect();
+            if !missing.is_empty() {
+                return Err(DefError::Bad {
+                    record: format!("machine `{}`", self.name),
+                    field: "real",
+                    why: format!(
+                        "a real machine cites every value; uncited: {}",
+                        missing.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                    ),
+                });
+            }
+        }
+        Ok(())
     }
 
     pub fn joint(&self, name: &str) -> Option<&Joint> {

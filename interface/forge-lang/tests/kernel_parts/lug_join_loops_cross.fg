@@ -1,0 +1,22 @@
+# A solid cylinder (radius 16, 26 tall) and a lug joined to its side: a slot outline in the plane
+# y = -15 (arcs of radius 3 about (13, 19) and 4 about (11, 11) in x and z, joined by their outer
+# tangents), extruded 15 along +y into the cylinder. The sketch is valid (alone it extrudes), but
+# the join builds an invalid body (LoopsCross), a judge fail. Extruded 10, or with the second arc of
+# radius 3.5 or 4.5, or in the plane y = -16, it builds. Seen while reducing
+# drill_coincident_lug_hole.fg.
+sketch tube_sk(on: xy) {
+  outer = circle((0, 0), 16.0)
+}
+tube = extrude(tube_sk, 26.0)
+sketch wy(on: xy) {
+  p = pt(0, 1)
+  r = pt(1, 0)
+  lug_at = pt(0, -15.0)
+}
+sketch lug_sk(on: plane(at: wy.lug_at, normal: axis(xy.origin, wy.p), x: axis(xy.origin, wy.r))) {
+  a0 = arc(center: (13.0, -19.0), from: (15.977183331249, -18.630704167188), to: (10.199287256986, -20.075178185753), cw: true)
+  l1 = line((10.199287256986, -20.075178185753), (7.265716342648, -12.433570914338))
+  a2 = arc(center: (11.0, -11.0), from: (7.265716342648, -12.433570914338), to: (14.969577774999, -10.50760555625), cw: true)
+  l3 = line((14.969577774999, -10.50760555625), (15.977183331249, -18.630704167188))
+}
+lug = extrude(lug_sk, 15.0)
