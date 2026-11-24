@@ -1,8 +1,13 @@
 //! `query F bendsim`: the part's sheet bent on a press brake (kernel/forge-brake), answered as
 //! typed JSON, schema `forgecad.bendsim/1` (docs/bendsim.md).
 //!
-//! Words: `bendsim [tooling T] [vendor V] [sequence S] [sheet NAME] [uts MPA]`.
-//! - T: a standard set (`std-eu`, `std-us`) or a tooling file (JSON, beside the part).
+//! Words: `bendsim [press P [punches A,B] [dies C,D]] [tooling T] [vendor V] [sequence S]
+//! [sheet NAME] [uts MPA]`.
+//! - P: a press brake from the library (kernel/forge-brake data, then the part's folder's
+//!   `bend/tooling/*.toml`, then the user's): real makers' records, every value cited; the
+//!   tools are the library's for its clamping system, or those named (by id).
+//! - T: a stand-in set (`std-eu`, `std-us`: forgecad's own numbers, not a maker's) or a
+//!   tooling file (JSON, beside the part).
 //! - V: a vendor file (JSON) whose `tooling` field is a set id, a tooling object, or
 //!   `{"base": ID, ..}` (the set with tools added or replaced by id, rules overridden).
 //! - S: bends in order, comma separated, by name (the flange's feature) or by number (1 = the
@@ -23,11 +28,40 @@ pub const SCHEMA: &str = "forgecad.bendsim/1";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Ask {
+    pub press: Option<String>,
+    pub punches: Option<Vec<String>>,
+    pub dies: Option<Vec<String>>,
     pub tooling: Option<String>,
     pub vendor: Option<String>,
     pub sequence: Option<String>,
     pub sheet: Option<String>,
     pub uts: Option<f64>,
+    /// Keep the last step's tools where they pass (a program applied from `programs`).
+    pub keep_tools: bool,
+    /// Also answer up to this many ranked feasible programs (`programs`).
+    pub programs: Option<usize>,
+    /// Stations along the bed as a program states them (a `bending` document's `station`s).
+    pub stations: Vec<StationAsk>,
+    /// Per step of `sequence`, what the program states of its setup.
+    pub steps: Vec<StepAsk>,
+}
+
+/// A station: its punch and die (library ids), its centre along the bed from the bed's centre,
+/// and its stacks' lengths.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StationAsk {
+    pub punch: String,
+    pub die: String,
+    pub y: f64,
+    pub punch_length: f64,
+    pub die_length: f64,
+}
+
+/// A step's stated setup: its station (an index into `Ask::stations`) and orientation.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct StepAsk {
+    pub station: Option<usize>,
+    pub rotate: Option<bool>,
 }
 
 /// The words after `bendsim`.
@@ -42,8 +76,21 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
         };
         match w.trim_start_matches("--") {
             "tooling" => a.tooling = Some(val("tooling")?),
+            "press" => a.press = Some(val("press")?),
+            "punches" => a.punches = Some(val("punches")?.split(',').map(|s| s.trim().to_string()).collect()),
+            "dies" => a.dies = Some(val("dies")?.split(',').map(|s| s.trim().to_string()).collect()),
             "vendor" => a.vendor = Some(val("vendor")?),
             "sequence" => a.sequence = Some(val("sequence")?),
+            "keep_tools" => a.keep_tools = true,
+            "programs" => {
+                a.programs = Some(
+                    val("programs")?
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|n| (1..=50).contains(n))
+                        .ok_or("programs takes a count, 1 to 50")?,
+                )
+            }
             "sheet" => a.sheet = Some(val("sheet")?),
             "uts" => {
                 let v = val("uts")?;
@@ -56,7 +103,7 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
             }
             other => {
                 return Err(format!(
-                    "bendsim takes tooling T, vendor V, sequence S, sheet NAME, uts MPA; not `{other}`"
+                    "bendsim takes press P, punches A,B, dies C,D, tooling T, vendor V, sequence S, sheet NAME, uts MPA; not `{other}`"
                 ));
             }
         }
@@ -107,6 +154,8 @@ pub struct Sim {
     pub plan: fb::Plan,
     pub names: Vec<String>,
     pub answer: Answer,
+    /// Ranked feasible programs, when asked for (`Ask::programs`).
+    pub programs: Vec<fb::Program>,
 }
 
 /// The part's sheet simulated: Err is the typed error reply.
@@ -162,7 +211,43 @@ pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &As
 /// One built sheet simulated (for a caller that has run the part already, as `query F dfm`
 /// does): its vendor's tooling unless `ask` names other.
 pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Sim, Answer> {
-    let (tooling, tsource) = tooling(ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
+    // a program's stations: their tools are the ones on the press
+    let mut ask = ask.clone();
+    if !ask.stations.is_empty() {
+        let mut ps: Vec<String> = ask.stations.iter().map(|s| s.punch.clone()).collect();
+        let mut ds: Vec<String> = ask.stations.iter().map(|s| s.die.clone()).collect();
+        ps.dedup();
+        ds.dedup();
+        ask.punches.get_or_insert(ps);
+        ask.dies.get_or_insert(ds);
+    }
+    let ask = &ask;
+    let (mut tooling, tsource) = tooling(ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
+    for st in &ask.stations {
+        let (Some(p), Some(d)) = (
+            tooling.punches.iter().position(|x| x.id == st.punch),
+            tooling.dies.iter().position(|x| x.id == st.die),
+        ) else {
+            return Err(err(
+                "BadStation",
+                format!(
+                    "a station's punch {} or die {} is not on the press",
+                    st.punch, st.die
+                ),
+                vec![],
+            ));
+        };
+        tooling.stations.push(fb::tooling::Station {
+            punch: p,
+            die: d,
+            y: st.y,
+            punch_length: st.punch_length,
+            die_length: st.die_length,
+        });
+    }
+    if let Err(e) = tooling.validate() {
+        return Err(err("BadStation", format!("{e:?}"), vec![]));
+    }
     let model = match fb::Model::new(&sh.sheet) {
         Ok(m) => m,
         Err(e) => return Err(model_err(sh, &e)),
@@ -182,12 +267,33 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         sequence,
         material: sh.material.clone(),
         uts,
+        keep_tools: ask.keep_tools,
+        setups: (!ask.steps.is_empty()).then(|| {
+            ask.steps
+                .iter()
+                .map(|st| {
+                    st.station
+                        .and_then(|k| tooling.stations.get(k))
+                        .map(|s| fb::Setup {
+                            punch: s.punch,
+                            die: s.die,
+                            rotate: st.rotate.unwrap_or(false),
+                        })
+                })
+                .collect()
+        }),
         ..fb::Options::default()
     };
-    let plan = fb::plan(&model, &tooling, &opts);
+    let mut plan = fb::plan(&model, &tooling, &opts);
+    let ranked = ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n));
+    // the operator's move into each step after the first, checked (a warning if not proven clear)
+    fb::scene::annotate_handling(&model, &tooling, &mut plan);
     let mut answer = answer(sh, &model, &tooling, &plan, &bend_names);
     if let Json::Obj(f) = &mut answer.json {
         f.insert(4, ("tooling_source".into(), tsource));
+        if let Some(r) = &ranked {
+            f.push(("programs".into(), programs_json(&tooling, r, &bend_names)));
+        }
     }
     Ok(Sim {
         model,
@@ -195,6 +301,7 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         plan,
         names: bend_names,
         answer,
+        programs: ranked.unwrap_or_default(),
     })
 }
 
@@ -482,9 +589,20 @@ fn tooling(ask: &Ask, dir: Option<&Path>, sheet_vendor: Option<&str>) -> Result<
     let standard = |why: &str| {
         (
             fb::library::std_eu(),
-            source("standard", "std-eu", vec![("why", why.into())]),
+            source(
+                "standard",
+                "std-eu",
+                vec![
+                    ("why", why.into()),
+                    ("real", false.into()),
+                    ("note", STANDIN.into()),
+                ],
+            ),
         )
     };
+    if let Some(p) = &ask.press {
+        return library_tooling(ask, p, dir);
+    }
     let vendor = ask
         .vendor
         .as_deref()
@@ -546,7 +664,18 @@ fn tooling(ask: &Ask, dir: Option<&Path>, sheet_vendor: Option<&str>) -> Result<
     match &ask.tooling {
         None => Ok(standard("no vendor or tooling given: the standard set")),
         Some(t) => match fb::library::set(t) {
-            Some(s) => Ok((s, source("standard", t, vec![("why", "asked for".into())]))),
+            Some(s) => Ok((
+                s,
+                source(
+                    "standard",
+                    t,
+                    vec![
+                        ("why", "asked for".into()),
+                        ("real", false.into()),
+                        ("note", STANDIN.into()),
+                    ],
+                ),
+            )),
             None if t.ends_with(".json") => Ok((tooling_of(&read(t)?)?, source("file", t, vec![]))),
             None => Err(err(
                 "NoSuchTooling",
@@ -555,6 +684,157 @@ fn tooling(ask: &Ask, dir: Option<&Path>, sheet_vendor: Option<&str>) -> Result<
             )),
         },
     }
+}
+
+/// Ranked programs: each its order, what it asks of the operator and the setter, and its steps'
+/// tooling and orientation.
+fn programs_json(tl: &fb::Tooling, ps: &[fb::Program], names: &[String]) -> Json {
+    Json::Arr(
+        ps.iter()
+            .enumerate()
+            .map(|(i, p)| {
+                Json::obj(vec![
+                    ("rank", (i + 1).into()),
+                    (
+                        "sequence",
+                        Json::Arr(
+                            p.plan
+                                .sequence
+                                .iter()
+                                .map(|b| names[*b].as_str().into())
+                                .collect(),
+                        ),
+                    ),
+                    ("flips", p.flips.into()),
+                    ("turns", p.turns.into()),
+                    ("stations", p.setups.into()),
+                    ("tool_changes", p.changes.into()),
+                    (
+                        "steps",
+                        Json::Arr(
+                            p.plan
+                                .steps
+                                .iter()
+                                .map(|s| {
+                                    Json::obj(vec![
+                                        ("bend", names[s.bend].as_str().into()),
+                                        ("punch", tl.punches[s.setup.punch].id.as_str().into()),
+                                        ("die", tl.dies[s.setup.die].id.as_str().into()),
+                                        ("rotate", s.setup.rotate.into()),
+                                        ("flip", s.flip.into()),
+                                    ])
+                                })
+                                .collect(),
+                        ),
+                    ),
+                ])
+            })
+            .collect(),
+    )
+}
+
+const STANDIN: &str = "a stand-in set: forgecad's own round numbers, not a maker's catalogue";
+
+/// The library: built in, then the part's folder's `bend/tooling/*.toml`, then the user's
+/// (`<config>/forgecad/bend/tooling`); a file that does not read is an error.
+pub fn catalog(dir: Option<&Path>) -> Result<fb::catalog::Catalog, Answer> {
+    let mut levels: Vec<PathBuf> = Vec::new();
+    if let Some(d) = dir {
+        levels.push(d.join("bend").join("tooling"));
+    }
+    if let Some(c) = forge_dirs::config() {
+        levels.push(c.join("forgecad").join("bend").join("tooling"));
+    }
+    let mut files: Vec<(String, String)> = Vec::new();
+    for l in levels {
+        let Ok(rd) = std::fs::read_dir(&l) else { continue };
+        let mut ps: Vec<PathBuf> = rd
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+            .collect();
+        ps.sort();
+        for p in ps {
+            let text = std::fs::read_to_string(&p).map_err(|e| bad(format!("{}: {e}", p.display())))?;
+            files.push((p.display().to_string(), text));
+        }
+    }
+    let mut srcs: Vec<(&str, &str)> = files.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
+    srcs.extend(fb::catalog::BUILTIN.iter().copied());
+    fb::catalog::Catalog::from_sources(&srcs).map_err(|e| err("BadLibrary", e.to_string(), vec![]))
+}
+
+fn unknown_err(e: fb::ToolingError) -> Answer {
+    match e {
+        fb::ToolingError::Unknown { id, fields } => err(
+            "UnknownGeometry",
+            format!("{id}: not known: {}; it cannot be simulated", fields.join(", ")),
+            vec![
+                ("id", id.as_str().into()),
+                (
+                    "fields",
+                    Json::Arr(fields.iter().map(|f| f.as_str().into()).collect()),
+                ),
+            ],
+        ),
+        fb::ToolingError::NoPunches | fb::ToolingError::NoDies => err(
+            "NoDefaultTooling",
+            "the library holds none of this press maker's tools and its clamping system is not published: name the punches and dies"
+                .to_string(),
+            vec![],
+        ),
+        other => err("BadTooling", format!("{other:?}"), vec![]),
+    }
+}
+
+/// A press from the library and its tools (named, else every known one of its clamping system).
+fn library_tooling(ask: &Ask, press: &str, dir: Option<&Path>) -> Result<(fb::Tooling, Json), Answer> {
+    let cat = catalog(dir)?;
+    let Some(rec) = cat.press(press) else {
+        let ids: Vec<&str> = cat.presses.iter().map(|p| p.id.as_str()).collect();
+        return Err(err(
+            "NoSuchPress",
+            format!("no press `{press}` in the library"),
+            vec![("ids", strs(&ids))],
+        ));
+    };
+    let t = match (&ask.punches, &ask.dies) {
+        (None, None) => cat.tooling_for(press),
+        (ps, ds) => {
+            let all_p: Vec<String> = cat
+                .default_tools(rec, true)
+                .into_iter()
+                .map(String::from)
+                .collect();
+            let all_d: Vec<String> = cat
+                .default_tools(rec, false)
+                .into_iter()
+                .map(String::from)
+                .collect();
+            let ps: Vec<&str> = ps.as_ref().unwrap_or(&all_p).iter().map(String::as_str).collect();
+            let ds: Vec<&str> = ds.as_ref().unwrap_or(&all_d).iter().map(String::as_str).collect();
+            cat.tooling(press, &ps, &ds)
+        }
+    }
+    .map_err(unknown_err)?;
+    let mut extra = vec![
+        ("maker", rec.prov.maker.as_str().into()),
+        ("model", rec.model.as_str().into()),
+        ("real", rec.prov.real.into()),
+        ("clamp", rec.clamp.as_str().into()),
+        ("file", rec.prov.file.as_str().into()),
+        (
+            "verify",
+            "restated from the makers' public specs and catalogues: verify against your machine and tools"
+                .into(),
+        ),
+    ];
+    if !t.press.unchecked.is_empty() {
+        extra.push((
+            "unknown",
+            Json::Arr(t.press.unchecked.iter().map(|u| u.as_str().into()).collect()),
+        ));
+    }
+    Ok((t, source("library", press, extra)))
 }
 
 fn bad(text: impl Into<String>) -> Answer {
@@ -675,6 +955,7 @@ fn die_of(j: &Json) -> Result<fb::Die, Answer> {
         shoulder_radius: need(j, "shoulder_radius", &w)?,
         height: need(j, "height", &w)?,
         width: need(j, "width", &w)?,
+        floor: num(j, "floor"),
         profile: profile(j)?,
         segments: segments(j),
         max_load: num(j, "max_load"),
@@ -893,6 +1174,8 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
             "verdict",
             (if c.pass {
                 "pass"
+            } else if c.unchecked.is_some() {
+                "not_checked"
             } else if c.undecided {
                 "undecided"
             } else {
@@ -903,6 +1186,15 @@ fn check(sh: &SheetOut, c: &Check) -> Json {
         ("certified", c.certified.into()),
         ("unit", (if a { "deg" } else { "mm" }).into()),
     ];
+    if let Some(u) = &c.unchecked {
+        f.push(("unknown", u.as_str().into()));
+    }
+    if c.estimate {
+        f.push((
+            "against",
+            "estimated envelope (no published geometry; errs large)".into(),
+        ));
+    }
     if let Some(lo) = c.lo {
         f.push(("limit_lo", v(lo)));
     }
@@ -1160,6 +1452,23 @@ fn answer(sh: &SheetOut, m: &fb::Model, tl: &fb::Tooling, plan: &fb::Plan, names
         ("tooling", tl.id.as_str().into()),
         ("press", tl.press.id.as_str().into()),
         ("material", sh.material.as_deref().map_or(Json::Null, Json::from)),
+        (
+            "springback",
+            if tl.springback.is_empty() {
+                Json::obj(vec![
+                    ("known", false.into()),
+                    (
+                        "why",
+                        "no cited springback for this material in forge-material: bent to the turn, no overbend".into(),
+                    ),
+                ])
+            } else {
+                Json::obj(vec![
+                    ("known", true.into()),
+                    ("source", "the stand-in set's rows (forgecad's own round numbers)".into()),
+                ])
+            },
+        ),
         ("clearance", r6(tl.clearance)),
         ("feasible", plan.feasible.into()),
         (

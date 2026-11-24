@@ -13,8 +13,9 @@ name = "kurt-dx6"
 kind = "vise"
 vendor = "Kurt"
 product = "DX6 CrossOver"
-note = "height unknown: bed height 2.875 in + jaw depth 1.735 in = 4.61 in (Penn Tool's overall height), but Penn Tool also lists a vise height of 4-3/8 in and Haas prints OAH 4.36 in for the same vise (haas-vise-05-0404): measure it. Weight conflicts between sources (65 / 69 lb), not recorded. Kurt's own site refused automated reading."
-unknown = ["jaw_thickness", "height"]
+note = "height in conflict: bed height 2.875 in + jaw depth 1.735 in = 4.61 in (Penn Tool's overall height), but Penn Tool also lists a vise height of 4-3/8 in and Haas prints OAH 4.36 in for the same vise (haas-vise-05-0404): measure it. Weight conflicts between sources (65 / 69 lb), not recorded. Kurt's own site refused automated reading."
+unknown = ["jaw_thickness"]
+conflict = ["height"]
 jaw_width = 152.4
 jaw_height = 44.07
 max_opening = 230.63

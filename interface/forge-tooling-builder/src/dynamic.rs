@@ -145,7 +145,17 @@ pub fn outline(r: &Rec) -> Option<Vec<[f64; 2]>> {
                 _ => p.push([0.0, rc]),
             }
             p.push([t.lcf, rc]);
-            p.push([t.lcf, rs]);
+            // a necked tool: the neck from the flutes to its reach, then the shank
+            let neck = forge_tooling::toml::num(&r.table, "neck_d");
+            let reach = forge_tooling::toml::num(&r.table, "reach");
+            match (neck, reach) {
+                (Some(nd), Some(lu)) if nd > 0.0 && lu > t.lcf && lu < t.oal => {
+                    p.push([t.lcf, nd / 2.0]);
+                    p.push([lu, nd / 2.0]);
+                    p.push([lu, rs]);
+                }
+                _ => p.push([t.lcf, rs]),
+            }
             p.push([t.oal, rs]);
             p.push([t.oal, 0.0]);
             Some(p)

@@ -29,6 +29,7 @@ name = "forge-studio"
 path = "src/bin/forge_studio.rs"
 
 [dependencies]
+forge-units = { path = "../forge-units" }
 forge-dirs = { path = "../../kernel/forge-dirs" }
 # the kernel's scoped threads: the threaded browser build gives them its Web Workers
 forge-par = { path = "../../kernel/forge-par" }
@@ -38,6 +39,7 @@ egui = { version = "=0.37.0", default-features = false }
 egui-wgpu = { version = "=0.37.0", default-features = false }
 forge-agent = { path = "../forge-agent" }
 forge-lang = { path = "../forge-lang" }
+forge-bend-lang = { path = "../forge-bend-lang" }
 forge-harness = { path = "../../kernel/forge-harness" }
 forge-history = { path = "../forge-history" }
 forge-git = { path = "../../kernel/forge-git" }
@@ -83,6 +85,9 @@ forge-machine-builder = { path = "../forge-machine-builder" }
 forge-machine-lang = { path = "../forge-machine-lang" }
 forge-tooling-builder = { path = "../forge-tooling-builder" }
 forge-library = { path = "../forge-library" }
+forge-workholding = { path = "../../kernel/forge-workholding" }
+forge-workholding-builder = { path = "../forge-workholding-builder" }
+forge-brake-builder = { path = "../forge-brake-builder" }
 png = "=0.18.1"
 # a background image's file (zune: MIT OR Apache-2.0 OR Zlib), already in the lock
 zune-jpeg = { version = "=0.5.15", default-features = false, features = ["std"] }

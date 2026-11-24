@@ -84,7 +84,7 @@ fn make_jog_check_save_and_close() {
     h.gui.shell.machine.as_mut().unwrap().filter.clear();
     h.step();
     assert!(
-        h.gui.shell.place("tool:Check Travel").is_some(),
+        h.gui.shell.place("tool:Check").is_some(),
         "the builder's ribbon group"
     );
     {
@@ -251,6 +251,32 @@ fn make_jog_check_save_and_close() {
         tu.pick(e);
     }
     shot(&mut h, "20-tool-library");
+    // a maker's tool with its helix angle: the flutes drawn wound; the list narrowed to its file
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        let tu = m.tooling.as_mut().unwrap();
+        let e = tu
+            .entries
+            .iter()
+            .find(|e| e.def.table.contains_key("helix"))
+            .cloned()
+            .expect("a tool citing its helix");
+        tu.filter = e.def.id.chars().take(4).collect();
+        tu.pick(e);
+        let p = tu.preview().unwrap();
+        assert!(p.edges.len() >= 3, "flute lines drawn");
+    }
+    shot(&mut h, "20b-tool-helix");
+    h.gui
+        .shell
+        .machine
+        .as_mut()
+        .unwrap()
+        .tooling
+        .as_mut()
+        .unwrap()
+        .filter
+        .clear();
     {
         let m = h.gui.shell.machine.as_mut().unwrap();
         let project = m.project.clone();
@@ -294,6 +320,72 @@ fn make_jog_check_save_and_close() {
             .is_some()
     );
     shot(&mut h, "22-holder");
+    // workholding: a vise derived from a built-in one, its jaw width the user's, checked, saved
+    h.gui.shell.machine.as_mut().unwrap().set_lib("workholding");
+    for _ in 0..3 {
+        h.step();
+    }
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        let w = m.workholding.as_mut().unwrap();
+        let e = w
+            .entries
+            .iter()
+            .find(|e| e.def.kind.name() == "vise" && !e.def.standin)
+            .cloned()
+            .expect("a built-in vise");
+        w.pick(e);
+        assert!(w.preview().is_some_and(|b| !b.is_empty()), "the vise previews");
+    }
+    shot(&mut h, "30-workholding-vise");
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        let project = m.project.clone();
+        let w = m.workholding.as_mut().unwrap();
+        w.new_id = "shop-vise".into();
+        w.derive();
+        assert_eq!(w.cur.as_ref().unwrap().name, "shop-vise", "{}", w.message);
+        let k = w.cur.as_ref().unwrap().vals.keys().next().cloned().unwrap();
+        let v = w.cur.as_ref().unwrap().vals[&k] + 1.0;
+        w.set(&k, v);
+        assert_eq!(w.cur.as_ref().unwrap().vals[&k], v, "{}", w.message);
+        w.check();
+        w.save(Level::Project, project.as_deref());
+        assert!(w.message.starts_with("Saved"), "{}", w.message);
+    }
+    assert!(dir.join("cam/workholding/shop-vise.toml").is_file());
+    // a list (parallels' heights) and a word edited as the user's
+    {
+        let m = h.gui.shell.machine.as_mut().unwrap();
+        let w = m.workholding.as_mut().unwrap();
+        if let Some(e) = w
+            .entries
+            .iter()
+            .find(|e| e.def.kind.name() == "parallels")
+            .cloned()
+        {
+            w.pick(e);
+            w.set_list("heights", vec![10.0, 20.0, 30.0]);
+            assert_eq!(
+                w.cur.as_ref().unwrap().lists["heights"],
+                vec![10.0, 20.0, 30.0],
+                "{}",
+                w.message
+            );
+        }
+        let vise = w
+            .entries
+            .iter()
+            .find(|e| e.def.name == "shop-vise")
+            .cloned()
+            .unwrap();
+        w.pick(vise);
+        if let Some(k) = w.cur.as_ref().unwrap().words.keys().next().cloned() {
+            w.set_word(&k, "user-word");
+            assert_eq!(w.cur.as_ref().unwrap().words[&k], "user-word", "{}", w.message);
+        }
+    }
+    shot(&mut h, "31-workholding-derived");
     h.gui.shell.machine.as_mut().unwrap().set_lib("machine");
     h.step();
 

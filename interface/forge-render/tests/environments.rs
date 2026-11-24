@@ -262,7 +262,7 @@ fn bend_simulation_in_the_view_keeps_its_place() {
     click(&mut h, "tool:Next Bend");
     assert_eq!(h.gui.shell.sheet.bend_sim.as_ref().unwrap().step, 1);
     shot(&mut h, "04-bend-simulation");
-    click(&mut h, "tool:American Tooling");
+    click(&mut h, "tool:Stand-in American");
     let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
     assert_eq!(b.tooling, "std-us");
     assert_eq!(b.step, 1, "the step kept across a tooling change");

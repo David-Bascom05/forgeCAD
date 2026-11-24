@@ -3,8 +3,9 @@
 //!
 //! - `Kind`: a kind of record, supplied by its data owner (reader, canonical writer, id, the
 //!   built-in files, its form's schema).
-//! - `Catalog<K>`: every record the search order sees: the project's `cam/<folder>/*.toml`, the
-//!   user's `<config>/forgecad/cam/<folder>/`, then the built-in set; a record found earlier
+//! - `Catalog<K>`: every record the search order sees: the project's `<root>/<folder>/*.toml`
+//!   (root `cam`, or the kind's own, e.g. `bend`), the user's `<config>/forgecad/<root>/<folder>/`,
+//!   then the built-in set; a record found earlier
 //!   hides a later one of the same id; a file that does not load is listed with its error and
 //!   hides nothing.
 //! - `save`: a record (and the part files it brings) into a level's folder, read back before
@@ -37,7 +38,10 @@ pub trait Kind: 'static {
     type Record: Clone + PartialEq + std::fmt::Debug;
     /// The command word and the record's name: "machine", "tool", ...
     const WORD: &'static str;
-    /// Its folder under `cam/`: "machines", "tools", ...
+    /// The top folder its records live under, in a project and in the user's config: "cam"
+    /// (machines, tools, workholding), "bend" (press-brake tooling).
+    const ROOT: &'static str = "cam";
+    /// Its folder under `ROOT`: "machines", "tools", ...
     const FOLDER: &'static str;
     /// The built-in files: (file name as listed, text).
     fn builtin() -> Vec<(String, String)>;
@@ -55,14 +59,19 @@ pub trait Kind: 'static {
 /// (file, text) pairs, or (file, why it could not be read).
 pub type Files = Vec<(String, String)>;
 
-/// The user's folder of a kind: `<config>/forgecad/cam/<folder>`.
+/// The user's folder of a kind: `<config>/forgecad/<root>/<folder>`.
 pub fn user_dir<K: Kind>() -> Option<PathBuf> {
-    Some(forge_dirs::config()?.join("forgecad").join("cam").join(K::FOLDER))
+    Some(
+        forge_dirs::config()?
+            .join("forgecad")
+            .join(K::ROOT)
+            .join(K::FOLDER),
+    )
 }
 
-/// A project's folder of a kind: `cam/<folder>` in the project.
+/// A project's folder of a kind: `<root>/<folder>` in the project.
 pub fn project_dir<K: Kind>(project: &Path) -> PathBuf {
-    project.join("cam").join(K::FOLDER)
+    project.join(K::ROOT).join(K::FOLDER)
 }
 
 /// The `.toml` files of a folder, sorted by name, with their text; and those it could not read.

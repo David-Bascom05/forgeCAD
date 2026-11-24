@@ -40,6 +40,7 @@ fn usage() -> ExitCode {
          forgecad build|check|query|measure|render|export FILE.fg [ARGS] [--json] [--labels SEL] [--px N] [--at FEAT] [-o OUT]\n       \
          forgecad edit FILE.fg 'OP'.. [--base VERSION]   (typed ops, as a part's fixes give them; export F.fg stl|3mf|obj|urdf|dxf [SHEET])\n       \
          forgecad cam FILE.fg [sheet] [--json] [-o OUT]   (a machining document: certified toolpaths, the program or setup sheet)\n       \
+         forgecad bend FILE.fg [sheet|program] [--json] [-o OUT]   (a bending document: simulated; its setup sheet, or its press-brake program where the format is openly specified)\n       \
          forgecad diff A.fg B.fg [volume]   (what B changed from A: features, params, faces, volume)\n       \
          forgecad help [forge | WORD]   (the .fg language, or its sections on WORD)\n       \
          forgecad versions F | history F [--all] | create_version F NAME [NOTES] | restore F v3|SAVE | compare F A B [--volume]\n       \
@@ -53,7 +54,7 @@ fn usage() -> ExitCode {
          forgecad tool log add|list|observe|worn|chipped|broken|regrind|predict|run|calibrate ..   (physical tools: wear and life)\n       \
          forgecad tool|holder|collet|collet_nut|pull_stud|insert|turn_holder list | new ID --from ID [FIELD=VALUE..] [--project] | check ID|FILE   (your own tooling)\n       \
          forgecad vendor list | show ID | export ID [-o F] | import F | new ID [--from ID] | check F [--json]   (sheet-metal vendor profiles)\n       \
-         forgecad workholding list [KIND] | show NAME | schema | new NAME --from X [field=value ..] [--json]   (vises, clamps, plates, chucks, collets)\n       \
+         forgecad workholding list [KIND] | new ID --from X [field=value ..] [--user] | check [ID ..] | show ID | schema [--json]   (vises, clamps, plates, chucks, collets)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nthe language: AGENTS.md, forgecad help forge"
     );
     ExitCode::from(2)
@@ -292,24 +293,13 @@ fn main() -> ExitCode {
             }
         }
         Some("workholding") => {
-            let json = args.iter().any(|a| a == "--json");
-            let rest: Vec<String> = args[2..].iter().filter(|a| *a != "--json").cloned().collect();
-            let here = std::env::current_dir().ok();
-            let user = forge_dirs::config();
-            match forge_workholding::cli::tool(&rest, user.as_deref(), here.as_deref()) {
-                Ok((j, text)) => {
-                    if json {
-                        println!("{j}");
-                    } else {
-                        print!("{text}");
-                    }
-                    ExitCode::SUCCESS
-                }
-                Err(e) => {
-                    eprintln!("error: {e}");
-                    ExitCode::from(1)
-                }
+            let here = std::env::current_dir().unwrap_or_else(|_| ".".into());
+            let o = forge_workholding_builder::cli::run(&args[2..], &here, None);
+            print!("{}", o.text);
+            if !o.text.ends_with('\n') {
+                println!();
             }
+            ExitCode::from(o.code)
         }
         Some("help" | "--help" | "-h") => {
             println!("{}", forge_lang::help(&args[2..].join(" ")));
@@ -585,6 +575,8 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "export" => "step",
             "cam" if a.words.first().is_some_and(|w| w == "sheet") => "html",
             "cam" => "nc",
+            "bend" if a.words.first().is_some_and(|w| w == "program") => "pgm",
+            "bend" => "html",
             _ => "png",
         };
         let stem = a.file.trim_end_matches(".fg");

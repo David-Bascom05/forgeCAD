@@ -1055,6 +1055,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bend-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-brake",
+ "forge-dirs",
+ "forge-lang",
+]
+
+[[package]]
 name = "forge-bool"
 version = "0.1.0"
 dependencies = [
@@ -1068,8 +1078,19 @@ name = "forge-brake"
 version = "0.1.0"
 dependencies = [
  "forge-math",
+ "forge-mesh",
  "forge-ops",
  "forge-sheet",
+ "forge-vendor",
+]
+
+[[package]]
+name = "forge-brake-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-brake",
+ "forge-library",
+ "forge-vendor",
 ]
 
 [[package]]
@@ -1344,7 +1365,9 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "forge-agent",
+ "forge-bend-lang",
  "forge-brake",
+ "forge-brake-builder",
  "forge-cam",
  "forge-cam-geom",
  "forge-cam-import",
@@ -1378,7 +1401,10 @@ dependencies = [
  "forge-topo",
  "forge-turn",
  "forge-turn-lang",
+ "forge-units",
  "forge-vendor",
+ "forge-workholding",
+ "forge-workholding-builder",
  "js-sys",
  "keyring-core",
  "png",
@@ -1515,6 +1541,24 @@ version = "0.1.0"
 dependencies = [
  "forge-math",
  "forge-ops",
+]
+
+[[package]]
+name = "forge-workholding"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-math",
+ "forge-tooling",
+]
+
+[[package]]
+name = "forge-workholding-builder"
+version = "0.1.0"
+dependencies = [
+ "forge-dirs",
+ "forge-library",
+ "forge-workholding",
 ]
 
 [[package]]

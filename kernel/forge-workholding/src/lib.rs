@@ -311,6 +311,8 @@ pub struct Record {
     pub lists: BTreeMap<String, Vec<f64>>,
     pub words: BTreeMap<String, String>,
     pub unknown: Vec<String>,
+    /// Fields whose published values disagree (each said in `note`): no value, as unknown.
+    pub conflict: Vec<String>,
     pub cites: Vec<Cite>,
     pub source: String,
     pub taken: String,
@@ -352,6 +354,18 @@ impl Role {
     pub fn name(self) -> &'static str {
         ROLES.iter().find(|r| r.0 == self).map(|r| r.1).unwrap_or("?")
     }
+}
+
+/// Fields that may be 0 (a range from zero, a hole on the plate's corner); every other number
+/// is > 0.
+pub const ZERO_OK: &[&str] = &["range_min", "min_opening", "hole_offset", "grip_min"];
+
+fn value_ok(k: &str, x: f64) -> bool {
+    x.is_finite() && (x > 0.0 || (x == 0.0 && ZERO_OK.contains(&k)))
+}
+
+fn bound(k: &str) -> &'static str {
+    if ZERO_OK.contains(&k) { "≥ 0" } else { "> 0" }
 }
 
 /// What a body does (for the reply, the renderer's colours, and "held").
@@ -420,12 +434,13 @@ impl Record {
             Kind::parse(ks).ok_or_else(|| bad(&rec, "kind", format!("`{ks}` is not a workholding kind")))?;
         let (need, may) = kind.fields();
         let unknown = toml::texts(t, "unknown").unwrap_or_default();
+        let conflict = toml::texts(t, "conflict").unwrap_or_default();
         let mut vals = BTreeMap::new();
         let mut lists = BTreeMap::new();
         let mut words = BTreeMap::new();
         let skip = [
-            "name", "kind", "vendor", "product", "standin", "basis", "unknown", "source", "taken", "note",
-            "cite", "part", "body",
+            "name", "kind", "vendor", "product", "standin", "basis", "unknown", "conflict", "source",
+            "taken", "note", "cite", "part", "body",
         ];
         for (k, v) in t {
             if skip.contains(&k.as_str()) {
@@ -434,15 +449,15 @@ impl Record {
             let known = need.contains(&k.as_str()) || may.contains(&k.as_str());
             match v {
                 Val::Num(x) if known => {
-                    if !(x.is_finite() && *x > 0.0) {
-                        return Err(bad(&rec, k, format!("must be > 0 (is {x})")));
+                    if !value_ok(k, *x) {
+                        return Err(bad(&rec, k, format!("must be {} (is {x})", bound(k))));
                     }
                     vals.insert(k.clone(), *x);
                 }
                 Val::Arr(_) if known => {
                     let xs = nums(t, k).ok_or_else(|| bad(&rec, k, "must be numbers"))?;
-                    if xs.is_empty() || xs.iter().any(|x| !(x.is_finite() && *x > 0.0)) {
-                        return Err(bad(&rec, k, "must be numbers > 0"));
+                    if xs.is_empty() || xs.iter().any(|x| !value_ok(k, *x)) {
+                        return Err(bad(&rec, k, format!("must be numbers {}", bound(k))));
                     }
                     lists.insert(k.clone(), xs);
                 }
@@ -462,7 +477,7 @@ impl Record {
                 }
             }
         }
-        for u in &unknown {
+        for u in unknown.iter().chain(&conflict) {
             if vals.contains_key(u) || lists.contains_key(u) {
                 return Err(bad(&rec, u, "has a value and is listed as unknown"));
             }
@@ -475,7 +490,10 @@ impl Record {
             }
         }
         for f in need {
-            if !vals.contains_key(*f) && !lists.contains_key(*f) && !unknown.iter().any(|u| u == f) {
+            if !vals.contains_key(*f)
+                && !lists.contains_key(*f)
+                && !unknown.iter().chain(&conflict).any(|u| u == f)
+            {
                 return Err(WhError::Missing {
                     record: rec.clone(),
                     field: f.to_string(),
@@ -489,7 +507,8 @@ impl Record {
             let source = text(c, "source").unwrap_or("").to_string();
             let taken = text(c, "taken").unwrap_or("").to_string();
             // a user's value carries provenance "user" and needs no date read
-            let user = source.starts_with("user") || source == "given in the job";
+            let user =
+                source.starts_with("user") || source.starts_with("stand-in") || source == "given in the job";
             if fields.is_empty() || source.is_empty() || (taken.is_empty() && !user) {
                 return Err(bad(
                     &rec,
@@ -597,6 +616,7 @@ impl Record {
             lists,
             words,
             unknown,
+            conflict,
             cites,
             source,
             taken: s("taken"),
@@ -616,6 +636,15 @@ impl Record {
     pub fn get(&self, k: &str) -> Result<f64, WhError> {
         if let Some(v) = self.vals.get(k) {
             return Ok(*v);
+        }
+        if self.conflict.iter().any(|u| u == k) {
+            return Err(WhError::Unpublished {
+                record: self.label(),
+                field: k.to_string(),
+                fix: format!(
+                    "its published values disagree (see the record's note): measure it and give `{k}` with the device"
+                ),
+            });
         }
         if self.unknown.iter().any(|u| u == k) {
             return Err(WhError::Unpublished {
@@ -652,18 +681,76 @@ impl Record {
                 format!("is not a field of a {}", self.kind.name()),
             ));
         }
-        if !(v.is_finite() && v > 0.0) {
-            return Err(bad(&self.label(), k, format!("must be > 0 (is {v})")));
+        if !value_ok(k, v) {
+            return Err(bad(&self.label(), k, format!("must be {} (is {v})", bound(k))));
         }
         let mut r = self.clone();
         r.unknown.retain(|u| u != k);
+        r.conflict.retain(|u| u != k);
         r.vals.insert(k.to_string(), v);
+        // the given value replaces the cited one: no older cite may claim it
+        for c in &mut r.cites {
+            c.fields.retain(|f| f != k);
+        }
+        r.cites.retain(|c| !c.fields.is_empty());
         r.cites.push(Cite {
             fields: vec![k.to_string()],
             source: "given in the job".into(),
             taken: String::new(),
         });
         Ok(r)
+    }
+
+    /// The record with a list the user gives (a parallel set's heights), provenance user.
+    pub fn with_list(&self, k: &str, v: Vec<f64>) -> Result<Record, WhError> {
+        let (need, may) = self.kind.fields();
+        if !need.contains(&k) && !may.contains(&k) {
+            return Err(bad(
+                &self.label(),
+                k,
+                format!("is not a field of a {}", self.kind.name()),
+            ));
+        }
+        if v.is_empty() || v.iter().any(|x| !value_ok(k, *x)) {
+            return Err(bad(&self.label(), k, format!("must be numbers {}", bound(k))));
+        }
+        let mut r = self.clone();
+        r.unknown.retain(|u| u != k);
+        r.conflict.retain(|u| u != k);
+        r.vals.remove(k);
+        r.lists.insert(k.to_string(), v);
+        r.user_cite(k);
+        Ok(r)
+    }
+
+    /// The record with a word the user gives (a screw, a collet system).
+    pub fn with_word(&self, k: &str, v: &str) -> Result<Record, WhError> {
+        if !WORDS.contains(&k) {
+            return Err(bad(
+                &self.label(),
+                k,
+                format!("is not a word field ({})", WORDS.join(", ")),
+            ));
+        }
+        let mut r = self.clone();
+        if v.is_empty() {
+            r.words.remove(k);
+        } else {
+            r.words.insert(k.to_string(), v.to_string());
+        }
+        Ok(r)
+    }
+
+    fn user_cite(&mut self, k: &str) {
+        for c in &mut self.cites {
+            c.fields.retain(|f| f != k);
+        }
+        self.cites.retain(|c| !c.fields.is_empty());
+        self.cites.push(Cite {
+            fields: vec![k.to_string()],
+            source: "user".into(),
+            taken: String::new(),
+        });
     }
 
     /// The citation of a field (a stand-in's basis for a stand-in).
@@ -967,6 +1054,33 @@ impl Workholding {
         v
     }
 
+    /// One collision body per device body, named "device/body", its prims in the part frame
+    /// with keep-outs applied (forge-machine's `SetupSpec.fixture`: a `Fixture {name, prims}`
+    /// each). A block whose axes are not the frame's is given as is (`Prim::Block` with axes);
+    /// `aligned` turns each into its axis-aligned bound instead (a superset: safe for a clearance
+    /// check, it may report contact the exact block would not).
+    pub fn fixtures(&self, aligned: bool) -> Vec<(String, Vec<Prim>)> {
+        self.bodies()
+            .map(|(p, b)| {
+                let prims = b
+                    .prims
+                    .iter()
+                    .map(|x| {
+                        let g = x.grown(b.keepout);
+                        match g {
+                            Prim::Block { axes, .. } if aligned && axes != geom::IDENT => {
+                                let (lo, hi) = g.bounds();
+                                Prim::aabb(lo, hi)
+                            }
+                            _ => g,
+                        }
+                    })
+                    .collect();
+                (format!("{}/{}", p.name, b.name), prims)
+            })
+            .collect()
+    }
+
     /// Whether a box of leftover stock (min, max) is held: inside a device's held box grown by
     /// `slack` (the fixture clearance: a tool kept that far from the device cannot reach it).
     pub fn held(&self, lo: V3, hi: V3, slack: f64) -> Option<&str> {
@@ -1090,6 +1204,19 @@ mod tests {
             matches!(&e, WhError::Bad { field, .. } if field == "jaw_width"),
             "{e:?}"
         );
+        // 0 only where it means something (a range from zero)
+        let z = p("[[workholding]]\nname = \"c\"\nkind = \"collet\"\nstandin = true\nbasis = \"s\"\nrange_min = 0\nrange_max = 9\nnose_d = 20\nnose_len = 10\n").unwrap();
+        assert_eq!(z[0].get("range_min"), Ok(0.0));
+        assert!(z[0].with("nose_d", 0.0).is_err());
+        let h = Library::builtin()
+            .get("standin-parallels")
+            .unwrap()
+            .with_list("heights", vec![12.7, 25.4])
+            .unwrap();
+        assert_eq!(h.list("heights").unwrap(), &[12.7, 25.4]);
+        assert!(h.cite("heights").is_some());
+        assert!(h.with_word("screw", "M8").unwrap().words["screw"] == "M8");
+        assert!(h.with_word("nope", "x").is_err());
         let e = p("[[workholding]]\nname = \"r\"\nkind = \"riser\"\nstandin = true\nbasis = \"s\"\nd = -5\nheight = 9\n").unwrap_err();
         assert!(matches!(&e, WhError::Bad { field, .. } if field == "d"), "{e:?}");
     }

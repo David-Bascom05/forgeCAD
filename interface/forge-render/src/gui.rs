@@ -24,6 +24,8 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
+#[path = "gui_bendsim.rs"]
+mod gui_bendsim;
 #[path = "gui_cam.rs"]
 mod gui_cam;
 #[path = "gui_camsim.rs"]
@@ -34,8 +36,6 @@ pub mod gui_docs;
 mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
-#[path = "gui_studio.rs"]
-mod gui_studio;
 #[path = "gui_fgmarks.rs"]
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
@@ -50,6 +50,8 @@ mod gui_overlay;
 mod gui_sheet;
 #[path = "gui_speech.rs"]
 pub mod gui_speech;
+#[path = "gui_studio.rs"]
+mod gui_studio;
 #[path = "gui_thermo.rs"]
 mod gui_thermo;
 #[path = "gui_versions.rs"]
@@ -131,6 +133,7 @@ pub struct Gui {
     /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
     studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
+    pub bend: gui_bendsim::BendView,
     /// An environment asked by name (a deep link, `--env`): entered once the document built.
     pub env_asked: Option<String>,
     /// The Machine Builder's scene (`gui_machine.rs`).
@@ -293,6 +296,7 @@ impl Gui {
         Gui {
             studio: None,
             vers: Default::default(),
+            bend: Default::default(),
             env_asked: None,
             mach: Default::default(),
             agent: Default::default(),
@@ -1328,6 +1332,7 @@ impl Gui {
         self.inspect_tick();
         self.sheet_frame();
         self.env_frame();
+        self.bendsim_frame();
         self.machine_frame();
         self.fg_hole_guess();
         self.fg_preview();
@@ -1520,11 +1525,17 @@ impl Gui {
                     selected: true,
                     second: false,
                 }));
+                // the bend simulation's bodies are not the design's: none of its marks
+                if self.bend.showing() {
+                    m.clear();
+                }
                 m
             };
             // the build's flags on the faces of what they're of; Compare's colours over them
             let flagged;
-            let colours: &[crate::render::FaceColour] = if self.vers.colours.is_empty() {
+            let colours: &[crate::render::FaceColour] = if self.bend.showing() {
+                &[]
+            } else if self.vers.colours.is_empty() {
                 flagged = self.fg_marks_was.1.clone();
                 &flagged
             } else {
@@ -1625,7 +1636,10 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || studio_busy || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        let again_in = if animating
+            || studio_busy
+            || self.mark_held.is_some()
+            || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {
