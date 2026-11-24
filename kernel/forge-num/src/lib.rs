@@ -5,11 +5,14 @@
 //!   common case) and as a [`Nat`] past it.
 //! - [`dy`]: [`Dy`], an exact dyadic `m · 2^e`: exact `+ − ×`, and the two roundings to f64 its
 //!   callers pin (nearest-or-adjacent for output).
-//! - [`ival`]: [`Ival`], f64 intervals rounded outward, the whole line where undefined: the filter
-//!   in front of every exact sign, and the clearance checker's arithmetic.
-//! - [`real`]: exact reals, an expression DAG over exact dyadic inputs with + − × ÷ √ whose sign
-//!   is decided exactly (a filter, exact rational and one-radical routes, then big-float intervals
-//!   to the BFMSS separation bound). Its literals are its own normalised dyadic, [`real::Dy`].
+//! - `ival` (feature `real`): `Ival`, f64 intervals rounded outward, the whole line where
+//!   undefined: the filter in front of every exact sign, and the clearance checker's arithmetic.
+//! - `real` (feature `real`): exact reals, an expression DAG over exact dyadic inputs with the
+//!   operations + − × ÷ √, whose sign is decided exactly (a filter, exact rational and one-radical
+//!   routes, then big-float intervals to the BFMSS separation bound). Its literals are its own normalised
+//!   dyadic, `real::Dy`. Only CAM uses them (forge-cam-geom enables the feature): a build without
+//!   CAM compiles the numbers alone, so the kernel's std code generation is as it was before they
+//!   moved here (see Cargo.toml).
 //!
 //! The crate depends on nothing, so the whole of it can be an Aeneas target (L4). Speed comes
 //! first: where two implementations differed, the faster one is kept, measured. Within that it is
@@ -22,11 +25,14 @@
 
 pub mod dy;
 pub mod int;
+#[cfg(feature = "real")]
 pub mod ival;
 pub mod nat;
+#[cfg(feature = "real")]
 pub mod real;
 
 pub use dy::Dy;
 pub use int::Big;
+#[cfg(feature = "real")]
 pub use ival::Ival;
 pub use nat::Nat;
