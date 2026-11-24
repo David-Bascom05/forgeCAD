@@ -562,6 +562,96 @@ fn trap(v: f64, a: f64) -> f64 {
     }
 }
 
+/// Under SINUMERIK TRAORI with the rotary axes held (3+2): the joints that put the tool tip at
+/// program point `words` (X Y Z, mm), the point taken through the programmable frame `f` about
+/// the work offset's zero into the table's frame (the work offset's zero: where the tip is with
+/// every linear joint at its offset and the rotary joints at machine 0), then through the table's
+/// pose at `q`; the linear joints solved for it (the tool side translates: exact). PGAsl 6.2,
+/// PGsl 12.4.
+#[allow(clippy::too_many_arguments)]
+fn traori_q(
+    s: &Setup,
+    words: &[Option<i64>],
+    q: &[f64],
+    wcs: &[f64],
+    toff: &[f64],
+    f: &[[f64; 3]; 3],
+    l: f64,
+    len: &dyn Fn(i64, usize) -> f64,
+) -> Result<Vec<f64>, String> {
+    let def = s.def;
+    let ix: Vec<usize> = ['X', 'Y', 'Z']
+        .iter()
+        .map(|c| s.control.idx(*c).ok_or("TRAORI needs X, Y and Z"))
+        .collect::<Result<_, _>>()?;
+    let mut w = [0.0; 3];
+    for (k, i) in ix.iter().enumerate() {
+        w[k] = len(words[*i].ok_or("an unknown X, Y or Z under TRAORI")?, *i);
+    }
+    // the work offset's zero in the table's frame
+    let mut qg = q.to_vec();
+    for (i, j) in s.joint_of.iter().enumerate() {
+        if def.joints[*j].ty == JointType::Rotary {
+            if wcs[i] != 0.0 {
+                return Err("a work offset on a rotary axis under TRAORI is not modelled".into());
+            }
+            qg[*j] = 0.0;
+        } else {
+            qg[*j] = wcs[i] + toff[i];
+        }
+    }
+    let (g, _) = crate::kin::tip_in_part(def, &qg, &s.tool_mount, &s.part_mount, l)
+        .ok_or("TRAORI: no tool or part mount")?;
+    let p = [0, 1, 2].map(|r| g[r] + (0..3).map(|c| f[r][c] * w[c]).sum::<f64>());
+    let pose = crate::kin::pose(def, q);
+    let target = crate::kin::part_frame(def, &pose, &s.part_mount)
+        .ok_or("TRAORI: no part mount")?
+        .apply(p);
+    // the tip is affine in the three linear joints: tip(x) = t0 + A x
+    let js: Vec<usize> = ix.iter().map(|i| s.joint_of[*i]).collect();
+    if js.iter().any(|j| def.joints[*j].ty != JointType::Linear) {
+        return Err("TRAORI: X, Y and Z must be linear joints".into());
+    }
+    let tip = |qq: &[f64]| -> Result<[f64; 3], String> {
+        let pz = crate::kin::pose(def, qq);
+        Ok(crate::kin::tool_tip(def, &pz, &s.tool_mount, l)
+            .ok_or("TRAORI: no tool mount")?
+            .0)
+    };
+    let mut q0 = q.to_vec();
+    for j in &js {
+        q0[*j] = 0.0;
+    }
+    let t0 = tip(&q0)?;
+    let mut a = [[0.0; 3]; 3];
+    for (k, j) in js.iter().enumerate() {
+        let mut qe = q0.clone();
+        qe[*j] = 1.0;
+        let te = tip(&qe)?;
+        for r in 0..3 {
+            a[r][k] = te[r] - t0[r];
+        }
+    }
+    let det = |m: &[[f64; 3]; 3]| {
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    };
+    let d = det(&a);
+    if d.abs() < 1e-12 {
+        return Err("TRAORI: X, Y and Z do not span space".into());
+    }
+    let b = [0, 1, 2].map(|r| target[r] - t0[r]);
+    let mut out = q.to_vec();
+    for (k, j) in js.iter().enumerate() {
+        let mut m = a;
+        for r in 0..3 {
+            m[r][k] = b[r];
+        }
+        out[*j] = det(&m) / d;
+    }
+    Ok(out)
+}
+
 /// Runs a program on a setup.
 pub fn simulate(text: &str, s: &Setup) -> Result<Timeline, SimError> {
     // a control that calls tools by name (SINUMERIK T="name") takes the setup's names
@@ -678,7 +768,18 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         Ok(())
     };
     // the program position (control letters) to joint values, keeping unspecified joints
-    let to_q = |words: &[Option<i64>], q: &[f64], wcs: &[f64], toff: &[f64]| -> Vec<f64> {
+    let to_q = |words: &[Option<i64>],
+                q: &[f64],
+                wcs: &[f64],
+                toff: &[f64],
+                tr: Option<&[[f64; 3]; 3]>,
+                ln: usize|
+     -> Result<Vec<f64>, SimError> {
+        if let Some(f) = tr {
+            let l = length_letter.map_or(0.0, |li| toff[li]);
+            return traori_q(s, words, q, wcs, toff, f, l, &len)
+                .map_err(|what| SimError::At { line: ln, what });
+        }
         let mut out = q.to_vec();
         for (i, w) in words.iter().enumerate() {
             if let Some(w) = w {
@@ -689,7 +790,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 out[s.joint_of[i]] = v + wcs[i] + toff[i];
             }
         }
-        out
+        Ok(out)
     };
     let push_seg = |tl: &mut Timeline, t: &mut f64, t_est: &mut f64, seg: Segment| {
         *t += seg.t_min;
@@ -698,6 +799,8 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
     };
     // after a skip move: (its segment, the joints still at its unknown stop)
     let mut follow: Option<(usize, Vec<bool>)> = None;
+    // SINUMERIK TRAORI (3+2): the programmable frame's rotation while it is on
+    let mut traori: Option<[[f64; 3]; 3]> = None;
     for b in blocks {
         let ln = b.line;
         let mark = |tl: &mut Timeline, t: f64, what: Happening| tl.marks.push(Mark { line: ln, t, what });
@@ -718,11 +821,18 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         let n0 = tl.segments.len();
         match &b.ev {
             Ev::Rapid(words) => {
-                let q1 = to_q(words, &q, &wcs, &toff);
+                let q1 = to_q(words, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 for seg in rapid(s, ln, &q, &q1, t, tool, spindle, &mut tl) {
                     push_seg(&mut tl, &mut t, &mut t_est, seg);
                 }
                 q = q1;
+            }
+            Ev::Frame(fr) => traori = *fr,
+            Ev::Machine(_) | Ev::Home { .. } if traori.is_some() => {
+                return Err(SimError::At {
+                    line: ln,
+                    what: "a machine-coordinate or home move under TRAORI is not modelled".into(),
+                });
             }
             Ev::Machine(mv) => {
                 let mut q1 = q.clone();
@@ -739,7 +849,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 q = q1;
             }
             Ev::Home { via, axes } => {
-                let qv = to_q(via, &q, &wcs, &toff);
+                let qv = to_q(via, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 for seg in rapid(s, ln, &q, &qv, t, tool, spindle, &mut tl) {
                     push_seg(&mut tl, &mut t, &mut t_est, seg);
                 }
@@ -755,7 +865,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             }
             Ev::ProbeSwitch(on) => mark(&mut tl, t, Happening::ProbeSwitch { on: *on }),
             Ev::Protected { to, f } => {
-                let q1 = to_q(to, &q, &wcs, &toff);
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 let seg = feed_seg(
                     s,
                     ln,
@@ -775,7 +885,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 q = q1;
             }
             Ev::Surface { to, .. } => {
-                let q1 = to_q(to, &q, &wcs, &toff);
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 let stop = s
                     .skip_stops
                     .iter()
@@ -805,7 +915,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 // back at the start
             }
             Ev::Skip { to, f, code } => {
-                let q1 = to_q(to, &q, &wcs, &toff);
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 let stop = s
                     .skip_stops
                     .iter()
@@ -838,7 +948,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 q = q_end;
             }
             Ev::Feed { to, f, mode } => {
-                let q1 = to_q(to, &q, &wcs, &toff);
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 inch_rotary(&q, &q1, ln)?;
                 let seg = feed_seg(
                     s,
@@ -867,7 +977,7 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 f,
                 mode,
             } => {
-                let q1 = to_q(to, &q, &wcs, &toff);
+                let q1 = to_q(to, &q, &wcs, &toff, traori.as_ref(), ln)?;
                 let (la, lb) = match plane {
                     17 => ('X', 'Y'),
                     18 => ('Z', 'X'),
@@ -888,7 +998,32 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                         });
                     }
                 }
+                if let Some(f) = &traori {
+                    // TRAORI: the frame's XY plane must be the machine's (the tool along the
+                    // frame's Z), so the circle stays one in X and Y
+                    let pz = crate::kin::pose(def, &q);
+                    let fz = crate::kin::part_frame(def, &pz, &s.part_mount)
+                        .map(|pf| pf.dir([f[0][2], f[1][2], f[2][2]]))
+                        .unwrap_or([0.0; 3]);
+                    if *plane != 17 || fz[2] < 1.0 - 1e-9 {
+                        return Err(SimError::At {
+                            line: ln,
+                            what: "an arc under TRAORI outside the plane normal to the tool is not modelled"
+                                .into(),
+                        });
+                    }
+                }
                 let (ca, cb, r) = match centre {
+                    // TRAORI: the centre through the frame and the table, as a point is
+                    Centre::Abs([wa, wb]) if traori.is_some() => {
+                        let mut wv = to.clone();
+                        wv[ia] = Some(*wa);
+                        wv[ib] = Some(*wb);
+                        let qc = to_q(&wv, &q, &wcs, &toff, traori.as_ref(), ln)?;
+                        let (ca, cb) = (qc[ja], qc[jb]);
+                        let r = ((sa - ca).powi(2) + (sb - cb).powi(2)).sqrt();
+                        (ca, cb, r)
+                    }
                     // the centre in program units, to joint values as a position's words are
                     Centre::Abs([wa, wb]) => {
                         let wj = |i: usize, w: i64| {

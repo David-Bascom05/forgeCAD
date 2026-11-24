@@ -457,6 +457,10 @@ pub enum Ev {
         /// The D word (LinuxCNC: the tool whose radius; None the loaded tool's).
         d: Option<u32>,
     },
+    /// SINUMERIK TRAORI with the rotary axes held (3+2): on, with the programmable frame's
+    /// rotation (frame coordinates to the table's, about the work offset's zero; PGsl 12.4), or off
+    /// (TRAFOOF). sim maps every later point through the frame and the table's pose to the joints.
+    Frame(Option<[[f64; 3]; 3]>),
     Rapid(Vec<Option<Q>>),
     Feed {
         to: Vec<Option<Q>>,

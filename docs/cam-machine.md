@@ -426,10 +426,25 @@ same core; what the subset does not hold is refused with the block's line and th
 | `CYCLE800()` | taken as no motion, reported not modelled (`cycle800`): it deselects the swivel data record (PGZ 3.16 p. 216); a machine's cycle settings may retract |
 | an M in the setup's `m_no_motion` | no motion, reported not modelled (`M27` …) |
 
-Refused by name (not in the subset): TRAORI, TRANS/ATRANS, ROT/AROT/AROTS, MIRROR, SCALE, COMPON
-and the other compressors, G64x, FFWON/FFWOF, SOFT/BRISK, other transformations, IF/GOTO and any
-token that is not a single address letter with a number. The dataset's 3+2 programs (TRAORI with
-AROT) need the U5-620's kinematics and are not read yet.
+3+2 machining (the dataset's Coordinate_system_representation_Achskreuz):
+
+| read | as |
+|---|---|
+| `TRAORI` (alone in its block), with B and C positioned before it and held | the orientation transformation (PGAsl 6.2 pp. 307-310): every point after it is taken through the programmable frame about the work offset's zero into the table's frame, then through the table's pose to the machine; the linear joints are solved for the tool tip there (sim.rs `traori_q`) |
+| `AROT X…` / `Y…` / `Z…` (one axis per block) | an additive rotation of the programmable frame about its current axis, right-handed (PGsl 12.4 pp. 333-334): post-multiplied. Checked on all 21 TRAORI operations of the program: each frame's Z is the tool's axis at its B and C (the alternatives match 0 to 5 of them) |
+| `TRANS X0 Y0 Z0` | resets the programmable frame (PGsl 12.3.1 p. 329: TRANS resets every frame component); TRANS with an offset is refused |
+| `TRAFOOF` | the transformation off |
+
+Under TRAORI arcs are read in G17 only when the frame's Z is the tool's axis (the circle stays one in
+X and Y). Refused under TRAORI: a rotary axis moving (simultaneous 5-axis), SUPA, G53 or G28, a tool
+change, cutter compensation, a modal cycle call, a work offset on a rotary axis. Frames outside
+TRAORI are refused. tests/traori.rs runs the program on the U5-620's kinematics fitted from the
+same dataset's log and finds the machine where the log has it: within 0.004-0.28 mm on two
+operations (B90 C0, and B90 C90 with a different frame chain).
+
+Refused by name (not in the subset): TRAORI with arguments, ATRANS, ROT, AROTS, MIRROR, SCALE,
+COMPON and the other compressors, G64x, FFWON/FFWOF, SOFT/BRISK, other transformations, ORIWKS/ORIMKS,
+IF/GOTO and any token that is not a single address letter with a number.
 
 ## Several channels (`multi`)
 
