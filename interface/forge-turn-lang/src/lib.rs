@@ -213,7 +213,8 @@ impl TurnCam {
             "part" => {
                 let file = text(a, "#0", None)?;
                 let path = dir.join(&file);
-                let src = forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+                let src =
+                    forge_dirs::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
                 let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
                 if !run.ok() {
                     return Err(format!(
@@ -242,9 +243,7 @@ impl TurnCam {
                     return Err("`chuck:` is a chuck(..)".into());
                 };
                 let machine = match a.get("machine") {
-                    Some(V::Str(m)) => {
-                        Some(machine::builtin(m).map_err(|e| format!("{e:?}"))?)
-                    }
+                    Some(V::Str(m)) => Some(machine::builtin(m).map_err(|e| format!("{e:?}"))?),
                     None => None,
                     Some(v) => return Err(format!("`machine:` is a name, not {v:?}")),
                 };
@@ -498,6 +497,26 @@ impl TurnCam {
     }
 
     /// The program's text, when every op is certified.
+    /// The parts, each as its exact half-profile in (ρ, z) (read-only: for a view).
+    pub fn parts(&self) -> &[forge_turn::profile::HalfProfile] {
+        &self.parts
+    }
+
+    /// The setups by name: the part, the bar (`bar_r`, `bar_front`; `Setup::bar()` its region),
+    /// the chuck (`Setup::chuck_region()` its envelope as it turns), the fixtures, Z0 the part's
+    /// own z = 0, the machine and its placement.
+    pub fn setups(&self) -> &[(String, Setup)] {
+        &self.setups
+    }
+
+    /// The ops' paths as generated, in document order: (op name, index into `setups`, path). A
+    /// path's points are the tool's reference point (the nose centre); `path.tool.tip` added
+    /// gives the imaginary tip the program states. `forge_turn::ops::steps_to_moves` gives its
+    /// moves.
+    pub fn paths(&self) -> &[(String, usize, OpPath)] {
+        &self.paths
+    }
+
     pub fn program_text(&self) -> Option<&str> {
         self.programs.iter().find_map(|p| p.text.as_deref())
     }

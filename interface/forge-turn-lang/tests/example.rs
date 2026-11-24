@@ -101,3 +101,17 @@ fn the_collar_back_chamfer_is_finished_left_hand() {
     let cam = forge_turn_lang::run(&rh, &d);
     assert!(!cam.ok && cam.ops.iter().any(|o| o.name == "fin" && o.status == "refused"));
 }
+
+#[test]
+fn a_view_reads_the_profile_the_setup_and_the_paths() {
+    let d = dir();
+    let src = std::fs::read_to_string(d.join("shaft_turn.fg")).unwrap();
+    let cam = forge_turn_lang::run(&src, &d);
+    assert_eq!(cam.parts().len(), 1);
+    let (name, s) = &cam.setups()[0];
+    assert_eq!((name.as_str(), s.bar_r, s.bar_front), ("op1", 16.0, 2.0));
+    assert!(!s.chuck_region().loops.is_empty());
+    let names: Vec<&str> = cam.paths().iter().map(|p| p.0.as_str()).collect();
+    assert_eq!(names, ["face", "rough", "fin", "thr", "cut"]);
+    assert!(cam.paths().iter().all(|p| p.1 == 0 && !p.2.steps.is_empty()));
+}
