@@ -231,3 +231,50 @@ fn the_queue_writes_a_turntable_frame_by_frame() {
     assert_ne!(written[0].1, written[1].1);
     assert!(q.jobs.is_empty() && q.log.iter().all(|l| l.is_ok()));
 }
+
+/// The golden scene's picture, as the GPU shows it: 96x64, 128 samples, seed 0, not denoised.
+fn golden_picture(device: &wgpu::Device, queue: &wgpu::Queue) -> Vec<u8> {
+    let f = fixture();
+    let size = (96, 64);
+    let mut t = Tracer::new(device, queue, size);
+    t.set_scene(&f.built, &f.materials, &f.lut).unwrap();
+    t.set_env(&f.env);
+    t.step(&f.view, &f.settings, 128);
+    t.show(0.0, false);
+    t.read_rgba()
+}
+
+const GOLDEN: &str = "tests/fixtures/studio_golden.png";
+
+fn read_png(path: &str) -> ((u32, u32), Vec<u8>) {
+    let d = png::Decoder::new(std::io::BufReader::new(std::fs::File::open(path).unwrap()));
+    let mut r = d.read_info().unwrap();
+    let mut buf = vec![0; r.output_buffer_size().unwrap()];
+    let info = r.next_frame(&mut buf).unwrap();
+    ((info.width, info.height), buf[..(info.width * info.height * 4) as usize].to_vec())
+}
+
+#[test]
+fn the_golden_scene_looks_as_it_did() {
+    let Some((device, queue)) = device() else {
+        return;
+    };
+    let got = golden_picture(&device, &queue);
+    if std::env::var("STUDIO_BLESS").is_ok() {
+        save(GOLDEN, (96, 64), &got);
+        return;
+    }
+    let (size, want) = read_png(GOLDEN);
+    assert_eq!(size, (96, 64));
+    // another GPU rounds differently and its noise lands elsewhere: the picture must agree on
+    // the whole (RMSE) and nearly everywhere (99th percentile of the per-channel difference)
+    let mut d: Vec<i32> = got.iter().zip(&want).enumerate().filter(|(k, _)| k % 4 != 3).map(|(_, (a, b))| (*a as i32 - *b as i32).abs()).collect();
+    let rmse = (d.iter().map(|x| (x * x) as f64).sum::<f64>() / d.len() as f64).sqrt();
+    d.sort();
+    let p99 = d[d.len() * 99 / 100];
+    eprintln!("golden: rmse {rmse:.2}, p99 {p99} (8-bit levels)");
+    if rmse > 1e-9 {
+        save("target/studio_golden_got.png", (96, 64), &got);
+    }
+    assert!(rmse < 6.0 && p99 < 40, "rmse {rmse}, p99 {p99}: see target/studio_golden_got.png");
+}
