@@ -899,7 +899,9 @@ impl Catalog {
             clearance: 0.5,
             self_clearance: 0.0,
             short_end: None,
-            springback: crate::library::springback_standin(),
+            // springback is a material property: forge-material's, when cited (none yet); a
+            // library set carries no rows of its own, so the overbend is 0 and said unknown
+            springback: Vec::new(),
             v_rule: 8.0,
             stations: Vec::new(),
         };

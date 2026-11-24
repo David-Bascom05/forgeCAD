@@ -1452,6 +1452,23 @@ fn answer(sh: &SheetOut, m: &fb::Model, tl: &fb::Tooling, plan: &fb::Plan, names
         ("tooling", tl.id.as_str().into()),
         ("press", tl.press.id.as_str().into()),
         ("material", sh.material.as_deref().map_or(Json::Null, Json::from)),
+        (
+            "springback",
+            if tl.springback.is_empty() {
+                Json::obj(vec![
+                    ("known", false.into()),
+                    (
+                        "why",
+                        "no cited springback for this material in forge-material: bent to the turn, no overbend".into(),
+                    ),
+                ])
+            } else {
+                Json::obj(vec![
+                    ("known", true.into()),
+                    ("source", "the stand-in set's rows (forgecad's own round numbers)".into()),
+                ])
+            },
+        ),
         ("clearance", r6(tl.clearance)),
         ("feasible", plan.feasible.into()),
         (
