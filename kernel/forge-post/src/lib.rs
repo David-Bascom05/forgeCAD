@@ -14,6 +14,17 @@
 //! below); `print` writes it; `read` parses our own text back to motions. The obligation, tested
 //! on every dialect: read(print(q)) = motions(q), exactly. The path the checks must hold for is
 //! therefore motions(quantize(g)), the rounded path, never g itself.
+//!
+//! A post's options (`PostOptions`, `Dialect::with`) change the dialect itself:
+//! - fewer decimals, never more than the control's increment;
+//! - line numbers on or off (off refused where every block is numbered);
+//! - no safe start, with the modes it would have set in `assumes_modes`;
+//! - inches: the dialect's cited `units_inch` code in place of `units_mm` (`{units}` in its header
+//!   templates), lengths and feeds quantised exactly from mm (x · 10^k · 10 / 254, ties to even)
+//!   at its `inch_decimals` and `inch_feed_decimals`. Integer units are then 10^-k inch
+//!   (`QProgram::mm_per_unit`), and the reader refuses the other unit's code.
+//!
+//! The round trip holds for the dialect they return.
 use forge_cam_geom::big::Nat;
 use forge_cam_geom::real::Dy;
 use forge_tooling::toml::{self, Table, num, text, texts};
@@ -100,7 +111,30 @@ pub struct Dialect {
     /// Where each code comes from (`[[dialect.cite]]`): a dialect restated from a control maker's
     /// manual cites every code it uses (`cite_required = true`).
     pub cites: Vec<Cite>,
+    /// The modes this dialect's program assumes the control is in at its start, because the
+    /// safe start that would set them is left out (`PostOptions::safe_start = Some(false)`): the
+    /// safe start's lines. Empty when the program sets them itself.
+    pub assumes_modes: Vec<String>,
+    /// Lengths and feeds in inches (`PostOptions::inch`): `decimals` and `feed_decimals` are then
+    /// the inch ones, and the program's integer units 10^-decimals inch.
+    pub inch: bool,
     t: Table,
+}
+
+/// What a post may change of its dialect (`Dialect::with`). None keeps the dialect's own.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PostOptions {
+    /// Inch: the dialect's cited inch code (`units_inch`) in place of its mm one, lengths and
+    /// feeds in inches at its inch decimals (refused where no source gives the code).
+    pub inch: bool,
+    /// Coordinate digits after the point, at most the dialect's (its control's increment).
+    pub decimals: Option<u32>,
+    /// Feed digits after the point, at most the dialect's.
+    pub feed_decimals: Option<u32>,
+    /// N-words on or off (off refused where the control numbers every block).
+    pub line_numbers: Option<bool>,
+    /// The dialect's safe start written, or left out (then `assumes_modes` lists its lines).
+    pub safe_start: Option<bool>,
 }
 
 /// One code's source: the dialect key (`dwell`, `cycle_peck`, ...), the document and where in it.
@@ -116,7 +150,7 @@ pub struct Cite {
 }
 
 /// The template keys a dialect may set; with `cite_required`, each one it sets is cited.
-pub const KEYS: [&str; 37] = [
+pub const KEYS: [&str; 53] = [
     "program_open",
     "program_close",
     "comment",
@@ -154,6 +188,27 @@ pub const KEYS: [&str; 37] = [
     "sign",
     "g_digits",
     "tool_word",
+    "line_numbers_required",
+    "units_mm",
+    "units_inch",
+    "inch_decimals",
+    "inch_feed_decimals",
+    // cutter radius compensation (CAM-2D-FINISH): G41/G42 with the register, G40, and what the
+    // control does at an outside corner under it (`arc` or `intersection`), where the first move
+    // under it ends (`comp_entry`: `norm`, displaced perpendicular to the next block; or
+    // `perpendicular`, to the entry move itself) and the turn below which a corner gets neither
+    // (`comp_corner_tolerance`, radians); comp is posted only where the first five are set and cited (no tolerance: exact)
+    "comp_left",
+    "comp_right",
+    "comp_off",
+    "comp_corner",
+    "comp_entry",
+    "comp_corner_tolerance",
+    "probe_move",
+    "probe_on",
+    "probe_off",
+    "probe_protected",
+    "probe_surface",
 ];
 
 impl Dialect {
@@ -226,6 +281,8 @@ impl Dialect {
         }
         Ok(Dialect {
             cites,
+            assumes_modes: Vec::new(),
+            inch: false,
             extension: text(&t, "extension").unwrap_or("nc").to_string(),
             feed_decimals: num(&t, "feed_decimals").unwrap_or(1.0) as u32,
             name,
@@ -235,8 +292,79 @@ impl Dialect {
         })
     }
 
+    /// The dialect with a post's options: every change is one the dialect allows, else a typed
+    /// refusal with its fix; the result is what `quantize`, `print`, `read` and `round_trip` take,
+    /// so the certified text is the one written.
+    pub fn with(&self, o: &PostOptions) -> Result<Dialect, PostError> {
+        let mut d = self.clone();
+        if o.inch && !self.inch {
+            let code = self.s("units_inch");
+            let refused = self
+                .cites
+                .iter()
+                .find(|c| c.key == "units_inch" && c.status == "refused");
+            if code.is_empty() || refused.is_some() || self.s("units_mm").is_empty() {
+                let why = refused.map(|c| format!(": {}", c.note)).unwrap_or_default();
+                return Err(PostError::Unsupported {
+                    what: format!("inch output ({}{why})", self.name),
+                    fix: "post in mm (units: \"mm\")".into(),
+                });
+            }
+            d.inch = true;
+            d.decimals = self
+                .n("inch_decimals")
+                .map(|x| x as u32)
+                .unwrap_or(self.decimals + 1);
+            d.feed_decimals = self
+                .n("inch_feed_decimals")
+                .map(|x| x as u32)
+                .unwrap_or(self.feed_decimals + 1);
+        }
+        let (dk, fk) = (d.decimals, d.feed_decimals);
+        if let Some(k) = o.decimals {
+            if k > dk {
+                return Err(PostError::Unsupported {
+                    what: format!("{k} decimals: {} writes at most {dk}", self.name),
+                    fix: format!("decimals: {dk} or fewer"),
+                });
+            }
+            d.decimals = k;
+        }
+        if let Some(k) = o.feed_decimals {
+            if k > fk {
+                return Err(PostError::Unsupported {
+                    what: format!("{k} feed decimals: {} writes at most {fk}", self.name),
+                    fix: format!("feed_decimals: {fk} or fewer"),
+                });
+            }
+            d.feed_decimals = k;
+        }
+        if let Some(on) = o.line_numbers {
+            if !on && self.t.get("line_numbers_required") == Some(&toml::Val::Bool(true)) {
+                return Err(PostError::Unsupported {
+                    what: format!("no line numbers: {} numbers every block", self.name),
+                    fix: "line_numbers: true".into(),
+                });
+            }
+            d.t.insert("line_numbers".into(), toml::Val::Bool(on));
+        }
+        if o.safe_start == Some(false) {
+            d.assumes_modes = self.lines("safe_start");
+            d.t.remove("safe_start");
+        }
+        Ok(d)
+    }
+
     fn s(&self, k: &str) -> &str {
         text(&self.t, k).unwrap_or("")
+    }
+    /// The code that sets the program's units (`{units}` in the header templates).
+    fn units(&self) -> &str {
+        if self.inch {
+            self.s("units_inch")
+        } else {
+            self.s("units_mm")
+        }
     }
     /// A template as the dialect sets it ("" if unset; "refuse" / "expand" for cycles).
     pub fn template(&self, k: &str) -> &str {
@@ -332,10 +460,21 @@ pub enum Coolant {
     Off,
 }
 
+/// The side cutter radius compensation puts the tool on, as it travels (G41 left, G42 right).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompSide {
+    Left,
+    Right,
+}
+
 /// A program record, in mm, mm/min, rpm, seconds.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Rec {
     Comment(String),
+    /// Cutter radius compensation on (the side and the offset register D), or off (G40). The
+    /// path around it is the tool centre's for a zero register: the control adds the
+    /// register's value (wear). It turns on and off only before a straight feed move in XY.
+    Comp(Option<(CompSide, u32)>),
     Wcs(u32),
     ToolChange {
         t: u32,
@@ -371,6 +510,33 @@ pub enum Rec {
     },
     Dwell(f64),
     Home,
+    /// A probe (skip) move toward `to` at feed `f`: the control stops where the probe triggers
+    /// and alarms if it reaches `to` untriggered (LinuxCNC G38.2, Grbl G38.2). The dialect's
+    /// `probe_move` writes it, all three axis words; afterwards the position is unknown to the
+    /// program, so the next move writes every axis.
+    Probe {
+        to: [f64; 3],
+        f: f64,
+    },
+    /// A probing macro control's probe switched on (true) or off: the dialect's `probe_on` /
+    /// `probe_off` (Renishaw Inspection Plus on Haas: G65 P9832 / P9833, each with a small Z
+    /// move of unpublished size inside: afterwards Z is unknown to the program).
+    ProbeOn(bool),
+    /// A protected positioning move (`probe_protected`, Inspection Plus O9810): a feed move to
+    /// `to` that stops with an alarm if the probe triggers on the way.
+    ProbeProtected {
+        to: [f64; 3],
+        f: f64,
+    },
+    /// A single-surface measure (`probe_surface`, Inspection Plus O9811) along axis 0/1/2 (X Y
+    /// Z) toward the surface expected at `at`, searching `q` past it, then back to the start;
+    /// `wcs` (54..59) the work offset it sets from the error, if any.
+    ProbeSurface {
+        axis: u8,
+        at: f64,
+        q: f64,
+        wcs: Option<u32>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -387,6 +553,7 @@ pub type Q = i64;
 #[derive(Clone, Debug, PartialEq)]
 pub enum QRec {
     Comment(String),
+    Comp(Option<(CompSide, u32)>),
     Wcs(u32),
     ToolChange {
         t: u32,
@@ -421,11 +588,22 @@ pub enum QRec {
     },
     Dwell(Q),
     Home,
+    Probe([Q; 3], Q),
+    ProbeOn(bool),
+    ProbeProtected([Q; 3], Q),
+    ProbeSurface {
+        axis: u8,
+        at: Q,
+        q: Q,
+        wcs: Option<u32>,
+    },
 }
 
 /// What the control does: the motion and the machine-state events, in integer units.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Motion {
+    /// Cutter radius compensation on or off: the motions around it are the programmed path.
+    Comp(Option<(CompSide, u32)>),
     Rapid([Q; 3]),
     Feed([Q; 3], Q),
     /// `full`: a whole turn (helical if Z moves). A control decides it from X and Y alone:
@@ -443,6 +621,19 @@ pub enum Motion {
     SpindleStop,
     Coolant(Coolant),
     Home,
+    /// A probe (skip) move toward the point at the feed: it stops where the probe triggers.
+    Probe([Q; 3], Q),
+    /// The probe switched on or off (a macro whose small Z move is not published).
+    ProbeOn(bool),
+    /// A protected positioning move to the point at the feed.
+    ProbeProtected([Q; 3], Q),
+    /// A single-surface measure along an axis toward `at`, `q` past it, back to its start.
+    ProbeSurface {
+        axis: u8,
+        at: Q,
+        q: Q,
+        wcs: Option<u32>,
+    },
 }
 
 /// The nearest integer to x · 10^k, ties to even, exactly.
@@ -490,6 +681,60 @@ pub fn quant(x: f64, k: u32) -> Result<Q, PostError> {
     Ok(if d.neg { -v2 } else { v2 })
 }
 
+/// The nearest integer to x · 10^k · num / den, ties to even, exactly (x in mm to inches:
+/// num 10, den 254).
+pub fn quant_ratio(x: f64, k: u32, num: u32, den: u32) -> Result<Q, PostError> {
+    if !x.is_finite() {
+        return Err(PostError::Range {
+            what: "a non-finite number".into(),
+            value: x,
+        });
+    }
+    let d = Dy::from_f64(x);
+    let mut m = d.mag.mul_small(num);
+    let mut i = 0;
+    while i < k {
+        m = m.mul_small(10);
+        i += 1;
+    }
+    // x · 10^k · num / den = m · 2^exp / den
+    let (top, bot) = if d.exp >= 0 {
+        (m.shl(d.exp as u64), Nat::from_u64(den as u64))
+    } else {
+        (m, Nat::from_u64(den as u64).shl((-d.exp) as u64))
+    };
+    let (q, r) = top.divrem(&bot);
+    // round half to even: 2r against the divisor
+    let twice = r.shl(1);
+    let n = match twice.cmp(&bot) {
+        core::cmp::Ordering::Greater => q.add(&Nat::from_u64(1)),
+        core::cmp::Ordering::Equal if q.bit(0) => q.add(&Nat::from_u64(1)),
+        _ => q,
+    };
+    if n.bits() > 62 {
+        return Err(PostError::Range {
+            what: "a coordinate".into(),
+            value: x,
+        });
+    }
+    let mut v2 = 0i64;
+    let mut j = n.limbs.len();
+    while j > 0 {
+        j -= 1;
+        v2 = (v2 << 32) | n.limbs[j] as i64;
+    }
+    Ok(if d.neg { -v2 } else { v2 })
+}
+
+/// A length or feed in the program's units: mm as they are, or in inches.
+fn qlen(x: f64, k: u32, inch: bool) -> Result<Q, PostError> {
+    if inch {
+        quant_ratio(x, k, 10, 254)
+    } else {
+        quant(x, k)
+    }
+}
+
 fn pow10(k: u32) -> i64 {
     let mut p = 1i64;
     let mut i = 0;
@@ -533,15 +778,127 @@ pub fn digits(q: Q, k: u32, point: Point) -> String {
     s
 }
 
+/// Cutter compensation's rules, as controls state them (RS274/NGC and LinuxCNC's reference):
+/// it turns on and off only immediately before a straight feed move (G1) that moves in X or Y
+/// (no arc, rapid, Z-only move or cycle in between: comments may be); while it is on, no tool
+/// change, cycle, dwell or machine-home move; and it is off when the program ends.
+/// Conservative: G1 only, where LinuxCNC also allows a rapid lead-in and a G0 after G40.
+/// The probe switch macros' rules (Renishaw H-2000-6222, p. 9-23, O9833): the probe is
+/// switched off before a tool change, and the motion record after switching it off is a home
+/// return (its macro moves Z: "the G28 reference return must be done following this macro").
+fn probe_rules(p: &Program) -> Result<(), PostError> {
+    let mut on = false;
+    let mut off_pending = false;
+    for r in &p.recs {
+        let motion = matches!(
+            r,
+            Rec::Rapid(_)
+                | Rec::Line(..)
+                | Rec::Arc { .. }
+                | Rec::Cycle { .. }
+                | Rec::Probe { .. }
+                | Rec::ProbeProtected { .. }
+                | Rec::ProbeSurface { .. }
+        );
+        match r {
+            Rec::ProbeOn(true) => {
+                on = true;
+                off_pending = false;
+            }
+            Rec::ProbeOn(false) => {
+                on = false;
+                off_pending = true;
+            }
+            Rec::Home => off_pending = false,
+            Rec::ToolChange { .. } if on => {
+                return Err(PostError::Unsupported {
+                    what: "a tool change while the probe is on".into(),
+                    fix: "switch the probe off first (Renishaw H-2000-6222 p. 9-23)".into(),
+                });
+            }
+            _ if motion && off_pending => {
+                return Err(PostError::Unsupported {
+                    what: "a move after the probe is switched off that is not a home return".into(),
+                    fix: "turn the probe off, then return Z home (Renishaw H-2000-6222 p. 9-23)".into(),
+                });
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn comp_rules(p: &Program) -> Result<(), PostError> {
+    let bad = |what: &str| {
+        PostError::Unsupported {
+        what: format!("cutter compensation: {what}"),
+        fix: "turn compensation on and off on a straight lead line in XY, and off before tool changes, cycles and the end".into(),
+    }
+    };
+    let mut on = false;
+    let mut at: Option<[f64; 3]> = None;
+    let mut want_line = false;
+    for r in &p.recs {
+        match r {
+            Rec::Comment(_) => continue,
+            Rec::Comp(c) => {
+                if c.is_some() == on {
+                    return Err(bad(if on {
+                        "turned on while on"
+                    } else {
+                        "turned off while off"
+                    }));
+                }
+                on = c.is_some();
+                want_line = true;
+                continue;
+            }
+            Rec::Line(v, _) if want_line => {
+                let moves_xy = at.is_none_or(|a| a[0] != v[0] || a[1] != v[1]);
+                if !moves_xy {
+                    return Err(bad("the move after G41/G42/G40 does not move in X or Y"));
+                }
+                want_line = false;
+            }
+            _ if want_line => return Err(bad("the move after G41/G42/G40 is not a straight feed move")),
+            Rec::ToolChange { .. }
+            | Rec::Cycle { .. }
+            | Rec::Dwell(_)
+            | Rec::Home
+            | Rec::Probe { .. }
+            | Rec::ProbeOn(_)
+            | Rec::ProbeProtected { .. }
+            | Rec::ProbeSurface { .. }
+                if on =>
+            {
+                return Err(bad(
+                    "a tool change, cycle, dwell, home or probe move while it is on",
+                ));
+            }
+            _ => {}
+        }
+        if let Rec::Rapid(v) | Rec::Line(v, _) | Rec::Arc { to: v, .. } = r {
+            at = Some(*v);
+        }
+    }
+    if on || want_line {
+        return Err(bad("still on at the program's end"));
+    }
+    Ok(())
+}
+
 pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
     let k = d.decimals;
     let fk = d.feed_decimals;
+    let inch = d.inch;
     let q3 = |v: [f64; 3]| -> Result<[Q; 3], PostError> {
-        Ok([quant(v[0], k)?, quant(v[1], k)?, quant(v[2], k)?])
+        Ok([qlen(v[0], k, inch)?, qlen(v[1], k, inch)?, qlen(v[2], k, inch)?])
     };
     let mut out = Vec::new();
     // where the tool is, as the program states it (an arc's start)
     let mut at: Option<[f64; 3]> = None;
+    comp_rules(p)?;
+    probe_rules(p)?;
     for r in &p.recs {
         let from = at;
         match r {
@@ -558,7 +915,8 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
         let mut full = false;
         if let (Rec::Arc { to, c, cw, f }, Some(s)) = (r, from) {
             let xy_same = to[0] == s[0] && to[1] == s[1];
-            let q_same = quant(to[0], k)? == quant(s[0], k)? && quant(to[1], k)? == quant(s[1], k)?;
+            let q_same = qlen(to[0], k, inch)? == qlen(s[0], k, inch)?
+                && qlen(to[1], k, inch)? == qlen(s[1], k, inch)?;
             if xy_same {
                 full = true;
             } else if q_same {
@@ -566,7 +924,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
                 let cross = (s[0] - c[0]) * (to[1] - c[1]) - (s[1] - c[1]) * (to[0] - c[0]);
                 let short = if *cw { cross <= 0.0 } else { cross >= 0.0 };
                 if short {
-                    out.push(QRec::Line(q3(*to)?, quant(*f, fk)?));
+                    out.push(QRec::Line(q3(*to)?, qlen(*f, fk, inch)?));
                     continue;
                 }
                 full = true;
@@ -574,6 +932,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
         }
         out.push(match r {
             Rec::Comment(s) => QRec::Comment(s.clone()),
+            Rec::Comp(c) => QRec::Comp(*c),
             Rec::Wcs(n) => QRec::Wcs(*n),
             Rec::ToolChange { t, h, name } => QRec::ToolChange {
                 t: *t,
@@ -587,12 +946,35 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
             Rec::SpindleStop => QRec::SpindleStop,
             Rec::Coolant(c) => QRec::Coolant(*c),
             Rec::Rapid(v) => QRec::Rapid(q3(*v)?),
-            Rec::Line(v, f) => QRec::Line(q3(*v)?, quant(*f, fk)?),
+            Rec::Line(v, f) => QRec::Line(q3(*v)?, qlen(*f, fk, inch)?),
+            Rec::Probe { to, f } => QRec::Probe(q3(*to)?, qlen(*f, fk, inch)?),
+            Rec::ProbeOn(on) => QRec::ProbeOn(*on),
+            Rec::ProbeProtected { to, f } => QRec::ProbeProtected(q3(*to)?, qlen(*f, fk, inch)?),
+            Rec::ProbeSurface { axis, at, q, wcs } => {
+                if *axis > 2 {
+                    return Err(PostError::Range {
+                        what: "a probe surface axis (0 X, 1 Y, 2 Z)".into(),
+                        value: *axis as f64,
+                    });
+                }
+                if wcs.is_some_and(|n| !(54..=59).contains(&n)) {
+                    return Err(PostError::Range {
+                        what: "a probed work offset (G54..G59)".into(),
+                        value: wcs.unwrap_or(0) as f64,
+                    });
+                }
+                QRec::ProbeSurface {
+                    axis: *axis,
+                    at: qlen(*at, k, inch)?,
+                    q: qlen(*q, k, inch)?,
+                    wcs: *wcs,
+                }
+            }
             Rec::Arc { to, c, cw, f } => QRec::Arc {
                 to: q3(*to)?,
-                c: [quant(c[0], k)?, quant(c[1], k)?],
+                c: [qlen(c[0], k, inch)?, qlen(c[1], k, inch)?],
                 cw: *cw,
-                f: quant(*f, fk)?,
+                f: qlen(*f, fk, inch)?,
                 full,
             },
             Rec::Cycle {
@@ -608,14 +990,14 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
                 kind: *kind,
                 holes: holes
                     .iter()
-                    .map(|h| Ok([quant(h[0], k)?, quant(h[1], k)?]))
+                    .map(|h| Ok([qlen(h[0], k, inch)?, qlen(h[1], k, inch)?]))
                     .collect::<Result<_, PostError>>()?,
-                z: quant(*z, k)?,
-                r: quant(*r, k)?,
-                clear: quant(*clear, k)?,
-                q: quant(*q, k)?,
+                z: qlen(*z, k, inch)?,
+                r: qlen(*r, k, inch)?,
+                clear: qlen(*clear, k, inch)?,
+                q: qlen(*q, k, inch)?,
                 dwell: quant(*dwell * 1000.0, 0)?,
-                f: quant(*f, fk)?,
+                f: qlen(*f, fk, inch)?,
             },
             Rec::Dwell(s) => QRec::Dwell(quant(*s * 1000.0, 0)?),
             Rec::Home => QRec::Home,
@@ -627,6 +1009,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
         recs: out,
         decimals: k,
         feed_decimals: fk,
+        inch,
     })
 }
 
@@ -637,6 +1020,19 @@ pub struct QProgram {
     pub recs: Vec<QRec>,
     pub decimals: u32,
     pub feed_decimals: u32,
+    /// Integer units of 10^-decimals inch (feeds 10^-feed_decimals inch/min), not mm.
+    pub inch: bool,
+}
+
+impl QProgram {
+    /// One length unit in mm, exactly: (numerator, denominator).
+    pub fn mm_per_unit(&self) -> (i64, i64) {
+        if self.inch {
+            (254, pow10(self.decimals) * 10)
+        } else {
+            (1, pow10(self.decimals))
+        }
+    }
 }
 
 /// The peck cycles' retract clearance and chip-break lift, mm (the controls' usual parameters,
@@ -657,6 +1053,7 @@ fn expand_hole(
     dwell: Q,
     f: Q,
     k: u32,
+    inch: bool,
     params: (f64, f64),
     out: &mut Vec<Motion>,
 ) {
@@ -675,8 +1072,8 @@ fn expand_hole(
         }
         CycleKind::Peck | CycleKind::ChipBreak => {
             let step = if q > 0 { q } else { r - z };
-            let pc = quant(params.0, k).unwrap_or(0);
-            let lift = quant(params.1, k).unwrap_or(0);
+            let pc = qlen(params.0, k, inch).unwrap_or(0);
+            let lift = qlen(params.1, k, inch).unwrap_or(0);
             let mut depth = r;
             while depth > z {
                 let next = if depth - step > z { depth - step } else { z };
@@ -708,12 +1105,22 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
     for r in &p.recs {
         match r {
             QRec::Comment(_) | QRec::Wcs(_) => {}
+            QRec::Comp(c) => out.push(Motion::Comp(*c)),
             QRec::ToolChange { t, .. } => out.push(Motion::Tool(*t)),
             QRec::Spindle { rpm, cw } => out.push(Motion::Spindle(*rpm, *cw)),
             QRec::SpindleStop => out.push(Motion::SpindleStop),
             QRec::Coolant(c) => out.push(Motion::Coolant(*c)),
             QRec::Rapid(v) => out.push(Motion::Rapid(*v)),
             QRec::Line(v, f) => out.push(Motion::Feed(*v, *f)),
+            QRec::Probe(v, f) => out.push(Motion::Probe(*v, *f)),
+            QRec::ProbeOn(on) => out.push(Motion::ProbeOn(*on)),
+            QRec::ProbeProtected(v, f) => out.push(Motion::ProbeProtected(*v, *f)),
+            QRec::ProbeSurface { axis, at, q, wcs } => out.push(Motion::ProbeSurface {
+                axis: *axis,
+                at: *at,
+                q: *q,
+                wcs: *wcs,
+            }),
             QRec::Arc { to, c, cw, f, full } => out.push(Motion::Arc {
                 to: *to,
                 c: *c,
@@ -732,7 +1139,9 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
                 f,
             } => {
                 for h in holes {
-                    expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out);
+                    expand_hole(
+                        *kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, p.inch, params, &mut out,
+                    );
                 }
             }
             QRec::Dwell(ms) => out.push(Motion::Dwell(*ms)),
@@ -809,6 +1218,17 @@ impl Writer<'_> {
 }
 
 /// Writes the program in the dialect.
+/// A probing record the dialect does not cite.
+fn no_probe(d: &Dialect, key: &str) -> PostError {
+    PostError::Unsupported {
+        what: format!(
+            "`{key}` on {} (no openly published probing cycle is cited for it)",
+            d.name
+        ),
+        fix: "probe by hand, or post for a control whose probing cycles are cited".into(),
+    }
+}
+
 pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
     let k = d.decimals;
     let num_ = |q: Q| d.coord(q);
@@ -833,8 +1253,16 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         .chars()
         .filter(|c| !d.s("comment_strip").contains(*c))
         .collect();
+    let units = d.units().to_string();
     for l in d.lines("program_open") {
-        let s = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
+        let s = fill(
+            &l,
+            &[
+                ("num", p.number.to_string()),
+                ("title", title.clone()),
+                ("units", units.clone()),
+            ],
+        );
         // a `%` line (a tape mark, or a header such as `%NAME G71 *`) is written as it is
         if s.contains('%') {
             w.lines.push(s)
@@ -843,7 +1271,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         }
     }
     for l in d.lines("safe_start") {
-        w.emit(&l);
+        w.emit(&fill(&l, &[("units", units.clone())]));
     }
     // modal state
     let mut pos: [Option<Q>; 3] = [None; 3];
@@ -858,6 +1286,37 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
     for r in &p.recs {
         match r {
             QRec::Comment(s) => w.comment(s),
+            QRec::Comp(c) => {
+                // a control's corner behaviour under compensation must be declared (and cited)
+                // for the checks' claim to hold: without it, refused
+                let key = match c {
+                    Some((CompSide::Left, _)) => "comp_left",
+                    Some((CompSide::Right, _)) => "comp_right",
+                    None => "comp_off",
+                };
+                let tpl = d.s(key).to_string();
+                let refused = ["comp_left", "comp_right", "comp_off", "comp_corner", "comp_entry"]
+                    .iter()
+                    .any(|k| d.cites.iter().any(|c| c.key == *k && c.status == "refused"));
+                if tpl.is_empty()
+                    || tpl == "refuse"
+                    || d.s("comp_corner").is_empty()
+                    || d.s("comp_entry").is_empty()
+                    || refused
+                {
+                    return Err(PostError::Unsupported {
+                        what: format!("cutter compensation on {} (no cited G41/G42/G40, corner or entry behaviour)", d.name),
+                        fix: "post the tool centre (comp: \"computer\"), or a dialect that declares compensation".into(),
+                    });
+                }
+                let dd = c.map(|(_, d)| d).unwrap_or(0);
+                // a standalone block, as LinuxCNC takes it; a Fanuc-family control (start-up
+                // type A/B) wants G41/G42 in the block of the first move: such a dialect will need a
+                // same-block template when it declares compensation
+                w.emit(&fill(&tpl, &[("d", dd.to_string())]));
+                // the next move states its G word again
+                motion = None;
+            }
             QRec::Wcs(n) => {
                 let first = d.n("wcs_first").unwrap_or(54.0) as u32;
                 let count = d.n("wcs_count").unwrap_or(6.0) as u32;
@@ -935,6 +1394,82 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                     w.emit(&ws.join(" "));
                 }
             }
+            QRec::ProbeOn(on) => {
+                let key = if *on { "probe_on" } else { "probe_off" };
+                let tpl = d.s(key).to_string();
+                if tpl.is_empty() {
+                    return Err(no_probe(d, key));
+                }
+                w.emit(&tpl);
+                // its small Z move is not published: Z is written again
+                pos[2] = None;
+                motion = None;
+            }
+            QRec::ProbeProtected(v, f) => {
+                let tpl = d.s("probe_protected").to_string();
+                if tpl.is_empty() {
+                    return Err(no_probe(d, "probe_protected"));
+                }
+                w.emit(&fill(
+                    &tpl,
+                    &[
+                        ("x", num_(v[0])),
+                        ("y", num_(v[1])),
+                        ("z", num_(v[2])),
+                        ("f", fnum(*f)),
+                    ],
+                ));
+                pos = [Some(v[0]), Some(v[1]), Some(v[2])];
+                motion = None;
+                feed = None;
+            }
+            QRec::ProbeSurface { axis, at, q, wcs } => {
+                let tpl = d.s("probe_surface").to_string();
+                if tpl.is_empty() {
+                    return Err(no_probe(d, "probe_surface"));
+                }
+                let letter = ['X', 'Y', 'Z'][*axis as usize];
+                let set = wcs.map(|n| format!(" S{}", n - 53)).unwrap_or_default();
+                w.emit(&fill(
+                    &tpl,
+                    &[
+                        ("axis", letter.to_string()),
+                        ("at", num_(*at)),
+                        ("q", digits(*q, k, d.point)),
+                        ("set", set),
+                    ],
+                ));
+                // it returns to its start: the position is as before; the motion mode is the macro's
+                motion = None;
+                feed = None;
+            }
+            QRec::Probe(v, f) => {
+                let tpl = d.s("probe_move").to_string();
+                if tpl.is_empty() {
+                    return Err(PostError::Unsupported {
+                        what: format!(
+                            "a probe move on {} (no openly published probe move is cited for it)",
+                            d.name
+                        ),
+                        fix:
+                            "probe by hand, or post for a control whose probe move is cited (linuxcnc, grbl)"
+                                .into(),
+                    });
+                }
+                w.emit(&fill(
+                    &tpl,
+                    &[
+                        ("x", num_(v[0])),
+                        ("y", num_(v[1])),
+                        ("z", num_(v[2])),
+                        ("f", fnum(*f)),
+                    ],
+                ));
+                // where it stopped is not known: every axis and the motion mode are written again
+                pos = [None; 3];
+                motion = None;
+                feed = Some(*f);
+            }
             QRec::Arc { to, c, cw, f, .. } => {
                 let (sx, sy) = match (pos[0], pos[1]) {
                     (Some(x), Some(y)) => (x, y),
@@ -991,7 +1526,20 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if tpl == "expand" {
                     let mut ms = Vec::new();
                     for h in holes {
-                        expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, k, (PECK_CLEAR, CHIP_LIFT), &mut ms);
+                        expand_hole(
+                            *kind,
+                            *h,
+                            *z,
+                            *r,
+                            *clear,
+                            *q,
+                            *dwell,
+                            *f,
+                            k,
+                            d.inch,
+                            (PECK_CLEAR, CHIP_LIFT),
+                            &mut ms,
+                        );
                     }
                     for m in ms {
                         let rr = match m {
@@ -1007,6 +1555,7 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                             recs: vec![rr],
                             decimals: k,
                             feed_decimals: d.feed_decimals,
+                            inch: d.inch,
                         };
                         write_moves(&one, d, &mut w, &mut pos, &mut feed, &mut motion)?;
                     }
@@ -1071,7 +1620,14 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
         }
     }
     for l in d.lines("program_close") {
-        let l = fill(&l, &[("num", p.number.to_string()), ("title", title.clone())]);
+        let l = fill(
+            &l,
+            &[
+                ("num", p.number.to_string()),
+                ("title", title.clone()),
+                ("units", units.clone()),
+            ],
+        );
         if l.contains('%') {
             w.lines.push(l)
         } else {
@@ -1200,7 +1756,27 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
     let mut feed: Q = 0;
     let mut motion: Option<u32> = None;
     let mut cycle: Option<(CycleKind, Q, Q, Q, Q, Q)> = None; // kind, z, r, q, dwell ms, clear
+    // the dialect's probing macros: each template's P number (G65 P9811 ...)
+    let macro_p = |key: &str| -> Option<u32> {
+        let t = d.s(key);
+        if !t.contains("G65") {
+            return None;
+        }
+        t.split_whitespace()
+            .find_map(|w| w.strip_prefix('P').and_then(|p| p.parse::<u32>().ok()))
+    };
+    let macros: Vec<(&str, u32)> = ["probe_on", "probe_off", "probe_protected", "probe_surface"]
+        .into_iter()
+        .filter_map(|k| macro_p(k).map(|p| (k, p)))
+        .collect();
+    // the dialect's probe move: its template's leading G word (G38.2, G31)
+    let probe_g: Option<f64> = d
+        .s("probe_move")
+        .split_whitespace()
+        .find_map(|w| w.strip_prefix('G').and_then(|g| g.parse::<f64>().ok()));
     let mut rpm: Q = 0;
+    // cutter compensation: on (G41/G42) until G40; a G40 with it off (a safe start) is no event
+    let mut comp_on = false;
     // the dialect's extras: an end-of-line comment mark, a block terminator, G codes that carry
     // no motion (ignored) or that make the block carry none (skipped), more word letters
     let eol = d.s("comment_eol").chars().next();
@@ -1267,6 +1843,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         let get = |c: char| words.iter().find(|(l, _)| *l == c).map(|(_, v)| v.clone());
         let mut gs: Vec<u32> = Vec::new();
         let mut ms: Vec<u32> = Vec::new();
+        let mut probe = false;
         for (l, v) in &words {
             match l {
                 'G' => {
@@ -1275,7 +1852,9 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                         line: ln,
                         what: format!("G{v}"),
                     })?;
-                    if g.fract() == 0.0 {
+                    if probe_g == Some(g) {
+                        probe = true;
+                    } else if g.fract() == 0.0 {
                         gs.push(g as u32)
                     } else if g_ignore_f.contains(&g) {
                         // a decimal G the dialect lists as carrying no motion (G91.1)
@@ -1288,6 +1867,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     what: format!("M{v}"),
                 })?),
                 'N' | 'O' | 'X' | 'Y' | 'Z' | 'I' | 'J' | 'F' | 'R' | 'Q' | 'P' | 'S' | 'T' | 'H' | 'K' => {}
+                'D' if d.s("comp_left").contains("D{d}") => {}
                 c if more_words.contains(*c) => {}
                 c => {
                     return Err(ReadError {
@@ -1297,7 +1877,10 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                 }
             }
         }
-        if let Some(sv) = get('S') {
+        // (a probing macro's S is the work offset it sets, not a speed)
+        if let Some(sv) = get('S')
+            && !gs.contains(&65)
+        {
             rpm = parse_q(&sv, 0, ln)?;
         }
         // a dwell written with F (G4 F seconds) is not a feed
@@ -1337,6 +1920,75 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         if ms.contains(&0) && !ms.contains(&6) {
             let t = raw_tool(text_, ln);
             out.push(Motion::Tool(t));
+        }
+        // a probing macro call: G65 P<number> the dialect's templates name
+        if gs.contains(&65) {
+            let p: Option<u32> = get('P').and_then(|v| v.trim_end_matches('.').parse().ok());
+            let Some(&(key, _)) = macros.iter().find(|(_, n)| Some(*n) == p) else {
+                return Err(ReadError {
+                    line: ln,
+                    what: format!(
+                        "G65 P{} is not a probing macro this dialect writes",
+                        p.unwrap_or(0)
+                    ),
+                });
+            };
+            let coord =
+                |c: char| -> Result<Option<Q>, ReadError> { get(c).map(|v| parse_q(&v, k, ln)).transpose() };
+            match key {
+                "probe_on" | "probe_off" => {
+                    out.push(Motion::ProbeOn(key == "probe_on"));
+                    pos[2] = None;
+                }
+                "probe_protected" => {
+                    let mut to = pos;
+                    for (i, c) in ['X', 'Y', 'Z'].into_iter().enumerate() {
+                        if let Some(v) = coord(c)? {
+                            to[i] = Some(v);
+                        }
+                    }
+                    let (Some(x), Some(y), Some(z)) = (to[0], to[1], to[2]) else {
+                        return Err(ReadError {
+                            line: ln,
+                            what: "a protected positioning move from an unknown position".into(),
+                        });
+                    };
+                    out.push(Motion::ProbeProtected([x, y, z], feed));
+                    pos = [Some(x), Some(y), Some(z)];
+                }
+                _ => {
+                    let axes: Vec<(u8, Q)> = ['X', 'Y', 'Z']
+                        .into_iter()
+                        .enumerate()
+                        .filter_map(|(i, c)| coord(c).transpose().map(|v| v.map(|v| (i as u8, v))))
+                        .collect::<Result<_, _>>()?;
+                    let [(axis, at)] = axes[..] else {
+                        return Err(ReadError {
+                            line: ln,
+                            what: "a single-surface measure names one axis".into(),
+                        });
+                    };
+                    let q = coord('Q')?.ok_or_else(|| ReadError {
+                        line: ln,
+                        what: "a single-surface measure with no Q (its default is not assumed)".into(),
+                    })?;
+                    let wcs = match get('S') {
+                        None => None,
+                        Some(v) => match v.trim_end_matches('.').parse::<u32>() {
+                            Ok(n) if (1..=6).contains(&n) => Some(n + 53),
+                            _ => {
+                                return Err(ReadError {
+                                    line: ln,
+                                    what: format!("S{v}: only S1..S6 (G54..G59) are read"),
+                                });
+                            }
+                        },
+                    };
+                    out.push(Motion::ProbeSurface { axis, at, q, wcs });
+                }
+            }
+            motion = None;
+            continue;
         }
         let mut home = false;
         let mut skip_motion = false;
@@ -1397,7 +2049,36 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     out.push(Motion::Dwell(ms));
                     skip_motion = true;
                 }
-                90 | 94 | 17 | 21 | 40 | 49 | 98 | 64 | 54..=59 | 187 => {}
+                // the program's units: its own code, never the other's
+                20 | 21 if (*g == 20) != d.inch => {
+                    return Err(ReadError {
+                        line: ln,
+                        what: format!(
+                            "G{g}: this program is in {}",
+                            if d.inch { "inches" } else { "mm" }
+                        ),
+                    });
+                }
+                41 | 42 => {
+                    let dv = get('D').ok_or_else(|| ReadError {
+                        line: ln,
+                        what: format!("G{g} with no D"),
+                    })?;
+                    let dn: u32 = dv.parse().map_err(|_| ReadError {
+                        line: ln,
+                        what: format!("D{dv}"),
+                    })?;
+                    let side = if *g == 41 { CompSide::Left } else { CompSide::Right };
+                    out.push(Motion::Comp(Some((side, dn))));
+                    comp_on = true;
+                    skip_motion = true;
+                }
+                40 if comp_on => {
+                    out.push(Motion::Comp(None));
+                    comp_on = false;
+                    skip_motion = true;
+                }
+                90 | 94 | 17 | 20 | 21 | 40 | 49 | 98 | 64 | 54..=59 | 187 => {}
                 43 => skip_motion = true,
                 g if g_ignore.contains(g) => {}
                 g if g_skip.contains(g) => skip_motion = true,
@@ -1424,6 +2105,20 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
         if skip_motion {
             continue;
         }
+        if probe {
+            let mut p = [0; 3];
+            for (i, c) in ['X', 'Y', 'Z'].into_iter().enumerate() {
+                let v = get(c).ok_or_else(|| ReadError {
+                    line: ln,
+                    what: format!("a probe move with no {c} (the dialect writes all three)"),
+                })?;
+                p[i] = parse_q(&v, k, ln)?;
+            }
+            out.push(Motion::Probe(p, feed));
+            pos = [None; 3];
+            motion = None;
+            continue;
+        }
         if centre_first && (get('I').is_some() || get('J').is_some()) {
             let need = |c: char| {
                 get(c).ok_or_else(|| ReadError {
@@ -1447,7 +2142,20 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             Some(80) => {
                 let (kind, z, r, q, dw, clear) = cycle.unwrap();
                 let (x, y) = (to[0].unwrap_or(0), to[1].unwrap_or(0));
-                expand_hole(kind, [x, y], z, r, clear, q, dw, feed, k, (PECK_CLEAR, CHIP_LIFT), &mut out);
+                expand_hole(
+                    kind,
+                    [x, y],
+                    z,
+                    r,
+                    clear,
+                    q,
+                    dw,
+                    feed,
+                    k,
+                    d.inch,
+                    (PECK_CLEAR, CHIP_LIFT),
+                    &mut out,
+                );
                 pos = [Some(x), Some(y), Some(clear)];
                 continue;
             }
@@ -1530,14 +2238,18 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
 
 /// A block that is a tape mark or a `%` header: `%`, `%NAME ...`, or `N<digits> %NAME ...`.
 fn pct_block(s: &str) -> bool {
+    strip_n(s).starts_with('%')
+}
+
+/// A block without its leading `N<digits>` (and the spaces around it).
+fn strip_n(s: &str) -> &str {
     let t = s.trim_start();
-    let t = match t.strip_prefix(['N', 'n']) {
+    match t.strip_prefix(['N', 'n']) {
         Some(r) if r.starts_with(|c: char| c.is_ascii_digit()) => {
             r.trim_start_matches(|c: char| c.is_ascii_digit()).trim_start()
         }
         _ => t,
-    };
-    t.starts_with('%')
+    }
 }
 
 /// The motion without its null moves (a rapid or feed to where the tool already is), which
@@ -1554,7 +2266,8 @@ pub fn normalize(m: &[Motion]) -> Vec<Motion> {
                 at = Some(*p);
             }
             Motion::Arc { to, .. } => at = Some(*to),
-            Motion::Home | Motion::Tool(_) => at = None,
+            Motion::Home | Motion::Tool(_) | Motion::Probe(..) | Motion::ProbeOn(_) => at = None,
+            Motion::ProbeProtected(p, _) => at = Some(*p),
             _ => {}
         }
         out.push(x.clone());
@@ -1566,7 +2279,7 @@ pub fn normalize(m: &[Motion]) -> Vec<Motion> {
 fn raw_tool(text_: &str, ln: usize) -> u32 {
     let lines: Vec<&str> = text_.lines().collect();
     if ln >= 2
-        && let Some(r) = lines[ln - 2].trim().strip_prefix("(TOOL ")
+        && let Some(r) = strip_n(lines[ln - 2]).trim_end().strip_prefix("(TOOL ")
     {
         return r
             .split(':')

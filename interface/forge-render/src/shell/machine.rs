@@ -2054,6 +2054,7 @@ fn tab_joints(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
                 preference: 0,
                 reset: Reset::Never,
                 diameter: false,
+                reference: None,
             });
             for f in ["range", "rapid", "max_feed"] {
                 touch.unknown.push(format!("joint.{name}.{f}"));
@@ -2576,6 +2577,8 @@ fn tab_bodies(
                 }],
                 part: None,
                 ignore: Vec::new(),
+                clearance: None,
+                passes_stock: false,
             });
             touch.unknown.push(format!("body.{n}"));
             *pick = d.bodies.len() - 1;
@@ -2757,6 +2760,33 @@ fn tab_bodies(
                                 ch |= super::lib_form::num_edit_in(ui, v, "mm", "", Some(110.0));
                             });
                         }
+                    }
+                    Prim::OBox { o, axes, size } => {
+                        // an oriented box (a fixture's angled block): its corner and sides edited;
+                        // its axes shown, set in the record (they must stay orthonormal)
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("Oriented box {}", i + 1))
+                                    .font(semi(11.0))
+                                    .color(t.ink),
+                            );
+                            if super::ux::icon_button(ui, t, "delete", "Remove this box", false).clicked() {
+                                del = Some(i);
+                            }
+                        });
+                        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, &format!("Corner {a}"));
+                                ch |= super::lib_form::num_edit_in(ui, &mut o[k], "mm", "", Some(110.0));
+                            });
+                        }
+                        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, &format!("Side {a}"));
+                                ch |= super::lib_form::num_edit_in(ui, &mut size[k], "mm", "", Some(110.0));
+                            });
+                        }
+                        ui.label(small(t, &format!("Axes {axes:?} (set in the record)")));
                     }
                 }
             }

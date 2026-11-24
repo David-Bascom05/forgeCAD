@@ -1,0 +1,44 @@
+# SINUMERIK 840D sl in its native language (not the ISO dialect, forge-post's `siemens`): read by
+# forge-machine's shell only (forge-post does not write it). The subset is what NX's 840D post
+# writes for the Spinner U5-620 programs of the open dataset ElMoe/Production-Data-Set-for-Five-
+# Axis-CNC-Milling-with-Multiple-Changeovers; everything else is refused, naming the construct.
+# Restated from Siemens' openly published manuals (cache.industry.siemens.com):
+#   PGsl  SINUMERIK 840D sl / 828D Fundamentals, Programming Manual 03/2013, 6FC5398-1BP40-3BA1
+#   PGAsl SINUMERIK 840D sl / 828D Job Planning, Programming Manual 03/2013, 6FC5398-2BP40-3BA1
+#   PGZ   SINUMERIK 840D sl/840D/840Di/810D Cycles, Programming Manual 11/2006, 6FC5398-3BP20-0BA0
+[dialect]
+name = "siemens-840d"
+native = "840d"
+# the programs write at most 4 decimals (CYCLE81's depth); the control's own input resolution is
+# machine data (not applied here)
+decimals = 4
+feed_decimals = 3
+dwell = "G4 F{s}"
+
+[[dialect.cite]]
+key = "native"
+source = "https://cache.industry.siemens.com/dl/files/554/74475554/att_56792/v1/PGsl_0313_en_en-US.pdf"
+taken = "2026-11-24"
+where = "PGsl: G0 9.4 p186, G1 9.5 p190, G2/G3 with I J K 9.6.2 p196, helix TURN 9.7 p211, G17 8.2 p153, G90 8.3.1 p156, G710 8.3.5 p165, G94 7.1 p101, G60/G601 exact stop 11.1 p305, SUPA 8.1 p149 and 12.9 p354, tool change T=\"name\" M6 T0 4.2.2 pp58-59, D0/D<n> 5.6 p73, MSG 14.1 p367, G4 F 14.7 p386"
+note = "SUPA suppresses frames (zero offsets), not the tool offset; a D's length acts on the next traverse of the length axis; without a D after M6 the length is machine data"
+
+[[dialect.cite]]
+key = "native"
+source = "https://cache.industry.siemens.com/dl/files/038/70265038/att_80019/v1/PGAsl_0313_en_en-US.pdf"
+taken = "2026-11-24"
+where = "PGAsl: DEF 1.1.4 p24, MCALL 1.24.3.4 p191, COMPOF 4.4 p241, TRAFOOF 6.11 p371, FNORM 10.2 p452"
+note = "MCALL: the subprogram runs after each block with path motion (and after S or F alone, or G0/G1 alone, while G0/G1 is active)"
+
+[[dialect.cite]]
+key = "native"
+source = "https://cache.industry.siemens.com/dl/files/633/109443633/att_829767/v1/PGZ_1106_en.pdf"
+taken = "2026-11-24"
+where = "PGZ: CYCLE81 2.1.3 pp42-44, CYCLE800 3.16 p216, CYCLE832 3.17 pp265-268"
+note = "CYCLE81: G0 to the reference plane shifted by the safety clearance, G1 to the final depth at the programmed feed, G0 to the retraction plane. CYCLE832 sets continuous-path mode, compression and velocity control from machine-specific settings: not modelled. CYCLE800() deselects the swivel data record and deletes the swivel frames"
+
+[[dialect.cite]]
+key = "native"
+source = "https://cache.industry.siemens.com/dl/files/554/74475554/att_56792/v1/PGsl_0313_en_en-US.pdf"
+taken = "2026-11-24"
+where = "PGsl: tool radius compensation G40/G41/G42 10.1 pp257-266, NORM 10.2 pp267-270, G450/G451/DISC 10.3 pp274-275, collision detection CDON/CDOF 10.5 p293, G function groups 17, 18 and 7 (defaults set by MD20150) 16.4"
+note = "G41/G42 need G0 or G1 and an axis of the plane in the block; a negative radius is the other side; no change of plane while on; NORM: straight to (and from) the contour's point displaced perpendicular to its tangent; G450: a circle of the tool radius about an outside corner; G451: the equidistants' intersection; the defaults of NORM/KONT and G450/G451 are machine data, so a program must state them (comp.rs)"

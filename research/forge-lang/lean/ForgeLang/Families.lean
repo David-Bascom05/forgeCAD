@@ -445,7 +445,7 @@ def camStmt : List Name :=
   ["part", "machine", "tool", "setup", "facing", "contour", "pocket", "clear", "adaptive", "drill",
     "engrave", "slot", "thread_mill", "edge_break", "bore", "soft_jaw", "parallel", "waterline",
     "zlevel", "pencil", "scallop", "rest", "steep_shallow", "spiral", "radial", "ramping", "flat",
-    "program"]
+    "probe", "probe_wcs", "inspect", "program"]
 
 /-- forge-cam-lang: `Cam::eval`'s built-ins (nested in an expression). -/
 def camExpr : List Name := ["box", "vise", "cylinder", "tube", "solid"]

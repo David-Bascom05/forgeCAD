@@ -272,6 +272,24 @@ pub struct SCurve {
     pub jerk: [f64; 2],
     /// The smoothing tolerance δ (mm): G642's (CYCLE832's _TOL).
     pub tolerance: f64,
+    /// The control's block cycle (s): no block takes less (its speed is held to length / cycle).
+    /// None: not applied (the record's `block_cycle`, UNKNOWN unless published).
+    pub block_cycle: Option<f64>,
+    /// The look-ahead depth (blocks): each block's exit is planned so the control can stop
+    /// within the next `window` blocks. None: over the whole run (the record's `lookahead`).
+    pub window: Option<usize>,
+}
+
+impl SCurve {
+    /// The default assumption set with the machine record's control limits where it states them
+    /// (`block_cycle`, `lookahead`); each UNKNOWN one is left out.
+    pub fn for_machine(def: &MachineDef) -> SCurve {
+        SCurve {
+            block_cycle: def.block_cycle,
+            window: def.lookahead,
+            ..SCurve::default()
+        }
+    }
 }
 
 impl Default for SCurve {
@@ -284,6 +302,8 @@ impl Default for SCurve {
             accel: [1000.0, 3600.0],
             jerk: [20000.0, 72000.0],
             tolerance: 0.02,
+            block_cycle: None,
+            window: None,
         }
     }
 }
@@ -446,6 +466,10 @@ pub fn plan_scurve(def: &MachineDef, tl: &Timeline, p: &SCurve) -> (Vec<f64>, f6
             a = a.min(ac);
             jk = jk.min(jc);
         }
+        if let Some(tc) = p.block_cycle {
+            // no block in less than one cycle: its speed at most its length per cycle
+            v_nom = v_nom.min(len / tc);
+        }
         run.push(SBlk {
             len,
             u0,
@@ -495,15 +519,27 @@ fn scurve_run(run: &[SBlk], p: &SCurve, acc: &[f64], jrk: &[f64]) -> Vec<f64> {
         let reach = sc_reach(e[k + 1], run[k].len, run[k].acc, run[k].jerk);
         e[k] = if k == 0 { 0.0 } else { max_entry[k].min(reach) };
     }
+    // a finite look-ahead: block k's exit must let the control stop within the next `w` blocks
+    // (a reverse pass from rest at the window's end, as grbl's planner buffer)
+    let win_exit = |k: usize| -> f64 {
+        let Some(w) = p.window else { return f64::INFINITY };
+        let end = (k + 1 + w).min(m);
+        let mut v = 0.0f64;
+        for i in (k + 1..end).rev() {
+            v = max_entry[i].min(sc_reach(v, run[i].len, run[i].acc, run[i].jerk));
+        }
+        if end == m { e[k + 1] } else { v.min(e[k + 1]) }
+    };
     let mut x = vec![0.0f64; m + 1];
     for k in 0..m {
         let reach = sc_reach(x[k], run[k].len, run[k].acc, run[k].jerk);
-        x[k + 1] = if k + 1 == m { 0.0 } else { e[k + 1].min(reach) };
+        x[k + 1] = if k + 1 == m { 0.0 } else { e[k + 1].min(reach).min(win_exit(k)) };
     }
     (0..m)
         .map(|k| {
             let b = &run[k];
-            sc_block_time(b.len, x[k], x[k + 1], b.v_nom, b.acc, b.jerk)
+            let t = sc_block_time(b.len, x[k], x[k + 1], b.v_nom, b.acc, b.jerk);
+            p.block_cycle.map_or(t, |tc| t.max(tc))
         })
         .collect()
 }

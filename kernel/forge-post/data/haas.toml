@@ -5,6 +5,10 @@ name = "haas"
 extension = "nc"
 decimals = 3
 feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
 point = "always"          # always: X10. ; never: X10 ; full: X10.000
 program_open = ["%", "O{num:04} ({title})"]
 program_close = ["M30", "%"]
@@ -16,7 +20,7 @@ line_step = 10
 # no G187: Haas documents it under the high-speed machining option (HFO Mill Programming manual
 # rev 04-2014; Gerotech NGC training), so a control without the option may alarm on it. Machines
 # with the option use the haas-hsm dialect (research/cam/machines/haas-dialect-audit.md #7)
-safe_start = ["G90 G94 G17 G49 G40 G80", "G21"]
+safe_start = ["G90 G94 G17 G49 G40 G80", "{units}"]
 tool_change = ["T{t} M06"]
 length_comp = "G43 H{h}"
 spindle_cw = "S{rpm} M03"
@@ -43,6 +47,42 @@ cycle_tap = "G98 G84 X{x} Y{y} Z{z} R{r} F{f}"
 cycle_ream = "G98 G85 X{x} Y{y} Z{z} R{r} F{f}"
 cycle_next = "X{x} Y{y}"
 cycle_cancel = "G80"
+# probing: Renishaw Inspection Plus for Haas machining centres (H-2000-6222-0A-B), the edition
+# Haas publishes for its controls. Only these four macros are written; every other probing
+# record is refused. O9811's Q is always written (its 4 mm / 10 mm defaults are not relied on).
+probe_on = "G65 P9832"
+probe_off = "G65 P9833"
+probe_protected = "G65 P9810 X{x} Y{y} Z{z} F{f}"
+probe_surface = "G65 P9811 {axis}{at} Q{q}{set}"
 source = "forgecad, restated from NIST RS274NGC v3 and common Fanuc practice"
 taken = "2026-11-23"
 note = "verify with your control's manual"
+
+[[dialect.cite]]
+key = "probe_on"
+source = "https://haascnc.com/content/dam/haascnc/en/service/reference/probe/renishaw-inspection-plus-programming-manual---2008.pdf (Renishaw, Inspection Plus software for Haas machining centres, programming manual H-2000-6222-0A-B (2008), published by Haas)"
+taken = "2026-11-24"
+where = "chapter 9, Turning the probe on - macro O9832"
+note = "format G65P9832; turns the probe on (includes M19); a small automatic Z axis movement takes place within the macro to test the probe; the probe tool offset must be active (read by PROBING, 2026-11-24)"
+
+[[dialect.cite]]
+key = "probe_off"
+source = "https://haascnc.com/content/dam/haascnc/en/service/reference/probe/renishaw-inspection-plus-programming-manual---2008.pdf (Renishaw, Inspection Plus software for Haas machining centres, programming manual H-2000-6222-0A-B (2008), published by Haas)"
+taken = "2026-11-24"
+where = "chapter 9, Turning the probe off - macro O9833"
+note = "format G65P9833; a small automatic Z axis movement takes place within the macro; a G28 reference return must follow it (read by PROBING, 2026-11-24)"
+
+[[dialect.cite]]
+key = "probe_protected"
+source = "https://haascnc.com/content/dam/haascnc/en/service/reference/probe/renishaw-inspection-plus-programming-manual---2008.pdf (Renishaw, Inspection Plus software for Haas machining centres, programming manual H-2000-6222-0A-B (2008), published by Haas)"
+taken = "2026-11-24"
+where = "chapter 5, Protected positioning - macro O9810"
+note = "format G65 P9810 Xx Yy Zz [Ff Mm]; X Y Z the target positions; F the modal feedrate of protected positioning moves (example G65P9810Z-8.F3000); the machine stops with alarm PATH OBSTRUCTED if the probe triggers (read by PROBING, 2026-11-24)"
+
+[[dialect.cite]]
+key = "probe_surface"
+source = "https://haascnc.com/content/dam/haascnc/en/service/reference/probe/renishaw-inspection-plus-programming-manual---2008.pdf (Renishaw, Inspection Plus software for Haas machining centres, programming manual H-2000-6222-0A-B (2008), published by Haas)"
+taken = "2026-11-24"
+where = "chapter 7, X Y Z single surface measurement - macro O9811"
+note = "format G65 P9811 Xx or Yy or Zz [Ee Ff Hh Mm Qq Ss Tt Uu Vv Ww]; the cycle measures the surface and returns to the start position; Q the overtravel past the expected position (defaults 4 mm in Z, 10 mm in X,Y); S1 to S6 the work offset G54 to G59 set (new offset = active offset + error) (read by PROBING, 2026-11-24)"
+
