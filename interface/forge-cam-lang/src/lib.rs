@@ -764,7 +764,7 @@ impl Cam {
                     Err(_) => ok = false,
                 }
                 (found_lo, ok)
-                        });
+            });
             for (found_lo, ok) in bands {
                 self.leftover.extend(found_lo);
                 all_ok &= ok;
