@@ -7810,6 +7810,18 @@ fn check_words(c: &CheckOut) -> String {
         ),
         None => (c.other.clone(), String::new()),
     };
+    // the plane under the stock where no workholding is modelled: what is there is unknown, so no
+    // body may reach it; say how to make it checkable
+    if c.rule == "fixture_collision" && c.other.starts_with("the support under the stock") {
+        let who = if c.tool_part == "cutter" {
+            "cutter"
+        } else {
+            "tool's shank or holder"
+        };
+        return format!(
+            "The {who} reaches the bottom of the stock {place}, where no workholding is modelled, so what is under it is unknown. Model the workholding (a vise with its parallels, or a fixture) so the cut can be checked against it, or leave stock under the part (for example `below: 0.5` on the stock box)."
+        );
+    }
     match c.rule {
         "machine_limit" | "axis_limit" | "containment" => {
             let what = match c.rule {
@@ -9396,8 +9408,8 @@ impl Cam {
                     "machine_limit" => "a tool or feeds the machine can run (its spindle range and feed limit are in the machine's record), or another machine".into(),
                     "axis_limit" => "SetArg at: a work offset that keeps the program within travel, or the part placed elsewhere on the table (or a shorter tool for Z)".into(),
                     "fixture_collision" if s.fixture.is_none() => format!(
-                        "the path reaches below the stock's bottom (z = {:.2}), where whatever holds it is: cut no lower than the stock, or SetArg stock: a box whose bottom is below the cut (the rest left to a second setup), or declare the workholding (SetArg fixture)",
-                        s.stock.min[2]
+                        "the cut reaches the stock's bottom (z = {} mm) with no workholding modelled: declare it (SetArg fixture: a vise with its parallels) so the cut is checked against it, or leave stock under the part (SetArg stock: box(.., below: 0.5)), or cut no lower than the stock's bottom",
+                        mm(s.stock.min[2])
                     ),
                     "fixture_collision" => {
                         let f = s.fixture.as_ref().expect("a fixture check has a fixture");
