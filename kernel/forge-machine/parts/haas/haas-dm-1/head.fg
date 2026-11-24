@@ -1,12 +1,12 @@
 # haas-dm-1 head: spindle nose cylinder and housing (unpublished sizes, conservative)
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared ax = 254
-shared ay = 203
+shared ax = 255.1
+shared ay = 211.2
 shared nz = 547
 shared nr = 94
 shared nh = 159
-shared x0 = 65
-shared y0 = 14
+shared x0 = 66.1
+shared y0 = 22.2
 shared z0 = 706
 shared lx = 378
 shared ly = 608

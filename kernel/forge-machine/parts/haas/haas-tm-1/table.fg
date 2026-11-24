@@ -1,11 +1,11 @@
 # haas-tm-1 table: 1213 x 267 published, thickness estimated; one T-slot
 # frame: the machine's base frame at the home pose (forgecad Haas approximation).
-shared x0 = -605.5
-shared y0 = -132.5
-shared z0 = -89
-shared lx = 1211
-shared ly = 265
-shared lz = 88
+shared x0 = -791.6
+shared y0 = -208.6
+shared z0 = -164.5
+shared lx = 1399.7
+shared ly = 357.9
+shared lz = 163.5
 shared cx = 0
 shared cy = 0
 shared cw = 1213

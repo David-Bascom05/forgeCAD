@@ -189,6 +189,8 @@ pub fn read(name: &str, bytes: &[u8]) -> Result<Vec<Piece>, String> {
             // names stands as the file has it)
             let mut meshed: std::collections::BTreeMap<u32, Option<Piece>> = Default::default();
             let mut failed = 0;
+            // drawn with the read's own budget (a machine table's 1100 faces outrun a part's)
+            let _budget = forge_geom::budget::scoped(lim.max_evals);
             for s in &imp.solids {
                 let q = forge_mesh::Quality {
                     chord: 5e-4 * s.body.faces_box().diagonal(),

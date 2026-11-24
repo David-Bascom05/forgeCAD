@@ -1,0 +1,13 @@
+# haas-dm-1 enclosure (display only: Haas's model drawn in its place)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -1253.5
+shared y0 = -880.3
+shared z0 = -626.6
+shared lx = 2366.3
+shared ly = 2213.4
+shared lz = 2446.6
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

@@ -65,6 +65,163 @@ MACHINES = {
 }
 
 
+# Automatic mode (VMCs): a model split by keywords in its parts' names onto the record's table and
+# head and the display-only saddle, base and enclosure (tools/machines/haas.py AUTO_MODELS), placed by
+# measuring it: the table top centre is the origin, the castings behind it are +y, Y up in the file.
+# The spindle nose face over the table against the record's published height says whether the model
+# stands at Z home; one that does is taken as at home in X and Y too (Haas's tutorial; the VF-2's
+# agrees to 0.4 mm), its spindle position measured; one that does not has its head moved to the
+# record's home. The measures go to research/cam/machines/haas/model-measures.json for haas.py.
+AUTO = {
+    "haas-vf-1": "vf-1_11_2021.zip",
+    "haas-tm-1": "tm_1_1p_10_2021.zip",
+    "haas-dm-1": "dm-1_solid_models_01_2026.zip",
+}
+VMC_RULES = ["anchor=-", "waycover=-", "table=table", "saddle=saddle", "spindle=head", "z axis=head", "head=head",
+             "casting=base", "base=base", "column=base", "pads=base", "leveling=base", "enclosure=enclosure",
+             "door=enclosure", "window=enclosure", "control panel=enclosure", "pendant=enclosure", "chute=enclosure",
+             "*=-"]
+MEASURES = os.path.join(ROOT, "research/cam/machines/haas/model-measures.json")
+
+
+def stl_points(p):
+    _, tris = read_stl(p)
+    out = []
+    for t in tris:
+        v = struct.unpack("<12f", t[:48])
+        out += [v[3:6], v[6:9], v[9:12]]
+    return out
+
+
+def nose_piece(p):
+    """The spindle nose in a head mesh: of its connected pieces (triangles sharing corners), the
+    lowest one round in plan, 90 to 230 mm across (a 40- or 50-taper nose, its drive keys on it).
+    Its plan centre is the spindle axis; its bottom the nose (the keys' faces, 9 mm under the nose
+    face on the VF-2). None where no piece is."""
+    d = open(p, "rb").read()
+    n = struct.unpack("<I", d[80:84])[0]
+    idx, up = {}, []
+
+    def root(i):
+        while up[i] != i:
+            up[i] = up[up[i]]
+            i = up[i]
+        return i
+
+    for k in range(n):
+        v = struct.unpack("<12f", d[84 + 50 * k: 84 + 50 * k + 48])
+        ids = []
+        for j in (3, 6, 9):
+            key = v[j:j + 3]
+            if key not in idx:
+                idx[key] = len(up)
+                up.append(len(up))
+            ids.append(idx[key])
+        a = root(ids[0])
+        for b in ids[1:]:
+            b = root(b)
+            if a != b:
+                up[b] = a
+    groups = {}
+    for key, i in idx.items():
+        groups.setdefault(root(i), []).append(key)
+    best = None
+    for g in groups.values():
+        lo = [min(q[k] for q in g) for k in range(3)]
+        hi = [max(q[k] for q in g) for k in range(3)]
+        ex, ey, ez = hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]
+        if 90 <= ex <= 230 and 90 <= ez <= 230 and max(ex, ez) / min(ex, ez) < 1.15 and ey >= 15:
+            if best is None or lo[1] < best[0][1]:
+                best = (lo, hi)
+    return best
+
+
+def record(name):
+    import tomllib
+    d = tomllib.load(open(os.path.join(ROOT, "kernel/forge-machine/data/machines/haas.toml"), "rb"))
+    return next(m for m in d["machine"] if m["name"] == name)
+
+
+def auto(name, zips, bin_, cell):
+    import json
+    rec = record(name)
+    nose = rec["spindle"][0]["nose"]
+    with tempfile.TemporaryDirectory() as tmp:
+        env = dict(os.environ, XDG_CONFIG_HOME=os.path.join(tmp, "config"))
+        with zipfile.ZipFile(os.path.join(zips, AUTO[name])) as z:
+            step = next(n for n in z.namelist() if re.search(r"\.ste?p$", n, re.I) and "__MACOSX" not in n)
+            src = z.extract(step, os.path.join(tmp, "zip"))
+        source = f"Haas Automation solid model {os.path.basename(step)} (haascnc.com download)"
+        out = run([bin_, "machine", "model", "attach", name, src, "--from", source], env)
+        file = re.search(r"^(\S+) attached", out, re.M).group(1)
+        run([bin_, "machine", "model", "split", name, file] + VMC_RULES, env)
+        lib = os.path.join(tmp, "config/forgecad/cam/machines/models", name)
+        _, ms = models(lib)
+        pts = {b: stl_points(os.path.join(lib, m["file"])) for b, m in ms.items()}
+        tp = pts["table"]
+        top = max(p[1] for p in tp)
+        face = [p for p in tp if p[1] > top - 0.5]
+        cx = (min(p[0] for p in face) + max(p[0] for p in face)) / 2
+        cz = (min(p[2] for p in face) + max(p[2] for p in face)) / 2
+        bz = sum(p[2] for p in pts["base"]) / len(pts["base"])
+        front_z = bz < cz  # the castings (the column) at smaller z: the front is +z, Haas's VF-2 way
+        rot = [90, 0, 0] if front_z else [90, 0, 180]
+
+        def ours(p):
+            return (p[0] - cx, -(p[2] - cz), p[1] - top) if front_z else (-(p[0] - cx), p[2] - cz, p[1] - top)
+
+        off = [-cx, cz, -top] if front_z else [cx, -cz, -top]
+        hp = pts["head"]
+        low = min(p[1] for p in hp)
+        bottom = [p for p in hp if p[1] < low + 15]
+        ext = [max(p[k] for p in bottom) - min(p[k] for p in bottom) for k in (0, 2)]
+        if all(60 <= e <= 230 for e in ext) and max(ext) / min(ext) < 1.3:
+            # the head's lowest 15 mm a nose in plan: the nose (with its keys) is the bottom
+            np_ = ([min(p[k] for p in bottom) for k in range(3)], [max(p[k] for p in bottom) for k in range(3)])
+        else:
+            np_ = nose_piece(os.path.join(lib, ms["head"]["file"]))
+        if np_ is None:
+            sys.exit(f"{name}: no spindle nose found in the head")
+        hx, hz, face_y = (np_[0][0] + np_[1][0]) / 2, (np_[0][2] + np_[1][2]) / 2, np_[0][1]
+        sx, sy, sh = *ours((hx, face_y, hz))[:2], face_y - top
+        dz = nose[2] - sh
+        # at home: the nose within 15 mm of the published height (the keys stand 9 mm under the
+        # nose face), and the spindle within the travels' reach of the record's estimate
+        at_home = abs(dz) < 15 and abs(sx - nose[0]) < 150 and abs(sy - nose[1]) < 150
+        place = {"*": off}
+        if not at_home:
+            # the head to the record's home: its published height, and its x, y (the model's unknown)
+            d = [nose[0] - sx, nose[1] - sy, dz]
+            place["head"] = [off[k] + d[k] for k in range(3)]
+        text, _ = models(lib)
+        blocks = text.split("[[model]]")
+        for i, b in enumerate(blocks[1:], 1):
+            body = re.search(r'body = "(.*)"', b).group(1)
+            b = re.sub(r"rotate = .*", f"rotate = {rot}", b)
+            blocks[i] = re.sub(r"offset = .*", f"offset = {place.get(body, place['*'])}", b)
+        open(os.path.join(lib, "models.toml"), "w").write("[[model]]".join(blocks))
+        boxes = {}
+        for b, ps in pts.items():
+            q = [ours(p) for p in ps]
+            if b == "head" and not at_home:
+                q = [(x + place["head"][0] - off[0], y + place["head"][1] - off[1], z + dz) for x, y, z in q]
+            boxes[b] = [[round(min(v[k] for v in q), 1) for k in range(3)], [round(max(v[k] for v in q), 1) for k in range(3)]]
+        dst = os.path.join(OUT, name)
+        shutil.rmtree(dst, ignore_errors=True)
+        run([bin_, "machine", "model", "ship", name, dst, "--cell", cell, "--source", source], env)
+        size = sum(os.path.getsize(os.path.join(dst, f)) for f in os.listdir(dst))
+        meas = json.load(open(MEASURES)) if os.path.exists(MEASURES) else {}
+        meas[name] = dict(file=os.path.basename(step), at_home=at_home, nose_over_table=round(sh, 1),
+                          published_nose=nose[2], spindle_xy=[round(sx, 1), round(sy, 1)], front_z=front_z,
+                          bodies=boxes, mb=round(size / 1e6, 2))
+        os.makedirs(os.path.dirname(MEASURES), exist_ok=True)
+        with open(MEASURES, "w") as f:
+            json.dump(dict(sorted(meas.items())), f, indent=1)
+            f.write("\n")
+        print(f"{name}: {size / 1e6:.2f} MB; nose {sh:.1f} over the table (published {nose[2]}), "
+              f"{'at home' if at_home else 'head moved to home'}; spindle ({sx:.1f}, {sy:.1f}) vs record ({nose[0]}, {nose[1]})")
+
+
 def run(cmd, env):
     print("+", " ".join(cmd), flush=True)
     r = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -143,8 +300,11 @@ def main(argv):
             names.append(a)
     if not names:
         sys.exit(__doc__)
-    zips, names = names[0], names[1:] or list(MACHINES)
+    zips, names = names[0], names[1:] or list(MACHINES) + list(AUTO)
     for name in names:
+        if name in AUTO:
+            auto(name, zips, bin_, cell)
+            continue
         m = MACHINES[name]
         with tempfile.TemporaryDirectory() as tmp:
             env = dict(os.environ, XDG_CONFIG_HOME=os.path.join(tmp, "config"))

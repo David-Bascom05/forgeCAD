@@ -1526,8 +1526,8 @@ name = "table"
 link = "X"
 part = "parts/haas/haas-tm-1/table.fg"
 [[machine.body.box]]
-min = [-606.5, -133.5, -90]
-max = [606.5, 133.5, 0]
+min = [-792.6, -209.6, -165.5]
+max = [609.1, 150.3, 0]
 [[machine.body]]
 name = "head"
 link = "Z"
@@ -1540,6 +1540,30 @@ h = 160
 [[machine.body.box]]
 min = [191, 13, 668]
 max = [571, 623, 1088]
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/haas/haas-tm-1/saddle.fg"
+check = false
+[[machine.body.box]]
+min = [-61, -161.4, -324.2]
+max = [308.4, 161.4, -48]
+[[machine.body]]
+name = "base"
+link = "base"
+part = "parts/haas/haas-tm-1/base.fg"
+check = false
+[[machine.body.box]]
+min = [-314.4, -269.7, -879.8]
+max = [580.1, 892.1, 1286.2]
+[[machine.body]]
+name = "enclosure"
+link = "base"
+part = "parts/haas/haas-tm-1/enclosure.fg"
+check = false
+[[machine.body.box]]
+min = [-1606.3, -710.8, -686.4]
+max = [1226.7, 2057.5, 1830.5]
 [[machine.cite]]
 path = "machine.coolants"
 status = "unknown"
@@ -1696,12 +1720,32 @@ taken = "2026-11-23"
 value = "Table Size: 47.8 × 10.5 in (1,213 × 267 mm)"
 [[machine.cite]]
 path = "body.table"
-status = "estimate"
-basis = "thickness 90 mm unpublished (only the top surface and outline matter for tool collisions)"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-tm-1 (Haas solid model TM-1_1P_STEP_10_2021.STEP)"
+taken = "2026-11-24"
+value = "table casting with its drive bracket: [-792.6, -209.6, -165.5] .. [609.1, 150.3, 0.0] mm, measured on the model"
 [[machine.cite]]
 path = "body.head"
 status = "unknown"
 basis = "no head dimensions published: nose cylinder r 95 mm x 160 mm and a housing 380 x 610 x 420 mm chosen larger than a 40-taper nose (errs large: a short tool deep in a pocket may report a hit the real nose would clear)"
+[[machine.cite]]
+path = "body.saddle"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-tm-1 (Haas solid model TM-1_1P_STEP_10_2021.STEP)"
+taken = "2026-11-24"
+value = "the saddle: [-61.0, -161.4, -324.2] .. [308.4, 161.4, -48.0] mm, the box of Haas's model placed in the record's frame"
+[[machine.cite]]
+path = "body.base"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-tm-1 (Haas solid model TM-1_1P_STEP_10_2021.STEP)"
+taken = "2026-11-24"
+value = "the base and column castings: [-314.4, -269.7, -879.8] .. [580.1, 892.1, 1286.2] mm, the box of Haas's model placed in the record's frame"
+[[machine.cite]]
+path = "body.enclosure"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-tm-1 (Haas solid model TM-1_1P_STEP_10_2021.STEP)"
+taken = "2026-11-24"
+value = "the enclosure, doors and panels: [-1606.3, -710.8, -686.4] .. [1226.7, 2057.5, 1830.5] mm, the box of Haas's model placed in the record's frame"
 
 # ---------------------------------------------------------------------------------------------
 [[machine]]
@@ -2273,7 +2317,7 @@ name = "S1"
 link = "Z"
 kind = "milling"
 axis = [0, 0, 1]
-nose = [254, 203, 546]
+nose = [255.1, 211.2, 546]
 rpm = [1, 10000]
 curve_rpm = [0, 1725.1, 10000]
 curve_kw = [0, 11.2, 11.2]
@@ -2287,7 +2331,7 @@ max_tool_kg = 5.4
 name = "spindle"
 kind = "tool"
 link = "Z"
-at = [254, 203, 546]
+at = [255.1, 211.2, 546]
 dir = [0, 0, -1]
 [[machine.mount]]
 name = "table"
@@ -2301,20 +2345,44 @@ name = "table"
 link = "X"
 part = "parts/haas/haas-dm-1/table.fg"
 [[machine.body.box]]
-min = [-330, -190.5, -90]
-max = [330, 190.5, 0]
+min = [-330.2, -190.5, -111.6]
+max = [330.2, 190.5, 0]
 [[machine.body]]
 name = "head"
 link = "Z"
 part = "parts/haas/haas-dm-1/head.fg"
 [[machine.body.cyl]]
-base = [254, 203, 546]
+base = [255.1, 211.2, 546]
 axis = [0, 0, 1]
 r = 95
 h = 160
 [[machine.body.box]]
-min = [64, 13, 706]
-max = [444, 623, 1126]
+min = [65.1, 21.2, 706]
+max = [445.1, 631.2, 1126]
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/haas/haas-dm-1/saddle.fg"
+check = false
+[[machine.body.box]]
+min = [-199.9, -150.8, -280.5]
+max = [768.3, 150.8, -89.8]
+[[machine.body]]
+name = "base"
+link = "base"
+part = "parts/haas/haas-dm-1/base.fg"
+check = false
+[[machine.body.box]]
+min = [-113.2, -321, -818.4]
+max = [623.4, 1146.4, 1040.3]
+[[machine.body]]
+name = "enclosure"
+link = "base"
+part = "parts/haas/haas-dm-1/enclosure.fg"
+check = false
+[[machine.body.box]]
+min = [-1254.5, -881.3, -627.6]
+max = [1113.8, 1334.1, 1821]
 [[machine.cite]]
 path = "machine.coolants"
 status = "published"
@@ -2439,7 +2507,7 @@ status = "published"
 source = "https://machinetoolindex.com/machines/haas-dm-1"
 taken = "2026-11-23"
 value = "Spindle Nose to Table (max): 21.5 in (546 mm); Spindle Nose to Table (min): 6 in (152 mm)"
-note = "nose height at Z = 0 published (max = min + Z travel); x, y: unpublished: the travel is taken as centred on the table/platter (the spindle is over the table centre at mid-travel); a real machine's offset of a few tens of mm moves every envelope"
+note = "nose height at Z = 0 published (max = min + Z travel); x, y: measured on https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-dm-1 (Haas solid model DM-1_1_2026.STEP) at home: (255.1, 211.2)"
 [[machine.cite]]
 path = "spindle.S1.max"
 status = "published"
@@ -2478,7 +2546,7 @@ status = "published"
 source = "https://machinetoolindex.com/machines/haas-dm-1"
 taken = "2026-11-23"
 value = "Spindle Nose to Table (max): 21.5 in (546 mm)"
-note = "gauge point taken at the spindle nose face (the taper gauge line is a few mm inside: unmodelled); x, y: unpublished: the travel is taken as centred on the table/platter (the spindle is over the table centre at mid-travel); a real machine's offset of a few tens of mm moves every envelope"
+note = "gauge point taken at the spindle nose face (the taper gauge line is a few mm inside: unmodelled); x, y: measured on https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-dm-1 (Haas solid model DM-1_1_2026.STEP) at home: (255.1, 211.2)"
 [[machine.cite]]
 path = "mount.table.at"
 status = "published"
@@ -2494,12 +2562,32 @@ taken = "2026-11-23"
 value = "Table Size: 26 × 15 in (660 × 381 mm)"
 [[machine.cite]]
 path = "body.table"
-status = "estimate"
-basis = "thickness 90 mm unpublished (only the top surface and outline matter for tool collisions)"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-dm-1 (Haas solid model DM-1_1_2026.STEP)"
+taken = "2026-11-24"
+value = "table casting with its drive bracket: [-330.2, -190.5, -111.6] .. [330.2, 190.5, 0.0] mm, measured on the model"
 [[machine.cite]]
 path = "body.head"
 status = "unknown"
 basis = "no head dimensions published: nose cylinder r 95 mm x 160 mm and a housing 380 x 610 x 420 mm chosen larger than a 40-taper nose (errs large: a short tool deep in a pocket may report a hit the real nose would clear)"
+[[machine.cite]]
+path = "body.saddle"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-dm-1 (Haas solid model DM-1_1_2026.STEP)"
+taken = "2026-11-24"
+value = "the saddle: [-199.9, -150.8, -280.5] .. [768.3, 150.8, -89.8] mm, the box of Haas's model placed in the record's frame"
+[[machine.cite]]
+path = "body.base"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-dm-1 (Haas solid model DM-1_1_2026.STEP)"
+taken = "2026-11-24"
+value = "the base and column castings: [-113.2, -321.0, -818.4] .. [623.4, 1146.4, 1040.3] mm, the box of Haas's model placed in the record's frame"
+[[machine.cite]]
+path = "body.enclosure"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-dm-1 (Haas solid model DM-1_1_2026.STEP)"
+taken = "2026-11-24"
+value = "the enclosure, doors and panels: [-1254.5, -881.3, -627.6] .. [1113.8, 1334.1, 1821.0] mm, the box of Haas's model placed in the record's frame"
 
 # ---------------------------------------------------------------------------------------------
 [[machine]]
@@ -4988,7 +5076,7 @@ name = "S1"
 link = "Z"
 kind = "milling"
 axis = [0, 0, 1]
-nose = [254, 203, 610]
+nose = [255.1, 210.5, 610]
 rpm = [1, 8100]
 curve_rpm = [0, 1753.4, 8100]
 curve_kw = [0, 22.4, 22.4]
@@ -5002,7 +5090,7 @@ max_tool_kg = 5.4
 name = "spindle"
 kind = "tool"
 link = "Z"
-at = [254, 203, 610]
+at = [255.1, 210.5, 610]
 dir = [0, 0, -1]
 [[machine.mount]]
 name = "table"
@@ -5016,20 +5104,44 @@ name = "table"
 link = "X"
 part = "parts/haas/haas-vf-1/table.fg"
 [[machine.body.box]]
-min = [-330, -178, -90]
-max = [330, 178, 0]
+min = [-330.2, -191.2, -208]
+max = [330.2, 197.5, 0]
 [[machine.body]]
 name = "head"
 link = "Z"
 part = "parts/haas/haas-vf-1/head.fg"
 [[machine.body.cyl]]
-base = [254, 203, 610]
+base = [255.1, 210.5, 610]
 axis = [0, 0, 1]
 r = 95
 h = 160
 [[machine.body.box]]
-min = [64, 13, 770]
-max = [444, 623, 1190]
+min = [65.1, 20.5, 770]
+max = [445.1, 630.5, 1190]
+[[machine.body]]
+name = "saddle"
+link = "Y"
+part = "parts/haas/haas-vf-1/saddle.fg"
+check = false
+[[machine.body.box]]
+min = [-363.6, -203.6, -390.6]
+max = [855.6, 203.6, -123.7]
+[[machine.body]]
+name = "base"
+link = "base"
+part = "parts/haas/haas-vf-1/base.fg"
+check = false
+[[machine.body.box]]
+min = [-162.3, -279.6, -865.5]
+max = [673.2, 1217.1, 1106.2]
+[[machine.body]]
+name = "enclosure"
+link = "base"
+part = "parts/haas/haas-vf-1/enclosure.fg"
+check = false
+[[machine.body.box]]
+min = [-910, -789.8, -718.8]
+max = [1429.5, 2331.9, 1472.9]
 [[machine.cite]]
 path = "machine.coolants"
 status = "published"
@@ -5154,7 +5266,7 @@ status = "published"
 source = "https://machinetoolindex.com/machines/haas-vf-1"
 taken = "2026-11-23"
 value = "Spindle Nose to Table (max): 24 in (610 mm); Spindle Nose to Table (min): 4 in (102 mm)"
-note = "nose height at Z = 0 published (max = min + Z travel); x, y: unpublished: the travel is taken as centred on the table/platter (the spindle is over the table centre at mid-travel); a real machine's offset of a few tens of mm moves every envelope"
+note = "nose height at Z = 0 published (max = min + Z travel); x, y: measured on https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-1 (Haas solid model VF-1_STEP_11_2021.STEP) at home: (255.1, 210.5)"
 [[machine.cite]]
 path = "spindle.S1.max"
 status = "estimate"
@@ -5191,7 +5303,7 @@ status = "published"
 source = "https://machinetoolindex.com/machines/haas-vf-1"
 taken = "2026-11-23"
 value = "Spindle Nose to Table (max): 24 in (610 mm)"
-note = "gauge point taken at the spindle nose face (the taper gauge line is a few mm inside: unmodelled); x, y: unpublished: the travel is taken as centred on the table/platter (the spindle is over the table centre at mid-travel); a real machine's offset of a few tens of mm moves every envelope"
+note = "gauge point taken at the spindle nose face (the taper gauge line is a few mm inside: unmodelled); x, y: measured on https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-1 (Haas solid model VF-1_STEP_11_2021.STEP) at home: (255.1, 210.5)"
 [[machine.cite]]
 path = "mount.table.at"
 status = "published"
@@ -5207,12 +5319,32 @@ taken = "2026-11-23"
 value = "Table Size: 26 × 14 in (660 × 356 mm)"
 [[machine.cite]]
 path = "body.table"
-status = "estimate"
-basis = "thickness 90 mm unpublished (only the top surface and outline matter for tool collisions)"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-1 (Haas solid model VF-1_STEP_11_2021.STEP)"
+taken = "2026-11-24"
+value = "table casting with its drive bracket: [-330.2, -191.2, -208.0] .. [330.2, 197.5, 0.0] mm, measured on the model"
 [[machine.cite]]
 path = "body.head"
 status = "unknown"
 basis = "no head dimensions published: nose cylinder r 95 mm x 160 mm and a housing 380 x 610 x 420 mm chosen larger than a 40-taper nose (errs large: a short tool deep in a pocket may report a hit the real nose would clear)"
+[[machine.cite]]
+path = "body.saddle"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-1 (Haas solid model VF-1_STEP_11_2021.STEP)"
+taken = "2026-11-24"
+value = "the saddle: [-363.6, -203.6, -390.6] .. [855.6, 203.6, -123.7] mm, the box of Haas's model placed in the record's frame"
+[[machine.cite]]
+path = "body.base"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-1 (Haas solid model VF-1_STEP_11_2021.STEP)"
+taken = "2026-11-24"
+value = "the base and column castings: [-162.3, -279.6, -865.5] .. [673.2, 1217.1, 1106.2] mm, the box of Haas's model placed in the record's frame"
+[[machine.cite]]
+path = "body.enclosure"
+status = "published"
+source = "https://github.com/David-Bascom05/forgeCAD/tree/main/kernel/forge-machine/data/models/haas/haas-vf-1 (Haas solid model VF-1_STEP_11_2021.STEP)"
+taken = "2026-11-24"
+value = "the enclosure, doors and panels: [-910.0, -789.8, -718.8] .. [1429.5, 2331.9, 1472.9] mm, the box of Haas's model placed in the record's frame"
 
 # ---------------------------------------------------------------------------------------------
 [[machine]]

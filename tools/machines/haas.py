@@ -28,6 +28,16 @@ MODEL_SRC = {
     "haas-vf-2": MODEL_REPO + "haas-vf-2 (Haas solid model VF-2_STEP__1_2023.step)",
     "haas-umc-750": MODEL_REPO + "haas-umc-750 (Haas solid model rpl_modular_umc-750_09-2026 1.STEP)",
 }
+# Machines converted by tools/machines/import_haas.py's automatic mode: Haas's model file, and the
+# measures it took of the placed model (research/cam/machines/haas/model-measures.json): the table
+# box, the saddle, base and enclosure boxes (display-only bodies here), and the spindle at home
+# where the model stands at home.
+AUTO_MODELS = {
+    "haas-vf-1": "VF-1_STEP_11_2021.STEP", "haas-tm-1": "TM-1_1P_STEP_10_2021.STEP",
+    "haas-dm-1": "DM-1_1_2026.STEP",
+}
+MEASURES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../research/cam/machines/haas/model-measures.json")
+MEASURED = json.load(open(MEASURES)) if os.path.exists(MEASURES) else {}
 # measured: the spindle axis (x, y) at home where the model stands at home (the VF-2's does: its nose
 # face is 609.6 mm over the table, the published 610), the nose (radius, height over the nose face),
 # the head housing above it, and a table-table's tilt axis height, cradle and supports
@@ -44,6 +54,15 @@ MODEL = {
                                    "r+": [([-270, 370, -320], [270, 400, 130]), ([-270, 560, -320], [270, 675, 310])]},
                          column=([-47, 539, 500], [803, 1319, 2212])),
 }
+for _n, _f in AUTO_MODELS.items():
+    MODEL_SRC[_n] = MODEL_REPO + f"{_n} (Haas solid model {_f})"
+    _m = MEASURED.get(_n)
+    if _m:
+        MODEL.setdefault(_n, {})
+        if _m.get("at_home") and _m.get("spindle_xy"):
+            MODEL[_n]["spindle_xy"] = tuple(_m["spindle_xy"])
+        if "table" in _m.get("bodies", {}):
+            MODEL[_n]["table"] = tuple(_m["bodies"]["table"])
 # Records whose own bodies can meet within published travel (tests/collide.rs pins those contacts):
 # they cite `zones` unknown (train 4b, d6d9c62d).
 ZONES_UNPUBLISHED = {"haas-umc-750", "haas-st-10", "haas-st-20", "haas-st-30", "haas-st-10y", "haas-st-20y",
@@ -549,6 +568,29 @@ def umc(r):
              status="unknown", basis="no head dimensions published; the VMC head stand-in (errs large)")
 
 
+def model_bodies(r):
+    """Display-only bodies for the parts of Haas's model a record has no body for (saddle, base and
+    castings, enclosure), boxes measured on the placed model; a stand-in box until measured."""
+    if r.name not in AUTO_MODELS:
+        return
+    have = {b[0] for b in r.bodies}
+    m = MEASURED.get(r.name, {}).get("bodies", {})
+    for bname, link, what in (("saddle", "Y", "the saddle"), ("base", "base", "the base and column castings"),
+                              ("enclosure", "base", "the enclosure, doors and panels")):
+        if bname in have:
+            continue
+        if bname in m:
+            lo, hi = [float(x) for x in m[bname][0]], [float(x) for x in m[bname][1]]
+            body(r, bname, link, [("box", lo, hi)],
+                 fg_box(f"{r.name} {bname} (display only: Haas's model drawn in its place)", *shrink_box(lo, hi)),
+                 check=False, status="published", source=MODEL_SRC[r.name], taken=MODEL_TAKEN,
+                 value=f"{what}: {lo} .. {hi} mm, the box of Haas's model placed in the record's frame")
+        else:
+            lo, hi = [-10.0, -10.0, -10.0], [10.0, 10.0, 10.0]
+            body(r, bname, link, [("box", lo, hi)], fg_box(f"{r.name} {bname} (stand-in until measured)", *shrink_box(lo, hi)),
+                 check=False, status="unknown", basis="awaiting the measures of Haas's model (tools/machines/import_haas.py)")
+
+
 def frame_bodies(r, kind):
     """The structure the sim draws around the work zone (base, column, saddle), for the machines whose
     Haas Machine Layout Drawing we have (research/cam/machines/haas/layout-drawings-2026-11-24.json,
@@ -937,6 +979,7 @@ def main():
         if kind == "vmc":
             vmc(r, VMC_NOTES.get(name, ""))
             frame_bodies(r, "vmc")
+            model_bodies(r)
         elif kind == "umc":
             umc(r)
             frame_bodies(r, "umc")

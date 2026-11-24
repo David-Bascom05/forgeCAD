@@ -1,0 +1,13 @@
+# haas-tm-1 saddle (display only: Haas's model drawn in its place)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -60
+shared y0 = -160.4
+shared z0 = -323.2
+shared lx = 367.4
+shared ly = 320.8
+shared lz = 274.2
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

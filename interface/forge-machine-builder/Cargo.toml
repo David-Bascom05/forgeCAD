@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }
+forge-geom = { path = "../../kernel/forge-geom" }
 forge-library = { path = "../forge-library" }
 forge-machine = { path = "../../kernel/forge-machine" }
 forge-math = { path = "../../kernel/forge-math" }

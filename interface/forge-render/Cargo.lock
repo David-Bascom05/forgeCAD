@@ -1295,6 +1295,7 @@ name = "forge-machine-builder"
 version = "0.1.0"
 dependencies = [
  "forge-dirs",
+ "forge-geom",
  "forge-library",
  "forge-machine",
  "forge-math",
