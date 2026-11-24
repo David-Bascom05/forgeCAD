@@ -1441,4 +1441,100 @@ theorem n_fans_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (hC :
 
 end nfans
 
+/-! ## The leaving coedges, by counting sort -/
+
+section sort
+variable {T : Type} (FI : topo_fans.FanTopo T) (t : T) {b : Body} {corners : Nat → Nat → List (Nat × Nat)}
+
+/-- The uses of the edges below `k`, edge by edge. -/
+def usesUpTo (b : Body) (k : Nat) : List Nat := (List.range k).flatMap fun e => (b.ed e).uses
+
+/-- How many of `Q` leave `w`. -/
+def cntQ (b : Body) (Q : List Nat) (w : Nat) : Nat := (Q.filter fun c => b.start c == w).length
+
+theorem usesUpTo_succ (b : Body) (k : Nat) : usesUpTo b (k + 1) = usesUpTo b k ++ (b.ed k).uses := by
+  simp [usesUpTo, List.range_succ, List.flatMap_append]
+
+theorem usesUpTo_all (b : Body) : usesUpTo b b.edges.size = allUses b := by
+  unfold usesUpTo allUses
+  have h : (List.range b.edges.size).map (fun e => b.ed e) = b.edges.toList := by
+    apply List.ext_getElem (by simp)
+    intro i h1 h2
+    simp only [List.getElem_map, List.getElem_range, Array.getElem_toList]
+    unfold Body.ed; rw [Array.getD_eq_getD_getElem?, Array.getElem?_eq_getElem (by simpa using h2)]; rfl
+  rw [← h, List.flatMap_map]
+
+theorem cntQ_snoc (b : Body) (Q : List Nat) (c w : Nat) :
+    cntQ b (Q ++ [c]) w = cntQ b Q w + (if b.start c = w then 1 else 0) := by
+  unfold cntQ; rw [List.filter_append]; simp; split <;> simp_all
+
+theorem use_start_lt (H : Sound b) (W : b.WF) {c : Nat} (hc : Use b c) : b.start c < b.nv := by
+  obtain ⟨-, he, -, -, -, -⟩ := use_facts H W hc
+  have := W.ends _ he
+  unfold Body.start; split <;> omega
+
+/-- The counts so far, at `off[w + 1]`. -/
+def CountInv (b : Body) (Q : List Nat) (off : alloc.vec.Vec Usize) : Prop :=
+  off.val.length = b.nv + 1 ∧ (off.val[0]!).val = 0 ∧ ∀ w < b.nv, (off.val[w + 1]!).val = cntQ b Q w
+
+theorem count_edge_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF)
+    (hsmall : (allUses b).length < Usize.max) (Q : List Nat) (hQ : List.Sublist Q (allUses b))
+    (e n : Usize) (he : e.val < b.edges.size) (hn : n.val = (b.ed e.val).uses.length)
+    (hQe : List.Sublist (Q ++ (b.ed e.val).uses) (allUses b))
+    (off : alloc.vec.Vec Usize) (hI : CountInv b Q off) :
+    topo_fans.fans_loop0_loop0 FI t off e n 0#usize ⦃ r => CountInv b (Q ++ (b.ed e.val).uses) r ⦄ := by
+  set U := (b.ed e.val).uses with hU
+  have hcntle : ∀ (P : List Nat) w, cntQ b P w ≤ P.length := fun P w => by unfold cntQ; exact List.length_filter_le _ _
+  unfold topo_fans.fans_loop0_loop0
+  apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Usize × Usize) => n.val - y.2.val)
+    (fun y => y.2.val ≤ n.val ∧ CountInv b (Q ++ U.take y.2.val) y.1)
+  · rintro ⟨o, i⟩ ⟨hle, hI0⟩
+    simp only at hle hI0 ⊢
+    unfold topo_fans.fans_loop0_loop0.body
+    split
+    · rename_i hlt
+      have hlt' : i.val < n.val := by scalar_tac
+      have hiU : i.val < U.length := by omega
+      step with R.base.edge_use e i he hiU as ⟨c, hc⟩
+      have hcv : c.val = U[i.val] := by rw [hc, getElem!_pos U i.val hiU]
+      have hcu : Use b c.val := ⟨e.val, he, by rw [hcv]; exact List.getElem_mem hiU⟩
+      obtain ⟨hcn, hen, -, -, -, -⟩ := use_facts H W hcu
+      step with start_spec FI t R c hcn hen as ⟨st, hst⟩
+      have hstn : st.val < b.nv := by rw [hst]; exact use_start_lt H W hcu
+      obtain ⟨hol, ho0, hos⟩ := hI0
+      have hop : o.val.length ≤ Usize.max := o.property
+      step with usize_add_wspec st 1#usize (by have h1 : (1#usize).val = 1 := rfl; rw [h1]; omega) as ⟨s1, hs1⟩
+      have hs1v : s1.val = st.val + 1 := by rw [hs1]; exact add_val st 1#usize (lt_size_of_le_max _ (by have h1 : (1#usize).val = 1 := rfl; rw [h1]; omega))
+      have hs1l : s1.val < o.val.length := by omega
+      step as ⟨x, back, hx, hback⟩
+      have hxv : x.val = cntQ b (Q ++ U.take i.val) st.val := by
+        rw [hx, ← getElem!_pos o.val s1.val hs1l, hs1v]; exact hos st.val hstn
+      have htk : Q ++ U.take (i.val + 1) = (Q ++ U.take i.val) ++ [c.val] := by
+        rw [List.take_succ_eq_append_getElem hiU, hcv]; simp
+      have hlen1 : (Q ++ U.take (i.val + 1)).length ≤ (allUses b).length := by
+        have := hQe.length_le; simp at this ⊢; omega
+      have hx1 : x.val + 1 ≤ Usize.max := by
+        have := hcntle (Q ++ U.take i.val) st.val
+        rw [htk, List.length_append, List.length_singleton] at hlen1; omega
+      step with usize_add_wspec x 1#usize (by have h1 : (1#usize).val = 1 := rfl; rw [h1]; exact hx1) as ⟨x1, hx1'⟩
+      have hx1v : x1.val = x.val + 1 := by rw [hx1']; exact add_val x 1#usize (lt_size_of_le_max _ (by have h1 : (1#usize).val = 1 := rfl; rw [h1]; exact hx1))
+      step with usize_add_wspec i 1#usize (succ_le_max i n hlt') as ⟨i1, hi1⟩
+      have hi1v : i1.val = i.val + 1 := by rw [hi1]; exact succ_val i n hlt'
+      rw [hi1v, hback]
+      have hsv : (o.set s1 x1).val = o.val.set s1.val x1 := by simp
+      refine ⟨by omega, ⟨by rw [hsv]; simp [hol], ?_, fun w hw => ?_⟩, by omega⟩
+      · rw [hsv, getElem!_set _ _ _ _ (by omega), if_neg (by omega)]; exact ho0
+      · rw [hsv, getElem!_set _ _ _ _ (by omega), htk, cntQ_snoc]
+        by_cases hws : w = st.val
+        · subst hws; rw [if_pos (by omega), hx1v, hxv, if_pos hst.symm]
+        · rw [if_neg (by omega), hos w hw, if_neg (by rw [← hst]; exact fun h => hws h.symm)]; rfl
+    · rename_i hlt
+      have hi : i.val = n.val := by scalar_tac
+      simp only [WP.spec_ok]
+      rw [hi, hn, List.take_length] at hI0; exact hI0
+  · have h0 : (0#usize).val = 0 := rfl
+    simp only [h0, List.take_zero, List.append_nil]; exact ⟨by simp, hI⟩
+
+end sort
+
 end forge_topo
