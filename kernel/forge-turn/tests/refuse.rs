@@ -22,6 +22,7 @@ fn setup_of(body: forge_topo::Body, bar_r: f64) -> Setup {
         tol: 0.002,
         machine: None,
         place: None,
+        fixtures: vec![],
     }
 }
 
@@ -154,5 +155,42 @@ fn a_filleted_shoulder_lowers_to_an_arc() {
     let fin = ops::finish(&s, &builtin("od-finish-dnmg").unwrap(), 2, 0.0, -38.0).unwrap();
     assert!(fin.steps.iter().any(|st| matches!(st, ops::Step::Arc { .. })));
     let rep = ops::certify(&s, &[fin], None).unwrap();
+    assert!(rep.ok(), "{:?}", rep.refusals);
+}
+
+#[test]
+fn a_tailstock_centre_is_a_fixture() {
+    // a live centre at the front face (its 60° point 0.5 ahead of it, growing to Ø20, its body
+    // Ø20 to z = 40, the quill Ø40 beyond): facing to the centre line and finishing from over
+    // it meet the centre; rough, thread and part-off from a bar already faced certify
+    let mut s = common::setup();
+    let t30 = forge_math::dmath::sin(30f64.to_radians()) / forge_math::dmath::cos(30f64.to_radians());
+    s.fixtures = vec![(
+        "tailstock".into(),
+        forge_cam_geom::region::Region {
+            loops: vec![forge_turn::profile::poly(&[
+                [0.0, 0.5],
+                [10.0, 0.5 + 10.0 / t30],
+                [10.0, 40.0],
+                [20.0, 40.0],
+                [20.0, 80.0],
+                [0.0, 80.0],
+            ])],
+        },
+    )];
+    let job = common::job(&s);
+    let rep = ops::certify_fast(&s, &job, None).unwrap();
+    assert!(
+        rep.refusals.iter().any(|r| r.op == 0 && r.rule == "tailstock"),
+        "{:?}",
+        rep.refusals
+    );
+    s.bar_front = 0.0;
+    // rough, thread and part off (the finish starts over the front face at the centre line,
+    // where the centre is: refused too)
+    let rest = vec![job[1].clone(), job[3].clone(), job[4].clone()];
+    let fin = ops::certify_fast(&s, &job[1..3], None).unwrap();
+    assert!(fin.refusals.iter().any(|r| r.op == 1 && r.rule == "tailstock"));
+    let rep = ops::certify_fast(&s, &rest, None).unwrap();
     assert!(rep.ok(), "{:?}", rep.refusals);
 }

@@ -235,6 +235,7 @@ fn shape(stmts: &[syntax::Stmt]) -> String {
 fn action_check(e: &Error) -> Option<&'static str> {
     match e {
         Error::Syntax(SyntaxError::AssignToNonName { .. }) => Some("AssignToNonName"),
+        Error::Syntax(SyntaxError::TooDeep { .. }) => Some("TooDeep"),
         Error::Syntax(SyntaxError::KeywordNotName { .. }) => Some("KeywordNotName"),
         Error::Syntax(SyntaxError::PositionalAfterKeyword { .. }) => Some("PositionalAfterKeyword"),
         Error::Syntax(SyntaxError::ParamWithoutOwner { .. }) => Some("ParamWithoutOwner"),

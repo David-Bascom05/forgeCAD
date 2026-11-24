@@ -1,0 +1,147 @@
+{
+ "vendor": "HERMLE",
+ "model": "C 400 GEN2",
+ "family": "C GEN2 Performance Line",
+ "source": [
+  "https://www.hermle.de/en/machining-centres-automation/models/machining-centre-c-400-gen2/",
+  "https://www.hermle.de/fileadmin/website/5_NEWS-UND-MEDIA/5_2_Mediathek/Technische_Daten/Englisch/hermle_technical_data_C400_GEN2_en.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Vertical spindle; A swivel axis (about X, range -139 to +91 deg, one-sided drive) carrying worm-driven C rotary table; collision circle dia 885 at A=0. Rigid clamping table version available (3-axis). Which unit carries X/Y/Z is not stated on the fetched pages (memory says Hermle modified gantry with linear axes in the tool, unverified).",
+ "control": {
+  "standard": "HEIDENHAIN TNC7",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 850,
+  "Y": 700,
+  "Z": 500
+ },
+ "rotary": {
+  "A": {
+   "range_deg": [
+    -139,
+    91
+   ],
+   "rapid_rpm": 25,
+   "indexing_or_full": "full, swivelling"
+  },
+  "B": null,
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 30,
+   "indexing_or_full": "full, worm drive"
+  }
+ },
+ "spindle_nose_to_table_mm": [
+  null,
+  625
+ ],
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 450,
+ "rotary_table_dia_mm": 440,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 16000,
+  "rpm_min": null,
+  "taper_or_interface": "HSK-A63",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": "20 kW at 20% c.d.f."
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 173
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 35,
+  "Y": 35,
+  "Z": 35,
+  "A_or_B_rpm": 25,
+  "C_rpm": 30
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": "6 m/s²",
+ "changer": {
+  "pockets": 38,
+  "options": [
+   "ZM 30 / ZM 50 / ZM 88 k / ZM 216 additional magazines"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": 6,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": 125,
+  "max_tool_len_mm": 300,
+  "max_tool_kg": 8
+ },
+ "coolant": {
+  "through_spindle": "optional",
+  "notes": "ICS internal coolant with paper band filter on request: 40 bar/27 l/min or 80 bar; external coolant tank standard"
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": 9500,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "changer.tool_to_tool_s",
+  "max_cutting_feed_m_min",
+  "overall_mm",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_type",
+  "table_height_from_floor_mm",
+  "table_mm"
+ ],
+ "options": [
+  "spindles (all 20% c.d.f.): 15,000 rpm SK40 20 kW/173 N·m; 16,000 rpm HSK-A63 20 kW/173 N·m; 20,000 rpm HSK-A63 42 kW/148 N·m (standard marked: 16000 HSK-A63)",
+  "swivelling rotary table variants: dia 440 (option dia 650 x 540)",
+  "rigid clamping table 1070 x 700, 2000 kg",
+  "Siemens control not listed in this PDF"
+ ],
+ "notes": "Standard items read from filled-dot markers on PDF pages (rendered and inspected). Table/rotary values for the standard (first-listed) swivel table dia 440; max table load 450 kg (one-sided drive). Nose-to-table: Hermle publishes only 'max. vertical table clearance' 625 mm (no min). Max workpiece dia 650 x H 500 mm. Linear feed force 7000 N. Positional uncertainty <=0.006 mm (ISO 230-2). Connected load up to 44 kVA. Weight approx. 9.5 t. No overall dimensions in the technical-data PDF; no tool-to-tool time published."
+}

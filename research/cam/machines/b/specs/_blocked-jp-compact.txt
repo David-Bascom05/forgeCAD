@@ -1,0 +1,12 @@
+# blocked_hosts (group jp-compact, 2026-11-23); plain curl / WebFetch, no UA spoofing
+www.techspex.com 403 (curl and WebFetch) - wanted for Makino a51nx pallet count/change time
+www.machinio.com 403 (curl and WebFetch) - Makino PS95
+www.exapro.com 403 - Makino PS95
+www.equipt.com 403 - Makino PS95
+www.machinetools.com 403 - Makino PS95
+www.directindustry.com 403 - Makino PS95
+www.aerospacemanufacturinganddesign.com 200 but Incapsula bot-challenge page (no content) - Makino PS series
+web.archive.org no answer (timeout, curl code 000) - archived Makino PS95 page
+ctemag.com/node/25402 404
+www.makino.co.jp/en/ 404 (English path); Japanese /ja-jp/ pages used instead
+www.matsuura.com - not attempted (reported not connecting); matsuurausa.com, matsuura.de, matsuura.co.jp used

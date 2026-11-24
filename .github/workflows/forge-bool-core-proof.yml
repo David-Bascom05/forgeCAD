@@ -68,6 +68,7 @@ jobs:
         if: ${{ github.event_name != 'push' || steps.restore.outputs.cache-hit != 'true' }}
         working-directory: verify/aeneas/forge-bool-core/lean
         run: |
+          set -o pipefail
           (for i in 1 2 3; do lake exe cache get && break; [ "$i" = 3 ] && exit 1; sleep 15; done) || true  # Mathlib's server drops downloads now and then
           lake build 2>&1 | tee build.log
           if [ "$GITHUB_EVENT_NAME" = push ]; then exit 0; fi  # main: the build above is what is saved; the checks below ran on the pull request

@@ -90,6 +90,7 @@ import ForgeCam
 #print axioms ForgeCam.Shadow.certified_clear_gen
 #print axioms ForgeCam.PathEnds.chord_mono
 #print axioms ForgeCam.PathEnds.proj_near
+#print axioms ForgeCam.setDist_of_heights
 #print axioms ForgeCam.Turn.rho_sub_sq_le
 #print axioms ForgeCam.Turn.pi_lipschitz
 #print axioms ForgeCam.Turn.turn_clear3
@@ -106,3 +107,4 @@ import ForgeCam
 #print axioms ForgeCam.Turn.zono_eq_hull
 #print axioms ForgeCam.Turn.smear_hull
 #print axioms ForgeCam.Turn.eroded_gap
+#print axioms ForgeCam.Turn.rect_in_convex
