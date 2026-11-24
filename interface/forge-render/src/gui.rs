@@ -3388,7 +3388,8 @@ impl Gui {
         let Some(p) = &mut self.shell.fg else { return };
         let Some(tool) = &mut p.tool else {
             self.shell.status = match &text {
-                Ok(a) => format!("Picked: {a}"),
+                // in words, as the Agent tab's chip says it: "end face of extrude1"
+                Ok(a) => format!("Picked: {}", crate::shell::agent::describe_lower(a)),
                 Err(e) => format!("Picked: {}", e.text()),
             };
             p.picked = Some(text);

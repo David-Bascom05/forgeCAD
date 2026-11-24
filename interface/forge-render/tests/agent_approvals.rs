@@ -312,6 +312,8 @@ fn esc_declines_and_the_mode_chip_tells_the_running_agent() {
     assert_eq!(h.gui.shell.agent.mode, Mode::Ask);
     assert!(h.click("agent:mode"));
     h.step();
+    assert!(h.click("agent:mode:acceptEdits"));
+    h.step();
     assert_eq!(h.gui.shell.agent.mode, Mode::AcceptEdits);
     let t = std::time::Instant::now();
     while t.elapsed().as_secs() < 30 && heard(&dir).len() < 2 {
@@ -450,9 +452,159 @@ fn a_tool_row_says_what_is_true_now() {
     assert_eq!(present("Edited plate.fg"), "Edit plate.fg");
     assert_eq!(progressive("Edited plate.fg"), "Editing plate.fg");
     assert_eq!(progressive("Query plate.fg: holes"), "Querying plate.fg: holes");
-    assert_eq!(not_done("Edited plate.fg"), "Not edited plate.fg");
-    assert_eq!(not_done("Ran cargo build"), "Not run cargo build");
+    assert_eq!(not_done("Edited plate.fg"), "Not edited: plate.fg");
+    assert_eq!(not_done("Ran cargo build"), "Not run: cargo build");
     // a summary that doesn't start with a known verb stays as it is
     assert_eq!(present("mcp__x__y"), "mcp__x__y");
     assert_eq!(progressive("Read"), "Reading");
+}
+
+#[test]
+fn one_params_edit_is_said_in_words() {
+    use forge_render::shell::agent::param_change;
+    let edit = "- param extrude1.d = 12\n+ param extrude1.d = 14\n";
+    assert_eq!(
+        param_change(edit),
+        Some(("extrude1.d".into(), "12".into(), "14".into()))
+    );
+    // two params, a non-param line changed, a param renamed: not one value's change
+    assert_eq!(
+        param_change("- param a = 1\n- param b = 2\n+ param a = 3\n+ param b = 4"),
+        None
+    );
+    assert_eq!(
+        param_change("- extrude1 = extrude(sk1, d)\n+ extrude1 = extrude(sk1, 2 * d)"),
+        None
+    );
+    assert_eq!(param_change("- param a = 1\n+ param b = 1"), None);
+}
+
+#[test]
+fn the_mode_chip_opens_its_menu_and_esc_closes_it() {
+    let Some((mut h, dir)) = app("menu") else { return };
+    assert!(h.click("agent:mode"));
+    h.step();
+    assert!(h.gui.shell.agent.mode_menu);
+    assert!(
+        h.gui.shell.place("agent:mode:plan").is_some(),
+        "the three, each said"
+    );
+    // a misclick doesn't switch it: the mode's the same until a row is picked
+    assert_eq!(h.gui.shell.agent.mode, Mode::Ask);
+    h.key(egui::Key::Escape);
+    h.step();
+    assert!(!h.gui.shell.agent.mode_menu, "Esc closes the menu");
+    // and only the menu: the question still waits
+    assert!(h.gui.shell.agent.waiting().is_some());
+    assert!(h.click("agent:mode"));
+    h.step();
+    assert!(h.click("agent:mode:plan"));
+    h.step();
+    assert_eq!(h.gui.shell.agent.mode, Mode::Plan);
+    assert!(!h.gui.shell.agent.mode_menu);
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+#[test]
+fn enter_answers_only_a_card_in_sight_and_the_chip_brings_it_back() {
+    use forge_render::shell::agent::ToolState;
+    let Some((mut h, dir)) = app("sight") else { return };
+    // a long chat above the question, and the reader scrolled up into it
+    let mut long = Vec::new();
+    for k in 0..40 {
+        long.push(Entry::Tool {
+            id: format!("old{k}"),
+            name: "Read".into(),
+            summary: format!("Read part{k}.fg"),
+            input: String::new(),
+            output: String::new(),
+            state: ToolState::Done,
+        });
+    }
+    h.gui.shell.agent.entries.splice(0..0, long);
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(h.gui.shell.agent.card_visible);
+    // the pointer over the chat, where it's in view: on the card
+    let chat = h.gui.shell.place("agent:perm:req-1").unwrap();
+    h.move_to(chat.center().x, chat.center().y);
+    for _ in 0..30 {
+        h.wheel(400.0);
+        h.step();
+    }
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(!h.gui.shell.agent.card_visible, "scrolled out of sight");
+    assert!(h.gui.shell.place("agent:jump").is_some(), "Permission needed ↓");
+    // Enter in the empty box doesn't answer what can't be seen: it brings it back
+    assert!(h.click("agent:input"));
+    h.key(egui::Key::Enter);
+    for _ in 0..6 {
+        h.step();
+    }
+    assert!(h.gui.shell.agent.waiting().is_some(), "not answered unseen");
+    assert!(h.gui.shell.agent.card_visible, "back in sight");
+    h.key(egui::Key::Enter);
+    h.step();
+    assert!(h.gui.shell.agent.waiting().is_none(), "now Enter allows it");
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// UX review pictures for the follow-ups: the card's headline and coloured diff, the mode's
+/// menu, and the chip that brings a question scrolled out of sight back. Dark at 1400, light
+/// at 480. `FORGE_UI_SHOTS=DIR` writes them.
+#[test]
+fn polish_pictures() {
+    use forge_render::shell::agent::ToolState;
+    for (w, dark, tag) in [(1400.0, true, "1400-dark"), (480.0, false, "480-light")] {
+        let Ok(mut h) = forge_render::gui::Headless::new((w, 860.0), 1.0) else {
+            return;
+        };
+        let dir = scratch(&format!("polish-{tag}"));
+        std::fs::write(dir.join("plate.fg"), PART).unwrap();
+        h.gui.agent.program = Some(fake_claude(&dir).display().to_string());
+        h.gui.agent.cwd = Some(dir.join("cwd"));
+        h.gui.agent.settings_file = Some(dir.join("agent.toml"));
+        let mut s = h.gui.shell.settings.clone();
+        s.dark = dark;
+        h.gui.shell.use_settings(s);
+        h.step();
+        h.gui.open(dir.join("plate.fg").to_str().unwrap());
+        h.settle();
+        assert!(h.click("side:tab:Agent"));
+        assert!(h.click("agent:input"));
+        h.text("make the base plate thicker");
+        assert!(h.click("agent:send"));
+        assert!(wait(&mut h, |g| g.shell.agent.waiting().is_some()));
+        shot(&mut h, &format!("polish-{tag}-card-headline"));
+        assert!(h.click("agent:mode"));
+        shot(&mut h, &format!("polish-{tag}-mode-menu"));
+        h.key(egui::Key::Escape);
+        let mut long = Vec::new();
+        for k in 0..40 {
+            long.push(Entry::Tool {
+                id: format!("old{k}"),
+                name: "Read".into(),
+                summary: format!("Read part{k}.fg"),
+                input: String::new(),
+                output: String::new(),
+                state: ToolState::Done,
+            });
+        }
+        h.gui.shell.agent.entries.splice(0..0, long);
+        for _ in 0..4 {
+            h.step();
+        }
+        let card = h.gui.shell.place("agent:perm:req-1").unwrap();
+        h.move_to(card.center().x, card.center().y);
+        for _ in 0..30 {
+            h.wheel(400.0);
+            h.step();
+        }
+        shot(&mut h, &format!("polish-{tag}-permission-needed-chip"));
+        drop(h);
+        let _ = std::fs::remove_dir_all(dir);
+    }
 }
