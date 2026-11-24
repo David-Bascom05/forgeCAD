@@ -35,7 +35,8 @@ impl Kind {
         match p {
             Phase::Cut => Kind::Cut,
             Phase::Plunge => Kind::Plunge,
-            Phase::Link => Kind::Link,
+            // a hop (forge_cam::hop) is a link: drawn as one
+            Phase::Link | Phase::Hop => Kind::Link,
             Phase::Rapid => Kind::Rapid,
             // a probe's search shows as a link until CAM-SIM gives it its own look
             Phase::Probe | Phase::Touch => Kind::Link,

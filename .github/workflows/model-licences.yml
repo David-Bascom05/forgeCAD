@@ -1,7 +1,6 @@
-# Model files committed only when ours or licensed to be here (tools/ci/model-licences.py): a
-# maker's model needs a MODEL-LICENCE.toml beside it quoting terms that permit redistribution;
-# without one it stays the user's own file, attached in the Machine Builder and kept in their
-# library. Every push and pull request: one git ls-files and a few small reads.
+# What the repository may hold, by size and type (tools/ci/model-licences.py): no raw vendor archive
+# (zip, 7z, rar) and no file over 20 MB. Models need no licence record. Every push and pull
+# request: one git ls-files and a stat per file.
 name: model-licences
 
 on:
@@ -23,5 +22,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: every model file ours or licensed
+      - name: no raw archive, no file over 20 MB
         run: python3 tools/ci/model-licences.py .

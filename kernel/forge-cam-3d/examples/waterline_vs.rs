@@ -64,16 +64,7 @@ fn main() {
     let t0 = Instant::now();
     let mut passes = Vec::new();
     for &z in &zs {
-        for lp in waterline::level(
-            &dc,
-            z,
-            waterline::Params {
-                grid: 0.5,
-                tol_xy: 0.005,
-            },
-        )
-        .unwrap()
-        {
+        for lp in waterline::level(&dc, z, waterline::Params::new(0.5, 0.005)).unwrap() {
             let mut v: Vec<[f64; 3]> = lp.pts.iter().map(|q| [q[0], q[1], lp.z]).collect();
             v.push(v[0]);
             passes.push(v);

@@ -86,7 +86,25 @@ pub fn spiral(
     d: Drape,
     c: &Containment,
 ) -> Result<Vec<Pass>, DrapeError> {
-    let s = pattern::spiral(centre, r0, r1, pitch, d.leave, inward);
+    spiral_sag(dc, centre, r0, r1, pitch, inward, d.leave, d, c)
+}
+
+/// `spiral` with the xy pattern's chords within `sag` of the true spiral (`spiral` takes the
+/// drape's leave). A fitter that replaces the chords by arcs within a tolerance needs them well
+/// within it: the arcs are fitted to the points, which lie on the spiral.
+#[allow(clippy::too_many_arguments)]
+pub fn spiral_sag(
+    dc: &dyn DropCutter,
+    centre: [f64; 2],
+    r0: f64,
+    r1: f64,
+    pitch: f64,
+    inward: bool,
+    sag: f64,
+    d: Drape,
+    c: &Containment,
+) -> Result<Vec<Pass>, DrapeError> {
+    let s = pattern::spiral(centre, r0, r1, pitch, sag.min(d.leave), inward);
     finish(dc, vec![s], d, c, None)
 }
 
