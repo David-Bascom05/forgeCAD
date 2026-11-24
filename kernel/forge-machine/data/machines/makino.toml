@@ -1,0 +1,1002 @@
+# Makino machines: the maker's published specifications, restated (never copied); each record's
+# `source` is the page or catalogue read and `taken` the date. Estimates and UNKNOWNs are named in
+# each record's `note` and beside the field. Bodies are conservative envelopes from published
+# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.
+
+# ---------------------------------------------------------------------------------------------
+# Makino a51nx: nx-series HMC (400 mm pallet), Makino Professional 6 (Pro6).
+# X 560 Y 640 Z 640; 14000 rpm CAT40 (US) / BT40 (JP, EU); HSK-A63 option; 60 tools.
+[[machine]]
+name = "makino-a51nx"
+kind = "vmc4"
+control = "fanuc"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx | https://www.makino.eu/en-us/machine-technology/machines/horizontal-4-axis/a51nx | https://www.makino.co.jp/ja-jp/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+note = "pallets: count UNKNOWN, 400 square, change time UNKNOWN, load 400 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle centre above the pallet UNKNOWN: 100 to 100 + Y (estimate); spindle power as published: torque max 303 N.m (no curve: no power check); max tool diameter 70 with the neighbouring pockets full, 170 with them empty; magazine options: 134/219/311 (US page), 133/218/313 (JP page), 40 (US page); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-280, 280]
+rapid = 60000
+max_feed = 50000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [0, 640]
+home = 640
+rapid = 60000
+max_feed = 50000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-640, 0]
+rapid = 60000
+max_feed = 50000
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 45000
+max_feed = 45000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 100, 740]
+rpm = [50, 14000]
+max = [430, 70]
+interface = "CAT40 (US) / BT40 (JP, EU); HSK-A63 option"
+
+[[machine.changer]]
+pockets = 60
+change_s = 2.2   # chip to chip, published (tool to tool 0.9)
+max_tool_kg = 12
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 100, 740]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "pallet"
+kind = "part"
+link = "B"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "pallet"
+link = "B"
+part = "parts/makino/makino-a51nx/pallet.fg"
+ignore = ["table"]
+[[machine.body.box]]
+min = [-200, -120, -200]
+max = [200, 0, 200]
+
+[[machine.body]]
+name = "table"
+link = "base"
+part = "parts/makino/makino-a51nx/table.fg"
+ignore = ["pallet", "bed"]
+[[machine.body.cyl]]
+base = [0, -370, 0]
+axis = [0, 1, 0]
+r = 284
+h = 249
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/makino/makino-a51nx/bed.fg"
+ignore = ["table", "column"]
+[[machine.body.box]]
+min = [-680, -770, -584]
+max = [680, -371, 2660]
+
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/makino/makino-a51nx/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-310, -370, 2070]
+max = [310, 1300, 2560]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/makino/makino-a51nx/nose.fg"
+[[machine.body.cyl]]
+base = [0, 100, 740]
+axis = [0, 0, 1]
+r = 120
+h = 180
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/makino/makino-a51nx/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-160, -60, 920]
+max = [160, 260, 1420]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "X stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "Y stroke 640 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "Z stroke 640 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "45000 deg/min"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "50..14000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "60"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "2.2 s (chip to chip, published (tool to tool 0.9))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a51nx"
+taken = "2026-11-23"
+value = "12 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Makino a61nx: nx-series HMC (500 mm pallet), Makino Professional 6 (Pro6).
+# X 730 Y 650 Z 800; 14000 rpm CAT40 (US) / BT40 (JP); HSK-A63 option; 60 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
+[[machine]]
+name = "makino-a61nx"
+kind = "vmc4"
+control = "fanuc"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx | https://www.makino.co.jp/ja-jp/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+note = "pallets: count UNKNOWN, 500 square, change time UNKNOWN, load 500 kg; the APC is not in the format (FORMAT-GAPS B1): the pallet at the spindle is the part mount, kind vmc4; spindle nose to pallet centre UNKNOWN: 100 to 100 + Z (estimate); Z modelled on the head (X column, Y head, Z ram) because the format needs the length joint on the head side (FORMAT-GAPS B10); the tool-to-part motion is the same either way; spindle centre above the pallet UNKNOWN: 100 to 100 + Y (estimate); spindle power as published: torque max 303 N.m (no curve: no power check); max tool diameter 70 with the neighbouring pockets full, 205 with them empty; magazine options: 133/218/313; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid X, Y 0 = spindle lowest (home at the top), Z 0 = spindle farthest from the pallet; machine zero UNKNOWN; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-365, 365]
+rapid = 60000
+max_feed = 50000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [0, 650]
+home = 650
+rapid = 60000
+max_feed = 50000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-800, 0]
+rapid = 60000
+max_feed = 50000
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, 1, 0]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 45000
+max_feed = 45000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 100, 900]
+rpm = [50, 14000]
+max = [510, 70]
+interface = "CAT40 (US) / BT40 (JP); HSK-A63 option"
+
+[[machine.changer]]
+pockets = 60
+change_s = 2.5   # chip to chip, published (tool to tool 0.9)
+max_tool_kg = 12
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 100, 900]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "pallet"
+kind = "part"
+link = "B"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "pallet"
+link = "B"
+part = "parts/makino/makino-a61nx/pallet.fg"
+ignore = ["table"]
+[[machine.body.box]]
+min = [-250, -120, -250]
+max = [250, 0, 250]
+
+[[machine.body]]
+name = "table"
+link = "base"
+part = "parts/makino/makino-a61nx/table.fg"
+ignore = ["pallet", "bed"]
+[[machine.body.cyl]]
+base = [0, -370, 0]
+axis = [0, 1, 0]
+r = 355
+h = 249
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/makino/makino-a61nx/bed.fg"
+ignore = ["table", "column"]
+[[machine.body.box]]
+min = [-765, -770, -655]
+max = [765, -371, 2980]
+
+[[machine.body]]
+name = "column"
+link = "X"
+part = "parts/makino/makino-a61nx/column.fg"
+ignore = ["bed", "head"]
+[[machine.body.box]]
+min = [-310, -370, 2390]
+max = [310, 1310, 2880]
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/makino/makino-a61nx/nose.fg"
+[[machine.body.cyl]]
+base = [0, 100, 900]
+axis = [0, 0, 1]
+r = 120
+h = 180
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/makino/makino-a61nx/head.fg"
+ignore = ["column"]
+[[machine.body.box]]
+min = [-160, -60, 1080]
+max = [160, 260, 1580]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "X stroke 730 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "Y stroke 650 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "Z stroke 800 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "60000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.B.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.B.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "45000 deg/min"
+
+[[machine.cite]]
+path = "joint.B.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.B.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "50..14000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "60"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "2.5 s (chip to chip, published (tool to tool 0.9))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/horizontal-4-axis/a61nx"
+taken = "2026-11-23"
+value = "12 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to pallet centre not published: 100 at the end of Z (estimate)"
+
+[[machine.cite]]
+path = "mount.pallet.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.pallet"
+status = "estimate"
+basis = "the published pallet; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.table"
+status = "estimate"
+basis = "the B index table under the pallet, a disc covering the pallet's corners (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the bed (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.column"
+status = "estimate"
+basis = "the moving column behind the head's Z stroke (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head / ram (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Makino D500: D-series vertical 5-axis, Makino Professional 6 (SGI.5).
+# X 550 Y 1000 Z 500; 14000 rpm BT40 (JP); HSK-A63, HSK-F63 options; 40 tools.
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
+[[machine]]
+name = "makino-d500"
+kind = "table-table"
+control = "fanuc"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500 | https://www.makino.co.jp/ja-jp/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+note = "A tilts the cradle about X (-120..30 deg, published) and carries C; the sense of +A (which way the table tips) is UNKNOWN: modelled right-handed about +x; A's pivot below the table top UNKNOWN: 150 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate); spindle power UNKNOWN (no curve: no power check); max tool diameter 70 with the neighbouring pockets full, 140 with them empty; magazine options: 60/80/113/155/197/323 (JP), 60 std, 80/113/155/197/239/281/323 (US); an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-275, 275]
+rapid = 48000
+max_feed = 48000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-500, 500]
+rapid = 50000
+max_feed = 50000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-500, 0]
+rapid = 50000
+max_feed = 50000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "A"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [1, 0, 0]
+pivot = [0, 0, -150]
+range = [-120, 30]
+rapid = 18000
+max_feed = 18000   # rotary max feed UNKNOWN: = rapid
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "A"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 18000
+max_feed = 18000   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 600]
+rpm = [50, 14000]
+max = [300, 70]
+interface = "BT40 (JP); HSK-A63, HSK-F63 options"
+
+[[machine.changer]]
+pockets = 40
+change_s = 10.2   # chip to chip, published (tool to tool 4.2)
+max_tool_kg = 8
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 600]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/makino/makino-d500/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-575, -800, -898.868904]
+max = [575, 800, -498.868904]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/makino/makino-d500/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-490, -310, -550]
+max = [-350, 310, 0]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/makino/makino-d500/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [350, -310, -550]
+max = [490, 310, 0]
+
+[[machine.body]]
+name = "cradle"
+link = "A"
+part = "parts/makino/makino-d500/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-330, -270, -200]
+max = [330, 270, -80]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/makino/makino-d500/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 250
+h = 80
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/makino/makino-d500/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 600]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/makino/makino-d500/head.fg"
+[[machine.body.box]]
+min = [-150, -150, 750]
+max = [150, 150, 1200]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "X stroke 550 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "48000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "Y stroke 1000 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "Z stroke 500 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "50000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "-120..30 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "18000 deg/min"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "18000 deg/min"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "50..14000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "40"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "10.2 s (chip to chip, published (tool to tool 4.2))"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.makino.com/en-us/machine-technology/machines/vertical-5-axis/d500"
+taken = "2026-11-23"
+value = "8 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+

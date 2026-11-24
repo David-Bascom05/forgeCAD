@@ -19,12 +19,65 @@ set_option maxRecDepth 2048
 
 namespace forge_math
 
-/-- [forge_math::vec::Point2]
-    Source: 'kernel/forge-math/src/vec.rs', lines 10:0-13:1
+/-- Trait declaration: [core::ops::arith::Add]
+    Source: '/rustc/library/core/src/ops/arith.rs', lines 76:0-76:31
+    Name pattern: [core::ops::arith::Add]
     Visibility: public -/
-structure vec.Point2 where
-  x : F64
-  y : F64
+@[rust_trait "core::ops::arith::Add"]
+structure core.ops.arith.Add (Self : Type _) (Rhs : Type _) (Self_Output :
+  Type _) where
+  add : Self → Rhs → Result Self_Output
+
+/-- Trait declaration: [core::ops::arith::Sub]
+    Source: '/rustc/library/core/src/ops/arith.rs', lines 188:0-188:31
+    Name pattern: [core::ops::arith::Sub]
+    Visibility: public -/
+@[rust_trait "core::ops::arith::Sub"]
+structure core.ops.arith.Sub (Self : Type _) (Rhs : Type _) (Self_Output :
+  Type _) where
+  sub : Self → Rhs → Result Self_Output
+
+/-- Trait declaration: [core::ops::arith::Mul]
+    Source: '/rustc/library/core/src/ops/arith.rs', lines 322:0-322:31
+    Name pattern: [core::ops::arith::Mul]
+    Visibility: public -/
+@[rust_trait "core::ops::arith::Mul"]
+structure core.ops.arith.Mul (Self : Type _) (Rhs : Type _) (Self_Output :
+  Type _) where
+  mul : Self → Rhs → Result Self_Output
+
+/-- Trait declaration: [core::ops::arith::Div]
+    Source: '/rustc/library/core/src/ops/arith.rs', lines 460:0-460:31
+    Name pattern: [core::ops::arith::Div]
+    Visibility: public -/
+@[rust_trait "core::ops::arith::Div"]
+structure core.ops.arith.Div (Self : Type _) (Rhs : Type _) (Self_Output :
+  Type _) where
+  div : Self → Rhs → Result Self_Output
+
+/-- Trait declaration: [core::ops::arith::Neg]
+    Source: '/rustc/library/core/src/ops/arith.rs', lines 690:0-690:19
+    Name pattern: [core::ops::arith::Neg]
+    Visibility: public -/
+@[rust_trait "core::ops::arith::Neg"]
+structure core.ops.arith.Neg (Self : Type _) (Self_Output : Type _) where
+  neg : Self → Result Self_Output
+
+/-- Trait declaration: [core::ops::arith::AddAssign]
+    Source: '/rustc/library/core/src/ops/arith.rs', lines 768:0-768:37
+    Name pattern: [core::ops::arith::AddAssign]
+    Visibility: public -/
+@[rust_trait "core::ops::arith::AddAssign"]
+structure core.ops.arith.AddAssign (Self : Type _) (Rhs : Type _) where
+  add_assign : Self → Rhs → Result Self
+
+/-- Trait declaration: [core::ops::arith::SubAssign]
+    Source: '/rustc/library/core/src/ops/arith.rs', lines 839:0-839:37
+    Name pattern: [core::ops::arith::SubAssign]
+    Visibility: public -/
+@[rust_trait "core::ops::arith::SubAssign"]
+structure core.ops.arith.SubAssign (Self : Type _) (Rhs : Type _) where
+  sub_assign : Self → Rhs → Result Self
 
 /-- [forge_math::vec::Vec3]
     Source: 'kernel/forge-math/src/vec.rs', lines 16:0-20:1
@@ -33,5 +86,92 @@ structure vec.Vec3 where
   x : F64
   y : F64
   z : F64
+
+/-- [forge_math::vec::UnitVec3]
+    Source: 'kernel/forge-math/src/vec.rs', lines 31:0-31:26
+    Visibility: public -/
+@[reducible]
+def vec.UnitVec3 := vec.Vec3
+
+/-- [forge_math::vec::Point3]
+    Source: 'kernel/forge-math/src/vec.rs', lines 23:0-27:1
+    Visibility: public -/
+structure vec.Point3 where
+  x : F64
+  y : F64
+  z : F64
+
+/-- [forge_math::frame::Frame]
+    Source: 'kernel/forge-math/src/frame.rs', lines 6:0-11:1
+    Visibility: public -/
+structure frame.Frame where
+  origin : vec.Point3
+  x : vec.UnitVec3
+  y : vec.UnitVec3
+  z : vec.UnitVec3
+
+/-- [forge_math::vec::{forge_math::vec::Vec3}::normalize::{closure}]
+    Source: 'kernel/forge-math/src/vec.rs', lines 123:40-123:61 -/
+def vec.Vec3.normalize.closure := vec.Vec3 × F64
+
+/-- [forge_math::frame::{forge_math::frame::Frame}::from_axes::{closure#1}]
+    Source: 'kernel/forge-math/src/frame.rs', lines 48:16-53:9 -/
+def frame.Frame.from_axes.closure_1 :=
+  vec.Point3 × vec.Vec3 × vec.Vec3 × vec.Vec3
+
+/-- [forge_math::frame::{forge_math::frame::Frame}::from_axes::{closure}]
+    Source: 'kernel/forge-math/src/frame.rs', lines 45:19-45:60 -/
+@[reducible]
+def frame.Frame.from_axes.closure := Unit
+
+/-- [forge_math::vec::Point2]
+    Source: 'kernel/forge-math/src/vec.rs', lines 10:0-13:1
+    Visibility: public -/
+structure vec.Point2 where
+  x : F64
+  y : F64
+
+/-- [forge_math::interval::Interval]
+    Source: 'kernel/forge-math/src/interval.rs', lines 8:0-11:1
+    Visibility: public -/
+structure interval.Interval where
+  lo : F64
+  hi : F64
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2::{closure#1}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 134:16-134:32 -/
+@[reducible]
+def interval.Interval.atan2.closure_1 := Unit
+
+/-- [forge_math::interval::{forge_math::interval::Interval}::atan2::{closure}]
+    Source: 'kernel/forge-math/src/interval.rs', lines 128:57-128:74 -/
+@[reducible]
+def interval.Interval.atan2.closure := Unit
+
+/-- [forge_math::interval::Box3]
+    Source: 'kernel/forge-math/src/interval.rs', lines 244:0-248:1
+    Visibility: public -/
+structure interval.Box3 where
+  x : interval.Interval
+  y : interval.Interval
+  z : interval.Interval
+
+/-- [forge_math::interval::Box2]
+    Source: 'kernel/forge-math/src/interval.rs', lines 310:0-313:1
+    Visibility: public -/
+structure interval.Box2 where
+  u : interval.Interval
+  v : interval.Interval
+
+/-- [forge_math::vec::Vec2]
+    Source: 'kernel/forge-math/src/vec.rs', lines 4:0-7:1
+    Visibility: public -/
+structure vec.Vec2 where
+  x : F64
+  y : F64
+
+/-- [forge_math::vec::{forge_math::vec::Vec2}::normalize::{closure}]
+    Source: 'kernel/forge-math/src/vec.rs', lines 59:40-59:51 -/
+def vec.Vec2.normalize.closure := vec.Vec2 × F64
 
 end forge_math

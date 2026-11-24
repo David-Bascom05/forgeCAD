@@ -152,7 +152,6 @@ import ForgeCurved
 #print axioms ForgeCurved.BodyModel.room_in_or_out
 #print axioms ForgeCurved.BodyModel.denote_refines
 #print axioms ForgeCurved.BodyModel.bounds_unique
-#print axioms ForgeCurved.BodyModel.exactOf_isolated
 #print axioms ForgeCurved.OnEdge.branch_of_sep
 #print axioms ForgeCurved.OnEdge.branch_of_sep_delta
 #print axioms ForgeCurved.OnEdge.branch_of_empty
@@ -169,3 +168,8 @@ import ForgeCurved
 #print axioms ForgeCurved.G14.kept_iff
 #print axioms ForgeCurved.G14.extra_not_end
 #print axioms ForgeCurved.G14.edge_cut_not_kept
+#print axioms ForgeCurved.PifNear.whole_of_outside
+#print axioms ForgeCurved.PifNear.touch_inside_on_eq_outside
+#print axioms ForgeCurved.PifNear.touch_inside_inside_differs
+#print axioms ForgeCurved.PifNear.touch_inside_on_ne_outside
+#print axioms ForgeCurved.PlaceMerge.merge_within

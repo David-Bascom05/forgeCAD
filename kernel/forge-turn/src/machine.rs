@@ -9,7 +9,7 @@
 //! line move is within travel iff its ends are; an arc is when its circle's box is (ForgeCam
 //! Machine.lean, `G5_line_iff`, `G5_arc`). An unplaced setup gets the necessary check only (the
 //! tip's span along each axis within the axis's travel) and says so.
-use forge_machine::def::{Kind, MachineDef, SpindleKind};
+use forge_machine::def::{MachineDef, SpindleKind};
 use forge_machine::library::Library;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -17,12 +17,13 @@ pub struct Lathe {
     pub name: String,
     /// The dialect its control speaks (post.rs).
     pub control: String,
-    /// The X joint's travel, as a radius (the joint value).
-    pub x: [f64; 2],
-    pub z: [f64; 2],
+    /// The X joint's travel, as a radius (the joint value). None: not known (a cited-unknown
+    /// value in the definition); the check that needs it is then not made, and says so.
+    pub x: Option<[f64; 2]>,
+    pub z: Option<[f64; 2]>,
     /// The turning spindle's speed range; rpm[1] is the G50 clamp ceiling.
-    pub rpm: [f64; 2],
-    pub stations: u32,
+    pub rpm: Option<[f64; 2]>,
+    pub stations: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,8 +39,8 @@ pub fn from_def(m: &MachineDef) -> Result<Lathe, MachineError> {
         machine: m.name.clone(),
         what: what.into(),
     };
-    if !matches!(m.kind, Kind::Lathe | Kind::MillTurn) {
-        return Err(missing("kind = \"lathe\" or \"mill-turn\""));
+    if !m.kind.turns() {
+        return Err(missing("a kind that turns (lathe, mill-turn, turn-mill)"));
     }
     let joint = |n: &str| m.joints.iter().find(|j| j.letter == n || j.name == n);
     let zj = joint("Z").ok_or_else(|| missing("joint Z"))?;

@@ -1,0 +1,331 @@
+{
+ "dialect": "pathpilot",
+ "control": "Tormach PathPilot (mill)",
+ "sources": [
+  {
+   "id": "S1",
+   "url": "https://tormach.com/g-code-formatting-reference",
+   "title": "Tormach: G-Code Formatting Reference (PathPilot machine code library)",
+   "edition": "web page, undated",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S2",
+   "url": "https://tormach.com/supported-g-codes-reference",
+   "title": "Tormach: Supported G-Codes Reference",
+   "edition": "web page, undated",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S3",
+   "url": "https://knowledgebase.tormach.com/8l/pathpilot-post-processor-guidelines",
+   "title": "Tormach Knowledge Base: PathPilot Post Processor Guidelines",
+   "edition": "web page, undated (covers Mill/Router, Lathe, Plasma)",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S4",
+   "url": "https://tormach.com/machine-codes/dwell-g04",
+   "title": "Tormach: Dwell (G04)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S5",
+   "url": "https://tormach.com/machine-codes/tool-change-m06",
+   "title": "Tormach: Tool Change (M06)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S6",
+   "url": "https://tormach.com/machine-codes/canned-cycles-reference",
+   "title": "Tormach: Canned Cycles Reference",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S7",
+   "url": "https://tormach.com/machine-codes/tapping-cycle-g84",
+   "title": "Tormach: Tapping Cycle (G84)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S8",
+   "url": "https://tormach.com/machine-codes/peck-drilling-cycle-g83",
+   "title": "Tormach: Peck Drilling Cycle (G83)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S9",
+   "url": "https://tormach.com/machine-codes/simple-drilling-cycle-g82",
+   "title": "Tormach: Simple Drilling Cycle (G82)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S10",
+   "url": "https://tormach.com/machine-codes/select-work-offset-coordinate-system-g54-to-g59-3",
+   "title": "Tormach: Select Work Offset Coordinate System (G54 to G59.3)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S11",
+   "url": "https://tormach.com/machine-codes/arc-distance-mode-g90-1-and-g91-1",
+   "title": "Tormach: Arc Distance Mode (G90.1 and G91.1)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S12",
+   "url": "https://tormach.com/machine-codes/coolant-control-m07-m08-and-m09",
+   "title": "Tormach: Coolant Control (M07, M08, M09)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S13",
+   "url": "https://tormach.com/machine-codes/return-to-predefined-position-g28-and-g28-1",
+   "title": "Tormach: Return to Predefined Position (G28 and G28.1)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S14",
+   "url": "https://tormach.com/machine-codes/about-g-code-programming-language",
+   "title": "Tormach: About G-Code Programming Language",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S15",
+   "url": "https://tormach.com/machine-codes/apply-tool-length-offset-g43",
+   "title": "Tormach: Apply Tool Length Offset (G43)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S16",
+   "url": "https://tormach.com/machine-codes/program-stop-and-program-end-m00-m01-m02-and-m30",
+   "title": "Tormach: Program Stop and Program End (M00, M01, M02, M30)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S17",
+   "url": "https://tormach.com/machine-codes/high-speed-peck-drill-g73",
+   "title": "Tormach: High Speed Peck Drill (G73)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S18",
+   "url": "https://tormach.com/machine-codes/boring-cycle-g85",
+   "title": "Tormach: Boring Cycle (G85)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S19",
+   "url": "https://tormach.com/machine-codes/absolute-coordinates-g53",
+   "title": "Tormach: Absolute Coordinates (G53)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S20",
+   "url": "https://tormach.com/machine-codes",
+   "title": "Tormach: Machine Codes (index of G/M code articles)",
+   "edition": "web",
+   "taken": "2026-11-23"
+  }
+ ],
+ "items": {
+  "program_open": {
+   "value": "No start code required; post guidelines say not to put % (or $) at the beginning or end of the program. O numbers only for subroutines (M98 O100 ...).",
+   "source": "S3",
+   "where": "Miscellaneous / M98-M99 entries",
+   "note": "Differs from LinuxCNC, where % file demarcation is accepted (memory, unverified)."
+  },
+  "program_close": {
+   "value": "M30 = end and rewind; M2 = end, no rewind. Both reset to G54, G17, G90, G94, M48, G40, M05, G01 motion, M09 and clear axis offsets.",
+   "source": "S16",
+   "where": "whole page; also S3 Miscellaneous",
+   "note": ""
+  },
+  "comment": {
+   "value": "Parentheses (...) inline, and ';' comments to end of line (';' inside parentheses is not a comment start). A comment may not sit between a letter and its number.",
+   "source": "S14",
+   "where": "Comments paragraph",
+   "note": "S1 also shows (..) comments, case preserved inside."
+  },
+  "line_numbers": {
+   "value": "Optional N + unsigned integer 0..99,999,999; may repeat/out of order. Program limited to 999,999 lines.",
+   "source": "S1",
+   "where": "Line Numbers",
+   "note": ""
+  },
+  "block_end": {
+   "value": "Newline ends the block; do not end blocks with ';'. Max 256 characters per line; blank lines ignored; case-insensitive outside comments.",
+   "source": "S1",
+   "where": "Line format",
+   "note": "';' rule from S3 Miscellaneous."
+  },
+  "safe_start": {
+   "value": "All supported: G90, G94, G17, G20/G21 (G21 mm), G40, G49, G80. No specific safe-start line is prescribed by Tormach in these pages. Any number of G words per line but not two of one modal group; up to four M words per line.",
+   "source": "S2",
+   "where": "G-code list",
+   "note": "Line rules from S1."
+  },
+  "tool_change": {
+   "value": "T<n> M06 (or M06 T<n>, or T and M06 on separate lines; T must have been called before M6). Put G43 H<n> on the tool-change line, e.g. M06 T3 G43 H3. G30 before a tool change is highly recommended. Mill has 1000 tool offsets.",
+   "source": "S3",
+   "where": "Mill/Router section; M6 and G43 entries",
+   "note": "Example from S5."
+  },
+  "tool_change_behaviour": {
+   "value": "With ATC and tool in carousel: automatic change. Without ATC (or tool not in carousel): M06 stops spindle, pauses the program and flashes the Tool Change LED; operator swaps and presses Cycle Start. No user macro needed.",
+   "source": "S5",
+   "where": "whole page",
+   "note": ""
+  },
+  "tool_length_comp": {
+   "value": "G43 H<n> explicit (H should match T; not stated to default to the tool). Non-integer, negative or invalid H is an error.",
+   "source": "S15",
+   "where": "whole page",
+   "note": ""
+  },
+  "spindle": {
+   "value": "S rpm with M03/M04/M05 (articles 'Spindle Control (M03, M04, and M05)' and 'Spindle Speed (S)').",
+   "source": "S20",
+   "where": "M-code links",
+   "note": ""
+  },
+  "work_offset": {
+   "value": "G54..G59 (1-6) plus G59.1, G59.2, G59.3 (7-9). Guidelines add that G54.1 P<n> is accepted (G54.1 P2 = G55).",
+   "source": "S10",
+   "where": "whole page",
+   "note": "G54.1 from S3 'Deviations from Fanuc'; count of G54.1 P values UNKNOWN."
+  },
+  "arc_format": {
+   "value": "G02/G03; I/J/K incremental from start by default (G91.1), G90.1 switches to absolute centre. R form exists in the supported list.",
+   "source": "S11",
+   "where": "whole page",
+   "note": "Page wording is lathe-flavoured (I and K); J by analogy."
+  },
+  "rapid_linear": {
+   "value": "G00 / G01.",
+   "source": "S2",
+   "where": "motion list",
+   "note": ""
+  },
+  "feed": {
+   "value": "F = feed rate; G94 units per minute (G20 in/min, G21 mm/min). G93 inverse time and G95 per rev exist.",
+   "source": "S2",
+   "where": "G93-G95 entries",
+   "note": "Per-minute wording from S16 (G94 = units per minute)."
+  },
+  "decimal_point": {
+   "value": "Number = optional sign, digits, optional single point; no implied-decimal scaling described, so X10 = 10 units in the active G20/G21 units.",
+   "source": "S1",
+   "where": "Number format",
+   "note": ""
+  },
+  "max_digits": {
+   "value": "No digit-count limit; 17 significant figures kept; integer-required values accepted within 0.0001.",
+   "source": "S1",
+   "where": "Number format",
+   "note": ""
+  },
+  "retract_home": {
+   "value": "G28 rapids (optionally via axis-word intermediate point) to the position stored with G28.1 in params 5161-5163 (machine coords, inches internally). G30 uses 5181-5186 and is recommended before tool changes. G53 G0 Z<n> = non-modal machine-coordinate move (needs G0 or G1 active; error with cutter comp). Guidelines: G28/G30 need G90 and comp off.",
+   "source": "S13",
+   "where": "whole page",
+   "note": "G30 and G90 requirement from S3; G53 from S19."
+  },
+  "coolant": {
+   "value": "M07 coolant (mist per guidelines, mill only), M08 flood, M09 all off. Smart Cool unit adds E/P/R/Q arguments. No through-spindle code.",
+   "source": "S12",
+   "where": "whole page",
+   "note": "Mist wording from S3 M-code table."
+  },
+  "dwell": {
+   "value": "G04 P<seconds>, decimals allowed (G04 P4.2 = 4.2 s); negative P error.",
+   "source": "S4",
+   "where": "whole page",
+   "note": "Same unit as LinuxCNC (memory, unverified)."
+  },
+  "drill_G81": {
+   "value": "G81 X Y Z R L (F modal); R/Z sticky; L repeat count, not sticky.",
+   "source": "S6",
+   "where": "general rules",
+   "note": "G81 page not fetched; format per general rules."
+  },
+  "dwell_drill_G82": {
+   "value": "G82 X Y Z A R L P ; P dwell in seconds.",
+   "source": "S9",
+   "where": "whole page",
+   "note": ""
+  },
+  "peck_G83": {
+   "value": "G83 X Y Z A R L Q ; Q incremental peck >0; rapid back to clear Z each peck.",
+   "source": "S8",
+   "where": "whole page",
+   "note": ""
+  },
+  "chipbreak_G73": {
+   "value": "G73 X Y Z R L Q ; Q peck >0; fixed retract of 0.010 in between pecks; R required.",
+   "source": "S17",
+   "where": "whole page",
+   "note": ""
+  },
+  "rigid_tap_G84": {
+   "value": "G84 X Y Z R P F ; spindle speed and M3 must be set before; F is the feed rate for in/out moves (relation to pitch not stated). P optional dwell in seconds (default 0.5 s per 1000 rpm). Feed override ignored. G98/G99 honoured. Left-hand G74 not supported.",
+   "source": "S7",
+   "where": "whole page",
+   "note": "G74 unsupported per S3."
+  },
+  "bore_G85": {
+   "value": "G85 X Y Z A R L ; feed in, feed out.",
+   "source": "S18",
+   "where": "whole page",
+   "note": ""
+  },
+  "return_level": {
+   "value": "G98 = back to original Z if above R else R; G99 = back to R (mill/router).",
+   "source": "S3",
+   "where": "G98/G99 entries",
+   "note": "S6 describes G98 only."
+  },
+  "cycle_cancel": {
+   "value": "G80 cancels canned cycle / motion mode; call G00 or G01 before further axis words.",
+   "source": "S3",
+   "where": "G80 entry",
+   "note": ""
+  },
+  "peck_depth_word": {
+   "value": "Q",
+   "source": "S8",
+   "where": "whole page",
+   "note": ""
+  },
+  "cycle_dwell_units": {
+   "value": "Seconds (G82, G84 P as G4).",
+   "source": "S3",
+   "where": "G4/G82/G84 entries",
+   "note": ""
+  },
+  "native_language": {
+   "value": "RS274NGC-style G-code shared with LinuxCNC plus Tormach additions; claims to follow most (~98%) of the Fanuc standard. No mode switch. Unsupported on mill: G07, G09, G12, G13, G52 (use G92), G74, G87 (G88 conflicting).",
+   "source": "S3",
+   "where": "intro and 'Deviations from Fanuc' / unsupported list",
+   "note": ""
+  }
+ },
+ "notes": "LinuxCNC-based. Differences documented by Tormach vs Fanuc: G54.1 P accepted, G92 shifts all offsets, G64 default P0.005 inch, no % marks. Differences vs LinuxCNC were not stated by Tormach; memory says LinuxCNC lacks G84 and G54.1 and accepts %-wrapped files (unverified). G73 retract is fixed 0.010 in.",
+ "unknown": [],
+ "filled": "30/30"
+}

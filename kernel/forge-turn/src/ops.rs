@@ -193,7 +193,10 @@ pub const RETRACT: f64 = 0.5;
 pub const DEFAULT_MAX_RPM: f64 = 3000.0;
 
 fn top_rpm(s: &Setup) -> f64 {
-    s.machine.as_ref().map_or(DEFAULT_MAX_RPM, |m| m.rpm[1])
+    s.machine
+        .as_ref()
+        .and_then(|m| m.rpm)
+        .map_or(DEFAULT_MAX_RPM, |r| r[1])
 }
 
 fn css(s: &Setup, t: &TurnTool) -> Spindle {
@@ -1667,18 +1670,23 @@ fn certify_with(
                     at: op.start,
                 })
             };
-            if op.t == 0 || op.t > m.stations {
-                refuse(format!("station {} on a turret of {}", op.t, m.stations));
+            // a value the definition leaves unknown is not checked (listed in rep.g5)
+            if let Some(n) = m.stations
+                && (op.t == 0 || op.t > n)
+            {
+                refuse(format!("station {} on a turret of {n}", op.t));
             }
-            match op.spindle {
-                Spindle::Css { max_rpm, .. } if max_rpm > m.rpm[1] => refuse(format!(
-                    "a top speed of {max_rpm} rpm over the spindle's {}",
-                    m.rpm[1]
-                )),
-                Spindle::Rpm(r) if r < m.rpm[0] || r > m.rpm[1] => {
-                    refuse(format!("{r} rpm outside the spindle's {:?}", m.rpm))
+            if let Some(rpm) = m.rpm {
+                match op.spindle {
+                    Spindle::Css { max_rpm, .. } if max_rpm > rpm[1] => refuse(format!(
+                        "a top speed of {max_rpm} rpm over the spindle's {}",
+                        rpm[1]
+                    )),
+                    Spindle::Rpm(r) if r < rpm[0] || r > rpm[1] => {
+                        refuse(format!("{r} rpm outside the spindle's {rpm:?}"))
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
             if let Some(p) = &s.place {
                 offsets = p.tools.iter().find(|(t, _)| *t == op.t).map(|x| x.1);
@@ -1724,7 +1732,9 @@ fn certify_with(
                         tlo[1].add(Ival::pt(z0)).add(Ival::pt(off[1])).lo,
                         thi[1].add(Ival::pt(z0)).add(Ival::pt(off[1])).hi,
                     ];
-                    if jx[0] < m.x[0] || jx[1] > m.x[1] || jz[0] < m.z[0] || jz[1] > m.z[1] {
+                    let out =
+                        |j: [f64; 2], r: Option<[f64; 2]>| r.is_some_and(|r| j[0] < r[0] || j[1] > r[1]);
+                    if out(jx, m.x) || out(jz, m.z) {
                         rep.refusals.push(Refusal {
                             op: oi,
                             step: si,
@@ -1842,7 +1852,8 @@ fn certify_with(
         }
         if let (Some(m), None) = (&s.machine, offsets)
             && span[0] <= span[1]
-            && (span[1] - span[0] > m.x[1] - m.x[0] || span[3] - span[2] > m.z[1] - m.z[0])
+            && (m.x.is_some_and(|x| span[1] - span[0] > x[1] - x[0])
+                || m.z.is_some_and(|z| span[3] - span[2] > z[1] - z[0]))
         {
             rep.refusals.push(Refusal {
                 op: oi,
@@ -1863,8 +1874,32 @@ fn certify_with(
         }
     }
     rep.g5 = match (&s.machine, &s.place) {
-        (Some(_), Some(_)) => "full".into(),
-        (Some(_), None) => "except G5 (no placement: the spans only)".into(),
+        (Some(m), place) => {
+            // the definition's unknown values: their checks were not made
+            let unknown: Vec<&str> = [
+                (m.x.is_none(), "X travel"),
+                (m.z.is_none(), "Z travel"),
+                (m.rpm.is_none(), "spindle speed range"),
+                (m.stations.is_none(), "turret stations"),
+            ]
+            .iter()
+            .filter(|(u, _)| *u)
+            .map(|(_, w)| *w)
+            .collect();
+            match (place, unknown.is_empty()) {
+                (Some(_), true) => "full".into(),
+                (None, true) => "except G5 (no placement: the spans only)".into(),
+                (p, false) => format!(
+                    "except G5 ({}not checked, unknown in the machine's definition: {})",
+                    if p.is_none() {
+                        "no placement: the spans only; "
+                    } else {
+                        ""
+                    },
+                    unknown.join(", ")
+                ),
+            }
+        }
         (None, _) => "no machine".into(),
     };
     let StockModel::Exact(stock_region) = stock_model else {
