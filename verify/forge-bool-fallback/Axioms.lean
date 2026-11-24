@@ -11,3 +11,5 @@ import ForgeBoolFallback
 #print axioms ForgeBoolFallback.Ladder.plan_correct
 #print axioms ForgeBoolFallback.Member.csg_sound
 #print axioms ForgeBoolFallback.Member.sound_mem
+#print axioms ForgeBoolFallback.Walk.splitOpen_never
+#print axioms ForgeBoolFallback.Walk.walk_ne_nil
