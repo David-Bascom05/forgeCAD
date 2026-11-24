@@ -965,8 +965,12 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         if sg.t_min <= 0.0 || b.len <= 0.0 || b.acc <= 0.0 {
                             continue;
                         }
-                        // the programmed speed, mm/s (t_min is the block at it)
+                        // the programmed speed, mm/s (t_min is the block at it); links through
+                        // air at the link feed (over 100 mm/s here) are not cutting time
                         let vf = b.len / sg.t_min;
+                        if vf > 100.0 {
+                            continue;
+                        }
                         let vt = 0.9 * vf;
                         let a = b.acc;
                         let vp = b.v_nom.min(((2.0 * a * b.len + b.v0 * b.v0 + b.v1 * b.v1) / 2.0).sqrt());
@@ -979,6 +983,49 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         t_feed += t_blk;
                         if vp >= vt {
                             t_90 += ((vp - b.v0.max(vt)) / a).max(0.0) + ((vp - b.v1.max(vt)) / a).max(0.0) + cruise / vp;
+                        }
+                    }
+                    // FORGE_QUALITY_SLOW: cutting blocks entered under half their feed, by what precedes
+                    if std::env::var_os("FORGE_QUALITY_SLOW").is_some() {
+                        let mut h: std::collections::BTreeMap<String, (usize, f64)> = Default::default();
+                        for (bi, b) in prof.iter().enumerate() {
+                            if !in_op(b.seg) || b.seg == 0 {
+                                continue;
+                            }
+                            let sg = &tl.segments[b.seg];
+                            if sg.t_min <= 0.0 || matches!(sg.kind, forge_machine::sim::SegKind::Rapid) {
+                                continue;
+                            }
+                            let vf = b.len / sg.t_min;
+                            if vf > 100.0 || b.v0 >= 0.5 * vf {
+                                continue;
+                            }
+                            let pv = &tl.segments[b.seg - 1];
+                            let kind = |k: &forge_machine::sim::SegKind| match k {
+                                forge_machine::sim::SegKind::Rapid => "rapid",
+                                forge_machine::sim::SegKind::Feed => "line",
+                                forge_machine::sim::SegKind::Arc => "arc",
+                            };
+                            let pvf = if pv.t_min > 0.0 {
+                                pv.q0.iter().zip(&pv.q1).take(3).map(|(a, c)| (c - a).powi(2)).sum::<f64>().sqrt() / pv.t_min
+                            } else {
+                                0.0
+                            };
+                            let dz = (pv.q1[2] - pv.q0[2]).abs() > 1e-6;
+                            let key = format!(
+                                "{} -> {}{}{}",
+                                kind(&pv.kind),
+                                kind(&sg.kind),
+                                if dz { " (prev vertical)" } else { "" },
+                                if pvf > 100.0 { " (prev link-fast)" } else { "" }
+                            );
+                            let lost = sg.t_min * 0.0 + (b.len / vf.max(1e-9)) * 0.0;
+                            let _ = (lost, bi);
+                            let e = h.entry(key).or_default();
+                            e.0 += 1;
+                        }
+                        for (k, (n, _)) in h {
+                            eprintln!("slow {want} {k}: {n}");
                         }
                     }
                     eprintln!(

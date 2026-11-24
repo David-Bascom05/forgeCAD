@@ -420,11 +420,15 @@ pub fn adaptive(
         eps: 1e-3,
     };
     let cap = prm.phi_max.clamp(5.0, 180.0).to_radians();
-    let sweep_dir = {
-        let (sn, cs) = dmath::sin_cos(prm.sweep.to_radians());
-        [cs, sn]
-    };
+    let mut sweep_dir: [f64; 2];
     let peel_cos = dmath::cos(PEEL.to_radians());
+    // the entries a sweep of a level may make before it stops
+    let max_entries = 20usize;
+    // the tightest a pass may curve: the tool's radius. A control holds a feed F round a curve of
+    // radius R only while F <= sqrt(A R) (A its acceleration); at R = r that is about 47 mm/s at
+    // 750 mm/s^2 for a 6 mm tool, above roughing feeds, so passes keep their feed through turns
+    // (and a turn that tight would mostly be the cap swinging the tool round a corner anyway)
+    let rmin = 0.5 * tool.tool.dc;
     let link_margin = LINK_MARGIN_R * 0.5 * tool.tool.dc;
     // the feed of links through cleared air
     let lf = if prm.link_feed > 0.0 { prm.link_feed } else { feed.0 };
@@ -486,6 +490,34 @@ pub fn adaptive(
                 last_searched: false,
             }
         };
+        // the sweeps of this level: the user's direction first; where its passes stop with
+        // material left (an island's lee, out of reach of passes that way), the reverse, then
+        // the two across it, each with its own entries
+        let all_cands = cands.clone();
+        let mut dir_k = 0usize;
+        sweep_dir = {
+            let (sn, cs) = dmath::sin_cos(prm.sweep.to_radians());
+            [cs, sn]
+        };
+        let left_area = |f: &Field| -> f64 {
+            let (lo, hi) = (ip.min, ip.max);
+            let h = f.map.h;
+            let mut a = 0.0;
+            let mut y = lo[1];
+            while y <= hi[1] {
+                let mut x = lo[0];
+                while x <= hi[0] {
+                    // (material within a radius of the region's edge is the rings' and the wall
+                    // pass's to take)
+                    if f.material(x, y, z) && edge_dist(&f.allowed, x, y) > 4.0 * f.r && f.ok(x, y) {
+                        a += h * h;
+                    }
+                    x += h;
+                }
+                y += h;
+            }
+            a
+        };
         let mut entered = false;
         // first, a start from the open side (cleared air next to material ahead), no entry
         let mut open_try = true;
@@ -493,6 +525,25 @@ pub fn adaptive(
         let mut small = 0usize;
         // entries at this level: a new one where the passes stop with material left
         let mut entries = 0usize;
+        macro_rules! next_sweep {
+            () => {{
+                if dir_k < 3 && left_area(&f) > 10.0 * f.r * f.r {
+                    dir_k += 1;
+                    let a = prm.sweep + [180.0, 90.0, -90.0][dir_k - 1];
+                    let (sn, cs) = dmath::sin_cos(a.to_radians());
+                    sweep_dir = [cs, sn];
+                    entries = 0;
+                    small = 0;
+                    open_try = true;
+                    entered = false;
+                    last_sign = 1.0;
+                    cands = all_cands.clone();
+                    true
+                } else {
+                    false
+                }
+            }};
+        }
         loop {
             guard += 1;
             if guard > 10_000 {
@@ -544,7 +595,9 @@ pub fn adaptive(
                     // across the sweep from one side to the other: the
                     // lowest band of r/2 across the sweep first, the nearest within it
                     let across = (sweep_dir[0] * p[1] - sweep_dir[1] * p[0]) / (0.5 * f.r);
-                    let d = across.floor() * 1e9 + (p[0] - here[0]).powi(2) + (p[1] - here[1]).powi(2);
+                    let d = across.floor() * 1e9
+                        + (p[0] - here[0]).powi(2)
+                        + (p[1] - here[1]).powi(2);
                     if best.is_none_or(|(_, bd, _)| d < bd) {
                         best = Some((p, d, sign));
                     }
@@ -593,7 +646,12 @@ pub fn adaptive(
                         deep = Some((p, d));
                     }
                 }
-                let Some((p, depth)) = deep else { break };
+                let Some((p, depth)) = deep else {
+                    if next_sweep!() {
+                        continue;
+                    }
+                    break;
+                };
                 // a helix of radius up to r where it fits (a hole of 2r: room to start passes
                 // off its centre), else a plunge
                 let rh = f.r.min((depth - 1e-3).max(0.0));
@@ -730,7 +788,10 @@ pub fn adaptive(
                 }
                 // no start next to material: a new entry if material is left (at most 20)
                 entries += 1;
-                if entries >= 20 {
+                if entries >= max_entries {
+                    if next_sweep!() {
+                        continue;
+                    }
                     break;
                 }
                 entered = false;
@@ -854,8 +915,19 @@ pub fn adaptive(
                     // turns within ±90° of the heading and within PEEL of the sweep direction
                     let th_u = dmath::atan2(dir[0] * u[1] - dir[1] * u[0], dir[0] * u[0] + dir[1] * u[1]);
                     let peel = PEEL.to_radians() - 1e-9;
-                    let lo_d = (-std::f64::consts::FRAC_PI_2).max(-peel - th_u);
-                    let hi_d = std::f64::consts::FRAC_PI_2.min(peel - th_u);
+                    // and within the turn a step of this length may take on a curve of radius
+                    // `rmin` (none under it: a control slows on a tighter curve)
+                    let dmax = if rmin > 0.5 * len {
+                        {
+                            // 2 asin(len / 2 rmin), by atan2 (dmath: bit-identical everywhere)
+                            let sx = 0.5 * len / rmin;
+                            (2.0 * dmath::atan2(sx, (1.0 - sx * sx).sqrt())).min(std::f64::consts::FRAC_PI_2)
+                        }
+                    } else {
+                        std::f64::consts::FRAC_PI_2
+                    };
+                    let lo_d = (-dmax).max(-peel - th_u);
+                    let hi_d = dmax.min(peel - th_u);
                     let (p_hi, ..) = eval(hi_d);
                     let (p_lo, ..) = eval(lo_d);
                     // turn toward the side the material is on (the right, climb, once a pass has
@@ -961,7 +1033,10 @@ pub fn adaptive(
                 if small >= 3 {
                     // the passes stall: a new entry where material is left (at most 20)
                     entries += 1;
-                    if entries >= 20 {
+                    if entries >= max_entries {
+                        if next_sweep!() {
+                            continue;
+                        }
                         break;
                     }
                     entered = false;
@@ -1185,6 +1260,38 @@ pub fn adaptive(
                     at = Some(target);
                 }
             }
+        }
+        if std::env::var_os("FORGE_ADAPTIVE_DIAG").is_some() {
+            // the material left at this level, on a 2 mm grid ('#': any left in the cell)
+            let (lo, hi) = (ip.min, ip.max);
+            let g2 = 2.0;
+            let mut y = hi[1];
+            let mut left = 0.0;
+            eprintln!("left at z={z}:");
+            while y >= lo[1] {
+                let mut row = String::new();
+                let mut x = lo[0];
+                while x <= hi[0] {
+                    let mut any = false;
+                    let mut yy = y - g2;
+                    while yy < y {
+                        let mut xx = x;
+                        while xx < x + g2 {
+                            if f.material(xx, yy, z) {
+                                any = true;
+                                left += f.map.h * f.map.h;
+                            }
+                            xx += f.map.h;
+                        }
+                        yy += f.map.h;
+                    }
+                    row.push(if any { '#' } else if !f.ok(x + 1.0, y - 1.0) { '.' } else { ' ' });
+                    x += g2;
+                }
+                eprintln!("  |{row}|");
+                y -= g2;
+            }
+            eprintln!("left area {left:.0} mm2");
         }
         // what this level provably cleared
         if let Some(v) = claimed(&moves_at_level, z, r_flat, ip, f.r) {
