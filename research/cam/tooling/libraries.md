@@ -43,6 +43,22 @@ no sign-up, login, email form or bot-challenge bypass.
   master catalogue.
 - The "local path" column refers to the survey's download directory (not in the repository).
 
+## Using them (nothing committed)
+
+- **User-side import, first class:** `forgecad tool import FILE.json|FILE.tools [--project DIR |
+  --user]` writes the user's own `cam/<name>.tools.toml` (the project's, or
+  `<config>/forgecad/cam/tools/`, which forge-cam-lang now reads before the project's); never
+  forgecad's data. Every value is a `user` cite of the file and its library version; presets are
+  kept where their name names a material (ISO 513 group by name) and their v_c is pi D n of their
+  own n within 5%; a drill without SIG and any record our reader refuses are left out, each with a
+  warning. `forge_cam_import::fusion_with(.., Opts { cite, presets, assemblies })` is the call
+  for the Library Builder's "Import Fusion tool library" action (MACHINE-BUILDER).
+- **Runtime load for benchmarks (opt-in):** `forge_cam_import::load_dir(cache)`; the test
+  `cargo test -p forge-cam-import --test cache` runs only with `FORGECAD_TOOL_LIBRARIES` set and
+  prints aggregate counts. On 2026-11-24's cache: 45 libraries, 123,114 tools read back, 5,495
+  presets (most makers ship a material-less "Default preset", left out; IMCO's presets fail the
+  pi D n check).
+
 ## Cross-check of our catalogue-cited records (2026-11-24)
 
 `tools/tooling/crosscheck.py` against the cached libraries, matched by product id; compared dc,
