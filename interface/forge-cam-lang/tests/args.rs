@@ -13,9 +13,23 @@ fn a_misspelled_argument_is_refused_with_the_nearest() {
     let e = errors("top = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepovr: 4)\n");
     assert!(
         e.iter()
-            .any(|e| e
-                .contains("UnknownArg: `stepovr` is not an argument of `clear` (did you mean `stepover`?)")),
+            .any(|e| e.contains("`stepovr` is not an argument of `clear` (did you mean `stepover`?)")),
         "{e:?}"
+    );
+    // its code beside the text, not in it
+    let cam = forge_cam_lang::run(
+        &doc("top = clear(op1, tool: t1, from: 18, to: 12, step: 3, stepovr: 4)\n"),
+        &dir(),
+    );
+    assert!(
+        cam.error_codes.iter().any(|(_, c)| c == "UnknownArg"),
+        "{:?}",
+        cam.error_codes
+    );
+    assert!(
+        cam.errors.iter().all(|e| !e.contains("UnknownArg")),
+        "{:?}",
+        cam.errors
     );
     let e = errors("skim = facing(op1, tool: t1, to: 18, step: 1, leave_axail: 0.5)\n");
     assert!(
@@ -40,8 +54,7 @@ fn a_misspelled_argument_is_refused_with_the_nearest() {
     let e = errors("skim = facing(op1, t1, to: 18)\n");
     assert!(
         e.iter()
-            .any(|e| e
-                .contains("UnknownArg: `facing` takes 1 positional argument (argument 2 is one too many)")),
+            .any(|e| e.contains("`facing` takes 1 positional argument (argument 2 is one too many)")),
         "{e:?}"
     );
 }
@@ -65,7 +78,7 @@ fn every_built_in_has_its_list_and_every_shipped_document_passes() {
                 .collect();
             let cam = forge_cam_lang::run(&src, &dir());
             assert!(
-                cam.errors.iter().all(|e| !e.contains("UnknownArg")),
+                cam.error_codes.iter().all(|(_, c)| c != "UnknownArg"),
                 "{}: {:?}",
                 p.display(),
                 cam.errors

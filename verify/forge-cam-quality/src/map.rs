@@ -106,6 +106,16 @@ impl HeightMap {
     /// each cell whose centre lies within r of the segment in xy is lowered to the body there.
     /// Returns the volume removed (mm³).
     pub fn sweep(&mut self, a: [f64; 3], b: [f64; 3], p: &Profile) -> f64 {
+        self.sweep_in(a, b, p, None)
+    }
+
+    /// `sweep`, skipping the runs of a row that lie in a tile of `tiles` whose highest cell is
+    /// at or below both the move's lowest tip and the bottom: `sweep` leaves every such cell as
+    /// it is (its first test). The cells are visited in the same order, so the volume removed
+    /// is summed in the same order: the same map and the same number, to the bit. `tiles` must
+    /// be `Tiles::of` this map, kept by `sweep_in` alone since (it keeps each tile's maximum
+    /// at or above its cells, refreshing the tiles it lowered).
+    pub fn sweep_in(&mut self, a: [f64; 3], b: [f64; 3], p: &Profile, mut tiles: Option<&mut Tiles>) -> f64 {
         let r = p.r();
         let cell = |v: f64, o: f64| ((v - o) / self.h - 0.5).floor();
         let i0 = cell(a[0].min(b[0]) - r, self.x0).max(0.0) as usize;
@@ -116,43 +126,137 @@ impl HeightMap {
         let ll = dx * dx + dy * dy;
         let zmin = a[2].min(b[2]);
         let mut removed = 0.0;
+        let floor = zmin.max(self.bottom);
+        // the column runs [i, i') of each tile row that hold a tile the move may lower (all of
+        // [i0, i1) without tiles), found once per tile row
+        let mut runs: Vec<(usize, usize)> = Vec::new();
+        let mut runs_row = usize::MAX;
         for j in j0..j1 {
             let y = self.y0 + (j as f64 + 0.5) * self.h;
-            for i in i0..i1 {
-                let k = j * self.nx + i;
-                let old = self.z[k];
-                if old <= zmin || old <= self.bottom {
-                    continue;
-                }
-                let x = self.x0 + (i as f64 + 0.5) * self.h;
-                let t = if ll > 0.0 {
-                    (((x - a[0]) * dx + (y - a[1]) * dy) / ll).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let px = a[0] + t * dx;
-                let py = a[1] + t * dy;
-                let d = ((x - px) * (x - px) + (y - py) * (y - py)).sqrt();
-                if d > r {
-                    continue;
-                }
-                let mut zc = a[2] + t * (b[2] - a[2]) + p.at(d);
-                // on a ramp the lower end may reach the cell lower than the nearest point does
-                for e in [a, b] {
-                    let de = ((x - e[0]) * (x - e[0]) + (y - e[1]) * (y - e[1])).sqrt();
-                    if de <= r {
-                        zc = zc.min(e[2] + p.at(de));
+            if runs_row != j / TILE {
+                runs_row = j / TILE;
+                runs.clear();
+                match tiles.as_deref() {
+                    None => runs.push((i0, i1)),
+                    Some(t) => {
+                        let mut i = i0;
+                        while i < i1 {
+                            let ti = i / TILE;
+                            let end = ((ti + 1) * TILE).min(i1);
+                            // every cell of a tile at or below the tip's lowest and the bottom
+                            // is left as it is (the test below): its run is passed over
+                            if t.max[runs_row * t.ntx + ti] > floor {
+                                match runs.last_mut() {
+                                    Some(r) if r.1 == i => r.1 = end,
+                                    _ => runs.push((i, end)),
+                                }
+                            }
+                            i = end;
+                        }
                     }
                 }
-                let new = zc.max(self.bottom);
-                if new < old {
-                    removed += old - new;
-                    self.z[k] = new;
+            }
+            for &(r0, r1) in &runs {
+                let mut i = r0;
+                while i < r1 {
+                    let ic = i;
+                    i += 1;
+                    let k = j * self.nx + ic;
+                    let old = self.z[k];
+                    if old <= zmin || old <= self.bottom {
+                        continue;
+                    }
+                    let x = self.x0 + (ic as f64 + 0.5) * self.h;
+                    let t = if ll > 0.0 {
+                        (((x - a[0]) * dx + (y - a[1]) * dy) / ll).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    let px = a[0] + t * dx;
+                    let py = a[1] + t * dy;
+                    let d = ((x - px) * (x - px) + (y - py) * (y - py)).sqrt();
+                    if d > r {
+                        continue;
+                    }
+                    let mut zc = a[2] + t * (b[2] - a[2]) + p.at(d);
+                    // on a ramp the lower end may reach the cell lower than the nearest point does
+                    for e in [a, b] {
+                        let de = ((x - e[0]) * (x - e[0]) + (y - e[1]) * (y - e[1])).sqrt();
+                        if de <= r {
+                            zc = zc.min(e[2] + p.at(de));
+                        }
+                    }
+                    let new = zc.max(self.bottom);
+                    if new < old {
+                        removed += old - new;
+                        self.z[k] = new;
+                        if let Some(t) = tiles.as_deref_mut() {
+                            let q = (j / TILE) * t.ntx + ic / TILE;
+                            if !t.dirty[q] {
+                                t.dirty[q] = true;
+                                t.touched.push(q);
+                            }
+                        }
+                    }
                 }
+            }
+        }
+        if let Some(t) = tiles {
+            for q in std::mem::take(&mut t.touched) {
+                t.dirty[q] = false;
+                t.max[q] = tile_max(self, q % t.ntx, q / t.ntx);
             }
         }
         removed * self.h * self.h
     }
+}
+
+/// The side of a tile of `Tiles`, in cells.
+const TILE: usize = 8;
+
+/// The highest cell of each TILE × TILE tile of a height map (+∞ where a cell is NaN), for
+/// `HeightMap::sweep_in` to pass over tiles a move cannot lower.
+#[derive(Clone, Debug)]
+pub struct Tiles {
+    ntx: usize,
+    max: Vec<f64>,
+    dirty: Vec<bool>,
+    touched: Vec<usize>,
+}
+
+impl Tiles {
+    pub fn of(m: &HeightMap) -> Tiles {
+        let (ntx, nty) = (m.nx.div_ceil(TILE), m.ny.div_ceil(TILE));
+        let mut max = vec![f64::NEG_INFINITY; ntx * nty];
+        let mut tj = 0;
+        while tj < nty {
+            let mut ti = 0;
+            while ti < ntx {
+                max[tj * ntx + ti] = tile_max(m, ti, tj);
+                ti += 1;
+            }
+            tj += 1;
+        }
+        Tiles {
+            ntx,
+            dirty: vec![false; max.len()],
+            max,
+            touched: Vec::new(),
+        }
+    }
+}
+
+fn tile_max(m: &HeightMap, ti: usize, tj: usize) -> f64 {
+    let mut hi = f64::NEG_INFINITY;
+    for j in tj * TILE..((tj + 1) * TILE).min(m.ny) {
+        for &z in &m.z[j * m.nx + ti * TILE..j * m.nx + ((ti + 1) * TILE).min(m.nx)] {
+            if z.is_nan() {
+                return f64::INFINITY;
+            }
+            hi = hi.max(z);
+        }
+    }
+    hi
 }
 
 /// What the cutter's side edge meets at one place, the map as it stands (before the piece
@@ -179,19 +283,31 @@ pub struct Engage {
 /// Points round the front half of the edge (θ in [−90°, 90°]), 1° apart.
 pub const N_EDGE: usize = 181;
 
+/// The sine and cosine of θ at each of `engage`'s edge points, computed once by the same
+/// expressions `engage` evaluated at every call, so the same numbers.
+fn edge() -> &'static [(f64, f64); N_EDGE] {
+    static EDGE: std::sync::OnceLock<[(f64, f64); N_EDGE]> = std::sync::OnceLock::new();
+    EDGE.get_or_init(|| {
+        let step = std::f64::consts::PI / (N_EDGE - 1) as f64;
+        let mut t = [(0.0, 0.0); N_EDGE];
+        for (k, x) in t.iter_mut().enumerate() {
+            let th = -std::f64::consts::FRAC_PI_2 + k as f64 * step;
+            *x = forge_math::dmath::sin_cos(th);
+        }
+        t
+    })
+}
+
 /// The engagement at tip c moving along xy direction u (unit), the side edge read at radius
 /// r − 3h/4 (a cell whose centre is within r of an earlier pass has every point within r + h/√2
 /// of it: a wall cut to exactly r reads as cut): a point is material if the map there is
 /// above the tip by more than `eps`.
 pub fn engage(m: &HeightMap, c: [f64; 3], u: [f64; 2], r: f64, eps: f64) -> Engage {
     let rr = (r - 0.75 * m.h).max(0.25 * r);
-    let step = std::f64::consts::PI / (N_EDGE - 1) as f64;
     let deg = 180.0 / (N_EDGE - 1) as f64;
     let mut e = Engage::default();
     let (mut n, mut sum_cos) = (0usize, 0.0);
-    for k in 0..N_EDGE {
-        let th = -std::f64::consts::FRAC_PI_2 + k as f64 * step;
-        let (s, co) = forge_math::dmath::sin_cos(th);
+    for (k, &(s, co)) in edge().iter().enumerate() {
         // u turned by θ (+ = left, counter-clockwise)
         let dx = u[0] * co - u[1] * s;
         let dy = u[0] * s + u[1] * co;
@@ -252,5 +368,58 @@ mod tests {
         assert!((e.right - 36.87).abs() < 3.0, "{e:?}");
         // the chip there: fz · sin φ = 0.6 fz
         assert!((e.cos_max - 0.6).abs() < 0.03, "{e:?}");
+    }
+
+    /// `sweep_in` with tiles is `sweep`, to the bit: the same map and the same volume removed,
+    /// move after move, for flat, bull and ball ends on level, ramped and plunging moves over a
+    /// stock cut unevenly (rows and tiles part cut, part not, cells at the bottom). Fails if a
+    /// tile's maximum is ever below one of its cells (e.g. `tile_max` taking the least).
+    #[test]
+    fn tiles_change_nothing() {
+        let mut seed = 11u64;
+        let mut rnd = || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((seed >> 11) as f64) / ((1u64 << 53) as f64)
+        };
+        let profs = [
+            Profile::Bull { r: 5.0, re: 0.0 },
+            Profile::Bull { r: 3.0, re: 1.0 },
+            Profile::Ball { r: 2.0 },
+            Profile::Bull { r: 12.0, re: 0.0 },
+        ];
+        let mut a = HeightMap::new([0.0, 0.0, 0.0], [37.3, 29.1, 10.0], 0.1);
+        let mut b = a.clone();
+        let mut tiles = Tiles::of(&b);
+        let mut skipped = 0usize;
+        for k in 0..400 {
+            let p = &profs[k % profs.len()];
+            let z0 = 10.5 - 11.0 * rnd();
+            let z1 = if k % 3 == 0 { z0 } else { 10.5 - 11.0 * rnd() };
+            let s = [rnd() * 45.0 - 4.0, rnd() * 37.0 - 4.0, z0];
+            let e = if k % 7 == 0 {
+                [s[0], s[1], z1]
+            } else {
+                [s[0] + rnd() * 12.0 - 6.0, s[1] + rnd() * 12.0 - 6.0, z1]
+            };
+            let before = tiles
+                .max
+                .iter()
+                .filter(|m| **m <= s[2].min(e[2]).max(b.bottom))
+                .count();
+            skipped += before;
+            let ra = a.sweep(s, e, p);
+            let rb = b.sweep_in(s, e, p, Some(&mut tiles));
+            assert_eq!(ra.to_bits(), rb.to_bits(), "move {k}: {ra} vs {rb}");
+            assert!(
+                a.z.iter().zip(&b.z).all(|(x, y)| x.to_bits() == y.to_bits()),
+                "move {k}: the maps differ"
+            );
+        }
+        assert!(
+            skipped > 0,
+            "no tile was ever passed over: the test shows nothing"
+        );
     }
 }

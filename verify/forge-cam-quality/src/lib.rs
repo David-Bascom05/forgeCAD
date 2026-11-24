@@ -599,6 +599,7 @@ pub fn measure_op(
     let mut hex_t = 0.0;
     let mut hex_tt = 0.0;
     let mut hexes: Vec<(f64, f64)> = Vec::new();
+    let mut tiles = map::Tiles::of(m);
     for (pi, p) in paths.iter().enumerate() {
         let prof = profile(p.tool);
         let r = prof.r();
@@ -626,7 +627,7 @@ pub fn measure_op(
                         };
                     }
                     let top = [holes[0], holes[1], m.top(holes[0], holes[1]).max(z)];
-                    q.removed += m.sweep(top, [holes[0], holes[1], z], &prof);
+                    q.removed += m.sweep_in(top, [holes[0], holes[1], z], &prof, Some(&mut tiles));
                     continue;
                 }
                 // a probe cuts nothing: no quality measure
@@ -650,7 +651,7 @@ pub fn measure_op(
                 q.len_rapid += dist(at, to);
                 let mut a = at;
                 for b in pieces(at, mv, l) {
-                    if m.sweep(a, b, &prof) > AIR_VOL {
+                    if m.sweep_in(a, b, &prof, Some(&mut tiles)) > AIR_VOL {
                         q.rapid_cuts += 1;
                     }
                     a = b;
@@ -698,7 +699,7 @@ pub fn measure_op(
                 } else {
                     None
                 };
-                let removed = m.sweep(a, b, &prof);
+                let removed = m.sweep_in(a, b, &prof, Some(&mut tiles));
                 q.removed += removed;
                 if removed > AIR_VOL {
                     moved_in = true;
@@ -737,7 +738,11 @@ pub fn measure_op(
                         // the target at this sample: the op's own (rough's class chip under
                         // 90°), else the group's slot chip
                         let target = if q.fz_class > 0.0 {
-                            if e.phi < 90.0 { q.fz_class_rough } else { q.fz_class }
+                            if e.phi < 90.0 {
+                                q.fz_class_rough
+                            } else {
+                                q.fz_class
+                            }
                         } else {
                             q.fz_target
                         };
@@ -957,13 +962,18 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                 }
                 // FORGE_QUALITY_BREAKDOWN=OP: where that op's time goes, by kind of move
                 if let Ok(want) = std::env::var("FORGE_QUALITY_BREAKDOWN") {
-                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> = Default::default();
+                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> =
+                        Default::default();
                     for (si, sg) in tl.segments.iter().enumerate() {
-                        let Some(Some(k)) = op_of.get(sg.line) else { continue };
+                        let Some(Some(k)) = op_of.get(sg.line) else {
+                            continue;
+                        };
                         if job.ops[*k].name != want {
                             continue;
                         }
-                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0) - sg.q0.get(2).copied().unwrap_or(0.0)).abs();
+                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0)
+                            - sg.q0.get(2).copied().unwrap_or(0.0))
+                        .abs();
                         let dxy = ((sg.q1[0] - sg.q0[0]).powi(2) + (sg.q1[1] - sg.q0[1]).powi(2)).sqrt();
                         let cat = match sg.kind {
                             forge_machine::sim::SegKind::Rapid => "rapid",
@@ -980,7 +990,10 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         e.3 += dxy + dz;
                     }
                     for (c, (n, tm, tl, l)) in acc {
-                        eprintln!("breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}", tl - tm);
+                        eprintln!(
+                            "breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}",
+                            tl - tm
+                        );
                     }
                 }
                 for (si, sg) in tl.segments.iter().enumerate() {
@@ -1261,4 +1274,129 @@ pub fn json(jobs: &[JobQ]) -> String {
     }
     o.push_str("]}\n");
     o
+}
+
+/// What `clear` would take where an `adaptive` op stands: the document with that op's statement
+/// rewritten as `clear(SETUP, tool:, from:, to:, leave:, leave_axial:)` (the same setup, tool,
+/// heights and stock left; clear's own defaults otherwise), measured like any document, and
+/// that op's figures returned (its `t_min`, its estimates). None if `op` is not an `adaptive`
+/// statement of `src`, or the rewritten document does not build the op. For showing beside an
+/// adaptive op, so a user sees where clear is the faster choice (CAM-UI).
+pub fn alternative_clear(src: &str, dir: &Path, op: &str, cfg: &Config) -> Option<OpQ> {
+    let alt = clear_for_adaptive(src, op)?;
+    let cam = forge_cam_lang::run(&alt, dir);
+    let job = measure_cam(&cam, format!("{op} as clear"), cfg);
+    job.ops.into_iter().find(|q| q.name == op && q.kind == "clear")
+}
+
+/// `src` with the statement `op = adaptive(..)` rewritten as clear (see `alternative_clear`).
+pub fn clear_for_adaptive(src: &str, op: &str) -> Option<String> {
+    let bytes = src.as_bytes();
+    let mut search = 0;
+    while let Some(i) = src[search..].find(op).map(|k| k + search) {
+        search = i + op.len();
+        // the name standing alone at a statement's start
+        let before_ok = i == 0 || matches!(bytes[i - 1], b'\n' | b' ' | b'\t');
+        let line_start = src[..i].rfind('\n').map_or(0, |k| k + 1);
+        if !before_ok || !src[line_start..i].trim().is_empty() {
+            continue;
+        }
+        let rest = &src[i + op.len()..];
+        let rest_t = rest.trim_start();
+        let Some(after_eq) = rest_t.strip_prefix('=') else {
+            continue;
+        };
+        let after_eq = after_eq.trim_start();
+        let Some(args0) = after_eq.strip_prefix("adaptive") else {
+            continue;
+        };
+        let args0 = args0.trim_start();
+        if !args0.starts_with('(') {
+            continue;
+        }
+        // the call's extent, by balanced parentheses
+        let call_start = src.len() - args0.len();
+        let mut depth = 0i32;
+        let mut end = None;
+        for (k, c) in src[call_start..].char_indices() {
+            match c {
+                '(' => depth += 1,
+                ')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        end = Some(call_start + k);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let end = end?;
+        let inner = &src[call_start + 1..end];
+        // top-level arguments
+        let mut args = Vec::new();
+        let (mut d, mut from) = (0i32, 0usize);
+        for (k, c) in inner.char_indices() {
+            match c {
+                '(' | '[' => d += 1,
+                ')' | ']' => d -= 1,
+                ',' if d == 0 => {
+                    args.push(inner[from..k].trim().to_string());
+                    from = k + 1;
+                }
+                _ => {}
+            }
+        }
+        args.push(inner[from..].trim().to_string());
+        let keep: Vec<String> = args
+            .into_iter()
+            .enumerate()
+            .filter(|(n, a)| {
+                !a.is_empty()
+                    && (*n == 0 && !a.contains(':')
+                        || ["tool", "from", "to", "leave", "leave_axial"]
+                            .iter()
+                            .any(|k| a.split(':').next().map(str::trim) == Some(k)))
+            })
+            .map(|(_, a)| a)
+            .collect();
+        return Some(format!(
+            "{}{} = clear({}){}",
+            &src[..i],
+            op,
+            keep.join(", "),
+            &src[end + 1..]
+        ));
+    }
+    None
+}
+
+#[cfg(test)]
+mod alt_tests {
+    use super::*;
+
+    #[test]
+    fn adaptive_rewritten_as_clear() {
+        let src = "machining\nrough = adaptive(op1, tool: t1, from: 25, to: 10.2, step: 15, engagement: 40,\n  passes: \"two_way\")\nfin = contour(op1, tool: t1)\n";
+        let got = clear_for_adaptive(src, "rough").unwrap();
+        assert_eq!(
+            got,
+            "machining\nrough = clear(op1, tool: t1, from: 25, to: 10.2)\nfin = contour(op1, tool: t1)\n"
+        );
+        assert!(clear_for_adaptive(src, "fin").is_none());
+        assert!(clear_for_adaptive(src, "nope").is_none());
+    }
+
+    #[test]
+    fn deep_boss_adaptive_beside_clear() {
+        let f = Path::new(env!("CARGO_MANIFEST_DIR")).join("parts/deep_boss_p_adaptive_cam.fg");
+        let src = std::fs::read_to_string(&f).unwrap();
+        let cfg = Config {
+            cell: Some(0.1),
+            ..Config::default()
+        };
+        let q = alternative_clear(&src, f.parent().unwrap(), "rough", &cfg).expect("clear's figures");
+        assert_eq!(q.kind, "clear");
+        assert!(q.t_min > 0.0 && q.status == "built", "{} {}", q.t_min, q.status);
+    }
 }

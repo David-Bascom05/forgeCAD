@@ -137,6 +137,16 @@ impl Gui {
         } else {
             &self.vers.colours
         };
+        let Some(camera) = camera.or_else(|| self.view.as_ref().map(|v| v.nav.camera)) else {
+            return Err("nothing in view".into());
+        };
+        // the see-through bodies' outline, facing this camera at this size (as the view's faces
+        // its own: gui.rs)
+        let outline = if self.bend.showing() {
+            self.bend.outline_tris(&camera, size)
+        } else {
+            Vec::new()
+        };
         let Some(v) = &mut self.view else {
             return Err("nothing in view".into());
         };
@@ -147,9 +157,9 @@ impl Gui {
             cube: overlays.then(|| (v.nav.cube_place(), None)),
             face_ghosts: ghosts,
             face_colours: colours,
+            world: &outline,
             ..Overlay::default()
         };
-        let camera = camera.unwrap_or(v.nav.camera);
         v.renderer.frame(&target.view, &mut v.scene, &camera, overlay);
         v.renderer.resize(was);
         v.dirty = true;

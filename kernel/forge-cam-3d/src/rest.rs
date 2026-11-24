@@ -50,15 +50,20 @@ impl Profile for forge_cam_geom::drop::Column {
 }
 
 fn cl_grid(dc: &dyn DropCutter, x0: f64, y0: f64, g: f64, nx: usize, ny: usize) -> Vec<f64> {
-    let mut z = vec![f64::NAN; nx * ny];
-    let mut k = 0;
-    while k < z.len() {
-        if let Some(b) = dc.drop(x0 + g * (k % nx) as f64, y0 + g * (k / nx) as f64) {
-            z[k] = b.hi;
+    // the rows on all cores (forge_math::par), joined in order: each height is its node's drop
+    let rows = forge_math::par::map(ny, |j| {
+        let mut z = vec![f64::NAN; nx];
+        let mut i = 0;
+        while i < nx {
+            let k = j * nx + i;
+            if let Some(b) = dc.drop(x0 + g * (k % nx) as f64, y0 + g * (k / nx) as f64) {
+                z[i] = b.hi;
+            }
+            i += 1;
         }
-        k += 1;
-    }
-    z
+        z
+    });
+    rows.concat()
 }
 
 /// The lower envelope of the cutter (profile `pr`) at every grid CL height.
@@ -151,7 +156,7 @@ pub fn rest(
     let [lo, hi] = cur.extent();
     let mut ps = Vec::new();
     let lines = pattern::raster(lo, hi, angle_deg, stepover, true);
-    for passes in crate::drape::drape_all(cur, &lines, d)? {
+    for passes in crate::drape::drape_all_in(cur, &lines, d, Some(&m))? {
         for p in passes {
             ps.extend(crate::steep::clip_open(&p, &m));
         }

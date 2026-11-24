@@ -488,18 +488,11 @@ mod tests {
         .unwrap();
         let curves = [
             (
-                Curve::Ellipse(forge_geom::Ellipse {
-                    frame: tilt,
-                    major: 3.0,
-                    minor: 1.25,
-                }),
+                Curve::Ellipse(forge_geom::Ellipse::new(tilt, 3.0, 1.25)),
                 Interval::new(-2.0, 2.9),
             ),
             (
-                Curve::Parabola(forge_geom::Parabola {
-                    frame: tilt,
-                    focal: 0.8,
-                }),
+                Curve::Parabola(forge_geom::Parabola::new(tilt, 0.8)),
                 Interval::new(-3.0, 1.5),
             ),
             (

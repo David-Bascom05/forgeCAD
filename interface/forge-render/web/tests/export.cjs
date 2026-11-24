@@ -44,7 +44,7 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     assert.ok(tris > 100, `the STL has ${tris} triangles`);
     assert.equal(stl.length, 84 + 50 * tris, "a binary STL's length");
     const said = (await p.evaluate(() => window.forgecad.state())).status;
-    assert.match(said, /^Exported gate_frame\.stl: /, said);
+    assert.match(said, /^Downloaded gate_frame\.stl: /, said);
     console.log(`ok - File > Export STL downloaded gate_frame.stl (${tris} triangles): ${said}`);
     t.check(p);
 
@@ -57,7 +57,8 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     const csvSaid = (
       await t.until(p, (s) => /Cut list written|Couldn't write/.test(s.status), "the cut list's export", 60000)
     ).status;
-    assert.match(csvSaid, /^Cut list written to /, csvSaid);
+    // the project's path, not where the page keeps it
+    assert.match(csvSaid, /^Cut list written to weldments\/gate_frame-cutlist\.csv$/, csvSaid);
     await p.evaluate(() => window.forgecad.settled());
     const csv = fs.readFileSync(path.join(dir, "weldments/gate_frame-cutlist.csv"), "utf8");
     assert.match(csv, /RHS 60x40x3/, csv);
