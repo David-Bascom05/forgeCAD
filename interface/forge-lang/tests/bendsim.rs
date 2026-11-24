@@ -671,3 +671,39 @@ fn stations_auto_on_a_real_press() {
         assert!(a.get("seconds").and_then(Json::num).is_some_and(|x| x > 0.0));
     }
 }
+
+/// `lock B=N`: a bend made at the station the user set, the rest searched; a station that is not
+/// there, or a bend that is not, is a typed error.
+#[test]
+fn a_lock_keeps_a_bend_at_its_station() {
+    use forge_lang::bendsim::StationAsk;
+    let st = |punch: &str, y: f64| StationAsk {
+        punch: punch.into(),
+        die: "std-eu/V12-88".into(),
+        y,
+        punch_length: 200.0,
+        die_length: 200.0,
+    };
+    let mut ask = forge_lang::bendsim::parse(&["lock", "left=2"].map(String::from)).unwrap();
+    assert_eq!(ask.locks, vec![("left".to_string(), 1)]);
+    ask.stations = vec![st("std-eu/P85-R08-H120", -600.0), st("std-eu/G88-R08", 600.0)];
+    let a = ask_src(&channel(), None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json.get("feasible"), Some(&Json::Bool(true)));
+    for s in arr(&a.json, "steps") {
+        let want = if s.get("bend").and_then(Json::str) == Some("left") {
+            "std-eu/G88-R08"
+        } else {
+            "std-eu/P85-R08-H120"
+        };
+        assert_eq!(s.get("punch").and_then(Json::str), Some(want));
+    }
+    let mut bad = ask.clone();
+    bad.locks = vec![("left".into(), 5)];
+    let e = ask_src(&channel(), None, None, &bad);
+    assert!(!e.ok && e.text.contains("BadStation"), "{}", e.text);
+    bad.locks = vec![("nope".into(), 0)];
+    let e = ask_src(&channel(), None, None, &bad);
+    assert!(!e.ok && e.text.contains("NoSuchBend"), "{}", e.text);
+    assert!(forge_lang::bendsim::parse(&["lock", "left=0"].map(String::from)).is_err());
+}

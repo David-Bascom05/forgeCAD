@@ -649,6 +649,17 @@ impl<'a> StepCtx<'a> {
         V3::new(x, y, z)
     }
 
+    /// The step worked at station `k` (a lock: a bend the user set to a station), in place of
+    /// the one its tools and stacks would pick: that station's place along the bed and its
+    /// stacks' lengths.
+    pub fn at_station(mut self, k: usize) -> Self {
+        let st = &self.tl.stations[k];
+        self.station = Some(k);
+        self.oy = st.y;
+        self.lengths = (Some(st.punch_length), Some(st.die_length));
+        self
+    }
+
     /// The punch tip's height above the die top at turn φ.
     pub fn ztip<T: Sc>(&self, phi: T) -> T {
         let b = self.bj;

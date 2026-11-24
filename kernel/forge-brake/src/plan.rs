@@ -32,6 +32,10 @@ pub struct Options {
     /// With `sequence`: each step's setup as the program states it (None: chosen as usual).
     /// A stated setup is simulated as stated, failing or not.
     pub setups: Option<Vec<Option<Setup>>>,
+    /// Per bend (indices into `Model::bends`), a station it must be made at (the user's lock):
+    /// only that station's punch and die are tried for it, worked at that station. The order and
+    /// every other bend's station are still searched.
+    pub locks: Vec<Option<usize>>,
 }
 
 /// What stops a bend: its best attempt's failing checks.
@@ -167,6 +171,24 @@ impl<'a> Search<'a> {
             .overbend(self.opts.material.as_deref(), self.m.bends[j].theta)
     }
 
+    /// The station bend j is locked to, if any (and if the tooling has it).
+    fn lock(&self, j: usize) -> Option<usize> {
+        self.opts
+            .locks
+            .get(j)
+            .copied()
+            .flatten()
+            .filter(|k| *k < self.tl.stations.len())
+    }
+
+    /// Whether a setup may be tried for bend j: a locked bend only at its station's tools.
+    fn allowed(&self, j: usize, s: Setup) -> bool {
+        self.lock(j).is_none_or(|k| {
+            let st = &self.tl.stations[k];
+            (st.punch, st.die) == (s.punch, s.die)
+        })
+    }
+
     /// The first closed-form rule a setup fails for bend j, decided before it is simulated
     /// (the die's and the punch's angle, the punch's radius): the same arithmetic, in the same
     /// order, as `StepCtx::rules`, so the verdict is the one the simulation would give. These read
@@ -181,6 +203,9 @@ impl<'a> Search<'a> {
         self.explored += 1;
         let ob = self.overbend(j);
         let mut ctx = StepCtx::new(self.m, self.tl, done, j, setup, ob);
+        if let Some(k) = self.lock(j) {
+            ctx = ctx.at_station(k);
+        }
         ctx.memo = Some(self.verdicts.clone());
         let lk = (mask(done), j);
         let legs = match self.legs.get(&lk) {
@@ -324,6 +349,9 @@ impl<'a> Search<'a> {
         let mut rejected = Vec::new();
         let mut screened = None;
         for s in self.setups.clone() {
+            if !self.allowed(j, s) {
+                continue;
+            }
             // a tool that cannot make this bend at all is named with its rule, not simulated
             if let Some(rule) = self.screen(j, s) {
                 let (p, d) = (&self.tl.punches[s.punch], &self.tl.dies[s.die]);
@@ -398,7 +426,7 @@ impl<'a> Search<'a> {
                         continue;
                     }
                     let s = Setup { rotate, ..p };
-                    if self.screen(j, s).is_some() {
+                    if !self.allowed(j, s) || self.screen(j, s).is_some() {
                         break;
                     }
                     if self.run(done, j, s, true).pass() {

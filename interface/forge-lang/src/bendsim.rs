@@ -46,6 +46,9 @@ pub struct Ask {
     pub steps: Vec<StepAsk>,
     /// Lay the program's tools out as stations along the bed (`stations auto`): stage bending.
     pub stage: bool,
+    /// Bends locked to a station (`lock rear=2,tab=1`: a bend's name or number, a station's
+    /// number from 1, into `stations`): each made there; the order and the rest are searched.
+    pub locks: Vec<(String, usize)>,
 }
 
 /// A station: its punch and die (library ids), its centre along the bed from the bed's centre,
@@ -84,6 +87,20 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
             "vendor" => a.vendor = Some(val("vendor")?),
             "sequence" => a.sequence = Some(val("sequence")?),
             "keep_tools" => a.keep_tools = true,
+            "lock" => {
+                for item in val("lock")?.split(',').map(str::trim).filter(|x| !x.is_empty()) {
+                    let (b, k) = item
+                        .split_once('=')
+                        .ok_or_else(|| format!("`lock` takes bend=station pairs, not `{item}`"))?;
+                    let k = k
+                        .trim()
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|k| *k >= 1)
+                        .ok_or_else(|| format!("`lock`: `{k}` is not a station number (1, 2, ..)"))?;
+                    a.locks.push((b.trim().to_string(), k - 1));
+                }
+            }
             "stations" => match val("stations")?.as_str() {
                 "auto" => a.stage = true,
                 other => {
@@ -113,7 +130,7 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
             }
             other => {
                 return Err(format!(
-                    "bendsim takes press P, punches A,B, dies C,D, tooling T, vendor V, sequence S, stations auto, sheet NAME, uts MPA; not `{other}`"
+                    "bendsim takes press P, punches A,B, dies C,D, tooling T, vendor V, sequence S, stations auto, lock B=N, sheet NAME, uts MPA; not `{other}`"
                 ));
             }
         }
@@ -275,7 +292,24 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
             .and_then(forge_material::find)
             .and_then(|m| m.uts)
     });
+    let mut locks = vec![None; model.bends.len()];
+    for (b, k) in &ask.locks {
+        let j = sequence_one(b, &bend_names)?;
+        if *k >= tooling.stations.len() {
+            return Err(err(
+                "BadStation",
+                format!(
+                    "`lock {b}={}`: the press has {} stations",
+                    k + 1,
+                    tooling.stations.len()
+                ),
+                vec![],
+            ));
+        }
+        locks[j] = Some(*k);
+    }
     let opts = fb::Options {
+        locks,
         sequence,
         material: sh.material.clone(),
         uts,
@@ -505,6 +539,11 @@ fn wall_name(sh: &SheetOut, w: WallId) -> String {
         .iter()
         .find(|x| x.0 == w)
         .map_or_else(|| format!("wall{}", w.0), |x| x.1.clone())
+}
+
+/// One bend by name or number (as in a sequence).
+fn sequence_one(item: &str, names: &[String]) -> Result<usize, Answer> {
+    Ok(sequence(item, names)?[0])
 }
 
 fn sequence(s: &str, names: &[String]) -> Result<Vec<usize>, Answer> {

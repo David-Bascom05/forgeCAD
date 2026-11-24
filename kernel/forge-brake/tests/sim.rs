@@ -704,3 +704,58 @@ fn stations_laid_out_along_the_bed() {
         assert!(t.approach >= 0.0 && t.work > 0.0 && t.ret >= t.work);
     }
 }
+
+/// A bend locked to a station (the user's choice) is made there, with that station's tools, at
+/// its place and stacks; the order and every other bend's station are still the planner's; a
+/// lock survives a re-plan (the same options plan the same).
+#[test]
+fn a_locked_bend_is_made_at_its_station() {
+    let s = channel(100.0, 200.0, 30.0);
+    let m = Model::new(&s).unwrap();
+    let mut tl = library::std_eu();
+    let pi = |id: &str| tl.punches.iter().position(|p| p.id == id).unwrap();
+    let di = |id: &str| tl.dies.iter().position(|d| d.id == id).unwrap();
+    let (p85, g88, v12) = (
+        pi("std-eu/P85-R08-H120"),
+        pi("std-eu/G88-R08"),
+        di("std-eu/V12-88"),
+    );
+    tl.stations = vec![
+        forge_brake::tooling::Station {
+            punch: p85,
+            die: v12,
+            y: -600.0,
+            punch_length: 200.0,
+            die_length: 200.0,
+        },
+        forge_brake::tooling::Station {
+            punch: g88,
+            die: v12,
+            y: 600.0,
+            punch_length: 200.0,
+            die_length: 200.0,
+        },
+    ];
+    tl.validate().unwrap();
+    let free = plan(&m, &tl, &Options::default());
+    assert!(free.feasible);
+    // left to itself every bend takes the straight punch: station 1
+    assert!(free.steps.iter().all(|st| st.station == Some(0)));
+    let mut locks = vec![None; m.bends.len()];
+    locks[1] = Some(1);
+    let opts = Options {
+        locks: locks.clone(),
+        ..Options::default()
+    };
+    let p = plan(&m, &tl, &opts);
+    assert!(p.feasible, "{:?}", p.blocking);
+    for st in &p.steps {
+        if st.bend == 1 {
+            assert_eq!(st.station, Some(1));
+            assert_eq!(st.punch, "std-eu/G88-R08");
+        } else {
+            assert_eq!(st.station, Some(0));
+        }
+    }
+    assert_eq!(plan(&m, &tl, &opts), p, "deterministic: a re-plan keeps the lock");
+}
