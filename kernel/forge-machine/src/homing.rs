@@ -83,6 +83,8 @@ pub fn home(s: &Setup, from: &[f64], t0: f64) -> Homing {
         t_stop: 0.0,
         joints: def.joints.iter().map(|j| j.name.clone()).collect(),
         accel_missing: false,
+        after_skip: Vec::new(),
+        skip_unmodelled: Vec::new(),
     };
     let mut q = from.to_vec();
     let mut t = t0;

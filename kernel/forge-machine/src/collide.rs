@@ -85,6 +85,75 @@ pub struct Report {
     /// Spans evaluated (the work).
     pub spans: usize,
     pub contacts: Vec<Contact>,
+    /// Skip moves whose following moves were checked for every place the probe can stop
+    /// (`check_after_skip`) and kept every pair clear: their lines.
+    pub skips_proven: Vec<usize>,
+}
+
+/// One pair through segment si: through its own path, or, when it follows a skip move with
+/// joints at the skip's unknown stop, for every stop.
+#[allow(clippy::too_many_arguments)]
+fn segment_pair(
+    def: &MachineDef,
+    tl: &Timeline,
+    si: usize,
+    a: &CBody,
+    b: &CBody,
+    clearance: f64,
+    spans: &mut usize,
+) -> Verdict {
+    let seg = &tl.segments[si];
+    match tl.after_skip.iter().find(|d| d.segment == si) {
+        Some(d) => check_after_skip(
+            def,
+            &tl.segments[d.skip],
+            seg,
+            &d.start,
+            &d.end,
+            a,
+            b,
+            clearance,
+            spans,
+        ),
+        None => check_span(def, seg, a, b, 0.0, 1.0, clearance, MAX_DEPTH, spans),
+    }
+}
+
+/// The skip moves (their lines) whose dependent moves all came out clear for every stop.
+fn skips_proven(tl: &Timeline, contacts: &[Contact]) -> Vec<usize> {
+    let mut skips: Vec<usize> = tl.after_skip.iter().map(|d| d.skip).collect();
+    skips.dedup();
+    skips
+        .into_iter()
+        .filter(|k| {
+            let line = tl.segments[*k].line;
+            !tl.skip_unmodelled.contains(&line)
+                && !tl
+                    .after_skip
+                    .iter()
+                    .filter(|d| d.skip == *k)
+                    .any(|d| contacts.iter().any(|c| c.segment == d.segment))
+        })
+        .map(|k| tl.segments[k].line)
+        .collect()
+}
+
+/// What `sim::unchecked` says of the moves after skip moves (`skip.end`), narrowed by a report:
+/// when every skip move's following moves were proven clear for every stop, only the material
+/// removal after it (from the stock model's trigger) is left unchecked.
+pub fn narrow_skip_unchecked(unchecked: &mut [crate::sim::Unchecked], tl: &Timeline, rep: &Report) {
+    let lines: Vec<usize> = tl
+        .marks
+        .iter()
+        .filter(|m| matches!(m.what, crate::sim::Happening::Skip { .. }))
+        .map(|m| m.line)
+        .collect();
+    if lines.is_empty() || !lines.iter().all(|l| rep.skips_proven.contains(l)) {
+        return;
+    }
+    for u in unchecked.iter_mut().filter(|u| u.path == "skip.end") {
+        u.check = "material removal after a skip move, from where the simulation stops it (collisions proven for every stop)";
+    }
 }
 
 /// The machine's bodies (a body with no envelope, cited unknown, is left out: sim::unchecked
@@ -631,17 +700,7 @@ pub fn check(s: &Setup, tl: &Timeline, work: &[CBody]) -> Report {
                     continue;
                 }
                 rep.pairs_checked += 1;
-                let v = check_span(
-                    def,
-                    seg,
-                    a,
-                    b,
-                    0.0,
-                    1.0,
-                    pair_clearance(def, a, b),
-                    MAX_DEPTH,
-                    &mut rep.spans,
-                );
+                let v = segment_pair(def, tl, si, a, b, pair_clearance(def, a, b), &mut rep.spans);
                 if v != Verdict::Clear {
                     rep.contacts.push(Contact {
                         line: seg.line,
@@ -654,6 +713,7 @@ pub fn check(s: &Setup, tl: &Timeline, work: &[CBody]) -> Report {
             }
         }
     }
+    rep.skips_proven = skips_proven(tl, &rep.contacts);
     rep
 }
 
@@ -947,6 +1007,170 @@ fn two_span(
     }
 }
 
+/// A move after a skip (probe) move, for every place the probe can stop: the skip moved along
+/// `skip` (a line) and stopped at an unknown u ∈ [0, 1]; on `seg`, joint j starts at the skip's
+/// point P_j(u) where `start[j]`, ends there where `end[j]`, and is the segment's own value
+/// otherwise. Clear only if the pair keeps `clearance` for every (u, s) ∈ [0, 1]²; a Hit's `s` is
+/// the segment's.
+#[allow(clippy::too_many_arguments)]
+pub fn check_after_skip(
+    def: &MachineDef,
+    skip: &Segment,
+    seg: &Segment,
+    start: &[bool],
+    end: &[bool],
+    a: &CBody,
+    b: &CBody,
+    clearance: f64,
+    spans: &mut usize,
+) -> Verdict {
+    if !matches!(skip.path, Path::Line) || !matches!(seg.path, Path::Line) {
+        return Verdict::Near {
+            s0: 0.0,
+            s1: 1.0,
+            gap_lo: f64::NEG_INFINITY,
+        };
+    }
+    let mut budget = TWO_BUDGET;
+    after_skip_span(
+        def,
+        skip,
+        seg,
+        start,
+        end,
+        a,
+        b,
+        [0.0, 1.0],
+        [0.0, 1.0],
+        clearance,
+        TWO_DEPTH,
+        spans,
+        &mut budget,
+    )
+}
+
+/// The joint values over u ∈ ru (the skip's stop) and s ∈ rs (along the move after it).
+fn after_skip_q(
+    skip: &Segment,
+    seg: &Segment,
+    start: &[bool],
+    end: &[bool],
+    ru: [f64; 2],
+    rs: [f64; 2],
+) -> Vec<Interval> {
+    let p = q_span(skip, ru[0], ru[1]);
+    let own = q_span(seg, rs[0], rs[1]);
+    let sv = Interval::new(rs[0], rs[1]);
+    let one_s = Interval::new(1.0 - rs[1], 1.0 - rs[0]);
+    (0..own.len())
+        .map(|j| match (start[j], end[j]) {
+            (false, false) => own[j],
+            (true, true) => p[j],
+            // from the stop to the segment's own end: P (1 − s) + s T
+            (true, false) => p[j] * one_s + sv * seg.q1[j],
+            // from the segment's own start to the stop
+            (false, true) => one_s * seg.q0[j] + sv * p[j],
+        })
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn after_skip_span(
+    def: &MachineDef,
+    skip: &Segment,
+    seg: &Segment,
+    start: &[bool],
+    end: &[bool],
+    a: &CBody,
+    b: &CBody,
+    ru: [f64; 2],
+    rs: [f64; 2],
+    clearance: f64,
+    depth_left: u32,
+    spans: &mut usize,
+    budget: &mut usize,
+) -> Verdict {
+    *spans += 1;
+    let q = after_skip_q(skip, seg, start, end, ru, rs);
+    let pose = kin::ipose(def, &q);
+    let (ta, tb) = (ilink(&pose, a.link), ilink(&pose, b.link));
+    let pa: Vec<IPrim> = a.prims.iter().map(|p| place(p, &ta)).collect();
+    let pb: Vec<IPrim> = b.prims.iter().map(|p| place(p, &tb)).collect();
+    let mut worst = f64::INFINITY;
+    let mut wide = 0.0f64;
+    for x in &pa {
+        for y in &pb {
+            let g = gap_lo(x, y);
+            worst = worst.min(g);
+            if g < clearance {
+                wide = wide.max(width(x) + width(y));
+            }
+        }
+    }
+    if worst >= clearance {
+        return Verdict::Clear;
+    }
+    let (mu, ms) = (0.5 * (ru[0] + ru[1]), 0.5 * (rs[0] + rs[1]));
+    *budget = budget.saturating_sub(1);
+    if wide <= RES || depth_left == 0 || *budget == 0 {
+        // a witness at the midpoint pose
+        let pu = skip.at(mu);
+        let qm: Vec<f64> = (0..pu.len())
+            .map(|j| {
+                let a0 = if start[j] { pu[j] } else { seg.q0[j] };
+                let a1 = if end[j] { pu[j] } else { seg.q1[j] };
+                a0 + ms * (a1 - a0)
+            })
+            .collect();
+        if let Some(w) = witness(a, b, &kin::pose(def, &qm)) {
+            return Verdict::Hit { s: ms, witness: w };
+        }
+        return Verdict::Near {
+            s0: rs[0],
+            s1: rs[1],
+            gap_lo: worst,
+        };
+    }
+    // split the parameter that moves the joints more over its span
+    let moves = |sg: &Segment| -> f64 {
+        sg.q0
+            .iter()
+            .zip(&sg.q1)
+            .map(|(x, y)| (y - x).abs())
+            .fold(0.0, f64::max)
+    };
+    let halves: [([f64; 2], [f64; 2]); 2] =
+        if moves(skip) * (ru[1] - ru[0]) >= (moves(seg) + moves(skip)) * (rs[1] - rs[0]) {
+            [([ru[0], mu], rs), ([mu, ru[1]], rs)]
+        } else {
+            [(ru, [rs[0], ms]), (ru, [ms, rs[1]])]
+        };
+    let mut out = Verdict::Clear;
+    for (hu, hs) in halves {
+        let v = after_skip_span(
+            def,
+            skip,
+            seg,
+            start,
+            end,
+            a,
+            b,
+            hu,
+            hs,
+            clearance,
+            depth_left - 1,
+            spans,
+            budget,
+        );
+        match v {
+            Verdict::Hit { .. } => return v,
+            Verdict::Clear => {}
+            _ => out = v,
+        }
+    }
+    out
+}
+
 /// `check` over the pairs `keep` admits (a multi-channel run checks each channel's own pairs
 /// with this, the cross-channel ones with check_two).
 pub fn check_where(
@@ -968,17 +1192,7 @@ pub fn check_where(
                     continue;
                 }
                 rep.pairs_checked += 1;
-                let v = check_span(
-                    def,
-                    seg,
-                    a,
-                    b,
-                    0.0,
-                    1.0,
-                    pair_clearance(def, a, b),
-                    MAX_DEPTH,
-                    &mut rep.spans,
-                );
+                let v = segment_pair(def, tl, si, a, b, pair_clearance(def, a, b), &mut rep.spans);
                 if v != Verdict::Clear {
                     rep.contacts.push(Contact {
                         line: seg.line,
@@ -991,6 +1205,7 @@ pub fn check_where(
             }
         }
     }
+    rep.skips_proven = skips_proven(tl, &rep.contacts);
     rep
 }
 

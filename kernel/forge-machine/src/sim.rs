@@ -504,6 +504,25 @@ pub struct Timeline {
     pub joints: Vec<String>,
     /// True if some joint that moved has no `accel` (its t_stop is t_min).
     pub accel_missing: bool,
+    /// The moves after a skip (probe) move whose start depends on where the probe stops: each
+    /// with the joints that start, and end, at the skip's stop (collide checks them for every
+    /// stop).
+    pub after_skip: Vec<SkipDep>,
+    /// Skip moves whose following moves could not be described that way (an arc, a move made
+    /// of several segments, another skip before the probed axes are set again): their lines.
+    pub skip_unmodelled: Vec<usize>,
+}
+
+/// A segment after a skip move whose joints depend on the skip's stop u ∈ [0, 1].
+#[derive(Clone, Debug, PartialEq)]
+pub struct SkipDep {
+    /// The skip move's segment index.
+    pub skip: usize,
+    /// The dependent segment's index.
+    pub segment: usize,
+    /// Per joint: starts (ends) at the skip's stop, not at a programmed value.
+    pub start: Vec<bool>,
+    pub end: Vec<bool>,
 }
 
 fn q_to_f(v: i64, k: u32) -> f64 {
@@ -548,6 +567,8 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         t_stop: 0.0,
         joints: def.joints.iter().map(|j| j.name.clone()).collect(),
         accel_missing: false,
+        after_skip: Vec::new(),
+        skip_unmodelled: Vec::new(),
     };
     let mut wcs: Vec<f64> = s
         .wcs
@@ -628,9 +649,26 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
         *t_est += seg.t_stop;
         tl.segments.push(seg);
     };
+    // after a skip move: (its segment, the joints still at its unknown stop)
+    let mut follow: Option<(usize, Vec<bool>)> = None;
     for b in blocks {
         let ln = b.line;
         let mark = |tl: &mut Timeline, t: f64, what: Happening| tl.marks.push(Mark { line: ln, t, what });
+        // the joints this event sets to programmed values (absolute words; incremental ones from
+        // an unknown position the interpreter refuses)
+        let named: Option<Vec<usize>> = match &b.ev {
+            Ev::Rapid(w) | Ev::Feed { to: w, .. } => Some(
+                w.iter()
+                    .enumerate()
+                    .filter(|(_, x)| x.is_some())
+                    .map(|(i, _)| s.joint_of[i])
+                    .collect(),
+            ),
+            Ev::Machine(mv) => Some(mv.iter().map(|(i, _)| s.joint_of[*i]).collect()),
+            _ => None,
+        };
+        let is_skip = matches!(b.ev, Ev::Skip { .. });
+        let n0 = tl.segments.len();
         match &b.ev {
             Ev::Rapid(words) => {
                 let q1 = to_q(words, &q, &wcs, &toff);
@@ -1107,6 +1145,43 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
                 t_est += sec;
             }
             Ev::End => mark(&mut tl, t, Happening::End),
+        }
+        let n1 = tl.segments.len();
+        if is_skip && n1 > n0 {
+            let k = n1 - 1;
+            if let Some((prev, _)) = follow.take() {
+                // a skip from a stop that depends on an earlier one: neither is modelled
+                tl.skip_unmodelled.push(tl.segments[prev].line);
+                tl.skip_unmodelled.push(tl.segments[k].line);
+            } else {
+                let sg = &tl.segments[k];
+                let mask: Vec<bool> = sg.q0.iter().zip(&sg.q1).map(|(a, b)| a != b).collect();
+                if mask.iter().any(|x| *x) {
+                    follow = Some((k, mask));
+                }
+            }
+        } else if n1 > n0
+            && let Some((k, mask)) = follow.take()
+        {
+            match &named {
+                Some(named) if n1 - n0 == 1 && matches!(tl.segments[n0].path, Path::Line) => {
+                    let end: Vec<bool> = mask
+                        .iter()
+                        .enumerate()
+                        .map(|(j, f)| *f && !named.contains(&j))
+                        .collect();
+                    tl.after_skip.push(SkipDep {
+                        skip: k,
+                        segment: n0,
+                        start: mask,
+                        end: end.clone(),
+                    });
+                    if end.iter().any(|x| *x) {
+                        follow = Some((k, end));
+                    }
+                }
+                _ => tl.skip_unmodelled.push(tl.segments[k].line),
+            }
         }
     }
     tl.t_min = t;

@@ -506,6 +506,7 @@ pub fn run_setup(path: &Path) -> Result<Outcome, String> {
     }
     // checks made against an unknown or estimated value: never a silent pass
     let mut unchecked = forge_machine::sim::unchecked(def, &tl);
+    collide::narrow_skip_unchecked(&mut unchecked, &tl, &col);
     unchecked.extend(forge_machine::sim::unchecked_cycles(def, &prog));
     unchecked.extend(load_unchecked);
     if let Err((w, max)) = load {
