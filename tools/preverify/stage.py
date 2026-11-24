@@ -66,6 +66,9 @@ text = open(log, errors="replace").read()
 failed = sorted(set(re.findall(r"^test (\S+) \.\.\. FAILED", text, re.M)) |
                 set(re.findall(r"^---- (\S+) stdout ----", text, re.M)) |
                 set(re.findall(r"^(\S+): NO RESULT", text, re.M)))
-print(f"VERIFY {stage} {sha} exit {code} {secs}s" +
+# the toolchain the checkout pins (rust-toolchain.toml), as it ran here: a verdict is stamped with it
+tc = " / ".join(subprocess.run(c, cwd=repo, capture_output=True, text=True).stdout.strip()
+                for c in (["rustc", "-V"], ["cargo", "clippy", "-V"]))
+print(f"VERIFY {stage} {sha} exit {code} {secs}s [{tc}]" +
       (f" failed: {' '.join(failed)}" if failed else "") + f"\nlog: {log}")
 sys.exit(code)
