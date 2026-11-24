@@ -126,6 +126,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | C.coinc | `ssi::coincident` / `unify::same_surface` `true`: one point set | CURVED-SITES | proven where the exact key holds: 6,864 of 6,900 trues (plane 6,115, cylinder 725, sphere 24); the 36 unkeyed are patterns seq's one-ulp pattern copies (exactly distinct planes): UNKNOWN | verify/forge-curved CarrierKey.lean `plane_key`, `plane_key_axis`, `cyl_key`, `sphere_key`; kernel/forge-bool/src/carrier_key.rs |
 | C.unify | unify's curved decisions | CURVED-SITES | open | — |
 | C.poles | poles and seams (`sphere_nearest`'s pole rule, periodic seams) | CURVED-SITES | open | — |
+| G.param | an edge's parameter range bounded by the model (abs(t) ≤ a bound from InputSize): would let forge-geom's `line_in_range` skip `near_parallel_in` by a constant test (its range check costs patterns seq ~+0.03%); tol::MODEL_HALF_SIZE (5e5) does not match InputSize (1.6e7) today | FLAT-SITES | open | — |
 | G12 | the `decide_once` feature becomes the fallback branch | FALLBACK | open | — |
 | G13 | `face_point`'s unchecked inward step | FLAT-SITES | open (GAP): 7 of 6,675 probes land off their own face per point_in_face (6 curved, 1 planar; fuzz 19/20/21/30/40); returning None there (callers take the general path) changed no result | — |
 | G14 | trim_in's box-only accept | FLAT-SITES | proven (hyp: D4's cut completeness, `Sorted`) | verify/forge-curved/ForgeCurved/G14.lean `kept_iff`, `extra_not_end`, `edge_cut_not_kept` |
