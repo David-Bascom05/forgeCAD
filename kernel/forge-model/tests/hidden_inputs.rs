@@ -252,7 +252,9 @@ fn item_end(text: &str, from: usize) -> usize {
                         if j >= b.len() {
                             return b.len();
                         }
-                        if b[j] == b'"' && b[j + 1..].iter().take(hashes).filter(|&&c| c == b'#').count() == hashes {
+                        if b[j] == b'"'
+                            && b[j + 1..].iter().take(hashes).filter(|&&c| c == b'#').count() == hashes
+                        {
                             i = j + 1 + hashes;
                             break;
                         }
@@ -334,7 +336,10 @@ pub fn c<'a>(x: &'a str) -> &'a str { let _ = std::env::var("LAST"); x }
     assert!(has("env::var(\"LAST\")"), "{keys:?}");
     assert!(!has("INSIDE") && !has("IN_MOD"), "{keys:?}");
     let (_, list) = listed();
-    assert!(found.keys().all(|k| !list.contains_key(k)), "the fixture is not listed");
+    assert!(
+        found.keys().all(|k| !list.contains_key(k)),
+        "the fixture is not listed"
+    );
 }
 
 const LIST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tools/proof/hidden-inputs.txt");
