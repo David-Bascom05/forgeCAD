@@ -330,7 +330,7 @@ mod tests {
         let Verdict::Clear { lower } = v else {
             panic!("{v:?}")
         };
-        assert!(lower <= 0.4999 && lower >= 0.5 - 1e-3, "{lower}");
+        assert!((0.5 - 1e-3..=0.4999).contains(&lower), "{lower}");
         // 0.49 away: beyond the resolution under the limit, so not Clear (a Hit here)
         let (v, _) = certify(&Line { x: 1.49, res: 1e-3 }, (0.0, 1.0), &p(1e-3));
         assert!(!matches!(v, Verdict::Clear { .. }), "{v:?}");
