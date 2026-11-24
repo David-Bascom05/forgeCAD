@@ -236,7 +236,7 @@ impl MachineUi {
         if drawn.is_none()
             && let Some((_, how)) = self.def.as_ref().and_then(|d| models::not_downloaded(&d.name))
         {
-            self.message = format!("Model not downloaded: drawn from its envelopes. Fetch it with `{how}`");
+            self.message = format!("Model not downloaded: drawn from its envelopes. To get it, run {how}");
         }
         self.models = drawn
             .map(|d| models::load_in(&d))
