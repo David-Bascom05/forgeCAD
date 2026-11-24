@@ -3,6 +3,7 @@ import AeneasF64.Lemmas
 import IEEE754.TwoSum
 import IEEE754.TwoProduct
 import ForgeMath.Refine
+import ForgeNum.Refine
 open Aeneas Aeneas.Std Result
 
 /-!
@@ -21,10 +22,12 @@ open IEEE754 hiding F64
 /-- Zero, as the code writes it. -/
 abbrev Z : _root_.F64 := F64.Ops.ofBits 0
 
-theorem two_sum_eq (a b : _root_.F64) : exact.two_sum a b = ok (twoSum a b) := by
-  simp only [exact.two_sum, lift, Std.bind_ok, F64.Ops.add_def, F64.Ops.sub_def]; rfl
+-- exact.rs re-exports forge-num's `two_sum`, `split`, `two_product` (`pub use
+-- forge_num::shewchuk::*`); their proofs are ForgeNum/Refine.lean's, restated here, same statements.
+theorem two_sum_eq (a b : _root_.F64) : forge_num.shewchuk.two_sum a b = ok (twoSum a b) :=
+  ForgeNum.two_sum_eq a b
 
-theorem two_sum_spec (a b : _root_.F64) : exact.two_sum a b ⦃ p => p = twoSum a b ⦄ := by
+theorem two_sum_spec (a b : _root_.F64) : forge_num.shewchuk.two_sum a b ⦃ p => p = twoSum a b ⦄ := by
   rw [two_sum_eq]; simp
 
 /-- One step of Grow-Expansion: carry `q`, keep the error unless it is zero. -/
@@ -128,14 +131,14 @@ theorem grow_spec (e : Slice _root_.F64) (b : _root_.F64) (hb : e.val.length + 1
 
 /-! ## The other functions -/
 
-theorem SPLITTER_eq : exact.SPLITTER = ForgeMath.splitter := by unfold exact.SPLITTER; rfl
-
-theorem split_eq (a : _root_.F64) : exact.split a = ok (IEEE754.split ForgeMath.splitter a) := by
-  simp [exact.split, IEEE754.split, lift, SPLITTER_eq]
+-- (`SPLITTER` went to forge-num with `split`: `ForgeNum.SPLITTER_eq`)
+theorem split_eq (a : _root_.F64) :
+    forge_num.shewchuk.split a = ok (IEEE754.split ForgeMath.splitter a) :=
+  ForgeNum.split_eq a
 
 theorem two_product_eq (a b : _root_.F64) :
-    exact.two_product a b = ok (twoProduct ForgeMath.splitter a b) := by
-  simp [exact.two_product, twoProduct, split_eq, IEEE754.split, lift]
+    forge_num.shewchuk.two_product a b = ok (twoProduct ForgeMath.splitter a b) :=
+  ForgeNum.two_product_eq a b
 
 @[simp] theorem deref_val {T : Type} (v : alloc.vec.Vec T) : (alloc.vec.Vec.deref v).val = v.val := by
   simp [alloc.vec.Vec.deref]

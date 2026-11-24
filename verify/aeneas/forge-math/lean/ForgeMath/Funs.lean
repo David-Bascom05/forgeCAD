@@ -2978,13 +2978,8 @@ def predicates.EPS : Result F64 := do
   let fl ← core.f64.F64.EPSILON
   ok (F64.Ops.mul fl (F64.Ops.ofBits 4602678819172646912))
 
-/-- [forge_math::predicates::SPLITTER]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 29:0-29:36 -/
-@[global_simps, irreducible]
-def predicates.SPLITTER : F64 := F64.Ops.ofBits 4728779608772575232
-
 /-- [forge_math::predicates::CCW_BOUND]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 30:0-30:48 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 29:0-29:48 -/
 @[global_simps, irreducible]
 def predicates.CCW_BOUND : Result F64 := do
   let fl ← predicates.EPS
@@ -2993,7 +2988,7 @@ def predicates.CCW_BOUND : Result F64 := do
   ok (F64.Ops.mul fl2 fl)
 
 /-- [forge_math::predicates::CCW_BOUND_B]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 34:0-34:50 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 33:0-33:50 -/
 @[global_simps, irreducible]
 def predicates.CCW_BOUND_B : Result F64 := do
   let fl ← predicates.EPS
@@ -3002,7 +2997,7 @@ def predicates.CCW_BOUND_B : Result F64 := do
   ok (F64.Ops.mul fl2 fl)
 
 /-- [forge_math::predicates::CROSS_BOUND]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 272:0-272:49 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 271:0-271:49 -/
 @[global_simps, irreducible]
 def predicates.CROSS_BOUND : Result F64 := do
   let fl ← predicates.EPS
@@ -3011,7 +3006,7 @@ def predicates.CROSS_BOUND : Result F64 := do
   ok (F64.Ops.mul fl2 fl)
 
 /-- [forge_math::predicates::DOT3_BOUND]
-    Source: 'kernel/forge-math/src/predicates.rs', lines 274:0-274:49 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 273:0-273:49 -/
 @[global_simps, irreducible]
 def predicates.DOT3_BOUND : Result F64 := do
   let fl ← predicates.EPS
@@ -3019,55 +3014,13 @@ def predicates.DOT3_BOUND : Result F64 := do
   let fl2 ← lift (F64.Ops.add (F64.Ops.ofBits 4613937818241073152) fl1)
   ok (F64.Ops.mul fl2 fl)
 
-/-- [forge_math::predicates::two_sum]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 278:0-283:1 -/
-def predicates.two_sum (a : F64) (b : F64) : Result (F64 × F64) := do
-  let x ← lift (F64.Ops.add a b)
-  let bv ← lift (F64.Ops.sub x a)
-  let av ← lift (F64.Ops.sub x bv)
-  let fl ← lift (F64.Ops.sub a av)
-  let fl1 ← lift (F64.Ops.sub b bv)
-  let fl2 ← lift (F64.Ops.add fl fl1)
-  ok (x, fl2)
-
-/-- [forge_math::predicates::two_diff]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 285:0-290:1 -/
-def predicates.two_diff (a : F64) (b : F64) : Result (F64 × F64) := do
-  let x ← lift (F64.Ops.sub a b)
-  let bv ← lift (F64.Ops.sub a x)
-  let av ← lift (F64.Ops.add x bv)
-  let fl ← lift (F64.Ops.sub a av)
-  let fl1 ← lift (F64.Ops.sub bv b)
-  let fl2 ← lift (F64.Ops.add fl fl1)
-  ok (x, fl2)
-
-/-- [forge_math::predicates::split]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 292:0-296:1 -/
-def predicates.split (a : F64) : Result (F64 × F64) := do
-  let c ← lift (F64.Ops.mul predicates.SPLITTER a)
-  let fl ← lift (F64.Ops.sub c a)
-  let hi ← lift (F64.Ops.sub c fl)
-  let fl1 ← lift (F64.Ops.sub a hi)
-  ok (hi, fl1)
-
 /-- [forge_math::predicates::two_product]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 298:0-306:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 282:0-286:1 -/
 def predicates.two_product (a : F64) (b : F64) : Result (F64 × F64) := do
-  let x ← lift (F64.Ops.mul a b)
-  let (ahi, alo) ← predicates.split a
-  let (bhi, blo) ← predicates.split b
-  let fl ← lift (F64.Ops.mul ahi bhi)
-  let fl1 ← lift (F64.Ops.sub x fl)
-  let fl2 ← lift (F64.Ops.mul alo bhi)
-  let fl3 ← lift (F64.Ops.sub fl1 fl2)
-  let fl4 ← lift (F64.Ops.mul ahi blo)
-  let err ← lift (F64.Ops.sub fl3 fl4)
-  let fl5 ← lift (F64.Ops.mul alo blo)
-  let fl6 ← lift (F64.Ops.sub fl5 err)
-  ok (x, fl6)
+  forge_num.shewchuk.two_product a b
 
 /-- [forge_math::predicates::estimate]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 309:0-317:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 289:0-297:1 -/
 def predicates.estimate (e : Slice F64) : Result F64 := do
   let o ← core.slice.Slice.last e
   let o1 ← core.option.OptionShared0T.copied F64.Insts.CoreMarkerCopy o
@@ -3086,7 +3039,7 @@ def predicates.estimate (e : Slice F64) : Result F64 := do
   else ok top
 
 /-- [forge_math::predicates::next_component]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 349:0-355:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 329:0-335:1 -/
 def predicates.next_component
   (e : Slice F64) (f : Slice F64) (ei : Std.Usize) (fi : Std.Usize) :
   Result (F64 × Std.Usize × Std.Usize)
@@ -3116,7 +3069,7 @@ def predicates.next_component
       ok (fl, ei, i2)
 
 /-- [forge_math::predicates::sum_into]: loop body 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 328:4-338:5 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 308:4-318:5 -/
 @[rust_loop_body]
 def predicates.sum_into_loop.body
   (e : Slice F64) (f : Slice F64) (total : Std.Usize) (h : Slice F64)
@@ -3127,7 +3080,7 @@ def predicates.sum_into_loop.body
   if k < total
   then
     let (x, ei2, fi2) ← predicates.next_component e f ei fi
-    let (s, err) ← predicates.two_sum q x
+    let (s, err) ← forge_num.shewchuk.two_sum q x
     let (h1, n1) ←
       if F64.Ops.ne err (F64.Ops.ofBits 0)
       then
@@ -3141,7 +3094,7 @@ def predicates.sum_into_loop.body
   else ok (done (h, n, q))
 
 /-- [forge_math::predicates::sum_into]: loop 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 328:4-338:5 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 308:4-318:5 -/
 @[rust_loop]
 def predicates.sum_into_loop
   (e : Slice F64) (f : Slice F64) (h : Slice F64) (n : Std.Usize)
@@ -3155,7 +3108,7 @@ def predicates.sum_into_loop
     (h, n, q, ei, fi, k)
 
 /-- [forge_math::predicates::sum_into]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 321:0-344:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 301:0-324:1 -/
 def predicates.sum_into
   (e : Slice F64) (f : Slice F64) (h : Slice F64) :
   Result (Std.Usize × (Slice F64))
@@ -3181,7 +3134,7 @@ def predicates.sum_into
       else ok (n, h1)
 
 /-- [forge_math::predicates::scale_into]: loop body 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 369:4-383:5 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 349:4-363:5 -/
 @[rust_loop_body]
 def predicates.scale_into_loop.body
   (e : Slice F64) (b : F64) (h : Slice F64) (n : Std.Usize) (q : F64)
@@ -3195,7 +3148,7 @@ def predicates.scale_into_loop.body
     let fl ← Slice.index_usize e i
     let (p1, p0) ← predicates.two_product fl b
     let i2 ← i + 1#usize
-    let (s, err) ← predicates.two_sum q p0
+    let (s, err) ← forge_num.shewchuk.two_sum q p0
     let (h1, n1) ←
       if F64.Ops.ne err (F64.Ops.ofBits 0)
       then
@@ -3204,7 +3157,7 @@ def predicates.scale_into_loop.body
         let n2 ← n + 1#usize
         ok (s1, n2)
       else ok (h, n)
-    let (s2, err2) ← predicates.two_sum p1 s
+    let (s2, err2) ← forge_num.shewchuk.two_sum p1 s
     if F64.Ops.ne err2 (F64.Ops.ofBits 0)
     then
       let s1 ← Slice.update h1 n1 err2
@@ -3214,7 +3167,7 @@ def predicates.scale_into_loop.body
   else ok (done (h, n, q))
 
 /-- [forge_math::predicates::scale_into]: loop 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 369:4-383:5 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 349:4-363:5 -/
 @[rust_loop]
 def predicates.scale_into_loop
   (e : Slice F64) (b : F64) (h : Slice F64) (n : Std.Usize) (q : F64)
@@ -3226,7 +3179,7 @@ def predicates.scale_into_loop
     (h, n, q, i)
 
 /-- [forge_math::predicates::scale_into]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 358:0-389:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 338:0-369:1 -/
 def predicates.scale_into
   (e : Slice F64) (b : F64) (h : Slice F64) :
   Result (Std.Usize × (Slice F64))
@@ -3258,7 +3211,7 @@ def predicates.scale_into
       else ok (n1, h2)
 
 /-- [forge_math::predicates::cross_exact]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 392:0-396:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 372:0-376:1 -/
 def predicates.cross_exact
   (a : F64) (d : F64) (b : F64) (c : F64) (h : Array F64 4#usize) :
   Result (Std.Usize × (Array F64 4#usize))
@@ -3275,7 +3228,7 @@ def predicates.cross_exact
   ok (i, h1)
 
 /-- [forge_math::predicates::mul_small]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 482:0-491:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 462:0-471:1 -/
 def predicates.mul_small
   (e : Slice F64) (f : Slice F64) (h : Array F64 8#usize) :
   Result (Std.Usize × (Array F64 8#usize))
@@ -3319,7 +3272,7 @@ def predicates.mul_small
     ok (np1, h1)
 
 /-- [forge_math::predicates::cross_two]: loop body 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 505:4-508:5 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 485:4-488:5 -/
 @[rust_loop_body]
 def predicates.cross_two_loop.body
   (nq : Std.Usize) (q : Array F64 8#usize) (i : Std.Usize) :
@@ -3335,7 +3288,7 @@ def predicates.cross_two_loop.body
   else ok (done q)
 
 /-- [forge_math::predicates::cross_two]: loop 0:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 505:4-508:5 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 485:4-488:5 -/
 @[rust_loop]
 def predicates.cross_two_loop
   (q : Array F64 8#usize) (nq : Std.Usize) (i : Std.Usize) :
@@ -3346,7 +3299,7 @@ def predicates.cross_two_loop
     (q, i)
 
 /-- [forge_math::predicates::cross_two]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 494:0-510:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 474:0-490:1 -/
 def predicates.cross_two
   (x1 : ((Array F64 2#usize) × Std.Usize))
   (y2 : ((Array F64 2#usize) × Std.Usize))
@@ -3387,16 +3340,16 @@ def predicates.cross_two
   ok (i4, h1)
 
 /-- [forge_math::predicates::diff2]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 477:0-480:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 457:0-460:1 -/
 def predicates.diff2
   (a : F64) (b : F64) : Result ((Array F64 2#usize) × Std.Usize) := do
-  let (x, y) ← predicates.two_diff a b
+  let (x, y) ← forge_num.shewchuk.two_diff a b
   if F64.Ops.eq y (F64.Ops.ofBits 0)
   then ok (Array.make 2#usize [ x, F64.Ops.ofBits 0 ], 1#usize)
   else ok (Array.make 2#usize [ y, x ], 2#usize)
 
 /-- [forge_math::predicates::orient2d_exact]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 449:0-461:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 429:0-441:1 -/
 def predicates.orient2d_exact
   (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) : Result F64 := do
   let o ←
@@ -3427,7 +3380,7 @@ def predicates.orient2d_exact
     predicates.estimate s
 
 /-- [forge_math::predicates::orient2d_adapt]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 437:0-447:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 417:0-427:1 -/
 def predicates.orient2d_adapt
   (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) (detsum : F64) :
   Result F64
@@ -3459,7 +3412,7 @@ def predicates.orient2d_adapt
       else ok e
 
 /-- [forge_math::predicates::orient2d]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 415:0-434:1
+    Source: 'kernel/forge-math/src/predicates.rs', lines 395:0-414:1
     Visibility: public -/
 def predicates.orient2d
   (a : vec.Point2) (b : vec.Point2) (c : vec.Point2) : Result F64 := do
@@ -3484,7 +3437,7 @@ def predicates.orient2d
     else predicates.orient2d_adapt a b c detsum
 
 /-- [forge_math::predicates::cross_sign]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 514:0-526:1
+    Source: 'kernel/forge-math/src/predicates.rs', lines 494:0-506:1
     Visibility: public -/
 def predicates.cross_sign
   (a : F64) (b : F64) (c : F64) (d : F64) : Result F64 := do
@@ -3512,7 +3465,7 @@ def predicates.cross_sign
     else ok e
 
 /-- [forge_math::predicates::dot3]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 536:0-560:1
+    Source: 'kernel/forge-math/src/predicates.rs', lines 516:0-540:1
     Visibility: public -/
 def predicates.dot3 (u : vec.Vec3) (v : vec.Vec3) : Result F64 := do
   let x ← lift (F64.Ops.mul u.x v.x)

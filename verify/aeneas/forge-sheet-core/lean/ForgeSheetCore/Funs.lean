@@ -39,52 +39,8 @@ def exact.FILTER : Result F64 := do
   let fl1 ← lift (F64.Ops.mul fl (F64.Ops.ofBits 4602678819172646912))
   ok (F64.Ops.mul (F64.Ops.ofBits 4625196817309499392) fl1)
 
-/-- [forge_sheet_core::exact::SPLITTER]
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 14:0-14:36 -/
-@[global_simps, irreducible]
-def exact.SPLITTER : F64 := F64.Ops.ofBits 4728779608772575232
-
-/-- [forge_sheet_core::exact::two_sum]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 17:0-22:1
-    Visibility: public -/
-def exact.two_sum (a : F64) (b : F64) : Result (F64 × F64) := do
-  let x ← lift (F64.Ops.add a b)
-  let bv ← lift (F64.Ops.sub x a)
-  let av ← lift (F64.Ops.sub x bv)
-  let fl ← lift (F64.Ops.sub a av)
-  let fl1 ← lift (F64.Ops.sub b bv)
-  let fl2 ← lift (F64.Ops.add fl fl1)
-  ok (x, fl2)
-
-/-- [forge_sheet_core::exact::split]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 25:0-29:1
-    Visibility: public -/
-def exact.split (a : F64) : Result (F64 × F64) := do
-  let c ← lift (F64.Ops.mul exact.SPLITTER a)
-  let fl ← lift (F64.Ops.sub c a)
-  let hi ← lift (F64.Ops.sub c fl)
-  let fl1 ← lift (F64.Ops.sub a hi)
-  ok (hi, fl1)
-
-/-- [forge_sheet_core::exact::two_product]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 32:0-38:1
-    Visibility: public -/
-def exact.two_product (a : F64) (b : F64) : Result (F64 × F64) := do
-  let x ← lift (F64.Ops.mul a b)
-  let (ah, al) ← exact.split a
-  let (bh, bl) ← exact.split b
-  let fl ← lift (F64.Ops.mul ah bh)
-  let fl1 ← lift (F64.Ops.sub x fl)
-  let fl2 ← lift (F64.Ops.mul al bh)
-  let fl3 ← lift (F64.Ops.sub fl1 fl2)
-  let fl4 ← lift (F64.Ops.mul ah bl)
-  let err ← lift (F64.Ops.sub fl3 fl4)
-  let fl5 ← lift (F64.Ops.mul al bl)
-  let fl6 ← lift (F64.Ops.sub fl5 err)
-  ok (x, fl6)
-
 /-- [forge_sheet_core::exact::sgn]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 41:0-49:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 18:0-26:1
     Visibility: public -/
 def exact.sgn (x : F64) : Result F64 := do
   if F64.Ops.gt x (F64.Ops.ofBits 0)
@@ -95,7 +51,7 @@ def exact.sgn (x : F64) : Result F64 := do
     else ok (F64.Ops.ofBits 0)
 
 /-- [forge_sheet_core::exact::exp_of]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 52:0-58:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 29:0-35:1
     Visibility: public -/
 def exact.exp_of (x : F64) : Result (alloc.vec.Vec F64) := do
   if F64.Ops.ne x (F64.Ops.ofBits 0)
@@ -103,7 +59,7 @@ def exact.exp_of (x : F64) : Result (alloc.vec.Vec F64) := do
   else ok (alloc.vec.Vec.new F64)
 
 /-- [forge_sheet_core::exact::grow]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 65:4-72:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 42:4-49:5
     Visibility: public -/
 @[rust_loop_body]
 def exact.grow_loop.body
@@ -115,7 +71,7 @@ def exact.grow_loop.body
   if i < i1
   then
     let fl ← Slice.index_usize e i
-    let (s, lo) ← exact.two_sum q fl
+    let (s, lo) ← forge_num.shewchuk.two_sum q fl
     let out1 ←
       if F64.Ops.ne lo (F64.Ops.ofBits 0)
       then alloc.vec.Vec.push out lo
@@ -125,7 +81,7 @@ def exact.grow_loop.body
   else ok (done (q, out))
 
 /-- [forge_sheet_core::exact::grow]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 65:4-72:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 42:4-49:5
     Visibility: public -/
 @[rust_loop]
 def exact.grow_loop
@@ -137,7 +93,7 @@ def exact.grow_loop
     (q, out, i)
 
 /-- [forge_sheet_core::exact::grow]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 61:0-77:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 38:0-54:1
     Visibility: public -/
 def exact.grow (e : Slice F64) (b : F64) : Result (alloc.vec.Vec F64) := do
   let (q, out) ← exact.grow_loop e b (alloc.vec.Vec.new F64) 0#usize
@@ -146,7 +102,7 @@ def exact.grow (e : Slice F64) (b : F64) : Result (alloc.vec.Vec F64) := do
   else ok out
 
 /-- [forge_sheet_core::exact::exp_diff]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 80:0-83:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 57:0-60:1
     Visibility: public -/
 def exact.exp_diff (a : F64) (b : F64) : Result (alloc.vec.Vec F64) := do
   let e ← exact.exp_of a
@@ -155,7 +111,7 @@ def exact.exp_diff (a : F64) (b : F64) : Result (alloc.vec.Vec F64) := do
   exact.grow s fl
 
 /-- [forge_sheet_core::exact::exp_add]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 89:4-92:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 66:4-69:5
     Visibility: public -/
 @[rust_loop_body]
 def exact.exp_add_loop.body
@@ -173,7 +129,7 @@ def exact.exp_add_loop.body
   else ok (done s)
 
 /-- [forge_sheet_core::exact::exp_add]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 89:4-92:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 66:4-69:5
     Visibility: public -/
 @[rust_loop]
 def exact.exp_add_loop
@@ -185,7 +141,7 @@ def exact.exp_add_loop
     (s, i)
 
 /-- [forge_sheet_core::exact::exp_add]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 86:0-94:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 63:0-71:1
     Visibility: public -/
 def exact.exp_add
   (e : Slice F64) (o : Slice F64) : Result (alloc.vec.Vec F64) := do
@@ -193,7 +149,7 @@ def exact.exp_add
   exact.exp_add_loop o s 0#usize
 
 /-- [forge_sheet_core::exact::exp_neg]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 100:4-103:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 77:4-80:5
     Visibility: public -/
 @[rust_loop_body]
 def exact.exp_neg_loop.body
@@ -211,7 +167,7 @@ def exact.exp_neg_loop.body
   else ok (done out)
 
 /-- [forge_sheet_core::exact::exp_neg]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 100:4-103:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 77:4-80:5
     Visibility: public -/
 @[rust_loop]
 def exact.exp_neg_loop
@@ -223,14 +179,14 @@ def exact.exp_neg_loop
     (out, i)
 
 /-- [forge_sheet_core::exact::exp_neg]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 97:0-105:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 74:0-82:1
     Visibility: public -/
 @[reducible]
 def exact.exp_neg (e : Slice F64) : Result (alloc.vec.Vec F64) := do
   exact.exp_neg_loop e (alloc.vec.Vec.new F64) 0#usize
 
 /-- [forge_sheet_core::exact::exp_mul]: loop body 1:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 113:8-118:9
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 90:8-95:9
     Visibility: public -/
 @[rust_loop_body]
 def exact.exp_mul_loop0_loop0.body
@@ -243,7 +199,7 @@ def exact.exp_mul_loop0_loop0.body
   then
     let fl ← Slice.index_usize e i
     let fl1 ← Slice.index_usize o j
-    let (x, y) ← exact.two_product fl fl1
+    let (x, y) ← forge_num.shewchuk.two_product fl fl1
     let s := alloc.vec.Vec.deref out
     let out1 ← exact.grow s y
     let s1 := alloc.vec.Vec.deref out1
@@ -253,7 +209,7 @@ def exact.exp_mul_loop0_loop0.body
   else ok (done out)
 
 /-- [forge_sheet_core::exact::exp_mul]: loop 1:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 113:8-118:9
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 90:8-95:9
     Visibility: public -/
 @[rust_loop]
 def exact.exp_mul_loop0_loop0
@@ -266,7 +222,7 @@ def exact.exp_mul_loop0_loop0
     (out, j)
 
 /-- [forge_sheet_core::exact::exp_mul]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 111:4-120:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 88:4-97:5
     Visibility: public -/
 @[rust_loop_body]
 def exact.exp_mul_loop0.body
@@ -282,7 +238,7 @@ def exact.exp_mul_loop0.body
   else ok (done out)
 
 /-- [forge_sheet_core::exact::exp_mul]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 111:4-120:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 88:4-97:5
     Visibility: public -/
 @[rust_loop]
 def exact.exp_mul_loop0
@@ -294,7 +250,7 @@ def exact.exp_mul_loop0
     (out, i)
 
 /-- [forge_sheet_core::exact::exp_mul]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 108:0-122:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 85:0-99:1
     Visibility: public -/
 @[reducible]
 def exact.exp_mul
@@ -302,7 +258,7 @@ def exact.exp_mul
   exact.exp_mul_loop0 e o (alloc.vec.Vec.new F64) 0#usize
 
 /-- [forge_sheet_core::exact::exp_sign]: loop body 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 128:4-131:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 105:4-108:5
     Visibility: public -/
 @[rust_loop_body]
 def exact.exp_sign_loop.body
@@ -321,7 +277,7 @@ def exact.exp_sign_loop.body
   else ok (done s)
 
 /-- [forge_sheet_core::exact::exp_sign]: loop 0:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 128:4-131:5
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 105:4-108:5
     Visibility: public -/
 @[rust_loop]
 def exact.exp_sign_loop
@@ -331,14 +287,14 @@ def exact.exp_sign_loop
     (s, i)
 
 /-- [forge_sheet_core::exact::exp_sign]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 125:0-133:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 102:0-110:1
     Visibility: public -/
 def exact.exp_sign (e : Slice F64) : Result F64 := do
   let i := Slice.len e
   exact.exp_sign_loop e (F64.Ops.ofBits 0) i
 
 /-- [forge_sheet_core::exact::disc]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 136:0-151:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 113:0-128:1
     Visibility: public -/
 def exact.disc
   (px : F64) (py : F64) (cx : F64) (cy : F64) (r : F64) : Result F64 := do
@@ -384,7 +340,7 @@ def exact.disc
     exact.exp_sign s14
 
 /-- [forge_sheet_core::exact::line_gap]:
-    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 154:0-179:1
+    Source: 'kernel/forge-sheet-core/src/exact.rs', lines 131:0-156:1
     Visibility: public -/
 def exact.line_gap
   (ax : F64) (ay : F64) (bx : F64) («by» : F64) (cx : F64) (cy : F64)

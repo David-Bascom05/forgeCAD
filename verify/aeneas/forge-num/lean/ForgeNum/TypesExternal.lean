@@ -13,3 +13,7 @@ forge-num if its types are plain structs and enums of integers, f64 and Vec.
 -/
 
 open Aeneas Aeneas.Std
+
+/-- `MaybeUninit<T>` comes in with std's array and vector internals; no translated function reads
+one. It is what it can hold: a value or none. -/
+def core.mem.maybe_uninit.MaybeUninit (T : Type _) : Type _ := Option T

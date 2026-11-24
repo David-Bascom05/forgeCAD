@@ -337,26 +337,47 @@ axiom alloc.vec.Vec.reserve
 axiom alloc.vec.Vec.clear
   {T : Type _} (A : Type _) : alloc.vec.Vec T → Result (alloc.vec.Vec T)
 
+/-- [forge_num::shewchuk::two_sum]:
+    Source: 'kernel/forge-num/src/shewchuk.rs', lines 15:0-15:44
+    Name pattern: [forge_num::shewchuk::two_sum]
+    Visibility: public -/
+@[rust_fun "forge_num::shewchuk::two_sum"]
+axiom forge_num.shewchuk.two_sum : F64 → F64 → Result (F64 × F64)
+
+/-- [forge_num::shewchuk::two_diff]:
+    Source: 'kernel/forge-num/src/shewchuk.rs', lines 24:0-24:45
+    Name pattern: [forge_num::shewchuk::two_diff]
+    Visibility: public -/
+@[rust_fun "forge_num::shewchuk::two_diff"]
+axiom forge_num.shewchuk.two_diff : F64 → F64 → Result (F64 × F64)
+
+/-- [forge_num::shewchuk::two_product]:
+    Source: 'kernel/forge-num/src/shewchuk.rs', lines 42:0-42:48
+    Name pattern: [forge_num::shewchuk::two_product]
+    Visibility: public -/
+@[rust_fun "forge_num::shewchuk::two_product"]
+axiom forge_num.shewchuk.two_product : F64 → F64 → Result (F64 × F64)
+
 /-- [forge_math::predicates::cross_big]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 264:0-270:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 263:0-269:1 -/
 axiom predicates.cross_big : F64 → F64 → F64 → F64 → Result F64
 
 /-- [forge_math::predicates::exact_diffs]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 398:0-411:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 378:0-391:1 -/
 axiom predicates.exact_diffs
   {N : Std.Usize} : Array (F64 × F64) N → Result (Option (Array F64 N))
 
 /-- [forge_math::predicates::orient2d_big]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 466:0-474:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 446:0-454:1 -/
 axiom predicates.orient2d_big
   : vec.Point2 → vec.Point2 → vec.Point2 → Result F64
 
 /-- [forge_math::predicates::dot3_big]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 564:0-571:1 -/
+    Source: 'kernel/forge-math/src/predicates.rs', lines 544:0-551:1 -/
 axiom predicates.dot3_big : vec.Vec3 → vec.Vec3 → Result F64
 
 /-- [forge_math::predicates::incircle]:
-    Source: 'kernel/forge-math/src/predicates.rs', lines 679:0-714:1
+    Source: 'kernel/forge-math/src/predicates.rs', lines 659:0-694:1
     Visibility: public -/
 axiom predicates.incircle
   : vec.Point2 → vec.Point2 → vec.Point2 → vec.Point2 → Result F64

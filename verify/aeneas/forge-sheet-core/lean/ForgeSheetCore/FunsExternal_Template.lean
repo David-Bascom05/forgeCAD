@@ -45,3 +45,17 @@ axiom core.f64.F64.EPSILON : Result F64
     Visibility: public -/
 @[rust_fun "std::f64::{f64}::sqrt"] axiom std.f64.F64.sqrt : F64 → Result F64
 
+/-- [forge_num::shewchuk::two_sum]:
+    Source: 'kernel/forge-num/src/shewchuk.rs', lines 15:0-15:44
+    Name pattern: [forge_num::shewchuk::two_sum]
+    Visibility: public -/
+@[rust_fun "forge_num::shewchuk::two_sum"]
+axiom forge_num.shewchuk.two_sum : F64 → F64 → Result (F64 × F64)
+
+/-- [forge_num::shewchuk::two_product]:
+    Source: 'kernel/forge-num/src/shewchuk.rs', lines 42:0-42:48
+    Name pattern: [forge_num::shewchuk::two_product]
+    Visibility: public -/
+@[rust_fun "forge_num::shewchuk::two_product"]
+axiom forge_num.shewchuk.two_product : F64 → F64 → Result (F64 × F64)
+

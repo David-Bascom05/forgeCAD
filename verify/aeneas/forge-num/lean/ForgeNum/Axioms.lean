@@ -3,6 +3,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 -/
 import Lean
 import ForgeNum.Funs
+import ForgeNum.Refine
 
 /-!
 # No axiom in forge-num's translation
@@ -23,4 +24,9 @@ elab "#standard_axioms " ids:ident* : command => do
       unless a == ``propext || a == ``Classical.choice || a == ``Quot.sound do
         throwError "{n} rests on the axiom {a}"
 
--- #standard_axioms forge_num.big.Big.add forge_num.big.Big.mul  -- fill in after the first translation
+#standard_axioms
+  forge_num.shewchuk.two_sum forge_num.shewchuk.two_diff forge_num.shewchuk.split
+  forge_num.shewchuk.two_product
+  forge_num.int.Big.add forge_num.int.Big.sub forge_num.int.Big.mul forge_num.dy.Dy.add
+  ForgeNum.two_sum_eq ForgeNum.split_eq ForgeNum.two_product_eq
+  ForgeNum.two_sum_exact ForgeNum.split_veltkamp ForgeNum.two_product_exact
