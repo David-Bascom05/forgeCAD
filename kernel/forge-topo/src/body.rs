@@ -831,7 +831,10 @@ impl Body {
 
     pub fn add_tolerant_vertex(&mut self, point: Point3, tol: f64, name: Name) -> VertexId {
         let tol = tol.max(forge_math::tol::LINEAR);
-        self.bound_vertex_tol(tol);
+        // (the bound is read as at least LINEAR: only a tolerant vertex moves it)
+        if tol > forge_math::tol::LINEAR {
+            self.bound_vertex_tol(tol);
+        }
         self.vertices.push(Vertex { point, name, tol });
         VertexId(self.vertices.len() as u32 - 1)
     }

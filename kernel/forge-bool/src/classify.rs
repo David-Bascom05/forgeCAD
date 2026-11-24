@@ -18,8 +18,12 @@ pub enum Where {
 pub struct FaceInfo {
     /// Each boundary use with its edge's box.
     edges: Vec<(forge_topo::CoedgeId, Box3)>,
-    /// The largest sag bound among the face's edges: an edge farther than
-    /// this can never decide a point, so it is skipped without solving.
+    /// At least the largest sag bound among the face's edges and the largest tolerance among its
+    /// loops' vertices (the body's bound, `Body::vertex_tol`, when built or extended; raised by
+    /// `grow_query_reach`): an edge farther than this can never decide a point, so it is skipped
+    /// without solving. Any reach at least that answers alike (CacheOK, G9): an edge within it of
+    /// the point is a candidate either way, so the nearest is the same when one is that near; when
+    /// none is, the nearest found lies past every vertex's ball and edge's sag, and decides nothing.
     reach: f64,
     /// The loops drawn in parameter space, only when a query needs them
     /// (planar faces are decided exactly without them).
@@ -261,8 +265,29 @@ pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId])
     }
 }
 
+/// Vertex `v`'s tolerance grew in place to `tol`: each face round it whose kept index reaches less
+/// reaches that far (CacheOK, G9: a kept reach takes in its loops' vertices' balls).
+pub fn grow_query_reach(body: &mut Body, v: forge_topo::VertexId, tol: f64) {
+    let faces: Vec<FaceId> = body
+        .edges
+        .iter()
+        .filter(|e| e.alive && (e.start == v || e.end == v))
+        .flat_map(|e| e.coedges.iter().map(|&c| body.coedge_face(c)))
+        .collect();
+    for f in faces {
+        let face = &mut body.faces[f.index()];
+        let Some(q) = face.query.get_mut() else { continue };
+        match std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) {
+            Some(info) => info.reach = info.reach.max(tol),
+            // shared with a copy of the body: built afresh when next asked
+            None => face.query.clear(),
+        }
+    }
+}
+
 /// Face `f` gained the loop `lp` in place: its kept index (if any) takes the loop's edges.
 pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
+    let vtol = body.vertex_tol();
     let entries: Vec<_> = body.lp(lp).coedges().map(|c| (c, edge_entry(body, c))).collect();
     let plane = match &body.face(f).surface {
         Surface::Plane(pl) => Some(*pl),
@@ -282,6 +307,8 @@ pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
         info.edges.push((c, b));
         info.reach = info.reach.max(sag);
     }
+    // (the new loop's vertices may be tolerant ones)
+    info.reach = info.reach.max(vtol);
     if info.bands.is_none()
         && info.edges.len() >= 16
         && let Some(pl) = plane
@@ -411,7 +438,8 @@ fn info(body: &Body, f: FaceId) -> &FaceInfo {
     let face = body.face(f);
     let q = face.query.get_or_init(|| {
         let mut edges = Vec::new();
-        let mut reach = tol::LINEAR;
+        // (the body's bound of its vertices' tolerances, at least this face's loops')
+        let mut reach = tol::LINEAR.max(body.vertex_tol());
         for &l in &face.loops {
             for c in body.lp(l).coedges() {
                 let (e, b) = edge_entry(body, c);
@@ -480,7 +508,24 @@ impl<'a> Index<'a> {
     }
 
     fn info(&self, f: FaceId) -> &FaceInfo {
-        info(self.body, f)
+        let i = info(self.body, f);
+        // (a kept index reaches past every one of its loops' vertices' balls: CacheOK, G9)
+        #[cfg(debug_assertions)]
+        {
+            let b = self.body;
+            for &l in &b.face(f).loops {
+                for c in b.lp(l).coedges() {
+                    let v = b.coedge_start(c);
+                    debug_assert!(
+                        b.vertex(v).tol <= i.reach,
+                        "face {f:?}'s index reaches {} short of vertex {v:?}'s tol {}",
+                        i.reach,
+                        b.vertex(v).tol
+                    );
+                }
+            }
+        }
+        i
     }
 
     fn drawn(&self, f: FaceId) -> &Drawn {
@@ -543,14 +588,9 @@ impl<'a> Index<'a> {
         {
             return w;
         }
-        // nearest boundary point, exactly: looked for within the face's sag reach and the body's
-        // vertex tolerance (a point within a tolerant vertex's ball is on the boundary however far
-        // past every edge's sag it lies; and any reach at least this answers alike: CacheOK, G9)
-        let reach = if body.vertex_tol() > info.reach {
-            body.vertex_tol()
-        } else {
-            info.reach
-        };
+        // nearest boundary point, exactly, within the face's reach (its edges' sag and its loops'
+        // vertex tolerances: any reach at least that answers alike, CacheOK G9)
+        let reach = info.reach;
         let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
         let mut near: Vec<u32> = Vec::new();
         // each candidate in turn (the band rows round p, or every use), the nearest kept
@@ -702,7 +742,7 @@ impl<'a> Index<'a> {
             .is_none()
         {
             // the nearest boundary point, as point_in_face_past finds it
-            let reach = info.reach.max(body.vertex_tol());
+            let reach = info.reach;
             let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
             for &(c, ref b) in &info.edges {
                 if c == GONE || box_distance(b, p) > reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
