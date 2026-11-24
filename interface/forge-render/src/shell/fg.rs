@@ -1112,10 +1112,14 @@ impl Shell {
                         ui.set_min_width(150.0);
                         let mut off_item = |ui: &mut Ui, label: &str, name: &str, why: Option<String>| {
                             let b = ui.add_enabled(why.is_none(), egui::Button::new(egui::RichText::new(label).font(sans(12.0))));
-                            let b = match why {
-                                Some(w) => b.on_disabled_hover_text(w),
-                                None => b,
-                            };
+                            // an item that's off says why under itself, muted, in the menu: no
+                            // tooltip over the items below it (UX-LEAD)
+                            if let Some(w) = why {
+                                ui.horizontal(|ui| {
+                                    ui.add_space(8.0);
+                                    ui.label(egui::RichText::new(w).font(sans(11.0)).color(t.ink2));
+                                });
+                            }
                             menu_places.push((format!("fg:menu:{name}:{key}"), b.rect));
                             let hit = b.clicked();
                             if hit {
