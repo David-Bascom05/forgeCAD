@@ -68,7 +68,7 @@ Don't:
   whole view over a 50 mm tool.
 - Animated subjects (bend, toolpath): the camera does not cut per step; it holds a frame that
   contains the whole motion envelope; "Follow" is opt-in.
-- Helper: `camera::frame(bounds, view_rect, Dir::Iso)` (section 12). No environment computes its
+- Helper: `frame::frame(bounds, view_rect, Framing::default(), obstacles)` (section 12). No environment computes its
   own fit distance.
 
 ## 3. Style: Realistic for physical things
@@ -217,7 +217,8 @@ spellings per row: `UNKNOWN`, `set`, `not given`, `published ?`).
   1400×860 and 1600×1000, and one at 1024×700 to prove nothing clips.
 - Differences are allowed only where the platform forces them (file dialogs, menus) and are
   listed in the branch's README.
-- Fonts: the app's Inter / mono pair at the theme sizes; nothing smaller than 11 px.
+- Fonts: the app's Public Sans / IBM Plex Mono pair (shell/theme.rs) at the theme sizes
+  (`caption` 11, `small` 12, `body` 13, `title` 14); nothing smaller than 11 px.
 
 ## 11. The review gate
 
@@ -233,10 +234,11 @@ Adopt these instead of writing your own:
 
 | Widget / helper | Does |
 |---|---|
-| `ux::PropertySheet` | sectioned label/value/unit/badge grid; raw key on hover; sizes columns; handles unknown/set |
-| `ux::provenance_badge` | section 6 |
-| `ux::thumbnail` | renders a body list offscreen to a cached 96×96 texture, 3/4 view, Realistic |
-| `camera::frame` | section 2: fit bounds into the uncovered view rect, from a direction, eye outside obstacles |
-| `ux::ghost` | translucent outlined envelope + leader label for unknown geometry |
-| `ux::empty_state` / `ux::loading` | section 7 |
-| `ux::LibraryList` | section 8 rows, groups, levels filter, search |
+| `shell::ux::Sheet` (`num`, `text`, `flag`, `section`) | sectioned label / value / unit / badge rows; raw key + file on hover; unknown = `unknown · Set…` |
+| `shell::ux::badge`, `ux::Source` | section 6 |
+| `shell::ux::show`, `ux::Qty`, `ux::System` | section 5 units: length, angle, mass, force (kN), torque, speed, feed, accel, rpm, power, load per length; metric / inch |
+| `shell::ux::label` | person's label for a record key (`dc` → Cutting diameter, `speeds.approach` → Approach speed) |
+| `frame::frame`, `frame::Bounds`, `frame::ViewRect`, `frame::grid_step` | section 2: fit bounds into the uncovered view rect from a direction, eye moved outside obstacles (or `eye_blocked` so the caller ghosts them); grid step for a subject |
+| `shell::ux::empty_state`, `ux::loading` | section 7 |
+| `shell::ux::transport`, `ux::transport_key`, `ux::icon_button` | the one transport row with icons and its keys (Space, ←/→, Home/End) |
+| planned: `ux::thumbnail`, `ux::ghost`, `ux::LibraryList` | 48 px real-geometry thumbnails; ghost envelopes with leader labels; section 8 lists |
