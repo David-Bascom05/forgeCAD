@@ -522,7 +522,9 @@ fn turning_sheet(text: &str, tc: &forge_turn_lang::TurnCam) -> String {
 pub fn recheck(mut r: Run) -> Run {
     let Some(cam) = &r.cam else { return r };
     for oc in cam.check(None) {
-        let Some(o) = r.ops.iter_mut().find(|o| o.name == oc.op) else { continue };
+        let Some(o) = r.ops.iter_mut().find(|o| o.name == oc.op) else {
+            continue;
+        };
         o.checks = oc
             .checks
             .iter()
@@ -693,7 +695,16 @@ mod tests {
     fn check_now_checks_the_posted_paths_again() {
         let (text, dir) = flange();
         let r = recheck(run(&text, &dir));
-        assert!(r.ops.iter().all(|o| o.status == "built" && o.assurance == Assurance::CheckedOnDemand), "{:?}", r.ops.iter().map(|o| (&o.name, &o.status, o.assurance)).collect::<Vec<_>>());
+        assert!(
+            r.ops
+                .iter()
+                .all(|o| o.status == "built" && o.assurance == Assurance::CheckedOnDemand),
+            "{:?}",
+            r.ops
+                .iter()
+                .map(|o| (&o.name, &o.status, o.assurance))
+                .collect::<Vec<_>>()
+        );
         assert!(r.ops.iter().all(|o| o.pairs > 0 || o.kind == "drill"));
     }
 

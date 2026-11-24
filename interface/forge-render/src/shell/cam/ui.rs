@@ -146,6 +146,7 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                     a(Ask::PostProcess),
                     w.post_dlg.is_some(),
                 ),
+                ("NC Programs", "cam_sheet", a(Ask::Programs), w.programs_open),
             ],
             vec![
                 (
@@ -181,6 +182,11 @@ pub fn num(x: f64) -> String {
     let s = format!("{x:.3}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
     if s == "-0" { "0".into() } else { s.into() }
+}
+
+/// A time as m:ss.
+fn short_time(s: f64) -> String {
+    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0).floor() as u32)
 }
 
 /// A work offset's word: G54 for the first.
@@ -294,7 +300,14 @@ impl Shell {
                     let lathe = w.stmt(&su).is_some_and(|s| s.func == "lathe_setup");
                     let label = match w.run.as_ref().and_then(|r| r.setup(&su)) {
                         Some(_) if lathe => format!("{su}  ·  lathe"),
-                        Some(s) => format!("{su}  ·  {}", wcs_word(s.offset)),
+                        Some(s) => {
+                            let tsum: f64 = w.run.as_ref().map_or(0.0, |r| r.ops.iter().filter(|o| o.setup == su).map(|o| o.time_s).sum());
+                            if tsum > 0.0 {
+                                format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), short_time(tsum))
+                            } else {
+                                format!("{su}  ·  {}", wcs_word(s.offset))
+                            }
+                        }
                         None => su.clone(),
                     };
                     let resp = tree_row(
@@ -486,6 +499,9 @@ impl Shell {
         if w.post_dlg.is_some() {
             blocks.extend(post_window(ctx, &t, v, &mut w, &mut places));
         }
+        if w.programs_open {
+            blocks.extend(programs_window(ctx, &t, v, &mut w, &mut places));
+        }
         if w.tools_open {
             blocks.extend(tools_window(ctx, &t, v, &mut w, &mut places));
         }
@@ -669,6 +685,27 @@ fn details(
             };
             fact(ui, t, "Machine", &su.machine, width, t.ink);
             fact(ui, t, "Work offset", &wcs_word(su.offset), width, t.ink);
+            if let Some(r) = run {
+                let ops: Vec<&super::run::OpRes> = r.ops.iter().filter(|o| o.setup == id).collect();
+                let total: f64 = ops.iter().map(|o| o.time_s).sum();
+                heading(ui, t, &format!("Cycle time {}", time(total)), width);
+                for o in &ops {
+                    fact(
+                        ui,
+                        t,
+                        &format!("  {} · {}", o.name, o.kind),
+                        &time(o.time_s),
+                        width,
+                        t.ink2,
+                    );
+                }
+                note(
+                    ui,
+                    "Feeds and rapids at their programmed rates, tool changes not counted; the machine-timeline time comes with the quality measure.",
+                    width,
+                    t.ink2,
+                );
+            }
             fact(
                 ui,
                 t,
@@ -1801,6 +1838,30 @@ fn tools_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: 
                     }
                 }
             });
+            heading(ui, t, "Import a Fusion tool library", width);
+            let mut ip = w.import_path.clone();
+            let mut go = false;
+            row(ui, t, "JSON file", width, 30.0, |ui| {
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut ip)
+                        .font(sans(13.0))
+                        .hint_text("beside the document, e.g. shop.json")
+                        .desired_width(ui.available_width() - 80.0),
+                );
+                places.push(("cam:tools:import:path".into(), r.rect));
+                go = button(ui, t, "Import", true, "cam:tools:import".into(), places);
+            });
+            w.import_path = ip;
+            if go {
+                let f = w.import_path.clone();
+                w.said = Some(match w.import_fusion(&f) {
+                    Ok(m) => m,
+                    Err(e) => format!("import: {e}"),
+                });
+            }
+            if let Some(s) = &w.said {
+                note(ui, s, width, t.ink2);
+            }
             heading(ui, t, "Holders", width);
             for h in &w.lib.holders {
                 fact(ui, t, &h.id, &format!("{} · gauge {} mm · {} rpm", h.interface, num(h.gauge_length), num(h.max_rpm)), width, t.ink);
@@ -1967,6 +2028,123 @@ fn section_window(
         });
     if close {
         w.turnview.open = false;
+    }
+    r.map(|r| r.response.rect)
+}
+
+/// The NC programs: every program, the setups it posts, its dialect and number, what it made;
+/// a new program over chosen setups; every released program written at once.
+fn programs_window(
+    ctx: &egui::Context,
+    t: &Theme,
+    v: Rect,
+    w: &mut CamWs,
+    places: &mut Places,
+) -> Option<Rect> {
+    let mut close = false;
+    let width = 600.0;
+    let mut edits: Vec<super::doc::Edit> = vec![];
+    let mut writes: Vec<(String, String)> = vec![];
+    let progs: Vec<super::doc::Stmt> = w
+        .stmts
+        .iter()
+        .filter(|s| s.role == super::doc::Role::Program)
+        .cloned()
+        .collect();
+    let setups: Vec<String> = w.setups().iter().map(|s| s.name.clone()).collect();
+    let lathe = w.turning();
+    let r = egui::Window::new("cam-programs")
+        .id(egui::Id::unique("cam-programs-window"))
+        .title_bar(false)
+        .collapsible(false)
+        .resizable(false)
+        .default_pos(pos2(v.center().x - width / 2.0, v.top() + 60.0))
+        .fixed_size(vec2(width, 0.0))
+        .frame(frame(t))
+        .constrain_to(crate::shell::dialog_area(ctx))
+        .show_placed(ctx, places, |ui, places| {
+            close = head(ui, t, "cam_sheet", "NC Programs", width, places, "cam:programs");
+            if progs.is_empty() {
+                note(ui, "No program yet: a new setup comes with one, or add one below.", width, t.ink2);
+            }
+            for p in &progs {
+                let res = w.run.as_ref().and_then(|r| r.programs.iter().find(|x| x.name == p.name)).cloned();
+                heading(ui, t, &p.name, width);
+                // its setups: a check each (the first positional argument: one name or a list)
+                let now = p.pos(0).unwrap_or("").to_string();
+                let had: Vec<String> = now
+                    .trim_matches(|c| c == '[' || c == ']' || c == '(' || c == ')')
+                    .split(',')
+                    .map(|x| x.trim().to_string())
+                    .filter(|x| !x.is_empty())
+                    .collect();
+                let mut want = had.clone();
+                ui.horizontal(|ui| {
+                    ui.add_space(14.0);
+                    ui.label(egui::RichText::new("Setups").font(sans(13.0)).color(t.ink2));
+                    for su in &setups {
+                        let mut on = want.contains(su);
+                        let r = ui.checkbox(&mut on, su.as_str());
+                        places.push((format!("cam:programs:{}:{su}", p.name), r.rect));
+                        if on && !want.contains(su) {
+                            want.push(su.clone());
+                        }
+                        if !on {
+                            want.retain(|x| x != su);
+                        }
+                    }
+                });
+                if want != had && !want.is_empty() {
+                    let ordered: Vec<String> = setups.iter().filter(|s| want.contains(s)).cloned().collect();
+                    let text = if ordered.len() == 1 { ordered[0].clone() } else { format!("[{}]", ordered.join(", ")) };
+                    // a program reads its setups: below the last of them first
+                    let at = |n: &str| w.stmts.iter().position(|x| x.name == n);
+                    if ordered.iter().any(|su| at(su) > at(&p.name)) {
+                        edits.push(super::doc::Edit::Move { id: p.name.clone(), before: None });
+                    }
+                    edits.push(super::doc::Edit::Set { id: p.name.clone(), arg: "#0".into(), text });
+                }
+                let words = format!(
+                    "{} · O{} · {}",
+                    p.arg_str("post").unwrap_or_else(|| "the machine's".into()),
+                    p.arg("number").unwrap_or("?"),
+                    match &res {
+                        Some(r) if r.text.is_some() => format!("{} lines, {}", r.lines, r.certified),
+                        Some(r) => format!("not released: {}", r.error.clone().unwrap_or_default()),
+                        None => "not generated".into(),
+                    }
+                );
+                note(ui, &words, width, if res.as_ref().is_some_and(|r| r.text.is_some()) { t.ink } else { t.warn });
+                if let Some(text) = res.and_then(|r| r.text) {
+                    writes.push((w.dir.join(format!("{}.nc", p.name)).display().to_string(), text));
+                }
+            }
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.add_space(14.0);
+                if !setups.is_empty() && button(ui, t, "New Program", false, "cam:programs:new".into(), places) {
+                    let n = super::doc::free_name(&w.stmts, &format!("prog{}", progs.len() + 1));
+                    let num = progs.len() + if lathe { 1 } else { 1001 };
+                    let (f, post) = if lathe { ("lathe_program", "fanuc-lathe") } else { ("program", "fanuc") };
+                    edits.push(super::doc::Edit::Add {
+                        before: None,
+                        text: format!("{n} = {f}({}, post: \"{post}\", number: {num})", setups[0]),
+                    });
+                }
+                if !writes.is_empty() && button(ui, t, "Write All NC Files", true, "cam:programs:write".into(), places) {
+                    w.want_write.extend(writes.clone());
+                }
+            });
+            note(ui, "Each program posts its setups in order with one dialect; open Post Process for a program's text and dialect.", width, t.ink2);
+            ui.add_space(8.0);
+        });
+    if !edits.is_empty()
+        && let Err(e) = w.edits(&edits)
+    {
+        w.said = Some(e);
+    }
+    if close {
+        w.programs_open = false;
     }
     r.map(|r| r.response.rect)
 }
