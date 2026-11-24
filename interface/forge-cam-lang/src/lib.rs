@@ -218,6 +218,18 @@ pub struct Leftover {
     pub below: Option<f64>,
 }
 
+/// A setup as `Cam::setup_view` shows it.
+#[derive(Clone, Copy, Debug)]
+pub struct SetupView<'a> {
+    pub name: &'a str,
+    pub stock: Stock,
+    pub machine: &'a str,
+    pub group: &'a str,
+    pub at: Option<[f64; 3]>,
+    pub clear: f64,
+    pub retract: f64,
+}
+
 pub struct Cam {
     pub leftover: Vec<Leftover>,
     pub leftover_done: bool,
@@ -4114,6 +4126,37 @@ impl Cam {
         }
         h.push_str("</table>\n<p>Feeds and speeds are starting points from generic data: verify with the tool maker. The certificate covers the geometry only.</p>\n</body></html>\n");
         h
+    }
+
+    /// The program's tools, indexed as `OpOut::tool` and `OpPath::tool` index them (read only,
+    /// for measurement: verify/forge-cam-quality).
+    pub fn tool_uses(&self) -> &[ToolUse] {
+        &self.tools
+    }
+
+    /// Setup `i` as measurement needs it (read only): its stock box, the machine named, the
+    /// part's ISO 513 material group, and the work offset if placed.
+    pub fn setup_view(&self, i: usize) -> Option<SetupView<'_>> {
+        let s = self.setups.get(i)?;
+        Some(SetupView {
+            name: &s.name,
+            stock: s.stock,
+            machine: &s.machine,
+            group: &self.parts[s.part].group,
+            at: s.at,
+            clear: s.heights.clear,
+            retract: s.heights.retract,
+        })
+    }
+
+    /// The cutting data of a material group in the library the job was made with.
+    pub fn cutting_group(&self, g: &str) -> Option<&feeds::Group> {
+        self.lib.group(g)
+    }
+
+    /// The machine's rpm range as the tooling library states it.
+    pub fn machine_rpm(&self, name: &str) -> Option<[f64; 2]> {
+        self.lib.machine(name).ok().map(|m| m.rpm)
     }
 
     /// The first program's text, if released.
