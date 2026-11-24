@@ -310,7 +310,8 @@ pub fn check(env: &Env, argv: &[String]) -> Out {
         if parts {
             if e.level == Level::Builtin {
                 // the built-in parts, written where the envelope check can build them
-                let tmp = std::env::temp_dir().join(format!("forgecad-machine-check-{}", std::process::id()));
+                let tmp = forge_dirs::temp_dir()
+                    .join(format!("forgecad-machine-check-{}", forge_dirs::process_id()));
                 let mut ok = true;
                 for b in &e.def.bodies {
                     if let Some(p) = &b.part
