@@ -28,6 +28,7 @@ pub mod export;
 pub mod holes;
 pub mod life;
 pub mod sim;
+pub mod toollog;
 
 use forge_agent::json::Json;
 use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolUse};

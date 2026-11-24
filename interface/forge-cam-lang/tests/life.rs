@@ -15,11 +15,21 @@ fn doc(material: &str) -> String {
 fn ti64_altin_carbide_is_estimated_and_warns_when_worn() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     let cam = forge_cam_lang::run(&doc(", material: \"Ti-6Al-4V\""), &dir);
-    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>());
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
     let rows = life::builtin();
     let out = cam.tool_life(&rows, &[], &BTreeMap::new());
     let t1 = out.iter().find(|o| o.t == 1).unwrap();
-    assert_eq!(t1.life.row.as_deref(), Some("ti64-carbide-alti-n-highfeed-vb03"), "{}", t1.life.note);
+    assert_eq!(
+        t1.life.row.as_deref(),
+        Some("ti64-carbide-alti-n-highfeed-vb03"),
+        "{}",
+        t1.life.note
+    );
     assert!(t1.life.minutes_in_cut > 0.0);
     let used = t1.life.used.unwrap();
     assert!(used > 0.0 && used.is_finite());
@@ -30,7 +40,13 @@ fn ti64_altin_carbide_is_estimated_and_warns_when_worn() {
     assert!(t2.warning.is_none());
     // a tool with almost no life left: a warning, with the change point inside the program
     let mut lim = BTreeMap::new();
-    lim.insert(1, Limit { at: 1.0, start: 1.0 - 0.5 * used });
+    lim.insert(
+        1,
+        Limit {
+            at: 1.0,
+            start: 1.0 - 0.5 * used,
+        },
+    );
     let out = cam.tool_life(&rows, &[], &lim);
     let w = out.iter().find(|o| o.t == 1).unwrap().warning.clone().unwrap();
     let at = w.change_at.unwrap();
@@ -42,8 +58,15 @@ fn ti64_altin_carbide_is_estimated_and_warns_when_worn() {
 fn no_material_is_not_estimated() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     let cam = forge_cam_lang::run(&doc(""), &dir);
-    assert!(cam.ok, "{:?} {:?}", cam.errors, cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>());
+    assert!(
+        cam.ok,
+        "{:?} {:?}",
+        cam.errors,
+        cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
+    );
     let out = cam.tool_life(&life::builtin(), &[], &BTreeMap::new());
-    assert!(out.iter().all(|o| o.life.used.is_none() && o.life.note.contains("names no material")));
+    assert!(
+        out.iter()
+            .all(|o| o.life.used.is_none() && o.life.note.contains("names no material"))
+    );
 }
-

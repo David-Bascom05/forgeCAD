@@ -177,30 +177,32 @@ impl Row {
 
     /// Minutes to the row's wear criterion at these conditions (None for non-positive input).
     pub fn life(&self, vc: f64, f: f64, ap: f64) -> Option<f64> {
-        if !(vc > 0.0) {
+        if !pos(vc) {
             return None;
         }
         let mut denom = vc;
         if self.a != 0.0 {
-            if !(f > 0.0) {
+            if !pos(f) {
                 return None;
             }
-            denom *= f.powf(self.a);
+            denom *= forge_math::dmath::powf(f, self.a);
         }
         if self.b != 0.0 {
-            if !(ap > 0.0) {
+            if !pos(ap) {
                 return None;
             }
-            denom *= ap.powf(self.b);
+            denom *= forge_math::dmath::powf(ap, self.b);
         }
-        let t = (self.c / denom).powf(1.0 / self.n);
+        let t = forge_math::dmath::powf(self.c / denom, 1.0 / self.n);
         t.is_finite().then_some(t)
     }
 
     /// Whether these conditions are inside every range the row states.
     pub fn inside(&self, vc: f64, f: f64, ap: f64) -> bool {
         let ok = |r: Option<[f64; 2]>, x: f64| r.is_none_or(|r| x >= r[0] && x <= r[1]);
-        ok(self.vc_range, vc) && (self.a == 0.0 || ok(self.f_range, f)) && (self.b == 0.0 || ok(self.ap_range, ap))
+        ok(self.vc_range, vc)
+            && (self.a == 0.0 || ok(self.f_range, f))
+            && (self.b == 0.0 || ok(self.ap_range, ap))
     }
 
     pub fn matches(&self, op: &str, tool: &str, coating: &str, work: &str) -> bool {
@@ -343,7 +345,7 @@ pub fn integrate(row: Option<&Row>, cuts: &[Cut], limit: Limit, not_found: &str)
     let mut bad = false;
     let budget = limit.at - limit.start;
     for c in cuts {
-        if !(c.minutes > 0.0) {
+        if !pos(c.minutes) {
             continue;
         }
         minutes += c.minutes;
@@ -360,7 +362,11 @@ pub fn integrate(row: Option<&Row>, cuts: &[Cut], limit: Limit, not_found: &str)
         let du = used.unwrap_or(0.0);
         if limit_at.is_none() && row.is_some() && !bad && d + du >= budget {
             // the fraction of this sample before the limit, linearly
-            let frac = if du > 0.0 { ((budget - d) / du).clamp(0.0, 1.0) } else { 0.0 };
+            let frac = if du > 0.0 {
+                ((budget - d) / du).clamp(0.0, 1.0)
+            } else {
+                0.0
+            };
             limit_at = Some(At {
                 op: c.op,
                 mv: c.mv,
@@ -402,9 +408,18 @@ pub fn integrate(row: Option<&Row>, cuts: &[Cut], limit: Limit, not_found: &str)
                 r.source,
                 r.n,
                 r.c,
-                if r.a != 0.0 { format!(", a = {} on {}", r.a, r.feed.name()) } else { String::new() },
-                if r.b != 0.0 { format!(", b = {} on ap", r.b) } else { String::new() },
-                r.vb.map(|v| format!("VB = {v} mm")).unwrap_or_else(|| r.criterion.clone()),
+                if r.a != 0.0 {
+                    format!(", a = {} on {}", r.a, r.feed.name())
+                } else {
+                    String::new()
+                },
+                if r.b != 0.0 {
+                    format!(", b = {} on ap", r.b)
+                } else {
+                    String::new()
+                },
+                r.vb.map(|v| format!("VB = {v} mm"))
+                    .unwrap_or_else(|| r.criterion.clone()),
             ),
         },
     }
@@ -469,6 +484,11 @@ pub fn check(tool: &str, life: &ToolLife, limit: Limit, sisters: &[&str]) -> Opt
     })
 }
 
+/// x > 0 (false for NaN).
+fn pos(x: f64) -> bool {
+    x > 0.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,7 +548,10 @@ mod tests {
         let r = row(0.25, 400.0, 0.5, 0.2);
         let t = r.life(200.0, 0.04, 2.0).unwrap();
         // v T^n f^a ap^b = C
-        let back = 200.0 * t.powf(0.25) * 0.04f64.powf(0.5) * 2.0f64.powf(0.2);
+        let back = 200.0
+            * forge_math::dmath::powf(t, 0.25)
+            * forge_math::dmath::powf(0.04, 0.5)
+            * forge_math::dmath::powf(2.0, 0.2);
         assert!((back - 400.0).abs() < 1e-9);
         assert_eq!(r.life(200.0, 0.0, 2.0), None);
     }
@@ -557,7 +580,12 @@ mod tests {
 
     #[test]
     fn no_row_is_not_estimated() {
-        let l = integrate(None, &[cut(0, 3.0, 200.0)], Limit::default(), "no data for hss in X");
+        let l = integrate(
+            None,
+            &[cut(0, 3.0, 200.0)],
+            Limit::default(),
+            "no data for hss in X",
+        );
         assert_eq!(l.used, None);
         assert_eq!(l.minutes_in_cut, 3.0);
         assert!(l.note.starts_with("not estimated"));

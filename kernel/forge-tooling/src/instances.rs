@@ -43,8 +43,17 @@ impl Bin {
 }
 
 /// Bins `cuts` to 2% steps in each value (log scale), keeping the time.
+/// ln(1.02): the bin step.
+const LN_STEP: f64 = 0.019_802_627_296_179_73;
+
 pub fn bins(cuts: &[Cut]) -> Vec<Bin> {
-    let q = |x: f64| if x > 0.0 { (x.ln() / 0.02f64.ln_1p()).round() as i64 } else { i64::MIN };
+    let q = |x: f64| {
+        if x > 0.0 {
+            (forge_math::dmath::ln(x) / LN_STEP).round() as i64
+        } else {
+            i64::MIN
+        }
+    };
     let mut out: Vec<(Vec<i64>, Bin)> = Vec::new();
     for c in cuts.iter().filter(|c| c.minutes > 0.0) {
         let k = vec![q(c.vc), q(c.fz), q(c.hex), q(c.hm), q(c.f_rev), q(c.ap)];
@@ -331,7 +340,11 @@ fn q(s: &str) -> String {
 fn f(x: f64) -> String {
     // shortest round-trip form, always with a digit after the point for floats
     let s = format!("{x:?}");
-    if s.contains('.') || s.contains('e') || s.contains("inf") || s.contains("NaN") { s } else { format!("{s}.0") }
+    if s.contains('.') || s.contains('e') || s.contains("inf") || s.contains("NaN") {
+        s
+    } else {
+        format!("{s}.0")
+    }
 }
 
 pub fn write(all: &[Instance]) -> String {
@@ -415,22 +428,22 @@ fn c_of_life(runs: &[Run], row: &Row, n: f64) -> Option<f64> {
             let fv = c.feed(row.feed);
             let mut x = c.vc;
             if row.a != 0.0 {
-                x *= fv.powf(row.a);
+                x *= forge_math::dmath::powf(fv, row.a);
             }
             if row.b != 0.0 {
-                x *= c.ap.powf(row.b);
+                x *= forge_math::dmath::powf(c.ap, row.b);
             }
-            if !(x > 0.0) {
+            if x.is_nan() || x <= 0.0 {
                 return None;
             }
-            s += c.minutes * x.powf(1.0 / n);
+            s += c.minutes * forge_math::dmath::powf(x, 1.0 / n);
         }
     }
-    (s > 0.0).then(|| s.powf(n))
+    (s > 0.0).then(|| forge_math::dmath::powf(s, n))
 }
 
 fn stats(cs: &[f64]) -> (f64, f64, f64, f64) {
-    let l: Vec<f64> = cs.iter().map(|c| c.ln()).collect();
+    let l: Vec<f64> = cs.iter().map(|&c| forge_math::dmath::ln(c)).collect();
     let m = l.iter().sum::<f64>() / l.len() as f64;
     let var = if l.len() > 1 {
         l.iter().map(|x| (x - m).powi(2)).sum::<f64>() / (l.len() - 1) as f64
@@ -439,7 +452,12 @@ fn stats(cs: &[f64]) -> (f64, f64, f64, f64) {
     };
     let lo = cs.iter().cloned().fold(f64::INFINITY, f64::min);
     let hi = cs.iter().cloned().fold(0.0, f64::max);
-    (m.exp(), lo, hi, var.sqrt().exp())
+    (
+        forge_math::dmath::exp(m),
+        lo,
+        hi,
+        forge_math::dmath::exp(var.sqrt()),
+    )
 }
 
 /// Fits the shop's C (and n with at least 3 lives whose time-weighted speeds span ≥ 20%) for
@@ -473,9 +491,13 @@ pub fn calibrate(all: &[Instance], tools: &[&str], row: &Row) -> Option<Calibrat
     let mut n = row.n;
     if fit_n {
         // n minimising the spread of log C across lives (golden-section on [0.05, 1.0])
-        let cost = |n: f64| cs_at(n).map(|c| stats(&c).3.ln()).unwrap_or(f64::INFINITY);
+        let cost = |n: f64| {
+            cs_at(n)
+                .map(|c| forge_math::dmath::ln(stats(&c).3))
+                .unwrap_or(f64::INFINITY)
+        };
         let (mut a, mut b) = (0.05f64, 1.0f64);
-        let g = (5f64.sqrt() - 1.0) / 2.0;
+        let g = 0.618_033_988_749_894_9;
         for _ in 0..80 {
             let (x1, x2) = (b - g * (b - a), a + g * (b - a));
             if cost(x1) < cost(x2) {
@@ -504,7 +526,11 @@ pub fn calibrate(all: &[Instance], tools: &[&str], row: &Row) -> Option<Calibrat
             c,
             lo,
             hi,
-            if fit_n { format!(", n = {n:.3} fitted") } else { format!(", n = {} from the cite", row.n) },
+            if fit_n {
+                format!(", n = {n:.3} fitted")
+            } else {
+                format!(", n = {} from the cite", row.n)
+            },
             row.n,
             row.c,
             row.source
@@ -592,7 +618,7 @@ mod tests {
         let (n, c) = (0.3f64, 300.0f64);
         let mut all = Vec::new();
         for (k, v) in [150.0, 200.0, 250.0].iter().enumerate() {
-            let t = (c / v).powf(1.0 / n);
+            let t = forge_math::dmath::powf(c / v, 1.0 / n);
             let mut i = Instance::new(&format!("a{k}"), "tool-x");
             i.runs.push(run(*v, t));
             i.log.push(Log {
@@ -611,8 +637,8 @@ mod tests {
         // with one life, n stays the cited 0.25 and C makes that life's D = 1
         let one = calibrate(&all[..1], &["tool-x"], &row()).unwrap();
         assert!(!one.n_fitted && one.n == 0.25);
-        let t = (c / 150.0f64).powf(1.0 / n);
-        assert!((one.c - 150.0 * t.powf(0.25)).abs() < 1e-9);
+        let t = forge_math::dmath::powf(c / 150.0f64, 1.0 / n);
+        assert!((one.c - 150.0 * forge_math::dmath::powf(t, 0.25)).abs() < 1e-9);
         assert!(one.note.contains("calibrated from your 1 log"));
     }
 }

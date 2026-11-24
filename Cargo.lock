@@ -109,6 +109,7 @@ dependencies = [
  "forge-dirs",
  "forge-lang",
  "forge-machine",
+ "forge-material",
  "forge-math",
  "forge-model",
  "forge-post",
