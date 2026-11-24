@@ -553,6 +553,67 @@ pub fn level_head(ui: &mut Ui, t: &Theme, level: &str, n: usize) {
     );
 }
 
+/// A library list's level filter (docs/ux/STANDARD.md §8): All · Project · User · Built-in as one
+/// segmented row with each level's count, kept per list; a level with nothing in it is greyed.
+/// Returns whether each level ([Project, User, Built-in]) is shown.
+pub fn level_filter(ui: &mut Ui, t: &Theme, salt: &str, counts: [usize; 3]) -> [bool; 3] {
+    let id = ui.make_persistent_id(("level-filter", salt));
+    let mut on: u8 = ui.data(|d| d.get_temp(id)).unwrap_or(0);
+    // a level emptied since it was chosen: back to all
+    if on > 0 && counts[usize::from(on) - 1] == 0 {
+        on = 0;
+    }
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        let total: usize = counts.iter().sum();
+        for (k, (w, n)) in [
+            ("All", total),
+            ("Project", counts[0]),
+            ("User", counts[1]),
+            ("Built-in", counts[2]),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let k = k as u8;
+            let text = RichText::new(format!("{w} {n}"))
+                .font(sans(11.0))
+                .color(if n == 0 { t.ink2.gamma_multiply(0.6) } else { t.ink });
+            let r = ui.add_enabled(n > 0 || k == 0, egui::Button::selectable(on == k, text));
+            if r.clicked() {
+                on = k;
+            }
+        }
+    });
+    ui.data_mut(|d| d.insert_temp(id, on));
+    match on {
+        0 => [true; 3],
+        k => std::array::from_fn(|i| i + 1 == usize::from(k)),
+    }
+}
+
+/// Whether a level is shown by `level_filter`'s answer.
+pub fn level_shown(shown: [bool; 3], lv: forge_library::Level) -> bool {
+    match lv {
+        forge_library::Level::Project => shown[0],
+        forge_library::Level::User => shown[1],
+        forge_library::Level::Builtin => shown[2],
+    }
+}
+
+/// The count of entries per level ([Project, User, Built-in]).
+pub fn level_counts(levels: impl Iterator<Item = forge_library::Level>) -> [usize; 3] {
+    let mut c = [0; 3];
+    for l in levels {
+        c[match l {
+            forge_library::Level::Project => 0,
+            forge_library::Level::User => 1,
+            forge_library::Level::Builtin => 2,
+        }] += 1;
+    }
+    c
+}
+
 /// Above a library list with no records of the user's own yet: what to do next.
 pub fn empty_levels(ui: &mut Ui, t: &Theme, any_own: bool) {
     if !any_own {

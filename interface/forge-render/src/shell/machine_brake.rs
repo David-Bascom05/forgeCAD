@@ -556,8 +556,17 @@ pub fn library(
         .id_salt(("brake:list", st.word))
         .max_height((ui.available_height() - 220.0).max(80.0))
         .show(ui, |ui| {
+            let shown = super::lib_form::level_filter(
+                ui,
+                t,
+                st.word,
+                super::lib_form::level_counts(st.entries.iter().map(|e| e.level)),
+            );
             super::lib_form::empty_levels(ui, t, st.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
+                if !super::lib_form::level_shown(shown, lv) {
+                    continue;
+                }
                 let here: Vec<&Entry<Rec>> = st
                     .entries
                     .iter()

@@ -1303,8 +1303,17 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
                     .iter()
                     .any(|x| x.to_lowercase().contains(&want))
             };
+            let shown = super::lib_form::level_filter(
+                ui,
+                t,
+                "machines",
+                super::lib_form::level_counts(st.cat.entries.iter().map(|e| e.level)),
+            );
             super::lib_form::empty_levels(ui, t, st.cat.entries.iter().any(|e| e.level != Level::Builtin));
             for lv in [Level::Project, Level::User, Level::Builtin] {
+                if !super::lib_form::level_shown(shown, lv) {
+                    continue;
+                }
                 let here: Vec<_> = st
                     .cat
                     .entries
