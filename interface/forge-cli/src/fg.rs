@@ -234,7 +234,15 @@ impl Session {
         if forge_turn_lang::is_turning(&src) {
             return Ok(Self::cam_turn(&src, &dir, a));
         }
-        let cam = forge_cam_lang::run(&src, &dir);
+        // the tooling the levels make: the document's project (`cam/<kind>/` beside it) over
+        // the user's (`<config>/forgecad/cam/`) over the built-in, as the builder saves them
+        let (lib, bad) =
+            forge_tooling_builder::library(Some(&dir), forge_tooling_builder::user_cam().as_deref());
+        let mut cam = forge_cam_lang::run_with_library(&src, &dir, lib);
+        for (kind, level, file, e) in bad {
+            cam.warnings
+                .push(format!("{kind} file {file} ({level:?}) did not load: {e}"));
+        }
         let mut text = String::new();
         for e in &cam.errors {
             text.push_str(&format!("error: {e}\n"));
