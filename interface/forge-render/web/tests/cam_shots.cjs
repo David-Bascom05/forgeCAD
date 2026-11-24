@@ -30,6 +30,9 @@ const SHOTS = [
   ["cam-1-opened.png", [], (s) => true],
   // opt-in roughing: a small 2D button; its Passes tab (engagement, one/two way, direction)
   ["cam-45-adaptive.png", ["select top", "new-op adaptive", "tab 2"], (s) => s.cam.dialogs.includes("op")],
+  // and made ahead of Clear (which then only tidies): its own toolpath, two-way passes at 50°
+  ["cam-46-adaptive-path.png", ["select skim", "new-op adaptive", "set to 12", "set passes \"two_way\"", "set engagement 50", "ok", "earlier adaptive2", "earlier adaptive2", "earlier adaptive2", "earlier adaptive2", "select adaptive2"],
+    (s) => s.cam.selected === "adaptive2" && !s.cam.generating && s.cam.ops?.every((o) => o.status === "built")],
   // a small screen (UX-LEAD's 1024 × 700): the windows fit the view, nothing runs under a panel
   ["cam-40-small-op.png", ["select prof"], (s) => s.cam.selected === "prof", undefined, "1024x700"],
   ["cam-41-small-tools.png", ["tools"], (s) => s.cam.dialogs.includes("tools"), undefined, "1024x700"],

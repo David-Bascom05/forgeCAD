@@ -198,9 +198,54 @@ pub fn num(x: f64) -> String {
     if s == "-0" { "0".into() } else { s.into() }
 }
 
+/// What a cycle time's two numbers are (shown on hover wherever they are).
+pub const CYCLE_TIP: &str = "\u{2265}: the least time the posted program can take on this machine, from its feeds, rapid rates and tool changes (a guaranteed lower bound).\nest.: an estimate with stated assumptions, not a prediction: a jerk-limited motion planner with 1000 mm/s\u{b2} acceleration (the machine record's where it gives one), 20,000 mm/s\u{b3} jerk and corners blended within 0.02 mm. A real machine can differ by tens of per cent.";
+
+/// A cycle time: the lower bound and the estimate, together.
+pub fn cycle_words((lo, est): (f64, f64)) -> String {
+    format!("\u{2265} {} \u{b7} est. {}", time(lo), time(est))
+}
+
+/// As `cycle_words`, short (m:ss), for the browser's rows.
+fn cycle_short((lo, est): (f64, f64)) -> String {
+    format!("\u{2265} {} \u{b7} est. {}", short_time(lo), short_time(est))
+}
+
+/// A choice's words for a person (the Forge word on hover): `passes: "one_way"` reads "One
+/// direction".
+fn choice_words(arg: &str, word: &str) -> String {
+    match (arg, word) {
+        ("passes", "one_way") => "One direction".into(),
+        ("passes", "two_way") => "Both directions".into(),
+        _ => {
+            let w = word.replace('_', " ");
+            let mut c = w.chars();
+            c.next().map_or(String::new(), |f| f.to_uppercase().collect::<String>() + c.as_str())
+        }
+    }
+}
+
+/// A default's value, where its words give one: a leading number ("0 (walls)", "60"), or a
+/// share of the tool's diameter ("half the tool's diameter", "0.4 × the tool's diameter").
+fn default_value(words: &str, tool_d: Option<f64>) -> Option<f64> {
+    let lead: String = words.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+    if !lead.is_empty() && !words.contains("tool's diameter") {
+        return lead.parse().ok();
+    }
+    let d = tool_d?;
+    if words.starts_with("half the tool's diameter") {
+        return Some(0.5 * d);
+    }
+    let (k, rest) = words.split_once(" \u{d7} ")?;
+    rest.starts_with("the tool's diameter").then_some(())?;
+    Some(k.trim().parse::<f64>().ok()? * d)
+}
+
 /// A time as m:ss.
 fn short_time(s: f64) -> String {
-    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0).floor() as u32)
+    // whole seconds, rounded as `time` rounds them
+    let s = s.round();
+    format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0) as u32)
 }
 
 /// A work offset's word: G54 for the first.
@@ -330,7 +375,9 @@ impl Shell {
                         Some(_) if lathe => format!("{su}  ·  lathe"),
                         Some(s) => {
                             let tsum: f64 = w.run.as_ref().map_or(0.0, |r| r.ops.iter().filter(|o| o.setup == su).map(|o| o.time_s).sum());
-                            if tsum > 0.0 {
+                            if let Some(c) = w.run.as_ref().and_then(|r| r.setup_cycle(&su)) {
+                                format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), cycle_short(c))
+                            } else if tsum > 0.0 {
                                 format!("{su}  ·  {}  ·  {}", wcs_word(s.offset), short_time(tsum))
                             } else {
                                 format!("{su}  ·  {}", wcs_word(s.offset))
@@ -728,23 +775,26 @@ fn details(
             if let Some(r) = run {
                 let ops: Vec<&super::run::OpRes> = r.ops.iter().filter(|o| o.setup == id).collect();
                 let total: f64 = ops.iter().map(|o| o.time_s).sum();
-                heading(ui, t, &format!("Cycle time {}", time(total)), width);
-                for o in &ops {
-                    fact(
+                if let Some(c) = r.setup_cycle(id) {
+                    heading(ui, t, "Cycle time", width);
+                    fact_tip(ui, t, "On the machine", &cycle_words(c), CYCLE_TIP, width, t.ink);
+                    for o in &ops {
+                        if let Some(oc) = r.cycle([o.name.as_str()]) {
+                            fact_tip(ui, t, &format!("  {} · {}", o.name, o.kind), &cycle_words(oc), CYCLE_TIP, width, t.ink2);
+                        }
+                    }
+                } else {
+                    heading(ui, t, &format!("Feed time {}", time(total)), width);
+                    for o in &ops {
+                        fact(ui, t, &format!("  {} · {}", o.name, o.kind), &time(o.time_s), width, t.ink2);
+                    }
+                    note(
                         ui,
-                        t,
-                        &format!("  {} · {}", o.name, o.kind),
-                        &time(o.time_s),
+                        "Feeds and rapids at their programmed rates, tool changes not counted: not a cycle time (that comes from the machine's timeline once the program is timed).",
                         width,
                         t.ink2,
                     );
                 }
-                note(
-                    ui,
-                    "Feeds and rapids at their programmed rates, tool changes not counted; the machine-timeline time comes with the quality measure.",
-                    width,
-                    t.ink2,
-                );
             }
             fact(
                 ui,
@@ -928,7 +978,10 @@ fn details(
                     width,
                     t.ink,
                 );
-                fact(ui, t, "Time", &time(o.time_s), width, t.ink);
+                match run.and_then(|r| r.cycle([o.name.as_str()])) {
+                    Some(c) => fact_tip(ui, t, "Cycle time", &cycle_words(c), CYCLE_TIP, width, t.ink),
+                    None => fact(ui, t, "Feed time", &time(o.time_s), width, t.ink),
+                }
             }
             if let Some(l) = o.least {
                 let tol = run.and_then(|r| r.setup(&o.setup)).map_or(0.0, |s| s.tol);
@@ -1001,8 +1054,8 @@ fn pct(x: f64) -> String {
 fn quality_facts(ui: &mut Ui, t: &Theme, q: &forge_cam_quality::OpQ, width: f32) {
     heading(ui, t, "Toolpath quality", width);
     let cut_air = q.t_cut + q.t_air;
-    if q.t_stop > 0.0 {
-        fact(ui, t, "Cycle (machine timeline)", &time(q.t_stop), width, t.ink);
+    if q.t_min > 0.0 {
+        fact_tip(ui, t, "Cycle time", &cycle_words((q.t_min, q.t_scurve.max(q.t_min))), CYCLE_TIP, width, t.ink);
     }
     if cut_air > 0.0 {
         let air = q.t_air / cut_air;
@@ -1174,6 +1227,22 @@ fn arg_field(
     key: &str,
     places: &mut Places,
 ) {
+    arg_field_tip(ui, t, label, v, hint, "", unit, key, places);
+}
+
+/// As `arg_field`, with `tip` on hover (a default's rule).
+#[allow(clippy::too_many_arguments)]
+fn arg_field_tip(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    v: &mut String,
+    hint: &str,
+    tip: &str,
+    unit: &str,
+    key: &str,
+    places: &mut Places,
+) {
     row(ui, t, label, DLG_W, 30.0, |ui| {
         let r = ui.add(
             egui::TextEdit::singleline(v)
@@ -1182,6 +1251,9 @@ fn arg_field(
                 .desired_width(ui.available_width() - 40.0)
                 .margin(vec2(7.0, 5.0)),
         );
+        if !tip.is_empty() {
+            r.clone().on_hover_text(tip);
+        }
         places.push((key.to_string(), r.rect));
         ui.add_space(4.0);
         ui.label(egui::RichText::new(unit).font(sans(12.0)).color(t.ink2));
@@ -1219,6 +1291,11 @@ fn arg_choice(
                     }
                 }
             });
+        // the Forge word it writes, on hover (an op's keyword choices)
+        if let Some(arg) = key.strip_prefix("cam:op:arg:") {
+            let words = if v.is_empty() { "not written (the default)".to_string() } else { format!("{arg}: {v}") };
+            r.response.clone().on_hover_text(format!("Forge text: {words}"));
+        }
         places.push((key.to_string(), r.response.rect));
     });
 }
@@ -1306,21 +1383,37 @@ fn op_dialog(
                 d.name = name;
                 fact(ui, t, "Setup", &d.setup, DLG_W, t.ink);
             }
+            // the chosen tool's diameter: the defaults that follow from it, as numbers
+            let tool_d = w
+                .lib
+                .tools
+                .iter()
+                .find(|x| w.stmt(d.get("tool")).and_then(|s| s.pos(0)).map(super::doc::unquote).as_deref() == Some(x.id.as_str()))
+                .map(|x| x.dc);
             for f in spec.fields.iter().filter(|f| f.tab == tab) {
                 let key = format!("cam:op:arg:{}", f.arg);
                 let mut val = d.get(f.arg).to_string();
-                let hint = if f.required { "required".to_string() } else { format!("default: {}", f.default) };
+                // a default: its value where it is a number (or the tool's diameter gives one),
+                // "default" beside it, the rule on hover
+                let (hint, tip) = if f.required {
+                    ("required".to_string(), String::new())
+                } else {
+                    match default_value(f.default, tool_d) {
+                        Some(v) => (format!("{}  \u{b7} default", num(v)), format!("Default: {}", f.default)),
+                        None => (format!("default: {}", f.default), String::new()),
+                    }
+                };
                 match f.kind {
-                    Kind::Len => arg_field(ui, t, f.label, &mut val, &hint, "mm", &key, places),
-                    Kind::Deg => arg_field(ui, t, f.label, &mut val, &hint, "deg", &key, places),
+                    Kind::Len => arg_field_tip(ui, t, f.label, &mut val, &hint, &tip, "mm", &key, places),
+                    Kind::Deg => arg_field_tip(ui, t, f.label, &mut val, &hint, &tip, "\u{b0}", &key, places),
                     Kind::Z => arg_field(ui, t, f.label, &mut val, &hint, "mm z", &key, places),
                     Kind::Count => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
                     Kind::Choice(words) => {
                         let mut items: Vec<(String, String)> = vec![];
                         if !f.required {
-                            items.push((String::new(), format!("default ({})", f.default)));
+                            items.push((String::new(), format!("{} (default)", choice_words(f.arg, f.default))));
                         }
-                        items.extend(words.iter().map(|w| (format!("\"{w}\""), (*w).to_string())));
+                        items.extend(words.iter().map(|w| (format!("\"{w}\""), choice_words(f.arg, w))));
                         arg_choice(ui, t, f.label, &mut val, &items, &key, places);
                     }
                     Kind::Tool => {
@@ -2814,14 +2907,13 @@ fn quality_window(
                     let words = match &p.error {
                         Some(e) => format!("not timed: {e}"),
                         None => format!(
-                            "{} with stops ({} at least) · {} tool changes{}",
-                            time(p.t_stop),
-                            time(p.t_min),
+                            "{} · {} tool changes{}",
+                            cycle_words((p.t_min, p.t_scurve.max(p.t_min))),
                             p.tool_changes,
                             if p.accel_missing { " · the machine gives no accelerations" } else { "" }
                         ),
                     };
-                    fact(ui, t, &format!("{} on {}", p.name, p.machine), &words, width, if p.error.is_some() { t.warn } else { t.ink });
+                    fact_tip(ui, t, &format!("{} on {}", p.name, p.machine), &words, CYCLE_TIP, width, if p.error.is_some() { t.warn } else { t.ink });
                 }
             }
             note(
@@ -2983,8 +3075,11 @@ pub fn status_line(w: &CamWs) -> String {
         .run
         .as_ref()
         .map_or(0.0, |r| r.ops.iter().map(|o| o.time_s).sum());
-    let machining = if time > 0.0 {
-        format!(" · {} machining", self::time(time))
+    let cycle = w.run.as_ref().and_then(|r| r.cycle(r.ops.iter().map(|o| o.name.as_str())));
+    let machining = if let Some(c) = cycle {
+        format!(" · {} machining", cycle_words(c))
+    } else if time > 0.0 {
+        format!(" · {} feed time", self::time(time))
     } else {
         String::new()
     };
@@ -3185,4 +3280,22 @@ fn docked_foot(
             foot(ui, t, key, apply, places)
         })
         .inner
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{choice_words, default_value};
+
+    #[test]
+    fn defaults_read_as_their_values() {
+        assert_eq!(default_value("half the tool's diameter", Some(10.0)), Some(5.0));
+        assert_eq!(default_value("0.4 × the tool's diameter", Some(10.0)), Some(4.0));
+        assert_eq!(default_value("half the tool's diameter", None), None);
+        assert_eq!(default_value("0 (walls)", None), Some(0.0));
+        assert_eq!(default_value("0 (from +x)", None), Some(0.0));
+        assert_eq!(default_value("60", None), Some(60.0));
+        assert_eq!(default_value("the stock's top", Some(10.0)), None);
+        assert_eq!(choice_words("passes", "two_way"), "Both directions");
+        assert_eq!(choice_words("side", "outside"), "Outside");
+    }
 }

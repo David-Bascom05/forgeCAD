@@ -510,6 +510,29 @@ fn a_narrow_window_tabs_the_sheet_and_the_simulation() {
     }
 }
 
+/// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
+/// estimate counts the tool change the bound counts (the flange changes T1 for T12).
+#[test]
+fn cycle_time_is_the_bound_and_the_estimate_together() {
+    let Some((h, _)) = open("cycle") else { return };
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let r = w.run.as_ref().unwrap();
+    let q = r.quality.as_ref().expect("measured");
+    let p = q.progs.first().expect("a timed program");
+    assert!(p.error.is_none(), "{:?}", p.error);
+    assert!(p.tool_changes > 0, "the flange changes tools");
+    assert!(p.t_min > 0.0 && p.t_scurve >= p.t_min, "t_min {} t_scurve {}", p.t_min, p.t_scurve);
+    let (lo, est) = r.cycle(r.ops.iter().map(|o| o.name.as_str())).expect("timed");
+    assert!(est >= lo);
+    for o in &q.ops {
+        assert!(o.t_scurve + 1e-9 >= o.t_min, "{}: t_min {} t_scurve {}", o.name, o.t_min, o.t_scurve);
+    }
+    let line = forge_render::shell::cam::status_line(w);
+    assert!(line.contains('\u{2265}') && line.contains("est."), "{line}");
+    let words = forge_render::shell::cam::cycle_words((lo, est));
+    assert!(words.starts_with('\u{2265}') && words.contains(" est. "), "{words}");
+}
+
 /// Adaptive is opt-in: a small button after the 2D group's three big ones (never Clear's place),
 /// and the fields its form writes generate.
 #[test]
@@ -530,4 +553,21 @@ fn adaptive_is_an_opt_in_op_whose_fields_generate() {
     let op = cam.ops.iter().find(|o| o.name == "top").expect("top");
     assert!(op.refusal.is_none(), "{:?}", op.refusal);
     assert!(op.moves > 0, "adaptive made no moves");
+}
+
+/// Suppressing an op generates again (Generate as I edit): the ops after it are made, not left
+/// stale.
+#[test]
+fn suppressing_an_op_generates_again() {
+    use forge_render::shell::cam::Cmd;
+    let Some((mut h, _)) = open("suppress") else { return };
+    h.gui.shell.cam.as_mut().unwrap().command(Cmd::Suppress("top".into()));
+    settle(&mut h);
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert_eq!(w.status("top"), "suppressed");
+    // made again (bolts may be refused: its drill now meets the stock top would have cleared)
+    for op in ["prof", "bore", "bolts"] {
+        assert!(["built", "refused"].contains(&w.status(op)), "{op}: {}", w.status(op));
+    }
+    assert_eq!(w.status("prof"), "built");
 }

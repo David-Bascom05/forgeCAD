@@ -24,9 +24,11 @@
 //! and the stock, rapids against both. An op whose checks are not all `pass` is refused, with the
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
+pub mod cycle;
 pub mod export;
 pub mod holes;
 pub mod life;
+mod memo;
 pub mod probing;
 pub mod sim;
 pub mod toollog;
@@ -54,6 +56,35 @@ pub static CYCLE_PARAMS: std::sync::Mutex<(f64, f64)> =
     std::sync::Mutex::new((forge_post::PECK_CLEAR, forge_post::CHIP_LIFT));
 
 /// Whether a source is a machining document.
+/// The certifications made by earlier runs of documents in this process (memo.rs).
+static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
+
+/// `ops::certify_fixtured`, taken from an earlier run when every argument is the same (each
+/// number the same number): it is a function of these arguments alone (no clock, file or other
+/// state; the kernel's own memos are by content), so the summary is the one it would make. An
+/// edit to one op re-certifies only the ops whose posted path, tool, target faces, stock
+/// stages, fixture, clearances or tolerance it changed.
+#[allow(clippy::too_many_arguments)]
+fn certify_memo(
+    p: &OpPath,
+    tool: &ops::ToolUse,
+    part: &[Face],
+    stages: &[(usize, Vec<Face>)],
+    fixture: &[Face],
+    fclear: f64,
+    tol: f64,
+    clearance: f64,
+    column: bool,
+) -> ops::CheckSummary {
+    let key = format!(
+        "certify_with/1 {:?}",
+        (p, tool, part, stages, fixture, fclear, tol, clearance, column)
+    );
+    CERTIFIED.get_or(key, || {
+        ops::certify_with(p, tool, part, stages, fixture, fclear, tol, clearance, column)
+    })
+}
+
 pub fn is_machining(src: &str) -> bool {
     match syntax::parse(src) {
         Ok(p) => {
@@ -5186,6 +5217,9 @@ impl Cam {
                                 &prm,
                             )
                             .map_err(|e| format!("{e:?}"))?;
+                            for n in &out.notes {
+                                self.warnings.push(format!("{name}: {n}"));
+                            }
                             for (v, z) in out.voids {
                                 voids.push((Some(v), z));
                             }
@@ -8145,7 +8179,7 @@ impl Cam {
                 | "ramping"
                 | "flat"
         );
-        let mut sum = ops::certify_with(
+        let mut sum = certify_memo(
             posted,
             &tool,
             target,
@@ -8212,6 +8246,11 @@ impl Cam {
             d.feed_decimals = k;
         }
         let mut recs = vec![];
+        // a control with no cited probe move but cited probing macros (Renishaw Inspection
+        // Plus on Haas): a probe path is written with the macros
+        let macros = d.template("probe_move").is_empty() && !d.template("probe_surface").is_empty();
+        // posting errors found while writing the records (a probe move the macros cannot say)
+        let mut refused: Option<String> = None;
         let mut current_tool: Option<u32> = None;
         // where the last path left the tool, in the part's frame
         let mut last: Option<(usize, [f64; 3])> = None;
@@ -8284,6 +8323,64 @@ impl Cam {
                 }
                 recs.push(Rec::Rapid(w(p.start)));
                 let mut cur = p.start;
+                if t.probe && macros {
+                    // the probe switched on, every move of it protected, each probe move a
+                    // single-surface measure; switched off and Z home at the end
+                    recs.push(Rec::ProbeOn(true));
+                    let r = 0.5 * t.tool.dc;
+                    let set = op
+                        .probe
+                        .as_ref()
+                        .filter(|pr| pr.kind == "surface")
+                        .and_then(|pr| pr.wcs);
+                    for m in &p.moves {
+                        let from = cur;
+                        match *m {
+                            PMove::Rapid { to } => {
+                                recs.push(Rec::Rapid(w(to)));
+                                cur = to;
+                            }
+                            PMove::Line { to, f, .. } => {
+                                recs.push(Rec::ProbeProtected { to: w(to), f });
+                                cur = to;
+                            }
+                            PMove::Probe {
+                                to, over, back: true, ..
+                            } => {
+                                let d = [to[0] - from[0], to[1] - from[1], to[2] - from[2]];
+                                let moving: Vec<usize> = (0..3).filter(|&k| d[k] != 0.0).collect();
+                                let [k] = moving[..] else {
+                                    refused.get_or_insert(format!(
+                                        "{}: a probe move not along X, Y or Z cannot be a single-surface measure on {post}",
+                                        op.name
+                                    ));
+                                    continue;
+                                };
+                                let sgn = d[k].signum();
+                                // the surface's coordinate along the axis: the tip on a Z
+                                // surface, the ball's side on an X or Y one
+                                let surf = if k == 2 { to[2] } else { to[k] + sgn * r };
+                                recs.push(Rec::ProbeSurface {
+                                    axis: k as u8,
+                                    at: surf - o[k],
+                                    q: over,
+                                    wcs: set,
+                                });
+                            }
+                            _ => {
+                                refused.get_or_insert(format!(
+                                    "{}: only rapids, feed moves and probe moves that back off are written with the probing macros",
+                                    op.name
+                                ));
+                            }
+                        }
+                    }
+                    recs.push(Rec::ProbeOn(false));
+                    recs.push(Rec::Home);
+                    last = Some((op.setup, cur));
+                    spans.push((oi, pi, start, recs.len()));
+                    continue;
+                }
                 for m in &p.moves {
                     let from = cur;
                     cur = match *m {
@@ -8375,6 +8472,10 @@ impl Cam {
             op.deepest = f64::INFINITY;
             op.posted.clear();
         }
+        if let Some(e) = refused {
+            po.error = Some(e);
+            return po;
+        }
         recs.push(Rec::SpindleStop);
         recs.push(Rec::Coolant(forge_post::Coolant::Off));
         if post != "grbl" {
@@ -8395,6 +8496,17 @@ impl Cam {
         match forge_post::round_trip(&q, &d) {
             Ok((txt, _)) => {
                 po.round_trip = true;
+                // the single-surface measure's S writes a surface probe's work offset
+                if macros {
+                    for &oi in &op_ids {
+                        if let Some(pr) = self.ops[oi].probe.as_mut()
+                            && pr.kind == "surface"
+                            && pr.wcs.is_some()
+                        {
+                            pr.sets_wcs = true;
+                        }
+                    }
+                }
                 po.lines = txt.lines().count();
                 po.text = Some(txt);
             }
@@ -8439,6 +8551,8 @@ impl Cam {
                 _ => None,
             });
             let mut moves = vec![];
+            // the probe's ball radius (a single-surface measure names the surface, not the tip)
+            let ball_r = 0.5 * self.tools[path.tool].tool.dc;
             // where the last probe move started (a feed straight back there is its back-off)
             let mut probe_from: Option<[f64; 3]> = None;
             let mut start: Option<[f64; 3]> = None;
@@ -8501,6 +8615,31 @@ impl Cam {
                             f: *f as f64 / fscale,
                         });
                         at = t;
+                        column = None;
+                        continue;
+                    }
+                    // the probing macros: the switch moves Z a little (not modelled here: the next
+                    // protected move names every axis), a protected move is a feed move, a
+                    // single-surface measure is a probe move that returns to its start
+                    forge_post::Motion::ProbeOn(_) => continue,
+                    forge_post::Motion::ProbeProtected(p, f) => (back(*p), Phase::Link, *f as f64 / fscale),
+                    forge_post::Motion::ProbeSurface { axis, at: sv, q, .. } => {
+                        let k = *axis as usize;
+                        let surf = *sv as f64 / scale + o[k];
+                        let sgn = if surf >= at[k] { 1.0 } else { -1.0 };
+                        let mut to = at;
+                        to[k] = if k == 2 { surf } else { surf - sgn * ball_r };
+                        let over = *q as f64 / scale;
+                        let (_, entry) = planned_probes.next().unwrap_or((0.0, 0.0));
+                        let l = (to[k] - at[k]).abs() + over;
+                        lc += 2.0 * l;
+                        moves.push(PMove::Probe {
+                            to,
+                            f: 0.0,
+                            over,
+                            entry,
+                            back: true,
+                        });
                         column = None;
                         continue;
                     }
@@ -9124,14 +9263,20 @@ impl Cam {
                 esc(&format!("{}; {}", t.tool.source, t.tool.note))
             ));
         }
+        // the cycle time as the app shows it: the lower bound and the estimate together
+        let ct = self.cycle_times(&forge_machine::library::Library::with_builtin(), None);
+        let time_of = |i: usize, feed: f64| match ct.ops.get(i) {
+            Some(t) if t.t_min > 0.0 => cycle::cycle_words(t.t_min, t.t_scurve),
+            _ => format!("{feed:.0} s feed time"),
+        };
         h.push_str("</table>\n<h2>Operations</h2>\n<table><tr><th>op</th><th>kind</th><th>tool</th><th>rpm</th><th>feed</th><th>moves</th><th>cut mm</th><th>time</th><th>certificate</th></tr>\n");
-        for o in &self.ops {
+        for (oi, o) in self.ops.iter().enumerate() {
             let t = o
                 .tool
                 .map(|i| format!("T{} {}", self.tools[i].t, self.tools[i].tool.id))
                 .unwrap_or_default();
             h.push_str(&format!(
-                "<tr class=\"{}\"><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:.0}</td><td>{:.0} s</td><td>{}</td></tr>\n",
+                "<tr class=\"{}\"><td>{}</td><td>{}{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:.0}</td><td>{}</td><td>{}</td></tr>\n",
                 if o.status == "built" { "" } else { "refused" },
                 esc(&o.name),
                 o.kind,
@@ -9141,11 +9286,53 @@ impl Cam {
                 o.feeds.map(|f| format!("{:.0}", f.vf)).unwrap_or("-".into()),
                 o.moves,
                 o.length_cut,
-                o.time_s,
+                time_of(oi, o.time_s),
                 if o.status == "built" { "pass (certified)".to_string() } else { format!("refused: {}", esc(o.refusal.as_deref().unwrap_or(""))) }
             ));
         }
-        h.push_str("</table>\n<p>Feeds and speeds are starting points from generic data: verify with the tool maker. The certificate covers the geometry only.</p>\n</body></html>\n");
+        h.push_str("</table>\n");
+        // each setup's and program's cycle time, and what the two numbers are
+        let mut timed = false;
+        for (si, s) in self.setups.iter().enumerate() {
+            let (lo, est) = self
+                .ops
+                .iter()
+                .zip(&ct.ops)
+                .filter(|(o, _)| o.setup == si)
+                .fold((0.0, 0.0), |(a, b), (_, t)| (a + t.t_min, b + t.t_scurve));
+            if lo > 0.0 {
+                timed = true;
+                h.push_str(&format!(
+                    "<p>Setup <b>{}</b>: {}.</p>\n",
+                    esc(&s.name),
+                    cycle::cycle_words(lo, est)
+                ));
+            }
+        }
+        for p in &ct.progs {
+            match &p.error {
+                None => {
+                    timed = true;
+                    h.push_str(&format!(
+                        "<p>Program <b>{}</b> on {}: {}, {} tool change{}.</p>\n",
+                        esc(&p.name),
+                        esc(&p.machine),
+                        cycle::cycle_words(p.t_min, p.t_scurve),
+                        p.tool_changes,
+                        if p.tool_changes == 1 { "" } else { "s" }
+                    ));
+                }
+                Some(e) => h.push_str(&format!(
+                    "<p>Program <b>{}</b>: not timed ({}).</p>\n",
+                    esc(&p.name),
+                    esc(e)
+                )),
+            }
+        }
+        if timed {
+            h.push_str(&format!("<p>{}</p>\n", esc(cycle::CYCLE_NOTE)));
+        }
+        h.push_str("<p>Feeds and speeds are starting points from generic data: verify with the tool maker. The certificate covers the geometry only.</p>\n</body></html>\n");
         h
     }
 
@@ -9286,5 +9473,207 @@ mod loop_band_tests {
         let far = path(&[3.0 + lcf + 1.0, 3.0], -10.0);
         assert!(loop_band(&far, &froms(&far), 0, far.moves.len(), 3.0, &tool, 3.0 + lcf).is_none());
         assert!(loop_band(&p, &f, 0, p.moves.len(), 3.0, &tool, 6.0 + lcf + 1.0).is_none());
+    }
+}
+
+#[cfg(test)]
+mod staging_tests {
+    use super::*;
+
+    /// 0897fd13 (soundness): an op's stock is staged after a level (its voids taken as cleared
+    /// down to it), but only where no later cut is higher. Here a pocket's path cuts the deep well
+    /// to z 7, links up, then rapids down into the shallow well before cutting it at z 9.5.
+    /// The shallow well's stock (z 7 to the top) is still there, so the rapid meets it. Staging
+    /// after the deep well took the whole op's voids as cleared down to z 7, the shallow well's
+    /// included, and certified the rapid clear. Now no stage is made there and the rapid is
+    /// refused, on that move.
+    #[test]
+    fn a_rapid_into_stock_a_later_higher_cut_removes_is_refused() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let src = "machining\nf = part(\"two_wells.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-6\", t: 1, stickout: 30, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 2), origin: \"top-corner\", tol: 0.01, at: (-20, -20, -250))\nwells = pocket(op1, tool: t1, from: 12, to: 7, stepover: 2.4, step: 3)\np = program(op1, post: \"fanuc\", number: 1)\n";
+        let cam = run(src, &dir);
+        assert!(cam.ok, "{:?}", cam.errors);
+        let real = &cam.ops[0].paths[0];
+        let line = |to: [f64; 3], phase| PMove::Line { to, f: 300.0, phase };
+        let path = OpPath {
+            tool: real.tool,
+            start: [16.0, 20.0, 20.0],
+            moves: vec![
+                PMove::Rapid {
+                    to: [16.0, 20.0, 15.0],
+                },
+                line([16.0, 20.0, 7.0], Phase::Plunge),
+                line([16.0, 25.0, 7.0], Phase::Cut),
+                line([16.0, 25.0, 15.0], Phase::Link),
+                PMove::Rapid {
+                    to: [44.0, 20.0, 15.0],
+                },
+                // into the shallow well's stock (7..13): it is cut only by the next move
+                PMove::Rapid {
+                    to: [44.0, 20.0, 9.5],
+                },
+                line([44.0, 25.0, 9.5], Phase::Cut),
+                line([44.0, 25.0, 15.0], Phase::Link),
+            ],
+            rpm: real.rpm,
+            coolant: real.coolant,
+        };
+        let sum = cam.certify_posted(0, &path, true);
+        assert!(
+            !sum.clear,
+            "the rapid into the shallow well's stock was certified clear"
+        );
+        let bad: Vec<_> = sum.checks.iter().filter(|c| c.verdict != "pass").collect();
+        assert!(
+            bad.iter().all(|c| c.move_index == 5 && c.phase == "rapid"),
+            "{bad:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod certify_memo_tests {
+    use super::*;
+    use forge_cam::ops::Stock;
+
+    /// certify_fixtured's arguments.
+    type Args = (
+        OpPath,
+        ToolUse,
+        Vec<Face>,
+        Vec<(usize, Vec<Face>)>,
+        Vec<Face>,
+        f64,
+        f64,
+        f64,
+    );
+
+    fn tool(id: &str, stickout: f64) -> ToolUse {
+        let l = Library::builtin();
+        let t = l.tool(id).unwrap().clone();
+        let shape = t.shape(stickout, Some(l.holder("bt40-er32").unwrap())).unwrap();
+        ToolUse {
+            t: 1,
+            tool: t,
+            holder: Some("bt40-er32".into()),
+            stickout,
+            shape,
+            probe: false,
+        }
+    }
+
+    fn path(x: f64) -> OpPath {
+        OpPath {
+            tool: 0,
+            start: [x, 5.0, 30.0],
+            moves: vec![
+                PMove::Line {
+                    to: [x, 5.0, 12.0],
+                    f: 300.0,
+                    phase: Phase::Plunge,
+                },
+                PMove::Line {
+                    to: [x + 20.0, 5.0, 12.0],
+                    f: 900.0,
+                    phase: Phase::Cut,
+                },
+                PMove::Rapid {
+                    to: [x + 20.0, 5.0, 30.0],
+                },
+            ],
+            rpm: 8000.0,
+            coolant: forge_post::Coolant::Off,
+        }
+    }
+
+    /// Every argument class is in the key: changing any one of them (the path, the tool, a part
+    /// face, the stock, the fixture, its clearance, the tolerance, the clearance) certifies anew,
+    /// and the summary equals a fresh certification of the changed inputs; the same arguments
+    /// again take the memo. A stale summary (a Clear for inputs it was not made for) is the bug
+    /// this guards.
+    #[test]
+    fn each_input_class_certifies_anew() {
+        let part = Stock {
+            min: [0.0, 0.0, 0.0],
+            max: [40.0, 30.0, 10.0],
+        }
+        .faces();
+        let stock = Stock {
+            min: [-2.0, -2.0, 0.0],
+            max: [42.0, 32.0, 14.0],
+        }
+        .faces();
+        let fix = Stock {
+            min: [-50.0, -50.0, -10.0],
+            max: [90.0, 80.0, 0.0],
+        }
+        .faces();
+        let base = (
+            path(10.0),
+            tool("flat-6", 30.0),
+            part.clone(),
+            vec![(0usize, stock.clone())],
+            fix.clone(),
+            1.0,
+            0.01,
+            2.0,
+        );
+        let run = |a: &Args| certify_memo(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7, false);
+        let fresh = |a: &Args| ops::certify_with(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7, false);
+        let same = |x: &ops::CheckSummary, y: &ops::CheckSummary| format!("{x:?}") == format!("{y:?}");
+        let n0 = CERTIFIED.computed();
+        let s0 = run(&base);
+        assert!(same(&s0, &fresh(&base)));
+        let n1 = CERTIFIED.computed();
+        assert!(n1 > n0);
+        // the same again: from the memo
+        let _ = run(&base);
+        // each class changed by a little
+        let mut edits = Vec::new();
+        let mut e = base.clone();
+        e.0 = path(10.000001);
+        edits.push(("path", e));
+        let mut e = base.clone();
+        e.1 = tool("flat-6", 30.5);
+        edits.push(("tool", e));
+        let mut e = base.clone();
+        e.2[3].mu *= 2.0;
+        edits.push(("part face", e));
+        let mut e = base.clone();
+        e.3 = vec![(
+            0,
+            Stock {
+                min: [-2.0, -2.0, 0.0],
+                max: [42.0, 32.0, 13.0],
+            }
+            .faces(),
+        )];
+        edits.push(("stock", e));
+        let mut e = base.clone();
+        e.4 = Stock {
+            min: [-50.0, -50.0, -10.0],
+            max: [90.0, 80.0, 0.5],
+        }
+        .faces();
+        edits.push(("fixture", e));
+        let mut e = base.clone();
+        e.5 = 1.5;
+        edits.push(("fixture clearance", e));
+        let mut e = base.clone();
+        e.6 = 0.02;
+        edits.push(("tolerance", e));
+        let mut e = base.clone();
+        e.7 = 2.5;
+        edits.push(("clearance", e));
+        for (what, e) in &edits {
+            let before = CERTIFIED.computed();
+            let s = run(e);
+            assert!(CERTIFIED.computed() > before, "{what}: not certified anew");
+            assert!(same(&s, &fresh(e)), "{what}: the summary is not the fresh one");
+        }
+        // and the unchanged arguments still from the memo, the same summary
+        let before = CERTIFIED.computed();
+        assert!(same(&run(&base), &s0));
+        assert_eq!(CERTIFIED.computed(), before, "the same arguments certified again");
     }
 }

@@ -15,6 +15,9 @@ use crate::studio::scene::{Built, Instance};
 use crate::studio::{Backdrop, Settings, View};
 
 pub struct StudioHost {
+    /// The view cube alone, over transparent, laid on the traced picture.
+    cube: crate::render::Offscreen,
+    cube_tex: egui::TextureId,
     live: Live,
     queue: Queue,
     tex: egui::TextureId,
@@ -74,13 +77,15 @@ impl Gui {
         if !active {
             if let Some(h) = self.studio.take() {
                 self.egui.free_texture(&h.tex);
+                self.egui.free_texture(&h.cube_tex);
+                self.shell.view_over_tex = None;
                 if let Some(v) = &self.view {
                     self.shell.view_tex = Some(v.tex);
                 }
             }
             return false;
         }
-        let Some(v) = &self.view else {
+        let Some(v) = &mut self.view else {
             return false;
         };
         let size = v.size;
@@ -96,6 +101,8 @@ impl Gui {
                 queue: Queue::default(),
                 tex,
                 tex_size: size,
+                cube: crate::render::Offscreen::new(&self.device, size),
+                cube_tex: egui::TextureId::default(),
                 env: Env::new(8, 4, vec![[0.0; 3]; 32]),
                 env_key: None,
                 scene_key: None,
@@ -148,10 +155,28 @@ impl Gui {
             st.version,
         );
         if host.scene_key != Some(key) {
-            st.names = (0..parts.len())
-                .map(|k| match (parts.len(), &name) {
-                    (1, n) if !n.is_empty() => n.clone(),
-                    _ => format!("Part {}", k + 1),
+            // an assembly's part by the file of an occurrence of it; one part by the document
+            let mut names: Vec<Option<String>> = vec![None; parts.len()];
+            if let Some((occ, _)) = &self.fg_asm {
+                for o in occ {
+                    let Some(pl) = o.placement else { continue };
+                    let Some(p) = v.scene.placements.get(pl) else {
+                        continue;
+                    };
+                    let stem = std::path::Path::new(&o.file)
+                        .file_stem()
+                        .map_or_else(|| o.file.clone(), |s| s.to_string_lossy().into_owned());
+                    names.get_mut(p.part as usize).map(|n| n.get_or_insert(stem));
+                }
+            }
+            st.names = names
+                .into_iter()
+                .enumerate()
+                .map(|(k, n)| {
+                    n.unwrap_or_else(|| match (parts.len(), &name) {
+                        (1, n) if !n.is_empty() => n.clone(),
+                        _ => format!("Part {}", k + 1),
+                    })
                 })
                 .collect();
             st.looks.resize(parts.len(), None);
@@ -238,6 +263,27 @@ impl Gui {
             host.tex_size = host.live.tracer.size;
         }
         st.samples = host.live.samples();
+        // the view cube over the picture, as the shaded view has it
+        if host.cube_tex == egui::TextureId::default()
+            || host.cube.texture.size().width != size.0
+            || host.cube.texture.size().height != size.1
+        {
+            if host.cube_tex != egui::TextureId::default() {
+                self.egui.free_texture(&host.cube_tex);
+            }
+            host.cube = crate::render::Offscreen::new(&self.device, size);
+            host.cube_tex = self.egui.register_native_texture(
+                &self.device,
+                &super::raw_view(&host.cube),
+                wgpu::FilterMode::Nearest,
+            );
+        }
+        let overlay = crate::render::Overlay {
+            cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
+            ..crate::render::Overlay::default()
+        };
+        v.renderer.cube_only(&host.cube.view, &v.nav.camera, &overlay);
+        let cube_tex = host.cube_tex;
         let tex = host.tex;
 
         // final renders
@@ -307,6 +353,7 @@ impl Gui {
         self.studio = Some(host);
         self.shell.studio = std::mem::take(st);
         self.shell.view_tex = Some(tex);
+        self.shell.view_over_tex = Some(cube_tex);
         if let Some(s) = status {
             self.shell.status = s;
         }

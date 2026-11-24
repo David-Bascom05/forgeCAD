@@ -211,6 +211,9 @@ pub struct OpQ {
     pub t_stop: f64,
     /// The lookahead planner's estimate (forge-machine lookahead: grbl's planner), op's blocks.
     pub t_la: f64,
+    /// The cycle-time ESTIMATE of the op's blocks (s): forge-machine's jerk-limited planner
+    /// (`seg_scurve`), tool change included. Shown only beside `t_min`, the lower bound.
+    pub t_scurve: f64,
     pub retracts: usize,
     pub plunges: usize,
     pub ramps: usize,
@@ -274,6 +277,8 @@ pub struct ProgQ {
     pub t_min: f64,
     pub t_stop: f64,
     pub t_la: f64,
+    /// The estimate (forge-machine's `t_scurve`: tool changes, dwells, indexes counted).
+    pub t_scurve: f64,
     pub tool_changes: usize,
     pub accel_missing: bool,
     pub violations: usize,
@@ -600,7 +605,7 @@ pub fn measure_op(
         let flutes = p.tool.nof.max(1) as f64;
         let rpm = p.rpm;
         q.rpm = rpm;
-        q.p_avail = power_at(&curve, rpm);
+        q.p_avail = power_at(curve, rpm);
         let l = cell.max((0.25 * r).min(0.5));
         let mut at = p.start;
         // the last feed direction (xy), for corners
@@ -732,7 +737,11 @@ pub fn measure_op(
                         // the target at this sample: the op's own (rough's class chip under
                         // 90°), else the group's slot chip
                         let target = if q.fz_class > 0.0 {
-                            if e.phi < 90.0 { q.fz_class_rough } else { q.fz_class }
+                            if e.phi < 90.0 {
+                                q.fz_class_rough
+                            } else {
+                                q.fz_class
+                            }
                         } else {
                             q.fz_target
                         };
@@ -931,6 +940,7 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                     _ => (tl.seg_la.clone(), tl.t_la),
                 };
                 pq.t_la = t_la;
+                pq.t_scurve = tl.t_scurve;
                 pq.accel_missing = tl.accel_missing;
                 pq.violations = tl.violations.len();
                 // text line (1-based) → op: the op whose comment "(name kind)" came last
@@ -951,13 +961,18 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                 }
                 // FORGE_QUALITY_BREAKDOWN=OP: where that op's time goes, by kind of move
                 if let Ok(want) = std::env::var("FORGE_QUALITY_BREAKDOWN") {
-                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> = Default::default();
+                    let mut acc: std::collections::BTreeMap<&str, (usize, f64, f64, f64)> =
+                        Default::default();
                     for (si, sg) in tl.segments.iter().enumerate() {
-                        let Some(Some(k)) = op_of.get(sg.line) else { continue };
+                        let Some(Some(k)) = op_of.get(sg.line) else {
+                            continue;
+                        };
                         if job.ops[*k].name != want {
                             continue;
                         }
-                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0) - sg.q0.get(2).copied().unwrap_or(0.0)).abs();
+                        let dz = (sg.q1.get(2).copied().unwrap_or(0.0)
+                            - sg.q0.get(2).copied().unwrap_or(0.0))
+                        .abs();
                         let dxy = ((sg.q1[0] - sg.q0[0]).powi(2) + (sg.q1[1] - sg.q0[1]).powi(2)).sqrt();
                         let cat = match sg.kind {
                             forge_machine::sim::SegKind::Rapid => "rapid",
@@ -974,7 +989,10 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         e.3 += dxy + dz;
                     }
                     for (c, (n, tm, tl, l)) in acc {
-                        eprintln!("breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}", tl - tm);
+                        eprintln!(
+                            "breakdown {want} {c:12} n {n:6} len {l:8.0} t_min {tm:7.1} t_plan {tl:7.1} over {:6.1}",
+                            tl - tm
+                        );
                     }
                 }
                 for (si, sg) in tl.segments.iter().enumerate() {
@@ -982,6 +1000,7 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         job.ops[*k].t_min += sg.t_min;
                         job.ops[*k].t_stop += sg.t_stop;
                         job.ops[*k].t_la += seg_la.get(si).copied().unwrap_or(sg.t_stop);
+                        job.ops[*k].t_scurve += tl.seg_scurve.get(si).copied().unwrap_or(sg.t_stop);
                     }
                 }
                 for mk in &tl.marks {
@@ -990,13 +1009,16 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                             pq.tool_changes += 1;
                             seconds
                         }
-                        Happening::Index { seconds, .. } | Happening::Dwell { seconds } => seconds,
+                        Happening::Index { seconds, .. }
+                        | Happening::Dwell { seconds }
+                        | Happening::PalletChange { seconds } => seconds,
                         _ => 0.0,
                     };
                     if let Some(Some(k)) = op_of.get(mk.line) {
                         job.ops[*k].t_min += secs;
                         job.ops[*k].t_stop += secs;
                         job.ops[*k].t_la += secs;
+                        job.ops[*k].t_scurve += secs;
                     }
                 }
             }
@@ -1167,7 +1189,7 @@ pub fn json(jobs: &[JobQ]) -> String {
             let _ = write!(
                 o,
                 "{{\"name\":{},\"setup\":{},\"kind\":{},\"status\":{},\"tool\":{},\"d\":{},\"flutes\":{},\"rpm\":{},\"moves\":{},\
-\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\
+\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
 \"fz_target\":{},\"fz_class\":{},\"fz_class_rough\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
@@ -1189,6 +1211,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.t_min),
                 jn(q.t_stop),
                 jn(q.t_la),
+                jn(q.t_scurve),
                 q.retracts,
                 q.plunges,
                 q.ramps,
@@ -1228,7 +1251,7 @@ pub fn json(jobs: &[JobQ]) -> String {
             }
             let _ = write!(
                 o,
-                "{{\"name\":{},\"setups\":[{}],\"machine\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
+                "{{\"name\":{},\"setups\":[{}],\"machine\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
                 js(&p.name),
                 p.setups
                     .iter()
@@ -1239,6 +1262,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(p.t_min),
                 jn(p.t_stop),
                 jn(p.t_la),
+                jn(p.t_scurve),
                 p.tool_changes,
                 p.accel_missing,
                 p.violations,
