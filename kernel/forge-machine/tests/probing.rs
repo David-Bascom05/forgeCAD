@@ -314,10 +314,11 @@ fn homing_follows_the_published_order_or_says_it_is_generic() {
         .iter()
         .map(|j| j.range.map_or(j.home, |r| 0.5 * (r[0] + r[1])))
         .collect();
-    let g = homing::home(&s, &from, 0.0);
+    let g = homing::home(&s, &from, false, 0.0);
     assert!(!g.published);
     assert_eq!(g.steps.len(), 1);
     assert!(g.unchecked.iter().any(|u| u.path == "homing"));
+    assert!(g.unchecked.iter().any(|u| u.path == "homing.start"));
     // Z first, then the rest one at a time; Z to its plus end
     let text = include_str!("../data/machines/generic.toml");
     let first = MachineDef::parse_all(text).unwrap()[0].name.clone();
@@ -328,7 +329,7 @@ fn homing_follows_the_published_order_or_says_it_is_generic() {
     let zi = d.joint_index("Z").unwrap();
     d.joints[zi].reference = Some(1);
     let s = Setup::new(&d, Control::for_dialect(&d, "fanuc", 1).unwrap()).unwrap();
-    let h = homing::home(&s, &from, 0.0);
+    let h = homing::home(&s, &from, true, 0.0);
     assert!(h.published);
     assert_eq!(h.steps[0], vec![zi]);
     assert_eq!(h.steps.len(), d.joints.len());
@@ -341,5 +342,7 @@ fn homing_follows_the_published_order_or_says_it_is_generic() {
         }
     }
     assert!(h.unchecked.iter().any(|u| u.path == "homing.rest"));
+    // a pose the caller knows is not reported
+    assert!(!h.unchecked.iter().any(|u| u.path == "homing.start"));
     assert!(!h.unchecked.iter().any(|u| u.path == "joint.Z.ref"));
 }

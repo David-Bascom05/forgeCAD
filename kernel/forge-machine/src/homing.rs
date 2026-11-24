@@ -42,12 +42,23 @@ fn reference_of(s: &Setup, j: usize) -> (f64, bool) {
 }
 
 /// Homing from joint values `from`, at program time `t0`, as timeline segments (line 0).
-pub fn home(s: &Setup, from: &[f64], t0: f64) -> Homing {
+/// A machine homes because its position is unknown (power-on, after an emergency stop): unless
+/// the caller knows `from` (`from_known`: homing after a program that ended at a known pose),
+/// the sweep from it is reported not checked (`homing.start`).
+pub fn home(s: &Setup, from: &[f64], from_known: bool, t0: f64) -> Homing {
     let def = s.def;
     let n = def.joints.len();
     let mut steps: Vec<Vec<usize>> = Vec::new();
     let mut unchecked: Vec<Unchecked> = Vec::new();
     let published = def.homing.is_some();
+    if !from_known {
+        unchecked.push(Unchecked {
+            path: "homing.start".into(),
+            why: "unknown",
+            line: 0,
+            check: "the machine's position before homing (swept from the given pose; the machine homes from wherever it is)",
+        });
+    }
     match &def.homing {
         Some(order) => {
             for g in order {
