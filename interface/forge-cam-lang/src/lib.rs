@@ -2127,44 +2127,93 @@ impl Cam {
         }
         faces.extend(extra);
         out.target = Some(faces);
-        // the path, each place in turn
+        // the path, each place in turn. Method (plain, textbook thread milling): per radial pass
+        // a helix of the lead (starts × pitch) per turn about the hole's axis, counter-clockwise
+        // (G3: climb inside with M03): up from the band's bottom for a right hand, down from its
+        // top for a left; each start the same helix one pitch higher. The radial passes split
+        // the depth from the bore to the major radius evenly (the last at the major); spring
+        // passes repeat the last. In and out on a line (the default) or a tangent arc.
+        let tp = thread_params(a)?;
+        let lead_len = pitch * tp.starts as f64;
+        let rc0 = rb - rt; // the tool touching the bore
         let mut mv = vec![];
         let first = bands[0].0;
         for (c, zb, zt) in &bands {
             mv.push(PMove::Rapid {
                 to: [c[0], c[1], h.retract],
             });
-            mv.push(PMove::Line {
-                to: [c[0], c[1], *zb],
-                f: feed.1,
-                phase: Phase::Plunge,
-            });
-            mv.push(PMove::Line {
-                to: [c[0] + rc, c[1], *zb],
-                f: feed.0,
-                phase: Phase::Cut,
-            });
-            let turns = ((zt - zb) / pitch - 1e-9).ceil().max(1.0) as usize;
-            for k in 1..=4 * turns {
-                let p = match k % 4 {
-                    1 => [c[0], c[1] + rc],
-                    2 => [c[0] - rc, c[1]],
-                    3 => [c[0], c[1] - rc],
-                    _ => [c[0] + rc, c[1]],
-                };
-                mv.push(PMove::Arc {
-                    to: [p[0], p[1], zb + pitch * k as f64 / 4.0],
-                    c: *c,
-                    cw: false,
-                    f: feed.0,
-                });
+            let turns = ((zt - zb) / lead_len - 1e-9).ceil().max(1.0) as usize;
+            let rise = lead_len * turns as f64;
+            let n = tp.passes;
+            let radii: Vec<f64> = (1..=n)
+                .map(|k| {
+                    if k == n {
+                        rc
+                    } else {
+                        rc0 + (rc - rc0) * k as f64 / n as f64
+                    }
+                })
+                .chain(std::iter::repeat_n(rc, tp.spring))
+                .collect();
+            for &r in &radii {
+                for st in 0..tp.starts {
+                    let off = pitch * st as f64;
+                    // right hand: up from zb; left: down from the top of the same helix
+                    let (z0, z1) = if tp.left {
+                        (zb + off + rise, zb + off)
+                    } else {
+                        (zb + off, zb + off + rise)
+                    };
+                    mv.push(PMove::Line {
+                        to: [c[0], c[1], z0],
+                        f: feed.1,
+                        phase: Phase::Plunge,
+                    });
+                    if tp.arc_lead {
+                        // a half circle of r/2 from the axis to the start, tangent to the helix
+                        mv.push(PMove::Arc {
+                            to: [c[0] + r, c[1], z0],
+                            c: [c[0] + 0.5 * r, c[1]],
+                            cw: false,
+                            f: feed.0,
+                        });
+                    } else {
+                        mv.push(PMove::Line {
+                            to: [c[0] + r, c[1], z0],
+                            f: feed.0,
+                            phase: Phase::Cut,
+                        });
+                    }
+                    for k in 1..=4 * turns {
+                        let p = match k % 4 {
+                            1 => [c[0], c[1] + r],
+                            2 => [c[0] - r, c[1]],
+                            3 => [c[0], c[1] - r],
+                            _ => [c[0] + r, c[1]],
+                        };
+                        mv.push(PMove::Arc {
+                            to: [p[0], p[1], z0 + (z1 - z0) * k as f64 / (4 * turns) as f64],
+                            c: *c,
+                            cw: false,
+                            f: feed.0,
+                        });
+                    }
+                    if tp.arc_lead {
+                        mv.push(PMove::Arc {
+                            to: [c[0], c[1], z1],
+                            c: [c[0] + 0.5 * r, c[1]],
+                            cw: false,
+                            f: feed.0,
+                        });
+                    } else {
+                        mv.push(PMove::Line {
+                            to: [c[0], c[1], z1],
+                            f: feed.0,
+                            phase: Phase::Cut,
+                        });
+                    }
+                }
             }
-            let zend = zb + pitch * turns as f64;
-            mv.push(PMove::Line {
-                to: [c[0], c[1], zend],
-                f: feed.0,
-                phase: Phase::Cut,
-            });
             mv.push(PMove::Line {
                 to: [c[0], c[1], h.retract],
                 f: feed.0,
@@ -2625,8 +2674,15 @@ impl Cam {
             posted: vec![],
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
+        for k in ["passes", "hand", "starts"] {
+            if a.contains_key(k) && kind != "thread_mill" {
+                return Err(format!("{kind} does not take `{k}:` (thread_mill does)"));
+            }
+        }
         for k in CONTOUR_ONLY {
-            if a.contains_key(k) && kind != "contour" {
+            // a thread mill has its own spring passes and lead
+            let thread = kind == "thread_mill" && matches!(k, "spring" | "lead");
+            if a.contains_key(k) && kind != "contour" && !thread {
                 return Err(format!("{kind} does not take `{k}:` (contour does)"));
             }
         }
@@ -3685,6 +3741,44 @@ fn contour_tabs(
         height,
         shape,
     }))
+}
+
+/// A thread mill's passes from its arguments.
+struct ThreadParams {
+    passes: usize,
+    spring: usize,
+    starts: usize,
+    left: bool,
+    arc_lead: bool,
+}
+
+/// `passes:` radial passes (default 1), `spring:` (default 0), `starts:` (default 1),
+/// `hand: "right" | "left"` (default right), `lead: "line" | "arc"` (default line).
+fn thread_params(a: &BTreeMap<String, V>) -> Result<ThreadParams, String> {
+    let count = |k: &str, default: f64, least: f64| -> Result<usize, String> {
+        let x = get_num(a, k, Some(default))?;
+        if x.fract() != 0.0 || x < least || x > 20.0 {
+            return Err(format!("{k}: a whole number from {least} to 20"));
+        }
+        Ok(x as usize)
+    };
+    let left = match get_str(a, "hand", Some("right"))?.as_str() {
+        "right" => false,
+        "left" => true,
+        k => return Err(format!("hand: \"right\" or \"left\", not \"{k}\"")),
+    };
+    let arc_lead = match get_str(a, "lead", Some("line"))?.as_str() {
+        "line" => false,
+        "arc" => true,
+        k => return Err(format!("thread_mill's lead: \"line\" or \"arc\", not \"{k}\"")),
+    };
+    Ok(ThreadParams {
+        passes: count("passes", 1.0, 1.0)?,
+        spring: count("spring", 0.0, 0.0)?,
+        starts: count("starts", 1.0, 1.0)?,
+        left,
+        arc_lead,
+    })
 }
 
 fn outer_or_inner(sec: &Region, outer: bool) -> Result<Region, String> {
