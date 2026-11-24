@@ -1731,6 +1731,9 @@ impl Gui {
         } else {
             Some(delay)
         };
+        // the sketches of the forge-lang runs this frame made on this thread (a tool's quick run,
+        // and in a page with one thread every build): freed between frames, none in use then
+        crate::plat::release_sketches();
         FrameOut {
             platform: output.platform_output,
             host,

@@ -1274,6 +1274,14 @@ pub fn app_store_failed(path: String, why: String) {
     ask(Ask::StoreFailed(path, why));
 }
 
+/// How many sketches this thread keeps (`forge_keep::kept`): none between frames, as each frame
+/// frees what its runs made (in the single-threaded page, every build's). What the page's tests
+/// hold bounded.
+#[wasm_bindgen]
+pub fn app_sketches_kept() -> usize {
+    forge_keep::kept()
+}
+
 /// Says `text` in the app's status line: what the page refused (a link's file outside the
 /// project, a name to save as that isn't a project path).
 #[wasm_bindgen]

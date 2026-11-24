@@ -20,6 +20,7 @@ imprint_column = ["forge-model/imprint_column"]
 node-mend-off = ["forge-geom/node-mend-off"]
 
 [dependencies]
+forge-keep = { path = "../forge-keep" }
 forge-dirs = { path = "../../kernel/forge-dirs" }
 forge-math = { path = "../../kernel/forge-math" }
 forge-geom = { path = "../../kernel/forge-geom" }
