@@ -54,7 +54,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 | B.rooms | the bridge: `room_in_or_out`, `denote_eq_closure_rooms`, `f6_hyps`, `oriented_denote`; F5 `res_eq_reg` | SPINE | proven | BodyModel.lean, Rooms.lean |
 | B.clusters | vertex clusters (option iv): `vertCore`, `ClusterOK`, `EdgeIsolated` | SPINE | proven on dol-curved (bc5f25d3) | landing: spine PR 2 |
 | B.phi | Φ_u: `formulas`, `Bounds.local_formula`, `mem_denote_zone` | SPINE | proven on dol-curved (53957ebb) | landing: spine PR 2 |
-| B.types | the translated `Body`, `Face`, `Loop`, `Coedge`, `Edge`, `Vertex`, `Surface`, `Curve` | TRANSLATE | open | verify/aeneas/forge-bool |
+| B.types | the translated `Body`, `Face`, `Loop`, `Coedge`, `Edge`, `Vertex`, `Surface`, `Curve` | TRANSLATE | partial: `Surface`, `Curve`, `SurfaceSurface`, `Contact` and their analytic structs translated (forge-geom), with `Proc`/`ProcCurve`/`IntCurve` opaque (L4.proc, L4.intcurve); `Body`…`Vertex` next (forge-topo) | verify/aeneas/forge-geom `ForgeGeom/Types.lean` |
 | B.abs | `abs : Body → BodyModel`, the abstraction function | TRANSLATE (def), SPINE (use) | open | — |
 | T.model | forge-topo `check` returning no problem ⇒ `Valid` (L1/L3) | SPINE | proven | verify/forge-topo-check/lean `check_sound` |
 | T.strays | `topo::strays` refines `checkStrays` (L4) | SPINE | proven (overflow-checked translation) | `forge_topo.strays_refines` |
@@ -73,7 +73,7 @@ verify/forge-bool-proof/ForgeBoolProof/<file>.
 |---|---|---|---|---|---|
 | D0 | `boolean` → clone, `boolean_into`, `into_compact` | compaction keeps a valid faithful result valid and faithful, and keeps its solid, names and size (`D0`); the clone is gone in the functional reading (`readInPlace`) | SPINE (stmt, composition), TRANSLATE (`into_compact` against `D0`) | stated; composition proven | Compose.lean `D0`, `compact_correct` |
 | D1 | `Index::new`, `face_box` | ⟦f⟧ ⊆ box f; boxes that miss ⇒ faces miss | FLAT-SITES | stated | Contracts.lean `D1`, `PairsOK` |
-| D2 | `meet_region`, `ssi::surfaces_in`, `plane_meet`, `crossings_near` | every point of ⟦fa⟧ ∩ ⟦fb⟧ is on a returned curve (within δ, F1); closed-form miss = `Unhandled::NoClosedForm` | TRANSLATE | stated | Contracts.lean `D2`, `CurvesOK` |
+| D2 | `meet_region`, `ssi::surfaces_in`, `plane_meet`, `crossings_near` | every point of ⟦fa⟧ ∩ ⟦fb⟧ is on a returned curve (within δ, F1); closed-form miss = `Unhandled::NoClosedForm` | TRANSLATE | stated; open; translated: `ssi::surfaces_in`, `closed_or_flush`, `closed_form`, `nearly_flush`, `turned_flush`, `spread_apart` with forge-geom's `plane_surface`/`plane_plane` (`meet_region`, `crossings_near` wait for FALLBACK's ladder argument; `plane_meet` is curved). Proven (L4, on the translation): two planes never reach the curved search: `surfaces_in` = `closed_or_flush`, whose value is never `NotAnalytic` (from `plane_plane` or the flush rule's `Coincident`). F1 for `plane_plane` is FALSE inside InputSize: its parallel branch (|n1×n2| ≤ ANGULAR) decides Empty/Coincident at `q.frame.origin`, sound only where the crossing is within LINEAR/ANGULAR = 1e6 of it; the exact reference refutes it at L = 1.6e7 (a box and a prism whose walls cross at x = 4e6 at 5e-12 rad: `plane_plane` = Empty both ways; reference: solid for all three ops; kernel: false ZeroThickness refusals, and intersect Ok with an invalid body, EdgeUses). These are B1, a confirmed wrong Ok (exact reference). B2, a separate confirmed wrong Ok (exact reference): a thin wedge (walls 1.2·LINEAR apart at the ends, angle > ANGULAR, `plane_plane` returns the right line) gives intersect Ok with an invalid body at L = 1e5…2e6; root cause UNKNOWN, downstream of D2. Repros: branch proof/tilt-wrong-ok (research/kernel-audit/tilt-wrong-ok.md) | Contracts.lean `D2`, `CurvesOK`; verify/aeneas/forge-bool `ForgeBool/Funs.lean`, `ForgeBool/D2Flat.lean` (`surfaces_in_planes`, `closed_or_flush_planes_only`, `plane_plane_only`, `spindle_in_planes`) |
 | D3 | `touches`, `flows_on`, `crack_tip`, `local_class` | every contact listed with exact local classes; the non-manifold refusal is `RefusalTrue` | FALLBACK (with G4) | stated | Contracts.lean `D3`, `TouchesOK` |
 | D4 | `trim`, `rank_pairs` | segments = the D2 curves' pieces inside both faces, ends at exact meets; rank by an exact key | FLAT-SITES (with G14, G15) | stated | Contracts.lean `D4`, `SegsOK` |
 | D5 | `imprint`, `share_cuts`, `place_cuts`, `edge_split`, `split_face`, `plane_split` | the regions are the arrangement's facets on f (`FacetData`) | SPINE (statement), FLAT-SITES (proof, after §1a) | stated | Contracts.lean `D5`, `ArrOK`; `place_cuts`: research/kernel-audit/coverage/aeneas (proven, L4) |
@@ -169,3 +169,20 @@ fuzz family reaches it.
 |---|---|---|---|---|
 | S3 | a screened vertex is transversal | CURVED-SITES (landing: SPINE) | proven on dol-curved (8dbdc11d) | landing: spine PR 2, VertexScreen.lean |
 | S4 | the angle comparator is the angular order | CURVED-SITES (landing: SPINE) | proven on dol-curved (83b5f267) | landing: spine PR 2, AngleOrder.lean |
+
+## L4 gaps: what the translation keeps opaque
+
+Each row is a Lean `opaque` in a translation (a type or a function with no definition a proof can
+see): an assumption, not a proof. A theorem whose computation reaches one says nothing there.
+TRANSLATE closes the easy ones as it goes. research/aeneas/forge-bool.md has the survey.
+
+| id | opaque item(s) | why | owner | status | how it closes |
+|---|---|---|---|---|---|
+| L4.proc | `forge_geom::curve::ProcCurve`, `forge_geom::surface::Proc` (`Arc<dyn …>`) | Aeneas takes no method call through a trait object; ~32 implementations across crates | TRANSLATE | open | a closed enum of forge-geom's kinds plus one `External` arm, or out of the theorem's scope (procedural faces refused) |
+| L4.intcurve | `forge_geom::intcurve::IntCurve` (traced intersection curves) | the tracer (forge-geom intcurve) is not translated | TRANSLATE (with CURVED-SITES) | open | translate the tracer's evaluation, or an exact curve per pair kind |
+| L4.cached | `forge_topo::body::Cached` (`Face::query: Arc<dyn Any>`, cached boxes) | interior mutability and `dyn Any` downcast | TRANSLATE (with FALLBACK, G9) | open (with forge-topo) | `CacheOK b` as a hypothesis of each step, the cache as a typed table |
+| L4.searched | `forge_bool::ssi::searched` (and its thread-local `MET`) | G9's cache in front of the curved search | FALLBACK (G9), then TRANSLATE | open | goes with G9; not reached by an analytic pair |
+| L4.geomcurved | forge-geom's `screw::coaxial::meet_coaxial`, `ruled::meet::meet_ruled`, `spline::meet::meet_spline`, `sheet::used_by`, `intersect::plane_cylinder` | curved; `plane_cylinder` stops Aeneas ("Unreachable" at a join) | TRANSLATE (with CURVED-SITES) | open | translate in forge-geom under `DEPS`; not reached by a plane–plane pair |
+| L4.big | `forge_bool::boolean::plan_once_in`, `split_face`, `nary::nary_body` | survey only: too large for Charon/Aeneas whole (12 GB cap) | TRANSLATE | open | split into named steps (E.shape's `Pipeline`), after FALLBACK's ladder argument |
+| L4.zero | `F64.zeroTie` (the bridge): the zero `f64::min`/`max` return for `+0`/`-0` | Rust and LLVM leave it open (outside the float trusted base T) | TRANSLATE | hyp (by design) | none needed: both zeros are equal in value; a theorem must not depend on the sign |
+

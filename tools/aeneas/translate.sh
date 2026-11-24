@@ -12,6 +12,8 @@
 #                                  Charon's item selection; the defaults are --preset=aeneas
 #   BRIDGE=none                    a crate with no f64: Types.lean does not import the float
 #                                  bridge (AeneasF64), and its lakefile requires Aeneas directly
+#   DEPS=(forge-math forge-geom)   the kernel crates this one calls that have their own translation
+#                                  here: their items are defined once, by that translation (below)
 #   OVERFLOW_CHECKS=false          interim, per crate: translate without overflow checks (integer ops
 #                                  as wrapping). The default, and the target, is true (below); a crate
 #                                  set to false carries a TODO in its translate.conf.
@@ -50,6 +52,7 @@ conf=$dir/translate.conf
 [ -f "$conf" ] || { echo "no $conf" >&2; exit 2; }
 PKG=
 BRIDGE=
+DEPS=()
 OVERFLOW_CHECKS=true
 CHARON_ARGS=()
 # shellcheck source=/dev/null
@@ -59,7 +62,8 @@ src=$root/kernel/$crate
 [ -d "$src" ] || { echo "no crate $src" >&2; exit 2; }
 
 work=$(mktemp -d)
-trap 'rm -rf "$work"' EXIT
+# FORGE_KEEP=DIR keeps the scratch translation (logs, raw Aeneas output) there, for debugging
+trap 'if [ -n "${FORGE_KEEP:-}" ]; then rm -rf "$FORGE_KEEP"; cp -a "$work" "$FORGE_KEEP"; fi; rm -rf "$work"' EXIT
 name=${crate//-/_}
 (
   cd "$src"
@@ -87,6 +91,38 @@ if [ "$BRIDGE" != none ]; then
   sed -i 's/^import Aeneas$/import Aeneas\nimport AeneasF64/' "$work/gen/Types.lean"
 fi
 
+# DEPS: the kernel crates this one calls whose own translations (verify/aeneas/DEP) define them.
+# Their items keep one definition, the dependency's: the types and functions Charon brings along
+# from a dependency (`Source: 'kernel/DEP/...'`) are dropped from this translation, and its
+# Types.lean imports the dependency's package. A dependency's functions are opaque here (Charon
+# keeps another crate's bodies opaque), and the dependency's translation defines them.
+dep_pkgs=()
+for d in "${DEPS[@]}"; do
+  dconf=$root/verify/aeneas/$d/translate.conf
+  [ -f "$dconf" ] || { echo "$crate: DEPS names $d, which has no $dconf" >&2; exit 2; }
+  dep_pkgs+=("$(PKG=; . "$dconf" > /dev/null; echo "$PKG")")
+done
+if [ ${#DEPS[@]} -gt 0 ]; then
+  python3 - "$work/gen" "${DEPS[*]}" "${dep_pkgs[*]}" <<'PY'
+import os, re, sys
+gen, deps, pkgs = sys.argv[1], sys.argv[2].split(), sys.argv[3].split()
+def from_dep(chunk):
+    m = re.search(r"Source: '([^']*)'", chunk)
+    return m is not None and any(m.group(1).startswith("kernel/%s/" % d) for d in deps)
+for f in ("Types.lean", "Funs.lean"):
+    p = os.path.join(gen, f)
+    if not os.path.exists(p):
+        continue
+    chunks = open(p).read().split("\n\n")
+    kept = [c for c in chunks if not (c.lstrip().startswith(("/--", "mutual")) and from_dep(c))]
+    text = "\n\n".join(kept)
+    if f == "Types.lean":
+        text = re.sub(r"^import Aeneas$", "import Aeneas\n" + "\n".join("import " + k for k in pkgs),
+                      text, count=1, flags=re.M)
+    open(p, "w").write(text)
+PY
+fi
+
 # The opaque functions Aeneas wants, against what FunsExternal.lean defines.
 # (an axiom's name is on its own line, or on the line after a bare `axiom`)
 opaque_list() { awk '/^(@\[[^]]*\] )?axiom *$/ { getline; print $1; next } /^(@\[[^]]*\] )?axiom / { sub(/^.*axiom /, ""); print $1 }' "$1" | sort; }
@@ -98,13 +134,29 @@ dest=$dir/lean/$PKG
 # Every opaque item needs a definition (a `def`, or a Lean `opaque`, never an `axiom`) in the
 # crate's FunsExternal.lean / TypesExternal.lean or in the float bridge.
 missing=0
+bridge_files=("$root"/verify/aeneas/bridge/AeneasF64/*.lean)
+[ "$BRIDGE" != none ] || bridge_files=()
+dep_files=()
+for i in "${!DEPS[@]}"; do
+  for f in "$root/verify/aeneas/${DEPS[$i]}/lean/${dep_pkgs[$i]}"/*.lean; do dep_files+=("$f"); done
+done
+# every name a file defines, with the namespace it is in (an opaque of a dependency is named in
+# full, `forge_math.vec.Vec3.dot`, and defined in `namespace forge_math` as `vec.Vec3.dot`)
+defined() {
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    awk '{ sub(/^@\[[^]]*\] */, "") }
+         $1 == "namespace" { ns = $2 "." } $1 == "end" && $2 != "" { ns = "" }
+         $1 == "def" || $1 == "opaque" || $1 == "abbrev" || $1 == "structure" || $1 == "inductive" {
+           print $2; if (ns != "") print ns $2 }' "$f"
+  done
+}
+defined "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "${bridge_files[@]}" "${dep_files[@]}" \
+  | sort -u > "$work/defined"
 while read -r n; do
   [ -n "$n" ] || continue
-  bridge_files=("$root"/verify/aeneas/bridge/AeneasF64/*.lean)
-  [ "$BRIDGE" != none ] || bridge_files=()
-  if ! { cat "$dest/FunsExternal.lean" "$dest/TypesExternal.lean" "${bridge_files[@]}" 2>/dev/null || true; } \
-      | awk '$1 == "def" || $1 == "opaque" || $1 == "abbrev" { print $2 }' | grep -qxF "$n"; then
-    echo "$crate: opaque $n has no definition (FunsExternal.lean, TypesExternal.lean or the bridge)" >&2
+  if ! grep -qxF "$n" "$work/defined"; then
+    echo "$crate: opaque $n has no definition (FunsExternal.lean, TypesExternal.lean, the bridge or DEPS)" >&2
     missing=1
   fi
 done < "$work/opaque"
