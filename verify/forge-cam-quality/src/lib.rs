@@ -947,7 +947,7 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                     let mut nseg = 0usize;
                     let (mut t_feed, mut t_90) = (0.0f64, 0.0f64);
                     let in_op = |si: usize| {
-                        matches!(op_of.get(tl.segments[si].line), Some(Some(k)) if job.ops[*k].name == want)
+                        matches!(op_of.get(tl.segments[si].line), Some(Some(k)) if want == "*" || job.ops[*k].name == want)
                     };
                     for (si, sg) in tl.segments.iter().enumerate() {
                         if !in_op(si) {
@@ -1026,6 +1026,96 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         }
                         for (k, (n, _)) in h {
                             eprintln!("slow {want} {k}: {n}");
+                        }
+                    }
+                    // FORGE_QUALITY_WORST: each cutting block's time lost to accelerating and
+                    // braking (its planned time less its length at its programmed feed), by cause,
+                    // and the worst blocks
+                    if std::env::var_os("FORGE_QUALITY_WORST").is_some() {
+                        let r = 0.5 * job.ops.iter().find(|o| want == "*" || o.name == want).map(|o| o.d).unwrap_or(6.0);
+                        let mut by: std::collections::BTreeMap<&str, (usize, f64)> = Default::default();
+                        let mut worst: Vec<(f64, usize, String)> = Vec::new();
+                        let tan = |sg: &forge_machine::sim::Segment, end: bool| -> [f64; 2] {
+                            let (a, b) = if end { (sg.at(0.98), sg.at(1.0)) } else { (sg.at(0.0), sg.at(0.02)) };
+                            let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+                            let l = (dx * dx + dy * dy).sqrt();
+                            if l > 0.0 { [dx / l, dy / l] } else { [0.0, 0.0] }
+                        };
+                        for b in &prof {
+                            if !in_op(b.seg) {
+                                continue;
+                            }
+                            let sg = &tl.segments[b.seg];
+                            if sg.t_min <= 0.0 || b.len <= 0.0 || b.acc <= 0.0 || matches!(sg.kind, forge_machine::sim::SegKind::Rapid) {
+                                continue;
+                            }
+                            let vf = b.len / sg.t_min;
+                            if vf > 100.0 {
+                                continue;
+                            }
+                            let a = b.acc;
+                            let vp = b.v_nom.min(((2.0 * a * b.len + b.v0 * b.v0 + b.v1 * b.v1) / 2.0).sqrt());
+                            let d_up = ((vp * vp - b.v0 * b.v0) / (2.0 * a)).max(0.0);
+                            let d_dn = ((vp * vp - b.v1 * b.v1) / (2.0 * a)).max(0.0);
+                            let cruise = (b.len - d_up - d_dn).max(0.0);
+                            let t_blk = ((vp - b.v0) / a).max(0.0) + ((vp - b.v1) / a).max(0.0) + if vp > 0.0 { cruise / vp } else { 0.0 };
+                            let lost = t_blk - sg.t_min;
+                            if lost <= 0.0 {
+                                continue;
+                            }
+                            // the cause: what this block is, and what it turns from
+                            let pv = (b.seg > 0).then(|| &tl.segments[b.seg - 1]);
+                            let turn = pv.map(|p| {
+                                let (u, w) = (tan(p, true), tan(sg, false));
+                                (u[0] * w[0] + u[1] * w[1]).clamp(-1.0, 1.0).acos().to_degrees()
+                            });
+                            let vert_prev = pv.is_some_and(|p| (p.q1[2] - p.q0[2]).abs() > 1e-6 && (p.q1[0] - p.q0[0]).abs() + (p.q1[1] - p.q0[1]).abs() < 1e-6);
+                            let pvf = pv.map(|p| if p.t_min > 0.0 { p.q0.iter().zip(&p.q1).take(3).map(|(a, c)| (c - a).powi(2)).sum::<f64>().sqrt() / p.t_min } else { 0.0 });
+                            let cause = if b.len < 1.0 {
+                                "block < 1 mm"
+                            } else if b.len < r {
+                                "block < r"
+                            } else if vert_prev {
+                                "after a vertical move"
+                            } else if matches!(sg.kind, forge_machine::sim::SegKind::Arc) && b.v_nom < 0.95 * vf {
+                                "arc held under F (radius)"
+                            } else if turn.is_some_and(|t| t > 60.0) {
+                                "corner > 60 deg"
+                            } else if turn.is_some_and(|t| t > 15.0) {
+                                "corner 15-60 deg"
+                            } else if pvf.is_some_and(|f| (f - vf).abs() > 0.05 * vf) {
+                                "feed change"
+                            } else {
+                                "other (neighbours short)"
+                            };
+                            let e = by.entry(cause).or_default();
+                            e.0 += 1;
+                            e.1 += lost;
+                            let p = sg.at(0.0);
+                            worst.push((lost, sg.line, format!("{cause}; len {:.2} turn {:.0} F {:.0} at ({:.1}, {:.1}, {:.1})", b.len, turn.unwrap_or(0.0), vf * 60.0, p[0], p[1], p[2])));
+                        }
+                        // every cutting block (lost time or not): how many under 1 mm and under r
+                        let (mut n_cut, mut n_mm, mut n_r) = (0usize, 0usize, 0usize);
+                        for b in &prof {
+                            if !in_op(b.seg) {
+                                continue;
+                            }
+                            let sg = &tl.segments[b.seg];
+                            if sg.t_min <= 0.0 || matches!(sg.kind, forge_machine::sim::SegKind::Rapid) || b.len / sg.t_min > 100.0 {
+                                continue;
+                            }
+                            n_cut += 1;
+                            n_mm += (b.len < 1.0) as usize;
+                            n_r += (b.len < r) as usize;
+                        }
+                        eprintln!("worst {want} counts cut {n_cut} sub_mm {n_mm} sub_r {n_r} t_feed {t_feed:.1}");
+                        let total: f64 = by.values().map(|v| v.1).sum();
+                        for (k, (n, t)) in &by {
+                            eprintln!("worst {want} cause {k}: {n} blocks, {t:.1} s ({:.0} %)", 100.0 * t / total.max(1e-9));
+                        }
+                        worst.sort_by(|a, b| b.0.total_cmp(&a.0));
+                        for (l, line, w) in worst.iter().take(10) {
+                            eprintln!("worst {want} top {l:.3} s line {line}: {w}");
                         }
                     }
                     eprintln!(
