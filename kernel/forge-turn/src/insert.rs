@@ -185,16 +185,12 @@ pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
         'T' => 60.0,
         'S' => 90.0,
         'R' => 360.0,
-        'W' => {
-            return Err(code_err(
-                code,
-                "the trigon (W) outline is not in this library yet: use C, D, V, T, S or R",
-            ));
-        }
+        // the trigon: three 80° corners and three 160° ones, every side tangent to the IC
+        'W' => 80.0,
         x => {
             return Err(code_err(
                 code,
-                format!("insert shape `{x}` not in this library (C D V T S R)"),
+                format!("insert shape `{x}` not in this library (C D V T S W R)"),
             ));
         }
     };
@@ -217,6 +213,8 @@ pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
         ('C', "12") | ('D', "15") | ('V', "22") | ('T', "22") | ('S', "12") => 12.7,
         ('C', "16") | ('S', "15") | ('T', "27") => 15.875,
         ('C', "19") | ('S', "19") => 19.05,
+        ('W', "06") => 9.525,
+        ('W', "08") => 12.7,
         ('R', s) => s
             .parse::<f64>()
             .map_err(|_| code_err(code, "round insert size: two digits (mm)"))?,
@@ -254,6 +252,8 @@ pub fn decode_insert(code: &str) -> Result<InsertSpec, ToolError> {
         let l = match shape {
             'T' => ic * 3f64.sqrt(),
             'S' => ic,
+            // a side between an 80° and a 160° corner: the tangent lengths r·cot 40° + r·cot 80°
+            'W' => 0.5 * ic * (1.0 / tan(40f64.to_radians()) + 1.0 / tan(80f64.to_radians())),
             _ => ic / dmath::sin(e),
         };
         (re, l)
@@ -336,6 +336,38 @@ pub fn decode_holder(code: &str) -> Result<HolderSpec, ToolError> {
         b,
         length,
     })
+}
+
+/// The insert's core (its outline less the nose radius, a convex polygon with its nose corner at
+/// the origin, counter-clockwise), the lead edge leaving the nose at `phi1` degrees from +ρ.
+fn insert_core(ins: &InsertSpec, phi1: f64) -> Vec<[f64; 2]> {
+    let re = ins.re;
+    let d1 = dir(phi1);
+    let d2 = dir(phi1 + ins.eps);
+    match ins.shape {
+        'T' => {
+            let ls = ins.l - 2.0 * re / tan(30f64.to_radians());
+            vec![[0.0, 0.0], sc(d1, ls), sc(d2, ls)]
+        }
+        // the trigon less re: six equal sides (each the side less re·cot 40° and re·cot 80°),
+        // turning left by 20° at a 160° corner and 100° at an 80° one
+        'W' => {
+            let e = ins.l - re * (1.0 / tan(40f64.to_radians()) + 1.0 / tan(80f64.to_radians()));
+            let mut p = [0.0, 0.0];
+            let mut v = vec![p];
+            for t in [0.0, 20.0, 120.0, 140.0, 240.0] {
+                p = add(p, sc(dir(phi1 + t), e));
+                v.push(p);
+            }
+            v
+        }
+        _ => {
+            let ls = ins.l - 2.0 * re / tan(0.5 * ins.eps.to_radians()).max(1e-9);
+            let a = sc(d1, ls);
+            let b = sc(d2, ls);
+            vec![[0.0, 0.0], a, add(a, b), b]
+        }
+    }
 }
 
 /// tan through forge_math::dmath (the platform's libm differs between targets).
@@ -432,19 +464,10 @@ pub fn turning_tool(
             "this style and insert leave no clearance at the face",
         ));
     }
-    let (d1, d2) = (dir(phi1), dir(phi2));
     let re = ins.re;
     // the shrunk insert: same angles, sides shorter by the corner allowances; its nose corner
     // is at the nose centre (0, 0)
-    let ls = ins.l - 2.0 * re / tan(0.5 * ins.eps.to_radians()).max(1e-9);
-    let core = match ins.shape {
-        'T' => vec![[0.0, 0.0], sc(d1, ls), sc(d2, ls)],
-        _ => {
-            let a = sc(d1, ls);
-            let b = sc(d2, ls);
-            vec![[0.0, 0.0], a, add(a, b), b]
-        }
-    };
+    let core = insert_core(&ins, phi1);
     let relief = tan((ins.clearance + clear_deg).max(0.0).to_radians());
     let insert_body = Body {
         name: "insert".into(),
@@ -567,6 +590,8 @@ pub struct BarSpec {
     pub length: f64,
     pub shape: char,
     pub kapr: f64,
+    /// R or L: a left-hand bar is its right-hand twin mirrored across z.
+    pub hand: char,
 }
 
 /// `S20R-SCLCR09`, `A16R-SDUCR07`: shank material and diameter, length letter, then clamping,
@@ -620,10 +645,11 @@ pub fn decode_bar(code: &str) -> Result<BarSpec, ToolError> {
         'Q' => 107.5,
         x => return Err(code_err(code, format!("bar style `{x}` not known (L J U F Q)"))),
     };
-    if t[4] != 'R' {
-        return Err(code_err(code, "only right-hand (R) bars in this phase"));
+    if t[4] != 'R' && t[4] != 'L' {
+        return Err(code_err(code, "the hand: right (R) or left (L)"));
     }
     Ok(BarSpec {
+        hand: t[4],
         d,
         length,
         shape: t[1],
@@ -651,16 +677,7 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
     let phi1 = b.kapr - 90.0;
     let phi2 = phi1 + ins.eps;
     let re = ins.re;
-    let ls = ins.l - 2.0 * re / tan(0.5 * ins.eps.to_radians()).max(1e-9);
-    let (d1, d2) = (dir(phi1), dir(phi2));
-    let od = match ins.shape {
-        'T' => vec![[0.0, 0.0], sc(d1, ls), sc(d2, ls)],
-        _ => {
-            let a = sc(d1, ls);
-            let bb = sc(d2, ls);
-            vec![[0.0, 0.0], a, add(a, bb), bb]
-        }
-    };
+    let od = insert_core(&ins, phi1);
     let core: Vec<[f64; 2]> = od.iter().map(|p| [-p[0], p[1]]).collect();
     let relief = tan((ins.clearance + clear_deg).max(0.0).to_radians());
     let f = 0.5 * b.d + 3.0;
@@ -688,7 +705,7 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
             z: [-re, b.length],
         }),
     };
-    Ok(TurnTool {
+    let t = TurnTool {
         id: id.into(),
         kind: Kind::Bore,
         code: insert.into(),
@@ -705,7 +722,8 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
         f: 0.15,
         ap: 1.0,
         source: "decoded from the ISO codes; bar f and seat generic: verify with the vendor".into(),
-    })
+    };
+    Ok(if b.hand == 'L' { mirrored(t) } else { t })
 }
 
 /// A grooving or part-off blade: width w, corner radius rc, reach (depth from the tip to the

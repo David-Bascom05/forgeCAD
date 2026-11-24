@@ -54,7 +54,7 @@ spheres and tori about it. Any other face (a flat, a cross hole) is refused by n
 
 The built-in tools: `od-rough-cnmg` (CNMG120408 in PCLNR2525M12), `od-finish-dnmg` (DNMG150404 in
 PDJNR2525M15), `od-profile-vbmt` (VBMT160404 in SVJBR2525M16), `groove-3`, `part-3`,
-`thread-60`, `drill-8`, `drill-26`, and for bores `id-bore-ccmt` (CCMT09T304 in S20R-SCLCR09: a Ø20 bar; its body is checked as the cylinder it is), `id-groove-2` (a 2 mm blade reaching 3 above a Ø16 bar) and `id-thread-60` (a 60° insert, pitch 0.5–2, on a Ø16 bar); left hand, `od-profile-vbmt-left` (VBMT160404 in SVJBL2525M16: an L holder is its R twin mirrored across z, tip number 4). Inserts and holders are decoded from their ISO codes; holder heads are
+`thread-60`, `drill-8`, `drill-26`, and for bores `id-bore-ccmt` (CCMT09T304 in S20R-SCLCR09: a Ø20 bar; its body is checked as the cylinder it is), `id-groove-2` (a 2 mm blade reaching 3 above a Ø16 bar) and `id-thread-60` (a 60° insert, pitch 0.5–2, on a Ø16 bar); left hand, `od-profile-vbmt-left` (VBMT160404 in SVJBL2525M16: an L holder is its R twin mirrored across z, tip number 4). Inserts (ISO 1832: C D V T S W R) and holders and bars (ISO 5608, 6261; right or left hand) are decoded from their ISO codes; holder heads are
 generic: verify with the vendor. The built-in machine: `generic-lathe` (CAM-MACHINE's generic
 2-axis lathe; placeholders, not a real machine).
 

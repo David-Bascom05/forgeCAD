@@ -429,6 +429,12 @@ pub fn bore_rough(
             tool.id
         )));
     }
+    if tool.left {
+        return Err(OpError::Tool(format!(
+            "`{}` is a left-hand bar: it feeds +z, not toward the chuck",
+            tool.id
+        )));
+    }
     let re = tool.re;
     let c = grown(s, re + leave)?;
     let z_start = z_top + APPROACH + re;
