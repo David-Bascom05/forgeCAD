@@ -216,10 +216,10 @@ fn check_honours_vertex_tolerance() {
     let mut moved = good.clone();
     moved.vertices[0].point.x += 3e-5;
     assert!(!check(&moved).is_empty());
-    moved.vertices[0].tol = 4e-5;
+    moved.grow_vertex_tol(forge_topo::VertexId(0), 4e-5);
     valid(&moved);
     // a ball reaching halfway along an edge is no longer a tolerance
-    moved.vertices[0].tol = 6.0;
+    moved.grow_vertex_tol(forge_topo::VertexId(0), 6.0);
     assert!(
         check(&moved)
             .iter()

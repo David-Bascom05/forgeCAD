@@ -2241,9 +2241,11 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         }
     }
     for &(k, t) in grown {
-        if let VKey::Old(0, v) = k {
-            let x = &mut a.vertices[v.index()];
-            x.tol = x.tol.max(t);
+        if let VKey::Old(0, v) = k
+            && t > a.vertex(v).tol
+        {
+            a.grow_vertex_tol(v, t);
+            crate::classify::grow_query_reach(a, v, t);
         }
     }
     // B kept where no new edge joins it to A: a lump apart (a union of disjoint solids) or a
