@@ -336,10 +336,13 @@ pub fn ijoint_rigid(def: &MachineDef, j: usize, q: Interval) -> IRigid {
             let t = one - c;
             let a = ipt(jt.axis);
             let [x, y, z] = a;
+            // the diagonal as a² + (1 − a²)c, not (1 − c)a² + c: the same value, with c once, so
+            // the axis's own entry is exactly 1 (c twice made it [-0.5, 2.5] over a wide turn)
+            let d = |a: Interval| a * a + (one - a * a) * c;
             let m: IM3 = [
-                [t * x * x + c, t * x * y - s * z, t * x * z + s * y],
-                [t * x * y + s * z, t * y * y + c, t * y * z - s * x],
-                [t * x * z - s * y, t * y * z + s * x, t * z * z + c],
+                [d(x), t * x * y - s * z, t * x * z + s * y],
+                [t * x * y + s * z, d(y), t * y * z - s * x],
+                [t * x * z - s * y, t * y * z + s * x, d(z)],
             ];
             let pv = ipt(jt.pivot);
             let rp = imul(&m, &pv);
@@ -377,6 +380,53 @@ pub fn ipose(def: &MachineDef, q: &[Interval]) -> Vec<IRigid> {
 mod tests {
     use super::*;
     use crate::library::builtin;
+
+    /// The interval rotation's entry for its own axis is exactly 1 however wide the turn (the
+    /// diagonal written with c once; within 8 ulps of outward rounding: (1 − c)a² + c gave
+    /// [-0.5, 2.5] over ±120°, and the cradle
+    /// of the trunnion could not be shown clear of its supports), and the others' diagonal is c.
+    #[test]
+    fn an_interval_rotation_keeps_its_own_axis() {
+        let ulps = |x: Interval, v: f64| {
+            x.lo <= v && v <= x.hi && x.hi - x.lo <= 8.0 * f64::EPSILON * v.abs().max(1.0)
+        };
+        for m in builtin() {
+            for (j, jt) in m.joints.iter().enumerate() {
+                if jt.ty != JointType::Rotary {
+                    continue;
+                }
+                for (lo, hi) in [
+                    (-120.0, 120.0),
+                    (0.0, 360.0),
+                    (-360.0, 360.0),
+                    (37.5, 37.5),
+                    (10.0, 11.0),
+                ] {
+                    let r = ijoint_rigid(&m, j, Interval::new(lo, hi));
+                    for k in 0..3 {
+                        let a = jt.axis[k];
+                        if a.abs() == 1.0 {
+                            assert!(
+                                ulps(r.r[k][k], 1.0),
+                                "{} {} [{lo}, {hi}]: {:?}",
+                                m.name,
+                                jt.name,
+                                r.r[k][k]
+                            );
+                        }
+                        // every entry stays within the unit interval but for rounding
+                        for l in 0..3 {
+                            assert!(
+                                r.r[k][l].lo >= -1.0 - 1e-12 && r.r[k][l].hi <= 1.0 + 1e-12,
+                                "{:?}",
+                                r.r[k][l]
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn vmc_tip_follows_words() {
