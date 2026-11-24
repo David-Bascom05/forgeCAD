@@ -33,6 +33,8 @@ pub struct Choice {
     pub dies: Option<Vec<String>>,
     /// Bend names in order.
     pub sequence: Option<Vec<String>>,
+    /// Keep the last step's tools where they pass (a ranked program applied).
+    pub keep_tools: bool,
 }
 
 /// What the environment holds: the simulation, the step shown, where in its motion, and play.
@@ -79,6 +81,9 @@ impl BendSimUi {
             punches: choice.punches.clone(),
             dies: choice.dies.clone(),
             sequence: choice.sequence.as_ref().map(|s| s.join(",")),
+            keep_tools: choice.keep_tools,
+            // the ranked alternatives, offered beside the order shown (never applied unasked)
+            programs: Some(5),
             ..Ask::default()
         };
         let mut sim = simulate(source, dir.clone(), None, &ask).map_err(|a| a.text);
@@ -93,6 +98,7 @@ impl BendSimUi {
         {
             let again = Ask {
                 sequence: Some(s.names.join(",")),
+                programs: None,
                 ..ask.clone()
             };
             if let Ok(s2) = simulate(source, dir.clone(), None, &again) {
@@ -481,8 +487,19 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     let Ok(sim) = &st.sim else { return };
     let names: Vec<String> = sim.plan.steps.iter().map(|s| sim.names[s.bend].clone()).collect();
     let passes: Vec<bool> = sim.plan.steps.iter().map(fb::Step::pass).collect();
+    let progs: Vec<(Vec<String>, [usize; 4])> = sim
+        .programs
+        .iter()
+        .map(|p| {
+            (
+                p.plan.sequence.iter().map(|b| sim.names[*b].clone()).collect(),
+                [p.flips, p.turns, p.setups, p.changes],
+            )
+        })
+        .collect();
     let mut order = names.clone();
     let mut moved = None;
+    let mut go = None;
     ui.horizontal(|ui| {
         ui.strong("Sequence");
         ui.label(if st.as_given {
@@ -509,12 +526,53 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
                 )
                 .clicked()
             {
-                st.go(i);
+                go = Some(i);
             }
         });
     }
+    if let Some(i) = go {
+        st.go(i);
+    }
     let planned = st.choice.sequence.is_some() && ui.button("Plan the order").clicked();
-    if let Some((a, b)) = moved {
+    // the planner's ranked programs: offered, applied only by a click
+    let mut apply: Option<Vec<String>> = None;
+    if !progs.is_empty() {
+        egui::CollapsingHeader::new(format!("Suggested programs ({})", progs.len()))
+            .id_salt("bendsim-programs")
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.small("ranked: fewest flips and turns, then stations, then tool changes");
+                for (i, (order, k)) in progs.iter().enumerate() {
+                    let shown = *order == names;
+                    ui.horizontal(|ui| {
+                        let txt = format!(
+                            "{}. {} · flips {} · turns {} · stations {} · changes {}",
+                            i + 1,
+                            order.join(" > "),
+                            k[0],
+                            k[1],
+                            k[2],
+                            k[3]
+                        );
+                        if shown {
+                            ui.colored_label(look::PASS, txt);
+                        } else {
+                            ui.label(txt);
+                            if ui.small_button("use").clicked() {
+                                apply = Some(order.clone());
+                            }
+                        }
+                    });
+                }
+            });
+    }
+    if let Some(order) = apply {
+        let mut c = st.choice.clone();
+        c.sequence = Some(order);
+        c.keep_tools = true;
+        let t = st.tooling.clone();
+        st.redo(c, &t);
+    } else if let Some((a, b)) = moved {
         order.swap(a, b);
         let mut c = st.choice.clone();
         c.sequence = Some(order);

@@ -21,7 +21,7 @@ pub mod tooling;
 pub mod view;
 
 pub use model::{Model, ModelError};
-pub use plan::{Blocking, Options, Plan, Suggestion, plan, simulate};
+pub use plan::{Blocking, Options, Plan, Program, Suggestion, plan, programs, simulate};
 pub use sim::{Check, PartRef, Phase, Rule, Setup, Severity, Step, Surface};
 pub use tooling::{
     Backgauge, Die, Finger, Press, Punch, PunchKind, Segment, Springback, Style, Tooling, ToolingError,

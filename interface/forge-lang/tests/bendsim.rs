@@ -582,3 +582,40 @@ fn unknown_geometry_and_unknown_clamping_refuse() {
         a.text
     );
 }
+
+#[test]
+fn ranked_programs_are_offered() {
+    let ask = Ask {
+        programs: Some(3),
+        ..Ask::default()
+    };
+    let a = ask_src(&channel(), None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let ps = arr(&a.json, "programs");
+    assert!(!ps.is_empty() && ps.len() <= 3);
+    let key = |p: &Json| {
+        let n = |k: &str| p.get(k).and_then(Json::num).unwrap();
+        (n("flips") + n("turns"), n("stations"), n("tool_changes"))
+    };
+    for w in ps.windows(2) {
+        assert!(key(&w[0]) <= key(&w[1]));
+    }
+    for p in &ps {
+        has(
+            p,
+            &[
+                "rank",
+                "sequence",
+                "flips",
+                "turns",
+                "stations",
+                "tool_changes",
+                "steps",
+            ],
+        );
+        assert_eq!(arr(p, "sequence").len(), 2);
+    }
+    // the plan itself is unchanged by asking
+    let plain = ask_src(&channel(), None, None, &Ask::default());
+    assert_eq!(plain.json.get("sequence"), a.json.get("sequence"));
+}

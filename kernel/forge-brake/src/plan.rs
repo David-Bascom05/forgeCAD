@@ -26,6 +26,9 @@ pub struct Options {
     pub budget: usize,
     /// Only this orientation (rotated end for end or not).
     pub rotate: Option<bool>,
+    /// Keep the last step's punch and die where they pass (fewer tool changes), before the
+    /// search's own order.
+    pub keep_tools: bool,
 }
 
 /// What stops a bend: its best attempt's failing checks.
@@ -79,6 +82,8 @@ struct Search<'a> {
     dead: HashSet<u64>,
     verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
     legs: HashMap<(u64, usize), (f64, f64, f64)>,
+    /// Steps with the last step's tools kept, by (done, bend, punch, die).
+    kept: HashMap<(u64, usize, usize, usize), Option<Step>>,
     /// Per bend: (bends done, failures, the attempt).
     best: Vec<Option<(usize, usize, Step, u64)>>,
     explored: usize,
@@ -146,6 +151,7 @@ impl<'a> Search<'a> {
             dead: HashSet::new(),
             verdicts: Default::default(),
             legs: HashMap::new(),
+            kept: HashMap::new(),
             best: vec![None; m.bends.len()],
             explored: 0,
             budget: if opts.budget == 0 { 4000 } else { opts.budget },
@@ -343,6 +349,38 @@ impl<'a> Search<'a> {
         found
     }
 
+    /// `try_bend`, the last step's punch and die tried first (both orientations) when
+    /// `keep_tools`.
+    fn try_bend_after(&mut self, done: &[bool], j: usize, prev: Option<Setup>) -> Option<Step> {
+        if self.opts.keep_tools
+            && let Some(p) = prev
+        {
+            let key = (mask(done), j, p.punch, p.die);
+            if let Some(r) = self.kept.get(&key) {
+                if r.is_some() {
+                    return r.clone();
+                }
+            } else {
+                let mut found = None;
+                for rotate in [p.rotate, !p.rotate] {
+                    if self.opts.rotate.is_some_and(|r| r != rotate) {
+                        continue;
+                    }
+                    let s = Setup { rotate, ..p };
+                    if self.run(done, j, s, true).pass() {
+                        found = Some(self.run(done, j, s, false));
+                        break;
+                    }
+                }
+                self.kept.insert(key, found.clone());
+                if found.is_some() {
+                    return found;
+                }
+            }
+        }
+        self.try_bend(done, j)
+    }
+
     fn order(&self) -> Vec<usize> {
         let depth = |k: usize| {
             let mut d = 0;
@@ -485,7 +523,8 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
     let mut feasible = true;
     let mut blocking = Vec::new();
     for &j in seq {
-        match s.try_bend(&done, j) {
+        let prev = steps.last().map(|st: &Step| st.setup);
+        match s.try_bend_after(&done, j, prev) {
             Some(st) => steps.push(st),
             None => {
                 feasible = false;
@@ -517,4 +556,122 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
         explored: s.explored,
         exhausted: s.exhausted,
     }
+}
+
+/// A whole program the search found, and what it asks of the operator and the setter.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Program {
+    pub plan: Plan,
+    /// Times the operator turns the part over between steps.
+    pub flips: usize,
+    /// Times the part is turned end for end between steps.
+    pub turns: usize,
+    /// Distinct punch and die pairs (stations needed).
+    pub setups: usize,
+    /// Steps whose punch or die differs from the step before (tool changes, or moves to
+    /// another station).
+    pub changes: usize,
+}
+
+impl Program {
+    fn of(plan: Plan) -> Program {
+        let st = &plan.steps;
+        let pairs = |f: &dyn Fn(&Step, &Step) -> bool| st.windows(2).filter(|w| f(&w[0], &w[1])).count();
+        let flips = pairs(&|a, b| a.flip != b.flip);
+        let turns = pairs(&|a, b| a.setup.rotate != b.setup.rotate);
+        let changes = pairs(&|a, b| (a.setup.punch, a.setup.die) != (b.setup.punch, b.setup.die));
+        let mut ds: Vec<(usize, usize)> = st.iter().map(|s| (s.setup.punch, s.setup.die)).collect();
+        ds.sort_unstable();
+        ds.dedup();
+        Program {
+            plan,
+            flips,
+            turns,
+            setups: ds.len(),
+            changes,
+        }
+    }
+
+    /// The ranking: fewest flips and turns (the operator's handling), then fewest stations,
+    /// then fewest changes between them; the search's order breaks ties.
+    pub fn key(&self) -> (usize, usize, usize) {
+        (self.flips + self.turns, self.setups, self.changes)
+    }
+}
+
+/// Feasible programs, ranked (`Program::key`), at most `max`: every bend order the search can
+/// complete within the budget, each step keeping the last step's tools where they pass
+/// (`keep_tools` is set). The first is the plan to offer; the rest are alternatives. Empty
+/// when none is feasible (then `plan` says why).
+pub fn programs(m: &Model, tl: &Tooling, opts: &Options, max: usize) -> Vec<Program> {
+    let opts = Options {
+        keep_tools: true,
+        sequence: None,
+        ..opts.clone()
+    };
+    let mut s = Search::new(m, tl, &opts);
+    let n = m.bends.len();
+    let mut found: Vec<Vec<Step>> = Vec::new();
+    // a bound on whole programs kept, so a part with many bends stays quick
+    let keep = (8 * max).max(16);
+    fn walk(
+        s: &mut Search,
+        done: &mut Vec<bool>,
+        steps: &mut Vec<Step>,
+        found: &mut Vec<Vec<Step>>,
+        keep: usize,
+    ) -> bool {
+        if done.iter().all(|d| *d) {
+            found.push(steps.clone());
+            return true;
+        }
+        let key = mask(done);
+        if s.dead.contains(&key) || s.exhausted || found.len() >= keep {
+            return false;
+        }
+        let mut any = false;
+        for j in s.order() {
+            if done[j] {
+                continue;
+            }
+            let prev = steps.last().map(|st| st.setup);
+            if let Some(step) = s.try_bend_after(done, j, prev) {
+                done[j] = true;
+                steps.push(step);
+                any |= walk(s, done, steps, found, keep);
+                steps.pop();
+                done[j] = false;
+            }
+            if s.exhausted || found.len() >= keep {
+                break;
+            }
+        }
+        if !any && !s.exhausted && found.len() < keep {
+            s.dead.insert(key);
+        }
+        any
+    }
+    let mut done = vec![false; n];
+    let mut steps = Vec::new();
+    walk(&mut s, &mut done, &mut steps, &mut found, keep);
+    let explored = s.explored;
+    let exhausted = s.exhausted;
+    let mut out: Vec<Program> = found
+        .into_iter()
+        .map(|steps| {
+            Program::of(Plan {
+                feasible: true,
+                sequence: steps.iter().map(|st| st.bend).collect(),
+                steps,
+                blocking: Vec::new(),
+                suggestions: Vec::new(),
+                explored,
+                exhausted,
+            })
+        })
+        .collect();
+    // stable: the search's order breaks ties
+    out.sort_by_key(Program::key);
+    out.truncate(max);
+    out
 }

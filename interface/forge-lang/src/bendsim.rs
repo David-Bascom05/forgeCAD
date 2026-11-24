@@ -36,6 +36,10 @@ pub struct Ask {
     pub sequence: Option<String>,
     pub sheet: Option<String>,
     pub uts: Option<f64>,
+    /// Keep the last step's tools where they pass (a program applied from `programs`).
+    pub keep_tools: bool,
+    /// Also answer up to this many ranked feasible programs (`programs`).
+    pub programs: Option<usize>,
 }
 
 /// The words after `bendsim`.
@@ -55,6 +59,16 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
             "dies" => a.dies = Some(val("dies")?.split(',').map(|s| s.trim().to_string()).collect()),
             "vendor" => a.vendor = Some(val("vendor")?),
             "sequence" => a.sequence = Some(val("sequence")?),
+            "keep_tools" => a.keep_tools = true,
+            "programs" => {
+                a.programs = Some(
+                    val("programs")?
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|n| (1..=50).contains(n))
+                        .ok_or("programs takes a count, 1 to 50")?,
+                )
+            }
             "sheet" => a.sheet = Some(val("sheet")?),
             "uts" => {
                 let v = val("uts")?;
@@ -118,6 +132,8 @@ pub struct Sim {
     pub plan: fb::Plan,
     pub names: Vec<String>,
     pub answer: Answer,
+    /// Ranked feasible programs, when asked for (`Ask::programs`).
+    pub programs: Vec<fb::Program>,
 }
 
 /// The part's sheet simulated: Err is the typed error reply.
@@ -193,14 +209,19 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         sequence,
         material: sh.material.clone(),
         uts,
+        keep_tools: ask.keep_tools,
         ..fb::Options::default()
     };
     let mut plan = fb::plan(&model, &tooling, &opts);
+    let ranked = ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n));
     // the operator's move into each step after the first, checked (a warning if not proven clear)
     fb::scene::annotate_handling(&model, &tooling, &mut plan);
     let mut answer = answer(sh, &model, &tooling, &plan, &bend_names);
     if let Json::Obj(f) = &mut answer.json {
         f.insert(4, ("tooling_source".into(), tsource));
+        if let Some(r) = &ranked {
+            f.push(("programs".into(), programs_json(&tooling, r, &bend_names)));
+        }
     }
     Ok(Sim {
         model,
@@ -208,6 +229,7 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         plan,
         names: bend_names,
         answer,
+        programs: ranked.unwrap_or_default(),
     })
 }
 
@@ -590,6 +612,53 @@ fn tooling(ask: &Ask, dir: Option<&Path>, sheet_vendor: Option<&str>) -> Result<
             )),
         },
     }
+}
+
+/// Ranked programs: each its order, what it asks of the operator and the setter, and its steps'
+/// tooling and orientation.
+fn programs_json(tl: &fb::Tooling, ps: &[fb::Program], names: &[String]) -> Json {
+    Json::Arr(
+        ps.iter()
+            .enumerate()
+            .map(|(i, p)| {
+                Json::obj(vec![
+                    ("rank", (i + 1).into()),
+                    (
+                        "sequence",
+                        Json::Arr(
+                            p.plan
+                                .sequence
+                                .iter()
+                                .map(|b| names[*b].as_str().into())
+                                .collect(),
+                        ),
+                    ),
+                    ("flips", p.flips.into()),
+                    ("turns", p.turns.into()),
+                    ("stations", p.setups.into()),
+                    ("tool_changes", p.changes.into()),
+                    (
+                        "steps",
+                        Json::Arr(
+                            p.plan
+                                .steps
+                                .iter()
+                                .map(|s| {
+                                    Json::obj(vec![
+                                        ("bend", names[s.bend].as_str().into()),
+                                        ("punch", tl.punches[s.setup.punch].id.as_str().into()),
+                                        ("die", tl.dies[s.setup.die].id.as_str().into()),
+                                        ("rotate", s.setup.rotate.into()),
+                                        ("flip", s.flip.into()),
+                                    ])
+                                })
+                                .collect(),
+                        ),
+                    ),
+                ])
+            })
+            .collect(),
+    )
 }
 
 const STANDIN: &str = "a stand-in set: forgecad's own round numbers, not a maker's catalogue";
