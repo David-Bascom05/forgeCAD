@@ -213,6 +213,25 @@ pub fn library() -> &'static [Appearance] {
     ALL.get_or_init(|| parse(DATA).expect("ForgeCAD's appearances read"))
 }
 
+/// One appearance for a key, for any environment's view: an appearance's name or id
+/// (`tool-steel-ground`, `Aluminium, machined`; case and punctuation ignored), else a
+/// forge-material name or alias (`6061-T6`, `1018`), whose default appearance it is. ForgeCAD's
+/// library; `Appearances::load` has the project's and the user's too.
+pub fn appearance_for(key: &str) -> Option<&'static Appearance> {
+    let n = forge_material::norm(key);
+    library()
+        .iter()
+        .find(|a| forge_material::norm(&a.name) == n)
+        .or_else(|| {
+            let m = forge_material::find(key)?;
+            let names: Vec<String> = std::iter::once(&m.name).chain(&m.aliases).map(|s| forge_material::norm(s)).collect();
+            library()
+                .iter()
+                .find(|a| a.materials.iter().any(|x| names.contains(&forge_material::norm(x))))
+                .or_else(|| library().iter().find(|a| a.families.contains(&m.family)))
+        })
+}
+
 /// Libraries searched in order: the project's, the user's, ForgeCAD's.
 #[derive(Clone, Debug, Default)]
 pub struct Appearances {
@@ -314,6 +333,20 @@ mod tests {
         let abs = forge_material::find("ABS").unwrap();
         let b = apps.resolve(None, Some(abs), Some([255, 0, 0]));
         assert_eq!(b.base, v3(1.0, 0.0, 0.0));
+    }
+
+    #[test]
+    fn any_environment_finds_an_appearance_by_name_id_or_material() {
+        for (key, want) in [
+            ("tool-steel-ground", "Tool steel, ground"),
+            ("Paint, machine gloss", "Paint, machine gloss"),
+            ("carbide", "Carbide"),
+            ("6061-T6", "Aluminium, machined"),
+            ("C36000", "Brass"),
+        ] {
+            assert_eq!(appearance_for(key).map(|a| a.name.as_str()), Some(want), "{key}");
+        }
+        assert!(appearance_for("unobtainium").is_none());
     }
 
     #[test]
