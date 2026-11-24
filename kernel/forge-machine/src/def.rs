@@ -344,6 +344,11 @@ pub struct Body {
     /// The stock runs through it by construction (a Swiss guide bushing): stock against it is
     /// never a contact (`passes = "stock"`).
     pub passes_stock: bool,
+    /// Collision-checked (`check`, default true). False: display only (an enclosure shell drawn
+    /// with its doors open, telescoping way covers that deform): drawn by the sim and the
+    /// builder, left out of every collision check, and reported so (`body.NAME`, display only).
+    /// Its primitives still hold its part.
+    pub check: bool,
 }
 
 /// A region of joint space the control forbids (Fanuc stored stroke check 2/3, an interference
@@ -1265,6 +1270,17 @@ impl MachineDef {
                             record: rec,
                             field: "passes",
                             why: format!("`{other}`: only \"stock\" runs through a body"),
+                        });
+                    }
+                },
+                check: match (s.contains_key("check"), boolean(s, "check")) {
+                    (false, _) => true,
+                    (true, Some(c)) => c,
+                    (true, None) => {
+                        return Err(DefError::Bad {
+                            record: rec,
+                            field: "check",
+                            why: "must be true or false (false: drawn, never collision-checked)".into(),
                         });
                     }
                 },

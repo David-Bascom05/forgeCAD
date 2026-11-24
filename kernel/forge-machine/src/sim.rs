@@ -2006,7 +2006,7 @@ pub fn timeline_json(tl: &Timeline) -> String {
 pub struct Unchecked {
     /// The value, as a cite path: `joint.X.range`, `spindle.S1.rpm`, `changer.pockets`, `body.head`.
     pub path: String,
-    /// "unknown" or "estimated".
+    /// "unknown", "estimated", or "display" (a body drawn and never collision-checked).
     pub why: &'static str,
     /// The first program line whose check needed it (0: the machine itself, e.g. a body).
     pub line: usize,
@@ -2156,8 +2156,14 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
             _ => {}
         }
     }
+    // display-only bodies (`check = false`): reported after `note`'s last use
+    let mut display: Vec<String> = Vec::new();
     for b in &def.bodies {
-        note(format!("body.{}", b.name), !b.prims.is_empty(), 0, "collision");
+        if b.check {
+            note(format!("body.{}", b.name), !b.prims.is_empty(), 0, "collision");
+        } else {
+            display.push(format!("body.{}", b.name));
+        }
     }
     if let Some(&(line, model)) = skips.first() {
         out.push(Unchecked {
@@ -2169,6 +2175,14 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
             } else {
                 "moves after a skip move, from its programmed end"
             },
+        });
+    }
+    for path in display {
+        out.push(Unchecked {
+            path,
+            why: "display",
+            line: 0,
+            check: "collision: display only (`check = false`), drawn and never checked",
         });
     }
     out
