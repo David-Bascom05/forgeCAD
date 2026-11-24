@@ -14,4 +14,6 @@ import ForgeBoolFallback
 #print axioms ForgeBoolFallback.Walk.splitOpen_never
 #print axioms ForgeBoolFallback.Walk.walk_ne_nil
 #print axioms ForgeBoolFallback.Walk.first_half_of_boundary
+#print axioms ForgeBoolFallback.Across.across_ok
+#print axioms ForgeBoolFallback.Across.axis_sq_ge_one
 #print axioms ForgeBoolFallback.Unneeded.withFallback_ok_iff
