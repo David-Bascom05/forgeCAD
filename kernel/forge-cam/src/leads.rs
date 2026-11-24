@@ -285,9 +285,15 @@ pub fn lead_out(e: P2, t: P2, part_right: bool, l: &Lead) -> Vec<Seg> {
     out
 }
 
-/// One loop with its entry, leads and overlap: (lead-in, the loop, the overlap and lead-out).
+/// One loop with its entry, leads and overlap: (lead-in, the loop, the overlap, the lead-out).
 /// `part_right`: the part is on the tool's right as it runs the loop (climb).
-pub fn wrap(segs: &[Seg], part_right: bool, ld: &Leads, eps: f64) -> (Vec<Seg>, Vec<Seg>, Vec<Seg>) {
+#[allow(clippy::type_complexity)]
+pub fn wrap(
+    segs: &[Seg],
+    part_right: bool,
+    ld: &Leads,
+    eps: f64,
+) -> (Vec<Seg>, Vec<Seg>, Vec<Seg>, Vec<Seg>) {
     let body = match ld.entry {
         Some(q) => rotate_to(segs, q, eps),
         None => segs.to_vec(),
@@ -298,24 +304,23 @@ pub fn wrap(segs: &[Seg], part_right: bool, ld: &Leads, eps: f64) -> (Vec<Seg>, 
         Some(l) if !l.is_none() => lead_in(s, t_in, part_right, &l),
         _ => vec![],
     };
-    let mut tail = if ld.overlap > 0.0 {
+    let ov = if ld.overlap > 0.0 {
         prefix(&body, ld.overlap)
     } else {
         vec![]
     };
-    let (e, t_out) = match tail.last() {
+    let (e, t_out) = match ov.last() {
         Some(x) => (x.end(), tangent(x, x.end())),
         None => {
             let x = body.last().unwrap_or(&body[0]);
             (x.end(), tangent(x, x.end()))
         }
     };
-    if let Some(l) = ld.lead_out
-        && !l.is_none()
-    {
-        tail.extend(lead_out(e, t_out, part_right, &l));
-    }
-    (li, body, tail)
+    let lo = match ld.lead_out {
+        Some(l) if !l.is_none() => lead_out(e, t_out, part_right, &l),
+        _ => vec![],
+    };
+    (li, body, ov, lo)
 }
 
 #[cfg(test)]
@@ -391,7 +396,7 @@ mod tests {
 
     #[test]
     fn overlap_and_sweep() {
-        let (li, body, tail) = wrap(
+        let (li, body, ov, lo) = wrap(
             &square(),
             false,
             &Leads {
@@ -413,7 +418,7 @@ mod tests {
         assert_eq!(li.len(), 1);
         assert!((seg_len(&li[0]) - std::f64::consts::FRAC_PI_4).abs() < 1e-12);
         assert_eq!(body.len(), 5);
-        assert!(close(tail[0].end(), p2(5.5, 0.0)));
-        assert!(close(tail[1].start(), p2(5.5, 0.0)));
+        assert!(close(ov[0].end(), p2(5.5, 0.0)));
+        assert!(close(lo[0].start(), p2(5.5, 0.0)));
     }
 }

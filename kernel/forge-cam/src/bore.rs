@@ -30,7 +30,16 @@ pub fn helical_bore(
     cut: Cut,
     b: Bore,
 ) -> Result<OpPath, OpError> {
-    let Cut { tool, tidx, h, feed } = cut;
+    let Cut {
+        tool,
+        tidx,
+        h,
+        feed,
+        ramp_feed,
+        ..
+    } = cut;
+    // the helix down is a ramp: FEEDS-SPEEDS' ramp feed where given
+    let ramp_f = ramp_feed.unwrap_or(feed.0);
     let rt = 0.5 * tool.tool.dc;
     let rc = r_hole - rt - b.leave;
     if rc <= 0.0 {
@@ -84,7 +93,7 @@ pub fn helical_bore(
                 to: [p[0], p[1], z],
                 c,
                 cw: false,
-                f: feed.0,
+                f: if k > 4 * turns { feed.0 } else { ramp_f },
             });
         }
         mv.push(PMove::Line {
