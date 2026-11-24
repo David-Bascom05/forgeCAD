@@ -69,3 +69,40 @@ fn the_studio_traces_the_view_and_renders_a_file() {
     h.step();
     assert_eq!(h.gui.shell.view_tex, shaded);
 }
+
+/// The environment as David sees it, for research/render/studio/: an assembly in mixed finishes
+/// under the bundled HDRI, at the window's usual size and at 1024x700. Only with STUDIO_SHOTS.
+#[test]
+fn shots_of_the_environment() {
+    let Ok(dir) = std::env::var("STUDIO_SHOTS") else {
+        return;
+    };
+    for (w, h) in [(1400.0, 860.0), (1024.0, 700.0)] {
+        let mut h_ = match Headless::new((w, h), 1.0) {
+            Ok(h) => h,
+            Err(e) => {
+                eprintln!("skipped: {e}");
+                return;
+            }
+        };
+        h_.step();
+        let asm = concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/sheetmetal/tray_asm.fg");
+        h_.gui.open(asm);
+        assert!(h_.until(settled), "never built: {}", h_.gui.shell.status);
+        h_.gui.shell.enter_env(EnvId::RenderStudio).unwrap();
+        h_.step();
+        h_.step();
+        let looks = ["Aluminium, bead-blasted", "Steel, black oxide", "Powder coat", "Stainless steel, brushed"];
+        let st = &mut h_.gui.shell.studio;
+        for (k, l) in st.looks.iter_mut().enumerate() {
+            *l = Some(looks[k % looks.len()].into());
+        }
+        st.version += 1;
+        let start = std::time::Instant::now();
+        while h_.gui.shell.studio.samples < 256 && start.elapsed().as_secs() < 300 {
+            h_.step();
+        }
+        let png = h_.png().unwrap();
+        std::fs::write(format!("{dir}/studio-env-{}x{}.png", w as u32, h as u32), png).unwrap();
+    }
+}

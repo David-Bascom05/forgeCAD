@@ -51,7 +51,8 @@ pub struct StudioUi {
     pub floor: bool,
     pub denoise: bool,
     pub depth_of_field: bool,
-    /// The view's focal length, mm (35 mm frame), as the GUI found it: shown, not set.
+    /// The view's focal length, mm (35 mm frame), as the GUI found it: shown, not set; 0 for a
+    /// parallel view.
     pub view_focal_mm: f32,
     pub f_number: f32,
     pub size: (u32, u32),
@@ -182,7 +183,14 @@ pub(super) fn command(s: &mut Shell, c: u16) {
 /// A setting's row: its words with its value and unit, then its control.
 fn row(ui: &mut Ui, label: String, control: impl FnOnce(&mut Ui)) {
     ui.horizontal(|ui| {
-        ui.add_sized([128.0, 18.0], egui::Label::new(label).truncate());
+        ui.allocate_ui_with_layout(
+            egui::vec2(128.0, 18.0),
+            egui::Layout::left_to_right(egui::Align::Center),
+            |ui| {
+                ui.set_min_width(128.0);
+                ui.add(egui::Label::new(label).truncate());
+            },
+        );
         control(ui);
     });
 }
@@ -273,7 +281,11 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
 
             head(ui, s, "Camera");
             ui.label(
-                RichText::new(format!("Lens {:.0} mm (the view's)", st.view_focal_mm))
+                RichText::new(if st.view_focal_mm > 0.0 {
+                    format!("Lens {:.0} mm (the view's)", st.view_focal_mm)
+                } else {
+                    "Parallel view: no lens (Camera › Perspective)".into()
+                })
                     .color(s.theme.ink2),
             );
             row(ui, format!("Aperture f/{:.1}", st.f_number), |ui| {
