@@ -171,3 +171,76 @@ fn bounds_and_the_acceleration_scale() {
         tl.t_min, tl.t_la, tl.t_stop
     );
 }
+
+// ---- the jerk-limited planner (lookahead::plan_scurve) against closed forms
+
+fn scurve_after(prog: &str, a: f64, j: f64) -> f64 {
+    let (m, tl) = run(prog);
+    let p = lookahead::SCurve {
+        accel: [a, 3600.0],
+        jerk: [j, 1e6],
+        tolerance: 0.02,
+    };
+    let (per, _) = lookahead::plan_scurve(&m, &tl, &p);
+    tl.segments
+        .iter()
+        .zip(&per)
+        .filter(|(g, _)| g.line >= 4)
+        .map(|(_, t)| t)
+        .sum()
+}
+
+#[test]
+fn a_lone_move_is_its_s_curve_and_unlimited_jerk_is_the_trapezoid() {
+    // 100 mm at 100 mm/s, a = 3000: with jerk 1e4 the acceleration never reaches a (a²/j = 900 >
+    // 100): each ramp takes 2 √(Δv/j) = 0.2 s over 10 mm; 80 mm cruise: 1.2 s
+    let t = scurve_after("G1 X100. F6000.\n", 3000.0, 1e4);
+    assert!(close(t, 1.2), "{t}");
+    // jerk unbounded in effect: the trapezoid, 1 + 1/30 s
+    let t = scurve_after("G1 X100. F6000.\n", 3000.0, 1e12);
+    assert!(
+        (t - trapezoid(100.0, 0.0, 0.0, 100.0, 3000.0)).abs() < 1e-6,
+        "{t}"
+    );
+    // reaching a: Δv ≥ a²/j; a = 500, j = 1e4 (a²/j = 25 < 100): each ramp Δv/a + a/j = 0.25 s
+    // over 12.5 mm; 75 mm cruise: 1.25 s
+    let t = scurve_after("G1 X100. F6000.\n", 500.0, 1e4);
+    assert!(close(t, 1.25), "{t}");
+}
+
+#[test]
+fn an_arc_is_held_to_its_centripetal_limits() {
+    // a full circle of radius 10 at 100 mm/s asked: √(a r) = √(30 × 10) ≈ 17.3 mm/s at a = 30 binds
+    let prog = "G1 X10. F6000.\nG3 X10. Y0 I-10. J0\n";
+    let (m, tl) = run(prog);
+    let p = lookahead::SCurve {
+        accel: [30.0, 3600.0],
+        jerk: [1e9, 1e6],
+        tolerance: 0.02,
+    };
+    let (per, _) = lookahead::plan_scurve(&m, &tl, &p);
+    let g = tl
+        .segments
+        .iter()
+        .position(|g| matches!(g.path, sim::Path::Arc { .. }))
+        .unwrap();
+    let len = 2.0 * std::f64::consts::PI * 10.0;
+    assert!(
+        per[g] >= len / (30.0f64 * 10.0).sqrt() * (1.0 - 1e-6),
+        "{} vs {}",
+        per[g],
+        len / (300.0f64).sqrt()
+    );
+    // and the jerk limit: (j r²)^(1/3) with j = 1e3: 46.4 mm/s binds before √(a r) at a = 1e4
+    let p = lookahead::SCurve {
+        accel: [1e4, 3600.0],
+        jerk: [1e3, 1e6],
+        tolerance: 0.02,
+    };
+    let (per, _) = lookahead::plan_scurve(&m, &tl, &p);
+    assert!(
+        per[g] >= len / forge_math::dmath::cbrt(1e3 * 100.0) * (1.0 - 1e-6),
+        "{}",
+        per[g]
+    );
+}

@@ -39,6 +39,8 @@ pub struct Config {
     pub feeds: Vec<(String, f64, f64)>,
     /// The lookahead planner's settings for t_la (None: forge-machine's grbl defaults).
     pub lookahead: Option<forge_machine::lookahead::LookAhead>,
+    /// The jerk-limited planner for t_la instead (wins over `lookahead`).
+    pub scurve: Option<forge_machine::lookahead::SCurve>,
 }
 
 /// `moves` with every feed set from (cut, plunge): straight-down moves the plunge feed.
@@ -892,8 +894,9 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                 pq.t_stop = tl.t_stop;
                 // the lookahead estimate: the timeline's (grbl defaults), or re-planned with the
                 // settings asked for
-                let (seg_la, t_la) = match (&cfg.lookahead, mlib.get(&mname)) {
-                    (Some(la), Ok(def)) => forge_machine::lookahead::plan(def, &tl, la),
+                let (seg_la, t_la) = match (&cfg.scurve, &cfg.lookahead, mlib.get(&mname)) {
+                    (Some(sc), _, Ok(def)) => forge_machine::lookahead::plan_scurve(def, &tl, sc),
+                    (None, Some(la), Ok(def)) => forge_machine::lookahead::plan(def, &tl, la),
                     _ => (tl.seg_la.clone(), tl.t_la),
                 };
                 pq.t_la = t_la;

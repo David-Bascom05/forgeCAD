@@ -135,6 +135,20 @@ fn main() {
                     ..Default::default()
                 });
             }
+            "--scurve" => {
+                // the jerk-limited planner: --scurve ACCEL JERK TOL (linear; rotary 3600/36000)
+                let mut num = || -> f64 {
+                    args.next()
+                        .and_then(|x| x.parse().ok())
+                        .expect("--scurve ACCEL JERK TOL")
+                };
+                let (a, j, d) = (num(), num(), num());
+                cfg.scurve = Some(forge_machine::lookahead::SCurve {
+                    accel: [a, 3600.0],
+                    jerk: [j, 36000.0],
+                    tolerance: d,
+                });
+            }
             "--flutes" => flutes = args.next().and_then(|s| s.parse().ok()),
             "--cell" => cfg.cell = args.next().and_then(|s| s.parse().ok()),
             _ => files.push(PathBuf::from(a)),

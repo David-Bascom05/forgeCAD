@@ -239,3 +239,251 @@ fn plan_run(run: &[Blk], p: &LookAhead, jacc: &[f64]) -> Vec<f64> {
     }
     out
 }
+
+// ------------------------------------------------------------------------------------------
+// A jerk-limited planner (S-curve), for controls that limit jerk: SINUMERIK SOFT ("acceleration
+// with jerk limitation", PGAsl 03/2013 10.3.1 p. 457; under it "both the maximum acceleration and
+// the maximum jerk of each axis is maintained", PGsl 03/2013 11.2 p. 315), the default of CYCLE832
+// with G642 smoothing within the programmed tolerance (PGZ 11/2006 3.17 pp. 264-271; G642: PGsl
+// 11.2 p. 309). What it takes from each, and what it assumes:
+//
+// - Each block's acceleration and jerk are limited by every axis along it (as grbl limits the
+//   acceleration, `limit_value_by_axis_maximum`).
+// - A speed change from v0 to v1 is a jerk-limited S-curve: time Δv/a + a/j where Δv ≥ a²/j, else
+//   2 √(Δv/j); its distance (v0 + v1)/2 × that time (the profile is point-symmetric).
+// - A corner is smoothed within the tolerance δ (G642): the blend circle tangent to both blocks
+//   whose deviation from the corner is δ (grbl's junction-deviation geometry, planner.c), radius
+//   R = δ sin(θ/2) / (1 - sin(θ/2)); its speed √(a R) and (j R²)^(1/3) (the jerk of uniform
+//   circular motion, v³/R²).
+// - An arc's speed √(a r) and (j r²)^(1/3) (centripetal acceleration and jerk on radius r).
+// - The look-ahead spans the run (reverse and forward passes over every block between stops):
+//   SINUMERIK's LookAhead plans over many blocks (PGsl 11.2), its depth machine data.
+// - Not modelled: the compressor (COMPCAD...), feed-forward, the interpolator's block cycle (a
+//   rate limit on very short blocks), axis-specific smoothing filters: the fitted jerk absorbs them.
+
+/// The jerk-limited planner's inputs. The acceleration and jerk apply to every linear (rotary)
+/// joint alike; none of them is published for the machines this was built against.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SCurve {
+    /// mm/s² (linear), deg/s² (rotary).
+    pub accel: [f64; 2],
+    /// mm/s³, deg/s³.
+    pub jerk: [f64; 2],
+    /// The smoothing tolerance δ (mm): G642's (CYCLE832's _TOL).
+    pub tolerance: f64,
+}
+
+/// Time of a jerk-limited speed change by dv at acceleration a, jerk j.
+fn sc_time(dv: f64, a: f64, j: f64) -> f64 {
+    let dv = dv.abs();
+    if dv == 0.0 {
+        return 0.0;
+    }
+    if dv >= a * a / j {
+        dv / a + a / j
+    } else {
+        2.0 * (dv / j).sqrt()
+    }
+}
+
+/// Distance of that change from v0 to v1.
+fn sc_dist(v0: f64, v1: f64, a: f64, j: f64) -> f64 {
+    0.5 * (v0 + v1) * sc_time(v1 - v0, a, j)
+}
+
+/// The largest speed reachable from (or that can stop to) v within distance l.
+fn sc_reach(v: f64, l: f64, a: f64, j: f64) -> f64 {
+    let mut hi = (v.max(1.0)) * 2.0;
+    while sc_dist(v, hi, a, j) < l && hi < 1e12 {
+        hi *= 2.0;
+    }
+    let mut lo = v;
+    for _ in 0..80 {
+        let mid = 0.5 * (lo + hi);
+        if sc_dist(v, mid, a, j) <= l {
+            lo = mid
+        } else {
+            hi = mid
+        }
+    }
+    lo
+}
+
+/// Time over a block of length l from v0 to v1, cruise at most vn.
+fn sc_block_time(l: f64, v0: f64, v1: f64, vn: f64, a: f64, j: f64) -> f64 {
+    if l <= 0.0 {
+        return 0.0;
+    }
+    let base = v0.max(v1);
+    let fits = |vp: f64| sc_dist(v0, vp, a, j) + sc_dist(vp, v1, a, j) <= l;
+    let vp = if vn.is_finite() && fits(vn) {
+        vn
+    } else {
+        let mut hi = if vn.is_finite() { vn } else { base.max(1.0) * 2.0 };
+        if !vn.is_finite() {
+            while fits(hi) && hi < 1e12 {
+                hi *= 2.0;
+            }
+        }
+        let mut lo = base;
+        for _ in 0..80 {
+            let mid = 0.5 * (lo + hi);
+            if fits(mid) { lo = mid } else { hi = mid }
+        }
+        lo
+    };
+    let d = sc_dist(v0, vp, a, j) + sc_dist(vp, v1, a, j);
+    let cruise = if vp > 0.0 { (l - d).max(0.0) / vp } else { 0.0 };
+    sc_time(vp - v0, a, j) + sc_time(vp - v1, a, j) + cruise
+}
+
+/// One S-curve planner block.
+struct SBlk {
+    len: f64,
+    /// unit tangents at the start and the end (axis space)
+    u0: Vec<f64>,
+    u1: Vec<f64>,
+    v_nom: f64,
+    acc: f64,
+    jerk: f64,
+    seg: usize,
+}
+
+/// The jerk-limited time of every segment of `tl` (s), and their sum.
+pub fn plan_scurve(def: &MachineDef, tl: &Timeline, p: &SCurve) -> (Vec<f64>, f64) {
+    let n = def.joints.len();
+    let lin = |j: usize| matches!(def.joints[j].ty, JointType::Linear);
+    let acc: Vec<f64> = (0..n)
+        .map(|j| if lin(j) { p.accel[0] } else { p.accel[1] })
+        .collect();
+    let jrk: Vec<f64> = (0..n)
+        .map(|j| if lin(j) { p.jerk[0] } else { p.jerk[1] })
+        .collect();
+    let mut per = vec![0.0; tl.segments.len()];
+    let mut run: Vec<SBlk> = Vec::new();
+    let flush = |run: &mut Vec<SBlk>, per: &mut Vec<f64>| {
+        for (b, t) in run.iter().zip(scurve_run(run, p, &acc, &jrk)) {
+            per[b.seg] += t;
+        }
+        run.clear();
+    };
+    let unit = |d: Vec<f64>| -> Option<Vec<f64>> {
+        let l = d.iter().map(|x| x * x).sum::<f64>().sqrt();
+        (l > 0.0).then(|| d.iter().map(|x| x / l).collect())
+    };
+    for (si, sg) in tl.segments.iter().enumerate() {
+        if si > 0 {
+            let pv = &tl.segments[si - 1];
+            let gap_t = (sg.t0 - (pv.t0 + pv.t_min)).abs() > 1e-9 * sg.t0.abs().max(1.0);
+            let gap_q = pv.q1.iter().zip(&sg.q0).any(|(a, b)| (a - b).abs() > 1e-9);
+            if gap_t || gap_q || pv.tool != sg.tool || pv.spindle != sg.spindle {
+                flush(&mut run, &mut per);
+            }
+        }
+        let (len, u0, u1, curv) = match &sg.path {
+            Path::Line => {
+                let d: Vec<f64> = (0..n).map(|j| sg.q1[j] - sg.q0[j]).collect();
+                let l = d.iter().map(|x| x * x).sum::<f64>().sqrt();
+                let Some(u) = unit(d) else { continue };
+                (l, u.clone(), u, None)
+            }
+            Path::Arc { a, b, r, r1, .. } => {
+                let k = 64;
+                let pts: Vec<Vec<f64>> = (0..=k).map(|i| sg.at(i as f64 / k as f64)).collect();
+                let l: f64 = pts
+                    .windows(2)
+                    .map(|w| (0..n).map(|j| (w[1][j] - w[0][j]).powi(2)).sum::<f64>().sqrt())
+                    .sum();
+                let (Some(u0), Some(u1)) = (
+                    unit((0..n).map(|j| pts[1][j] - pts[0][j]).collect()),
+                    unit((0..n).map(|j| pts[k][j] - pts[k - 1][j]).collect()),
+                ) else {
+                    continue;
+                };
+                (l, u0, u1, Some((r.min(*r1), *a, *b)))
+            }
+        };
+        if len == 0.0 {
+            continue;
+        }
+        // the block's limits along it: the larger of the two tangents' (a straight block: one)
+        let lim = |lim: &[f64], u: &[f64]| limit(lim, u);
+        let mut a = lim(&acc, &u0).min(lim(&acc, &u1));
+        let mut jk = lim(&jrk, &u0).min(lim(&jrk, &u1));
+        let mut v_nom = if sg.t_min > 0.0 {
+            len / sg.t_min
+        } else {
+            f64::INFINITY
+        };
+        if let Some((r, ja, jb)) = curv {
+            // centripetal acceleration and jerk on the arc: the plane axes' limits
+            let (ac, jc) = (acc[ja].min(acc[jb]), jrk[ja].min(jrk[jb]));
+            if r > 0.0 {
+                v_nom = v_nom
+                    .min((ac * r).sqrt())
+                    .min(forge_math::dmath::cbrt(jc * r * r));
+            }
+            a = a.min(ac);
+            jk = jk.min(jc);
+        }
+        run.push(SBlk {
+            len,
+            u0,
+            u1,
+            v_nom,
+            acc: a,
+            jerk: jk,
+            seg: si,
+        });
+    }
+    flush(&mut run, &mut per);
+    let total = per.iter().sum();
+    (per, total)
+}
+
+/// One run from rest to rest: reverse and forward passes over all of it, S-curve blocks.
+fn scurve_run(run: &[SBlk], p: &SCurve, acc: &[f64], jrk: &[f64]) -> Vec<f64> {
+    let m = run.len();
+    if m == 0 {
+        return Vec::new();
+    }
+    // each block's largest entry: the G642 blend at the corner with the block before, and both
+    // nominal speeds
+    let mut max_entry = vec![0.0f64; m];
+    for i in 1..m {
+        let (a, b) = (&run[i - 1].u1, &run[i].u0);
+        let cos_t: f64 = -a.iter().zip(b).map(|(x, y)| x * y).sum::<f64>();
+        let vj = if cos_t > 0.999999 {
+            0.0
+        } else if cos_t < -0.999999 {
+            f64::INFINITY
+        } else {
+            let d: Vec<f64> = b.iter().zip(a).map(|(x, y)| x - y).collect();
+            let dl = d.iter().map(|x| x * x).sum::<f64>().sqrt();
+            let du: Vec<f64> = d.iter().map(|x| x / dl).collect();
+            let s = (0.5 * (1.0 - cos_t)).sqrt();
+            let rad = p.tolerance * s / (1.0 - s);
+            (limit(acc, &du) * rad)
+                .sqrt()
+                .min(forge_math::dmath::cbrt(limit(jrk, &du) * rad * rad))
+        };
+        max_entry[i] = vj.min(run[i].v_nom).min(run[i - 1].v_nom);
+    }
+    // reverse: what each block can still stop from; forward: what it can reach
+    let mut e = vec![0.0f64; m + 1];
+    for k in (0..m).rev() {
+        let reach = sc_reach(e[k + 1], run[k].len, run[k].acc, run[k].jerk);
+        e[k] = if k == 0 { 0.0 } else { max_entry[k].min(reach) };
+    }
+    let mut x = vec![0.0f64; m + 1];
+    for k in 0..m {
+        let reach = sc_reach(x[k], run[k].len, run[k].acc, run[k].jerk);
+        x[k + 1] = if k + 1 == m { 0.0 } else { e[k + 1].min(reach) };
+    }
+    (0..m)
+        .map(|k| {
+            let b = &run[k];
+            sc_block_time(b.len, x[k], x[k + 1], b.v_nom, b.acc, b.jerk)
+        })
+        .collect()
+}
