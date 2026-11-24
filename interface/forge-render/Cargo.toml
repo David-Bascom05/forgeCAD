@@ -24,6 +24,10 @@ path = "src/bin/forge_app.rs"
 name = "forge-parity"
 path = "src/bin/forge_parity.rs"
 
+[[bin]]
+name = "forge-studio"
+path = "src/bin/forge_studio.rs"
+
 [dependencies]
 forge-dirs = { path = "../../kernel/forge-dirs" }
 # the kernel's scoped threads: the threaded browser build gives them its Web Workers
@@ -59,9 +63,16 @@ forge-vendor = { path = "../../kernel/forge-vendor" }
 forge-step = { path = "../../kernel/forge-step" }
 # the Manufacture workspace: the machining document's run (forgecad.cam/1), its libraries and posts
 forge-cam-lang = { path = "../forge-cam-lang" }
+# a Fusion tool library brought into the project's cam/*.toml
+forge-cam-import = { path = "../forge-cam-import" }
+# toolpath quality per op (cycle time on the machine, engagement, chip load, air cutting)
+forge-cam-quality = { path = "../../verify/forge-cam-quality" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-post = { path = "../../kernel/forge-post" }
 forge-cam = { path = "../../kernel/forge-cam" }
+# turning: the lathe document (forgecad.cam/1, "process": "turning"), its tools, lathes and posts
+forge-turn-lang = { path = "../forge-turn-lang" }
+forge-turn = { path = "../../kernel/forge-turn" }
 # the tools' revolved profiles (the simulation's tool and stock)
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 # the machine simulation: machines as data, the posted text on them (forge-machine)
@@ -82,6 +93,8 @@ rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal",
 egui-winit = { version = "=0.37.0", default-features = false, features = ["wayland", "x11", "smithay-clipboard"] }
 ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
 keyring-core = "=1.0.1"
+# a fetched HDRI checked against its pinned hash (studio/hdri.rs); already in the lock
+sha2 = "=0.11.1"
 
 # already in wgpu's tree on this target: only the entry point names them
 [target.'cfg(target_arch = "wasm32")'.dependencies]

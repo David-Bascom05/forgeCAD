@@ -11,7 +11,17 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-num",
+ "forge-par",
 ]
+
+[[package]]
+name = "forge-num"
+version = "0.1.0"
+
+[[package]]
+name = "forge-par"
+version = "0.1.0"
 
 [[package]]
 name = "fv-predicates"

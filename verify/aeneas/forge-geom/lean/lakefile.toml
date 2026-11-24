@@ -1,0 +1,16 @@
+name = "forgegeom"
+version = "0.1.0"
+defaultTargets = ["ForgeGeom"]
+
+# forge-math's translation (the types and functions forge-geom calls), and through it the float bridge.
+[[require]]
+name = "forgemath"
+path = "../../forge-math/lean"
+
+[[lean_lib]]
+name = "ForgeGeom"
+
+# The spline's binary64 bounds (research/spline-loops/fp), carried to the translation in Refine.lean.
+[[require]]
+name = "splinefp"
+path = "../../../../research/spline-loops/fp"

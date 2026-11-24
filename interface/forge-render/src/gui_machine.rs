@@ -290,6 +290,29 @@ impl Gui {
 }
 
 impl Gui {
+    /// A Machine Builder ribbon command.
+    pub(crate) fn machine_cmd(&mut self, c: crate::shell::machine::MachineCmd) {
+        use crate::shell::machine::MachineCmd as C;
+        if c == C::Close {
+            self.shell.machine = None;
+            return;
+        }
+        let Some(m) = &mut self.shell.machine else { return };
+        match c {
+            C::FromTemplate => m.make_template(),
+            C::Clone => m.make_clone(),
+            C::Save => m.save(),
+            C::Check => m.run_check(),
+            C::Home => {
+                if let Some(d) = &m.def {
+                    m.q = d.joints.iter().map(|j| j.home).collect();
+                    m.jogged();
+                }
+            }
+            C::Close => {}
+        }
+    }
+
     /// The Machine Builder by words, for the page and tests (`app_machine`): `open`, `close`,
     /// `pick NAME`, `template KIND NAME`, `clone NAME`, `jog JOINT VALUE`, `tab NAME`, `check`,
     /// `save user|project`. The answer goes to the status line as `machine: [CMD] ANSWER`.

@@ -1,0 +1,221 @@
+{
+ "dialect": "syntec",
+ "control": "Syntec (mill)",
+ "sources": [],
+ "items": {
+  "program_open": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "program_close": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "comment": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "line_numbers": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "block_end": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "safe_start": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "tool_change": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "tool_change_behaviour": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "tool_length_comp": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "spindle": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "work_offset": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "arc_format": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "rapid_linear": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "feed": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "decimal_point": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "max_digits": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "retract_home": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "coolant": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "dwell": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "drill_G81": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "dwell_drill_G82": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "peck_G83": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "chipbreak_G73": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "rigid_tap_G84": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "bore_G85": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "return_level": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "cycle_cancel": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "peck_depth_word": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "cycle_dwell_units": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  },
+  "native_language": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: no openly published Syntec mill programming manual found (syntecclub.com documents require login); third-party copies not used."
+  }
+ },
+ "notes": "Blocked: see _blocked-pc.txt. Memory says Syntec mill controls run Fanuc-style ISO G-code (G54.1, G4 X/P, G73-G89), unverified. Do not emit for this dialect until a source is supplied.",
+ "unknown": [
+  "program_open",
+  "program_close",
+  "comment",
+  "line_numbers",
+  "block_end",
+  "safe_start",
+  "tool_change",
+  "tool_change_behaviour",
+  "tool_length_comp",
+  "spindle",
+  "work_offset",
+  "arc_format",
+  "rapid_linear",
+  "feed",
+  "decimal_point",
+  "max_digits",
+  "retract_home",
+  "coolant",
+  "dwell",
+  "drill_G81",
+  "dwell_drill_G82",
+  "peck_G83",
+  "chipbreak_G73",
+  "rigid_tap_G84",
+  "bore_G85",
+  "return_level",
+  "cycle_cancel",
+  "peck_depth_word",
+  "cycle_dwell_units",
+  "native_language"
+ ],
+ "filled": "0/30"
+}

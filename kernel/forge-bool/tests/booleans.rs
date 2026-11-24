@@ -216,10 +216,10 @@ fn check_honours_vertex_tolerance() {
     let mut moved = good.clone();
     moved.vertices[0].point.x += 3e-5;
     assert!(!check(&moved).is_empty());
-    moved.vertices[0].tol = 4e-5;
+    moved.grow_vertex_tol(forge_topo::VertexId(0), 4e-5);
     valid(&moved);
     // a ball reaching halfway along an edge is no longer a tolerance
-    moved.vertices[0].tol = 6.0;
+    moved.grow_vertex_tol(forge_topo::VertexId(0), 6.0);
     assert!(
         check(&moved)
             .iter()
@@ -670,4 +670,123 @@ fn bends_tangent_on_one_flat_touch() {
             boolean(&bracket, &post, Op::Intersect, 3).unwrap_or_else(|e| panic!("dip {dip}: {e:?}"));
         assert!(volume(&common).abs() < 1e-6, "dip {dip}: {}", volume(&common));
     }
+}
+
+/// B2 (research/kernel-audit/tilt-wrong-ok.md): a box and a prism under its y = 0 wall whose top
+/// wall runs from y = -1.2e-5 to 1.2e-5 over the length, crossing the box's wall at x = L/2 at
+/// 2.4e-5/L rad. Between the walls lies a wedge 1.2e-5 thick at x = L (1.2·LINEAR): every op is a
+/// valid solid of the exact volume (once an invalid body for intersect and false ZeroThickness
+/// refusals for union and subtract: the prism's bottom edge was not imprinted into the box's
+/// coplanar bottom, its samples all within LINEAR of the box's edge).
+#[test]
+fn tilted_wedge_thinner_than_two_tolerances() {
+    let prism = |pts: &[(f64, f64)], feature: u64| {
+        let n = pts.len();
+        let segs = (0..n)
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % n]);
+                (
+                    Segment::Line {
+                        a: Point2::new(a.0, a.1),
+                        b: Point2::new(b.0, b.1),
+                    },
+                    feature * 10 + i as u64,
+                )
+            })
+            .collect();
+        extrude(
+            &Profile {
+                plane: Frame::WORLD,
+                loops: vec![ProfileLoop::new(segs)],
+            },
+            10.0,
+            feature,
+        )
+        .unwrap()
+    };
+    for l in [1e3, 1e5, 1e6, 2e6] {
+        let a = prism(&[(0.0, 0.0), (l, 0.0), (l, 10.0), (0.0, 10.0)], 1);
+        let b = prism(&[(0.0, -10.0), (l, -10.0), (l, 1.2e-5), (0.0, -1.2e-5)], 2);
+        // the wedge: a triangle L/2 long and 1.2e-5 wide at its end, 10 high
+        let wedge = 3e-5 * l;
+        for (op, want) in [
+            (Op::Intersect, wedge),
+            (Op::Union, 200.0 * l - wedge),
+            (Op::Subtract, 100.0 * l - wedge),
+        ] {
+            let r = boolean(&a, &b, op, 9).unwrap_or_else(|e| panic!("L {l} {op:?}: {e:?}"));
+            valid(&r);
+            let open = tessellate(&r, &Quality::default()).unwrap().open_edges();
+            assert!(open.is_empty(), "L {l} {op:?}: {} open mesh edges", open.len());
+            // (the volume with its error bound: the wedge's own is tiny beside its coordinates)
+            let m = forge_topo::mass::mass(&r).unwrap();
+            let slack = m.err[0] + 1e-9 * want;
+            assert!(
+                (m.volume - want).abs() <= slack,
+                "L {l} {op:?}: {} want {want}",
+                m.volume
+            );
+        }
+    }
+}
+
+/// A chain of booleans on one plate: tilted rectangular prisms (z tilted up to `tilt`, any angle
+/// in plane), nine subtracts through it then a union below, `n` of them, as in turn from seed 7.
+/// The tools with ids in `only` (all if empty). Each result must be valid (names included).
+fn plate_chain(n: usize, tilt: f64, only: &[u64]) {
+    let block = |f: Frame, w: f64, h: f64, d: f64, id: u64| {
+        extrude(
+            &Profile {
+                plane: f,
+                loops: vec![Profile::rectangle(Point2::ORIGIN, w, h, id * 10)],
+            },
+            d,
+            id,
+        )
+    };
+    let mut rng = Rng::new(7);
+    let mut body = block(Frame::WORLD, 200.0, 200.0, 10.0, 1).unwrap();
+    for i in 0..n {
+        let z = Vec3::new(rng.range(-tilt, tilt), rng.range(-tilt, tilt), 1.0)
+            .normalize()
+            .unwrap();
+        let (s, c) = dmath::sin_cos(rng.range(0.0, dmath::TAU));
+        let o = Point3::new(
+            rng.range(10.0, 180.0),
+            rng.range(10.0, 180.0),
+            rng.range(-5.0, 2.0),
+        );
+        let Some(f) = Frame::from_zx(o, z, Vec3::new(c, s, 0.0)) else {
+            continue;
+        };
+        let (w, h) = (rng.range(3.0, 30.0), rng.range(3.0, 30.0));
+        let op = if i % 10 == 9 { Op::Union } else { Op::Subtract };
+        let d = if op == Op::Union {
+            rng.range(1.0, 8.0)
+        } else {
+            20.0
+        };
+        let id = 100 + i as u64;
+        if !only.is_empty() && !only.contains(&id) {
+            continue;
+        }
+        let tool = block(f, w, h, d, id).unwrap();
+        body = boolean(&body, &tool, op, id).unwrap_or_else(|e| panic!("op {i} {op:?}: {e:?}"));
+        let p = check(&body);
+        assert!(p.is_empty(), "after op {i} ({op:?}): {p:?}");
+    }
+}
+
+/// A face split twice, the second time by its own boundary piece that named it the first time:
+/// the new region once took the face's own name (`Name::piece` keeps the first whole's high
+/// half), a duplicate name in a body handed out (the plate's bottom, at the tenth tool).
+#[test]
+fn a_region_split_again_by_its_naming_edge_gets_its_own_name() {
+    plate_chain(95, 0.05, &[118, 119, 138, 139, 144, 145, 186, 187, 188, 194]);
+}
+
+/// The chain whole: 100 booleans of tilted tools on one plate, every result valid.
+#[test]
+fn a_hundred_tilted_booleans_on_one_plate() {
+    plate_chain(100, 0.05, &[]);
 }

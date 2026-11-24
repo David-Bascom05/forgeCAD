@@ -96,20 +96,94 @@ count() {
 }
 echo "counter: $counter (baseline $baseline)"
 export CARGO_TARGET_DIR="$target"
-cargo build -q --release -p forge-model --example regen1 --example bits
-cargo build -q --release -p forge-lang --example benchparts
+if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
+  # Built from one fixed source path, whatever the checkout's: the binaries carry their sources'
+  # paths (CARGO_MANIFEST_DIR in benchparts, and each path crate's metadata hash, which names its
+  # symbols), so two checkouts at paths of different lengths build binaries whose counts differ.
+  # The checkout's files (tracked, and untracked ones not ignored: the work in progress) are copied
+  # there with their times, under a lock (gates may run at once: each builds in turn, then counts
+  # in parallel), and built into this checkout's own target directory, so neither side of a
+  # comparison reuses the other's build.
+  src=/tmp/forge-gate-src
+  checkout=$PWD
+  exec 9>"$src.lock"
+  flock 9
+  rm -rf "$src"
+  mkdir "$src"
+  git ls-files -co --exclude-standard -z | tar --null -T - -cf - | tar -xf - -C "$src"
+  (cd "$src" && cargo build -q --release -p forge-model --example regen1 --example bits \
+    && cargo build -q --release -p forge-lang --example benchparts) || exit 1
+else
+  cargo build -q --release -p forge-model --example regen1 --example bits
+  cargo build -q --release -p forge-lang --example benchparts
+fi
 bin="$target/release/examples"
 if [ "$counter" = callgrind ] && [ "$exact" = 1 ]; then
-  # (the binaries at a path of one length whatever the checkout, and the fixed getrandom)
+  # (the binaries at a path of one length whatever the checkout, and the fixed getrandom and
+  # clock, fixedrandom.c: a clock read under load moved tour seq by up to 24)
+  # (the directory's path reaches each counted process in argv[0], LD_PRELOAD and
+  # FORGE_BENCH_PARTS: its LENGTH moves the counts (tour seq: 9,441,701 from a 22-character
+  # directory, 9,436,604 from 14, 9,437,129 from 41), its letters do not. Always this one form)
+  fill() {
+    cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$1/"
+    mkdir "$1/parts"
+    cp interface/forge-lang/parts/bench/*.fg "$1/parts/"
+    cc -O2 -shared -fPIC -o "$1/fixedrandom.so" "$dir/fixedrandom.c"
+  }
   gatedir=$(mktemp -d /tmp/forge-gate.XXXXXX)
   trap 'rm -rf "$gatedir"' EXIT
-  cp "$bin/regen1" "$bin/bits" "$bin/benchparts" "$gatedir/"
-  mkdir "$gatedir/parts"
-  cp interface/forge-lang/parts/bench/*.fg "$gatedir/parts/"
-  cc -O2 -shared -fPIC -o "$gatedir/fixedrandom.so" "$dir/fixedrandom.c"
+  case $gatedir in
+    /tmp/forge-gate.??????) ;;
+    *) echo "gate dir $gatedir is not /tmp/forge-gate.XXXXXX: its length would move the counts" >&2; exit 64 ;;
+  esac
+  fill "$gatedir"
+  # (the binaries copied out, the source directory is free for the next gate's build)
+  flock -u 9
+  # the binaries were built from the fixed source path, not from this checkout's
+  if [ "${GATE_SELFTEST:-0}" = 1 ]; then
+    # (workspace crates name their sources relatively; benchparts holds its manifest's directory
+    # whole, CARGO_MANIFEST_DIR, which must be the fixed one)
+    for b in regen1 benchparts; do
+      if grep -q -a "$checkout/" "$gatedir/$b"; then
+        echo "self-test FAILED: $b carries this checkout's path ($checkout)" >&2
+        exit 66
+      fi
+    done
+    if ! grep -q -a "$src/" "$gatedir/benchparts"; then
+      echo "self-test FAILED: benchparts was not built from $src" >&2
+      exit 66
+    fi
+    echo "self-test: built from $src, no path of the checkout in the binaries"
+  fi
+  # GATE_SELFTEST=1: the counts do not depend on which gate directory they are made in (nor on the
+  # checkout's: workspace crates embed their sources' paths relative). A second directory of the
+  # same form counts the process alone and one small part's line; any difference fails the gate
+  if [ "${GATE_SELFTEST:-0}" = 1 ]; then
+    other=$(mktemp -d /tmp/forge-gate.XXXXXX)
+    fill "$other"
+    for a in "noop" "tour seq"; do
+      # shellcheck disable=SC2086
+      x=$(bin=$gatedir; count "$bin/regen1" $a)
+      # shellcheck disable=SC2086
+      y=$(bin=$other; count "$bin/regen1" $a)
+      echo "self-test regen1 $a: $x in $gatedir, $y in $other"
+      if [ -z "$x" ] || [ "$x" != "$y" ]; then
+        rm -rf "$other"
+        echo "self-test FAILED: the count depends on the gate directory" >&2
+        exit 65
+      fi
+    done
+    rm -rf "$other"
+  fi
   bin=$gatedir
 fi
 now=$(mktemp)
+# each binary's process alone (its start, std's runtime and the loader's work, nothing built):
+# band.py takes it off that binary's whole-process lines, so a strict line is not charged with
+# start-up work that moves with the binary's layout (glibc reading /proc/self/maps for the main
+# thread's stack guard, say), which on the smallest lines is several hundredths of a percent
+echo "noop regen1 $(count "$bin/regen1" noop)" >> "$now"
+echo "noop benchparts $(count "$bin/benchparts" noop)" >> "$now"
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
     n=$(count "$bin/regen1" $p $m)

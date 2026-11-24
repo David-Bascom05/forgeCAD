@@ -20,7 +20,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-const CRATES: [&str; 12] = [
+const CRATES: [&str; 13] = [
     "forge-par",
     "forge-geom",
     "forge-topo",
@@ -30,6 +30,7 @@ const CRATES: [&str; 12] = [
     "forge-sheet",
     "forge-thermo",
     "forge-math",
+    "forge-num",
     "forge-gpu",
     "forge-mesh",
     "forge-harness",

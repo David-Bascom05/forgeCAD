@@ -44,6 +44,9 @@ impl Gui {
             w.ran(r);
             changed = true;
             self.shell.status = crate::shell::cam::status_line(w);
+        } else if self.shell.status.is_empty() && w.run.is_some() && w.running.is_none() {
+            // nothing else to say (a view loaded after the run cleared it): the run's state
+            self.shell.status = crate::shell::cam::status_line(w);
         }
         // a run asked for, none going
         if w.want_run && w.running.is_none() {
@@ -60,8 +63,31 @@ impl Gui {
                 waker();
             });
         }
+        // a check asked, none going: the run checked again off this thread
+        let Some(w) = &mut self.shell.cam else { return };
+        if w.want_check && w.running.is_none() {
+            w.want_check = false;
+            if let Some(r) = w.run.take() {
+                let slot = w.job.clone();
+                let waker = self.waker.clone();
+                w.running = Some(r.text.clone());
+                self.shell.status = "Checking: the posted paths certified again".into();
+                crate::plat::spawn("forge-cam-check", move || {
+                    let r = run::recheck(r);
+                    *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
+                    waker();
+                });
+            }
+        }
         let Some(w) = &mut self.shell.cam else { return };
         for (path, text) in std::mem::take(&mut w.want_write) {
+            w.write_gen += 1;
+            // a program's `out:` folder made as it is posted
+            if let Some(d) = std::path::Path::new(&path).parent()
+                && !d.as_os_str().is_empty()
+            {
+                let _ = forge_dirs::fs::create_dir_all(d);
+            }
             match forge_dirs::fs::write(&path, text.as_bytes()) {
                 Ok(()) => {
                     if path == w.path {
@@ -104,6 +130,17 @@ impl Gui {
         };
         // a setup that turns the part over, or machines another part (soft jaws), is not in the
         // frame the view shows
+        // a lathe setup: in the part's own frame (z the spindle axis), a witness at (ρ, 0, z)
+        if run.process == "turning" {
+            if let Some(l) = &w.focus.locate {
+                let q = [l.at[0] as f32, l.at[1] as f32, l.at[2] as f32];
+                for (list, a) in [(&mut *out, 1.0), (&mut *behind, 0.9)] {
+                    crate::origin::disc(q, px * 9.0, [0.05, 0.06, 0.08, a], cam, size, list);
+                    crate::origin::disc(q, px * 6.0, [0.93, 0.27, 0.22, a], cam, size, list);
+                }
+            }
+            return;
+        }
         let turned = w.stmt(&su.name).is_some_and(|s| s.arg("from").is_some());
         let main = w.parts.first().map(|p| p.file.as_str());
         if turned || main != Some(su.part.as_str()) {

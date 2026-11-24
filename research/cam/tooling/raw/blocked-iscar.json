@@ -1,0 +1,10 @@
+{
+ "source": "Iscar",
+ "blocked": [
+  {
+   "url": "https://iscar.com/Catalogs/publication-2023/english-1/Aluminum_Machining_catalog_2023/flipview-Aluminum_Machining_catalog_2023/files/basic-html/page9.html",
+   "why": "TLS handshake fails via plain curl (\"unable to get local issuer certificate\"); page did not load with a plain request - skipped"
+  }
+ ],
+ "records": []
+}

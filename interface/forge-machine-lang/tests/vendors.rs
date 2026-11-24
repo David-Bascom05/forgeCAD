@@ -58,9 +58,11 @@ fn vendor_machines_parse_build_and_stay_clear() {
             let c = collide::check_pose(&m, &home);
             assert!(c.is_empty(), "{} at home: {c:?}", m.name);
             for j in 0..m.joints.len() {
-                for end in 0..2 {
+                // a travel cited UNKNOWN has no ends to put the joint at
+                let Some(range) = m.joints[j].range else { continue };
+                for end in range {
                     let mut q = home.clone();
-                    q[j] = m.joints[j].range[end];
+                    q[j] = end;
                     let c = collide::check_pose(&m, &q);
                     assert!(
                         c.is_empty(),

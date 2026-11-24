@@ -104,6 +104,8 @@ pub struct ProgRes {
     pub certified: String,
     pub error: Option<String>,
     pub text: Option<String>,
+    /// A split program's part: the setup it posts (its name is `PROGRAM/SETUP`).
+    pub setup: Option<String>,
 }
 
 /// A left-over region (G4).
@@ -134,8 +136,15 @@ pub struct Run {
     pub json: String,
     /// The setup sheet (HTML).
     pub sheet: String,
-    /// The run itself: the ops' paths for the views.
-    pub cam: forge_cam_lang::Cam,
+    /// The run itself: the ops' paths for the views (milling).
+    pub cam: Option<forge_cam_lang::Cam>,
+    /// A turning document's run (forge-turn-lang).
+    pub turn: Option<forge_turn_lang::TurnCam>,
+    /// "milling" or "turning".
+    pub process: &'static str,
+    /// The toolpaths' quality (forge-cam-quality: cycle time on the machine, engagement, chip,
+    /// air cutting), measured on the run; milling only for now.
+    pub quality: Option<forge_cam_quality::JobQ>,
 }
 
 fn s(j: &Json, k: &str) -> String {
@@ -165,6 +174,9 @@ fn strs(j: &Json, k: &str) -> Vec<String> {
 
 /// Generates `text` (its files beside it in `dir`).
 pub fn run(text: &str, dir: &Path) -> Run {
+    if forge_turn_lang::is_turning(text) {
+        return run_turning(text, dir);
+    }
     let cam = forge_cam_lang::run(text, dir);
     let j = cam.json();
     let mut json = String::new();
@@ -261,6 +273,7 @@ pub fn run(text: &str, dir: &Path) -> Run {
             certified: s(x, "certified"),
             error: p.error.clone(),
             text: p.text.clone(),
+            setup: p.setup.clone(),
         })
         .collect();
     let lo = j.get("leftover");
@@ -300,11 +313,292 @@ pub fn run(text: &str, dir: &Path) -> Run {
         leftover_done: matches!(lo.and_then(|l| l.get("computed")), Some(Json::Bool(true))),
         json,
         sheet: cam.sheet(),
-        cam,
+        quality: Some(forge_cam_quality::measure_cam(
+            &cam,
+            String::new(),
+            &forge_cam_quality::Config::default(),
+        )),
+        cam: Some(cam),
+        turn: None,
+        process: "milling",
     }
 }
 
+/// A turning document generated (forge-turn-lang): its ops, programs and checks as the
+/// workspace shows a milling run's. Checks are the report's refusals, at (ρ, z) in the part's
+/// frame (`at` = [ρ, 0, z]).
+fn run_turning(text: &str, dir: &Path) -> Run {
+    let tc = forge_turn_lang::run(text, dir);
+    let j = tc.json();
+    let mut json = String::new();
+    j.write(&mut json);
+    let stmts = doc::read(text).unwrap_or_default();
+    // each op's tool, from the document: `tool: NAME` → `NAME = lathe_tool("ID", t: N)`
+    let tool_of = |op: &str| -> (Option<String>, Option<u32>) {
+        let Some(name) = stmts
+            .iter()
+            .find(|s| s.name == op)
+            .and_then(|s| s.arg("tool").map(str::to_string))
+        else {
+            return (None, None);
+        };
+        let Some(t) = stmts.iter().find(|s| s.name == name) else {
+            return (None, None);
+        };
+        (
+            t.pos(0).map(doc::unquote),
+            t.arg("t").and_then(|x| x.trim().parse().ok()),
+        )
+    };
+    let tools = forge_turn::insert::library(forge_turn::insert::BUILTIN).unwrap_or_default();
+    let refusals = tc.report.as_ref().map(|r| r.refusals.clone()).unwrap_or_default();
+    let ops = tc
+        .ops
+        .iter()
+        .enumerate()
+        .map(|(k, o)| {
+            let (tool, t) = tool_of(&o.name);
+            let rec = tool.as_ref().and_then(|id| tools.iter().find(|x| &x.id == id));
+            OpRes {
+                name: o.name.clone(),
+                kind: o.kind.clone(),
+                // forge-turn-lang says "planned" for an op no lathe_program posted
+                status: if o.status == "planned" {
+                    "unposted".into()
+                } else {
+                    o.status.clone()
+                },
+                assurance: Assurance::CheckedAtGenerate,
+                tool,
+                tool_t: t,
+                // a lathe tool has no cutting diameter: its nose radius is in its record
+                tool_d: None,
+                refusal: o.refusal.clone(),
+                fix: None,
+                checks: refusals
+                    .iter()
+                    .filter(|r| r.op == k)
+                    .map(|r| Check {
+                        rule: r.rule.clone(),
+                        verdict: r.verdict.clone(),
+                        value: f64::NAN,
+                        limit: f64::NAN,
+                        at: [r.at[0], 0.0, r.at[1]],
+                        tool_part: r.body.clone(),
+                        other: r.rule.clone(),
+                        phase: String::new(),
+                        mov: r.step,
+                    })
+                    .collect(),
+                moves: o.moves,
+                vc: rec.map(|r| r.vc),
+                fz: rec.map(|r| r.f),
+                ..Default::default()
+            }
+        })
+        .collect();
+    let programs = tc
+        .programs
+        .iter()
+        .map(|p| ProgRes {
+            name: p.name.clone(),
+            post: p.post.clone(),
+            lines: p.text.as_ref().map_or(0, |t| t.lines().count()),
+            round_trip: p.text.is_some(),
+            certified: match (p.error.is_some(), tc.certification()) {
+                (true, _) => "no".into(),
+                (false, "full") => "full".into(),
+                (false, _) => "except G5 (unchecked: no machine or not placed)".into(),
+            },
+            error: p.error.clone(),
+            text: p.text.clone(),
+            setup: None,
+        })
+        .collect();
+    let setups = stmts
+        .iter()
+        .filter(|s| s.func == "lathe_setup" && !s.suppressed)
+        .map(|s| {
+            let bar: f64 = s
+                .arg("bar")
+                .and_then(|x| x.trim().parse().ok())
+                .unwrap_or(f64::NAN);
+            let front: f64 = s
+                .arg("front")
+                .and_then(|x| x.trim().parse().ok())
+                .unwrap_or(f64::NAN);
+            SetupRes {
+                name: s.name.clone(),
+                part: stmts
+                    .iter()
+                    .find(|p| Some(p.name.as_str()) == s.pos(0))
+                    .and_then(|p| p.pos(0).map(doc::unquote))
+                    .unwrap_or_default(),
+                machine: s.arg_str("machine").unwrap_or_else(|| "none".into()),
+                stock_min: [-bar / 2.0, -bar / 2.0, f64::NAN],
+                stock_max: [bar / 2.0, bar / 2.0, front],
+                tol: s.arg("tol").and_then(|x| x.trim().parse().ok()).unwrap_or(0.002),
+                clearance: s
+                    .arg("clearance")
+                    .and_then(|x| x.trim().parse().ok())
+                    .unwrap_or(1.0),
+                at: s
+                    .arg("at")
+                    .and_then(|x| x.trim().parse().ok())
+                    .map(|z: f64| [0.0, 0.0, z]),
+                fixture: s.arg("chuck").map(str::to_string),
+                ..Default::default()
+            }
+        })
+        .collect();
+    let leftover = match j.get("leftover").map(|l| arr(l, "regions")) {
+        Some(rs) => rs
+            .iter()
+            .map(|r| {
+                let pair = |k: &str| match r.get(k) {
+                    Some(Json::Arr(a)) if a.len() == 2 => {
+                        [a[0].num().unwrap_or(0.0), a[1].num().unwrap_or(0.0)]
+                    }
+                    _ => [0.0, 0.0],
+                };
+                let (rho, z) = (pair("rho"), pair("z"));
+                LeftRes {
+                    setup: String::new(),
+                    z,
+                    boxes: vec![[rho[0], z[0], rho[1], z[1]]],
+                    why: s(r, "reason"),
+                }
+            })
+            .collect(),
+        None => vec![],
+    };
+    let sheet = turning_sheet(text, &tc);
+    Run {
+        text: text.to_string(),
+        stmts,
+        ok: tc.ok,
+        certification: tc.certification().to_string(),
+        errors: tc.errors.clone(),
+        warnings: tc.warnings.clone(),
+        setups,
+        ops,
+        programs,
+        leftover,
+        leftover_done: true,
+        json,
+        sheet,
+        cam: None,
+        turn: Some(tc),
+        process: "turning",
+        quality: None,
+    }
+}
+
+/// A turning setup sheet: forge-turn-lang has none yet, so its ops and programs as a table.
+fn turning_sheet(text: &str, tc: &forge_turn_lang::TurnCam) -> String {
+    let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+    let mut h = String::from(
+        "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Setup sheet (turning)</title><style>body{font-family:sans-serif;margin:2em}table{border-collapse:collapse}td,th{border:1px solid #999;padding:4px 8px}</style></head><body>\n<h1>Setup sheet: turning</h1>\n<table><tr><th>op</th><th>kind</th><th>status</th><th>moves</th></tr>\n",
+    );
+    for o in &tc.ops {
+        h.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>\n",
+            esc(&o.name),
+            esc(&o.kind),
+            esc(&o.status),
+            o.moves
+        ));
+    }
+    h.push_str("</table>\n<h2>Programs</h2>\n<ul>\n");
+    for p in &tc.programs {
+        h.push_str(&format!(
+            "<li>{} ({}, O{}): {}</li>\n",
+            esc(&p.name),
+            esc(&p.post),
+            p.number,
+            p.text.as_ref().map_or_else(
+                || p.error.clone().unwrap_or_default(),
+                |t| format!("{} lines", t.lines().count())
+            )
+        ));
+    }
+    h.push_str(&format!(
+        "</ul>\n<h2>Document</h2>\n<pre>{}</pre>\n</body></html>\n",
+        esc(text)
+    ));
+    h
+}
+
+/// `r` checked again over its posted paths (forge-cam-lang's `Cam::check`), nothing
+/// regenerated: each op's checks and status replaced by the new verdicts, its assurance "checked
+/// on demand". A turning run is returned as it is (forge-turn-lang has no on-demand check yet).
+pub fn recheck(mut r: Run) -> Run {
+    let Some(cam) = &r.cam else { return r };
+    for oc in cam.check(None) {
+        let Some(o) = r.ops.iter_mut().find(|o| o.name == oc.op) else {
+            continue;
+        };
+        o.checks = oc
+            .checks
+            .iter()
+            .map(|c| Check {
+                rule: c.rule.to_string(),
+                verdict: c.verdict.to_string(),
+                value: c.value,
+                limit: c.limit,
+                at: c.at,
+                tool_part: c.tool_part.to_string(),
+                other: c.other.clone(),
+                phase: c.phase.to_string(),
+                mov: c.move_index,
+            })
+            .collect();
+        o.pairs = oc.pairs;
+        o.assurance = Assurance::CheckedOnDemand;
+        if o.status == "built" || o.status == "refused" {
+            o.status = if oc.clear { "built" } else { "refused" }.into();
+        }
+    }
+    r
+}
+
 impl Run {
+    /// Program statement `name` as run: itself, or its parts (`NAME/SETUP`, one per setup when
+    /// split) as one: lines summed, the least certified part's words, the texts one after another.
+    pub fn program(&self, name: &str) -> Option<ProgRes> {
+        let parts: Vec<&ProgRes> = self
+            .programs
+            .iter()
+            .filter(|x| x.name == name || x.name.split_once('/').is_some_and(|(n, _)| n == name))
+            .collect();
+        match parts.as_slice() {
+            [] => None,
+            [one] => Some((*one).clone()),
+            many => Some(ProgRes {
+                name: name.to_string(),
+                post: many[0].post.clone(),
+                lines: many.iter().map(|x| x.lines).sum(),
+                round_trip: many.iter().all(|x| x.round_trip),
+                certified: many
+                    .iter()
+                    .find(|x| x.certified != "full")
+                    .map_or_else(|| "full".to_string(), |x| x.certified.clone()),
+                error: many.iter().find_map(|x| x.error.clone()),
+                text: many
+                    .iter()
+                    .map(|x| x.text.clone())
+                    .collect::<Option<Vec<String>>>()
+                    .map(|t| t.join("\n")),
+                setup: None,
+            }),
+        }
+    }
+
+    /// An op's quality, if measured.
+    pub fn quality(&self, op: &str) -> Option<&forge_cam_quality::OpQ> {
+        self.quality.as_ref()?.ops.iter().find(|q| q.name == op)
+    }
+
     pub fn op(&self, name: &str) -> Option<&OpRes> {
         self.ops.iter().find(|o| o.name == name)
     }
@@ -444,6 +738,58 @@ mod tests {
             stale(&was, &doc::read(&t).unwrap()),
             ["skim", "top", "prof", "bore", "bolts"]
         );
+    }
+
+    #[test]
+    fn check_now_checks_the_posted_paths_again() {
+        let (text, dir) = flange();
+        let r = recheck(run(&text, &dir));
+        assert!(
+            r.ops
+                .iter()
+                .all(|o| o.status == "built" && o.assurance == Assurance::CheckedOnDemand),
+            "{:?}",
+            r.ops
+                .iter()
+                .map(|o| (&o.name, &o.status, o.assurance))
+                .collect::<Vec<_>>()
+        );
+        assert!(r.ops.iter().all(|o| o.pairs > 0 || o.kind == "drill"));
+    }
+
+    #[test]
+    fn the_shaft_turns_and_every_op_is_certified() {
+        let dir = std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+        let text = std::fs::read_to_string(dir.join("shaft_turn.fg")).expect("the example");
+        let r = run(&text, &dir);
+        assert_eq!(r.process, "turning");
+        assert!(r.errors.is_empty(), "{:?}", r.errors);
+        let names: Vec<(&str, &str)> = r
+            .ops
+            .iter()
+            .map(|o| (o.name.as_str(), o.status.as_str()))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                ("face", "built"),
+                ("rough", "built"),
+                ("fin", "built"),
+                ("thr", "built"),
+                ("cut", "built")
+            ]
+        );
+        assert_eq!(r.certification, "full");
+        assert!(
+            r.programs[0]
+                .text
+                .as_ref()
+                .is_some_and(|t| t.lines().count() > 20)
+        );
+        assert_eq!(r.ops[0].tool.as_deref(), Some("od-rough-cnmg"));
+        assert_eq!(r.ops[0].tool_t, Some(1));
+        assert_eq!(r.setups[0].name, "op1");
+        assert!(stale(&r.stmts, &r.stmts).is_empty());
     }
 
     #[test]

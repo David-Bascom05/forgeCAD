@@ -1,0 +1,10 @@
+{
+ "source": "Widia",
+ "blocked": [
+  {
+   "url": "https://widia.com/id/en/products/p.cnmg-roughing.2027567.html",
+   "why": "HTTP 200 but the HTML is an Angular single-page-app shell (no product data without JavaScript)"
+  }
+ ],
+ "records": []
+}

@@ -1,10 +1,15 @@
 //! One full regen of a part, for instruction counting: `regen1 <part> <seq|nary1|naryN>`.
+//! `regen1 noop` builds nothing (the process's own start and end, for the speed gate).
 //! Parts: a suite name, torture (or tortureN, its first N features), fuzzN, or fuzzkN (`fuzz_keep`). The n-ary batch runs where FORGE_BATCH says.
 use forge_model::{suite, torture};
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let name = args.get(1).map_or("torture", |s| s.as_str());
+    // the process alone, nothing built: what the speed gate takes off each whole-process count
+    if name == "noop" {
+        return;
+    }
     let path = args.get(2).map_or("seq", |s| s.as_str());
     let part = match name {
         "torture" => torture::part(221),

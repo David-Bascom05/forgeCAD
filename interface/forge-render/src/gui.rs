@@ -30,8 +30,12 @@ mod gui_cam;
 pub mod gui_camsim;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
+#[path = "gui_env.rs"]
+mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
+#[path = "gui_studio.rs"]
+mod gui_studio;
 #[path = "gui_fgmarks.rs"]
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
@@ -124,7 +128,11 @@ pub type AsmPlaced = (Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>);
 pub(crate) type PartAnchors = (String, Result<Vec<String>, String>);
 
 pub struct Gui {
+    /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
+    studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
+    /// An environment asked by name (a deep link, `--env`): entered once the document built.
+    pub env_asked: Option<String>,
     /// The Machine Builder's scene (`gui_machine.rs`).
     pub mach: gui_machine::MachHost,
     pub ctx: egui::Context,
@@ -283,7 +291,9 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            studio: None,
             vers: Default::default(),
+            env_asked: None,
             mach: Default::default(),
             agent: Default::default(),
             apps: Default::default(),
@@ -923,6 +933,18 @@ impl Gui {
                     s.set_toggle(g, !s.toggle(g));
                     continue;
                 }
+                Action::EnterEnv(id) => {
+                    self.env_enter(id);
+                    continue;
+                }
+                Action::ExitEnv => {
+                    self.env_exit();
+                    continue;
+                }
+                Action::Env(id, c) => {
+                    self.shell.env_command(id, c);
+                    continue;
+                }
                 a => a,
             };
             if let Action::PartColours(on) = a {
@@ -932,6 +954,7 @@ impl Gui {
             }
             match a {
                 Action::MachineBuilder => self.machine_toggle(),
+                Action::Machine(c) => self.machine_cmd(c),
                 Action::Versions(c) => {
                     use crate::shell::versions::{VersionsAct, VersionsCmd};
                     let v = &mut self.shell.versions;
@@ -1304,6 +1327,7 @@ impl Gui {
         self.save_settings();
         self.inspect_tick();
         self.sheet_frame();
+        self.env_frame();
         self.machine_frame();
         self.fg_hole_guess();
         self.fg_preview();
@@ -1533,6 +1557,7 @@ impl Gui {
             v.dirty = false;
             times.view_drawn = true;
         }
+        let studio_busy = self.studio_frame();
         times.view = now_ms() - t1;
 
         let t2 = now_ms();
@@ -1600,7 +1625,7 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        let again_in = if animating || studio_busy || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {

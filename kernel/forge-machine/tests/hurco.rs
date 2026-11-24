@@ -22,14 +22,14 @@ fn hurco_records_are_real_and_cited() {
         }
     }
     let m = builtin_named("hurco-vm10i").unwrap();
-    assert_eq!(m.joint("X").unwrap().range, [-660.0, 0.0]);
-    assert_eq!(m.joint("X").unwrap().rapid, 28000.0);
+    assert_eq!(m.joint("X").unwrap().range, Some([-660.0, 0.0]));
+    assert_eq!(m.joint("X").unwrap().rapid, Some(28000.0));
     assert_eq!(m.spindles[0].nose[2], 102.0 + 508.0); // nose to table 4 in at the bottom of 20 in Z
     let c = m.changer.as_ref().unwrap();
-    assert_eq!((c.pockets, c.max_tool_kg), (24, 7.0));
+    assert_eq!((c.pockets, c.max_tool_kg), (Some(24), Some(7.0)));
     // the VM20i's printed travel "40 in / 1,106 mm" is a conflict; the record holds 1,016
     let v = builtin_named("hurco-vm20i").unwrap();
-    assert_eq!(v.joint("X").unwrap().range, [-1016.0, 0.0]);
+    assert_eq!(v.joint("X").unwrap().range, Some([-1016.0, 0.0]));
     assert!(
         v.cites
             .iter()
@@ -37,11 +37,11 @@ fn hurco_records_are_real_and_cited() {
     );
     let s = builtin_named("hurco-vmx42srti").unwrap();
     assert_eq!(s.kind, Kind::HeadTable);
-    assert_eq!(s.joint("B").unwrap().range, [-92.0, 92.0]);
-    assert_eq!(s.joint("C").unwrap().rapid, 36000.0); // 100 rpm
+    assert_eq!(s.joint("B").unwrap().range, Some([-92.0, 92.0]));
+    assert_eq!(s.joint("C").unwrap().rapid, Some(36000.0)); // 100 rpm
     let t = builtin_named("hurco-tm10i").unwrap();
     assert_eq!(t.kind, Kind::Lathe);
-    assert_eq!(t.spindles[0].rpm[1], 3000.0);
+    assert_eq!(t.spindles[0].rpm.unwrap()[1], 3000.0);
 }
 
 #[test]

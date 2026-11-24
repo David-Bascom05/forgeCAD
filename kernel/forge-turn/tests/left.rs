@@ -136,3 +136,39 @@ fn the_wrong_hand_or_too_low_is_refused() {
         rep.refusals
     );
 }
+
+#[test]
+fn the_stock_under_the_chamfer_is_roughed_up_then_finished() {
+    // the same collar, the band under the back chamfer roughed up (leave 0.3) before finish_up
+    let s = collar();
+    let mut j = job(&s);
+    let lh = builtin("od-profile-vbmt-left").unwrap();
+    let up = ops::rough_up(&s, &lh, 9, 0.3, 1.0, -21.0, -16.0).unwrap();
+    assert!(
+        up.steps
+            .iter()
+            .filter(|st| matches!(st, ops::Step::Feed(_)))
+            .count()
+            >= 4
+    );
+    j.insert(4, up);
+    let rep = ops::certify(&s, &j, None).unwrap();
+    show(&rep);
+    assert!(rep.ok());
+    let rep = ops::certify_fast(&s, &j, None).unwrap();
+    show(&rep);
+    assert!(rep.ok());
+    // a right-hand tool does not rough up
+    assert!(
+        ops::rough_up(
+            &s,
+            &builtin("od-profile-vbmt").unwrap(),
+            2,
+            0.3,
+            1.0,
+            -21.0,
+            -16.0
+        )
+        .is_err()
+    );
+}
