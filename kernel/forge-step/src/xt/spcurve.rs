@@ -81,7 +81,7 @@ pub(crate) fn param_deriv(s: &Param, uv: Point2) -> SurfDeriv {
                 let w = r - along;
                 let w1 = c1 - *a * a.dot(c1);
                 let w2 = c2 - *a * a.dot(c2);
-                let (sn, cn) = uv.y.sin_cos();
+                let (sn, cn) = forge_math::dmath::sin_cos(uv.y);
                 let turn = |x: Vec3| x * cn + a.cross(x) * sn;
                 let turn_v = |x: Vec3| x * -sn + a.cross(x) * cn;
                 SurfDeriv {
@@ -145,7 +145,7 @@ impl ProceduralCurve for OnSurface {
             let r = d.p - p;
             let g = r.dot(d.d1);
             let h = d.d1.dot(d.d1) + r.dot(d.d2);
-            if !(h > 0.0) {
+            if h.is_nan() || h <= 0.0 {
                 break;
             }
             let next = (t - g / h).clamp(range.lo, range.hi);

@@ -46,7 +46,10 @@ fn a_certified_program_is_written_where_its_statement_says_and_equals_the_apps()
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     let wrote = d.join("nc/mark-1.nc");
     let text = std::fs::read_to_string(&wrote).unwrap();
-    assert!(text.starts_with("%\n(plate, mark side)\n(TOOLS)\n(T1 flat-10"), "{text}");
+    assert!(
+        text.starts_with("%\n(plate, mark side)\n(TOOLS)\n(T1 flat-10"),
+        "{text}"
+    );
     // the app's files: the same run, the same function
     let cam = forge_cam_lang::run(&src, &d);
     let app = forge_cam_lang::export::files(&src, &cam.export_programs(), None, false).unwrap();
@@ -64,19 +67,29 @@ fn an_uncertified_program_is_refused_unless_allowed_and_then_stamped() {
     let d = scratch("flange", &["flange_cam.fg", "flange.fg"]);
     let doc = d.join("flange_cam.fg");
     // the setup not placed: its positions on the machine are unchecked (G5)
-    let src = std::fs::read_to_string(&doc).unwrap().replace(", at: (0, 0, -250)", "");
+    let src = std::fs::read_to_string(&doc)
+        .unwrap()
+        .replace(", at: (0, 0, -250)", "");
     assert!(!src.contains("at: ("));
     std::fs::write(&doc, src).unwrap();
     let o = post(&doc, &[]);
     assert!(!o.status.success());
     let err = String::from_utf8_lossy(&o.stderr);
-    assert!(err.contains("refused: program `prog` is certified except G5"), "{err}");
+    assert!(
+        err.contains("refused: program `prog` is certified except G5"),
+        "{err}"
+    );
     assert!(err.contains("fix: add `at: (x, y, z)` to the setup"), "{err}");
     assert!(!d.join("prog.nc").exists(), "nothing written when refused");
     let o = post(&doc, &["--allow-uncertified"]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     let text = std::fs::read_to_string(d.join("prog.nc")).unwrap();
-    assert!(text.lines().take(3).any(|l| l.starts_with("(NOT CERTIFIED IN FULL: except G5")), "{text}");
+    assert!(
+        text.lines()
+            .take(3)
+            .any(|l| l.starts_with("(NOT CERTIFIED IN FULL: except G5")),
+        "{text}"
+    );
     let o = post(&doc, &["nope"]);
     assert!(String::from_utf8_lossy(&o.stderr).contains("no program `nope` (the document's: prog)"));
 }
@@ -87,5 +100,9 @@ fn a_turning_program_goes_into_a_folder() {
     let out = d.join("out");
     let o = post(&d.join("shaft_turn.fg"), &["-o", &format!("{}/", out.display())]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
-    assert!(std::fs::read_to_string(out.join("prog.nc")).unwrap().contains("G"));
+    assert!(
+        std::fs::read_to_string(out.join("prog.nc"))
+            .unwrap()
+            .contains("G")
+    );
 }

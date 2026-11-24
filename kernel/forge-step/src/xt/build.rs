@@ -12,6 +12,9 @@ use forge_math::{Interval, Point3};
 use forge_topo::Name;
 use std::collections::HashMap;
 
+/// A face's loops: each its edges, with whether each is used along its direction.
+type Loops = Vec<Vec<(usize, bool)>>;
+
 /// Most nodes a chain or ring is followed through: past it the file loops.
 const MAX_CHAIN: usize = 1 << 24;
 
@@ -271,7 +274,7 @@ impl Build<'_, '_> {
         }
         // the edge's curve and which way it runs along it; a tolerant edge's from a fin, the
         // first whose surface reads
-        let (curve, against, cidx) = match ed.p("curve") {
+        let (curve, against, _) = match ed.p("curve") {
             0 => {
                 let mut got = None;
                 let mut first_err = None;
@@ -349,12 +352,6 @@ impl Build<'_, '_> {
         if off > forge_math::tol::LINEAR {
             self.stats.vertices_off += 1;
         }
-        if off > 1e-3 && std::env::var_os("XT_TRACE").is_some() {
-            eprintln!(
-                "edge {idx}: curve {cidx} type {} off {off:.4} range {range:?}",
-                s.node(cidx).map_or(0, |n| n.ty())
-            );
-        }
         self.p.edges.push(PEdge {
             curve,
             range,
@@ -425,17 +422,6 @@ impl Build<'_, '_> {
                 }
             }
             loops.push(uses);
-        }
-        if std::env::var_os("XT_TRACE").is_some() {
-            let st = s.node(f.p("surface")).map_or(0, |x| x.ty());
-            if !matches!(st, 50..=54) {
-                eprintln!(
-                    "face {} = xt face {idx} surface {} type {st} sense {} agree {agree}",
-                    self.p.faces.len(),
-                    f.p("surface"),
-                    f.c("sense") as char
-                );
-            }
         }
         // a spindle torus's cap, its rim and its pole on the axis: healing knows no pole of a
         // torus, so the meridian from the rim to the pole is made here
@@ -514,14 +500,14 @@ impl Build<'_, '_> {
         });
         let at = |p: forge_math::Point3| {
             let q = frame.point_to_local(p);
-            q.y.atan2(q.x)
+            forge_math::dmath::atan2(q.y, q.x)
         };
         let (va_t, vp_t) = (at(pa), at(pp));
         // either way round: the one whose middle stays where the torus is used
         let tau = forge_math::dmath::TAU;
         let up = (vp_t - va_t).rem_euclid(tau);
         let mid_up = va_t + 0.5 * up;
-        let used = |v: f64| t.major + t.minor * v.cos() >= 0.0;
+        let used = |v: f64| t.major + t.minor * forge_math::dmath::cos(v) >= 0.0;
         let (start, end, range) = if used(mid_up) {
             (va, pole, Interval::new(va_t, va_t + up))
         } else {
@@ -541,7 +527,7 @@ impl Build<'_, '_> {
     /// A whole torus face, which a file bounds with nothing, as two bands round the axis, out
     /// and in, met at its outer and inner equators: the circles round the axis at v = 0 and pi,
     /// each made two halves as a ring edge is. Each band's loops wind as a cylinder's rims do.
-    fn whole_torus(&mut self, t: &forge_geom::Torus, idx: u32) -> R<[Vec<Vec<(usize, bool)>>; 2]> {
+    fn whole_torus(&mut self, t: &forge_geom::Torus, idx: u32) -> R<[Loops; 2]> {
         use forge_geom::{Circle, Curve};
         use forge_math::Interval;
         if t.minor <= forge_math::tol::LINEAR || t.major <= t.minor + forge_math::tol::LINEAR {
@@ -669,18 +655,12 @@ fn orient_blends(p: &mut Proto, blends: &[usize]) {
                     let at = ed.curve.eval(ed.range.mid());
                     if let (Some(a), Some(b)) = (normal(p, f, at), normal(p, g, at)) {
                         let d = a.dot(b);
-                        if std::env::var_os("XT_TRACE").is_some() {
-                            eprintln!("  blend {f} edge {e} with {g}: {d:.3}");
-                        }
                         if d.abs() > 0.9 {
                             vote += if d > 0.0 { 1 } else { -1 };
                         }
                     }
                 }
             }
-        }
-        if std::env::var_os("XT_TRACE").is_some() {
-            eprintln!("blend face {f} vote {vote}");
         }
         if vote < 0 {
             p.faces[f].same_sense = !p.faces[f].same_sense;
@@ -745,9 +725,6 @@ pub(crate) fn import(b: &[u8], lim: &Limits, place: bool) -> Result<Imported, Im
                 salt,
                 blends: Vec::new(),
             };
-            if std::env::var_os("XT_TRACE").is_some() {
-                eprintln!("solid {} region {}", solids.len(), region.index);
-            }
             let built = (|| {
                 for sh in chain(&s, region.p("shell"), "next") {
                     b.shell(&sh)?;
@@ -757,9 +734,7 @@ pub(crate) fn import(b: &[u8], lim: &Limits, place: bool) -> Result<Imported, Im
             let blends = std::mem::take(&mut b.blends);
             let mut proto = b.p;
             if built.is_ok() {
-                if std::env::var_os("XT_NOORIENT").is_none() {
-                    orient_blends(&mut proto, &blends);
-                }
+                orient_blends(&mut proto, &blends);
             }
             if proto.vtol.len() < proto.verts.len() {
                 proto.vtol.resize(proto.verts.len(), 0.0);
@@ -790,7 +765,10 @@ pub(crate) fn import(b: &[u8], lim: &Limits, place: bool) -> Result<Imported, Im
     let system = s
         .header
         .key("APPL")
-        .map(|a| format!("{a} (Parasolid {})", s.header.key("FRU").unwrap_or("")))
+        .map(|a| match s.header.key("FRU") {
+            Some(v) if !v.is_empty() => format!("{a} ({v})"),
+            _ => a.to_string(),
+        })
         .unwrap_or_default();
     Ok(Imported {
         solids,

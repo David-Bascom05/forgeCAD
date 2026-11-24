@@ -429,7 +429,7 @@ impl<'s> Geo<'s> {
         }
         let mut out = Vec::with_capacity(total as usize);
         for (k, &c) in kn.iter().zip(m) {
-            if !(c >= 1.0) || !k.is_finite() {
+            if c.is_nan() || c < 1.0 || !k.is_finite() {
                 return refuse(at, ty, "a knot or multiplicity is null");
             }
             out.extend(std::iter::repeat_n(*k, c as usize));
@@ -458,7 +458,7 @@ impl<'s> Geo<'s> {
         let (nu, nv) = (ns.f("n_u_vertices"), ns.f("n_v_vertices"));
         let dim = ns.f("vertex_dim");
         let rational = ns.f("rational") == 1.0;
-        let ok = |x: f64| x.is_finite() && x >= 1.0 && x <= 1e7;
+        let ok = |x: f64| x.is_finite() && (1.0..=1e7).contains(&x);
         if !(ok(p) && ok(q) && ok(nu) && ok(nv) && ok(dim)) {
             return refuse(idx, ty, "degree or vertex count out of range");
         }
@@ -474,7 +474,7 @@ impl<'s> Geo<'s> {
         let mut ws = Vec::with_capacity(nu * nv);
         for c in a.chunks_exact(dim) {
             let w = if rational { c[3] } else { 1.0 };
-            if !(w > 0.0) {
+            if w.is_nan() || w <= 0.0 {
                 return refuse(idx, ty, "a weight not positive");
             }
             pts.push(self.xf.point([c[0] / w, c[1] / w, c[2] / w]));
@@ -493,7 +493,7 @@ impl<'s> Geo<'s> {
         let nc = self.node(at, nc_idx, "the NURBS data")?;
         let (deg, n, dim) = (nc.f("degree"), nc.f("n_vertices"), nc.f("vertex_dim"));
         let rational = nc.f("rational") == 1.0;
-        let ok = |x: f64| x.is_finite() && x >= 1.0 && x <= 1e7;
+        let ok = |x: f64| x.is_finite() && (1.0..=1e7).contains(&x);
         if !(ok(deg) && ok(n) && ok(dim)) {
             return refuse(at, ty, "degree or vertex count out of range");
         }
@@ -508,7 +508,7 @@ impl<'s> Geo<'s> {
         let mut ws = Vec::with_capacity(n);
         for c in a.chunks_exact(dim) {
             let w = if rational { c[dim - 1] } else { 1.0 };
-            if !(w > 0.0) {
+            if w.is_nan() || w <= 0.0 {
                 return refuse(at, ty, "a weight not positive");
             }
             pts.push(if flat {
@@ -724,7 +724,9 @@ impl<'s> Geo<'s> {
         let chart = self.node(idx, n.p("chart"), "the chart")?;
         let hv = chart.all("hvec");
         let mut pts: Vec<Point3> = hv
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .filter(|c| c.iter().all(|x| x.is_finite()))
             .map(|c| self.xf.point([c[0], c[1], c[2]]))
             .collect();
@@ -763,16 +765,7 @@ impl<'s> Geo<'s> {
         {
             pts.push(p);
         }
-        let n0 = pts.len();
         let pts = densify(&a, &b, pts, closed);
-        if std::env::var_os("XT_TRACE").is_some() {
-            eprintln!(
-                "intersection {idx}: {n0} -> {} closed {closed} {} {}",
-                pts.len(),
-                a.kind(),
-                b.kind()
-            );
-        }
         let m = pts.len();
         let mut tans = Vec::with_capacity(m);
         for i in 0..m {

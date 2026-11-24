@@ -6,6 +6,7 @@ use crate::b64;
 use crate::fg::{self, Args, Reply};
 use forge_agent::json::Json;
 use std::io::{BufRead, Write};
+use std::path::Path;
 use std::process::ExitCode;
 
 /// Each tool: name, description, how many of its parameters are required, its parameters,
@@ -17,7 +18,19 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 17] = [
+const TOOLS: [Tool; 18] = [
+    (
+        "import",
+        "A model file (STEP, IGES, .brep, Parasolid .x_t/.x_b) under the root as a part: the file kept in `out` beside a new `<stem>.fg` that imports it (writable sessions). Replies with its solids and what was refused",
+        1,
+        &[
+            ("file", "path to the model under the root"),
+            (
+                "out",
+                "the directory under the root for the part (default: the model's own)",
+            ),
+        ],
+    ),
     (
         "bend",
         "Run a bending document (.fg starting with `bending`): the press-brake program simulated as it states (certified tool clearance through each bend, handling between steps); reply forgecad.bending/1. what=sheet: the setup sheet",
@@ -399,6 +412,9 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
             },
         };
     }
+    if name == "import" {
+        return model_import(p);
+    }
     if name == "help" {
         let text = forge_lang::help(&a.file);
         return Reply {
@@ -423,6 +439,52 @@ fn call(forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
         write_out(&mut r, out);
     }
     r
+}
+
+/// `import`: a model under the root brought in as a part, in a writable session only.
+fn model_import(p: &Json) -> Reply {
+    let fail = |msg: String| Reply {
+        ok: false,
+        text: format!("error: {msg}"),
+        json: Json::obj(vec![("ok", false.into()), ("error", msg.as_str().into())]),
+        png: None,
+    };
+    let Some((root, writable)) = FENCE.get() else {
+        return fail("no session root".into());
+    };
+    if !writable {
+        return fail("import writes: the session is read-only (serve --writable)".into());
+    }
+    let Some(file) = p.get("file").and_then(Json::str) else {
+        return fail("import needs a file".into());
+    };
+    let src = root.join(file);
+    let dir = match p.get("out").and_then(Json::str) {
+        Some(o) => root.join(o),
+        None => src.parent().map_or_else(|| root.clone(), Path::to_path_buf),
+    };
+    let under = |q: &Path| std::fs::canonicalize(q).is_ok_and(|c| c.starts_with(root));
+    if !under(&src) {
+        return fail(format!("{file} is not a file under the session's root"));
+    }
+    let _ = std::fs::create_dir_all(&dir);
+    if !under(&dir) {
+        return fail("out is outside the session's root".into());
+    }
+    if !crate::model::is_model_name(&src) {
+        return fail(format!(
+            "{file}: not a model file (STEP, IGES, .brep, .x_t, .x_b)"
+        ));
+    }
+    match crate::model::import(&src, &dir) {
+        Ok((json, text)) => Reply {
+            ok: true,
+            json,
+            text,
+            png: None,
+        },
+        Err(e) => fail(e),
+    }
 }
 
 /// An export written to `out` under the session's root, not sent back: refused in a read-only

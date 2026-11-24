@@ -194,7 +194,7 @@ fn main() {
             for a in &xsum {
                 let score = |b: &Sum| {
                     let d: f64 = (0..6).map(|k| (a.bx[k] - b.bx[k]).abs()).sum();
-                    let dv = (a.volume - b.volume).abs().powf(1.0 / 3.0);
+                    let dv = forge_math::dmath::cbrt((a.volume - b.volume).abs());
                     d + if dv.is_finite() { dv } else { 0.0 }
                 };
                 let best = ssum
@@ -300,7 +300,7 @@ fn main() {
                         use forge_geom::{CurveGeom, SurfaceGeom};
                         let b = &s.body;
                         let fc = &b.faces[face.0 as usize];
-                        eprintln!("  face surface {:?} same {}", &fc.surface, fc.same_sense);
+                        eprintln!("  face surface {:?} same {}", fc.surface, fc.same_sense);
                         for lp in fc.loops.iter() {
                             eprintln!("  loop");
                             for c in b.loops[lp.0 as usize].coedges() {

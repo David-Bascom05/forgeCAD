@@ -682,3 +682,34 @@ fn a_sheet_part_is_bend_simulated_over_mcp_and_the_cli() {
     assert_eq!(arr(&j, "sequence").len(), 1);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn mcp_import_brings_a_parasolid_model_in_as_a_part_under_the_root() {
+    let dir = scratch("mcp-import");
+    let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../kernel/forge-step/tests/data/xt/haas_sphere.x_t");
+    let model = dir.join("models").join("sphere.x_t");
+    std::fs::create_dir_all(model.parent().unwrap()).unwrap();
+    std::fs::copy(&src, &model).unwrap();
+    let mut m = Server::start("mcp", &dir);
+    let out = dir.join("parts");
+    let (err, j, _) = m.tool(
+        "import",
+        vec![
+            ("file", model.to_str().unwrap().into()),
+            ("out", out.to_str().unwrap().into()),
+        ],
+    );
+    assert!(!err, "{j}");
+    assert_eq!(j.get("solids").and_then(Json::num), Some(1.0), "{j}");
+    assert!(out.join("sphere.fg").exists() && out.join("sphere.x_t").exists());
+    let (err, j, _) = m.tool(
+        "build",
+        vec![("file", out.join("sphere.fg").to_str().unwrap().into())],
+    );
+    assert!(!err, "{j}");
+    // a model outside the root is refused
+    let (err, j, _) = m.tool("import", vec![("file", src.to_str().unwrap().into())]);
+    assert!(err, "{j}");
+    let _ = std::fs::remove_dir_all(&dir);
+}
