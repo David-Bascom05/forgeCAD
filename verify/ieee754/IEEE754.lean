@@ -41,3 +41,4 @@ import IEEE754.Expansion
 import IEEE754.ExpansionSum
 import IEEE754.Axioms
 import IEEE754.Conic
+import IEEE754.EqualCrossing

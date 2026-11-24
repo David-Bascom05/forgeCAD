@@ -4,6 +4,7 @@ Copyright (c) 2026 ForgeCAD contributors. Released under the Mozilla Public Lice
 import Lean
 import IEEE754.Binary64
 import IEEE754.Conic
+import IEEE754.EqualCrossing
 import IEEE754.Compare
 import IEEE754.Computed
 import IEEE754.TwoSum
@@ -57,6 +58,9 @@ elab "#standard_axioms " ids:ident* : command => do
   -- a conic's size made by a division (forge-geom plane_cylinder's ellipse)
   IEEE754.round_ge_two_pow_qmin IEEE754.div_pos_finite IEEE754.quarter_pos_finite
   IEEE754.mul_pos_finite IEEE754.mul_nonneg_finite
+  -- ssi equal_crossing's divisor (in progress): one operation, a sum of three squares
+  IEEE754.round_err_le IEEE754.add_err_le IEEE754.sub_err_le IEEE754.mul_err_le IEEE754.div_err_le
+  IEEE754.sq3_err
   -- rounding
   IEEE754.round_rel_err IEEE754.round_abs_err IEEE754.round_err IEEE754.round_mono
   IEEE754.round_val IEEE754.round_exact
