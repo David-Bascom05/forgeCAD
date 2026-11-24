@@ -709,6 +709,8 @@ pub struct Library {
     /// the allowance tables.
     pub reaming: Vec<feeds::DrillRow>,
     pub ream_allowances: Vec<feeds::ReamAllowance>,
+    /// Counterboring data: `[[counterbore]]` rows (the drilling row's shape).
+    pub counterboring: Vec<feeds::DrillRow>,
     pub turn_generics: Vec<feeds::TurnGeneric>,
     /// Elastic data per tool substrate (deflection).
     pub substrates: Vec<feeds::SubstrateData>,
@@ -1058,6 +1060,9 @@ impl Library {
         for r in tables(&t, "ream") {
             self.reaming.push(feeds::DrillRow::from_table(r)?);
         }
+        for r in tables(&t, "counterbore") {
+            self.counterboring.push(feeds::DrillRow::from_table(r)?);
+        }
         for r in tables(&t, "ream_allowance") {
             self.ream_allowances.push(feeds::ReamAllowance::from_table(r)?);
         }
@@ -1206,6 +1211,12 @@ impl Library {
     /// The group's reaming row for a substrate ("carbide" | "hss").
     pub fn ream(&self, group: &str, substrate: &str) -> Option<&feeds::DrillRow> {
         self.reaming
+            .iter()
+            .find(|r| r.group == group && r.substrate == substrate)
+    }
+    /// The group's counterboring row for a substrate.
+    pub fn counterbore(&self, group: &str, substrate: &str) -> Option<&feeds::DrillRow> {
+        self.counterboring
             .iter()
             .find(|r| r.group == group && r.substrate == substrate)
     }

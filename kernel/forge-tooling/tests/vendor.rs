@@ -614,3 +614,61 @@ fn generic_turning_default() {
     // no class for a group with no turning data: nothing to default to (the op is refused)
     assert!(l.turn_generic("N", None).is_none());
 }
+
+/// Reaming and counterboring data: every row cited per value; the allowance band by diameter;
+/// a 10 mm carbide reamer in N resolves at its row's speed with the pre-drill 9.8.
+#[test]
+fn reaming_and_counterbore_data() {
+    use forge_tooling::feeds::Substrate;
+    use forge_tooling::resolve::{self, DrillTool, ReamAsk, Spindle};
+    let l = Library::builtin();
+    for (k, rows) in [("ream", &l.reaming), ("counterbore", &l.counterboring)] {
+        assert!(!rows.is_empty(), "{k}");
+        for r in rows.iter() {
+            assert!(r.real, "{k} {}/{}", r.group, r.substrate);
+            for f in ["vc", "d_rows", "f_rows"] {
+                let c = r
+                    .cites
+                    .iter()
+                    .find(|c| c.path == f)
+                    .unwrap_or_else(|| panic!("{k} {} {f}", r.group));
+                assert!(c.status == CiteStatus::Published || !c.basis.is_empty());
+            }
+        }
+    }
+    for g in ["P", "M", "K", "N", "S"] {
+        assert!(
+            l.ream(g, "hss").is_some() && l.ream(g, "carbide").is_some(),
+            "{g}"
+        );
+    }
+    assert!(l.ream("H", "carbide").is_some() && l.ream("H", "hss").is_none());
+    let a = l.ream_allowance("carbide").unwrap();
+    assert_eq!(
+        (a.at(4.0), a.at(10.0), a.at(12.0)),
+        (Some(0.15), Some(0.2), Some(0.25))
+    );
+    let r = resolve::reaming(
+        &ReamAsk::default(),
+        &DrillTool {
+            d: 10.0,
+            flutes: 6,
+            point: 0.0,
+            substrate: Substrate::Carbide,
+            preset: None,
+        },
+        l.group("N"),
+        None,
+        l.ream("N", "carbide"),
+        Some(a),
+        &Spindle {
+            rpm: [100.0, 12000.0],
+            max_feed: 0.0,
+            power: &[],
+        },
+    )
+    .unwrap();
+    assert_eq!((r.vc.v, r.predrill.v), (25.0, 9.8));
+    assert!((r.f.v - 0.25).abs() < 1e-12, "{}", r.f.v);
+    assert!(r.f.note.contains("reaming data"), "{}", r.f.note);
+}
