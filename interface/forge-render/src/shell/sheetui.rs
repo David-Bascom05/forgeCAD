@@ -357,6 +357,7 @@ impl Shell {
         let mut ok = false;
         let mut cancel = false;
         let defaults = self.sheet.defaults.clone();
+        let units = self.units;
         let (close, _) = self.sheet_window(
             ctx,
             "sheet:dlg",
@@ -395,7 +396,7 @@ impl Shell {
                     Self::sheet_picks(ui, &t, &mut d, places, &edges, &sketches, &loops, &points, &walls, &flanges, &sheets, &paths);
                     match d.cmd {
                         SheetCmd::Punch => Self::sheet_library(ui, &t, &mut d, places),
-                        SheetCmd::Hardware => Self::sheet_catalogue(ui, &t, &mut d, places, &catalogue),
+                        SheetCmd::Hardware => Self::sheet_catalogue(ui, &t, &mut d, places, &catalogue, units),
                         _ => {}
                     }
                 }
@@ -795,8 +796,14 @@ impl Shell {
         d: &mut SheetDlg,
         places: &mut Vec<(String, Rect)>,
         rows: &[super::sheet::HwRow],
+        units: &str,
     ) {
         section(ui, t, "Catalogue");
+        // lengths in the user's system, the unit in the column's head (STANDARD §5: "Hole · mm")
+        use super::ux::{Qty, System, convert};
+        let sys = System::of_doc(units);
+        let (_, unit) = convert(1.0, Qty::Length, sys);
+        let len = |v: f64| super::fg::short(convert(v, Qty::Length, sys).0);
         let kind = d.field("#0").map_or("nut", |f| f.word());
         let size = d.field("Size").map_or(String::new(), |f| f.num().to_string());
         let mut pick = None;
@@ -804,7 +811,7 @@ impl Shell {
             .striped(true)
             .spacing(vec2(10.0, 2.0))
             .show(ui, |ui| {
-                for h in ["Type", "Size", "Hole", "Edge", "Code"] {
+                for h in ["Type".to_string(), "Size".into(), format!("Hole · {unit}"), format!("Edge · {unit}"), "Code".into()] {
                     ui.label(egui::RichText::new(h).font(medium(11.0)).color(t.ink2));
                 }
                 ui.end_row();
@@ -824,12 +831,12 @@ impl Shell {
                     }
                     ui.label(egui::RichText::new(&row.size).font(mono(11.0)).color(t.ink));
                     ui.label(
-                        egui::RichText::new(super::fg::short(row.hole))
+                        egui::RichText::new(len(row.hole))
                             .font(mono(11.0))
                             .color(t.ink),
                     );
                     ui.label(
-                        egui::RichText::new(super::fg::short(row.edge))
+                        egui::RichText::new(len(row.edge))
                             .font(mono(11.0))
                             .color(t.ink),
                     );
