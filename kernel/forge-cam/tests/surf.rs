@@ -267,5 +267,92 @@ fn surfacing_paths_are_the_same_bits_everywhere() {
             }
         }
     }
-    assert_eq!(h, 0x423e3078ebeba40d, "digest {h:#018x}");
+    assert_eq!(h, 0xfec2cc97e5c76082, "digest {h:#018x}");
+}
+
+/// Z-level roughing off the prism route (the dome's sphere) traces each level's blocked region
+/// from its contour: the voids reach the true CL = z contour to within the fit (a quarter of
+/// the leave), where the grid's cells stopped up to two cells short.
+#[test]
+fn zlevel_on_a_curved_part_reaches_the_contour() {
+    use forge_cam::stock::InProcess;
+    use forge_cam_geom::boolean::{Op, boolean, region_of};
+    use forge_cam_geom::region::{Loop, Region, Seg, p2};
+    let faces = dome();
+    let flat = tool("flat-10", 1);
+    let sf = Surfacer::new(&faces, &flat.shape.bodies[0], 0.5, TOL, 0.0).unwrap();
+    let c = Cut {
+        tool: &flat,
+        tidx: 0,
+        h: H,
+        feed: (1500.0, 300.0),
+    };
+    let (_, voids) =
+        surf::zlevel_voids(&sf, c, [-15.0, -15.0, 75.0, 75.0], 12.0, 0.5, 4.0, 4.0, 2.0).unwrap();
+    let mut ip = InProcess::new([0.0, 0.0, 0.0], [60.0, 60.0, 12.0]);
+    let floors: Vec<f64> = voids.iter().map(|v| v.1).collect();
+    for (v, f) in voids {
+        ip.cut(v, f);
+    }
+    // a level with the cap standing above it
+    let z = floors
+        .iter()
+        .cloned()
+        .filter(|&f| f > 1.0 && f < 9.0)
+        .fold(f64::NAN, f64::max);
+    assert!(z.is_finite(), "{floors:?}");
+    let m = ip.material(z + 0.05).unwrap().expect("material");
+    // the tool centre's least free distance from the cap's axis at z, by bisection on the drop
+    let free = |d: f64| sf.cl(30.0 + d, 30.0).hi <= z;
+    let (mut lo, mut hi) = (0.0, 30.0);
+    assert!(free(hi) && !free(lo));
+    while hi - lo > 1e-4 {
+        let mid = 0.5 * (lo + hi);
+        if free(mid) { hi = mid } else { lo = mid }
+    }
+    // the flat bottom (radius 5) sweeps 5 in from the centres: cleared from hi − 5 out; a point
+    // 0.15 past that (the fit 0.125, res) in each of eight directions is not material
+    let rf = 5.0;
+    let s = std::f64::consts::FRAC_1_SQRT_2;
+    for (dx, dy) in [
+        (1.0, 0.0),
+        (s, s),
+        (0.0, 1.0),
+        (-s, s),
+        (-1.0, 0.0),
+        (-s, -s),
+        (0.0, -1.0),
+        (s, -s),
+    ] {
+        let d = hi - rf + 0.15;
+        let (x, y) = (30.0 + d * dx, 30.0 + d * dy);
+        let e = 0.01;
+        let sq = Region {
+            loops: vec![Loop {
+                segs: vec![
+                    Seg::Line {
+                        a: p2(x - e, y - e),
+                        b: p2(x + e, y - e),
+                    },
+                    Seg::Line {
+                        a: p2(x + e, y - e),
+                        b: p2(x + e, y + e),
+                    },
+                    Seg::Line {
+                        a: p2(x + e, y + e),
+                        b: p2(x - e, y + e),
+                    },
+                    Seg::Line {
+                        a: p2(x - e, y + e),
+                        b: p2(x - e, y - e),
+                    },
+                ],
+            }],
+        };
+        let left = region_of(&boolean(&m, &sq, Op::Inter).unwrap());
+        assert!(
+            left.loops.is_empty(),
+            "material at ({x}, {y}), {d} from the axis, level {z}"
+        );
+    }
 }
