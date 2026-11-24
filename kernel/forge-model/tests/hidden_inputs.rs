@@ -164,18 +164,177 @@ fn scan() -> BTreeMap<String, usize> {
                 continue;
             }
             let text = std::fs::read_to_string(&f).expect("read");
-            // test modules sit at the end of a file: stop at `#[cfg(test)]`
-            for line in text
-                .lines()
-                .take_while(|l| !l.trim_start().starts_with("#[cfg(test)]"))
-            {
-                for k in kinds(line) {
-                    *out.entry(format!("{rel}|{k}|{}", line.trim())).or_default() += 1;
-                }
-            }
+            scan_text(&rel, &text, &mut out);
         }
     }
     out
+}
+
+/// One file's entries: every line but those of `#[cfg(test)]` items.
+fn scan_text(rel: &str, text: &str, out: &mut BTreeMap<String, usize>) {
+    for line in live_lines(text) {
+        for k in kinds(line) {
+            *out.entry(format!("{rel}|{k}|{}", line.trim())).or_default() += 1;
+        }
+    }
+}
+
+/// The lines of `text` outside `#[cfg(test)]` items. Each such item (a fn, a mod, a use, ...) is
+/// skipped from its attribute to its matching closing brace (or its `;`, for one without a body),
+/// and the scan goes on after it: a test item mid-file hides only itself. Braces inside strings,
+/// raw strings, char literals and comments are not counted.
+fn live_lines(text: &str) -> Vec<&str> {
+    let mut out = vec![];
+    let mut starts = vec![];
+    let mut at = 0;
+    for l in text.split_inclusive('\n') {
+        starts.push(at);
+        at += l.len();
+    }
+    let lines: Vec<&str> = text.lines().collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let t = lines[i].trim_start();
+        if let Some(rest) = t.strip_prefix("#[cfg(test)]") {
+            let from = starts[i] + (lines[i].len() - rest.len());
+            let end = item_end(text, from);
+            // resume on the line after the one the item ends on
+            i = starts.partition_point(|&s| s <= end);
+            continue;
+        }
+        out.push(lines[i]);
+        i += 1;
+    }
+    out
+}
+
+/// The byte offset of the end of the item starting at or after `from`: its body's closing brace,
+/// or a `;` before any brace. The end of the text if neither comes.
+fn item_end(text: &str, from: usize) -> usize {
+    let b = text.as_bytes();
+    let mut i = from;
+    let mut depth = 0usize;
+    while i < b.len() {
+        match b[i] {
+            b'/' if b.get(i + 1) == Some(&b'/') => {
+                while i < b.len() && b[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            b'/' if b.get(i + 1) == Some(&b'*') => {
+                let mut nest = 1;
+                i += 2;
+                while i < b.len() && nest > 0 {
+                    if b[i] == b'/' && b.get(i + 1) == Some(&b'*') {
+                        nest += 1;
+                        i += 1;
+                    } else if b[i] == b'*' && b.get(i + 1) == Some(&b'/') {
+                        nest -= 1;
+                        i += 1;
+                    }
+                    i += 1;
+                }
+                continue;
+            }
+            b'r' if (i == 0 || !(b[i - 1].is_ascii_alphanumeric() || b[i - 1] == b'_'))
+                && matches!(b.get(i + 1), Some(b'"') | Some(b'#')) =>
+            {
+                // a raw string r"..", r#".."#: its end is `"` and as many `#`s
+                let mut j = i + 1;
+                let mut hashes = 0;
+                while b.get(j) == Some(&b'#') {
+                    hashes += 1;
+                    j += 1;
+                }
+                if b.get(j) == Some(&b'"') {
+                    j += 1;
+                    loop {
+                        if j >= b.len() {
+                            return b.len();
+                        }
+                        if b[j] == b'"' && b[j + 1..].iter().take(hashes).filter(|&&c| c == b'#').count() == hashes {
+                            i = j + 1 + hashes;
+                            break;
+                        }
+                        j += 1;
+                    }
+                    continue;
+                }
+            }
+            b'"' => {
+                i += 1;
+                while i < b.len() && b[i] != b'"' {
+                    if b[i] == b'\\' {
+                        i += 1;
+                    }
+                    i += 1;
+                }
+            }
+            b'\'' => {
+                // a char literal ('x', '\n', '\u{7b}', '{'); otherwise a lifetime
+                if b.get(i + 1) == Some(&b'\\') {
+                    i += 2;
+                    while i < b.len() && b[i] != b'\'' {
+                        i += 1;
+                    }
+                } else if let Some(c) = text[i + 1..].chars().next() {
+                    let n = c.len_utf8();
+                    if b.get(i + 1 + n) == Some(&b'\'') {
+                        i += 1 + n;
+                    }
+                }
+            }
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return i;
+                }
+            }
+            b';' if depth == 0 => return i,
+            _ => {}
+        }
+        i += 1;
+    }
+    b.len()
+}
+
+/// A `#[cfg(test)]` item mid-file hides only itself: an env read after it is found (and, not
+/// being listed, would fail `every_hidden_input_is_reviewed`), and nothing inside it is.
+#[test]
+fn a_test_item_mid_file_hides_only_itself() {
+    let text = r##"pub fn a() -> f64 { 1.0 }
+
+#[cfg(test)]
+fn helper() -> usize {
+    let s = "}"; let c = '{'; let r = r#"{{"#; // }
+    /* { */ std::env::var("INSIDE").map_or(0, |v| v.len())
+}
+
+#[cfg(test)]
+mod tests;
+
+pub fn b() -> bool {
+    std::env::var("AFTER").is_ok()
+}
+
+#[cfg(test)]
+mod more {
+    #[test]
+    fn t() { let _ = std::env::var("IN_MOD"); }
+}
+
+pub fn c<'a>(x: &'a str) -> &'a str { let _ = std::env::var("LAST"); x }
+"##;
+    let mut found = BTreeMap::new();
+    scan_text("fixture/src/lib.rs", text, &mut found);
+    let keys: Vec<&String> = found.keys().collect();
+    let has = |p: &str| keys.iter().any(|k| k.contains(p));
+    assert!(has("env::var(\"AFTER\")"), "{keys:?}");
+    assert!(has("env::var(\"LAST\")"), "{keys:?}");
+    assert!(!has("INSIDE") && !has("IN_MOD"), "{keys:?}");
+    let (_, list) = listed();
+    assert!(found.keys().all(|k| !list.contains_key(k)), "the fixture is not listed");
 }
 
 const LIST: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tools/proof/hidden-inputs.txt");
