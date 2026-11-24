@@ -100,6 +100,7 @@ pub fn home(s: &Setup, from: &[f64], from_known: bool, t0: f64) -> Homing {
         seg_la: Vec::new(),
         t_scurve: 0.0,
         seg_scurve: Vec::new(),
+        t_scurve_blend: None,
     };
     let mut q = from.to_vec();
     let mut t = t0;
