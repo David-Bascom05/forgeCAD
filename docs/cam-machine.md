@@ -178,7 +178,7 @@ pieces into material, the removal summary, and what is claimed.
 
 | part | what it is |
 |---|---|
-| interpreter (gcode.rs) | words to control events in exact integers; agrees with forge-post's reader on its subset (L6, 240 programs × 4 dialects); its Lean spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine, L1) |
+| interpreter (gcode.rs) | words to control events in exact integers; agrees with forge-post's reader on its subset (L6, 60 programs per dialect, every built-in dialect); its Lean spec refines forge-cam's post model, so posted programs do the planned motion (verify/forge-machine, L1) |
 | kinematics (kin.rs) | joint values to link placements, dmath rotations (exact at multiples of 90°), and the same over intervals |
 | timing (sim.rs) | `t_min` a lower bound (feed and axis limits; G95 with G96 integrated exactly on lines, the clamp's bound on arcs); `t_stop` exact stops with trapezoidal acceleration, an estimate |
 | collision (collide.rs) | every pair of bodies on different links through every segment: interval poses and separating-axis lower bounds prove Clear; a penetration witness gives Hit; otherwise Near (refused) |

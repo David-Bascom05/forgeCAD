@@ -12,6 +12,7 @@ pub mod asmtools;
 mod banner;
 pub mod bendsim;
 mod bendsim_env;
+pub mod cam;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -86,6 +87,8 @@ pub const ASM_TAB: usize = 8;
 pub const HARNESS_TAB: usize = 9;
 /// A part's Weldments tab: structural members, their ends and plates, the cut list.
 pub const WELD_TAB: usize = 10;
+/// A machining document's Manufacture tab: setups, operations, posts (`cam/`).
+pub const CAM_TAB: usize = 11;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -185,6 +188,8 @@ pub enum Action {
     EnterEnv(env::EnvId),
     ExitEnv,
     Env(env::EnvId, u16),
+    /// The Manufacture workspace's command.
+    Cam(cam::Ask),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
     Versions(versions::VersionsCmd),
     /// The Machine Builder workspace (shell/machine.rs), opened or closed.
@@ -400,6 +405,12 @@ pub struct Shell {
     pub new_drawing: Option<drawing::NewDrawing>,
     /// A DWG file is open: AutoCAD's layout instead of the model's (`dwgdoc.rs`).
     pub dwgdoc: Option<dwgdoc::DwgDoc>,
+    /// A machining document is open: the Manufacture workspace over its part (`cam/`).
+    pub cam: Option<cam::CamWs>,
+    /// A machining document's toolpath and stock simulation (`gui_camsim_panel.rs`).
+    pub camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
+    /// The simulation being made off the window's thread, and the workspace focus it last took.
+    pub camsim_job: crate::gui_camsim_panel::SimJob,
     /// What's set in Settings, and its window.
     pub settings: settings::Settings,
     pub prefs: settings::Window,
@@ -466,6 +477,9 @@ impl Default for Shell {
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            cam: None,
+            camsim: None,
+            camsim_job: Default::default(),
             settings: Default::default(),
             prefs: Default::default(),
             agent: Default::default(),
@@ -744,9 +758,11 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
+        // an environment's docked properties take the right of the window
+        let props_w = self.env_properties_width();
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width()), snap(bottom)),
+            pos2(snap(s.width() - props_w), snap(bottom)),
         );
 
         p.rect_filled(
@@ -773,12 +789,17 @@ impl Shell {
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
         self.side(ui, side);
+        if props_w > 0.0 {
+            let r = Rect::from_min_max(pos2(s.width() - props_w, top), pos2(s.width(), bottom));
+            self.env_properties(ui, r);
+        }
         self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
         if !self.view_owned {
             self.navbar(&ctx);
         }
         self.window_ui(&ctx);
+        self.camsim_ui(&ctx);
         // a dialog holds its numbers while it's up; a sketch has its own
         if self.fg.as_ref().is_some_and(|p| p.tool.is_none()) && self.sketch.is_none() {
             self.fg_dim_ui(&ctx);
@@ -786,6 +807,7 @@ impl Shell {
         self.thermo_probes(&ctx);
         self.thermo_ui(&ctx);
         self.env_panels(&ctx);
+        self.cam_ui(&ctx);
         self.harness_ui(&ctx);
         self.fg_dialog(&ctx);
         self.fg_sketches_ui(&ctx);
@@ -1011,6 +1033,7 @@ impl Shell {
                 ASM_TAB => &"Assemble",
                 HARNESS_TAB => &"Harness",
                 WELD_TAB => &"Weldments",
+                CAM_TAB => &"Manufacture",
                 k if k < TABS.len() => &TABS[k],
                 k => &self.env_tab_name(k).unwrap_or("?"),
             };
@@ -1059,7 +1082,9 @@ impl Shell {
             return v;
         }
         let fg = self.fg.is_some() && !self.is_asm();
-        if fg && self.sheet.flat_env {
+        if self.cam.is_some() {
+            vec![CAM_TAB, 2, 3, 4]
+        } else if fg && self.sheet.flat_env {
             vec![FLAT_TAB, 2, 3, 4]
         } else if fg && self.sheet.env {
             vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4, env::ENV_TAB]
@@ -1132,10 +1157,14 @@ impl Shell {
         let st = Rect::from_min_size(pos2(0.0, bottom + DOCS_H), vec2(s.width(), STATUS_H));
         p.rect_filled(st, 0.0, t.bar);
         let x = self.voice_status(ui, 6.0, st);
+        // an environment owns the status bar too
+        let env_line = self.env_status();
         let said = p.text(
             pos2(x + 4.0, st.center().y),
             Align2::LEFT_CENTER,
-            if self.status.is_empty() && self.unshown {
+            if let Some(l) = &env_line {
+                l
+            } else if self.status.is_empty() && self.unshown {
                 "This part built but some of it can't be drawn: fix or delete what the tree marks"
             } else {
                 &self.status

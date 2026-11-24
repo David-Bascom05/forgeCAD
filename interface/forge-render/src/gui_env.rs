@@ -12,6 +12,15 @@ impl Gui {
         if id == EnvId::FlatPattern {
             return self.sheet_cmd(SheetCmd::FlatPattern);
         }
+        // the Machine Builder takes the view for its machine's scene: the host opens it
+        if id == EnvId::MachineBuilder && self.shell.machine.is_none() {
+            if self.shell.env.is_some() {
+                self.env_exit();
+            }
+            self.machine_toggle();
+            self.shell.env_sync();
+            return;
+        }
         if self.shell.enter_env(id).is_ok()
             && let Some(v) = &mut self.view
         {
@@ -25,6 +34,11 @@ impl Gui {
     pub fn env_exit(&mut self) {
         if self.shell.env == Some(EnvId::FlatPattern) {
             return self.sheet_cmd(SheetCmd::Folded);
+        }
+        if self.shell.env == Some(EnvId::MachineBuilder) {
+            self.machine_toggle();
+            self.shell.env_sync();
+            return;
         }
         self.shell.exit_env();
         if let Some(v) = &mut self.view {

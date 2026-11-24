@@ -14,16 +14,13 @@ pub(super) fn of(id: EnvId) -> &'static dyn Environment {
         EnvId::BendSim => &super::bendsim::BendSim,
         EnvId::RenderStudio => &super::render::RenderStudio,
         EnvId::Drawing => &Drawing,
-        EnvId::Manufacture => &Pending(EnvId::Manufacture, MANUFACTURE),
-        EnvId::MachineBuilder => &Pending(EnvId::MachineBuilder, MACHINE),
+        EnvId::Manufacture => &super::workspaces::Manufacture,
+        EnvId::MachineBuilder => &super::workspaces::MachineBuilder,
         EnvId::Robot => &Pending(EnvId::Robot, ROBOT),
         EnvId::Simulation => &Pending(EnvId::Simulation, SIMULATION),
     }
 }
 
-const MANUFACTURE: &str =
-    "coming: the Manufacture workspace (CAM setups, operations, posts, simulation) is still on its branch";
-const MACHINE: &str = "coming: the Machine Builder is still on its branch";
 const ROBOT: &str = "coming: the robot (URDF) editor is still on its branch";
 const SIMULATION: &str = "not yet: the kernel has no structural or motion solver";
 
@@ -67,6 +64,11 @@ pub(super) fn sheet_part(s: &Shell) -> Result<&super::super::fg::FgPanel, String
 struct Thermoform;
 
 impl Environment for Thermoform {
+    /// It works on the part: the part's tree stays.
+    fn keeps_tree(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> EnvId {
         EnvId::Thermoform
     }
@@ -97,6 +99,11 @@ impl Environment for Thermoform {
 pub(super) struct FlatPattern;
 
 impl Environment for FlatPattern {
+    /// It works on the part: the part's tree stays.
+    fn keeps_tree(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> EnvId {
         EnvId::FlatPattern
     }
@@ -189,8 +196,6 @@ impl Environment for Pending {
 
     fn tabs(&self) -> &'static [(usize, &'static str)] {
         match self.0 {
-            EnvId::Manufacture => &[(11, "Manufacture")],
-            EnvId::MachineBuilder => &[(12, "Machine Builder")],
             EnvId::Robot => &[(13, "Robot")],
             _ => &[(14, "Simulation")],
         }

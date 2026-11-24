@@ -1,0 +1,138 @@
+{
+ "vendor": "Mazak",
+ "model": "QUICK TURN 250MY",
+ "family": "QUICK TURN",
+ "source": [
+  "https://www.mazak.com/us-en/detail/usa/turning/us-qt250myeky-all0/",
+  "https://www.mazak.com/us-en/products/quick-turn/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe-y",
+ "architecture": null,
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 228.6,
+  "Y": 101.6,
+  "Z": 1092.2,
+  "W": 1066.8
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": 685.8,
+ "max_turning_dia_mm": 381.0,
+ "max_turning_length_mm": 1016.0,
+ "chuck_size_in": 10,
+ "bar_capacity_mm": 76.2,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 4000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": 26,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "control.standard",
+  "coolant.through_spindle",
+  "live_tool.power_kw",
+  "live_tool.rpm_max",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "sub_spindle",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "turret_index_s",
+  "weight_kg"
+ ],
+ "options": [
+  "variant '40' block: second spindle 6\" chuck, 6000 rpm, 11 kW (15 HP) 30 min; machining length 36\"; W 37\""
+ ],
+ "notes": "Spec page shows two blocks headed '20' and '40' without saying which bed (500U/1000U); fields use block '20'. The 'W-axis (Second spindle)' row appears even in the block without a second spindle (may be tailstock/W travel; unclear). Product listing gives Φ14.75\" dia and 40.35\"/36.38\" lengths. Live-tool rpm/power, Y rapids, tailstock, footprint, weight not on page.",
+ "orig": {
+  "swing": "Φ27\"",
+  "dia": "Φ15\"",
+  "length": "40\" (variant '20'), 36\" (variant '40')",
+  "travel": "X 9\" Y 4\" Z 43\" W 42\" (variant '40': W 37\")",
+  "power": "26 kW (35 HP) 30 min"
+ }
+}

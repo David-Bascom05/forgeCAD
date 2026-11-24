@@ -1,0 +1,14 @@
+# matsuura-mx-520 cradle: the tilting cradle under the rotary table (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -230
+shared y0 = -170
+shared z0 = -200
+shared L = 460
+shared W = 340
+shared H = 120
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

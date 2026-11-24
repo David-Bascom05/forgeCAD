@@ -1,5 +1,5 @@
 //! `cargo run -p forge-exact-fuzz --release --bin exact-curved [-- SOURCE..] [--seeds N]
-//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME] [--shrink] [--oracle]`
+//! [--lang N] [--rule strict|snap] [--threads N] [--only NAME] [--shard K/N] [--shrink] [--oracle]`
 //!
 //! The kernel's booleans of solids bounded by planes, cylinders, cones and spheres against the
 //! exact curved reference: totals per source and path, every disagreement, and with --shrink one
@@ -10,7 +10,7 @@
 //! family, `--seeds` each, where its tools are quadric solids), `lang` (forge_lang::fuzz
 //! programs drawn from extrude, revolve, ball, hole, pattern, workplane, param and sketch),
 //! `band` (each degenerate pair with its tool moved by δ·LINEAR along x, y and z), `torus` (the
-//! degenerate pairs with a torus, on the polynomial path) and `torusband` (those moved as `band`).
+//! degenerate pairs with a torus, on the polynomial path) and `torusband` (those moved as `band`), and `fg:PATH` (a .fg file).
 //!
 //! With `--oracle`, each case also goes to the decide-once oracle (the curved ledger `qledgerB`,
 //! proven exact on certified inputs by `curved_exact` in verify/forge-curved): its probe
@@ -27,6 +27,8 @@ struct Case {
     name: String,
     source: String,
     part: Part,
+    /// a forge_lang program's feature ids (its names refer to faces by them)
+    ids: Option<Vec<u64>>,
 }
 
 fn quadric_pair(name: &str) -> bool {
@@ -54,9 +56,11 @@ fn lang_kinds() -> u64 {
 fn lang_case(seed: u64, len: usize) -> Option<Case> {
     let run = forge_exact_fuzz::guarded(|| Ok(forge_lang::fuzz::run_kinds(seed, len, lang_kinds()))).ok()?;
     let built = forge_exact_fuzz::guarded(|| Ok(forge_lang::fuzz::build(&run.src))).ok()?;
+    let (part, ids) = forge_exact_fuzz::curved::curved_part_ids(&built.part(), Some(&built.ids));
     Some(Case {
         name: format!("lang/{seed}"),
-        part: forge_exact_fuzz::curved::curved_part(&built.part()),
+        part,
+        ids,
         source: run.src,
     })
 }
@@ -67,6 +71,7 @@ fn adv(name: String, part: Part) -> Case {
         source: forge_model::adversarial::literal(&part),
         name,
         part,
+        ids: None,
     }
 }
 
@@ -74,8 +79,10 @@ fn adv(name: String, part: Part) -> Case {
 const BAND: [f64; 3] = [0.9, -0.9, 3.0];
 
 fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
-    let on =
-        |s: &str| sources.is_empty() && s != "band" && s != "torusband" || sources.iter().any(|x| x == s);
+    let only_fg = !sources.is_empty() && sources.iter().all(|s| s.starts_with("fg:"));
+    let on = |s: &str| {
+        !only_fg && (sources.is_empty() && s != "band" && s != "torusband" || sources.iter().any(|x| x == s))
+    };
     let mut out = Vec::new();
     if on("degen") || on("band") || on("torus") || on("torusband") {
         for (name, part) in forge_model::adversarial::degenerate_parts() {
@@ -113,6 +120,22 @@ fn cases(sources: &[String], seeds: u64, lang: u64) -> Vec<Case> {
             }
         }
     }
+    // `fg:PATH`: a .fg file, built by forge_lang, its convex sub-history judged
+    for src in sources.iter().filter_map(|s| s.strip_prefix("fg:")) {
+        let text = std::fs::read_to_string(src).unwrap_or_else(|e| panic!("{src}: {e}"));
+        match forge_exact_fuzz::guarded(|| Ok(forge_lang::fuzz::build(&text))) {
+            Ok(built) => {
+                let (part, ids) = forge_exact_fuzz::curved::curved_part_ids(&built.part(), Some(&built.ids));
+                out.push(Case {
+                    name: format!("fg/{src}"),
+                    part,
+                    ids,
+                    source: text,
+                })
+            }
+            Err(e) => eprintln!("{src}: {e}"),
+        }
+    }
     if on("lang") {
         for s in 1..=lang {
             if let Some(c) = lang_case(s, 8) {
@@ -147,6 +170,7 @@ fn main() {
     let mut threads = 4;
     let mut only: Vec<String> = Vec::new();
     let mut shrink = false;
+    let mut shard: Option<(usize, usize)> = None;
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         match a.as_str() {
@@ -157,12 +181,24 @@ fn main() {
             "--only" => only.push(args.next().expect("--only NAME")),
             "--shrink" => shrink = true,
             "--oracle" => forge_exact_fuzz::curved::ORACLE.store(true, std::sync::atomic::Ordering::Relaxed),
+            "--shard" => {
+                let v = args.next().expect("--shard K/N");
+                let (k, n) = v.split_once('/').expect("--shard K/N");
+                shard = Some((k.parse().expect("K"), n.parse().expect("N")));
+            }
             s => sources.push(s.to_string()),
         }
     }
     let mut cs = cases(&sources, seeds, lang);
     if !only.is_empty() {
         cs.retain(|c| only.contains(&c.name));
+    }
+    if let Some((k, n)) = shard {
+        let mut i = 0;
+        cs.retain(|_| {
+            i += 1;
+            (i - 1) % n == k
+        });
     }
     eprintln!("{} cases, rule {rule}", cs.len());
     let cs = std::sync::Arc::new(cs);
@@ -183,7 +219,10 @@ fn main() {
                 }
                 let c = &cs[i];
                 let t = std::time::Instant::now();
-                for (path, class, ans) in judge_curved(&mut reference, &c.part, &rule) {
+                let judged = forge_exact_fuzz::curved::with_ids(c.ids.clone(), || {
+                    judge_curved(&mut reference, &c.part, &rule)
+                });
+                for (path, class, ans) in judged {
                     let oracle = ans
                         .as_ref()
                         .filter(|_| path == "sequential")

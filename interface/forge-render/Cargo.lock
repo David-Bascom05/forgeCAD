@@ -1094,8 +1094,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-cam"
+version = "0.1.0"
+dependencies = [
+ "forge-cam-geom",
+ "forge-geom",
+ "forge-math",
+ "forge-post",
+ "forge-tooling",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-cam-geom"
 version = "0.1.0"
+
+[[package]]
+name = "forge-cam-lang"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-dirs",
+ "forge-lang",
+ "forge-machine",
+ "forge-math",
+ "forge-model",
+ "forge-post",
+ "forge-sketch",
+ "forge-tooling",
+]
 
 [[package]]
 name = "forge-dirs"
@@ -1311,6 +1340,9 @@ dependencies = [
  "forge-bend-lang",
  "forge-brake",
  "forge-brake-builder",
+ "forge-cam",
+ "forge-cam-geom",
+ "forge-cam-lang",
  "forge-dirs",
  "forge-draw",
  "forge-dwg",
@@ -1329,6 +1361,7 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-par",
+ "forge-post",
  "forge-sheet",
  "forge-sketch",
  "forge-step",

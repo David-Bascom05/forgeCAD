@@ -69,6 +69,7 @@ pub(super) fn scope(s: &Shell) -> &'static str {
             super::super::env::ENV_TAB => "env",
             super::super::env::BENDSIM_TAB => "bendsim",
             super::super::env::RENDER_TAB => "render",
+            super::super::CAM_TAB => "cam",
             _ => "tools",
         }
     }

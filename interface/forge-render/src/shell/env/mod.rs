@@ -12,6 +12,7 @@
 mod bendsim;
 mod builtin;
 mod render;
+mod workspaces;
 
 use super::ribbon::{Group, Tool};
 use super::{Action, Shell};
@@ -21,6 +22,8 @@ use egui::{Rect, Ui};
 pub const ENV_TAB: usize = 20;
 /// The tabs of environments with no design tab of their own (11..19 kept for the in-flight ones).
 pub const BENDSIM_TAB: usize = 21;
+/// The Machine Builder's (Manufacture's is `CAM_TAB`, 11).
+pub const MACHINE_TAB: usize = 12;
 pub const RENDER_TAB: usize = 22;
 
 /// Every environment, known or still to land.
@@ -110,7 +113,7 @@ impl EnvId {
         match self {
             EnvId::Manufacture => "hole",
             EnvId::MachineBuilder => "gear",
-            EnvId::Thermoform => "shell",
+            EnvId::Thermoform => "thicken",
             EnvId::FlatPattern => "flatpattern",
             EnvId::BendSim => "bendtable",
             EnvId::Robot => "jrevolute",
@@ -169,10 +172,27 @@ pub(in crate::shell) trait Environment: Sync {
     fn finish_button(&self) -> bool {
         true
     }
-    /// Its browser in the left panel; false: the document's own stays.
+    /// Its browser in the left panel; false: none of its own (see `keeps_tree`).
     fn browser(&self, _s: &mut Shell, _ui: &mut Ui, _r: Rect) -> bool {
         false
     }
+    /// With no browser of its own, the document's feature tree stays in the left panel. Only an
+    /// environment that works on the part itself opts in (Thermoform, Flat Pattern, Render
+    /// Studio); by default an environment owns the window and the part's tree goes.
+    fn keeps_tree(&self) -> bool {
+        false
+    }
+    /// Its line in the status bar. None: the shell's own line if it keeps the tree, else its
+    /// name (or what it last said, a line starting with its name).
+    fn status(&self, _s: &Shell) -> Option<String> {
+        None
+    }
+    /// Its properties panel, docked at the window's right at full height (the view gives up the
+    /// width): the width, or None for none. Use this, not floating windows.
+    fn properties_width(&self, _s: &Shell) -> Option<f32> {
+        None
+    }
+    fn properties(&self, _s: &mut Shell, _ui: &mut Ui, _r: Rect) {}
     /// Its windows and panels, once a frame.
     fn panels(&self, _s: &mut Shell, _ctx: &egui::Context) {}
     /// What it draws over the view; true: it takes the view's pointer too (hit-testing is its).
@@ -237,7 +257,20 @@ impl Shell {
 
     /// Each frame, first: the environment kept up with the document (another way into or out
     /// of it — the Flat Pattern's own buttons — or the document no longer fit for it).
-    pub(super) fn env_sync(&mut self) {
+    pub(crate) fn env_sync(&mut self) {
+        // the workspaces with state of their own: open is in, closed is out
+        for (open, id) in [
+            (self.machine.is_some(), EnvId::MachineBuilder),
+            (self.cam.is_some(), EnvId::Manufacture),
+        ] {
+            if open && self.env != Some(id) && (self.env.is_none() || id == EnvId::MachineBuilder) {
+                self.env = Some(id);
+                self.tab = id.imp().tabs()[0].0;
+            } else if !open && self.env == Some(id) {
+                self.env = None;
+                self.tab = self.tab_order()[0];
+            }
+        }
         let flat = self.fg.is_some() && self.sheet.flat_env;
         if flat && self.env != Some(EnvId::FlatPattern) {
             self.env = Some(EnvId::FlatPattern);
@@ -278,11 +311,85 @@ impl Shell {
     }
 
     /// The browser, if the environment has its own.
+    /// The left panel in an environment: its browser, else the part's tree if it keeps it, else
+    /// the environment's name and the way out (the part's tree is not its).
     pub(super) fn env_browser(&mut self, ui: &mut Ui, r: Rect) -> bool {
-        match self.env {
-            Some(id) => id.imp().browser(self, ui, r),
-            None => false,
+        let Some(id) = self.env else { return false };
+        let e = id.imp();
+        if e.browser(self, ui, r) {
+            return true;
         }
+        if e.keeps_tree() {
+            return false;
+        }
+        let t = self.theme;
+        let p = ui.painter();
+        p.text(
+            egui::pos2(r.left() + super::theme::S3, r.top() + super::theme::S3),
+            egui::Align2::LEFT_TOP,
+            id.name(),
+            super::theme::semi(13.0),
+            t.ink,
+        );
+        let why = if e.finish_button() {
+            format!(
+                "Its tools are on the ribbon. {} goes back to the design.",
+                finish_word(id)
+            )
+        } else {
+            "Its tools are on the ribbon.".to_string()
+        };
+        let g = p.layout(
+            why,
+            super::theme::small(),
+            t.ink2,
+            r.width() - 2.0 * super::theme::S3,
+        );
+        p.galley(
+            egui::pos2(r.left() + super::theme::S3, r.top() + super::theme::S3 + 22.0),
+            g,
+            t.ink2,
+        );
+        self.places.push((format!("env:{}:browser", id.key()), r));
+        true
+    }
+
+    /// The status bar's line in an environment (None: the shell's own).
+    pub(super) fn env_status(&self) -> Option<String> {
+        let id = self.env?;
+        let e = id.imp();
+        if let Some(s) = e.status(self) {
+            return Some(s);
+        }
+        if e.keeps_tree() {
+            return None;
+        }
+        Some(if self.status.starts_with(id.name()) {
+            self.status.clone()
+        } else {
+            id.name().to_string()
+        })
+    }
+
+    /// The width the environment's docked properties take at the right.
+    pub(super) fn env_properties_width(&self) -> f32 {
+        self.env
+            .and_then(|id| id.imp().properties_width(self))
+            .unwrap_or(0.0)
+    }
+
+    /// The environment's properties, docked at the right of the view at full height.
+    pub(super) fn env_properties(&mut self, ui: &mut Ui, r: Rect) {
+        let Some(id) = self.env else { return };
+        if r.width() <= 0.0 {
+            return;
+        }
+        let t = self.theme;
+        ui.painter().rect_filled(r, 0.0, t.surface);
+        ui.painter()
+            .vline(r.left(), r.y_range(), egui::Stroke::new(1.0, t.line));
+        self.places.push((format!("env:{}:properties", id.key()), r));
+        id.imp().properties(self, ui, r);
     }
 
     pub(super) fn env_panels(&mut self, ctx: &egui::Context) {
@@ -402,7 +509,8 @@ mod tests {
         let gs = groups(&t).unwrap();
         let tiles: Vec<_> = gs.iter().flat_map(|g| &g.big).collect();
         assert_eq!(tiles.len(), EnvId::ALL.len());
-        for tile in tiles {
+        // the Machine Builder edits machine files, not the document: on with nothing open
+        for tile in tiles.into_iter().filter(|t| t.name != "Machine Builder") {
             assert!(tile.action.is_none(), "{} is on with nothing open", tile.name);
             assert!(t.env_why_off(tile.name).is_some());
         }

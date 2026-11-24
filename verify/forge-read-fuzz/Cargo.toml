@@ -1,0 +1,30 @@
+[package]
+name = "forge-read-fuzz"
+description = "Every reader of a file, fed mutated real files: each ends in a value or a typed error, in bounded time and memory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+# The supervisor: runs a worker of itself, restarts it past a case that killed it, and keeps
+# each crash, hang and runaway as a file to replay.
+[[bin]]
+name = "read-fuzz"
+path = "src/main.rs"
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-step = { path = "../../kernel/forge-step" }
+forge-dwg = { path = "../../kernel/forge-dwg" }
+forge-font = { path = "../../kernel/forge-font" }
+forge-git = { path = "../../kernel/forge-git" }
+forge-material = { path = "../../kernel/forge-material" }
+forge-agent = { path = "../../interface/forge-agent" }
+forge-lang = { path = "../../interface/forge-lang" }
+forge-import = { path = "../../interface/forge-import" }
+
+[lints]
+workspace = true
