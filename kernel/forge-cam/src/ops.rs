@@ -599,7 +599,7 @@ pub enum OpError {
 }
 
 /// Contour: the region's boundary, offset by the tool radius plus `leave` (outside for the
-/// part's outline: `outside` true), at each level.
+/// part's outline: `outside` true), at each level, each loop through all its levels in turn.
 pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Result<OpPath, OpError> {
     let Cut { tool, tidx, h, feed } = c;
     let Span { top, bottom, step } = sp;
@@ -616,27 +616,43 @@ pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Resu
             why: "the tool does not fit the contour".into(),
         });
     }
+    // climb with the spindle clockwise (M03): the part on the tool's right. An offset loop has
+    // its region on the left: inside, the region is where the tool goes (the part on the
+    // right); outside, it is the part grown, so the loops are run backwards.
+    let loops: Vec<Vec<Seg>> = loops
+        .iter()
+        .map(|l| {
+            if outside {
+                l.segs.iter().rev().map(|s| s.reversed()).collect()
+            } else {
+                l.segs.clone()
+            }
+        })
+        .collect();
     let mut mv = Vec::new();
-    let first = loops[0].segs[0].start();
+    let first = loops[0][0].start();
     let start = [first.x, first.y, h.clear];
-    for z in levels(top, bottom, step) {
-        for l in &loops {
-            let s = l.segs[0].start();
-            mv.push(PMove::Rapid {
-                to: [s.x, s.y, h.retract],
-            });
+    // each loop through all its levels: down at its start from the retract height, then from
+    // each level straight down at the start to the next (the column the plunge from the retract
+    // height would pass through), and up once at the end
+    for l in &loops {
+        let s = l[0].start();
+        mv.push(PMove::Rapid {
+            to: [s.x, s.y, h.retract],
+        });
+        for z in levels(top, bottom, step) {
             mv.push(PMove::Line {
                 to: [s.x, s.y, z],
                 f: feed.1,
                 phase: Phase::Plunge,
             });
-            push_loop(&mut mv, &l.segs, z, feed.0);
-            mv.push(PMove::Line {
-                to: [s.x, s.y, h.retract],
-                f: feed.0,
-                phase: Phase::Link,
-            });
+            push_loop(&mut mv, l, z, feed.0);
         }
+        mv.push(PMove::Line {
+            to: [s.x, s.y, h.retract],
+            f: feed.0,
+            phase: Phase::Link,
+        });
     }
     mv.push(PMove::Rapid {
         to: [first.x, first.y, h.clear],
