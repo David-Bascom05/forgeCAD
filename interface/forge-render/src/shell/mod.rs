@@ -1516,6 +1516,11 @@ impl Shell {
             self.capture.settings_open = false;
         } else if self.inspect.props.is_some() {
             self.inspect.props = None;
+        } else if self.sheet.vendor.dfm_open {
+            // the DFM report opens over the Vendor window: it goes first
+            self.sheet.vendor.dfm_open = false;
+        } else if self.sheet.vendor.open {
+            self.sheet.vendor.open = false;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.params_open) {
             p.params_open = false;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.cutlist_open) {
