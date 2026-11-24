@@ -737,6 +737,21 @@ fn a_late_measure_of_an_older_text_does_not_lose_the_shown_ones() {
     assert!(r.quality.is_some(), "the shown run's own measure taken");
 }
 
+/// Export NC on a certified document answers the click at once, in every host (BUTTON-AUDITOR:
+/// headless there is no save dialog, and nothing changed): the status asks where, and the export
+/// is handed to the host.
+#[test]
+fn export_nc_answers_its_click() {
+    let Some((mut h, _)) = open("export-click") else { return };
+    assert!(forge_render::shell::cam::release_block(h.gui.shell.cam.as_ref().unwrap()).is_none(), "the flange is placed");
+    tap(&mut h, "tool:Export NC");
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    let line = forge_render::shell::cam::status_line(w);
+    assert_eq!(line, "Export NC: choose where to save prog.nc\u{2026}");
+    assert!(w.export.as_ref().is_some_and(|x| x.files.len() == 1), "handed to the host's Save As");
+}
+
 /// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
 /// estimate counts the tool change the bound counts (the flange changes T1 for T12).
 #[test]

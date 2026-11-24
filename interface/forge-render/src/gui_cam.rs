@@ -61,6 +61,16 @@ impl Gui {
             // nothing else to say (a view loaded after the run cleared it): the run's state
             self.shell.status = crate::shell::cam::status_line(w);
         }
+        // what the workspace just said (an export asked, a refusal) is the shell's status too, as
+        // drawn: the status bar draws the workspace's line, and what reads the shell's status
+        // (the page's state, the UI audit) sees the same words
+        // (once, when it is said: what comes after, "Generating", is not undone)
+        if w.said != w.said_shown {
+            if let Some(s) = &w.said {
+                self.shell.status = s.clone();
+            }
+            w.said_shown = w.said.clone();
+        }
         // a run asked for, none going
         if w.want_run && w.running.is_none() {
             w.want_run = false;
