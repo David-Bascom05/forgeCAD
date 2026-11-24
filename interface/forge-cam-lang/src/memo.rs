@@ -202,6 +202,8 @@ mod tests {
 
     /// Work handed to another thread under the caller's context counts as the caller's calls
     /// and keeps the caller's bypass; without it, the other thread's calls are its own.
+    // (threads: none on wasip1)
+    #[cfg(not(target_os = "wasi"))]
     #[test]
     fn work_on_other_threads_counts_and_bypasses_as_the_callers() {
         static M: Memo<u64> = Memo::new();
@@ -225,7 +227,10 @@ mod tests {
         // this thread's own state back after `enter`
         bypass(true);
         mc.enter(|| ());
-        assert!(BYPASS.with(|b| b.get()), "enter left this thread's bypass changed");
+        assert!(
+            BYPASS.with(|b| b.get()),
+            "enter left this thread's bypass changed"
+        );
         bypass(false);
     }
 }
