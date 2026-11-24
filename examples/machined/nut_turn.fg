@@ -1,0 +1,21 @@
+machining
+# nut.fg on the generic lathe from a Ø52 bar: face, drill Ø26, rough and finish the bore, the
+# thread relief groove with an ID grooving bar, the M30 x 1.5 internal thread. Placed: G5 in full.
+shared bar = 52
+
+f     = part("nut.fg")
+t1    = lathe_tool("od-rough-cnmg", t: 1)
+t3    = lathe_tool("id-bore-ccmt", t: 3)
+t6    = lathe_tool("drill-26", t: 6)
+t7    = lathe_tool("id-groove-2", t: 7)
+t8    = lathe_tool("id-thread-60", t: 8)
+jaws  = chuck(face: -45, grip: 30, jaw: 15, body_r: 90)
+op1   = lathe_setup(f, bar: bar, front: 1, chuck: jaws, machine: "generic-lathe", at: 100,
+                    offsets: ((1, 0, 0), (3, 0, 0), (6, 0, 0), (7, 0, 0), (8, 0, 0)))
+face  = turn_face(op1, tool: t1, to: 0, step: 1)
+drill = turn_drill(op1, tool: t6, to: -40)
+rough = bore_rough(op1, tool: t3, leave: 0.2, step: 1, to: -31, from: 26)
+fin   = turn_finish(op1, tool: t3, to: -18.5)
+relief = turn_groove(op1, tool: t7, from: -22, to: -19, r: 16, bore: 28.2)
+thr   = turn_thread(op1, tool: t8, d: 30, pitch: 1.5, from: 3, to: -20.5, passes: 8)
+prog  = lathe_program(op1, post: "fanuc-lathe", number: 2)
