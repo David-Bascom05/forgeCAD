@@ -12,6 +12,7 @@ use crate::drop::{Band, DropCutter, seg_band};
 use forge_cam::surf::{Surfacer, XyGrid};
 use forge_cam_geom::check::Move;
 use forge_cam_geom::drop::{Column, Gap, gap_move};
+use forge_cam_geom::ival::Ival;
 
 /// Cells for one face's gap check in a generator's segment test.
 const GAP_BUDGET: usize = 2_000;
@@ -153,6 +154,8 @@ impl DropCutter for SurfDrop<'_, '_> {
         };
         let w = r + grown.r;
         let idx = self.grid.near(c[0] - w, c[1] - w, c[0] + w, c[1] + w);
+        // outward-rounded, as `contact::clear_arc`
+        let lim = Ival::pt(self.sf.leave).sub(Ival::pt(slack)).add(Ival::pt(sag)).hi;
         for k in 0..n {
             let mv = Move::Line {
                 a: at(k),
@@ -161,7 +164,7 @@ impl DropCutter for SurfDrop<'_, '_> {
             for &i in &idx {
                 let f = &self.sf.faces[i as usize];
                 if matches!(
-                    forge_cam_geom::contact::clear(&self.sf.cutter, f, &mv, self.sf.leave - slack + sag),
+                    forge_cam_geom::contact::clear(&self.sf.cutter, f, &mv, lim),
                     Some(forge_cam_geom::check::Verdict::Clear { .. })
                 ) {
                     continue;
