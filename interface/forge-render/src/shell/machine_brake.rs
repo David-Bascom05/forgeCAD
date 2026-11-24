@@ -738,6 +738,71 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
             });
             ch.then_some(Item::Arr(a2))
         }
+        // a die's or punch's segments: a small table, Length and Count, a row each
+        (Ty::Points(cols), Some(Item::Arr(rows))) if rows.iter().all(|r| matches!(r, Item::Table(_))) => {
+            let mut rows = rows.clone();
+            let mut ch = false;
+            let mut del = None;
+            let mut add = false;
+            let head = |c: &str, u: &forge_library::schema::Unit| {
+                let w = super::lib_form::humanize(c);
+                match u.suffix().trim() {
+                    "" => w,
+                    "mm" => format!("{w} · {}", super::lib_form::doc_units()),
+                    s => format!("{w} · {s}"),
+                }
+            };
+            ui.vertical(|ui| {
+                egui::Grid::new(("brake:table", &f.path))
+                    .num_columns(cols.len() + 1)
+                    .spacing(vec2(6.0, 2.0))
+                    .show(ui, |ui| {
+                        for (c, u) in cols.iter() {
+                            ui.label(RichText::new(head(c, u)).font(semi(10.5)).color(t.ink2));
+                        }
+                        ui.label("");
+                        ui.end_row();
+                        for (i, row) in rows.iter_mut().enumerate() {
+                            if let Item::Table(tb) = row {
+                                for (c, u) in cols.iter() {
+                                    match tb.get(c) {
+                                        Some(Item::Num(x)) => {
+                                            let mut x = *x;
+                                            let edited = if *u == forge_library::schema::Unit::None {
+                                                super::lib_form::int_edit(ui, &mut x)
+                                            } else {
+                                                num_cell(ui, &mut x, u.suffix())
+                                            };
+                                            if edited {
+                                                tb.set(c, Item::Num(x));
+                                                ch = true;
+                                            }
+                                        }
+                                        _ => {
+                                            ui.label("");
+                                        }
+                                    }
+                                }
+                            }
+                            if super::ux::icon_button(ui, t, "delete", "Remove this row", false).clicked() {
+                                del = Some(i);
+                            }
+                            ui.end_row();
+                        }
+                    });
+                let what = if f.path == "segments" { "segment" } else { "row" };
+                add = !rows.is_empty() && ui.button(format!("+ Add {what}")).clicked();
+            });
+            if let Some(i) = del {
+                rows.remove(i);
+                ch = true;
+            }
+            if add && let Some(last) = rows.last().cloned() {
+                rows.push(last);
+                ch = true;
+            }
+            ch.then_some(Item::Arr(rows))
+        }
         (Ty::Points(cols), Some(Item::Arr(rows))) => {
             let mut rows = rows.clone();
             let mut ch = false;
@@ -803,7 +868,7 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
                                 }
                                 _ => {}
                             }
-                            if ui.small_button("x").clicked() {
+                            if super::ux::icon_button(ui, t, "delete", "Remove this point", false).clicked() {
                                 del = Some(i);
                             }
                         });
@@ -813,7 +878,7 @@ fn cell(ui: &mut Ui, t: &Theme, f: &Field, v: Option<&Item>) -> Option<Item> {
                         ch = true;
                     }
                     if let Some(last) = rows.last().cloned()
-                        && ui.small_button("+").clicked()
+                        && ui.button("+ Add point").clicked()
                     {
                         rows.push(last);
                         ch = true;
@@ -906,7 +971,12 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
         Some(Item::Str(s)) => s.clone(),
         _ => String::new(),
     };
-    let name = lf::product_name(&word("maker"), &word("model"));
+    // a press: maker and model; a punch or die: maker and its catalogue name
+    let model = match word("model") {
+        m if m.is_empty() => word("name"),
+        m => m,
+    };
+    let name = lf::product_name(&word("maker"), &model);
     lf::title(ui, t, name.as_deref(), &cur.id, title);
     let from = match &st.origin {
         Some((l, f)) => format!("{} level · {f}", l.name()),

@@ -331,7 +331,7 @@ pub fn brake_label(key: &str, group: &str) -> (String, &'static str) {
         "relief.z0" => "Relief from",
         "relief.z1" => "Relief to",
         "max_load" => "Max load",
-        "segments" => "Segments (length, count)",
+        "segments" => "Segments",
         "outline" => "Section outline (x, z)",
         "v" => "V opening",
         "angle" => "V angle",
@@ -551,6 +551,11 @@ pub fn level_head(ui: &mut Ui, t: &Theme, level: &str, n: usize) {
             .font(semi(11.0))
             .color(t.ink2),
     );
+}
+
+/// The document's length unit word ("mm", "in"), for a table's column heading.
+pub fn doc_units() -> &'static str {
+    DOC_UNITS.with(|c| c.get())
 }
 
 /// A library list's level filter (docs/ux/STANDARD.md §8): All · Project · User · Built-in as one
