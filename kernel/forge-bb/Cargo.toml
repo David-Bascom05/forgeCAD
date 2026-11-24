@@ -1,0 +1,14 @@
+[package]
+name = "forge-bb"
+description = "ForgeCAD's certified branch and bound: Clear (proven), Hit (a real witness) or Undecided (refused), over any cell search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# the outward f64 intervals a cell's bound is in
+forge-num = { path = "../forge-num" }
+
+[lints]
+workspace = true
