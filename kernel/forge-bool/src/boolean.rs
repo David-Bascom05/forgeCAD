@@ -2116,18 +2116,20 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             as_is[si] = true;
         }
     }
-    let mut staying: Vec<FaceId> = specs
-        .iter()
-        .zip(&as_is)
-        .filter(|(_, k)| **k)
-        .map(|(s, _)| s.from)
-        .collect();
-    staying.extend(
-        kept.iter()
-            .filter(|&&(si, flip)| specs[si].extend && !flip)
-            .map(|&(si, _)| specs[si].from),
-    );
-    staying.extend(untouched_kept.iter().copied());
+    let mut staying: Vec<FaceId> = Vec::new();
+    for (si, s) in specs.iter().enumerate() {
+        if as_is[si] {
+            staying.push(s.from);
+        }
+    }
+    for &(si, flip) in kept {
+        if specs[si].extend && !flip {
+            staying.push(specs[si].from);
+        }
+    }
+    for &f in untouched_kept {
+        staying.push(f);
+    }
     staying.sort_unstable();
     staying.dedup();
     for &f in involved {
