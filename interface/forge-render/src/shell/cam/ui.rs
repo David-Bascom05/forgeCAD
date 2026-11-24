@@ -305,18 +305,20 @@ impl Shell {
                 );
                 let cert = match &w.run {
                     _ if w.running.is_some() => ("generating…".to_string(), t.accent),
-                    Some(run) if run.certification == "full" => ("certified".into(), t.success),
-                    // not a failure: travel (G5) is checked by span only until a setup is placed
-                    Some(run) if run.certification == "except G5" => ("certified · G5 unchecked".into(), t.ink2),
-                    Some(_) => ("refused".into(), t.error),
+                    Some(run) => match cert_of(run.ok, &run.certification) {
+                        Cert::Certified => ("certified".into(), t.success),
+                        // not a failure: a rule this run does not decide (G4's leftover not
+                        // computed; G5's travel by span only until a setup is placed)
+                        Cert::Unchecked(g) => (format!("certified · {g} unchecked"), t.ink2),
+                        Cert::Refused => ("refused".into(), t.error),
+                    },
                     None => ("not generated".into(), t.ink2),
                 };
-                if w.run.as_ref().is_some_and(|r| r.certification == "except G5") {
-                    ui.interact(r, ui.scope_id().with("cam-cert"), Sense::hover()).on_hover_text(
-                        "Every op is certified. Machine travel (G5) is checked against each axis's span only: \
-                         a setup is not placed on the machine (`at:`, the work offset in machine coordinates). \
-                         Place it in the setup dialog to check the positions too.",
-                    );
+                if let Some(run) = &w.run
+                    && let Cert::Unchecked(g) = cert_of(run.ok, &run.certification)
+                {
+                    ui.interact(r, ui.scope_id().with("cam-cert"), Sense::hover())
+                        .on_hover_text(unchecked_words(g));
                 }
                 ui.painter().text(
                     pos2(r.left() + 32.0, r.center().y),
@@ -2969,15 +2971,12 @@ fn checks_window(
                 note(ui, "Generate first.", width, t.ink2);
                 return;
             };
-            let (word, c) = match run.certification.as_str() {
-                "full" => ("Every op certified, every program released", t.success),
-                "except G5" => (
-                    "Every op certified; machine travel (G5) checked by span only: a setup is not placed (at:)",
-                    t.ink2,
-                ),
-                _ => ("Refused: an op or program below", t.error),
+            let (word, c) = match cert_of(run.ok, &run.certification) {
+                Cert::Certified => ("Every op certified, every program released".to_string(), t.success),
+                Cert::Unchecked(g) => (unchecked_words(g), t.ink2),
+                Cert::Refused => ("Refused: an op or program below".to_string(), t.error),
             };
-            note(ui, word, width, c);
+            note(ui, &word, width, c);
             note(ui, "Rules: gouge, holder_collision, rapid_clear, fixture_collision, axis_limit (G5), leftover (G4), on the posted path.", width, t.ink2);
             let mut k = 0;
             for o in &run.ops {
@@ -3287,9 +3286,78 @@ fn docked_foot(
         .inner
 }
 
+/// A run's certification as the Setups header and the Checks panel read it: refused only when
+/// the run is not ok (an op, a program or a statement refused); otherwise certified, naming a
+/// rule the run leaves undecided (forge-cam-lang's `Cam::certification`: "full", "except G5",
+/// "full except G4 (leftover not computed)", "except G4 and G5 (..)").
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) enum Cert {
+    Certified,
+    Unchecked(&'static str),
+    Refused,
+}
+
+pub(crate) fn cert_of(ok: bool, certification: &str) -> Cert {
+    if !ok || certification == "refused" {
+        return Cert::Refused;
+    }
+    match certification {
+        "full" => Cert::Certified,
+        "except G5" => Cert::Unchecked("G5"),
+        c if c.starts_with("full except G4") => Cert::Unchecked("G4"),
+        c if c.starts_with("except G4 and G5") => Cert::Unchecked("G4 and G5"),
+        // words this build does not know: not called a refusal, not called full
+        _ => Cert::Unchecked("a rule"),
+    }
+}
+
+/// What an unchecked rule means, for the hover and the Checks panel.
+fn unchecked_words(g: &str) -> String {
+    let g4 = "the leftover (G4: the stock left against the part) is not computed in this run";
+    let g5 = "machine travel (G5) is checked against each axis's span only: a setup is not placed on \
+              the machine (`at:`, the work offset in machine coordinates); place it in the setup \
+              dialog to check the positions too";
+    match g {
+        "G4" => format!("Every op certified, every program released; {g4}."),
+        "G5" => format!("Every op certified; {g5}."),
+        "G4 and G5" => format!("Every op certified; {g4}, and {g5}."),
+        _ => "Every op certified; a rule is not decided in this run.".into(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{choice_words, default_value};
+    use super::{Cert, cert_of, choice_words, default_value};
+
+    /// A run whose ops and programs all certify reads certified, naming what it leaves
+    /// unchecked (mold_core_cam: "full except G4 (leftover not computed)" read "refused"); only a
+    /// run that is not ok reads refused.
+    #[test]
+    fn a_certified_run_with_a_rule_unchecked_is_not_refused() {
+        assert_eq!(cert_of(true, "full"), Cert::Certified);
+        assert_eq!(cert_of(true, "full except G4 (leftover not computed)"), Cert::Unchecked("G4"));
+        assert_eq!(cert_of(true, "except G5"), Cert::Unchecked("G5"));
+        assert_eq!(
+            cert_of(true, "except G4 and G5 (leftover not computed; no `at:`)"),
+            Cert::Unchecked("G4 and G5")
+        );
+        assert_eq!(cert_of(false, "refused"), Cert::Refused);
+        assert_eq!(cert_of(false, "full"), Cert::Refused);
+        assert_eq!(cert_of(true, "refused"), Cert::Refused);
+    }
+
+    /// mold_core_cam end to end: its five ops and its program certify, G4 is not computed: the
+    /// header reads "certified · G4 unchecked".
+    #[test]
+    fn mold_core_reads_certified_with_g4_unchecked() {
+        let dir =
+            std::path::PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+        let text = std::fs::read_to_string(dir.join("mold_core_cam.fg")).expect("the example");
+        let r = crate::shell::cam::run::run(&text, &dir);
+        assert!(r.ok, "{:?}", r.errors);
+        assert!(r.ops.iter().all(|o| o.status == "built"));
+        assert_eq!(cert_of(r.ok, &r.certification), Cert::Unchecked("G4"), "{}", r.certification);
+    }
 
     #[test]
     fn defaults_read_as_their_values() {
