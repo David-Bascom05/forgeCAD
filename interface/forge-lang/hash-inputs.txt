@@ -9,6 +9,7 @@
 #   dep NAME VERSION    a crate from a registry or git (none today): its version is the input
 path interface/forge-agent
 path interface/forge-history
+path interface/forge-keep
 path interface/forge-lang
 path interface/forge-units
 path kernel/forge-alloc
