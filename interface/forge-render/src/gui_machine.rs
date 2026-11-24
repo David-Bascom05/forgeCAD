@@ -28,6 +28,9 @@ pub struct MachHost {
     ghost_boxes: Vec<crate::frame::Bounds>,
     /// A long tool's section and dimensions, for the inset.
     inset: Option<crate::library_mesh::Inset>,
+    /// The envelope of the body chosen in the Bodies tab, when a model is drawn in its place:
+    /// its primitives' boxes at the current pose, drawn see-through.
+    envelope: Vec<crate::frame::Bounds>,
 }
 
 fn oct(n: [f32; 3]) -> [i16; 2] {
@@ -189,6 +192,10 @@ impl super::Gui {
             for b in &self.mach.ghost_boxes {
                 crate::ghost::ghost_box(*b, cam, size, out);
             }
+        } else if self.shell.machine.is_some() {
+            for b in &self.mach.envelope {
+                crate::ghost::ghost_box(*b, cam, size, out);
+            }
         }
     }
 }
@@ -294,9 +301,22 @@ impl Gui {
             } else {
                 self.mach.labels.clear();
                 self.mach.ghost_boxes.clear();
-                def.bodies
+                // a body with a model the user attached is drawn as the model
+                let model_of = |b: &forge_machine::def::Body| {
+                    let md = m
+                        .models
+                        .iter()
+                        .find(|x| x.body.as_deref() == Some(b.name.as_str()))?;
+                    let t = m.model_tris(md).ok()?;
+                    Some(body_mesh(&crate::machine_model::placed(&t, md)))
+                };
+                let mut ms: Vec<PartMesh> = def
+                    .bodies
                     .iter()
                     .map(|b| {
+                        if let Some(mesh) = model_of(b) {
+                            return mesh;
+                        }
                         // a made machine's parts not saved yet: from the texts it carries
                         if m.origin.is_none()
                             && let Some(p) = &b.part
@@ -307,13 +327,26 @@ impl Gui {
                         }
                         body_mesh(&crate::machine_mesh::body_tris(&def, b, dir.as_deref()))
                     })
-                    .collect()
+                    .collect();
+                // whole-machine models: one piece each, on the base
+                for md in m.models.iter().filter(|x| x.body.is_none()) {
+                    if let Ok(t) = m.model_tris(md) {
+                        ms.push(body_mesh(&crate::machine_model::placed(&t, md)));
+                    }
+                }
+                ms
             };
             if tooling.is_none() {
                 self.mach.bodies = def
                     .bodies
                     .iter()
                     .map(|b| (b.name.clone(), b.link.clone()))
+                    .chain(
+                        m.models
+                            .iter()
+                            .filter(|x| x.body.is_none() && m.model_tris(x).is_ok())
+                            .map(|x| (format!("model:{}", x.file), "base".to_string())),
+                    )
                     .collect();
             }
             if meshes.is_empty() {
@@ -417,6 +450,76 @@ impl Gui {
             if let Some(m) = &mut self.shell.machine {
                 m.view_labels = px;
                 m.inset = inset;
+            }
+        }
+        let Some(m) = &self.shell.machine else { return };
+        // the chosen body's envelope, while its model is drawn in its place
+        self.mach.envelope.clear();
+        if tooling.is_none()
+            && m.problem.is_none()
+            && m.tab == crate::shell::machine::Tab::Bodies
+            && let Some(b) = def.bodies.get(m.pick)
+            && m.models
+                .iter()
+                .any(|x| x.body.as_deref() == Some(b.name.as_str()))
+        {
+            let pose = kin::pose(&def, &m.q);
+            let at = kin::link(&def, &pose, &b.link);
+            for p in &b.prims {
+                let pts: Vec<[f64; 3]> = match p {
+                    Prim::Box { min, max } => (0..8)
+                        .map(|k| std::array::from_fn(|a| if k >> a & 1 == 1 { max[a] } else { min[a] }))
+                        .collect(),
+                    Prim::Cyl { .. } => forge_machine_builder::models::prims_bounds(std::slice::from_ref(p))
+                        .map(|(lo, hi)| {
+                            (0..8)
+                                .map(|k| std::array::from_fn(|a| if k >> a & 1 == 1 { hi[a] } else { lo[a] }))
+                                .collect()
+                        })
+                        .unwrap_or_default(),
+                };
+                if let Some((lo, hi)) =
+                    forge_machine_builder::models::bounds(pts.into_iter().map(|x| at.apply(x)))
+                {
+                    self.mach.envelope.push(crate::frame::Bounds::new(
+                        lo.map(|x| x as f32),
+                        hi.map(|x| x as f32),
+                    ));
+                }
+            }
+        }
+        // the envelope and the farthest-out point on the screen, for the panel to draw on top
+        if let Some(v) = &self.view {
+            let rect = self.shell.view_rect;
+            let px = |p: [f64; 3]| crate::gui_camsim_panel::screen_of(&v.nav.camera, v.size, rect, p);
+            let boxes: Vec<[egui::Pos2; 8]> = self
+                .mach
+                .envelope
+                .iter()
+                .filter_map(|b| {
+                    let c = b.corners();
+                    let mut out = [egui::Pos2::ZERO; 8];
+                    for (k, q) in c.iter().enumerate() {
+                        out[k] = px(q.map(f64::from))?;
+                    }
+                    Some(out)
+                })
+                .collect();
+            let worst = def.bodies.get(m.pick).and_then(|b| {
+                let i = m
+                    .models
+                    .iter()
+                    .position(|x| x.body.as_deref() == Some(b.name.as_str()))?;
+                let o = m.model_checks.get(i)?.as_ref().ok()?;
+                (o.out > 0 && !boxes.is_empty() && m.problem.is_none()).then(|| {
+                    let pose = kin::pose(&def, &m.q);
+                    (kin::link(&def, &pose, &b.link).apply(o.at), o.worst)
+                })
+            });
+            let worst = worst.and_then(|(p, d)| px(p).map(|q| (q, d)));
+            if let Some(m) = &mut self.shell.machine {
+                m.envelope_px = boxes;
+                m.out_px = worst;
             }
         }
         let Some(m) = &self.shell.machine else { return };

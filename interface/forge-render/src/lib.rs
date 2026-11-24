@@ -13,6 +13,7 @@ pub mod library_mesh;
 pub mod livegpu;
 pub mod look;
 pub mod machine_mesh;
+pub mod machine_model;
 pub mod mesh;
 pub mod nav;
 pub mod origin;
