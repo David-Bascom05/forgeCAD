@@ -40,7 +40,7 @@ spheres and tori about it. Any other face (a flat, a cross hole) is refused by n
 |---|---|
 | `part("F.fg")` | the part, lowered to its half-profile in (ρ, z) |
 | `lathe_tool("ID", t: N)` | a tool of the built-in library (kernel/forge-turn/data/turning.toml) at station N |
-| `lathe_tool(blade: "B", insert: "I", t: N)` | a parting or grooving blade and its insert from the tooling library's `[[blade]]` and `[[groove_insert]]` records (makers' data: the insert's width, corner, length and side clearance; the blade's thickness, reach, height; a bar over the blade's largest is refused) |
+| `lathe_tool(blade: "B", insert: "I", block: "K", t: N)` | a parting or grooving blade and its insert from the tooling library's `[[blade]]` and `[[groove_insert]]` records (makers' data: the insert's width, corner, length and side clearance; the blade's thickness, reach, height; a bar over the blade's largest is refused; `block:` its `[[tool_block]]`, else a generic block) |
 | `lathe_tool(drill: "D", t: N)` | a drill from the tooling library (`[[tool]]` type drill: diameter, point angle, 180 for an indexable drill's flat bottom, usable depth, shank) |
 | `lathe_tool(holder: "H", insert: "I", t: N)` | a holder or boring bar and an insert from the tooling library (forge-tooling's makers' records, and the user's and the project's where the caller passes them: `forge_turn_lang::run_with_library`), assembled by their ISO codes |
 | `chuck(face:, grip:, jaw:, body_r: 80, body_len: 60)` | the three-jaw chuck's envelope as it turns |

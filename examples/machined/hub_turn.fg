@@ -15,7 +15,7 @@ t6    = lathe_tool("id-bore-ccmt", t: 6)
 t7    = lathe_tool("id-groove-2", t: 7)
 t8    = lathe_tool("id-thread-60", t: 8)
 t9    = lathe_tool("od-profile-vbmt-left", t: 9)
-t10   = lathe_tool(blade: "tungaloy-CGP32-3D", insert: "tungaloy-SGM3-020", t: 10)
+t10   = lathe_tool(blade: "tungaloy-CGP32-3D", insert: "tungaloy-SGM3-020", block: "tungaloy-CTBU25-32", t: 10)
 jaws  = chuck(face: -100, grip: 30, jaw: 15)
 op1   = lathe_setup(f, bar: bar, front: 1, chuck: jaws, machine: "generic-lathe", at: 100,
                     offsets: ((1, 0, 0), (2, 0, 0), (3, 0, 0), (4, 0, 0), (5, 0, 0), (6, 0, 0),

@@ -559,7 +559,7 @@ impl TurnCam {
         t.map_err(|e| e.to_string())
     }
 
-    /// `lathe_tool(blade: B, insert: I, t: N)`: a parting blade and a grooving insert from the
+    /// `lathe_tool(blade: B, insert: I, block: K?, t: N)`: a parting blade and a grooving insert from the
     /// tooling library: the insert's width, corner, length and side clearance (2° when not
     /// stated), the blade's thickness, reach, height and largest bar. Its reach makes it a part-off
     /// blade when it reaches 20 or more, else a grooving one.
@@ -583,6 +583,20 @@ impl TurnCam {
         } else {
             insert::Kind::Groove
         };
+        // the tool block, `block:` (its record), else generic
+        let block = match a.get("block") {
+            None => None,
+            Some(_) => {
+                let kid = text(a, "block", None)?;
+                let k = self
+                    .lib
+                    .tool_blocks
+                    .iter()
+                    .find(|k| k.id == kid)
+                    .ok_or_else(|| format!("no tool block `{kid}` in the tooling library"))?;
+                Some([k.h, k.b, k.l1])
+            }
+        };
         insert::blade_tool(
             &format!("{bid} + {iid}"),
             kind,
@@ -594,6 +608,7 @@ impl TurnCam {
             b.cdx,
             b.h,
             b.max_bar,
+            block,
         )
         .map_err(|e| e.to_string())
     }

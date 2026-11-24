@@ -734,7 +734,9 @@ pub fn boring_tool(id: &str, insert: &str, bar: &str, seat_deg: Option<f64>) -> 
 /// its length along the blade `head`, side clearance `side_deg`) as a head falling away by the
 /// side clearance; the blade (thickness t_blade, reach, height h) as a rectangle centred on the
 /// insert's width from the tip back to the reach (where the blade truly starts behind the insert,
-/// a superset); the tool block generic. `max_bar`: the maker's largest bar.
+/// a superset); the tool block from its record ([h, b, l1]: depth below centre height, width
+/// along z centred on the blade, length along ρ from the reach back) or generic. `max_bar`: the
+/// maker's largest bar.
 pub fn blade_tool(
     id: &str,
     kind: Kind,
@@ -746,6 +748,7 @@ pub fn blade_tool(
     reach: f64,
     h: f64,
     max_bar: Option<f64>,
+    block: Option<[f64; 3]>,
 ) -> Result<TurnTool, ToolError> {
     if !(w > 2.0 * rc && rc >= 0.0 && reach > 0.0 && t_blade > 2.0 * rc && t_blade <= w && head > 0.0) {
         return Err(ToolError::Bad {
@@ -783,7 +786,23 @@ pub fn blade_tool(
         on_axis: false,
         cyl: None,
     };
-    let holder = t.bodies.pop().expect("the block");
+    let mut holder = t.bodies.pop().expect("the block");
+    if let Some([bh, bb, bl]) = block {
+        // the block: b wide along z about the blade's middle, l1 back along ρ from the reach (the
+        // blade's clamped length beyond the reach lies in it), its depth below centre height
+        let (x0, zm) = (reach + rc, 0.5 * core_w);
+        holder = Body {
+            name: "tool block".into(),
+            core: vec![
+                [x0, zm - 0.5 * bb],
+                [x0 + bl, zm - 0.5 * bb],
+                [x0 + bl, zm + 0.5 * bb],
+                [x0, zm + 0.5 * bb],
+            ],
+            depth: [0.0, bh.max(h)],
+            ..holder
+        };
+    }
     t.bodies = vec![insert, body, holder];
     t.code = format!("blade {t_blade} x {reach}, insert {w}");
     t.max_bar = max_bar;

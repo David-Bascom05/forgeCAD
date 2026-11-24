@@ -189,7 +189,7 @@ fn the_hub_certifies_in_full() {
     );
     // a blade too short for the bar is refused with the library's blades that reach
     let short = src.replace(
-        "lathe_tool(blade: \"tungaloy-CGP32-3D\", insert: \"tungaloy-SGM3-020\", t: 10)",
+        "lathe_tool(blade: \"tungaloy-CGP32-3D\", insert: \"tungaloy-SGM3-020\", block: \"tungaloy-CTBU25-32\", t: 10)",
         "lathe_tool(\"part-3\", t: 10)",
     );
     assert_ne!(short, src);
