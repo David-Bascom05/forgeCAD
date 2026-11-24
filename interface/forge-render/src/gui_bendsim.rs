@@ -9,7 +9,7 @@ use crate::render::Renderer;
 use crate::scene::{Placement, Scene};
 use crate::shell::bendsim::Framing;
 use crate::shell::env::EnvId;
-use forge_brake::scene::{Body, Look, Mesh};
+use forge_brake::scene::{Body, Look, Mesh, stage_at};
 
 struct Taken {
     renderer: Renderer,
@@ -37,6 +37,8 @@ pub struct BendView {
     cut: Vec<String>,
     /// The step last framed (Follow bend re-frames on a new one).
     step: Option<usize>,
+    /// The part's motion at the tools through that step: (step, lo, hi).
+    envelope: Option<(usize, [f32; 3], [f32; 3])>,
     /// The bodies drawn, in placement order: what see-through tests against.
     bodies: Vec<Body>,
     /// See-through: the eye and the settings it was worked out for, and the faces drawn as
@@ -433,27 +435,44 @@ impl Gui {
             sim.tooling.station(st.punch, st.die).map(|x| x.y.to_bits())
         };
         let ask = b.frame;
-        // with Follow bend, each new step is framed afresh; otherwise the eye is the user's
+        // with Follow bend, each new step is framed afresh, and through the operator's handling
+        // the eye widens to keep the part in view, settling back on the working zone as it
+        // returns to the tools; otherwise the eye is the user's
         let moved = self.bend.framed && b.follow && self.bend.step != Some(step);
+        let handling = b.follow && stage_at(b.t).0 == forge_brake::scene::Stage::Handle;
         let first = !self.bend.framed;
         let mut eye = None;
-        if first || ask.is_some() || moved {
+        if first || ask.is_some() || moved || (handling && self.bend.framed) {
             let how = ask.unwrap_or(Framing::Work);
-            // the part's whole motion through the step, from gauging to the ram's return
+            // the part's whole motion through the step at the tools, from gauging to the ram's
+            // return (kept for the step), and where the part is now
             let envelope = match how {
                 Framing::Work => {
-                    let samples: Vec<Vec<Body>> = [0.2, 0.35, 0.5, 0.6, 0.7, 0.78, 0.9]
-                        .iter()
-                        .map(|&tt| sc.bodies(step, tt))
-                        .collect();
-                    bounds(
-                        samples
+                    let kept = self.bend.envelope.filter(|e| e.0 == step).map(|e| (e.1, e.2));
+                    let env = kept.or_else(|| {
+                        let samples: Vec<Vec<Body>> = [0.2, 0.35, 0.5, 0.6, 0.7, 0.78, 0.9]
                             .iter()
-                            .flatten()
-                            .chain(bodies.iter())
-                            .filter(|x| x.look.is_sheet())
-                            .map(|x| &x.mesh),
-                    )
+                            .map(|&tt| sc.bodies(step, tt))
+                            .collect();
+                        bounds(
+                            samples
+                                .iter()
+                                .flatten()
+                                .filter(|x| x.look.is_sheet())
+                                .map(|x| &x.mesh),
+                        )
+                    });
+                    if let Some((a, c)) = env {
+                        self.bend.envelope = Some((step, a, c));
+                    }
+                    let now = bounds(bodies.iter().filter(|x| x.look.is_sheet()).map(|x| &x.mesh));
+                    match (env, now) {
+                        (Some((a, c)), Some((p, q))) => Some((
+                            [0, 1, 2].map(|k| a[k].min(p[k])),
+                            [0, 1, 2].map(|k| c[k].max(q[k])),
+                        )),
+                        (e, n) => e.or(n),
+                    }
                 }
                 Framing::Overview => None,
             };
@@ -462,11 +481,12 @@ impl Gui {
                     Framing::Work => cutaway(&bodies, cam.eye(), lo, hi),
                     Framing::Overview => Vec::new(),
                 };
-                if how == Framing::Work {
+                if how == Framing::Work && !handling {
                     // the cube's home is the working zone
                     v.nav.home_view = Some(cam);
                 }
-                eye = Some((cam, first));
+                // tracking the handling is continuous: placed, not travelled to
+                eye = Some((cam, first || (handling && !moved && ask.is_none())));
             }
             self.bend.framed = true;
             self.bend.station = at;
@@ -613,6 +633,7 @@ impl Gui {
         self.bend.ghosts.clear();
         self.bend.seen = None;
         self.bend.step = None;
+        self.bend.envelope = None;
         if let (Some(t), Some(v)) = (self.bend.taken.take(), &mut self.view) {
             v.renderer = t.renderer;
             v.scene = t.scene;
