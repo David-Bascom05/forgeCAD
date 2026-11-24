@@ -86,7 +86,7 @@ blob = extrude(s.c, 1)
 "
         ))
     };
-    let (through, pulled) = (square(""), square(", cv: true"));
+    let (through, pulled) = (square(", closed: true"), square(", cv: true"));
     assert!(through > 400.0, "{through}");
     assert!(pulled > 50.0 && pulled < 400.0, "{pulled}");
     let r = forge_lang::run(

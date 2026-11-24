@@ -39,9 +39,9 @@
 [[check]]
 id = "blend-node-mend"
 owner = "CURVED-SITES"
-removed = "the marching trace near a tangent node of two tubes, replaced by mend (gating helpers tube, spring, one_plane_fits, nodes, crossings, reach_of in the same file)"
+removed = "the marching trace near a tangent node of two tubes, one of them procedural, replaced by mend (gating helpers tube, spring, one_plane_fits, nodes, crossings, reach_of in the same file; two analytic tubes are left as traced, their touches being forge-bool touch_params's)"
 rust = { file = "kernel/forge-geom/src/node.rs", fn = "mend" }
-reviewed_at = "3b7d91c6d4da2230"
+reviewed_at = "2b2ad1725a6d7c2a"
 level = "L1"
 hyp = "LEDGER C.node: the face is its tube's whole cap within reach; towards_touch's points exact to its tolerance only"
 lemmas = [
@@ -62,6 +62,8 @@ tests = [
   # refused are refused again
   { file = "interface/forge-lang/tests/round_node.rs", name = "without_the_mend_the_radii_once_refused_are_refused_again", kind = "mutation" },
   { file = "kernel/forge-geom/src/node.rs", name = "a_line_crosses_a_circle_where_its_chord_ends", kind = "unit" },
+  # the scope (b0824dbe): two analytic tubes are left as traced
+  { file = "kernel/forge-geom/src/node.rs", name = "two_analytic_tubes_are_left_as_traced", kind = "unit" },
   { file = "kernel/forge-geom/src/node.rs", name = "two_circles_cross_on_their_common_chord", kind = "unit" },
 ]
 owed = ["code = model"]

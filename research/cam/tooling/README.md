@@ -94,6 +94,14 @@ by the test, not failed.
   labelled: in the note only). RUKO's DIN 373 counterbores (same sizes) print no cutting length,
   so no record is made from them; their pilot Ø agree with Guhring's. Reamer feeds are tabulated
   for Ø 3/4/6/8/10/12, not 5 mm: the 5 mm reamers carry no preset.
+- Spindle interfaces (raw/interfaces.json → data/interfaces.toml, `[[interface]]`, for CAM-SIM):
+  BT30/40/50 from Sumitomo's "Bottle Grip Taper" table (n2.pdf p.31) with Maritool drawings;
+  CAT40/50 from ISCAR's "CAT A.N.S.I. B5.50" table (CAT.pdf) with Maritool drawings; HSK-A63/A100
+  from Sumitomo (g.pdf p.18) and Maritool. The standards are paywalled and not used. Values whose
+  meaning is our reading of a figure are estimates; a second maker's agreeing value is noted on the
+  cite; disagreements are conflict cites. Not printed by any maker: the taper's small-end
+  diameter, the V-groove angle and root diameter, HSK clamping bore and drive slots (each
+  interface's note). Holders find their table by `Library::interface(holder.interface)`.
 - Inconsistencies found in the sources are kept in the raw facts (e.g. Rego-Fix ER20 nut thread
   M25x1.5 in the catalogue vs M24x1.5 on the pocket sheet; Tormach BT30 "Gage length is 60mm
   (1.97 inches)"; Lakeshore ".0003.0010" chip load); the generator never resolves them silently.

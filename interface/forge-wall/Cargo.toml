@@ -1,0 +1,19 @@
+[package]
+name = "forge-wall"
+description = "A part's thinnest wall, found through a box tree: forge_agent::measure::wall's answer, fast, a few rays at a time"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-agent = { path = "../forge-agent" }
+
+[dev-dependencies]
+forge-ops = { path = "../../kernel/forge-ops" }
+
+[lints]
+workspace = true
