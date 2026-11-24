@@ -83,3 +83,23 @@ putting it back in one frame. A fade for the cut-away is the next step.
 
 Each frame is rendered once, at its own instant, with no clock read, so no frame is duplicated.
 Frames repeat only where nothing in the picture moves.
+
+## Five stations on the TruBend 5130 (BENDSIM-TOOLS' staged program)
+
+`shots/load-tray-5-stations-trubend.mp4` and its strip: the load tray on a Trumpf TruBend 5130,
+the planner's five stations along the bed. They run from y −335 to 380:
+
+| station | punch | die | bends |
+|---|---|---|---|
+| 1 | OW300-S | EV004 30 degrees | 1, 2 |
+| 2 | OW300-S | EV004 30 degrees | 3 |
+| 3 | OW300-S | EV001 30 degrees | 4 |
+| 4 | OW222-K | EV001 30 degrees | 5 |
+| 5 | OW222-K | EV001 30 degrees | 6 |
+
+It was rendered from bendsim/next d3ea3f8a with bendsim/tools b359d1be merged (in a scratch
+checkout, BENDSIM-TOOLS' `a_staged_clip`). With the operator's camera, the eye stands still at a
+station and eases along the bed as the part moves to the next. The other stations' tools are seen
+through only where they stand between the eye and the bend.
+
+Jerk, measured the same way: max 8.7, median 0.25, 2 frames over 5, no duplicates.
