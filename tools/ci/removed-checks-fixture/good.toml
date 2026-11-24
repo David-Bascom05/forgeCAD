@@ -1,0 +1,13 @@
+[[check]]
+id = "fixture"
+owner = "FALLBACK"
+removed = "the fixture's check"
+rust = { file = "src/lib.rs", fn = "guarded" }
+reviewed_at = "2b520a93392e453c"
+level = "L1"
+lemmas = [{ project = "lean", name = "guarded_never_fails" }]
+tests = [
+  { file = "src/lib.rs", name = "samples", kind = "sampling" },
+  { file = "src/lib.rs", name = "samples", kind = "mutation" },
+]
+owed = ["code = model"]

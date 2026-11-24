@@ -1,0 +1,30 @@
+# Runtime checks removed or replaced because a proof says they cannot fire, each with what keeps
+# that proof honest. Checked on every pull request by tools/ci/removed_checks.py (seconds, no build;
+# .github/workflows/removed-checks.yml):
+#   * `rust`: the fn the proof stands for. Its source is hashed (whitespace-normalized); when it no
+#     longer matches `reviewed_at` the job fails until someone re-reads the lemma against the new
+#     code and updates the hash (`tools/ci/removed_checks.py --hash ID` prints the current one).
+#   * `lemmas`: each must be declared in `project` and listed in that project's axiom report, so
+#     the project's own proof job (path-filtered, cached) checks it builds on the standard axioms.
+#   * `tests`: each must exist as a `#[test]` and not be `#[ignore]`d; the existing test jobs run
+#     them. `kind`: "sampling" (the new path against the removed check or the old path, over many
+#     inputs), "mutation" (a deliberately broken input or code path fails it), or "unit".
+#   * `level`: "L4" when the lemma is about the Aeneas translation of the code itself; "L1"/"L2"
+#     when it is about a hand-written model. A hand-model entry needs a sampling and a mutation
+#     test, and lists "code = model" in `owed`.
+#
+# Entry form:
+#
+# [[check]]
+# id = "short-name"
+# owner = "WORKSTREAM"
+# removed = "what check was removed or replaced, and where, in a sentence"
+# rust = { file = "kernel/<crate>/src/<file>.rs", fn = "<fn name>" }
+# reviewed_at = "<16 hex: tools/ci/removed_checks.py --hash short-name>"
+# level = "L1"
+# lemmas = [{ project = "verify/<project>", name = "Namespace.lemma_name" }]
+# tests = [
+#   { file = "kernel/<crate>/tests/<file>.rs", name = "<test fn>", kind = "sampling" },
+#   { file = "kernel/<crate>/src/<file>.rs", name = "<test fn>", kind = "mutation" },
+# ]
+# owed = ["code = model"]
