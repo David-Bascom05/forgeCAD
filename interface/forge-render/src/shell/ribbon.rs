@@ -638,18 +638,31 @@ impl Shell {
         }
         let mut gx = 0.0;
         let gs = groups(self);
-        // too wide for the window: small buttons lose their words, as Inventor's ribbon shrinks
-        let full: f32 = gs
+        // too wide for the window: small buttons lose their words, as Inventor's ribbon shrinks,
+        // a group at a time from the right until the ribbon fits (the rest keep theirs)
+        let sizes: Vec<(f32, f32)> = gs
             .iter()
             .map(|g| {
-                12.0 + g.big.iter().map(|tool| big_width(ui, tool)).sum::<f32>()
-                    + g.small.chunks(3).map(|c| small_width(ui, c)).sum::<f32>()
-                    + g.icons.len().div_ceil(3) as f32 * ICON_W
+                let base = 12.0 + g.big.iter().map(|tool| big_width(ui, tool)).sum::<f32>();
+                let words = g.small.chunks(3).map(|c| small_width(ui, c)).sum::<f32>()
+                    + g.icons.len().div_ceil(3) as f32 * ICON_W;
+                let icons = (g.small.len() + g.icons.len()).div_ceil(3) as f32 * ICON_W;
+                (base + words, base + icons)
             })
-            .sum();
-        let compact = full > w;
-        for mut g in gs {
-            if compact {
+            .collect();
+        let mut total: f32 = sizes.iter().map(|s| s.0).sum();
+        let mut compact = vec![false; gs.len()];
+        for k in (0..gs.len()).rev() {
+            if total <= w {
+                break;
+            }
+            if sizes[k].1 < sizes[k].0 {
+                total -= sizes[k].0 - sizes[k].1;
+                compact[k] = true;
+            }
+        }
+        for (k, mut g) in gs.into_iter().enumerate() {
+            if compact[k] {
                 let mut small = std::mem::take(&mut g.small);
                 small.append(&mut g.icons);
                 g.icons = small;
