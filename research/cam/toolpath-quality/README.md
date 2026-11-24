@@ -17,6 +17,8 @@ opensource.md, fusion-*.md); they do not repeat them.
 | [feeds-speeds.md](feeds-speeds.md) | Chip thinning (radial, ball, lead angle, bull nose), engagement in corners, Kienzle and mechanistic force, power, deflection, chatter lobes, feed scheduling, acceleration and jerk, tool-maker data, a worked example |
 | [surface-finish.md](surface-finish.md) | Scallop formulas (exact and bounds), steep walls, curvature, Ra; finishing strategies; drop and push cutter; corner smoothing, arc fitting, NURBS; controller tolerance modes; 5-axis outlook; statements S1–S7 that can be proved |
 | [fusion-benchmark.md](fusion-benchmark.md) | What Fusion offers per area, with its parameters; user-reported weaknesses; competitors; **a testable 69-item "Fusion-level" checklist** (17 items go beyond Fusion); benchmark parts |
+| [gap-tables.md](gap-tables.md) | **The whole Fusion 2D / 3D-rough / 3D-finish / common / turning set**: one row per toolpath (forgeCAD on main, on a branch, or absent, from the code; Fusion; best known method; metrics; impact; effort; patent gate), a ranked top 15, 8 hand-off packets |
+| [unclaimed-methods.md](unclaimed-methods.md) | Methods that are free because they were never claimed, or the patent expired, lapsed or was abandoned, ranked by toolpath quality; vendor trade-secret behaviour inferred from public material only |
 | [opensource-oracles.md](opensource-oracles.md) | FreeCAD Adaptive (from its source), OCL, Kiri:Moto, libactp, Clipper2, cavalier_contours, Boost Voronoi, Ruckig, CAMotics, LinuxCNC tp, Grbl: licences with file evidence, what we may read or port, and **five oracles for verify/** (two already run here) |
 
 **Source marks**, as in every CAM note: **[R]** read this session; **[S]** search snippet only;
@@ -161,8 +163,10 @@ gate:
   warning, not a guarantee.
 - **Controllers** [R]: Heidenhain Cycle 32 and Siemens CYCLE832 manuals, LinuxCNC G64 P/Q, GRBL
   $11/$12. Each wants the CAM chord error well below the control tolerance and enough decimals.
-  forge-post prints **3 decimals** and hard-codes `G187 P2` (Haas) and `G64 P0.01` (LinuxCNC).
-  Finishing should post 4 decimals, and the tolerance mode should come from the op.
+  forge-post's fanuc, haas and grbl dialects print **3 decimals**; linuxcnc prints 4
+  (`kernel/forge-post/data/*.toml:6`). The dialects hard-code `G187 P2` (Haas) and `G64 P0.01`
+  (LinuxCNC). Finishing should post 4 decimals on every dialect, and the tolerance mode should come
+  from the op.
 - **Provable**: S1–S7, of which S3 is the differentiator:
   - S1, S4: scallop and chord bounds;
   - S2: the curvature bound the planner uses to pick the stepover;
@@ -213,8 +217,20 @@ See §0 for its weaknesses.
 2. **`cutting.toml` values have no per-value source**, against the standing "real data, cited per
    value" rule. Replace them with cited values (Klippel CC BY; Sandvik ranges cited by page),
    held as intervals.
-3. **forge-post finishing precision.** 3 decimals, plus the hard-coded `G187 P2` and
-   `G64 P0.01` (surface-finish.md §5).
+3. **forge-post finishing precision.** 3 decimals on fanuc, haas and grbl (linuxcnc already prints
+   4), plus the hard-coded `G187 P2` and `G64 P0.01` (surface-finish.md §5).
+5. **Feeds at an assumed width of cut** (verified: `interface/forge-cam-lang/src/lib.rs:2109`).
+   - `clear`, `contour`, `slot` and `engrave` take their feeds at ae = 0.1·D, whatever the op
+     really cuts.
+   - A slot cuts at ae = D. With the thinning factor for 0.1·D applied, the chip runs about 1.5–1.7×
+     the target for 55–95% of the time (gap-tables.md, from the cam/quality harness).
+   - This is a tool-life and breakage risk, and it is now the most urgent feeds fix.
+6. **Linking at cutting feed** (`ops.rs`): every retract runs at cutting feed, and the pocket's
+   helix or plunge repeats for every ring. On `thin_wall`, 355 of 522 s of cutting is at plunge
+   feed.
+7. **Cycle time in the reply** is length ÷ feed, with rapids at a fixed 10 m/min
+   (`lib.rs:3263`). forge-machine on main already has an exact-stop trapezoid (`t_stop`) that the
+   reply does not use.
 4. **Corrections to research/cam notes:**
    - Adaptive's author and licence (above).
    - The opencamlib Python versions (above).
@@ -302,6 +318,23 @@ machine/product claims, and the unread claims of 10,108,172 and 12,663,778.
 ---
 
 ## 4. The ranked plan
+
+**Where the code is** (gap-tables.md, read in the code):
+- **No 3-axis surfacing exists on any branch.** The lowering takes planes, plus cylinders, cones
+  and tori about z only. All 16 Fusion finishing strategies are absent.
+- **Absent:** adaptive clearing (2D and 3D), rest roughing, contour leads, wear compensation (no
+  G41/G42), tabs, V-carve and 3+2.
+- **Hole cycles:** G73, G82 and G85 exist in the post, but a `.fg` file cannot reach them.
+- **Turning:** part-off has no reduced feed near the centre and no pecking; threading has no
+  first-pass depth, spring pass or flank infeed; the CSS speed caps are hard-coded.
+- **Unmerged:** `origin/cam/quality` (aec87afa) already has the measuring half of row 1: a
+  harness for cycle time, engagement, chip, MRR, air cutting, links and load over every example
+  part, with a baseline.
+
+gap-tables.md ranks the whole set; its top 5 agree with rows 1, 4, 2, 7 below and add **2D
+contour basics** (lead arcs, finishing and spring passes, wear compensation certified over a
+radius range, tabs). Its full top 15 also places the **3-axis base (Parallel)** at #10. It is
+ranked there only because it is weeks of work: it is the largest capability gap.
 
 Ranked by real-world gain (cycle time, tool life, finish) per unit of work, with the patent gate
 respected.
