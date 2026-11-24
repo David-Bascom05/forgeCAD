@@ -118,7 +118,7 @@ fn mul3<T: Num>(a: [T; 3], k: T) -> [T; 3] {
 }
 
 /// (c(t), s(t)): the rational unit circle.
-fn circ<T: Num>(t: T) -> (T, T) {
+pub(crate) fn circ<T: Num>(t: T) -> (T, T) {
     let t2 = t.sqr();
     let den = T::c(1.0).add(t2);
     let c = T::c(1.0).sub(t2).div(den);
@@ -1124,6 +1124,28 @@ pub fn certify_shared(
         }
         return (v, n);
     }
+    // a vertical wall that is not a prism (its trim not its box: an L-shaped side wall) against
+    // a planar move: the wall over its box holds it, so the closed form's Clear there is the
+    // face's (a superset's clearance). Anything else proves nothing about the face: the face
+    // goes on as if this were not tried, its cells counted
+    if f.prism.is_none()
+        && let Some(pl) = mv.planar()
+        && let Some(hull) = crate::slab::Prism::hull_wall(f)
+    {
+        let (v, n) =
+            crate::slab::certify_shared(body, f, &hull, &pl, limit, res, budget, &mut None, mv.path_gap());
+        if let Verdict::Clear { .. } = v {
+            return (v, n);
+        }
+        let (v, m) = certify_rest(body, f, mv, limit, res, budget);
+        return (v, n + m);
+    }
+    certify_rest(body, f, mv, limit, res, budget)
+}
+
+/// `certify_shared` past the prism forms: ramps against prisms, the symmetric closed forms, then
+/// the branch and bound.
+fn certify_rest(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
     // a ramp (a line that moves in z and in xy) against a prism face: the closed form for its xy
     // segment swept over every height it passes (a superset of the move). Only `Clear` proves
     // anything about the move itself (certified_clear, the tip's heights in that range); any

@@ -3,7 +3,7 @@ machining
 # with a 60° V tool, into the groove the model carries.
 shared tol = 0.01
 
-f    = part("plate_mark.fg", group: "N")
+f    = part("plate_mark.fg", material: "6061-T6")
 m    = machine("generic-vmc3")
 t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
 t5   = tool("engrave-60", t: 5, stickout: 20, holder: "bt40-er32")

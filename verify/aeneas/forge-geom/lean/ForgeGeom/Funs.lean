@@ -76,10 +76,10 @@ def intersect.plane_cone.closure.Insts.CoreOpsFunctionFnTupleVec3Point3.call
   let p ← forge_math.vec.Point3.new tupled_args.x tupled_args.y tupled_args.z
   forge_math.frame.Frame.point_to_world c p
 
-/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::Fn<(f64, f64), forge_math::vec::Point3> for forge_geom::intersect::plane_cone::{closure#3}<'_0, '_1, '_2, '_3, '_4>}::call]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1230:19-1230:66 -/
-def intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnPairF64F64Point3.call
-  (c : intersect.plane_cone.closure_3) (tupled_args : (F64 × F64)) :
+/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::Fn<(f64, f64), forge_math::vec::Point3> for forge_geom::intersect::plane_cone::{closure#6}<'_0, '_1, '_2, '_3, '_4>}::call]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1256:19-1256:66 -/
+def intersect.plane_cone.closure_6.Insts.CoreOpsFunctionFnPairF64F64Point3.call
+  (c : intersect.plane_cone.closure_6) (tupled_args : (F64 × F64)) :
   Result forge_math.vec.Point3
   := do
   let (c1, v, v1, uv) := c
@@ -91,72 +91,260 @@ def intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnPairF64F64Point3.call
   intersect.plane_cone.closure.Insts.CoreOpsFunctionFnTupleVec3Point3.call c1
     v5
 
-/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::Fn<(forge_math::vec::Vec3,), forge_math::vec::UnitVec3> for forge_geom::intersect::plane_cone::{closure#2}<'_0>}::call]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1229:20-1229:73 -/
+/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::Fn<(forge_math::vec::Vec3,), forge_math::vec::UnitVec3> for forge_geom::intersect::plane_cone::{closure#5}<'_0>}::call]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1255:20-1255:73 -/
 def
-  intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
-  (c : intersect.plane_cone.closure_2) (tupled_args : forge_math.vec.Vec3) :
+  intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+  (c : intersect.plane_cone.closure_5) (tupled_args : forge_math.vec.Vec3) :
   Result forge_math.vec.UnitVec3
   := do
   let uv ← forge_math.vec.UnitVec3.new_unchecked tupled_args
   forge_math.frame.Frame.unit_to_world c uv
 
-/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::FnMut<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#1}<'_0, '_1, '_2, '_3, '_4, '_5>}::call_mut]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1207:36-1215:9 -/
+/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::FnMut<(forge_math::vec::UnitVec3,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#4}<'_0, '_1>}::call_mut]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1234:37-1239:17 -/
 def
-  intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact.call_mut
-  (c : intersect.plane_cone.closure_1) (tupled_args : F64) :
-  Result ((curve.Curve × intersect.Contact) × intersect.plane_cone.closure_1)
+  intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnMutTupleUnitVec3PairCurveContact.call_mut
+  (c : intersect.plane_cone.closure_4) (tupled_args : forge_math.vec.UnitVec3)
+  :
+  Result ((curve.Curve × intersect.Contact) × intersect.plane_cone.closure_4)
   := do
-  let (v, fl, uv, fl1, p, f) := c
+  let (p, f) := c
+  let uv ← forge_math.frame.Frame.unit_to_world f tupled_args
+  let l ← curve.Line.new p uv
+  ok ((curve.Curve.Line l, intersect.Contact.Crossing), c)
+
+/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::FnOnce<(forge_math::vec::UnitVec3,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#4}<'_0, '_1>}::call_once]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1234:37-1239:17 -/
+def
+  intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnOnceTupleUnitVec3PairCurveContact.call_once
+  (c : intersect.plane_cone.closure_4) (uv : forge_math.vec.UnitVec3) :
+  Result (curve.Curve × intersect.Contact)
+  := do
+  let (p, _) ←
+    intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnMutTupleUnitVec3PairCurveContact.call_mut
+      c uv
+  ok p
+
+/-- Trait implementation: [forge_geom::intersect::plane_cone::{impl core::ops::function::FnOnce<(forge_math::vec::UnitVec3,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#4}<'_0, '_1>}]
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1234:37-1239:17 -/
+@[reducible]
+def
+  intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnOnceTupleUnitVec3PairCurveContact
+  : core.ops.function.FnOnce intersect.plane_cone.closure_4
+  forge_math.vec.UnitVec3 (curve.Curve × intersect.Contact) := {
+  call_once :=
+    intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnOnceTupleUnitVec3PairCurveContact.call_once
+}
+
+/-- Trait implementation: [forge_geom::intersect::plane_cone::{impl core::ops::function::FnMut<(forge_math::vec::UnitVec3,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#4}<'_0, '_1>}]
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1234:37-1239:17 -/
+@[reducible]
+def
+  intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnMutTupleUnitVec3PairCurveContact
+  : core.ops.function.FnMut intersect.plane_cone.closure_4
+  forge_math.vec.UnitVec3 (curve.Curve × intersect.Contact) := {
+  FnOnceInst :=
+    intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnOnceTupleUnitVec3PairCurveContact
+  call_mut :=
+    intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnMutTupleUnitVec3PairCurveContact.call_mut
+}
+
+/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::FnMut<(f64,), forge_math::vec::UnitVec3> for forge_geom::intersect::plane_cone::{closure#3}<'_0, '_1, '_2, '_3>}::call_mut]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1228:39-1232:13 -/
+def
+  intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnMutTupleF64UnitVec3.call_mut
+  (c : intersect.plane_cone.closure_3) (tupled_args : F64) :
+  Result (forge_math.vec.UnitVec3 × intersect.plane_cone.closure_3)
+  := do
+  let (v, fl, uv, fl1) := c
   let v1 ← forge_math.vec.Vec3.Insts.CoreOpsArithMulF64Vec3.mul v fl
   let fl2 ← lift (F64.Ops.mul tupled_args fl1)
   let v2 ← forge_math.vec.UnitVec3.Insts.CoreOpsArithMulF64Vec3.mul uv fl2
   let v3 ← forge_math.vec.Vec3.Insts.CoreOpsArithAddVec3Vec3.add v1 v2
   let o ← forge_math.vec.Vec3.normalize v3
-  let d ← core.option.Option.expect o (toStr "unit combination")
-  let uv1 ← forge_math.frame.Frame.unit_to_world f d
-  let l ← curve.Line.new p uv1
-  ok ((curve.Curve.Line l, intersect.Contact.Crossing), c)
+  let uv1 ← core.option.Option.expect o (toStr "unit combination")
+  ok (uv1, c)
 
-/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::FnOnce<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#1}<'_0, '_1, '_2, '_3, '_4, '_5>}::call_once]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1207:36-1215:9 -/
+/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::FnOnce<(f64,), forge_math::vec::UnitVec3> for forge_geom::intersect::plane_cone::{closure#3}<'_0, '_1, '_2, '_3>}::call_once]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1228:39-1232:13 -/
 def
-  intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnOnceTupleF64PairCurveContact.call_once
-  (c : intersect.plane_cone.closure_1) (fl : F64) :
-  Result (curve.Curve × intersect.Contact)
+  intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnOnceTupleF64UnitVec3.call_once
+  (c : intersect.plane_cone.closure_3) (fl : F64) :
+  Result forge_math.vec.UnitVec3
   := do
-  let (p, _) ←
-    intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact.call_mut
+  let (uv, _) ←
+    intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnMutTupleF64UnitVec3.call_mut
       c fl
-  ok p
+  ok uv
 
-/-- Trait implementation: [forge_geom::intersect::plane_cone::{impl core::ops::function::FnOnce<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#1}<'_0, '_1, '_2, '_3, '_4, '_5>}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1207:36-1215:9 -/
+/-- Trait implementation: [forge_geom::intersect::plane_cone::{impl core::ops::function::FnOnce<(f64,), forge_math::vec::UnitVec3> for forge_geom::intersect::plane_cone::{closure#3}<'_0, '_1, '_2, '_3>}]
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1228:39-1232:13 -/
 @[reducible]
-def
-  intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnOnceTupleF64PairCurveContact
-  : core.ops.function.FnOnce intersect.plane_cone.closure_1 F64 (curve.Curve ×
-  intersect.Contact) := {
+def intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnOnceTupleF64UnitVec3
+  : core.ops.function.FnOnce intersect.plane_cone.closure_3 F64
+  forge_math.vec.UnitVec3 := {
   call_once :=
-    intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnOnceTupleF64PairCurveContact.call_once
+    intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnOnceTupleF64UnitVec3.call_once
 }
 
-/-- Trait implementation: [forge_geom::intersect::plane_cone::{impl core::ops::function::FnMut<(f64,), (forge_geom::curve::Curve, forge_geom::intersect::Contact)> for forge_geom::intersect::plane_cone::{closure#1}<'_0, '_1, '_2, '_3, '_4, '_5>}]
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1207:36-1215:9 -/
+/-- Trait implementation: [forge_geom::intersect::plane_cone::{impl core::ops::function::FnMut<(f64,), forge_math::vec::UnitVec3> for forge_geom::intersect::plane_cone::{closure#3}<'_0, '_1, '_2, '_3>}]
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1228:39-1232:13 -/
+@[reducible]
+def intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnMutTupleF64UnitVec3 :
+  core.ops.function.FnMut intersect.plane_cone.closure_3 F64
+  forge_math.vec.UnitVec3 := {
+  FnOnceInst :=
+    intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnOnceTupleF64UnitVec3
+  call_mut :=
+    intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnMutTupleF64UnitVec3.call_mut
+}
+
+/-- [forge_geom::intersect::plane_cone::{closure#2}::{closure}::{impl core::ops::function::FnOnce<(forge_math::vec::Vec3,), bool> for forge_geom::intersect::plane_cone::{closure#2}::{closure}::{closure}<'_0, '_1, '_2, '_3, '_4, '_5, '_6, '_7, '_8, '_9, '_10>}::call_once]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1209:29-1209:93 -/
+def
+  intersect.plane_cone.closure_2.closure.closure.Insts.CoreOpsFunctionFnOnceTupleVec3Bool.call_once
+  (c : intersect.plane_cone.closure_2.closure.closure)
+  (tupled_args : forge_math.vec.Vec3) :
+  Result Bool
+  := do
+  let (fl, uv) := c
+  let fl1 ← core.f64.F64.abs fl
+  let v ← forge_math.vec.UnitVec3.get uv
+  let v1 ← forge_math.vec.Vec3.cross v tupled_args
+  let fl2 ← forge_math.vec.Vec3.length v1
+  let fl3 ← forge_math.tol.LINEAR
+  let fl4 ← lift (F64.Ops.mul fl3 fl2)
+  ok (F64.Ops.le fl1 fl4)
+
+/-- Trait implementation: [forge_geom::intersect::plane_cone::{closure#2}::{closure}::{impl core::ops::function::FnOnce<(forge_math::vec::Vec3,), bool> for forge_geom::intersect::plane_cone::{closure#2}::{closure}::{closure}<'_0, '_1, '_2, '_3, '_4, '_5, '_6, '_7, '_8, '_9, '_10>}]
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1209:29-1209:93 -/
 @[reducible]
 def
-  intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact
-  : core.ops.function.FnMut intersect.plane_cone.closure_1 F64 (curve.Curve ×
-  intersect.Contact) := {
-  FnOnceInst :=
-    intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnOnceTupleF64PairCurveContact
-  call_mut :=
-    intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact.call_mut
+  intersect.plane_cone.closure_2.closure.closure.Insts.CoreOpsFunctionFnOnceTupleVec3Bool
+  : core.ops.function.FnOnce intersect.plane_cone.closure_2.closure.closure
+  forge_math.vec.Vec3 Bool := {
+  call_once :=
+    intersect.plane_cone.closure_2.closure.closure.Insts.CoreOpsFunctionFnOnceTupleVec3Bool.call_once
 }
+
+/-- [forge_geom::intersect::plane_cone::{closure#1}::{impl core::ops::function::FnOnce<(forge_math::vec::UnitVec3,), forge_math::vec::Vec3> for forge_geom::intersect::plane_cone::{closure#1}::{closure}<'_0>}::call_once]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1199:54-1199:65 -/
+def
+  intersect.plane_cone.closure_1.closure.Insts.CoreOpsFunctionFnOnceTupleUnitVec3Vec3.call_once
+  (c : intersect.plane_cone.closure_1.closure)
+  (tupled_args : forge_math.vec.UnitVec3) :
+  Result forge_math.vec.Vec3
+  := do
+  forge_math.vec.UnitVec3.get tupled_args
+
+/-- Trait implementation: [forge_geom::intersect::plane_cone::{closure#1}::{impl core::ops::function::FnOnce<(forge_math::vec::UnitVec3,), forge_math::vec::Vec3> for forge_geom::intersect::plane_cone::{closure#1}::{closure}<'_0>}]
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1199:54-1199:65 -/
+@[reducible]
+def
+  intersect.plane_cone.closure_1.closure.Insts.CoreOpsFunctionFnOnceTupleUnitVec3Vec3
+  : core.ops.function.FnOnce intersect.plane_cone.closure_1.closure
+  forge_math.vec.UnitVec3 forge_math.vec.Vec3 := {
+  call_once :=
+    intersect.plane_cone.closure_1.closure.Insts.CoreOpsFunctionFnOnceTupleUnitVec3Vec3.call_once
+}
+
+/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::Fn<(f64, f64), core::option::Option<forge_math::vec::Vec3>> for forge_geom::intersect::plane_cone::{closure#1}<'_0>}::call]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1197:27-1200:5 -/
+def
+  intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnPairF64F64OptionVec3.call
+  (c : intersect.plane_cone.closure_1) (tupled_args : (F64 × F64)) :
+  Result (Option forge_math.vec.Vec3)
+  := do
+  let (dx, dy) := tupled_args
+  let fl ← lift (F64.Ops.mul dx dx)
+  let fl1 ← lift (F64.Ops.mul dy dy)
+  let fl2 ← lift (F64.Ops.add fl fl1)
+  let fl3 ← std.f64.F64.sqrt fl2
+  let fl4 ← core.f64.F64.MIN_POSITIVE
+  let r ← core.f64.F64.max fl3 fl4
+  let fl5 ← lift (F64.Ops.div dx r)
+  let fl6 ← lift (F64.Ops.div dy r)
+  let fl7 ← lift (F64.Ops.neg c)
+  let v ← forge_math.vec.Vec3.new fl5 fl6 fl7
+  let o ← forge_math.vec.Vec3.normalize v
+  core.option.Option.map
+    intersect.plane_cone.closure_1.closure.Insts.CoreOpsFunctionFnOnceTupleUnitVec3Vec3
+    o ()
+
+/-- [forge_geom::intersect::plane_cone::{closure#2}::{impl core::ops::function::FnMut<(&'_4 forge_math::vec::Vec3,), bool> for forge_geom::intersect::plane_cone::{closure#2}::{closure}<'_0, '_1, '_2, '_3, '_4, '_5, '_6, '_7, '_8>}::call_mut]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1207:24-1210:9 -/
+def
+  intersect.plane_cone.closure_2.closure.Insts.CoreOpsFunctionFnMutTupleShared4Vec3Bool.call_mut
+  (c : intersect.plane_cone.closure_2.closure)
+  (tupled_args : forge_math.vec.Vec3) :
+  Result (Bool × intersect.plane_cone.closure_2.closure)
+  := do
+  let (c1, fl, uv) := c
+  let o ←
+    intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnPairF64F64OptionVec3.call
+      c1 (tupled_args.x, tupled_args.y)
+  let b ←
+    core.option.Option.is_some_and
+      intersect.plane_cone.closure_2.closure.closure.Insts.CoreOpsFunctionFnOnceTupleVec3Bool
+      o (fl, uv)
+  ok (b, (c1, fl, uv))
+
+/-- [forge_geom::intersect::plane_cone::{closure#2}::{impl core::ops::function::FnOnce<(&'_4 forge_math::vec::Vec3,), bool> for forge_geom::intersect::plane_cone::{closure#2}::{closure}<'_0, '_1, '_2, '_3, '_4, '_5, '_6, '_7, '_8>}::call_once]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1207:24-1210:9 -/
+def
+  intersect.plane_cone.closure_2.closure.Insts.CoreOpsFunctionFnOnceTupleShared4Vec3Bool.call_once
+  (c : intersect.plane_cone.closure_2.closure) (v : forge_math.vec.Vec3) :
+  Result Bool
+  := do
+  let (c1, fl, uv) := c
+  let (b, _) ←
+    intersect.plane_cone.closure_2.closure.Insts.CoreOpsFunctionFnMutTupleShared4Vec3Bool.call_mut
+      (c1, fl, uv) v
+  ok b
+
+/-- Trait implementation: [forge_geom::intersect::plane_cone::{closure#2}::{impl core::ops::function::FnOnce<(&'_4 forge_math::vec::Vec3,), bool> for forge_geom::intersect::plane_cone::{closure#2}::{closure}<'_0, '_1, '_2, '_3, '_4, '_5, '_6, '_7, '_8>}]
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1207:24-1210:9 -/
+@[reducible]
+def
+  intersect.plane_cone.closure_2.closure.Insts.CoreOpsFunctionFnOnceTupleShared4Vec3Bool
+  : core.ops.function.FnOnce intersect.plane_cone.closure_2.closure
+  forge_math.vec.Vec3 Bool := {
+  call_once :=
+    intersect.plane_cone.closure_2.closure.Insts.CoreOpsFunctionFnOnceTupleShared4Vec3Bool.call_once
+}
+
+/-- Trait implementation: [forge_geom::intersect::plane_cone::{closure#2}::{impl core::ops::function::FnMut<(&'_4 forge_math::vec::Vec3,), bool> for forge_geom::intersect::plane_cone::{closure#2}::{closure}<'_0, '_1, '_2, '_3, '_4, '_5, '_6, '_7, '_8>}]
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1207:24-1210:9 -/
+@[reducible]
+def
+  intersect.plane_cone.closure_2.closure.Insts.CoreOpsFunctionFnMutTupleShared4Vec3Bool
+  : core.ops.function.FnMut intersect.plane_cone.closure_2.closure
+  forge_math.vec.Vec3 Bool := {
+  FnOnceInst :=
+    intersect.plane_cone.closure_2.closure.Insts.CoreOpsFunctionFnOnceTupleShared4Vec3Bool
+  call_mut :=
+    intersect.plane_cone.closure_2.closure.Insts.CoreOpsFunctionFnMutTupleShared4Vec3Bool.call_mut
+}
+
+/-- [forge_geom::intersect::plane_cone::{impl core::ops::function::Fn<(&'_4 [forge_math::vec::Vec3],), bool> for forge_geom::intersect::plane_cone::{closure#2}<'_0, '_1, '_2, '_3>}::call]:
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1206:16-1211:5 -/
+def
+  intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleShared4SliceVec3Bool.call
+  (c : intersect.plane_cone.closure_2)
+  (tupled_args : Slice forge_math.vec.Vec3) :
+  Result Bool
+  := do
+  let (c1, fl, uv) := c
+  let i ← core.slice.Slice.iter tupled_args
+  let (b, _) ←
+    core.slice.iter.Iter.Insts.CoreIterTraitsIteratorIteratorSharedAT.all
+      intersect.plane_cone.closure_2.closure.Insts.CoreOpsFunctionFnMutTupleShared4Vec3Bool
+      i (c1, fl, uv)
+  ok b
 
 /-- [forge_geom::intersect::plane_cone]:
-    Source: 'kernel/forge-geom/src/intersect.rs', lines 1157:0-1309:1
+    Source: 'kernel/forge-geom/src/intersect.rs', lines 1157:0-1335:1
     Visibility: public -/
 def intersect.plane_cone
   (p : surface.Plane) (c : surface.Cone) :
@@ -271,18 +459,233 @@ def intersect.plane_cone
             let fl12 ←
               lift (F64.Ops.sub (F64.Ops.ofBits 4607182418800017408) fl11)
             let sin_phi ← std.f64.F64.sqrt fl12
-            let lines ←
+            let dirs ←
               core.array.Array.map
-                intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact
+                intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnMutTupleF64UnitVec3
                 (Array.make 2#usize [
                   F64.Ops.ofBits 13830554455654793216, F64.Ops.ofBits
                   4607182418800017408
-                  ]) (e11, cos_phi, e2, sin_phi, apex_w, c.frame)
-            let s ← lift (Array.to_slice lines)
-            let v4 ←
-              alloc.slice.Slice.to_vec (BuiltinClone (curve.Curve ×
-                intersect.Contact)) s
-            ok (intersect.SurfaceSurface.Curves v4)
+                  ]) (e11, cos_phi, e2, sin_phi)
+            let uv1 ← Array.index_usize dirs 0#usize
+            let v4 ← forge_math.vec.UnitVec3.get uv1
+            let uv2 ← Array.index_usize dirs 1#usize
+            let v5 ← forge_math.vec.UnitVec3.get uv2
+            let s ← lift (Array.to_slice (Array.make 2#usize [ v4, v5 ]))
+            let b ←
+              intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleShared4SliceVec3Bool.call
+                (k, apex_dist, n1) s
+            if b
+            then
+              let lines ←
+                core.array.Array.map
+                  intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnMutTupleUnitVec3PairCurveContact
+                  dirs (apex_w, c.frame)
+              let s1 ← lift (Array.to_slice lines)
+              let v6 ←
+                alloc.slice.Slice.to_vec (BuiltinClone (curve.Curve ×
+                  intersect.Contact)) s1
+              ok (intersect.SurfaceSurface.Curves v6)
+            else
+              let v6 ←
+                forge_math.vec.UnitVec3.Insts.CoreOpsArithMulF64Vec3.mul n1
+                  apex_dist
+              let p0 ←
+                forge_math.vec.Vec3.Insts.CoreOpsArithSubVec3Vec3.sub apex v6
+              let fl13 ← lift (F64.Ops.mul k p0.z)
+              let rk ← lift (F64.Ops.add c.radius fl13)
+              let fl14 ← lift (F64.Ops.mul k k)
+              let fl15 ←
+                lift (F64.Ops.add (F64.Ops.ofBits 4607182418800017408) fl14)
+              let fl16 ← lift (F64.Ops.mul fl15 e11.z)
+              let fl17 ← lift (F64.Ops.mul fl16 e11.z)
+              let a ←
+                lift (F64.Ops.sub (F64.Ops.ofBits 4607182418800017408) fl17)
+              let fl18 ← forge_math.vec.Vec3.dot p0 e11
+              let fl19 ← lift (F64.Ops.mul p0.z e11.z)
+              let fl20 ← lift (F64.Ops.sub fl18 fl19)
+              let fl21 ←
+                lift (F64.Ops.mul (F64.Ops.ofBits 4611686018427387904) fl20)
+              let fl22 ←
+                lift (F64.Ops.mul (F64.Ops.ofBits 4611686018427387904) rk)
+              let fl23 ← lift (F64.Ops.mul fl22 k)
+              let fl24 ← lift (F64.Ops.mul fl23 e11.z)
+              let d ← lift (F64.Ops.sub fl21 fl24)
+              let v7 ← forge_math.vec.UnitVec3.get e2
+              let fl25 ← forge_math.vec.Vec3.dot p0 v7
+              let e ←
+                lift (F64.Ops.mul (F64.Ops.ofBits 4611686018427387904) fl25)
+              let fl26 ← forge_math.vec.Vec3.length_sq p0
+              let fl27 ← lift (F64.Ops.mul p0.z p0.z)
+              let fl28 ← lift (F64.Ops.sub fl26 fl27)
+              let fl29 ← lift (F64.Ops.mul rk rk)
+              let fc ← lift (F64.Ops.sub fl28 fl29)
+              let fl30 ← lift (F64.Ops.neg e)
+              let t_shift ←
+                lift (F64.Ops.div fl30 (F64.Ops.ofBits 4611686018427387904))
+              let normal_w ← surface.Plane.normal_vec p
+              let fl31 ← core.f64.F64.abs a
+              if F64.Ops.le fl31 (F64.Ops.ofBits 4427486594234968593)
+              then
+                let fl32 ← lift (F64.Ops.mul e e)
+                let fl33 ←
+                  lift (F64.Ops.div fl32 (F64.Ops.ofBits 4616189618054758400))
+                let f2 ← lift (F64.Ops.sub fc fl33)
+                let fl34 ← core.f64.F64.abs d
+                if F64.Ops.le fl34 fl7
+                then ok intersect.SurfaceSurface.Empty
+                else
+                  let fl35 ← lift (F64.Ops.neg f2)
+                  let s_vertex ← lift (F64.Ops.div fl35 d)
+                  let fl36 ← lift (F64.Ops.mul s_vertex e11.z)
+                  let fl37 ← lift (F64.Ops.add p0.z fl36)
+                  let fl38 ← lift (F64.Ops.sub fl fl5)
+                  if F64.Ops.lt fl37 fl38
+                  then ok intersect.SurfaceSurface.Empty
+                  else
+                    let «open» ←
+                      if F64.Ops.gt d (F64.Ops.ofBits 0)
+                      then
+                        forge_math.vec.Vec3.Insts.CoreOpsArithNegVec3.neg e11
+                      else ok e11
+                    let p2 ←
+                      intersect.plane_cone.closure_6.Insts.CoreOpsFunctionFnPairF64F64Point3.call
+                        (c.frame, p0, e11, e2) (s_vertex, t_shift)
+                    let uv3 ←
+                      intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                        c.frame «open»
+                    let v8 ← forge_math.vec.UnitVec3.get uv3
+                    let o2 ← forge_math.frame.Frame.from_zx p2 normal_w v8
+                    let frame ←
+                      core.option.Option.expect o2 (toStr
+                        "opening direction lies in the plane")
+                    let fl39 ←
+                      lift (F64.Ops.div fl34 (F64.Ops.ofBits
+                        4616189618054758400))
+                    let y ←
+                      lift (Std.Array.to_slice
+                        (Array.make 1#usize [
+                           (curve.Curve.Parabola { frame, focal := fl39 },
+                           intersect.Contact.Crossing)
+                           ] : Array (curve.Curve × intersect.Contact)
+                        1#usize))
+                    let ret := alloc.slice.Slice.into_vec y
+                    ok (intersect.SurfaceSurface.Curves ret)
+              else
+                let fl32 ← lift (F64.Ops.neg d)
+                let fl33 ←
+                  lift (F64.Ops.mul (F64.Ops.ofBits 4611686018427387904) a)
+                let s_center ← lift (F64.Ops.div fl32 fl33)
+                let fl34 ← lift (F64.Ops.mul d d)
+                let fl35 ←
+                  lift (F64.Ops.mul (F64.Ops.ofBits 4616189618054758400) a)
+                let fl36 ← lift (F64.Ops.div fl34 fl35)
+                let fl37 ← lift (F64.Ops.mul e e)
+                let fl38 ←
+                  lift (F64.Ops.div fl37 (F64.Ops.ofBits 4616189618054758400))
+                let fl39 ← lift (F64.Ops.add fl36 fl38)
+                let g ← lift (F64.Ops.sub fl39 fc)
+                let center ←
+                  intersect.plane_cone.closure_6.Insts.CoreOpsFunctionFnPairF64F64Point3.call
+                    (c.frame, p0, e11, e2) (s_center, t_shift)
+                if F64.Ops.gt a (F64.Ops.ofBits 0)
+                then
+                  if F64.Ops.lt g (F64.Ops.ofBits 0)
+                  then ok intersect.SurfaceSurface.Empty
+                  else
+                    let fl40 ← lift (F64.Ops.mul s_center e11.z)
+                    let fl41 ← lift (F64.Ops.add p0.z fl40)
+                    if F64.Ops.lt fl41 fl
+                    then ok intersect.SurfaceSurface.Empty
+                    else
+                      let fl42 ← lift (F64.Ops.div g a)
+                      let along_e1 ← std.f64.F64.sqrt fl42
+                      let along_e2 ← std.f64.F64.sqrt g
+                      let fl43 ← core.f64.F64.max along_e1 along_e2
+                      if F64.Ops.le fl43 fl5
+                      then
+                        let y ←
+                          lift (Std.Array.to_slice
+                            (Array.make 1#usize [ center ] : Array
+                            forge_math.vec.Point3 1#usize))
+                        let ret := alloc.slice.Slice.into_vec y
+                        ok (intersect.SurfaceSurface.Points ret)
+                      else
+                        let (major, minor, xdir) ←
+                          if F64.Ops.ge along_e1 along_e2
+                          then ok (along_e1, along_e2, e11)
+                          else ok (along_e2, along_e1, v7)
+                        let uv3 ←
+                          intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                            c.frame xdir
+                        let v8 ← forge_math.vec.UnitVec3.get uv3
+                        let o2 ←
+                          forge_math.frame.Frame.from_zx center normal_w v8
+                        let frame ←
+                          core.option.Option.expect o2 (toStr
+                            "axis lies in the plane")
+                        let fl44 ← lift (F64.Ops.sub major minor)
+                        if F64.Ops.le fl44 fl5
+                        then
+                          let fl45 ← lift (F64.Ops.add major minor)
+                          let fl46 ←
+                            lift (F64.Ops.mul (F64.Ops.ofBits
+                              4602678819172646912) fl45)
+                          let y ←
+                            lift (Std.Array.to_slice
+                              (Array.make 1#usize [
+                                 (curve.Curve.Circle { frame, radius := fl46 },
+                                 intersect.Contact.Crossing)
+                                 ] : Array (curve.Curve × intersect.Contact)
+                              1#usize))
+                          let ret := alloc.slice.Slice.into_vec y
+                          ok (intersect.SurfaceSurface.Curves ret)
+                        else
+                          let y ←
+                            lift (Std.Array.to_slice
+                              (Array.make 1#usize [
+                                 (curve.Curve.Ellipse { frame, major, minor },
+                                 intersect.Contact.Crossing)
+                                 ] : Array (curve.Curve × intersect.Contact)
+                              1#usize))
+                          let ret := alloc.slice.Slice.into_vec y
+                          ok (intersect.SurfaceSurface.Curves ret)
+                else
+                  if F64.Ops.ge g (F64.Ops.ofBits 0)
+                  then ok intersect.SurfaceSurface.NotAnalytic
+                  else
+                    let fl40 ← lift (F64.Ops.neg g)
+                    let fl41 ← lift (F64.Ops.neg a)
+                    let fl42 ← lift (F64.Ops.div fl40 fl41)
+                    let semi_a ← std.f64.F64.sqrt fl42
+                    let fl43 ← lift (F64.Ops.neg g)
+                    let semi_b ← std.f64.F64.sqrt fl43
+                    let fl44 ← lift (F64.Ops.add s_center semi_a)
+                    let fl45 ← lift (F64.Ops.mul fl44 e11.z)
+                    let up_vertex_z ← lift (F64.Ops.add p0.z fl45)
+                    let xdir ←
+                      if F64.Ops.ge up_vertex_z fl
+                      then ok e11
+                      else
+                        forge_math.vec.Vec3.Insts.CoreOpsArithNegVec3.neg e11
+                    let uv3 ←
+                      intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                        c.frame xdir
+                    let v8 ← forge_math.vec.UnitVec3.get uv3
+                    let o2 ←
+                      forge_math.frame.Frame.from_zx center normal_w v8
+                    let frame ←
+                      core.option.Option.expect o2 (toStr
+                        "axis lies in the plane")
+                    let y ←
+                      lift (Std.Array.to_slice
+                        (Array.make 1#usize [
+                           (curve.Curve.Hyperbola
+                           { frame, a := semi_a, b := semi_b },
+                           intersect.Contact.Crossing)
+                           ] : Array (curve.Curve × intersect.Contact)
+                        1#usize))
+                    let ret := alloc.slice.Slice.into_vec y
+                    ok (intersect.SurfaceSurface.Curves ret)
       else
         let v4 ←
           forge_math.vec.UnitVec3.Insts.CoreOpsArithMulF64Vec3.mul n1 apex_dist
@@ -341,10 +744,10 @@ def intersect.plane_cone
                 then forge_math.vec.Vec3.Insts.CoreOpsArithNegVec3.neg e11
                 else ok e11
               let p2 ←
-                intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnPairF64F64Point3.call
+                intersect.plane_cone.closure_6.Insts.CoreOpsFunctionFnPairF64F64Point3.call
                   (c.frame, p0, e11, e2) (s_vertex, t_shift)
               let uv1 ←
-                intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
                   c.frame «open»
               let v6 ← forge_math.vec.UnitVec3.get uv1
               let o2 ← forge_math.frame.Frame.from_zx p2 normal_w v6
@@ -376,7 +779,7 @@ def intersect.plane_cone
           let fl32 ← lift (F64.Ops.add fl29 fl31)
           let g ← lift (F64.Ops.sub fl32 fc)
           let center ←
-            intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnPairF64F64Point3.call
+            intersect.plane_cone.closure_6.Insts.CoreOpsFunctionFnPairF64F64Point3.call
               (c.frame, p0, e11, e2) (s_center, t_shift)
           if F64.Ops.gt a (F64.Ops.ofBits 0)
           then
@@ -405,7 +808,7 @@ def intersect.plane_cone
                     then ok (along_e1, along_e2, e11)
                     else ok (along_e2, along_e1, v5)
                   let uv1 ←
-                    intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                    intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
                       c.frame xdir
                   let v6 ← forge_math.vec.UnitVec3.get uv1
                   let o2 ← forge_math.frame.Frame.from_zx center normal_w v6
@@ -456,7 +859,7 @@ def intersect.plane_cone
                 then ok e11
                 else forge_math.vec.Vec3.Insts.CoreOpsArithNegVec3.neg e11
               let uv1 ←
-                intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
                   c.frame xdir
               let v6 ← forge_math.vec.UnitVec3.get uv1
               let o2 ← forge_math.frame.Frame.from_zx center normal_w v6
@@ -524,18 +927,227 @@ def intersect.plane_cone
           let fl11 ←
             lift (F64.Ops.sub (F64.Ops.ofBits 4607182418800017408) fl10)
           let sin_phi ← std.f64.F64.sqrt fl11
-          let lines ←
+          let dirs ←
             core.array.Array.map
-              intersect.plane_cone.closure_1.Insts.CoreOpsFunctionFnMutTupleF64PairCurveContact
+              intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnMutTupleF64UnitVec3
               (Array.make 2#usize [
                 F64.Ops.ofBits 13830554455654793216, F64.Ops.ofBits
                 4607182418800017408
-                ]) (e11, cos_phi, e2, sin_phi, apex_w, c.frame)
-          let s ← lift (Array.to_slice lines)
-          let v4 ←
-            alloc.slice.Slice.to_vec (BuiltinClone (curve.Curve ×
-              intersect.Contact)) s
-          ok (intersect.SurfaceSurface.Curves v4)
+                ]) (e11, cos_phi, e2, sin_phi)
+          let uv1 ← Array.index_usize dirs 0#usize
+          let v4 ← forge_math.vec.UnitVec3.get uv1
+          let uv2 ← Array.index_usize dirs 1#usize
+          let v5 ← forge_math.vec.UnitVec3.get uv2
+          let s ← lift (Array.to_slice (Array.make 2#usize [ v4, v5 ]))
+          let b ←
+            intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleShared4SliceVec3Bool.call
+              (k, apex_dist, n1) s
+          if b
+          then
+            let lines ←
+              core.array.Array.map
+                intersect.plane_cone.closure_4.Insts.CoreOpsFunctionFnMutTupleUnitVec3PairCurveContact
+                dirs (apex_w, c.frame)
+            let s1 ← lift (Array.to_slice lines)
+            let v6 ←
+              alloc.slice.Slice.to_vec (BuiltinClone (curve.Curve ×
+                intersect.Contact)) s1
+            ok (intersect.SurfaceSurface.Curves v6)
+          else
+            let v6 ←
+              forge_math.vec.UnitVec3.Insts.CoreOpsArithMulF64Vec3.mul n1
+                apex_dist
+            let p0 ←
+              forge_math.vec.Vec3.Insts.CoreOpsArithSubVec3Vec3.sub apex v6
+            let fl12 ← lift (F64.Ops.mul k p0.z)
+            let rk ← lift (F64.Ops.add c.radius fl12)
+            let fl13 ← lift (F64.Ops.mul k k)
+            let fl14 ←
+              lift (F64.Ops.add (F64.Ops.ofBits 4607182418800017408) fl13)
+            let fl15 ← lift (F64.Ops.mul fl14 e11.z)
+            let fl16 ← lift (F64.Ops.mul fl15 e11.z)
+            let a ←
+              lift (F64.Ops.sub (F64.Ops.ofBits 4607182418800017408) fl16)
+            let fl17 ← forge_math.vec.Vec3.dot p0 e11
+            let fl18 ← lift (F64.Ops.mul p0.z e11.z)
+            let fl19 ← lift (F64.Ops.sub fl17 fl18)
+            let fl20 ←
+              lift (F64.Ops.mul (F64.Ops.ofBits 4611686018427387904) fl19)
+            let fl21 ←
+              lift (F64.Ops.mul (F64.Ops.ofBits 4611686018427387904) rk)
+            let fl22 ← lift (F64.Ops.mul fl21 k)
+            let fl23 ← lift (F64.Ops.mul fl22 e11.z)
+            let d ← lift (F64.Ops.sub fl20 fl23)
+            let v7 ← forge_math.vec.UnitVec3.get e2
+            let fl24 ← forge_math.vec.Vec3.dot p0 v7
+            let e ←
+              lift (F64.Ops.mul (F64.Ops.ofBits 4611686018427387904) fl24)
+            let fl25 ← forge_math.vec.Vec3.length_sq p0
+            let fl26 ← lift (F64.Ops.mul p0.z p0.z)
+            let fl27 ← lift (F64.Ops.sub fl25 fl26)
+            let fl28 ← lift (F64.Ops.mul rk rk)
+            let fc ← lift (F64.Ops.sub fl27 fl28)
+            let fl29 ← lift (F64.Ops.neg e)
+            let t_shift ←
+              lift (F64.Ops.div fl29 (F64.Ops.ofBits 4611686018427387904))
+            let normal_w ← surface.Plane.normal_vec p
+            let fl30 ← core.f64.F64.abs a
+            if F64.Ops.le fl30 (F64.Ops.ofBits 4427486594234968593)
+            then
+              let fl31 ← lift (F64.Ops.mul e e)
+              let fl32 ←
+                lift (F64.Ops.div fl31 (F64.Ops.ofBits 4616189618054758400))
+              let f2 ← lift (F64.Ops.sub fc fl32)
+              let fl33 ← core.f64.F64.abs d
+              if F64.Ops.le fl33 fl6
+              then ok intersect.SurfaceSurface.Empty
+              else
+                let fl34 ← lift (F64.Ops.neg f2)
+                let s_vertex ← lift (F64.Ops.div fl34 d)
+                let fl35 ← lift (F64.Ops.mul s_vertex e11.z)
+                let fl36 ← lift (F64.Ops.add p0.z fl35)
+                let fl37 ← lift (F64.Ops.sub fl fl4)
+                if F64.Ops.lt fl36 fl37
+                then ok intersect.SurfaceSurface.Empty
+                else
+                  let «open» ←
+                    if F64.Ops.gt d (F64.Ops.ofBits 0)
+                    then forge_math.vec.Vec3.Insts.CoreOpsArithNegVec3.neg e11
+                    else ok e11
+                  let p2 ←
+                    intersect.plane_cone.closure_6.Insts.CoreOpsFunctionFnPairF64F64Point3.call
+                      (c.frame, p0, e11, e2) (s_vertex, t_shift)
+                  let uv3 ←
+                    intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                      c.frame «open»
+                  let v8 ← forge_math.vec.UnitVec3.get uv3
+                  let o2 ← forge_math.frame.Frame.from_zx p2 normal_w v8
+                  let frame ←
+                    core.option.Option.expect o2 (toStr
+                      "opening direction lies in the plane")
+                  let fl38 ←
+                    lift (F64.Ops.div fl33 (F64.Ops.ofBits
+                      4616189618054758400))
+                  let y ←
+                    lift (Std.Array.to_slice
+                      (Array.make 1#usize [
+                         (curve.Curve.Parabola { frame, focal := fl38 },
+                         intersect.Contact.Crossing)
+                         ] : Array (curve.Curve × intersect.Contact) 1#usize))
+                  let ret := alloc.slice.Slice.into_vec y
+                  ok (intersect.SurfaceSurface.Curves ret)
+            else
+              let fl31 ← lift (F64.Ops.neg d)
+              let fl32 ←
+                lift (F64.Ops.mul (F64.Ops.ofBits 4611686018427387904) a)
+              let s_center ← lift (F64.Ops.div fl31 fl32)
+              let fl33 ← lift (F64.Ops.mul d d)
+              let fl34 ←
+                lift (F64.Ops.mul (F64.Ops.ofBits 4616189618054758400) a)
+              let fl35 ← lift (F64.Ops.div fl33 fl34)
+              let fl36 ← lift (F64.Ops.mul e e)
+              let fl37 ←
+                lift (F64.Ops.div fl36 (F64.Ops.ofBits 4616189618054758400))
+              let fl38 ← lift (F64.Ops.add fl35 fl37)
+              let g ← lift (F64.Ops.sub fl38 fc)
+              let center ←
+                intersect.plane_cone.closure_6.Insts.CoreOpsFunctionFnPairF64F64Point3.call
+                  (c.frame, p0, e11, e2) (s_center, t_shift)
+              if F64.Ops.gt a (F64.Ops.ofBits 0)
+              then
+                if F64.Ops.lt g (F64.Ops.ofBits 0)
+                then ok intersect.SurfaceSurface.Empty
+                else
+                  let fl39 ← lift (F64.Ops.mul s_center e11.z)
+                  let fl40 ← lift (F64.Ops.add p0.z fl39)
+                  if F64.Ops.lt fl40 fl
+                  then ok intersect.SurfaceSurface.Empty
+                  else
+                    let fl41 ← lift (F64.Ops.div g a)
+                    let along_e1 ← std.f64.F64.sqrt fl41
+                    let along_e2 ← std.f64.F64.sqrt g
+                    let fl42 ← core.f64.F64.max along_e1 along_e2
+                    if F64.Ops.le fl42 fl4
+                    then
+                      let y ←
+                        lift (Std.Array.to_slice (Array.make 1#usize [ center ]
+                          : Array forge_math.vec.Point3 1#usize))
+                      let ret := alloc.slice.Slice.into_vec y
+                      ok (intersect.SurfaceSurface.Points ret)
+                    else
+                      let (major, minor, xdir) ←
+                        if F64.Ops.ge along_e1 along_e2
+                        then ok (along_e1, along_e2, e11)
+                        else ok (along_e2, along_e1, v7)
+                      let uv3 ←
+                        intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                          c.frame xdir
+                      let v8 ← forge_math.vec.UnitVec3.get uv3
+                      let o2 ←
+                        forge_math.frame.Frame.from_zx center normal_w v8
+                      let frame ←
+                        core.option.Option.expect o2 (toStr
+                          "axis lies in the plane")
+                      let fl43 ← lift (F64.Ops.sub major minor)
+                      if F64.Ops.le fl43 fl4
+                      then
+                        let fl44 ← lift (F64.Ops.add major minor)
+                        let fl45 ←
+                          lift (F64.Ops.mul (F64.Ops.ofBits
+                            4602678819172646912) fl44)
+                        let y ←
+                          lift (Std.Array.to_slice
+                            (Array.make 1#usize [
+                               (curve.Curve.Circle { frame, radius := fl45 },
+                               intersect.Contact.Crossing)
+                               ] : Array (curve.Curve × intersect.Contact)
+                            1#usize))
+                        let ret := alloc.slice.Slice.into_vec y
+                        ok (intersect.SurfaceSurface.Curves ret)
+                      else
+                        let y ←
+                          lift (Std.Array.to_slice
+                            (Array.make 1#usize [
+                               (curve.Curve.Ellipse { frame, major, minor },
+                               intersect.Contact.Crossing)
+                               ] : Array (curve.Curve × intersect.Contact)
+                            1#usize))
+                        let ret := alloc.slice.Slice.into_vec y
+                        ok (intersect.SurfaceSurface.Curves ret)
+              else
+                if F64.Ops.ge g (F64.Ops.ofBits 0)
+                then ok intersect.SurfaceSurface.NotAnalytic
+                else
+                  let fl39 ← lift (F64.Ops.neg g)
+                  let fl40 ← lift (F64.Ops.neg a)
+                  let fl41 ← lift (F64.Ops.div fl39 fl40)
+                  let semi_a ← std.f64.F64.sqrt fl41
+                  let fl42 ← lift (F64.Ops.neg g)
+                  let semi_b ← std.f64.F64.sqrt fl42
+                  let fl43 ← lift (F64.Ops.add s_center semi_a)
+                  let fl44 ← lift (F64.Ops.mul fl43 e11.z)
+                  let up_vertex_z ← lift (F64.Ops.add p0.z fl44)
+                  let xdir ←
+                    if F64.Ops.ge up_vertex_z fl
+                    then ok e11
+                    else forge_math.vec.Vec3.Insts.CoreOpsArithNegVec3.neg e11
+                  let uv3 ←
+                    intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                      c.frame xdir
+                  let v8 ← forge_math.vec.UnitVec3.get uv3
+                  let o2 ← forge_math.frame.Frame.from_zx center normal_w v8
+                  let frame ←
+                    core.option.Option.expect o2 (toStr
+                      "axis lies in the plane")
+                  let y ←
+                    lift (Std.Array.to_slice
+                      (Array.make 1#usize [
+                         (curve.Curve.Hyperbola
+                         { frame, a := semi_a, b := semi_b },
+                         intersect.Contact.Crossing)
+                         ] : Array (curve.Curve × intersect.Contact) 1#usize))
+                  let ret := alloc.slice.Slice.into_vec y
+                  ok (intersect.SurfaceSurface.Curves ret)
     else
       let v4 ←
         forge_math.vec.UnitVec3.Insts.CoreOpsArithMulF64Vec3.mul n1 apex_dist
@@ -592,10 +1204,10 @@ def intersect.plane_cone
               then forge_math.vec.Vec3.Insts.CoreOpsArithNegVec3.neg e11
               else ok e11
             let p2 ←
-              intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnPairF64F64Point3.call
+              intersect.plane_cone.closure_6.Insts.CoreOpsFunctionFnPairF64F64Point3.call
                 (c.frame, p0, e11, e2) (s_vertex, t_shift)
             let uv1 ←
-              intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+              intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
                 c.frame «open»
             let v6 ← forge_math.vec.UnitVec3.get uv1
             let o2 ← forge_math.frame.Frame.from_zx p2 normal_w v6
@@ -625,7 +1237,7 @@ def intersect.plane_cone
         let fl31 ← lift (F64.Ops.add fl28 fl30)
         let g ← lift (F64.Ops.sub fl31 fc)
         let center ←
-          intersect.plane_cone.closure_3.Insts.CoreOpsFunctionFnPairF64F64Point3.call
+          intersect.plane_cone.closure_6.Insts.CoreOpsFunctionFnPairF64F64Point3.call
             (c.frame, p0, e11, e2) (s_center, t_shift)
         if F64.Ops.gt a (F64.Ops.ofBits 0)
         then
@@ -654,7 +1266,7 @@ def intersect.plane_cone
                   then ok (along_e1, along_e2, e11)
                   else ok (along_e2, along_e1, v5)
                 let uv1 ←
-                  intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+                  intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
                     c.frame xdir
                 let v6 ← forge_math.vec.UnitVec3.get uv1
                 let o2 ← forge_math.frame.Frame.from_zx center normal_w v6
@@ -702,7 +1314,7 @@ def intersect.plane_cone
               then ok e11
               else forge_math.vec.Vec3.Insts.CoreOpsArithNegVec3.neg e11
             let uv1 ←
-              intersect.plane_cone.closure_2.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
+              intersect.plane_cone.closure_5.Insts.CoreOpsFunctionFnTupleVec3UnitVec3.call
                 c.frame xdir
             let v6 ← forge_math.vec.UnitVec3.get uv1
             let o2 ← forge_math.frame.Frame.from_zx center normal_w v6

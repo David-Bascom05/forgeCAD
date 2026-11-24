@@ -188,6 +188,16 @@ theorem cone_radius (o x y : ForgeCam.DistArc.P) (rr c s : ℝ) :
     simp only [nsq, dot, sc, Prod.fst_add, Prod.snd_add, Prod.fst_sub, Prod.snd_sub]; ring
   rw [this, Real.sqrt_mul (sq_nonneg _), Real.sqrt_sq_eq_abs]
 
+/-- **The torus about a vertical axis** (a fillet round a boss or a hole, shadow.rs `Kind::Torus`):
+its face point is o + (big + r cos φ)(c x + s y) + r sin φ ax horizontally o + (big + r cos φ)(c x
++ s y), at distance |big + r cos φ|·|c x + s y| from the axis: the cone's radius with the radius
+big + r cos φ. Its height o.z + az r sin φ is enclosed directly; `axis_gap` and `cone_factor` then
+give the bound as for the cone. -/
+theorem torus_radius (o x y : ForgeCam.DistArc.P) (big r cf c s : ℝ) :
+    √(nsq (o + sc (big + r * cf) (sc c x + sc s y) - o)) =
+      |big + r * cf| * √(nsq (sc c x + sc s y)) :=
+  cone_radius o x y (big + r * cf) c s
+
 /-- **The axis gap**: the horizontal distance is at least the gap between the two distances from
 the axis. -/
 theorem axis_gap {P A o : ForgeCam.DistArc.P} {a0 a1 b0 b1 : ℝ}

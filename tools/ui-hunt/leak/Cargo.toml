@@ -1,0 +1,13 @@
+# Memory kept per forge-lang run (research/ui-bughunt/FINDINGS.md, finding 8): its own workspace,
+# outside the root's. cargo run --release [-- run|edit] [N]
+[package]
+name = "ui-hunt-leak"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+forge-lang = { path = "../../../interface/forge-lang" }
+forge-agent = { path = "../../../interface/forge-agent" }
+
+[workspace]

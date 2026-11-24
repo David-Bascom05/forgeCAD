@@ -383,7 +383,7 @@ knob = ball(top.c, r)
 
 ```
 hole(at: POINT | [POINTS], d: D, depth: DEPTH, cbore: (D, depth), csink: (D, A), point: A,
-     thread: "M36x2" | (size, pitch), flip: false, on: PLANE, bodies: BODIES)
+     thread: "M36x2" | (size, pitch), fit: CLASS, flip: false, on: PLANE, bodies: BODIES)
 hole(at: .., screw: SIZE, convention: "iso"|"ansi", fit: "close"|"normal"|"loose"|"tap",
      seat: "cbore"|"csink", depth: DEPTH, point: A, ..)
 DEPTH: d | thru | next | upto(FACES | WORKPLANE | SKETCH, offset)
@@ -395,9 +395,11 @@ or points worked out here (work points, `mid(..)`), then `on:` is required; each
 the plane. Several points make one hole feature, the rest copies of the first. `point:` is a
 blind hole's drill point (the cone's included angle; none on `thru`). `thread:` records a thread
 (modeled by `thread(hole: ..)`). SIZE: `M6`, `M8x1`, `1/4-20`, `#10-24` from the tables: its fit's
-diameter, its seat's head; `fit: "tap"` the tap drill, its thread recorded. Options that cannot
-apply are errors, never dropped: `cbore` with `csink` or `seat`, `d` or `thread` with `screw`
-(`Conflict`); `fit`, `seat`, `convention` without `screw`, `point` on `thru` (`NotApplicable`);
+diameter, its seat's head; `fit: "tap"` the tap drill, its thread recorded. On a hole of its own
+`d`, `fit:` is its ISO 286 hole class (CLASS: "H7", "H6".."H11", "G7", "F7", "JS7", "K7", "N7",
+"P7" and the like): the hole's geometry is the nominal `d`; CAM reams it (a dowel's 6H7). Options
+that cannot apply are errors, never dropped: `cbore` with `csink` or `seat`, `d` or `thread` with
+`screw` (`Conflict`); `seat`, `convention` without `screw`, `point` on `thru` (`NotApplicable`);
 an unknown size (`UnknownSize`) or word (`UnknownWord`).
 
 ```

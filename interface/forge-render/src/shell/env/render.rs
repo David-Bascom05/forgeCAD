@@ -10,6 +10,11 @@ use egui::{Rect, Ui};
 pub(super) struct RenderStudio;
 
 impl Environment for RenderStudio {
+    /// It works on the part: the part's tree stays.
+    fn keeps_tree(&self) -> bool {
+        true
+    }
+
     fn id(&self) -> EnvId {
         EnvId::RenderStudio
     }
@@ -36,6 +41,10 @@ impl Environment for RenderStudio {
 
     fn browser(&self, s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
         content::browser(s, ui, r)
+    }
+
+    fn status(&self, s: &Shell) -> Option<String> {
+        Some(content::status(s))
     }
 
     fn draw(&self, s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {

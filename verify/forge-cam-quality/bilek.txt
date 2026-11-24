@@ -1,0 +1,5 @@
+job/op                 kind       tool     t_stop   t_min   cut_s   air rapid retr plng c>90 phiMx phiAv climb  slot  hexMx  hex99  hexAv  fzTgt  thin thick     MRR   Fc_N  P_kW  f/rev
+bilek_cam/well         pocket     flat-6    351.8   344.7   332.7    2%   121    4    0   44   180    74   93%    7%  0.028  0.028  0.025  0.039    4%    0%    5943    143  0.57      -
+bilek_cam: program prog on generic-vmc3: t_stop 351.8 s, t_min 344.7 s, 1 tool changes, 0 violations
+verify/forge-cam-quality/parts/bilek/bilek_cam.fg: 1 of 1 ops certified
+all: 1 of 1 ops certified

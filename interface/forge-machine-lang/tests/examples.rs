@@ -27,3 +27,23 @@ fn examples_answer_as_documented() {
     let o = run("lathe_turn.toml");
     assert!(o.ok, "{}", o.text);
 }
+
+#[test]
+fn two_channels_answer_as_documented() {
+    let o = run("millturn_2ch.toml");
+    assert!(o.ok, "{}", o.text);
+    assert!(
+        o.json
+            .starts_with("{\"format\":\"forgecad.machine-multi/1\",\"ok\":true"),
+        "{}",
+        o.json
+    );
+    let o = run("millturn_2ch_nowait.toml");
+    assert!(!o.ok, "{}", o.text);
+    assert!(
+        o.text.contains("channel 1 line") && o.text.contains("channel 2 line 3"),
+        "{}",
+        o.text
+    );
+    assert!(o.json.contains("\"cross\":[{"), "{}", o.json);
+}

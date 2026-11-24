@@ -1,0 +1,12 @@
+machining
+# Benchmark (adaptive vs clear): deep_open_slot.fg's open level, 15.0 mm deep with a
+# 6 mm end mill (2.5 D, flute 18 mm), material group P: clear.
+shared tol = 0.01
+
+f    = part("deep_open_slot.fg", group: "P")
+m    = machine("generic-vmc3")
+t1   = tool("flat-6", t: 1, stickout: 30, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)
+skim = facing(op1, tool: t1, to: 20, step: 1)
+rough = clear(op1, tool: t1, from: 20, to: 5.2, step: 6, stepover: 2.4)
+prog = program(op1, post: "fanuc", number: 5008)

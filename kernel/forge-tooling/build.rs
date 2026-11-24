@@ -11,6 +11,7 @@ fn main() {
         "holders.toml",
         "machines.toml",
         "cutting.toml",
+        "generic.toml",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -35,6 +36,30 @@ fn main() {
             "    (\"builtin/{f}\", include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/data/{f}\"))),"
         )
         .unwrap();
+    }
+    out.push_str("];\n");
+    // maker-published libraries in bulk (data/libraries/, research/cam/tooling/libraries.md):
+    // embedded only with the `maker-libraries` feature, so the default library stays small
+    out.push_str("pub const MAKER_LIBRARIES: &[(&str, &str)] = &[\n");
+    let libs = root.join("libraries");
+    println!("cargo:rerun-if-changed={}", libs.display());
+    if std::env::var_os("CARGO_FEATURE_MAKER_LIBRARIES").is_some()
+        && let Ok(rd) = std::fs::read_dir(&libs)
+    {
+        let mut names: Vec<String> = rd
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| n.ends_with(".toml"))
+            .collect();
+        names.sort();
+        for n in names {
+            println!("cargo:rerun-if-changed={}", libs.join(&n).display());
+            writeln!(
+                out,
+                "    (\"libraries/{n}\", include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), \"/data/libraries/{n}\"))),"
+            )
+            .unwrap();
+        }
     }
     out.push_str("];\n");
     std::fs::write(

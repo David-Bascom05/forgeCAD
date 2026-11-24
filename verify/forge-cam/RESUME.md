@@ -63,6 +63,13 @@ Expect about 2 min with the Mathlib cache. Post.lean's `step` takes about 45 s.
   face's sense: convex and concave faces alike ("convex" in (3) is the squared-distance
   polynomial, not the face). Dist2.lean has the metric pieces. Non-finite or
   overflowing data is refused in the code (no Clear), tested.
+- **H.probe (a probe move's contact window).** In a `PMove::Probe`'s window (Phase::Touch) the
+  stylus ball is exempt against every part and stock face, not only the one probed: a second
+  face (a corner, a wall beside a web) meeting the ball there is certified, though the trigger
+  would come from it (a wrong measurement, not a crash; every other body keeps the clearance).
+  Tightening (CAM-CORE): in the window, hold the ball to the clearance from every face but those
+  whose contact normal opposes the move (n·u < −cos θ). Also assumed: the control stops within
+  `over` of the first trigger (the probe's overtravel spec). Not in Lean (hyp).
 
 ## The vise code (3e8a91d, 0a4c189): done
 
@@ -171,6 +178,13 @@ Shadow.lean proves S1–S4, with `shadow_face` and `certified_clear_gen` assembl
   `g_digits`, `arc = centre_abs` (an absolute I J block, then G02/G03), `tool_word` (the T block is
   the tool change), multi-line spindle templates. G6 for the dialects that use them (siemens,
   heidenhain, pathpilot, mach3, mach4, centroid-cnc12, masso) is UNKNOWN in Lean.
+- The torus about a vertical axis (shadow.rs `Kind::Torus`, CAM-CORE 2026-11-24): the same
+  bound as the cone. `torus_radius` (= `cone_radius` with the radius big + r cos φ) gives the
+  face point's distance from the axis, `axis_gap` the horizontal gap, `cone_factor` the
+  |c x + s y| enclosure. Its cos φ and sin φ over a cell of q are the rational map's interval
+  enclosures (L5). A posted arc whose centre is ε off the axis (rounded words) is covered by the
+  path's own distance range from the axis (`arc_far`, `arc_near`), which already holds every
+  instant within r ± ε.
 
 ## Still to do when asked
 
@@ -218,6 +232,23 @@ The checker of drop.rs (the tool's column, research/cam/phase3.md). 10 theorems,
 - `ring_rho_ge`, `ring_bound`, `line_rho_ge`, `line_bound`: spheres, horizontal cylinders and tori
   about a vertical axis reduce to the vertical plane through the tool's axis (b monotone).
 
-Open: the 1D closed forms' candidates (`disk_drop`, `bowl_drop`, `plane_support`) contain the
+Open: the 1D closed forms' candidates (`disk_drop`, `bowl_drop`, `plane_support`, and `conj`'s
+maximiser ρ* and bound B(λ) for Concave.lean, all L6-tested) contain the
 maximum; the sphere bound S − sd(centre) for a convex column (supporting half-space); each
 cutter lies in its column (`Column::of`, L6-tested); the z-map's soundness; L5.
+
+## A dome cylinder's exact move bound (Concave.lean, CAM-3AXIS, 2026-11-24): done
+
+drop.rs `cyl_chord`, `section`, `Column::sq_convex` (research/cam/phase3.md). 12 theorems, standard
+axioms.
+- `disk_conj`, `disk_conj_at`: √(r² − e²) − λe ≤ r√(1 + λ²), attained at e* = −λr/√(1 + λ²).
+- `top_concave`, `neg_profile_concave`: the disk's top and −b(|u|) (b convex, non-decreasing) are
+  concave, so the cylinder's CL across its axis (their sup-convolution) is.
+- `end_of_outside`, `move_clear_of_outside`, `move_le_unconstrained`: along a line move, a
+  maximiser beyond an end makes that end decide; else the unconstrained maximum bounds it.
+- `end_rho_ge`, `section_mono`, `ball_section`: past the face's end by a, the column's section a
+  off its axis (a ball's is a ball).
+- `superadd`, `profile_superadd`: h = b ∘ √ convex gives b(√(u² + a²)) ≥ b(|u|) + b(a) − b(0).
+
+Open: that `conj` finds the profile's maximiser ρ* and B(λ) (the enumeration over pieces; L6-tested
+in tests/drop_vs_sampling.rs), and L5.

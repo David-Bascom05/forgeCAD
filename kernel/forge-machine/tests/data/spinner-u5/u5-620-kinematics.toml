@@ -1,0 +1,99 @@
+# The spinner-u5-620 record's kinematics (machines/spinner-u5-620 @3576cc70: joints, spindle,
+# changer, mounts; no bodies or cites), for tests/traori.rs until the record and the 840D reader
+# share a branch. B and C fitted from the RPTU/Spinner log (tools/machines/spinner_u5_620_fit.py).
+[[machine]]
+name = "spinner-u5-620"
+kind = "table-table"
+control = "siemens"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+real = false
+source = "machines/spinner-u5-620 @3576cc70 (dealer listings; B and C fitted from the RPTU/Spinner log)"
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-365, 255]
+rapid = 48000
+max_feed = 48000
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-296, 224]
+rapid = 48000
+max_feed = 48000
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-460, 0]
+rapid = 48000
+max_feed = 48000
+
+[[machine.joint]]
+name = "B"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [0, -1, 0]
+pivot = [0, 0, 49.3]
+range = [-91, 110]
+rapid = 360000
+max_feed = 360000
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "B"
+side = "table"
+type = "rotary"
+axis = [0, 0, -1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 360000
+max_feed = 360000
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 610]
+rpm = [1, 12000]
+max = [290, 127]
+interface = "SK40"
+
+[[machine.changer]]
+pockets = 32
+change_s = 0.001
+max_tool_kg = 7
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 610]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
