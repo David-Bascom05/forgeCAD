@@ -400,6 +400,19 @@ list on main: this branch's new strings add none).
   are in (`Ask::OpenLinked`), and says "FILE not opened: you opened NAME". deeplink.cjs covers it
   (New part during a held load: kept, no machining workspace, the link said not opened).
 
+## 25. A double click in a busy page was two single clicks (ui/bughunt-3, ui/dblclick)
+
+- `inputcut::frame_cut` (§14's LAG fix) ended a frame at every button release, so a double click
+  queued whole (the tests' `app_click`, or a person's on a page behind its GPU) went to two
+  frames. egui counts a click as double only within 0.3 s of the one before by `RawInput.time`, and
+  with frames paced to the GPU the second frame came later: two single clicks. CI's cam.cjs:134
+  ("the op dialog, by a double click") timed out right after a dialog's close, with the row
+  selected and no dialog.
+- A release followed by a press of the same button within 6 px no longer ends the frame.
+- Tests: `inputcut::tests::a_double_click_is_one_frame`; in the page, under CDP CPU throttling
+  (8x, 20x), a double click on cam:row:prof right after a dialog's close missed on the first try
+  before, never after (6 tries each).
+
 ## Open (reported, not fixed here)
 
 
