@@ -458,6 +458,27 @@ fn prim(m: &Rigid, p: &Prim, c: [f32; 3], out: &mut Vec<WorldVert>) {
                 out,
             );
         }
+        Prim::OBox { o, axes, size } => {
+            // corners o + Σ f_k size_k axes_k (f_k 0 or 1); each face's normal ± its axis,
+            // its corners counter-clockwise seen from outside (as the Box faces above)
+            let v = |f: [u8; 3]| Prim::obox_at(&o, &axes, &size, f.map(f64::from));
+            let neg = |a: [f64; 3]| a.map(|x| -x);
+            for (k, i, j) in [(0, 1, 2), (1, 2, 0), (2, 0, 1)] {
+                let at = |side: u8, a: u8, b: u8| {
+                    let mut f = [0u8; 3];
+                    f[k] = side;
+                    f[i] = a;
+                    f[j] = b;
+                    v(f)
+                };
+                quad([at(1, 0, 0), at(1, 1, 0), at(1, 1, 1), at(1, 0, 1)], axes[k], out);
+                quad(
+                    [at(0, 0, 0), at(0, 0, 1), at(0, 1, 1), at(0, 1, 0)],
+                    neg(axes[k]),
+                    out,
+                );
+            }
+        }
         Prim::Cyl { base, axis, r, h } => {
             // a frame about the axis
             let u = if axis[2].abs() < 0.9 {
