@@ -92,7 +92,10 @@ pub fn prim_tris(p: &Prim, out: &mut Tris) {
                     v(f)
                 };
                 out.quad([at(1, 0, 0), at(1, 1, 0), at(1, 1, 1), at(1, 0, 1)], axes[k]);
-                out.quad([at(0, 0, 0), at(0, 0, 1), at(0, 1, 1), at(0, 1, 0)], axes[k].map(|x| -x));
+                out.quad(
+                    [at(0, 0, 0), at(0, 0, 1), at(0, 1, 1), at(0, 1, 0)],
+                    axes[k].map(|x| -x),
+                );
                 // the four edges along axis k
                 for (a, b) in [(0, 0), (1, 0), (1, 1), (0, 1)] {
                     out.edges.push(vec![at(0, a, b), at(1, a, b)]);

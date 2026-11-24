@@ -195,6 +195,7 @@ fn clear_is_never_contradicted_by_samples() {
             seg_la: Vec::new(),
             t_scurve: 0.0,
             seg_scurve: Vec::new(),
+            t_scurve_blend: None,
             after_skip: Vec::new(),
             skip_unmodelled: Vec::new(),
         };
@@ -458,6 +459,7 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                         seg_la: Vec::new(),
                         t_scurve: 0.0,
                         seg_scurve: Vec::new(),
+                        t_scurve_blend: None,
                         after_skip: Vec::new(),
                         skip_unmodelled: Vec::new(),
                     };

@@ -38,3 +38,37 @@ On deep_boss / deep_islands / deep_open_slot (steel and aluminium), against the 
 the share of cutting time at >= 90 % F under plan_scurve (up), the count of cutting moves under
 1 mm (down; the ratchet tightened to the new level), plan_scurve time (down), and as always equal
 volume (tests/guards.rs) and every op certified.
+
+## Result (2026-11-24): parked
+
+Built on cam/adaptive-loops (40df387a; analysis base, `FORGE_ADAPTIVE_LOOPS=1`,
+`FORGE_ADAPTIVE_LOOP_R`): two-way pass end -> next start as a Dubins path (arcs of radius R and
+lines, tangent), the start slid forward along its heading (its first steps are air), leaving the
+pass end forwards or reversed (one stop where the pass ended against the cap), every sample an
+allowed centre whose disk is clear or that moves away from material (no front engagement).
+
+| R | transitions looped (deep_boss two-way) | plan_scurve set 1, deep_boss two-way | deep_islands two-way | cutting/link blocks under 1 mm |
+|---|---|---|---|---|
+| none (6b8c43c9) | - | 392.8 s | 1,033.6 s | 52 / 436 |
+| >= r (3 mm) | 20 of 253 | 393.4 s | 1,023.7 s | 56 / 472 |
+| 1 mm | 43 of 109 | 289.6 s, but 6,630 mm3 left uncut (open) | 912.2 s | 43 / 525 |
+| 0.5 mm | 192 of 265 | 360.8 s (-8 %) | 816.5 s (-21 %) | 201 / 1,159 |
+
+Equal volume except as noted; every op certified. The structural limit: a loop of R >= r needs
+about 2R + r (9 mm) of cleared width, and this algorithm's passes lie r/2 apart with their ends
+pressed against the cap or a wall. Loops that fit (R 0.5 mm, a link in air: a control holds
+about 19 mm/s round it at A = 750 mm/s^2) win clearly under plan_scurve but are themselves
+sub-mm blocks. To be judged again under CAM-MACHINE's block-rate / look-ahead model: if they
+still win there they ship, and the micro-move ratchet then counts time lost to block rate
+rather than raw sub-mm counts.
+
+## Long term (not built): passes planned for their transitions
+
+The real fix is in pass generation, not in the links: plan the passes so that each ends where a
+loop of R >= max(r, F^2/A) fits. Two ways that fit this simulation:
+- trochoidal passes in narrow and corner regions (each loop of the trochoid is itself the
+  transition, the engagement held by the loop's pitch), with peels only in open regions;
+- peels that stop a loop's width (2R + r) short of the cap or the wall and turn there, the strip
+  left by the turn taken by the next pass or a ring.
+Either changes what the simulation steers, so the cap, the peel test and the winding test are
+re-derived for it; a redesign, scheduled after islands.

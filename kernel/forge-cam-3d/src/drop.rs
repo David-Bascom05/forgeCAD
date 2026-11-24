@@ -56,6 +56,14 @@ pub trait DropCutter: Sync {
     /// 3D segment a → b (z linear in the xy parameter). With slack ≤ the op's inner tolerance this
     /// is the generator's no-gouge test for a sloped cutting move.
     fn seg3_below(&self, a: [f64; 3], b: [f64; 3], slack: f64) -> bool;
+    /// Whether the CL height is *proven* at most the move's height plus `slack` all along the
+    /// arc from `a` to `to` about `c` (xy; clockwise when `cw`; the height linear in the angle:
+    /// `PMove::Arc`'s form). The default proves nothing (false): a drop-cutter without an arc
+    /// test gets lines only from the fitter.
+    fn arc3_below(&self, a: [f64; 3], to: [f64; 3], c: [f64; 2], cw: bool, slack: f64) -> bool {
+        let _ = (a, to, c, cw, slack);
+        false
+    }
     /// The xy box the part occupies, grown by the tool radius: outside it `drop` is `None`.
     fn extent(&self) -> [[f64; 2]; 2];
 }
