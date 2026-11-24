@@ -640,9 +640,10 @@ pub fn stale(ran: &[Stmt], now: &[Stmt]) -> Vec<String> {
             }
         }
     }
-    // a statement taken out (or suppressed) changes what every later op starts from
+    // a statement taken out (or suppressed) changes what every later op starts from; one
+    // already suppressed in the run changed nothing
     for r in ran {
-        if !now.iter().any(|s| s.name == r.name && !s.suppressed) && r.is_op() {
+        if !r.suppressed && !now.iter().any(|s| s.name == r.name && !s.suppressed) && r.is_op() {
             let su = r.setup.clone().unwrap_or_default();
             let mut after = false;
             for s in now {

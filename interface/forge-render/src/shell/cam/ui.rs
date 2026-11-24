@@ -199,6 +199,36 @@ pub fn num(x: f64) -> String {
 }
 
 /// A time as m:ss.
+/// A choice's words for a person (the Forge word on hover): `passes: "one_way"` reads "One
+/// direction".
+fn choice_words(arg: &str, word: &str) -> String {
+    match (arg, word) {
+        ("passes", "one_way") => "One direction".into(),
+        ("passes", "two_way") => "Both directions".into(),
+        _ => {
+            let w = word.replace('_', " ");
+            let mut c = w.chars();
+            c.next().map_or(String::new(), |f| f.to_uppercase().collect::<String>() + c.as_str())
+        }
+    }
+}
+
+/// A default's value, where its words give one: a leading number ("0 (walls)", "60"), or a
+/// share of the tool's diameter ("half the tool's diameter", "0.4 × the tool's diameter").
+fn default_value(words: &str, tool_d: Option<f64>) -> Option<f64> {
+    let lead: String = words.chars().take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+    if !lead.is_empty() && !words.contains("tool's diameter") {
+        return lead.parse().ok();
+    }
+    let d = tool_d?;
+    if words.starts_with("half the tool's diameter") {
+        return Some(0.5 * d);
+    }
+    let (k, rest) = words.split_once(" \u{d7} ")?;
+    rest.starts_with("the tool's diameter").then_some(())?;
+    Some(k.trim().parse::<f64>().ok()? * d)
+}
+
 fn short_time(s: f64) -> String {
     format!("{}:{:02}", (s / 60.0).floor(), (s % 60.0).floor() as u32)
 }
@@ -1174,6 +1204,22 @@ fn arg_field(
     key: &str,
     places: &mut Places,
 ) {
+    arg_field_tip(ui, t, label, v, hint, "", unit, key, places);
+}
+
+/// As `arg_field`, with `tip` on hover (a default's rule).
+#[allow(clippy::too_many_arguments)]
+fn arg_field_tip(
+    ui: &mut Ui,
+    t: &Theme,
+    label: &str,
+    v: &mut String,
+    hint: &str,
+    tip: &str,
+    unit: &str,
+    key: &str,
+    places: &mut Places,
+) {
     row(ui, t, label, DLG_W, 30.0, |ui| {
         let r = ui.add(
             egui::TextEdit::singleline(v)
@@ -1182,6 +1228,9 @@ fn arg_field(
                 .desired_width(ui.available_width() - 40.0)
                 .margin(vec2(7.0, 5.0)),
         );
+        if !tip.is_empty() {
+            r.clone().on_hover_text(tip);
+        }
         places.push((key.to_string(), r.rect));
         ui.add_space(4.0);
         ui.label(egui::RichText::new(unit).font(sans(12.0)).color(t.ink2));
@@ -1219,6 +1268,11 @@ fn arg_choice(
                     }
                 }
             });
+        // the Forge word it writes, on hover (an op's keyword choices)
+        if let Some(arg) = key.strip_prefix("cam:op:arg:") {
+            let words = if v.is_empty() { "not written (the default)".to_string() } else { format!("{arg}: {v}") };
+            r.response.clone().on_hover_text(format!("Forge text: {words}"));
+        }
         places.push((key.to_string(), r.response.rect));
     });
 }
@@ -1306,21 +1360,37 @@ fn op_dialog(
                 d.name = name;
                 fact(ui, t, "Setup", &d.setup, DLG_W, t.ink);
             }
+            // the chosen tool's diameter: the defaults that follow from it, as numbers
+            let tool_d = w
+                .lib
+                .tools
+                .iter()
+                .find(|x| w.stmt(d.get("tool")).and_then(|s| s.pos(0)).map(super::doc::unquote).as_deref() == Some(x.id.as_str()))
+                .map(|x| x.dc);
             for f in spec.fields.iter().filter(|f| f.tab == tab) {
                 let key = format!("cam:op:arg:{}", f.arg);
                 let mut val = d.get(f.arg).to_string();
-                let hint = if f.required { "required".to_string() } else { format!("default: {}", f.default) };
+                // a default: its value where it is a number (or the tool's diameter gives one),
+                // "default" beside it, the rule on hover
+                let (hint, tip) = if f.required {
+                    ("required".to_string(), String::new())
+                } else {
+                    match default_value(f.default, tool_d) {
+                        Some(v) => (format!("{}  \u{b7} default", num(v)), format!("Default: {}", f.default)),
+                        None => (format!("default: {}", f.default), String::new()),
+                    }
+                };
                 match f.kind {
-                    Kind::Len => arg_field(ui, t, f.label, &mut val, &hint, "mm", &key, places),
-                    Kind::Deg => arg_field(ui, t, f.label, &mut val, &hint, "deg", &key, places),
+                    Kind::Len => arg_field_tip(ui, t, f.label, &mut val, &hint, &tip, "mm", &key, places),
+                    Kind::Deg => arg_field_tip(ui, t, f.label, &mut val, &hint, &tip, "\u{b0}", &key, places),
                     Kind::Z => arg_field(ui, t, f.label, &mut val, &hint, "mm z", &key, places),
                     Kind::Count => arg_field(ui, t, f.label, &mut val, &hint, "", &key, places),
                     Kind::Choice(words) => {
                         let mut items: Vec<(String, String)> = vec![];
                         if !f.required {
-                            items.push((String::new(), format!("default ({})", f.default)));
+                            items.push((String::new(), format!("{} (default)", choice_words(f.arg, f.default))));
                         }
-                        items.extend(words.iter().map(|w| (format!("\"{w}\""), (*w).to_string())));
+                        items.extend(words.iter().map(|w| (format!("\"{w}\""), choice_words(f.arg, w))));
                         arg_choice(ui, t, f.label, &mut val, &items, &key, places);
                     }
                     Kind::Tool => {
@@ -3185,4 +3255,22 @@ fn docked_foot(
             foot(ui, t, key, apply, places)
         })
         .inner
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{choice_words, default_value};
+
+    #[test]
+    fn defaults_read_as_their_values() {
+        assert_eq!(default_value("half the tool's diameter", Some(10.0)), Some(5.0));
+        assert_eq!(default_value("0.4 × the tool's diameter", Some(10.0)), Some(4.0));
+        assert_eq!(default_value("half the tool's diameter", None), None);
+        assert_eq!(default_value("0 (walls)", None), Some(0.0));
+        assert_eq!(default_value("0 (from +x)", None), Some(0.0));
+        assert_eq!(default_value("60", None), Some(60.0));
+        assert_eq!(default_value("the stock's top", Some(10.0)), None);
+        assert_eq!(choice_words("passes", "two_way"), "Both directions");
+        assert_eq!(choice_words("side", "outside"), "Outside");
+    }
 }
