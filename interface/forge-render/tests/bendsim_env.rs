@@ -324,17 +324,39 @@ fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
 /// is framed on its station.
 #[test]
 fn following_keeps_the_handled_part_in_view() {
-    let Some(mut h) = headless() else { return };
-    enter(&mut h, CHANNEL, "follow", "trumpf-trubend-5130", None);
+    for (w, ht) in [(1400.0, 860.0), (1000.0, 700.0)] {
+        follow_through_the_handling(w, ht);
+    }
+}
+
+fn follow_through_the_handling(w: f32, ht: f32) {
+    let Ok(mut h) = Headless::new((w, ht), 1.0) else {
+        return;
+    };
+    h.step();
+    enter(
+        &mut h,
+        CHANNEL,
+        &format!("follow{w}"),
+        "trumpf-trubend-5130",
+        None,
+    );
     h.gui.shell.sheet.bend_sim.as_mut().unwrap().follow = true;
     let mut seen = Vec::new();
-    for t in [0.0, 0.02, 0.05, 0.08, 0.11, 0.15, 0.5] {
+    let mut handled = 0;
+    // through the handling and back to the tools as a recording goes, a frame an instant, then
+    // the bend itself
+    let instants: Vec<(f64, usize)> = (0..=60)
+        .map(|i| (i as f64 * 0.0025, 1))
+        .chain([(0.5, 30)])
+        .collect();
+    for (t, frames) in instants {
         {
             let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
             b.step = 1;
             b.t = t;
         }
-        for _ in 0..3 {
+        for _ in 0..frames {
             h.step();
         }
         // the part's middle, as the view's camera projects it
@@ -353,21 +375,56 @@ fn following_keeps_the_handled_part_in_view() {
         let (cam, size) = h.gui.shell.camera.expect("the view's camera");
         let m = cam.view(size.0, size.1).matrix;
         let mut inside = true;
+        let (mut x0, mut x1, mut y0, mut y1) = (f32::MAX, f32::MIN, f32::MAX, f32::MIN);
         for corner in 0..8 {
             let p = [0, 1, 2].map(|k| if corner >> k & 1 == 0 { lo[k] } else { hi[k] });
             let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
             let w = c(3);
             inside &= w > 0.0 && (c(0) / w).abs() <= 1.0 && (c(1) / w).abs() <= 1.0;
+            (x0, x1) = (x0.min(c(0) / w), x1.max(c(0) / w));
+            (y0, y1) = (y0.min(c(1) / w), y1.max(c(1) / w));
         }
         seen.push((t, inside));
-        if t == 0.05 {
+        // through the handling the part is the subject (the coordinator): it spans at least 40 %
+        // of the view one way, and the eye sees its middle past the press's frame
+        if forge_brake::scene::stage_at(t).0 == forge_brake::scene::Stage::Handle {
+            handled += 1;
+            let span = ((x1 - x0) / 2.0).max((y1 - y0) / 2.0);
+            assert!(
+                span >= 0.4,
+                "{w}x{ht} at t = {t}: the part spans {span:.2} of the view"
+            );
+            let eye = cam.eye();
+            let mid = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
+            for x in bodies
+                .iter()
+                .filter(|x| x.look == forge_brake::scene::Look::Frame)
+            {
+                let (a, c) = x.mesh.bounds().unwrap();
+                let mut t0 = 0f32;
+                let mut t1 = 1f32;
+                for k in 0..3 {
+                    let d = mid[k] - eye[k];
+                    if d.abs() < 1e-9 {
+                        if eye[k] < a[k] || eye[k] > c[k] {
+                            t1 = -1.0;
+                        }
+                        continue;
+                    }
+                    let (u, v) = ((a[k] - eye[k]) / d, (c[k] - eye[k]) / d);
+                    t0 = t0.max(u.min(v));
+                    t1 = t1.min(u.max(v));
+                }
+                assert!(t0 > t1, "{w}x{ht} at t = {t}: {} stands before the part", x.name);
+            }
+        }
+        if (t - 0.05).abs() < 1e-9 && w == 1400.0 {
             shot(&mut h, "13-following-the-handling");
         }
     }
-    assert!(
-        seen.iter().all(|s| s.1),
-        "the whole part in view at every instant: {seen:?}"
-    );
+    assert!(handled > 10, "{w}x{ht}: {handled} instants of the handling");
+    let out: Vec<_> = seen.iter().filter(|s| !s.1).collect();
+    assert!(out.is_empty(), "{w}x{ht}: the part not wholly in view at {out:?}");
 }
 
 /// No flicker (David): the eye swept round the second bend through the views where the first
