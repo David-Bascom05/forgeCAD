@@ -343,22 +343,29 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut WorkholdingUi) {
         );
         return;
     };
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(&r.name).font(semi(14.0)).color(t.ink));
-        ui.add_space(6.0);
-        ui.label(RichText::new(r.kind.name()).font(sans(11.0)).color(t.ink2));
-    });
+    super::lib_form::title(
+        ui,
+        t,
+        super::lib_form::product_name(&r.vendor, &r.product).as_deref(),
+        &r.name,
+        &r.kind.name().replace('_', " "),
+    );
     let from = match &st.origin {
         Some((l, f)) => format!("{} level · {f}", l.name()),
         None => "not saved yet".into(),
     };
     ui.label(RichText::new(from).font(sans(10.5)).color(t.ink2));
-    if !r.vendor.is_empty() || !r.product.is_empty() {
-        ui.label(
-            RichText::new(format!("{} {}", r.vendor, r.product))
-                .font(sans(11.0))
-                .color(t.ink2),
-        );
+    // the product's detail after its name (part numbers, what it is made by)
+    if let Some((_, rest)) = r.product.split_once(" (") {
+        ui.add(
+            egui::Label::new(
+                RichText::new(rest.trim_end_matches(')'))
+                    .font(sans(11.0))
+                    .color(t.ink2),
+            )
+            .truncate(),
+        )
+        .on_hover_text(&r.product);
     }
     super::lib_form::legend(ui, t);
     ui.separator();

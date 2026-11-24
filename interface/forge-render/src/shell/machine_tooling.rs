@@ -346,15 +346,12 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut ToolingUi) {
         );
         return;
     };
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(&cur.id).font(semi(14.0)).color(t.ink));
-        ui.add_space(8.0);
-        ui.label(
-            RichText::new(st.word.replace('_', " "))
-                .font(sans(11.0))
-                .color(t.ink2),
-        );
-    });
+    let word = |k: &str| match st.table.get(k) {
+        Some(Val::Str(s)) => s.clone(),
+        _ => String::new(),
+    };
+    let name = lf::product_name(&word("vendor"), &word("product_id"));
+    lf::title(ui, t, name.as_deref(), &cur.id, &st.word.replace('_', " "));
     let from = match &st.origin {
         Some((l, f)) => format!("{} level · {f}", l.name()),
         None => "not saved yet".into(),
@@ -451,7 +448,15 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut ToolingUi) {
                                     }
                                 }
                                 Some(Val::Str(s0)) => {
-                                    if let Some(s) = lf::text_cell(ui, t, ("tooling:text", k), &s0, 140.0) {
+                                    let word = (k == "coating").then(|| lf::coating_word(&s0)).flatten();
+                                    if let Some(s) = lf::text_cell_as(
+                                        ui,
+                                        t,
+                                        ("tooling:text", k),
+                                        &s0,
+                                        word.as_deref(),
+                                        140.0,
+                                    ) {
                                         edit = Some((k.clone(), Val::Str(s)));
                                     }
                                 }

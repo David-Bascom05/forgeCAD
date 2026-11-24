@@ -174,6 +174,37 @@ pub fn unknown_slot(ui: &mut Ui, t: &Theme, w: f32) -> bool {
         .clicked()
 }
 
+/// A record's heading: its product name ("Trumpf TruBend 5085") with the id and kind under it,
+/// or, with no name, the id. A long name is cut with "…" and shown whole on hover.
+pub fn title(ui: &mut Ui, t: &Theme, name: Option<&str>, id: &str, kind: &str) {
+    match name.map(str::trim).filter(|n| !n.is_empty()) {
+        Some(n) => {
+            ui.add(egui::Label::new(RichText::new(n).font(semi(14.0)).color(t.ink)).truncate())
+                .on_hover_text(n);
+            ui.label(
+                RichText::new(format!("{id} · {kind}"))
+                    .font(sans(11.0))
+                    .color(t.ink2),
+            );
+        }
+        None => {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(id).font(semi(14.0)).color(t.ink));
+                ui.add_space(6.0);
+                ui.label(RichText::new(kind).font(sans(11.0)).color(t.ink2));
+            });
+        }
+    }
+}
+
+/// "Maker product": the product's words up to its first parenthesis (the rest is detail).
+pub fn product_name(maker: &str, product: &str) -> Option<String> {
+    let p = product.split(" (").next().unwrap_or(product).trim();
+    let s = format!("{} {p}", maker.trim());
+    let s = s.trim();
+    (!s.is_empty()).then(|| s.to_string())
+}
+
 /// A value the record does not publish but the view draws (a conflict's first cited value, an
 /// estimate by its rule): shown as drawn, in its chip's colour, the reason on hover; a click takes
 /// it as the user's own value. Lengths in the document's units.
@@ -591,6 +622,35 @@ pub fn text_cell(
     value: &str,
     w: f32,
 ) -> Option<String> {
+    text_cell_as(ui, t, salt, value, None, w)
+}
+
+/// A maker's coating code in words, the code kept ("Uncoated (UN)"); a symbol the maker does not
+/// name says so. None: shown as written.
+pub fn coating_word(code: &str) -> Option<String> {
+    let w = match code.to_ascii_uppercase().as_str() {
+        "UN" => "Uncoated",
+        "BRIGHT" => "Bright (uncoated)",
+        "TIALN" => "TiAlN",
+        "ALTIN" => "AlTiN",
+        "TICN" => "TiCN",
+        "TIN" => "TiN",
+        "APLUS" => "Aplus",
+        "F" | "S" => return Some(format!("\"{code}\" (the maker's symbol, not named)")),
+        _ => return None,
+    };
+    (w != code).then(|| format!("{w} ({code})"))
+}
+
+/// `text_cell` showing `shown` in place of the value while not editing (the value on hover).
+pub fn text_cell_as(
+    ui: &mut Ui,
+    t: &Theme,
+    salt: impl std::hash::Hash + std::fmt::Debug,
+    value: &str,
+    shown: Option<&str>,
+    w: f32,
+) -> Option<String> {
     let id = ui.make_persistent_id(salt);
     let editing = ui.data(|d| d.get_temp::<String>(id));
     if let Some(mut buf) = editing {
@@ -628,7 +688,11 @@ pub fn text_cell(
                     start(ui);
                 }
             } else {
-                let shown = if value.is_empty() { "(none)" } else { value };
+                let shown = match shown {
+                    Some(s) => s,
+                    None if value.is_empty() => "(none)",
+                    None => value,
+                };
                 let r = ui
                     .add(
                         egui::Label::new(RichText::new(shown).font(sans(12.0)).color(t.ink))
@@ -643,4 +707,31 @@ pub fn text_cell(
         },
     );
     None
+}
+
+#[cfg(test)]
+mod words_tests {
+    use super::*;
+
+    #[test]
+    fn makers_codes_and_names_read_as_words() {
+        assert_eq!(coating_word("UN").as_deref(), Some("Uncoated (UN)"));
+        assert_eq!(coating_word("TIALN").as_deref(), Some("TiAlN (TIALN)"));
+        assert_eq!(coating_word("TiAlN"), None);
+        assert!(coating_word("F").unwrap().contains("not named"));
+        assert_eq!(coating_word("C3"), None);
+        assert_eq!(
+            product_name(
+                "Haas",
+                "6 in single-station CrossOver vise, 9 in opening (PN 05-0404, Kurt)"
+            )
+            .as_deref(),
+            Some("Haas 6 in single-station CrossOver vise, 9 in opening")
+        );
+        assert_eq!(
+            product_name("Trumpf", "TruBend 5085").as_deref(),
+            Some("Trumpf TruBend 5085")
+        );
+        assert_eq!(product_name("", ""), None);
+    }
 }

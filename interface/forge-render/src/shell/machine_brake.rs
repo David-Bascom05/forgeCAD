@@ -893,11 +893,12 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
         .iter()
         .find(|(w, _)| *w == st.word)
         .map_or(st.word, |(_, t)| *t);
-    ui.horizontal(|ui| {
-        ui.label(RichText::new(&cur.id).font(semi(14.0)).color(t.ink));
-        ui.add_space(8.0);
-        ui.label(RichText::new(title).font(sans(11.0)).color(t.ink2));
-    });
+    let word = |k: &str| match get(&st.table, k) {
+        Some(Item::Str(s)) => s.clone(),
+        _ => String::new(),
+    };
+    let name = lf::product_name(&word("maker"), &word("model"));
+    lf::title(ui, t, name.as_deref(), &cur.id, title);
     let from = match &st.origin {
         Some((l, f)) => format!("{} level · {f}", l.name()),
         None => "not saved yet".into(),
