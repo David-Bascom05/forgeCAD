@@ -1010,6 +1010,11 @@ kernel/forge-machine/parts/smart/smart-sv6/head.fg#1 agree
 kernel/forge-machine/parts/smart/smart-sv6/saddle.fg#1 agree
 kernel/forge-machine/parts/smart/smart-sv6/table.fg#1 agree
 kernel/forge-machine/parts/spinner/spinner-tc600/headstock.fg#1 agree
+kernel/forge-machine/parts/spinner/spinner-u5-620/bed.fg#1 agree
+kernel/forge-machine/parts/spinner/spinner-u5-620/cradle.fg#1 agree
+kernel/forge-machine/parts/spinner/spinner-u5-620/head.fg#1 agree
+kernel/forge-machine/parts/spinner/spinner-u5-620/support-l.fg#1 agree
+kernel/forge-machine/parts/spinner/spinner-u5-620/support-r.fg#1 agree
 kernel/forge-machine/parts/spinner/spinner-u5-630/bed.fg#1 agree
 kernel/forge-machine/parts/spinner/spinner-u5-630/cradle.fg#1 agree
 kernel/forge-machine/parts/spinner/spinner-u5-630/head.fg#1 agree
@@ -1732,8 +1737,14 @@ taper/00296 agree
 taper/00297 refused_ok
 taper/00298 agree
 taper/00299 refused_ok
+verify/forge-cam-quality/parts/bilek/bilek.fg#1 agree
+verify/forge-cam-quality/parts/bilek/bilek.fg#3 agree
 verify/forge-cam-quality/parts/boss.fg#1 agree
 verify/forge-cam-quality/parts/boss.fg#3 agree
+verify/forge-cam-quality/parts/deep_islands.fg#1 agree
+verify/forge-cam-quality/parts/deep_islands.fg#4 agree
+verify/forge-cam-quality/parts/deep_open_slot.fg#1 agree
+verify/forge-cam-quality/parts/deep_open_slot.fg#3 agree
 verify/forge-cam-quality/parts/deep_slot.fg#1 agree
 verify/forge-cam-quality/parts/deep_slot.fg#3 agree
 verify/forge-cam-quality/parts/open_step.fg#1 agree

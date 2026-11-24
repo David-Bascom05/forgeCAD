@@ -413,7 +413,7 @@ impl DrawingEnv {
             Some(b) => {
                 forge_lang::drawing::block::read(&self.src, &name_of(&self.path), b).unwrap_or_default()
             }
-            None => self.doc(),
+            None => doc::read(&self.src),
         }
     }
 
@@ -422,6 +422,16 @@ impl DrawingEnv {
     pub fn reload(&mut self, src: String) {
         self.src = src;
         self.regen();
+    }
+
+    /// Made again from its file as it is now, and the files it names: one that was not there
+    /// when it was made may be now (a page's project files come after its first frame; a part
+    /// saved beside its drawing). Nothing watched a file that was missing.
+    pub fn rebuild(&mut self) {
+        match forge_dirs::fs::read_to_string(&self.path) {
+            Ok(src) => self.reload(src),
+            Err(_) => self.regen(),
+        }
     }
 
     fn regen(&mut self) {

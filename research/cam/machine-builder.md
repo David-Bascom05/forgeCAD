@@ -125,6 +125,10 @@ part's renderer and scene, restore on close).
   sets a box to its bounds, (c) a STEP file: writes `parts/NAME/BODY.fg` = `import("BODY.step")`
   and fits the envelope, (d) a mesh (STL/OBJ): envelope fitted from its bounds; the mesh shown
   only once F5 exists. The part-in-envelope check runs on save and on demand.
+- **Models** (the user's own files, e.g. a maker's STEP; §5 "Attached models"): "Attach model…"
+  per body, or one for the whole machine; drawn in the body's place, placed on its envelope, nudged
+  (units, quarter turns, angles, move), checked against the envelope. Never in a project, never
+  fetched, never committed.
 - **Jog**: one slider per joint over its range (the value box beside it); the scene's placements
   follow `kin::pose`. Live self-collision at the jogged pose: `collide::check_pose` on every pair
   each change (cheap). "Check travel" runs §2's check in the background (plat::spawn; synchronous
@@ -153,6 +157,29 @@ part's renderer and scene, restore on close).
 - Body geometry: an attached STEP is copied to `parts/NAME/` with a `BODY.fg` that imports it;
   the envelope is fitted to the part's tessellated bounds + 0.05 mm (chord 0.01 mm). An STL gives
   the envelope only (its display waits on F5).
+- Attached models (forge_machine_builder::models, src/machine_model.rs; tests/machine_models.rs).
+  A maker's model may be committed only where its licence explicitly permits redistribution
+  (tools/ci/model-licences.py; the licence findings per maker, 2026-11-24: none does), so the
+  user brings their own:
+  - Kept in the user's library only: `<config>/forgecad/cam/machines/models/<machine>/` holds a
+    copy of each file and `models.toml` (body or whole machine, file, `from`, scale, rotate,
+    offset). Nothing goes into a project; nothing is downloaded.
+  - Read: STEP and IGES through forge-step (meshed as a file's body is), STL as it is. Parasolid
+    (X_T/X_B) and CAD programs' own formats are refused with "save it as STEP (or STL)".
+  - Placed: `p ↦ Rz·Ry·Rx·(scale·p) + offset` into the base frame at home, then by the body's
+    link at the jogged pose. On attach it sits centred over the body's envelope, its bottom on the
+    envelope's bottom; a file 25.4 or 1000 times too small for the envelope (within 2.5x) is read
+    as inches or metres, and the message says so. Quarter turns and "Place on envelope" re-place
+    it; angles and the move are free.
+  - Checked: every point of the model (up to 200 000, spread evenly) against the body's
+    primitives, 0.1 mm slack: "Inside the collision envelope", or "Sticks out by up to D mm (n of
+    N points). Collisions there are not found." with "Fit envelope to model" (one box around it +
+    0.05 mm, the value then the user's). Collisions are still found on the envelope only.
+  - Shown: the body is drawn as the model (a whole-machine model as one piece on the base, not
+    moving with the axes); on the Bodies tab the chosen body's envelope is dashed over the view
+    (the model would hide it) and the farthest point out is marked with its distance.
+  - The Part file row takes a forgecad `.fg` only now: a STEP or STL typed there is pointed to
+    the Model row, so a maker's file is not copied beside a project's machine.
 - Page: `fc.app_machine(cmd)` (open, pick, template, clone, jog, tab, check, save) drives the same
   code; the answer is the state's status line.
 - Found while building it: egui's Slider rounds the value it shows into the variable; the jog

@@ -376,6 +376,9 @@ pub struct Eval<'s> {
     scopes: Vec<Scope>,
     pub b: Builder,
     pub feats: Vec<FeatInfo>,
+    /// Each plain hole's ISO 286 hole class (`hole(.., d:, fit: "H7")`), by the hole's id: what
+    /// CAM reams to. Not part of the kernel's hole (it changes no geometry).
+    pub hole_fits: Vec<(String, &'static str)>,
     /// Each id made so far and where: a second is DuplicateId. FNV like `Scope`; nothing
     /// iterates it.
     ids: HashMap<String, Span, std::hash::BuildHasherDefault<NameHasher>>,
@@ -524,6 +527,7 @@ impl<'s> Eval<'s> {
             scopes: vec![Scope::default()],
             b: Builder::new(building, cache),
             feats: vec![],
+            hole_fits: Vec::new(),
             ids: HashMap::default(),
             hids: HashMap::default(),
             errors: vec![],
@@ -2484,6 +2488,9 @@ impl<'s> Eval<'s> {
         let last = self.feats.last_mut().expect("pushed");
         last.frame = Some(sk.borrow().frame);
         last.reads.extend(reads);
+        // kept for the app to free between builds (`forge_keep`; a sketch with a named entity is
+        // an Rc cycle, and a run frees nothing)
+        forge_keep::keep(sk.clone());
         Ok(Value::Sketch(sk))
     }
 

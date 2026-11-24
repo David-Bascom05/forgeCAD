@@ -68,6 +68,9 @@ Don't:
   whole view over a 50 mm tool.
 - Animated subjects (bend, toolpath): the camera does not cut per step; it holds a frame that
   contains the whole motion envelope; "Follow" is opt-in.
+- Subjects the user moves by hand (driving a robot joint, jogging a machine axis): frame the
+  entry pose and keep the camera still while they drag; F / Fit All re-fits to the current pose.
+  The motion-envelope rule above is for playback the app animates, not for direct manipulation.
 - Helper: `frame::frame(bounds, view_rect, Framing::default(), obstacles)` (section 12). No environment computes its
   own fit distance.
 
@@ -206,6 +209,9 @@ spellings per row: `UNKNOWN`, `set`, `not given`, `published ?`).
 
 ## 9. Keyboard and undo
 
+- Selection is always visible: a picked face, edge or body is tinted in the selection colour
+  (fill and a brighter edge) for as long as it is selected, not only on hover; geometry in front
+  wins a pick over origin planes and helpers behind it.
 - Every environment: Esc = clear selection / close popover (never exits the environment);
   Enter in a field = commit; Tab / Shift-Tab move through the property sheet; F = fit subject;
   Space = play/pause for anything with a transport; ←/→ = previous/next step; Delete = delete the

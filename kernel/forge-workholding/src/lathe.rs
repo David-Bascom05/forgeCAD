@@ -266,6 +266,51 @@ pub fn steady_rest(name: &str, rec: &Record, bar_d: f64, z: f64) -> Result<Spin,
     })
 }
 
+impl Spin {
+    /// Each ring as cylinders about the spindle axis (+z, the part frame: the chuck face datum),
+    /// for a machine simulation that takes boxes and cylinders: the ring's z span cut at its
+    /// vertices, each slab the cylinder of the ring's largest radius over it (a superset of the
+    /// swept ring; it fills the bore, which the bar or the part occupies anyway).
+    pub fn cylinders(&self) -> Vec<(String, Vec<crate::Prim>)> {
+        self.rings
+            .iter()
+            .map(|r| {
+                let mut zs: Vec<f64> = r.poly.iter().map(|p| p[1]).collect();
+                zs.sort_by(f64::total_cmp);
+                zs.dedup();
+                let mut prims = Vec::new();
+                for w in zs.windows(2) {
+                    let (z0, z1) = (w[0], w[1]);
+                    // the largest radius over [z0, z1]: at a vertex or where an edge crosses
+                    // the slab's ends (edges are straight, so the max is at an end of each
+                    // edge's part inside the slab)
+                    let mut rmax: f64 = 0.0;
+                    let n = r.poly.len();
+                    for i in 0..n {
+                        let (a, b) = (r.poly[i], r.poly[(i + 1) % n]);
+                        let (lo, hi) = (a[1].min(b[1]), a[1].max(b[1]));
+                        if hi < z0 || lo > z1 {
+                            continue;
+                        }
+                        for z in [z0.max(lo), z1.min(hi)] {
+                            let rho = if b[1] == a[1] {
+                                a[0].max(b[0])
+                            } else {
+                                a[0] + (b[0] - a[0]) * (z - a[1]) / (b[1] - a[1])
+                            };
+                            rmax = rmax.max(rho);
+                        }
+                    }
+                    if rmax > 0.0 && z1 > z0 {
+                        prims.push(crate::Prim::post(0.0, 0.0, rmax, z0, z1));
+                    }
+                }
+                (format!("{}/{}", self.name, r.name), prims)
+            })
+            .collect()
+    }
+}
+
 /// Distance from a point to a polygon's boundary, negative inside.
 fn signed_dist(poly: &[[f64; 2]], p: [f64; 2]) -> f64 {
     let n = poly.len();
@@ -382,6 +427,24 @@ mod tests {
         let p = chuck_params(l.get("standin-chuck-200").unwrap(), 60.0, 0.0, 25.0).unwrap();
         assert_eq!((p.jaw_height, p.body_r, p.body_len), (35.0, 100.0, 80.0));
         assert!(chuck_params(l.get("kitagawa-b208").unwrap(), 60.0, 0.0, 25.0).is_err());
+    }
+
+    #[test]
+    fn rings_as_cylinders_hold_the_rings() {
+        let l = crate::Library::builtin();
+        let c = chuck("c", l.get("standin-chuck-200").unwrap(), 60.0, 0.0, 25.0).unwrap();
+        let e = centre("t", l.get("standin-live-centre").unwrap(), 200.0, 2.0, 50.0).unwrap();
+        for s in [c, e] {
+            for ((_, cyl), ring) in s.cylinders().iter().zip(&s.rings) {
+                for p in &ring.poly {
+                    let out = cyl
+                        .iter()
+                        .map(|q| q.outside([p[0], 0.0, p[1]]))
+                        .fold(f64::INFINITY, f64::min);
+                    assert!(out <= 1e-9, "{} {p:?}", ring.name);
+                }
+            }
+        }
     }
 
     #[test]

@@ -407,8 +407,10 @@ fn search(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
         Some(r) if r != SurfaceSurface::NotAnalytic => r,
         _ => match forge_geom::intcurve::trace(a, b, region) {
             Some(cs) if cs.is_empty() => SurfaceSurface::Empty,
+            // two rounds touching where their springs cross: the trace mended there (forge-geom node.rs)
             Some(cs) => SurfaceSurface::Curves(
-                cs.into_iter()
+                forge_geom::node::mend(a, b, cs)
+                    .into_iter()
                     .map(|c| (Curve::Intersection(std::sync::Arc::new(c)), Contact::Crossing))
                     .collect(),
             ),
