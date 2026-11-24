@@ -350,6 +350,8 @@ pub struct Holder {
     pub vendor: String,
     pub product_id: String,
     pub taken: String,
+    /// The collet nut this holder takes (a [[collet_nut]] id), when known.
+    pub nut: Option<String>,
     /// A real maker's product: every value cited (cite.rs).
     pub real: bool,
     pub cites: Vec<Cite>,
@@ -357,6 +359,7 @@ pub struct Holder {
 
 /// Fields a holder may cite beyond the required ones.
 const HOLDER_EXTRA: &[&str] = &[
+    "nut",
     "max_rpm",
     "balance",
     "coolant",
@@ -430,6 +433,7 @@ impl Holder {
             vendor: text(t, "vendor").unwrap_or("").to_string(),
             product_id: text(t, "product_id").unwrap_or("").to_string(),
             taken: text(t, "taken").unwrap_or("").to_string(),
+            nut: text(t, "nut").map(str::to_string),
             gauge_length: need(t, &rec, "gauge_length")?,
             interface: text(t, "interface").unwrap_or("").to_string(),
             clamp: text(t, "clamp").unwrap_or("").to_string(),

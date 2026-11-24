@@ -184,9 +184,18 @@ pub fn derive(
     rec.map_err(DeriveError::Bad)
 }
 
+/// How a finding stands: an error is a record that cannot be right; a warning is one the check
+/// could not settle (it says what would settle it).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Severity {
+    Error,
+    Warning,
+}
+
 /// What a check found: the field, what it measured, the limit it broke, and the fix.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Finding {
+    pub severity: Severity,
     pub path: String,
     pub measured: f64,
     pub limit: f64,
@@ -201,6 +210,7 @@ pub fn check(lib: &Library, r: &Record) -> Vec<Finding> {
         Record::Tool(t) => {
             if t.re > t.dc / 2.0 + 1e-12 {
                 out.push(Finding {
+                    severity: Severity::Error,
                     path: "re".into(),
                     measured: t.re,
                     limit: t.dc / 2.0,
@@ -209,6 +219,7 @@ pub fn check(lib: &Library, r: &Record) -> Vec<Finding> {
             }
             if t.tip_d > 0.0 && t.tip_d >= t.dc {
                 out.push(Finding {
+                    severity: Severity::Error,
                     path: "tip_d".into(),
                     measured: t.tip_d,
                     limit: t.dc,
@@ -217,20 +228,54 @@ pub fn check(lib: &Library, r: &Record) -> Vec<Finding> {
             }
         }
         Record::Holder(h) => {
-            // the nose ring must cover the collet nut of its system (the nut is what stands out)
-            let nut = lib
-                .collet_nuts
-                .iter()
-                .filter(|n| n.system.eq_ignore_ascii_case(&h.clamp))
-                .map(|n| n.od)
-                .fold(f64::NAN, f64::max);
-            if nut.is_finite() && h.profile[0][1] + 1e-9 < nut {
-                out.push(Finding {
+            // the nose ring must cover the collet nut (the nut is what stands out): the holder's
+            // own nut when it names one; otherwise the largest nut of its system, as a warning
+            let own = h
+                .nut
+                .as_ref()
+                .map(|id| lib.collet_nuts.iter().find(|n| &n.id == id));
+            match own {
+                Some(None) => out.push(Finding {
+                    severity: Severity::Error,
+                    path: "nut".into(),
+                    measured: f64::NAN,
+                    limit: f64::NAN,
+                    fix: format!(
+                        "nut `{}` is not a [[collet_nut]] in the library",
+                        h.nut.as_deref().unwrap_or("")
+                    ),
+                }),
+                Some(Some(n)) if h.profile[0][1] + 1e-9 < n.od => out.push(Finding {
+                    severity: Severity::Error,
                     path: "profile".into(),
                     measured: h.profile[0][1],
-                    limit: nut,
-                    fix: format!("the nose ring is smaller than the largest {} nut in the library: widen it to the nut's OD", h.clamp),
-                });
+                    limit: n.od,
+                    fix: format!(
+                        "the nose ring is smaller than its nut `{}`: widen it to the nut's OD",
+                        n.id
+                    ),
+                }),
+                Some(Some(_)) => {}
+                None => {
+                    let nut = lib
+                        .collet_nuts
+                        .iter()
+                        .filter(|n| n.system.eq_ignore_ascii_case(&h.clamp))
+                        .map(|n| n.od)
+                        .fold(f64::NAN, f64::max);
+                    if nut.is_finite() && h.profile[0][1] + 1e-9 < nut {
+                        out.push(Finding {
+                            severity: Severity::Warning,
+                            path: "profile".into(),
+                            measured: h.profile[0][1],
+                            limit: nut,
+                            fix: format!(
+                                "not checked against this holder's nut: give `nut` (the largest {} nut in the library is wider than the nose ring)",
+                                h.clamp
+                            ),
+                        });
+                    }
+                }
             }
         }
         Record::Collet(c) => {
@@ -238,6 +283,7 @@ pub fn check(lib: &Library, r: &Record) -> Vec<Finding> {
                 && !(lo <= c.bore + 1e-9 && c.bore <= hi + 1e-9)
             {
                 out.push(Finding {
+                    severity: Severity::Error,
                     path: "clamp".into(),
                     measured: c.bore,
                     limit: if c.bore < lo { lo } else { hi },
@@ -255,6 +301,7 @@ pub fn check_fit(tool: &Tool, collet: &Collet) -> Vec<Finding> {
     let [lo, hi] = collet.clamp.unwrap_or([collet.bore, collet.bore]);
     if tool.dcon + 1e-9 < lo || tool.dcon > hi + 1e-9 {
         vec![Finding {
+            severity: Severity::Error,
             path: "dcon".into(),
             measured: tool.dcon,
             limit: if tool.dcon < lo { lo } else { hi },
@@ -272,6 +319,7 @@ pub fn check_fit(tool: &Tool, collet: &Collet) -> Vec<Finding> {
 pub fn check_stickout(tool: &Tool, stickout: f64) -> Vec<Finding> {
     if stickout + 1e-9 < tool.lcf {
         vec![Finding {
+            severity: Severity::Error,
             path: "stickout".into(),
             measured: stickout,
             limit: tool.lcf,
