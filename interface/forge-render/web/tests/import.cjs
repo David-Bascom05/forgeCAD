@@ -1,5 +1,6 @@
 // File > Open > From this computer in the page: a DWG drawing opens in its environment; a STEP
-// model (read by a part, nothing to open itself) is added to the project and the status says so.
+// model (read by a part, nothing to open itself) is added to the project and the status says so
+// ("Added NAME to the project").
 // Before: a STEP file was added without a word (the dialog closed, nothing changed on screen).
 //   node web/tests/import.cjs OUT   (OUT: web/build.sh's output)
 const assert = require("node:assert/strict");
@@ -36,8 +37,8 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     // a STEP model: added, and said
     const step = path.join(t.repo, "examples/rack18u/asm/order/RACK-322_latch_base.step");
     await pick(step);
-    let s = await t.until(p, (s) => /^Added to the project: /.test(s.status), "the STEP file said added", 60000);
-    assert.equal(s.status, "Added to the project: RACK-322_latch_base.step");
+    let s = await t.until(p, (s) => /^Added .* to the project$/.test(s.status), "the STEP file said added", 60000);
+    assert.equal(s.status, "Added RACK-322_latch_base.step to the project");
     await p.evaluate(() => window.forgecad.settled());
     assert.ok(fs.existsSync(path.join(dir, "RACK-322_latch_base.step")), "the STEP file not kept with the project");
     console.log(`ok - a STEP file: ${s.status}`);
