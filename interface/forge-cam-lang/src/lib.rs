@@ -2267,7 +2267,9 @@ impl Cam {
                         let regions = match get_str(a, "region", Some("outside"))?.as_str() {
                             "outside" => {
                                 let islands = outer_or_inner(&sec, true)?;
-                                let g = d;
+                                // D + 1 past the stock: room to park the tool beside it, where
+                                // the one-way passes start
+                                let g = d + 1.0;
                                 let q = [
                                     p2(s.stock.min[0] - g, s.stock.min[1] - g),
                                     p2(s.stock.max[0] + g, s.stock.min[1] - g),
@@ -2287,7 +2289,13 @@ impl Cam {
                                 }
                                 vec![Region { loops }]
                             }
-                            "pockets" => pockets_of(&sec)?,
+                            // closed pockets: one-direction peels cannot leave an entry hole
+                            // under the cap, and anything that winds round (a spiral) is what
+                            // fto-adaptive.md §8 rules out; offset pockets with feeds from
+                            // engagement are the design-around there (§8 (a))
+                            "pockets" => {
+                                return Err("adaptive: region \"pockets\" is not offered (fto-adaptive.md §8): use pocket(SETUP, from:, to:, ..), whose feeds follow the engagement".into());
+                            }
                             o => return Err(format!("adaptive: region \"{o}\": \"outside\" or \"pockets\"")),
                         };
                         let prm = forge_cam::adaptive::Adaptive {
@@ -2295,6 +2303,7 @@ impl Cam {
                             step: get_num(a, "step_length", Some(0.0))?,
                             leave: get_num(a, "leave", Some(0.0))?,
                             wall_pass: true,
+                            sweep: get_num(a, "sweep", Some(0.0))?,
                         };
                         let mut paths = vec![];
                         for rg in &regions {

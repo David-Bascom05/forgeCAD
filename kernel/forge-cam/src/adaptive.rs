@@ -23,7 +23,14 @@
 //!    the simulation's steps. Never the two-tangent-arc pass into a three-sided region (Truemill
 //!    US 7,577,490).
 //!
-//! The test `single_capped_target` asserts rule 1's behaviour; keep it passing.
+//! Since fto-adaptive.md §8 (TOOLPATH-RESEARCH, 2026-11-24): the step rule alone, in a closed
+//! region, makes an outward spiral, which SolidCAM's '645/'861/'445 machine claims may read on
+//! however it was computed. So every pass is a one-direction "peel" (§8 (b)): its heading stays
+//! within `PEEL` of one sweep direction, it never winds round a centre or an island, and it ends
+//! at the boundary or the cap; the next starts by the fixed link rule.
+//!
+//! The tests `single_capped_target` and `passes_peel_one_way` assert rule 1 and the peel; keep
+//! them passing.
 //!
 //! Certification: the path is posted and certified like every other (G1–G3 on the posted
 //! path). What the op claims cleared (its voids, for the in-process stock and G4) is not taken
@@ -49,7 +56,13 @@ pub struct Adaptive {
     pub leave: f64,
     /// A plain offset pass along the walls at the end of each level.
     pub wall_pass: bool,
+    /// The sweep direction, degrees from +x: every pass heads within `PEEL` of it (one-direction
+    /// "peel" passes, fto-adaptive.md §8 (b): a pass never winds round a centre).
+    pub sweep: f64,
 }
+
+/// The most a pass's heading may turn from the sweep direction (either way).
+pub const PEEL: f64 = 75.0;
 
 /// The op's result: the path, and per level the cells it provably cleared (floor z).
 pub struct AdaptiveOut {
@@ -258,6 +271,11 @@ pub fn adaptive(
         eps: 1e-3,
     };
     let cap = prm.phi_max.clamp(5.0, 180.0).to_radians();
+    let sweep_dir = {
+        let (sn, cs) = dmath::sin_cos(prm.sweep.to_radians());
+        [cs, sn]
+    };
+    let peel_cos = dmath::cos(PEEL.to_radians());
     let mut mv: Vec<PMove> = Vec::new();
     let mut voids = Vec::new();
     // where the tool is: (x, y, z)
@@ -266,14 +284,16 @@ pub fn adaptive(
     let mut above = sp.top;
     for z in levels(sp.top, sp.bottom, sp.step) {
         let mut moves_at_level: Vec<([f64; 3], [f64; 3])> = Vec::new();
-        // candidate starts: allowed centres on a grid of r/2
-        let g = 0.5 * f.r;
+        // candidate starts: allowed centres on a grid of r/4 (fine enough to find the band beside
+        // the stock that is clear of it yet inside the region)
+        let g = 0.25 * f.r;
         let (lo, hi) = (ip.min, ip.max);
         let mut cands: Vec<[f64; 2]> = Vec::new();
-        let mut y = lo[1] - f.r;
-        while y <= hi[1] + f.r {
-            let mut x = lo[0] - f.r;
-            while x <= hi[0] + f.r {
+        // out to 2r past the stock (clear's region reaches D past it): starts in the air beside it
+        let mut y = lo[1] - 2.0 * f.r;
+        while y <= hi[1] + 2.0 * f.r {
+            let mut x = lo[0] - 2.0 * f.r;
+            while x <= hi[0] + 2.0 * f.r {
                 if f.ok(x, y) {
                     cands.push([x, y]);
                 }
@@ -282,6 +302,8 @@ pub fn adaptive(
             y += g;
         }
         let mut entered = false;
+        // first, a start from the open side (cleared air next to material ahead), no entry
+        let mut open_try = true;
         let mut guard = 0usize;
         let mut small = 0usize;
         // entries at this level: a new one where the passes stop with material left
@@ -298,7 +320,7 @@ pub fn adaptive(
                 .map(|p| [p[0], p[1]])
                 .unwrap_or([0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1])]);
             let mut best: Option<([f64; 2], f64)> = None;
-            if entered {
+            if entered || open_try {
                 for &p in &cands {
                     if f.disk_has_material(p[0], p[1], z) {
                         continue;
@@ -309,7 +331,9 @@ pub fn adaptive(
                         // past the disk by a grid spacing: the next candidate out may already
                         // overlap material
                         let rr = f.r + g + 2.0 * f.map.h;
-                        f.material(p[0] + rr * d[0], p[1] + rr * d[1], z)
+                        // ahead along the sweep: a pass from here meets it going forward
+                        d[0] * sweep_dir[0] + d[1] * sweep_dir[1] > 0.0
+                            && f.material(p[0] + rr * d[0], p[1] + rr * d[1], z)
                     });
                     if !near {
                         continue;
@@ -466,6 +490,11 @@ pub fn adaptive(
                 continue;
             }
             let Some((p, _)) = best else {
+                if open_try && !entered {
+                    // no open side here: a helix entry
+                    open_try = false;
+                    continue;
+                }
                 // no start next to material: a new entry if material is left (at most 20)
                 entries += 1;
                 if entries >= 20 {
@@ -476,7 +505,11 @@ pub fn adaptive(
                 continue;
             };
             // the link, by the fixed rule
-            let cur = at.expect("entered");
+            entered = true;
+            if start.is_none() {
+                start = Some([p[0], p[1], h.clear]);
+            }
+            let cur = at.unwrap_or([p[0], p[1], h.clear]);
             let target = [p[0], p[1], z];
             if cur[2] == z && f.link_clear([cur[0], cur[1]], p, z) {
                 mv.push(PMove::Line {
@@ -500,21 +533,9 @@ pub fn adaptive(
                 });
             }
             moves_at_level.push((target, target));
-            // the heading: material on the right (climb with M03)
-            let mut m = [0.0, 0.0];
-            for k in 0..32 {
-                let d = rot([1.0, 0.0], std::f64::consts::TAU * k as f64 / 32.0);
-                let rr = f.r + g + 2.0 * f.map.h;
-                if f.material(p[0] + rr * d[0], p[1] + rr * d[1], z) {
-                    m = [m[0] + d[0], m[1] + d[1]];
-                }
-            }
-            let ml = (m[0] * m[0] + m[1] * m[1]).sqrt();
-            let mut u = if ml > 1e-9 {
-                rot([m[0] / ml, m[1] / ml], std::f64::consts::FRAC_PI_2)
-            } else {
-                [1.0, 0.0] // material all round: any heading
-            };
+            // the heading: the sweep direction (every pass the same way)
+            let dir = sweep_dir;
+            let mut u = dir;
             let mut touched = false;
             let mut removed = 0.0;
             let mut pos = target;
@@ -530,9 +551,17 @@ pub fn adaptive(
                     let eval = |d: f64| {
                         let w = rot(u, d);
                         let q = [pos[0] + len * w[0], pos[1] + len * w[1], z];
+                        // a heading past PEEL from the sweep direction is not taken
+                        if w[0] * dir[0] + w[1] * dir[1] < peel_cos {
+                            return (f64::INFINITY, w, q);
+                        }
                         (f.phi(q, w), w, q)
                     };
-                    let (lo_d, hi_d) = (-std::f64::consts::FRAC_PI_2, std::f64::consts::FRAC_PI_2);
+                    // turns within ±90° of the heading and within PEEL of the sweep direction
+                    let th_u = dmath::atan2(dir[0] * u[1] - dir[1] * u[0], dir[0] * u[0] + dir[1] * u[1]);
+                    let peel = PEEL.to_radians() - 1e-9;
+                    let lo_d = (-std::f64::consts::FRAC_PI_2).max(-peel - th_u);
+                    let hi_d = std::f64::consts::FRAC_PI_2.min(peel - th_u);
                     let (p_hi, ..) = eval(hi_d);
                     let (p_lo, ..) = eval(lo_d);
                     // turn toward the side the material is on (the right, climb, once a pass has
@@ -545,7 +574,23 @@ pub fn adaptive(
                         continue;
                     }
                     let d = if p_hi <= 0.0 && p_lo <= 0.0 {
-                        0.0 // air every way: straight on
+                        // air every way: turn toward the side material lies on (within the
+                        // tool's reach and two steps), as far as the peel allows; none: straight
+                        let reach = f.r + 2.0 * len + 2.0 * f.map.h;
+                        let mut side = 0.0;
+                        for k in 0..24 {
+                            let dd = rot([1.0, 0.0], std::f64::consts::TAU * k as f64 / 24.0);
+                            if f.material(pos[0] + reach * dd[0], pos[1] + reach * dd[1], z) {
+                                side += u[0] * dd[1] - u[1] * dd[0];
+                            }
+                        }
+                        if side > 1e-9 {
+                            hi_d
+                        } else if side < -1e-9 {
+                            lo_d
+                        } else {
+                            0.0f64.clamp(lo_d, hi_d)
+                        }
                     } else if eval(toward).0 <= cap {
                         toward
                     } else {
@@ -1033,13 +1078,88 @@ mod tests {
         }
     }
 
+    /// The peel (fto-adaptive.md §8 (b)): every cutting step at depth, wall pass off, heads
+    /// within PEEL of the sweep direction, so no pass winds round a centre.
+    #[test]
+    fn passes_peel_one_way() {
+        let t = tool("flat-6");
+        // an open region: the stock box grown by the tool's diameter and 1 mm (as forge-cam-lang
+        // makes it: room for the tool beside the stock)
+        let rg = Region {
+            loops: vec![rect(-7.0, -7.0, 47.0, 37.0)],
+        };
+        let ip = InProcess::new([0.0, 0.0, -5.0], [40.0, 30.0, 0.0]);
+        for sweep in [0.0, 90.0, 30.0] {
+            let prm = Adaptive {
+                phi_max: 60.0,
+                step: 0.0,
+                leave: 0.0,
+                wall_pass: false,
+                sweep,
+            };
+            let out = adaptive(
+                &rg,
+                Cut {
+                    tool: &t,
+                    tidx: 0,
+                    h: Heights {
+                        clear: 20.0,
+                        retract: 3.0,
+                    },
+                    feed: (1000.0, 300.0),
+                },
+                Span {
+                    top: 0.0,
+                    bottom: -3.0,
+                    step: 3.0,
+                },
+                &ip,
+                &prm,
+            )
+            .unwrap();
+            let (sn, cs) = dmath::sin_cos(sweep.to_radians());
+            let lim = dmath::cos((PEEL + 1.0).to_radians());
+            let mut at = out.path.start;
+            let mut n = 0;
+            for mv in &out.path.moves {
+                let to = match *mv {
+                    PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+                    PMove::Cycle { .. } => continue,
+                };
+                let cutting = matches!(
+                    mv,
+                    PMove::Line {
+                        phase: Phase::Cut,
+                        ..
+                    } | PMove::Arc { .. }
+                );
+                if cutting && to[2] == -3.0 && at[2] == -3.0 {
+                    let (dx, dy) = (to[0] - at[0], to[1] - at[1]);
+                    let l = (dx * dx + dy * dy).sqrt();
+                    // lines and fitted arcs (by their chord) alike
+                    if l > 1e-9 {
+                        n += 1;
+                        assert!(
+                            (dx * cs + dy * sn) / l >= lim,
+                            "sweep {sweep}: step {at:?} -> {to:?}"
+                        );
+                    }
+                }
+                at = to;
+            }
+            assert!(n > 20, "sweep {sweep}: {n} steps");
+        }
+    }
+
     /// Rule 1 of the design-around: one capped target. Every step of every pass keeps the
     /// engagement the simulation measured within the cap (and nothing in the API sets a minimum).
     #[test]
     fn single_capped_target() {
         let t = tool("flat-6");
+        // an open region: the stock box grown by the tool's diameter and 1 mm (as forge-cam-lang
+        // makes it: room for the tool beside the stock)
         let rg = Region {
-            loops: vec![rect(0.0, 0.0, 40.0, 30.0)],
+            loops: vec![rect(-7.0, -7.0, 47.0, 37.0)],
         };
         let ip = InProcess::new([0.0, 0.0, -5.0], [40.0, 30.0, 0.0]);
         let prm = Adaptive {
@@ -1047,6 +1167,7 @@ mod tests {
             step: 0.0,
             leave: 0.0,
             wall_pass: false,
+            sweep: 0.0,
         };
         let out = adaptive(
             &rg,
