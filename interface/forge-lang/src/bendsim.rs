@@ -187,6 +187,37 @@ pub struct Sim {
     pub stage: Option<fb::Staged>,
 }
 
+/// A made plan, kept by its whole question: (tooling as laid out, plan, ranked programs, staged
+/// program, the reply's stage field).
+type Made = (
+    fb::Tooling,
+    fb::Plan,
+    Option<Vec<fb::Program>>,
+    Option<fb::Staged>,
+    Option<Json>,
+);
+
+/// The last plans made in this process, each by its whole question (the model, tooling, options
+/// and what was asked, written out exactly): a reopened or re-simulated unchanged part is answered
+/// at once.
+static PLANS: std::sync::Mutex<Vec<(String, Made)>> = std::sync::Mutex::new(Vec::new());
+const PLANS_KEPT: usize = 8;
+
+fn memo_get(key: &str) -> Option<Made> {
+    let v = PLANS.lock().ok()?;
+    v.iter().find(|(k, _)| k == key).map(|(_, m)| m.clone())
+}
+
+fn memo_put(key: String, made: Made) {
+    if let Ok(mut v) = PLANS.lock() {
+        v.retain(|(k, _)| *k != key);
+        v.push((key, made));
+        while v.len() > PLANS_KEPT {
+            v.remove(0);
+        }
+    }
+}
+
 /// `BENDSIM_TIME=1`: each phase's wall time on stderr (native only: no clock on wasm32).
 struct Phases {
     #[cfg(not(target_arch = "wasm32"))]
@@ -361,59 +392,76 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         }),
         ..fb::Options::default()
     };
-    // stage bending: the program's tools laid out along the bed, simulated all on the press
-    let mut tooling = tooling;
-    let mut staged: Option<fb::Staged> = None;
-    let mut stage_json: Option<Json> = None;
-    let mut shared: Option<Vec<fb::Program>> = None;
-    let mut plan = if ask.stage && tooling.stations.is_empty() && opts.sequence.is_none() {
-        match fb::stage(&model, &tooling, &opts, 8) {
-            Ok(s) => {
-                let speeds = ask
-                    .press
-                    .as_deref()
-                    .and_then(|p| catalog(dir).ok().and_then(|c| c.press(p).map(|r| r.speeds)));
-                stage_json = Some(staged_json(sh, &s, &bend_names, speeds.as_ref()));
-                tooling = s.tooling.clone();
-                let p = s.plan.clone();
-                staged = Some(s);
-                p
-            }
-            Err(fb::StageFail::NoProgram(p)) => {
-                stage_json = Some(Json::obj(vec![
-                    ("ok", false.into()),
-                    (
-                        "why",
-                        "no feasible program to lay out: `blocking` says why".into(),
-                    ),
-                ]));
-                p
-            }
-            Err(fb::StageFail::NoLayout { why, .. }) => {
-                stage_json = Some(Json::obj(vec![
-                    ("ok", false.into()),
-                    ("why", why.as_str().into()),
-                ]));
-                fb::plan(&model, &tooling, &opts)
-            }
+    // a plan already made for this very model, tooling and options (a reopening, Simulate Again
+    // on an unchanged part): the planner is deterministic, so it is the same plan
+    let key = format!(
+        "{model:?}|{tooling:?}|{opts:?}|{:?}|{}|{bend_names:?}|{:?}",
+        ask.programs, ask.stage, ask.press
+    );
+    let (tooling, plan, ranked, staged, stage_json) = match memo_get(&key) {
+        Some(hit) => {
+            ph.lap("memo");
+            hit
         }
-    } else if let Some(n) = ask.programs {
-        // the plan and the ranked programs from one search's learning
-        let (p, r) = fb::plan_and_programs(&model, &tooling, &opts, n);
-        shared = Some(r);
-        p
-    } else {
-        fb::plan(&model, &tooling, &opts)
+        None => {
+            // stage bending: the program's tools laid out along the bed, simulated all on the press
+            let mut tooling = tooling;
+            let mut staged: Option<fb::Staged> = None;
+            let mut stage_json: Option<Json> = None;
+            let mut shared: Option<Vec<fb::Program>> = None;
+            let mut plan = if ask.stage && tooling.stations.is_empty() && opts.sequence.is_none() {
+                match fb::stage(&model, &tooling, &opts, 8) {
+                    Ok(s) => {
+                        let speeds = ask
+                            .press
+                            .as_deref()
+                            .and_then(|p| catalog(dir).ok().and_then(|c| c.press(p).map(|r| r.speeds)));
+                        stage_json = Some(staged_json(sh, &s, &bend_names, speeds.as_ref()));
+                        tooling = s.tooling.clone();
+                        let p = s.plan.clone();
+                        staged = Some(s);
+                        p
+                    }
+                    Err(fb::StageFail::NoProgram(p)) => {
+                        stage_json = Some(Json::obj(vec![
+                            ("ok", false.into()),
+                            (
+                                "why",
+                                "no feasible program to lay out: `blocking` says why".into(),
+                            ),
+                        ]));
+                        p
+                    }
+                    Err(fb::StageFail::NoLayout { why, .. }) => {
+                        stage_json = Some(Json::obj(vec![
+                            ("ok", false.into()),
+                            ("why", why.as_str().into()),
+                        ]));
+                        fb::plan(&model, &tooling, &opts)
+                    }
+                }
+            } else if let Some(n) = ask.programs {
+                // the plan and the ranked programs from one search's learning
+                let (p, r) = fb::plan_and_programs(&model, &tooling, &opts, n);
+                shared = Some(r);
+                p
+            } else {
+                fb::plan(&model, &tooling, &opts)
+            };
+            ph.lap(if ask.stage { "stage" } else { "plan" });
+            let ranked = match shared {
+                Some(r) => Some(r),
+                None => ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n)),
+            };
+            ph.lap("programs");
+            // the operator's move into each step after the first, checked (a warning if not proven clear)
+            fb::scene::annotate_handling(&model, &tooling, &mut plan);
+            ph.lap("handling");
+            let made = (tooling, plan, ranked, staged, stage_json);
+            memo_put(key, made.clone());
+            made
+        }
     };
-    ph.lap(if ask.stage { "stage" } else { "plan" });
-    let ranked = match shared {
-        Some(r) => Some(r),
-        None => ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n)),
-    };
-    ph.lap("programs");
-    // the operator's move into each step after the first, checked (a warning if not proven clear)
-    fb::scene::annotate_handling(&model, &tooling, &mut plan);
-    ph.lap("handling");
     let mut answer = answer(sh, &model, &tooling, &plan, &bend_names);
     ph.lap("reply");
     if let Json::Obj(f) = &mut answer.json {

@@ -707,3 +707,36 @@ fn a_lock_keeps_a_bend_at_its_station() {
     assert!(!e.ok && e.text.contains("NoSuchBend"), "{}", e.text);
     assert!(forge_lang::bendsim::parse(&["lock", "left=0"].map(String::from)).is_err());
 }
+
+/// The same question twice in one process (a reopening, Simulate Again on an unchanged part): the
+/// same reply, the second from the kept plan at once; a changed part is planned afresh.
+#[test]
+fn an_unchanged_part_is_answered_from_the_kept_plan() {
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap();
+    let ask = Ask {
+        programs: Some(3),
+        ..Ask::default()
+    };
+    let t0 = std::time::Instant::now();
+    let a = ask_src(&src, None, None, &ask);
+    let first = t0.elapsed();
+    let t1 = std::time::Instant::now();
+    let b = ask_src(&src, None, None, &ask);
+    let second = t1.elapsed();
+    assert!(a.ok, "{}", a.text);
+    assert_eq!(a.json, b.json);
+    assert!(second * 5 < first, "kept plan: {second:?} vs {first:?}");
+    // a changed part (the lips 1 mm taller) is planned for itself
+    let c = ask_src(
+        &src.replace("shared lip = 12", "shared lip = 13"),
+        None,
+        None,
+        &ask,
+    );
+    assert!(c.ok);
+    assert_ne!(a.json, c.json);
+}
