@@ -91,26 +91,24 @@ impl Gui {
             && let Some(st) = self.shell.camsim.as_deref_mut()
         {
             st.take_focus(&f);
-            // the toolpath coloured by what the workspace chose (its run's quality measurement)
-            st.values = f.colour_by.map(|c| {
-                use crate::camsim::draw::Values;
-                let (name, unit, bands) = match c {
-                    crate::shell::cam::ColourBy::ChipLoad => {
-                        ("chip load", "mm, against the op's fz", Values::chip_bands())
-                    }
-                    crate::shell::cam::ColourBy::Engagement => {
-                        ("engagement", "degrees", Values::engagement_bands())
-                    }
-                };
-                // per feed move, from forge-cam-quality's measurement of the run (w.run.quality):
-                // its per-move values (MoveQ) are not on this branch yet, so every cutting move is
-                // grey, "not measured" in the legend; with them, per_op is op i's OpQ (by name)
-                // mapped to (path, load or phi, 1.0) per moves_q entry
-                Values::of_feeds(&st.sim.cam, &st.sim.tl, name, unit, bands, &|_| None)
-            });
             self.shell.camsim_job.focus = Some(f);
             if let Some(v) = &mut self.view {
                 v.dirty = true;
+            }
+        }
+        // the toolpath coloured by what the workspace chose, from its run's quality measurement
+        // (forge-cam-quality's per-move MoveQ): again when the choice, the simulation or the
+        // measurement changes (the measurement can arrive after the choice)
+        let q = w.run.as_ref().and_then(|r| r.quality.as_ref());
+        if let Some(st) = self.shell.camsim.as_deref_mut() {
+            let by = w.focus().colour_by;
+            let key = format!("{by:?}\u{1}{}\u{1}{}", st.src, q.is_some());
+            if self.shell.camsim_job.colour.as_deref() != Some(key.as_str()) {
+                st.values = by.map(|c| colour_values(&st.sim, c, q));
+                self.shell.camsim_job.colour = Some(key);
+                if let Some(v) = &mut self.view {
+                    v.dirty = true;
+                }
             }
         }
     }
@@ -523,4 +521,35 @@ impl Gui {
             ),
         ]))
     }
+}
+
+/// The toolpath's colours for `by`: each op's measured feed moves (found by the op's name),
+/// laid onto the moves played; ops not measured stay grey.
+fn colour_values(
+    sim: &crate::camsim::Sim,
+    by: crate::shell::cam::ColourBy,
+    q: Option<&forge_cam_quality::JobQ>,
+) -> crate::camsim::draw::Values {
+    use crate::camsim::draw::Values;
+    use crate::shell::cam::ColourBy;
+    let (name, unit, bands) = match by {
+        ColourBy::ChipLoad => ("chip load", "mm, against the op's fz", Values::chip_bands()),
+        ColourBy::Engagement => ("engagement", "degrees", Values::engagement_bands()),
+    };
+    let cam = &sim.cam;
+    Values::of_feeds(cam, &sim.tl, name, unit, bands, &|i| {
+        let o = q?.ops.iter().find(|o| o.name == cam.ops[i].name)?;
+        Some(
+            o.moves_q
+                .iter()
+                .map(|m| {
+                    let v = match by {
+                        ColourBy::ChipLoad => m.load,
+                        ColourBy::Engagement => m.phi,
+                    };
+                    (m.path, v as f32, 1.0)
+                })
+                .collect(),
+        )
+    })
 }
