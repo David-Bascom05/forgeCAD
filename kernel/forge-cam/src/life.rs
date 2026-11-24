@@ -18,6 +18,20 @@ use crate::ops::{OpPath, PMove, Phase};
 use forge_tooling::feeds::effective_diameter;
 use forge_tooling::life::Cut;
 
+/// An entry move into stock (for forge_tooling::entry): a straight plunge, a linear ramp or a
+/// helix, or the first engaged sample after air.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Entry {
+    /// A sample meeting stock after air: its feed, mm/min.
+    Contact { mv: usize, feed: f64 },
+    /// Straight down into stock: its feed.
+    Plunge { mv: usize, feed: f64 },
+    /// A linear descent into stock: its angle to the xy plane, degrees.
+    Ramp { mv: usize, deg: f64 },
+    /// A descending arc into stock: its angle, degrees, and the diameter it cuts over D.
+    Helix { mv: usize, deg: f64, dia_ratio: f64 },
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Measured {
     pub cuts: Vec<Cut>,
@@ -25,6 +39,99 @@ pub struct Measured {
     pub unsampled_minutes: f64,
     /// Canned cycles in the path (not in the estimate).
     pub cycles: usize,
+    /// Entries into stock, in path order, and the largest feed of an engaged sample (mm/min).
+    pub entries: Vec<Entry>,
+    pub max_cut_feed: f64,
+}
+
+/// Whether stock stands above `z` within the tool's footprint at (x, y) (centre and 8 points at
+/// 0.9 r).
+fn in_stock(map: &HeightMap, p: [f64; 3], r: f64) -> bool {
+    const EPS: f64 = 1e-3;
+    if map.top(p[0], p[1]) > p[2] + EPS {
+        return true;
+    }
+    (0..8).any(|k| {
+        let (sn, cs) = forge_math::dmath::sin_cos(k as f64 * std::f64::consts::FRAC_PI_4);
+        map.top(p[0] + 0.9 * r * cs, p[1] + 0.9 * r * sn) > p[2] + EPS
+    })
+}
+
+/// The entries of `path` into the stock of `map` (copied: the caller's map is not changed).
+fn scan_entries(path: &OpPath, map: &HeightMap, prof: &Profile, d: f64) -> Vec<Entry> {
+    let mut m = HeightMap {
+        x0: map.x0,
+        y0: map.y0,
+        h: map.h,
+        nx: map.nx,
+        ny: map.ny,
+        bottom: map.bottom,
+        z: map.z.clone(),
+    };
+    let r = prof.r();
+    let mut out = Vec::new();
+    let mut at = path.start;
+    for (i, mv) in path.moves.iter().enumerate() {
+        match *mv {
+            PMove::Rapid { to } => {
+                m.sweep(at, to, prof);
+                at = to;
+            }
+            PMove::Line { to, f, .. } => {
+                if to[2] < at[2] && in_stock(&m, to, r) {
+                    let dxy = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+                    if dxy < 1e-9 {
+                        out.push(Entry::Plunge { mv: i, feed: f });
+                    } else {
+                        let deg = forge_math::dmath::atan2(at[2] - to[2], dxy).to_degrees();
+                        out.push(Entry::Ramp { mv: i, deg });
+                    }
+                }
+                m.sweep(at, to, prof);
+                at = to;
+            }
+            PMove::Arc { to, c, .. } => {
+                let rr = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                let len = move_len(at, mv);
+                if to[2] < at[2] && in_stock(&m, to, r) {
+                    let xy = (len * len - (to[2] - at[2]).powi(2)).max(0.0).sqrt();
+                    let deg = forge_math::dmath::atan2(at[2] - to[2], xy).to_degrees();
+                    out.push(Entry::Helix {
+                        mv: i,
+                        deg,
+                        dia_ratio: (2.0 * rr + d) / d,
+                    });
+                }
+                // sweep along chords no longer than 0.5 mm
+                let n = (len / 0.5).ceil().max(1.0) as usize;
+                let a0 = forge_math::dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                let a1 = forge_math::dmath::atan2(to[1] - c[1], to[0] - c[0]);
+                let cw = matches!(*mv, PMove::Arc { cw: true, .. });
+                let mut sw = a1 - a0;
+                if cw && sw >= 0.0 {
+                    sw -= std::f64::consts::TAU;
+                }
+                if !cw && sw <= 0.0 {
+                    sw += std::f64::consts::TAU;
+                }
+                let mut p = at;
+                for k in 1..=n {
+                    let t = k as f64 / n as f64;
+                    let (sn, cs) = forge_math::dmath::sin_cos(a0 + t * sw);
+                    let q = if k == n {
+                        to
+                    } else {
+                        [c[0] + rr * cs, c[1] + rr * sn, at[2] + t * (to[2] - at[2])]
+                    };
+                    m.sweep(p, q, prof);
+                    p = q;
+                }
+                at = to;
+            }
+            PMove::Cycle { .. } => {}
+        }
+    }
+    out
 }
 
 /// The tool, as the measurement needs it.
@@ -60,6 +167,7 @@ pub fn measure(
         cell,
         sample,
     };
+    let mut entries = scan_entries(path, map, prof, tool.d);
     let samples = schedule_samples(path, map, prof, &sc);
     // each move's start, length and sample count
     let mut starts = Vec::with_capacity(path.moves.len());
@@ -76,7 +184,14 @@ pub fn measure(
     }
     let z = tool.flutes.max(1) as f64;
     let mut cuts = Vec::new();
+    let mut max_cut_feed: f64 = 0.0;
+    let mut prev_engaged = false;
     for s in &samples {
+        let engaged = s.engage.is_some();
+        if let (true, false, PMove::Line { f, .. } | PMove::Arc { f, .. }) = (engaged, prev_engaged, path.moves[s.mv]) {
+            entries.push(Entry::Contact { mv: s.mv, feed: f });
+        }
+        prev_engaged = engaged;
         let Some(e) = s.engage else { continue };
         let mv = &path.moves[s.mv];
         let f = match *mv {
@@ -86,6 +201,7 @@ pub fn measure(
         if !(pos(f) && pos(rpm)) {
             continue;
         }
+        max_cut_feed = max_cut_feed.max(f);
         let len = move_len(starts[s.mv], mv) / count[s.mv].max(1) as f64;
         let fz = f / (z * rpm);
         let span = e.th_hi - e.th_lo;
@@ -129,6 +245,8 @@ pub fn measure(
         cuts,
         unsampled_minutes: unsampled,
         cycles,
+        entries,
+        max_cut_feed,
     }
 }
 
@@ -178,7 +296,10 @@ mod tests {
             0.25,
             0.0,
         );
-        // the plunge outside the stock: 7 mm at 300 → not sampled, counted
+        // the plunge (the map's box is all stock): an entry, at half the cutting feed
+        assert!(m.entries.contains(&Entry::Plunge { mv: 0, feed: 300.0 }), "{:?}", m.entries);
+        assert_eq!(m.max_cut_feed, 600.0);
+        // 7 mm at 300 → not sampled, counted
         assert!((m.unsampled_minutes - 7.0 / 300.0).abs() < 1e-12);
         let mins: f64 = m.cuts.iter().map(|c| c.minutes).sum();
         // engaged from x ≈ -5 to 50 plus the tool's exit: between 50 and 70 mm of the 80 mm move
