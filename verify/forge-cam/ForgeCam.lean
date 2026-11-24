@@ -6,6 +6,7 @@ import ForgeCam.Machine
 import ForgeCam.Post
 import ForgeCam.Fixture
 import ForgeCam.Pocket
+import ForgeCam.PocketDrop
 import ForgeCam.Dist2
 import ForgeCam.Vise
 import ForgeCam.DistArc
