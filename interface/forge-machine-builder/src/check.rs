@@ -384,8 +384,17 @@ pub fn check(def: &MachineDef, level: Option<Level>, file: &str) -> CheckReport 
             .iter()
             .any(|c| c.path == format!("body.{n}") && c.status == forge_machine::def::CiteStatus::Unknown)
     };
+    for b in def.bodies.iter().filter(|b| !b.check) {
+        r.notes.push(format!(
+            "body `{}` is display only (`check = false`): drawn, never collision-checked",
+            b.name
+        ));
+    }
     for i in 0..def.bodies.len() {
         for j in i + 1..def.bodies.len() {
+            if !def.bodies[i].check || !def.bodies[j].check {
+                continue;
+            }
             let (js, travel) = pair_travel(def, i, j);
             let (a, b) = (&def.bodies[i].name, &def.bodies[j].name);
             r.pairs.push(PairCheck {
