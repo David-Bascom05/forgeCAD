@@ -1,7 +1,8 @@
 // Paths that reached std calls which panic in a browser (`SystemTime::now`: "time not
 // implemented on this platform", then `unreachable` and a dead page), clicked as a person would:
 //   - Versions > Turn on history (forge-git's temp file names read the time of day)
-//   - Agent > Send (a new conversation's id read the time of day)
+//   - Agent > Send (a new conversation's id read the time of day; the page's Agent tab now says
+//     the agent runs in the desktop app, and has no Send: clicked where it was, nothing happens)
 // and a lock taken twice on the page's one thread ("cannot recursively acquire mutex"): a job
 // started while its caller held the lock the job takes, which natively runs on another thread
 // but in the single-threaded page runs before `plat::spawn` returns:
@@ -59,7 +60,7 @@ const pause = (ms) => new Promise((r) => setTimeout(r, ms));
     await click(at.agentSend);
     await pause(2000);
     t.check(p);
-    console.log("ok - Agent: a message sent without a panic");
+    console.log("ok - Agent: the tab clicked through without a panic");
 
     await p.evaluate(() => window.forgecad.fc.app_open("/project/thermoform/cover.fg"));
     await t.until(p, (s) => /cover\.fg$/.test(s.path ?? "") && s.done >= s.seq && s.built?.checked, "cover.fg built", 120000);

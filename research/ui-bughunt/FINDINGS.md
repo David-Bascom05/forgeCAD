@@ -93,6 +93,7 @@ reached from the page are covered by the twiggy check above, not by the lint.
 - Fix: the distance kept in units of the near plane's (`p.z / near`, i.e. `1 / depth`: bounded,
   scale-free; the passes compare it only relatively, 1%), `ao_apply_fs` compares the same.
   Where it worked before, the frame is the same (max difference 1 level in the page, 4 natively).
+- Shots: `shots/ao-80mm-before.png`, `shots/ao-80mm-after.png`.
 - Test: `interface/forge-render/web/tests/shade.cjs` (30, 80 and 400 mm boxes: old build "the
   80 mm box drawn dark: mean 0.0, 1400 of 1400 black"; new: all shaded).
 
@@ -110,6 +111,51 @@ reached from the page are covered by the twiggy check above, not by the lint.
 - Test: `nopanic.cjs` opens cover.fg and clicks Thermoform > Check Forming (old: the panic). The
   two `gui_thermo.rs` paths have no browser test yet (an assembly with a thermoform, and a
   suggested fix's re-simulation).
+
+## 9. forge-lang kept every run's sketches (ui/bughunt-2)
+
+- The Rc cycle of open finding 8 (below): `Sk.named` held the sketch's own entities, each holding
+  the sketch. Fix: `sketch::detach` keeps them in `named` pointing at a thread-local stand-in,
+  `sketch::attach` gives them the sketch back on member access (`plan.outline`); anchors and
+  `sketch_view` read only ids and loops.
+- Numbers (tools/ui-hunt/leak): 2000 runs 11 MB -> 16 KB, 2000 edits 44 MB -> 2 KB, flat.
+- Band (callgrind exact, main 4846170a vs 319b39a3, host vm): strict total -0.0000%, worst strict
+  line +0.0000% (volute edit); bits identical.
+- Test: `forge-lang` `sketch::no_cycle::a_run_frees_its_sketches` (a sketch is freed with its
+  evaluation; names still read through it). Fails before: "the sketch outlived its evaluation".
+
+## 10. Versions under `forgecad web`, and in any page (ui/bughunt-2)
+
+- Server (`forge-cli/src/web.rs`): the served root's own `.git/...` and `.gitignore` are project
+  paths (written, read, listed, bundled), never `.git/hooks`, no other or nested dot path; a
+  `.git/config` only with keys git reads as settings (refused: fsmonitor, hooksPath, sshCommand,
+  alias, filters, includes: a page must not make the machine's own git run anything); a `.git`
+  over 64 MiB stays on the machine.
+- Page: a write the storage refuses reaches the app (`app_store_failed`): "Not kept: PATH: why"
+  in the status, and Versions says the history isn't kept until a reload.
+- Found on the way: in a page no save could be signed (no git identity), so history kept nothing
+  under "History is on: every save is kept". Now the failure is the status, and Versions asks for
+  a name and an email for the project's saves (`History::set_identity`).
+- Test: forge-cli web tests; `web/tests/history.cjs` (writable: kept on the machine and back after
+  a reload; read only: never "History is on").
+
+## 11. Keys typed around a click were lost in the page (ui/bughunt-2)
+
+- Symptom: typing a name, clicking the next field and typing on: "Test User" came out "Test",
+  "test@example.com" "st@example.com"; "Jo Do", a click, "xy" kept only "Jo ".
+- Root cause: egui moves keyboard focus between frames (a press away from a field takes the focus
+  at the frame's start, the clicked field takes it at the frame's end), so keys in the same frame
+  as a click reach no field. A page's frame waits for whatever ran before it on its one thread, so
+  input typed meanwhile arrives with the click in one frame.
+- Fix: `inputcut::frame_cut`: a frame's events end where a mouse button and the keyboard meet;
+  the rest is the next frame's, drawn at once. Shots: `shots/typing-after.png`.
+- Test: `inputcut` unit test; `history.cjs` types each field right after clicking it.
+
+## 12. The Agent tab in a page (ui/bughunt-2)
+
+- Nothing in it can run in a page (Claude Code and Codex are programs on the computer, speech its
+  engine, the OpenAI-compatible path returns "doesn't reach endpoints yet"). The tab now says so
+  plainly, with no Send to fail and no microphone. Shots: `shots/agent-tab-page-{before,after}.png`.
 
 ## Open (reported, not fixed here)
 
