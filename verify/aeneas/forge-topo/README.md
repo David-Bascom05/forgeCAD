@@ -87,4 +87,13 @@ Build: `cd lean && lake build` (shares Mathlib and Aeneas's library with
 `verify/forge-mass/lean/.lake/packages`; the f64 bridge `verify/aeneas/bridge` is required but
 unused, the topology has no floats).
 
+Speed (T.fans, judged exception, the coordinator's call): against main 4846170a, exact callgrind
+on one VM, the strict total is −0.0377% and every strict line but one is within +0.03%; gearbox
+edit is +0.0399% (450,709,672 vs 450,529,868 Ir). Callgrind attributes it to heap layout, not to
+the fan test: in that run `check_fans` costs ~150k Ir less (Body::fans_by −58k, Body::leaving −23k,
+their mallocs −100k, against topo_fans +95k), while memcpy is +384k, from the boolean's reused
+`scratch.pieces` (Vec<Piece>) growing by copy where it had grown in place (edge_split's grow_one
+100k → 400k). Layout variants tried (capacity hints, allocation order, reserving `scratch.pieces`)
+gave +0.037..+0.089% on that line.
+
 Next: `check_known`'s combinatorial part composed from these (T.all).
