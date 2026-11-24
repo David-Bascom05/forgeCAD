@@ -33,6 +33,10 @@ slot_plate_cam: program prog on generic-vmc3: t_stop 52.7 s, t_min 49.5 s, 2 too
 well_island_cam/skim   facing     flat-10    22.7    21.2    14.9   16%    60    2    0    0   105    86   38%    0%  0.065  0.062  0.061  0.062    1%    0%   12292     90  0.36      -
 well_island_cam/well   pocket     flat-6     58.3    54.8    39.7   19%   222    8    4   20   180   115   57%   42%  0.040  0.039  0.036  0.039    4%    0%    8794    187  0.74      -
 well_island_cam: program prog on generic-vmc3: t_stop 81.0 s, t_min 76.1 s, 2 tool changes, 0 violations
+boss_adaptive_cam/skim facing     flat-10    35.4    33.3    25.6   14%    90    2    0    0   109    94   42%    0%  0.065  0.062  0.061  0.062    1%    0%   13579     90  0.37      -
+boss_adaptive_cam/rough adaptive   flat-10   167.7   101.4    81.5   19%   240   11    0    8   180    44   84%    8%  0.066  0.062  0.057  0.062    1%    0%   53276   1343  2.51      -
+boss_adaptive_cam/fin  contour    flat-10     7.8     7.3     4.1   35%    14    2    1    0   171   161    0%   95%  0.062  0.062  0.061  0.062    1%    0%    4439     17  0.11      -
+boss_adaptive_cam: program prog on generic-vmc3: t_stop 210.9 s, t_min 142.1 s, 1 tool changes, 0 violations
 boss_cam/skim          facing     flat-10    35.4    33.3    25.6   14%    90    2    0    0   109    94   42%    0%  0.065  0.062  0.061  0.062    1%    0%   13579     90  0.37      -
 boss_cam/rough         clear      flat-10   189.8   178.5   141.9   20%    93    5    5   70   174    76   67%   19%  0.063  0.062  0.057  0.062    6%    0%   30601    261  1.71      -
 boss_cam/fin           contour    flat-10     7.9     7.3     4.1   35%    14    2    1    0   171   161    0%   95%  0.062  0.062  0.061  0.062    1%    0%    4439     17  0.11      -

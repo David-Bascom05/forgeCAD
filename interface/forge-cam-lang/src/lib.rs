@@ -986,8 +986,8 @@ impl Cam {
                 });
                 Ok(V::Setup(self.setups.len() - 1))
             }
-            "facing" | "contour" | "pocket" | "clear" | "drill" | "engrave" | "slot" | "thread_mill"
-            | "edge_break" => self.op(name, f, a),
+            "facing" | "contour" | "pocket" | "clear" | "adaptive" | "drill" | "engrave" | "slot"
+            | "thread_mill" | "edge_break" => self.op(name, f, a),
             "soft_jaw" => self.soft_jaw(name, a),
             "program" => {
                 let su: Vec<usize> = match a.get("#0") {
@@ -2091,7 +2091,10 @@ impl Cam {
     /// left it the model. The paths' geometry is unchanged; they are posted and certified after.
     fn feeds_from_engagement(&self, su: usize, kind: &str, out: &OpOut, paths: Vec<OpPath>) -> Vec<OpPath> {
         use forge_cam::engage::{HeightMap, Profile, Sched, schedule};
-        if !matches!(kind, "facing" | "pocket" | "clear" | "contour" | "slot") {
+        if !matches!(
+            kind,
+            "facing" | "pocket" | "clear" | "adaptive" | "contour" | "slot"
+        ) {
             return paths;
         }
         let (Some(fe), Some(ti)) = (out.feeds, out.tool) else {
@@ -2154,6 +2157,7 @@ impl Cam {
                 "contour" => "contour",
                 "pocket" => "pocket",
                 "clear" => "clear",
+                "adaptive" => "adaptive",
                 "engrave" => "engrave",
                 "slot" => "slot",
                 "thread_mill" => "thread_mill",
@@ -2208,6 +2212,12 @@ impl Cam {
                 let fd = match kind {
                     "facing" => self.feeds_for(su, t, 0.7 * d, step.min(t.tool.lcf)),
                     "pocket" | "clear" => self.feeds_for(su, t, get_num(a, "stepover", Some(0.4 * d))?, step),
+                    // the engagement cap's width of cut: ae = D (1 − cos φ) / 2
+                    "adaptive" => {
+                        let phi = get_num(a, "engagement", Some(60.0))?;
+                        let ae = 0.5 * d * (1.0 - forge_math::dmath::cos(phi.to_radians()));
+                        self.feeds_for(su, t, ae, step)
+                    }
                     // the whole width
                     "slot" => self.feeds_for(su, t, d, step),
                     // what a contour meets is not known here: no thinning credit
@@ -2243,6 +2253,58 @@ impl Cam {
                         );
                         voids.push((None, z));
                         Ok(vec![p])
+                    }
+                    "adaptive" => {
+                        // the region of `clear` (the stock's outline grown by D, the part's section
+                        // as islands), cleared by forge_cam::adaptive under one engagement cap
+                        let top = get_num(a, "from", Some(s.stock.max[2]))?;
+                        let bottom = get_num(a, "to", None)?;
+                        let zmid = 0.5 * (top + bottom);
+                        let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
+                            .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                        let islands = outer_or_inner(&sec, true)?;
+                        let g = d;
+                        let q = [
+                            p2(s.stock.min[0] - g, s.stock.min[1] - g),
+                            p2(s.stock.max[0] + g, s.stock.min[1] - g),
+                            p2(s.stock.max[0] + g, s.stock.max[1] + g),
+                            p2(s.stock.min[0] - g, s.stock.max[1] + g),
+                        ];
+                        let mut loops = vec![Loop {
+                            segs: (0..4)
+                                .map(|i| Seg::Line {
+                                    a: q[i],
+                                    b: q[(i + 1) % 4],
+                                })
+                                .collect(),
+                        }];
+                        for l in &islands.loops {
+                            loops.push(l.reversed());
+                        }
+                        let rg = Region { loops };
+                        let prm = forge_cam::adaptive::Adaptive {
+                            phi_max: get_num(a, "engagement", Some(60.0))?,
+                            step: get_num(a, "step_length", Some(0.0))?,
+                            leave: get_num(a, "leave", Some(0.0))?,
+                            wall_pass: true,
+                        };
+                        let out = forge_cam::adaptive::adaptive(
+                            &rg,
+                            ops::Cut {
+                                tool: t,
+                                tidx: ti,
+                                h,
+                                feed: (vf, vp),
+                            },
+                            ops::Span { top, bottom, step },
+                            &s.ip,
+                            &prm,
+                        )
+                        .map_err(|e| format!("{e:?}"))?;
+                        for (v, z) in out.voids {
+                            voids.push((Some(v), z));
+                        }
+                        Ok(vec![out.path])
                     }
                     "clear" => {
                         // everything between the stock's outline and the part's section, from a
