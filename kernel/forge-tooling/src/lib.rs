@@ -7,6 +7,7 @@
 //! generic tools, conservative holders, a generic 3-axis machine and per-group cutting data, each
 //! marked "verify with the vendor". Search order for a named library: the project's
 //! `cam/` directory, then the user's, then the built-in set.
+pub mod build;
 pub mod cite;
 pub mod feeds;
 pub mod toml;
@@ -599,6 +600,8 @@ pub struct Library {
     pub pull_studs: Vec<PullStud>,
     pub inserts: Vec<turning::Insert>,
     pub turn_holders: Vec<turning::TurnHolder>,
+    /// Each record's own table as read: (TOML key, id, table), for `build::derive`.
+    pub sources: Vec<(String, String, Table)>,
 }
 
 /// A tool-side collet (ER, TG, R8, ...): the bore it is named for and the range it clamps.
@@ -891,10 +894,12 @@ impl Library {
                     name: x.id,
                 });
             }
+            self.sources.push(("tool".into(), x.id.clone(), r.clone()));
             self.tools.push(x);
         }
         for r in tables(&t, "holder") {
             let x = Holder::from_table(r)?;
+            self.sources.push(("holder".into(), x.id.clone(), r.clone()));
             if self.holders.iter().any(|o| o.id == x.id) {
                 return Err(LibError::Duplicate {
                     kind: "holder",
@@ -929,6 +934,7 @@ impl Library {
             ($key:literal, $vec:ident, $ty:ty, $kind:literal) => {
                 for r in tables(&t, $key) {
                     let x = <$ty>::from_table(r)?;
+                    self.sources.push(($key.into(), x.id.clone(), r.clone()));
                     if self.$vec.iter().any(|o| o.id == x.id) {
                         return Err(LibError::Duplicate {
                             kind: $kind,
