@@ -413,6 +413,18 @@ list on main: this branch's new strings add none).
   (8x, 20x), a double click on cam:row:prof right after a dialog's close missed on the first try
   before, never after (6 tries each).
 
+## 26. In a narrow window the status line ran under Markup and the issues (ui/bughunt-3)
+
+- Reported by AGENT-TAB (main 0de84ac1, native window 480 px wide). The status line was painted
+  whole from the left; Markup sits at a fixed `width - 330` and the issues chip at the right, so
+  "volume 57600 mm³ · 6 faces · valid · rebuilt 0, reused 2 · 0.3 ms" (10 to 357 px) ran under
+  Markup (150 px), both drawn over it.
+- It is laid out on one row now, cut with "…" short of Markup, and the whole of it shows on hover
+  when cut (`shots/status-480-after.png`).
+- Test: `tests/status_narrow.rs` (480×860: the status line, noted as `status:said`, ends before
+  Markup). Before (the width limit lifted): fails, the line's rect ending at 357.5 past Markup's
+  150.
+
 ## Open (reported, not fixed here)
 
 

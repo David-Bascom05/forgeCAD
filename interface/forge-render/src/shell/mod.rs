@@ -14,6 +14,7 @@ pub mod bendsim;
 mod bendsim_cards;
 mod bendsim_env;
 pub mod cam;
+pub mod capture;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -27,7 +28,6 @@ mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
 pub(crate) mod empty;
-pub mod capture;
 pub mod env;
 pub mod fg;
 pub mod fgasm;
@@ -1201,24 +1201,36 @@ impl Shell {
         // an environment owns the status bar too
         let env_line = self.env_status();
         let status = shown(&self.status);
-        let said = p.text(
-            pos2(x + 4.0, st.center().y),
-            Align2::LEFT_CENTER,
-            if let Some(l) = &env_line {
-                l
-            } else if self.status.is_empty() && self.unshown {
-                "This part built but some of it can't be drawn: fix or delete what the tree marks"
-            } else {
-                &status
-            },
-            sans(12.0),
-            Color32::WHITE,
-        );
         // markup for the agent, on or off
         let mr = Rect::from_min_size(
             pos2(s.width() - 330.0, st.top() + 2.0),
             vec2(78.0, STATUS_H - 4.0),
         );
+        // the status on one row, cut with "…" short of Markup (in a narrow window it ran on under
+        // Markup and the issues), the whole of it on hover when cut
+        let words = if let Some(l) = &env_line {
+            l.as_str()
+        } else if self.status.is_empty() && self.unshown {
+            "This part built but some of it can't be drawn: fix or delete what the tree marks"
+        } else {
+            &*status
+        };
+        let mut job = egui::text::LayoutJob::simple_singleline(words.to_string(), sans(12.0), Color32::WHITE);
+        job.wrap = egui::text::TextWrapping {
+            max_width: (mr.left() - theme::S2 - (x + 4.0)).max(0.0),
+            max_rows: 1,
+            break_anywhere: true,
+            overflow_character: Some('\u{2026}'),
+        };
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        let said = Rect::from_min_size(pos2(x + 4.0, st.center().y - g.size().y * 0.5), g.size());
+        let cut = g.elided;
+        p.galley(said.min, g, Color32::WHITE);
+        if cut {
+            ui.interact(said, ui.scope_id().with("status-cut"), Sense::hover())
+                .on_hover_text(words);
+        }
+        self.note("status:said", said);
         let m_resp = ui
             .interact(mr, ui.scope_id().with("status-markup"), Sense::click())
             .on_hover_text("Draw on the window for the agent (K)");
