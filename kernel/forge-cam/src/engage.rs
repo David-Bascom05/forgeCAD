@@ -326,8 +326,8 @@ pub struct Sample {
 ///
 /// Per research/cam/toolpath-quality/fto-adaptive.md (design-around D): the feed is set per
 /// FIXED-LENGTH sample from chip thinning and the chip load; the path is never split where the
-/// engagement changes, there is no abrasion term, and samples are joined only when both sit at
-/// the same clamp (machine/user limit or the thinning cap), never by engagement band.
+/// engagement changes, there is no abrasion term, and every sample is its own move: samples are
+/// never joined, whatever their feeds (equal F words are simply not repeated when posted).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Sched {
     /// The chip to cut (feed per tooth), mm.
@@ -481,39 +481,26 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
 /// The path with each scheduled move's feed set per fixed-length sample from the engagement
 /// it meets in `map` (left as the path cut it): fz / max cos θ over the sample and the start of
 /// the next (the chip never above fz), at most cap · fz, the feed within [f_min, f_max]. A move
-/// is split at its sample boundaries; neighbouring samples are joined only when both sit at the
-/// same clamp. Straight plunges, moves up and rapids keep their feeds. The caller keeps f_max
+/// is split at its sample boundaries, each sample its own move (never joined). Straight plunges, moves up and rapids keep their feeds. The caller keeps f_max
 /// under the machine's limit (G5 checks the posted F soundly, so the limit itself may fail).
 pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> OpPath {
     let samples = schedule_samples(path, map, prof, s);
-    // the chip rule per sample; a clamped value is tagged so joins happen only between clamps
-    let want = |e: &Option<Engage>| -> (f64, bool) {
+    // the chip rule per sample
+    let want = |e: &Option<Engage>| -> f64 {
         match e {
-            Some(g) if g.cos_max * s.cap > 1.0 => (s.fz / g.cos_max, false),
-            _ => (s.cap * s.fz, true),
+            Some(g) if g.cos_max * s.cap > 1.0 => s.fz / g.cos_max,
+            _ => s.cap * s.fz,
         }
     };
     let n = samples.len();
-    let mut feed: Vec<(f64, bool)> = Vec::with_capacity(n);
+    let mut feed: Vec<f64> = Vec::with_capacity(n);
     for k in 0..n {
-        let (mut fz, mut clamp) = want(&samples[k].engage);
+        let mut fz = want(&samples[k].engage);
         // no faster than the next sample of the same run of feed moves
         if let Some(nx) = samples.get(k + 1) {
-            let (f2, c2) = want(&nx.engage);
-            if f2 < fz {
-                fz = f2;
-                clamp = c2;
-            }
+            fz = fz.min(want(&nx.engage));
         }
-        let mut f = fz * s.flutes * s.rpm;
-        if f >= s.f_max {
-            f = s.f_max;
-            clamp = true;
-        } else if f <= s.f_min {
-            f = s.f_min;
-            clamp = true;
-        }
-        feed.push((f, clamp));
+        feed.push((fz * s.flutes * s.rpm).clamp(s.f_min, s.f_max.max(s.f_min)));
     }
     let mut out = Vec::with_capacity(path.moves.len() + n);
     let mut k = 0;
@@ -526,19 +513,13 @@ pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -
             out.push(*mv);
             continue;
         }
-        let mut i = start;
-        while i < k {
-            let mut j = i;
-            while j + 1 < k && feed[j + 1].1 && feed[i].1 && feed[j + 1].0 == feed[i].0 {
-                j += 1;
-            }
-            let (end, f) = (samples[j].end, feed[i].0);
+        for i in start..k {
+            let (end, f) = (samples[i].end, feed[i]);
             out.push(match *mv {
                 PMove::Line { phase, .. } => PMove::Line { to: end, f, phase },
                 PMove::Arc { c, cw, .. } => PMove::Arc { to: end, c, cw, f },
                 other => other,
             });
-            i = j + 1;
         }
     }
     OpPath {
@@ -647,8 +628,8 @@ mod tests {
             let along = x.end[0] + 6.0;
             assert!((along / 2.0 - (along / 2.0).round()).abs() < 1e-9, "{x:?}");
         }
-        // in air every sample sits at the cap: joined into one move each
+        // every sample its own move, whatever the feeds (all at the cap in air): never joined
         let out = schedule(&p, &mut HeightMap::of_stock(&air, 0.05), &prof, &sched(2.0));
-        assert_eq!(out.moves.len(), p.moves.len());
+        assert_eq!(out.moves.len(), b.len());
     }
 }
