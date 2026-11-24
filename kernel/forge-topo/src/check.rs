@@ -1110,6 +1110,22 @@ pub fn sides_of(body: &Body, faces: &[FaceId]) -> Vec<Problem> {
     out
 }
 
+/// A crossing drawn at eight chords a sample, asked again finer: a chord of a long arc sags further
+/// than eight times the default leaves it (a 60 mm radius over 0.94 rad sags 3 µm in 48 chords), and
+/// a corner of another loop within that of the arc is crossed by the chord, not by the arc (Haas
+/// HBF-12 #24138: a corner 1.3e-4 off an arc a boolean's unify had joined whole). A real crossing
+/// stays one however finely it is drawn: it is believed only if it is still there at 64 and 512
+/// times. Cold: only where the loops' chords already cross steeply.
+#[cold]
+#[inline(never)]
+fn crosses_finer(body: &Body, f: FaceId, band: f64) -> bool {
+    let surface = &body.face(f).surface;
+    [64, 512].iter().all(|&k| {
+        let loops = face_uv_loops_with(body, f, |e| (k * default_segments(e)).min(1 << 16));
+        loops_cross_steeply(&loops, &|uv| surface.eval(uv), band)
+    })
+}
+
 fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mut Vec<Problem>) {
     for &f in faces {
         let loops = face_uv_loops_with(body, f, default_segments);
@@ -1129,21 +1145,25 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
             .map(|&c| edge_length(body, body.coedge(c).edge))
             .fold(f64::INFINITY, f64::min);
         // drawn finely before it is believed: two chords of curved loops close by may cross where the loops do not
+        // a file's edges meet within their tolerance; ours are to meet (asked only of a crossing)
+        let band = || {
+            if body.from_file {
+                loops
+                    .iter()
+                    .flat_map(|l| l.coedges.iter())
+                    .map(|&c| body.edge(body.coedge(c).edge).tol)
+                    .fold(tol::LINEAR, f64::max)
+            } else {
+                0.0
+            }
+        };
         if loops_cross(&loops)
             && loops_cross_steeply(
                 fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
                 &|uv| surface.eval(uv),
-                // a file's edges meet within their tolerance; ours are to meet
-                if body.from_file {
-                    loops
-                        .iter()
-                        .flat_map(|l| l.coedges.iter())
-                        .map(|&c| body.edge(body.coedge(c).edge).tol)
-                        .fold(tol::LINEAR, f64::max)
-                } else {
-                    0.0
-                },
+                band(),
             )
+            && crosses_finer(body, f, band())
         {
             out.push(Problem::LoopsCross { face: f });
         }
