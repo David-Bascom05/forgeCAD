@@ -402,8 +402,8 @@ impl Shell {
             };
             let setup = st.setup_now();
             let mut jump = None;
-            let layer = egui::LayerId::new(egui::Order::Middle, egui::Id::unique("camsim:marks"));
-            let painter = ctx.layer_painter(layer);
+            // in the view's own layer: under every window and panel drawn over the view (CAM-UI)
+            let painter = ctx.layer_painter(egui::LayerId::background()).with_clip_rect(v);
             for (k, m) in st.sim.markers.iter().enumerate() {
                 if m.setup != setup || m.t > st.t + 1e-9 && m.severe() && st.played_only {
                     continue;
@@ -423,7 +423,7 @@ impl Shell {
                 let hit = Rect::from_center_size(p, vec2(16.0, 16.0));
                 let resp = egui::Area::new(id)
                     .fixed_pos(hit.min)
-                    .order(egui::Order::Middle)
+                    .order(egui::Order::Background)
                     .fade_in(false)
                     .show(ctx, |ui| {
                         let (_, r) = ui.allocate_exact_size(hit.size(), Sense::click());

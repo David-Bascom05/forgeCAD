@@ -19,13 +19,19 @@ impl Gui {
         // a turning document is not a milling run (its removal comes later, through this
         // interface): no simulation of it, and none finished for it taken in. Its run says so
         // (the workspace ran it as turning), else its text does
-        let turning =
-            w.run.as_ref().is_some_and(|r| r.process != "milling") || forge_turn_lang::is_turning(&w.text);
+        let turning = w.turning()
+            || w.run.as_ref().is_some_and(|r| r.process != "milling")
+            || forge_turn_lang::is_turning(&w.text);
         let job = &mut self.shell.camsim_job;
         if turning {
             crate::plat::lock(&job.slot).take();
             job.running = None;
-            self.shell.camsim = None;
+            if self.shell.camsim.take().is_some() {
+                self.shell.camsim_job.focus = None;
+                if let Some(v) = &mut self.view {
+                    v.dirty = true;
+                }
+            }
             return;
         }
         // a finished simulation
