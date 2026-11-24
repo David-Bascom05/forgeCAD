@@ -548,3 +548,40 @@ fn suppressing_an_op_generates_again() {
     }
     assert_eq!(w.status("prof"), "built");
 }
+
+/// The Quality window while the run's quality is still being measured (a milling run is shown
+/// first and measured after): a spinner, "Measuring quality", not the turning runs' note; the
+/// Quality button stays enabled; the status line says it; the table once the measure lands.
+#[test]
+fn the_quality_window_shows_the_measure_on_its_way() {
+    use forge_render::shell::cam::{Cmd, status_line};
+    let Some((mut h, _)) = open("quality-measuring") else { return };
+    // the measure landed with the run's settle: keep it, then take it away as an edit does
+    // (the run shown, its measure not yet in)
+    for _ in 0..600 {
+        if h.gui.shell.cam.as_ref().unwrap().run.as_ref().unwrap().quality.is_some() {
+            break;
+        }
+        h.step();
+    }
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    let measured = w.run.as_mut().unwrap().quality.take().expect("the flange's quality measured");
+    assert!(status_line(w).ends_with(" · measuring quality"), "{}", status_line(w));
+    w.command(Cmd::Quality);
+    for _ in 0..12 {
+        h.step();
+    }
+    assert!(h.gui.shell.place("cam:quality:measuring").is_some(), "no spinner while measuring");
+    assert!(h.gui.shell.place("cam:quality:not-measured").is_none(), "the turning note while measuring");
+    assert!(h.gui.shell.place("tool:Quality").is_some() || h.gui.shell.place("cam:quality").is_some());
+    shot(&mut h, "cam-quality-measuring");
+    // the measure lands: the table, and the status line without it
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    w.run.as_mut().unwrap().quality = Some(measured);
+    assert!(!status_line(w).contains("measuring quality"), "{}", status_line(w));
+    for _ in 0..12 {
+        h.step();
+    }
+    assert!(h.gui.shell.place("cam:quality:measuring").is_none(), "the spinner after the measure landed");
+    shot(&mut h, "cam-quality-measured");
+}

@@ -574,7 +574,8 @@ pub fn measure_cam_unless(cam: &Cam, file: String, cfg: &Config, stop: &dyn Fn()
                 moves: mvs,
             })
             .collect();
-        job.ops.push(measure_op(q, &paths, m, group, &curve, cell));
+        job.ops
+            .push(measure_op_unless(q, &paths, m, group, &curve, cell, stop)?);
     }
     if stop() {
         return None;
@@ -596,13 +597,27 @@ pub struct PathIn<'a> {
 /// Measures one op's paths on the stock `m` (lowered as they cut), `q` holding its name, tool and
 /// target already.
 pub fn measure_op(
-    mut q: OpQ,
+    q: OpQ,
     paths: &[PathIn],
     m: &mut HeightMap,
     group: Option<&forge_tooling::feeds::Group>,
     curve: &[[f64; 2]],
     cell: f64,
 ) -> OpQ {
+    measure_op_unless(q, paths, m, group, curve, cell, &|| false).expect("never stopped")
+}
+
+/// `measure_op`, given up (None, the map left part cut) once `stop` says so, asked every 64
+/// moves. Not stopped, `measure_op`'s answer exactly.
+pub fn measure_op_unless(
+    mut q: OpQ,
+    paths: &[PathIn],
+    m: &mut HeightMap,
+    group: Option<&forge_tooling::feeds::Group>,
+    curve: &[[f64; 2]],
+    cell: f64,
+    stop: &dyn Fn() -> bool,
+) -> Option<OpQ> {
     let mut phi_t = 0.0; // Σ φ dt
     let mut side_t = 0.0; // time of side-engaged cutting
     let mut hex_t = 0.0;
@@ -622,6 +637,9 @@ pub fn measure_op(
         let mut last_dir: Option<[f64; 2]> = None;
         let mut was_descending = false;
         for (mi, mv) in p.moves.iter().enumerate() {
+            if mi % 64 == 63 && stop() {
+                return None;
+            }
             let (f, phase) = match *mv {
                 PMove::Rapid { .. } => (0.0, Phase::Rapid),
                 PMove::Line { f, phase, .. } => (f, phase),
@@ -850,7 +868,7 @@ pub fn measure_op(
     if q.t_cut > 0.0 {
         q.mrr = q.removed / (q.t_cut / 60.0);
     }
-    q
+    Some(q)
 }
 
 /// Each program on the machine: its timeline, the ops' shares by their blocks.

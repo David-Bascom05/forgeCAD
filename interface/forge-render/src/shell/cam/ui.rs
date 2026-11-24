@@ -150,10 +150,9 @@ pub fn groups(s: &Shell) -> Vec<(&'static str, Vec<Button>, Vec<Button>)> {
                 (
                     "Quality",
                     "cam_check",
-                    w.run
-                        .as_ref()
-                        .is_some_and(|r| r.quality.is_some())
-                        .then_some(Action::Cam(Ask::Quality)),
+                    // enabled once there is a run: the window says when the measure is still
+                    // on its way (or that a turning run is not measured)
+                    w.run.is_some().then_some(Action::Cam(Ask::Quality)),
                     w.quality_open,
                 ),
             ],
@@ -2796,7 +2795,25 @@ fn quality_window(
             });
             let Some(run) = &w.run else { return };
             let Some(job) = &run.quality else {
-                note(ui, "Not measured (turning runs are not yet).", width, t.ink2);
+                if run.cam.is_some() {
+                    // a milling run is measured after it is shown (the worker hands the
+                    // measure over when it lands, and wakes the frame)
+                    ui.add_space(6.0);
+                    let r = ui.horizontal(|ui| {
+                        ui.add_space(14.0);
+                        crate::shell::ux::loading(ui, t, "Measuring quality");
+                    });
+                    places.push(("cam:quality:measuring".into(), r.response.rect));
+                    ui.add_space(6.0);
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(250));
+                } else {
+                    let top = ui.cursor().min;
+                    note(ui, "Not measured (turning runs are not yet).", width, t.ink2);
+                    places.push((
+                        "cam:quality:not-measured".into(),
+                        Rect::from_min_max(top, pos2(top.x + width, ui.cursor().min.y)),
+                    ));
+                }
                 return;
             };
             let cols: [(&str, f32); 10] = [
@@ -3058,10 +3075,16 @@ pub fn status_line(w: &CamWs) -> String {
     } else {
         String::new()
     };
+    // a milling run's quality is measured after it is shown
+    let measuring = w
+        .run
+        .as_ref()
+        .is_some_and(|r| r.cam.is_some() && r.quality.is_none());
     format!(
-        "{} · {built}/{n} ops certified{machining}{}",
+        "{} · {built}/{n} ops certified{machining}{}{}",
         w.path.rsplit('/').next().unwrap_or(""),
-        if w.dirty() { " · unsaved" } else { "" }
+        if w.dirty() { " · unsaved" } else { "" },
+        if measuring { " · measuring quality" } else { "" }
     )
 }
 

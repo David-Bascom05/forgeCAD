@@ -54,6 +54,8 @@ impl Gui {
         {
             r.quality = Some(q);
             changed = true;
+            // the status line drops its "measuring quality"
+            self.shell.status = crate::shell::cam::status_line(w);
         }
         if !took && self.shell.status.is_empty() && w.run.is_some() && w.running.is_none() {
             // nothing else to say (a view loaded after the run cleared it): the run's state
