@@ -295,6 +295,10 @@ fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
     c.yaw = 240f32.to_radians();
     c.pitch = 25f32.to_radians();
     v.nav.jump_to(c);
+    // its fade run through (FADE_AFTER frames, then FADE_FRAMES)
+    for _ in 0..16 {
+        h.step();
+    }
     shot(&mut h, "11-seen-through");
     let n = h.gui.bend.ghosts.len();
     assert!(n > 0, "a flange between the eye and the bend is seen through");
@@ -439,4 +443,42 @@ fn a_narrow_view_gets_a_compact_bar() {
         }
     }
     assert!(h.gui.shell.place("view:axes").is_some(), "the first chips still shown");
+}
+
+/// Bend 2 as a recording sees it (Follow bend on, coordinator's frame strip): at every instant of
+/// its forming the part is a real share of the picture, not a sliver under the ram.
+#[test]
+fn bend_two_followed_shows_the_part() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "strip", "trumpf-trubend-5130", None);
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().follow = true;
+    let mut least = f32::MAX;
+    for (i, t) in [0.2, 0.4, 0.5, 0.6, 0.7, 0.8].into_iter().enumerate() {
+        {
+            let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+            b.step = 1;
+            b.t = t;
+        }
+        for _ in 0..16 {
+            h.step();
+        }
+        shot(&mut h, &format!("15-bend-2-strip-{i}"));
+        let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
+        let sim = b.sim.as_ref().unwrap();
+        let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
+        let (cam, size) = h.gui.shell.camera.expect("the view's camera");
+        let m = cam.view(size.0, size.1).matrix;
+        let (mut ylo, mut yhi) = (f32::MAX, f32::MIN);
+        for x in sc.bodies(1, t).iter().filter(|x| x.look.is_sheet()) {
+            for p in &x.mesh.pos {
+                let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
+                let y = c(1) / c(3);
+                ylo = ylo.min(y);
+                yhi = yhi.max(y);
+            }
+        }
+        // the part's height on the screen, as a share of the view's (NDC spans 2)
+        least = least.min((yhi.min(1.0) - ylo.max(-1.0)) / 2.0);
+    }
+    assert!(least > 0.2, "the part only {least:.2} of the view's height at some instant");
 }
