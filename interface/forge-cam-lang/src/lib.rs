@@ -828,6 +828,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "kink",
             "min_len",
             "vc",
@@ -867,6 +868,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "stepover",
             "walls",
             "vc",
@@ -905,6 +907,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "after",
             "after_leave",
             "stepover",
@@ -947,6 +950,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "threshold",
             "step",
             "down",
@@ -989,6 +993,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "stepover",
             "center",
             "r0",
@@ -1030,6 +1035,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "stepover",
             "center",
             "r0",
@@ -1070,6 +1076,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "slope_min",
             "step",
             "down",
@@ -1109,6 +1116,7 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "cusp",
             "stay",
             "lift",
+            "fit",
             "stepover",
             "angle",
             "vc",
@@ -5732,6 +5740,20 @@ impl Cam {
             (w(sn), w(cs))
         };
         let cut = t.tool.cutter();
+        // the fitter's chord tolerance (forge_cam::fit): each pass's points are fitted into
+        // longer lines and arcs within it, each piece proven as a chord is (no gouge beyond the
+        // slack). It is taken from the path's tolerance, not the cusp's: the passes are draped
+        // within tol − fit above the CL surface (their contours within fit/5), so a fitted piece
+        // keeps the plain op's tol; the spacing, and so the cusp, is the plain op's. 0: none
+        let fit_tol = get_num(a, "fit", Some(0.25 * tol))?;
+        if !(fit_tol >= 0.0 && fit_tol.is_finite()) {
+            return Err("fit: a chord tolerance in mm, 0 or more".into());
+        }
+        if fit_tol > 0.5 * tol {
+            return Err(format!("fit: at most half the setup's tol ({} mm)", 0.5 * tol));
+        }
+        // curved xy patterns chorded well within the fit's tolerance, so arcs fit their points
+        let pattern_sag = if fit_tol > 0.0 { 0.2 * fit_tol } else { tol };
         // the spacing along the surface from the cusp, at the slope that bounds the op's passes
         let cusp_at = |deg: f64| -> Result<Option<(f64, f64, Ival, Ival)>, String> {
             match a.get("cusp") {
@@ -5748,7 +5770,7 @@ impl Cam {
         let dr = Drape {
             step: get_num(a, "sample", Some(0.5 * d))?,
             slack: 0.5 * tol,
-            leave: tol,
+            leave: tol - fit_tol,
             zmin: floor,
         };
         let mut fin = Finish {
@@ -5795,6 +5817,8 @@ impl Cam {
                     bottom,
                     grid,
                     tol,
+                    leave: tol - fit_tol,
+                    contour: if fit_tol > 0.0 { pattern_sag } else { tol },
                     area: Some([[area[0], area[1]], [area[2], area[3]]]),
                 };
                 let (st, sh) = steep::steep_and_shallow(&dc, p).map_err(|x| e(format!("{x:?}")))?;
@@ -5835,7 +5859,7 @@ impl Cam {
                         "in" => true,
                         _ => return Err("direction: \"in\" or \"out\"".into()),
                     };
-                    strategy::spiral(&dc, centre, r0, r1, so, inward, dr, &within)
+                    strategy::spiral_sag(&dc, centre, r0, r1, so, inward, pattern_sag, dr, &within)
                 } else {
                     strategy::radial(&dc, centre, r0.max(0.5 * so), r1, so, dr, &within)
                 };
@@ -5867,7 +5891,12 @@ impl Cam {
                     &zs,
                     waterline::Params {
                         grid,
-                        tol_xy: 0.5 * tol,
+                        tol_xy: if fit_tol > 0.0 {
+                            pattern_sag.min(0.5 * tol)
+                        } else {
+                            0.5 * tol
+                        },
+                        slack: 0.25 * tol,
                     },
                 )
                 .map_err(|x| e(format!("{x:?}")))?;
@@ -5986,7 +6015,8 @@ impl Cam {
                 vec![rp]
             }
             _ => {
-                // flat: the flat heights within the band, raster passes at each
+                // flat: the flat heights within the band, raster passes at each (every pass and
+                // every fitted piece at its flat's exact height)
                 let so = match cusp_at(0.0)? {
                     Some((h0, hb, ..)) => {
                         fin.cusp = Some(h0);
@@ -6052,7 +6082,7 @@ impl Cam {
             rpm: 0.0,
             coolant: forge_post::Coolant::Flood,
         };
-        let (p, c) = link::path(
+        let (p, c) = link::path_fit(
             &dc,
             &ordered,
             link::Rules {
@@ -6061,6 +6091,10 @@ impl Cam {
                 slack: 0.25 * tol,
             },
             em,
+            (fit_tol > 0.0).then_some(link::FitRule {
+                fit: forge_cam::fit::Fit::arcs(fit_tol),
+                slack: 0.5 * tol,
+            }),
         );
         fin.links = [c.stay, c.lift, c.retract];
         if std::env::var("FORGE_CAM3D_TIME").is_ok() {
@@ -6078,6 +6112,27 @@ impl Cam {
             "links: {} stayed down, {} lifted, {} retracted",
             c.stay, c.lift, c.retract
         ));
+        if fit_tol > 0.0 {
+            let points: usize = ordered.iter().map(|p| p.len().saturating_sub(1)).sum();
+            let arcs = p.moves.iter().filter(|m| matches!(m, PMove::Arc { .. })).count();
+            let cuts = p
+                .moves
+                .iter()
+                .filter(|m| {
+                    matches!(
+                        m,
+                        PMove::Line {
+                            phase: forge_cam::ops::Phase::Cut,
+                            ..
+                        }
+                    )
+                })
+                .count();
+            out.plan.push(format!(
+                "fit within {fit_tol} mm (of the tolerance; passes draped within tol − fit): {points} pass points as {cuts} lines and {arcs} arcs, measured {:.5} mm from the passes at most",
+                c.fit_dev
+            ));
+        }
         out.finish = Some(fin);
         Ok(vec![p])
     }

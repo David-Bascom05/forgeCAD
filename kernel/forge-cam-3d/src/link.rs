@@ -15,10 +15,18 @@
 //!
 //! Ordering: greedy nearest start (an open pass may be reversed when the strategy allows it),
 //! from the op's start; groups (e.g. waterline levels top down) are kept in order.
+//!
+//! Fitting (`path_fit`): each pass's points are fitted into longer lines and arcs by forge-cam's
+//! one fitter (`forge_cam::fit`) before they are emitted, within the rule's chord tolerance, and
+//! each fitted piece is kept only when the drop-cutter proves it as it proves a chord: a line by
+//! `seg3_below`, an arc by `arc3_below`, both with the rule's slack. A fitted piece is within the
+//! tolerance of the pass both ways, so the cusp it leaves is the pass's plus at most the
+//! tolerance (the caller budgets for it).
 
 use crate::drape::Pass;
 use crate::drop::DropCutter;
 use crate::path::Emit;
+use forge_cam::fit::{self, Fit, Piece};
 use forge_cam::ops::{OpPath, PMove, Phase};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -32,12 +40,25 @@ pub struct Rules {
     pub slack: f64,
 }
 
+/// Fitting passes into longer moves before they are emitted.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FitRule {
+    /// The chord tolerance and the pieces allowed.
+    pub fit: Fit,
+    /// How far a fitted piece may dip below the CL surface (at most the op's inner tolerance,
+    /// as for the strategies' own chords).
+    pub slack: f64,
+}
+
 /// What a linked path did, for the quality report.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct LinkCount {
     pub stay: usize,
     pub lift: usize,
     pub retract: usize,
+    /// With fitting: the fitted pieces' measured largest distance from their passes (mm;
+    /// `fit::deviation`, sampled every 0.01 mm); 0 without.
+    pub fit_dev: f64,
 }
 
 fn dxy(a: [f64; 3], b: [f64; 3]) -> f64 {
@@ -125,14 +146,53 @@ pub fn order(groups: Vec<Vec<Pass>>, start: [f64; 3], reversible: bool) -> Vec<P
 
 /// The passes, in order, linked by the rule, as one path.
 pub fn path(dc: &dyn DropCutter, ps: &[Pass], r: Rules, e: Emit) -> (OpPath, LinkCount) {
+    path_fit(dc, ps, r, e, None)
+}
+
+/// A pass fitted by the rule: its cutting moves after its first point.
+pub fn fit_pass(dc: &dyn DropCutter, p: &Pass, fr: FitRule) -> Vec<Piece> {
+    fit::fit(p, fr.fit, &mut |a, pc| match *pc {
+        Piece::Line { to } => dc.seg3_below(a, to, fr.slack),
+        Piece::Arc { to, c, cw } => dc.arc3_below(a, to, c, cw, fr.slack),
+    })
+}
+
+/// `path`, with every pass fitted first when `fit` is given (the passes in parallel, in a fixed
+/// order).
+pub fn path_fit(
+    dc: &dyn DropCutter,
+    ps: &[Pass],
+    r: Rules,
+    e: Emit,
+    fit: Option<FitRule>,
+) -> (OpPath, LinkCount) {
+    let fitted: Option<Vec<Vec<Piece>>> = fit.map(|fr| {
+        forge_math::par::map(ps.len(), |k| {
+            if ps[k].len() < 2 {
+                Vec::new()
+            } else {
+                fit_pass(dc, &ps[k], fr)
+            }
+        })
+    });
     let mut moves = Vec::new();
     let mut count = LinkCount::default();
+    if let Some(f) = &fitted {
+        let dev = forge_math::par::map(ps.len(), |k| {
+            if ps[k].len() < 2 {
+                0.0
+            } else {
+                fit::deviation(&ps[k], &f[k], 0.01)
+            }
+        });
+        count.fit_dev = dev.into_iter().fold(0.0, f64::max);
+    }
     let start = match ps.first().and_then(|l| l.first()) {
         Some(p) => [p[0], p[1], e.h.clear],
         None => [0.0, 0.0, e.h.clear],
     };
     let mut prev: Option<[f64; 3]> = None;
-    for p in ps {
+    for (k, p) in ps.iter().enumerate() {
         if p.len() < 2 {
             continue;
         }
@@ -150,14 +210,19 @@ pub fn path(dc: &dyn DropCutter, ps: &[Pass], r: Rules, e: Emit) -> (OpPath, Lin
             }
             Some(a) => link(dc, a, b, r, e, &mut moves, &mut count),
         }
-        let mut i = 1;
-        while i < p.len() {
-            moves.push(PMove::Line {
-                to: p[i],
-                f: e.feed.0,
-                phase: Phase::Cut,
-            });
-            i += 1;
+        match &fitted {
+            Some(f) => moves.extend(fit::to_moves(&f[k], e.feed.0, Phase::Cut)),
+            None => {
+                let mut i = 1;
+                while i < p.len() {
+                    moves.push(PMove::Line {
+                        to: p[i],
+                        f: e.feed.0,
+                        phase: Phase::Cut,
+                    });
+                    i += 1;
+                }
+            }
         }
         prev = Some(p[p.len() - 1]);
     }
@@ -269,6 +334,8 @@ mod tests {
             bottom: 0.0,
             grid: 1.0,
             tol: 0.01,
+            leave: 0.01,
+            contour: 0.01,
             area: None,
         };
         let (st, sh) = steep::steep_and_shallow(&dc, p).unwrap();
@@ -295,6 +362,43 @@ mod tests {
         );
         let total = c.stay + c.lift + c.retract;
         assert!(total > 10);
+        // fitted: fewer moves, each cutting line proven by the drop-cutter (a fitted piece at the
+        // fit's slack, a kept input chord at the drape's, here the op's tol 0.01), within the
+        // tolerance of the passes (the dome's drop-cutter has no arc test: lines only)
+        let fr = FitRule {
+            fit: Fit::arcs(0.002),
+            slack: 0.005,
+        };
+        let r = Rules {
+            max_stay: 2.0,
+            lift: 0.5,
+            slack: 0.0,
+        };
+        let (p0, _) = path(&dc, &ord, r, e);
+        let (p1, c1) = path_fit(&dc, &ord, r, e, Some(fr));
+        assert!(
+            p1.moves.len() < p0.moves.len(),
+            "{} vs {}",
+            p1.moves.len(),
+            p0.moves.len()
+        );
+        assert!(c1.fit_dev <= 0.002 * (1.0 + 1e-9), "{}", c1.fit_dev);
+        let mut at = p1.start;
+        for m in &p1.moves {
+            match *m {
+                PMove::Line {
+                    to,
+                    phase: Phase::Cut,
+                    ..
+                } => {
+                    assert!(dc.seg3_below(at, to, 0.01), "{at:?} -> {to:?}");
+                    at = to;
+                }
+                PMove::Arc { .. } => panic!("no arc test, no arcs"),
+                PMove::Rapid { to } | PMove::Line { to, .. } => at = to,
+                _ => {}
+            }
+        }
         // most links stay down or lift a little; full retracts are rare
         assert!(c.retract * 4 < total, "{c:?}");
         assert!(c.stay > 0, "{c:?}");
