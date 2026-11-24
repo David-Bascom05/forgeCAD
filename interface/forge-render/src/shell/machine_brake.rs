@@ -647,7 +647,7 @@ pub fn library(
                             }
                             // the secondary line: what it is picked by
                             let lt = super::lib_form::len_text;
-                            let mut sub: Vec<String> = match &*e.def.kind {
+                            let mut sub: Vec<String> = match e.def.kind {
                                 "press" => [
                                     n("force").map(|f| format!("{} kN", forge_units::trim(f))),
                                     n("bed_length").map(lt),

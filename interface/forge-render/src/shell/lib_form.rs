@@ -564,10 +564,13 @@ pub fn len_text(mm: f64) -> String {
     }
 }
 
+/// A part as the thumbnail rasteriser takes it: positions, triangles, colour.
+type ThumbPart<'a> = (Vec<[f32; 3]>, &'a Vec<[u32; 3]>, [f32; 3]);
+
 /// A record's preview as a thumbnail (its solid parts at their appearances; the floor and the
 /// ghosts left out), 96 px for a 48 px row.
 pub fn thumb_of(p: &crate::library_mesh::Preview) -> Option<crate::thumb::Image> {
-    let parts: Vec<(Vec<[f32; 3]>, &Vec<[u32; 3]>, [f32; 3])> = p
+    let parts: Vec<ThumbPart> = p
         .parts
         .iter()
         .filter(|(_, l)| *l != crate::library_mesh::Look::Floor)
