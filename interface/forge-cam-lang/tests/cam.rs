@@ -1138,3 +1138,65 @@ fn a_contour_takes_its_direction_and_passes() {
         cam.errors
     );
 }
+
+/// Heights as model references (Fusion parity): `from:`/`to:` take a horizontal face of the part
+/// (`f.boss.end`, `f.plate.end`) with an offset (`+ 0.5`), read in the setup's frame; the program
+/// is the one the same heights as numbers give. A reference that is not horizontal, or one in an
+/// argument that is not a height, is refused.
+#[test]
+fn heights_are_model_references() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let text = |body: &str| {
+        let cam = forge_cam_lang::run(&doc(body), &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        assert!(
+            cam.ops.iter().all(|o| o.status == "built"),
+            "{:?}",
+            cam.ops.iter().map(|o| &o.refusal).collect::<Vec<_>>()
+        );
+        cam.program_text().unwrap().0.to_string()
+    };
+    let prog = "prog = program(op1, post: \"fanuc\", number: 1)\n";
+    let by_number = text(&format!(
+        "skim = facing(op1, tool: t1, to: 18, step: 1)\ntop = clear(op1, tool: t1, from: 18, to: 12.5, step: 3, stepover: 4)\n{prog}"
+    ));
+    let by_model = text(&format!(
+        "skim = facing(op1, tool: t1, to: f.boss.end, step: 1)\ntop = clear(op1, tool: t1, from: f.boss.end, to: f.plate.end + 0.5, step: 3, stepover: 4)\n{prog}"
+    ));
+    assert_eq!(by_number, by_model);
+    // turned over (`from:`): the mounting face (z = 0 in the part) is the top, h − z = 18
+    let turned = |to: &str| {
+        let body = format!(
+            "skim = facing(op1, tool: t1, to: 18, step: 1)\nprog = program(op1, post: \"fanuc\", number: 1)\nop2 = setup(f, from: op1, machine: m, origin: \"top-center\", tol: 0.01)\nback = facing(op2, tool: t1, to: {to}, step: 1)\nprog2 = program(op2, post: \"fanuc\", number: 2)\n"
+        );
+        let cam = forge_cam_lang::run(&doc(&body), &dir);
+        assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+        let o = cam.ops.iter().find(|o| o.name == "back").unwrap();
+        (o.status, format!("{:?}", o.paths.iter().map(|p| &p.moves).collect::<Vec<_>>()))
+    };
+    let (st, a) = turned("18");
+    assert_eq!(st, "built");
+    let (_, b) = turned("f.plate.start");
+    assert_eq!(a, b);
+    for (body, why) in [
+        (
+            "skim = facing(op1, tool: t1, to: f.plan.outline, step: 1)\n",
+            "not",
+        ),
+        (
+            "skim = facing(op1, tool: t1, to: 18, step: f.plate.end)\n",
+            "`step` takes a number, not a model height",
+        ),
+        (
+            "skim = facing(op1, tool: t1, to: f.plate.end * 2, step: 1)\n",
+            "a model height takes only + or − a length",
+        ),
+    ] {
+        let cam = forge_cam_lang::run(&doc(body), &dir);
+        assert!(
+            cam.errors.iter().any(|e| e.contains(why)),
+            "{body}: {:?}",
+            cam.errors
+        );
+    }
+}

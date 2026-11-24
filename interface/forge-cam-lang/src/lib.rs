@@ -72,6 +72,14 @@ enum V {
     Vise(ViseSpec),
     /// Soft jaws: their index, and the jaws as a part.
     Jaws(usize, usize),
+    /// A height of the model: the plane of a horizontal face of part `part` (`f.base.end`) at
+    /// `z` in its frame, plus `off` along the setup's up (`f.base.end + 0.5`); an op's `from:`
+    /// or `to:` reads it in its setup's frame (a turned-over part's is h − z).
+    Height {
+        part: usize,
+        z: f64,
+        off: f64,
+    },
     #[allow(dead_code)]
     Op(usize),
 }
@@ -251,6 +259,62 @@ fn tuple3(v: &V) -> Option<[f64; 3]> {
 }
 
 impl Cam {
+    /// A model reference of part i (`base.end`, `plate.start`) as a height: forge-lang evaluates
+    /// it on the finished part (`Options::asks`); it must be a horizontal plane (a face facing
+    /// ±z, or a plane).
+    fn model_height(&self, i: usize, text: &str) -> Result<V, String> {
+        let p = &self.parts[i];
+        let opts = forge_lang::Options {
+            dir: Some(p.pdir.clone()),
+            asks: vec![text.to_string()],
+            ..Default::default()
+        };
+        let (run, _) = forge_lang::run(&p.src, opts, Default::default());
+        let frame = match run.asked.first().map(|(_, a)| a) {
+            Some(forge_lang::anchors::Asked::Plane(f)) => *f,
+            Some(forge_lang::anchors::Asked::Faces(_, Some(f))) => *f,
+            Some(forge_lang::anchors::Asked::Faces(_, None)) => {
+                return Err(format!(
+                    "`{text}` is not a plane: a height is a horizontal face's"
+                ));
+            }
+            _ => return Err(format!("`{text}` is not in the part")),
+        };
+        let n = frame.z().get();
+        if !(n.x == 0.0 && n.y == 0.0 && n.z.abs() == 1.0) {
+            return Err(format!(
+                "`{text}` is not horizontal: a height is a face facing up or down"
+            ));
+        }
+        Ok(V::Height {
+            part: i,
+            z: frame.origin.z,
+            off: 0.0,
+        })
+    }
+
+    /// An op's arguments with each model height (`from:`, `to:`) read in setup su's frame.
+    fn heights_in(&self, su: usize, a: &BTreeMap<String, V>) -> Result<BTreeMap<String, V>, String> {
+        let sp = self.setups[su].part;
+        let mut out = a.clone();
+        for (k, v) in out.iter_mut() {
+            if let V::Height { part, z, off } = *v {
+                if k != "from" && k != "to" {
+                    return Err(format!("`{k}` takes a number, not a model height"));
+                }
+                let zs = if sp == part {
+                    z
+                } else if self.parts[sp].turn_of == Some(part) {
+                    self.parts[part].h() - z
+                } else {
+                    return Err(format!("`{k}`: a height of another part than the setup's"));
+                };
+                *v = V::Num(zs + off);
+            }
+        }
+        Ok(out)
+    }
+
     /// The part turned over about x, made once.
     fn turned_part(&mut self, i: usize) -> Result<usize, String> {
         if let Some(k) = self.parts.iter().position(|p| p.turn_of == Some(i)) {
@@ -287,9 +351,32 @@ impl Cam {
             }
             ExprKind::Neg(x) => V::Num(-num(&self.eval(x, env)?).ok_or("`-` of a non-number")?),
             ExprKind::Bin(op, a, b) => {
+                let (va, vb) = (self.eval(a, env)?, self.eval(b, env)?);
+                // a model height plus or minus a length: offset along the setup's up
+                match (&va, &vb, op) {
+                    (V::Height { part, z, off }, V::Num(d), syntax::BinOp::Add | syntax::BinOp::Sub) => {
+                        let d = if matches!(op, syntax::BinOp::Add) { *d } else { -*d };
+                        return Ok(V::Height {
+                            part: *part,
+                            z: *z,
+                            off: off + d,
+                        });
+                    }
+                    (V::Num(d), V::Height { part, z, off }, syntax::BinOp::Add) => {
+                        return Ok(V::Height {
+                            part: *part,
+                            z: *z,
+                            off: off + d,
+                        });
+                    }
+                    (V::Height { .. }, _, _) | (_, V::Height { .. }, _) => {
+                        return Err("a model height takes only + or − a length".into());
+                    }
+                    _ => {}
+                }
                 let (a, b) = (
-                    num(&self.eval(a, env)?).ok_or("arithmetic on a non-number")?,
-                    num(&self.eval(b, env)?).ok_or("arithmetic on a non-number")?,
+                    num(&va).ok_or("arithmetic on a non-number")?,
+                    num(&vb).ok_or("arithmetic on a non-number")?,
                 );
                 V::Num(match op {
                     syntax::BinOp::Add => a + b,
@@ -298,6 +385,20 @@ impl Cam {
                     syntax::BinOp::Div => a / b,
                     _ => return Err("only + - * / in a machining document".into()),
                 })
+            }
+            ExprKind::Attr(x, name) if matches!(x.kind, ExprKind::Attr(..)) => {
+                // a chain below a part: a model reference, `f.base.end`
+                let mut names = vec![name.clone()];
+                let mut root = x.as_ref();
+                while let ExprKind::Attr(y, n) = &root.kind {
+                    names.push(n.clone());
+                    root = y.as_ref();
+                }
+                names.reverse();
+                match self.eval(root, env)? {
+                    V::Part(i) => self.model_height(i, &names.join("."))?,
+                    _ => return Err(format!("`.{name}` of something that is not a part")),
+                }
             }
             ExprKind::Attr(x, name) => match self.eval(x, env)? {
                 V::Part(i) => {
@@ -314,6 +415,8 @@ impl Cam {
                     .is_some()
                     {
                         V::Sketch(i, name.clone())
+                    } else if let Ok(h) = self.model_height(i, name) {
+                        h
                     } else {
                         let have: Vec<&str> = self.parts[i].holes.iter().map(|h| h.name.as_str()).collect();
                         return Err(format!(
@@ -2102,6 +2205,13 @@ impl Cam {
         let su = match a.get("#0") {
             Some(V::Setup(i)) => *i,
             _ => return Err(format!("{kind}(SETUP, ..)")),
+        };
+        let resolved;
+        let a = if a.values().any(|v| matches!(v, V::Height { .. })) {
+            resolved = self.heights_in(su, a)?;
+            &resolved
+        } else {
+            a
         };
         let s = &self.setups[su];
         let part = &self.parts[s.part];

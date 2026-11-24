@@ -86,6 +86,12 @@ conventional and an inside one climb. `finish: n` (default 1) cuts n radial pass
 `finish_step:` apart (default a tenth of the tool's diameter), the last at the contour's own offset;
 `spring: n` (default 0) repeats the last pass n times. Only `contour` takes these four.
 
+Heights (`from:`, `to:`) are numbers in the part's frame, or the model's own: a horizontal face or
+plane of the part named as in the part's text (`f.plate.end`, `f.boss.end`, `f.plate.start`),
+plus or minus a length along the setup's up (`to: f.plate.end + 0.5`). In a setup turned over
+(`from:`), the same reference is read in the turned frame. A reference that is not horizontal, or
+in any other argument, is refused.
+
 Holes are read from the part's history (`hole(d:, depth:, thread:, ...)`), never recognised from
 the shape: `f.bolts` is the `bolts` hole feature with its diameter, depth, thread and fit.
 
