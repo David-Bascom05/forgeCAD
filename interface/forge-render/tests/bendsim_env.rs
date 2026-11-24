@@ -1636,3 +1636,33 @@ fn cut_lengths(line: &str) -> String {
     out.push_str(rest);
     out
 }
+
+/// No silent button (BUTTON-AUDITOR): with no feasible order, Simulate Again and Suggest Order
+/// say so with the first reason; at bend 1, First and Previous are off (clicked, nothing moves).
+#[test]
+fn no_feasible_order_is_said_and_bend_one_has_no_previous() {
+    let Some(mut h) = headless() else { return };
+    enter(
+        &mut h,
+        NARROW_U,
+        "narrow-say",
+        "bystronic-xpert-pro-100-3100",
+        Some(&["bystronic/P6_RF-A_H175_R1.0"]),
+    );
+    assert!(!h.gui.shell.sheet.bend_sim.as_ref().unwrap().sim.as_ref().unwrap().plan.feasible);
+    for tool in ["tool:Simulate Again", "tool:Suggest Order"] {
+        h.gui.shell.status.clear();
+        click(&mut h, tool);
+        let st = h.gui.shell.status.clone();
+        assert!(st.starts_with("No feasible order: bend "), "{tool}: {st:?}");
+    }
+    let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+    b.go(0);
+    for tool in ["tool:First Bend", "tool:Previous Bend"] {
+        h.click(tool);
+        h.step();
+        assert_eq!(h.gui.shell.sheet.bend_sim.as_ref().unwrap().step, 0, "{tool}");
+    }
+    click(&mut h, "tool:Next Bend");
+    assert_eq!(h.gui.shell.sheet.bend_sim.as_ref().unwrap().step, 1);
+}

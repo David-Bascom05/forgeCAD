@@ -443,6 +443,11 @@ impl Shell {
 
     /// Why an environment's tile is off, for its tooltip.
     pub(super) fn env_why_off(&self, name: &str) -> Option<String> {
+        if self.env == Some(EnvId::BendSim)
+            && let Some(w) = super::bendsim_env::why_off(self, name)
+        {
+            return Some(w);
+        }
         let id = EnvId::ALL.into_iter().find(|e| e.name() == name)?;
         id.imp().available(self).err()
     }

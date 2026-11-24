@@ -129,8 +129,52 @@ pub(super) fn status(s: &Shell) -> Option<String> {
     ))
 }
 
+/// Why a Bend Simulation tool is off, in words (its tooltip; BUTTON-AUDITOR: no silent button).
+pub(super) fn why_off(s: &Shell, name: &str) -> Option<String> {
+    let b = s.sheet.bend_sim.as_deref()?;
+    let sim = match &b.sim {
+        Ok(x) => x,
+        Err(e) => return Some(format!("nothing simulated: {e}")),
+    };
+    let n = sim.plan.steps.len();
+    match name {
+        "First Bend" | "Previous Bend" if b.step == 0 => Some("already at bend 1".into()),
+        "Next Bend" | "Last Bend" if b.step + 1 >= n => Some(format!("already at the last bend ({n})")),
+        "Write Program" if b.doc.is_some() => Some("the program is written: its document is open in the browser".into()),
+        _ => None,
+    }
+}
+
+/// The planner found no feasible order: the first reason, in words.
+pub(super) fn infeasible(b: &BendSimUi) -> Option<String> {
+    let sim = b.sim.as_ref().ok().filter(|x| !x.plan.feasible)?;
+    let first = sim.plan.blocking.first().map(|k| {
+        let rules: Vec<String> = k
+            .checks
+            .iter()
+            .filter(|c| !c.pass)
+            .map(|c| super::bendsim_cards::rule_label(c.rule).to_lowercase())
+            .collect();
+        format!(
+            "bend {} ({}) fails {} (best tried: {} on {})",
+            k.bend + 1,
+            sim.names[k.bend],
+            if rules.is_empty() { "its checks".to_string() } else { rules.join(", ") },
+            k.punch,
+            k.die
+        )
+    });
+    Some(format!(
+        "No feasible order: {}",
+        first.unwrap_or_else(|| "the planner found none with these tools".into())
+    ))
+}
+
 pub(super) fn groups(s: &Shell) -> Vec<Group> {
     let b = s.sheet.bend_sim.as_deref();
+    let n = b.and_then(|b| b.sim.as_ref().ok()).map_or(0, |x| x.plan.steps.len());
+    let at_first = b.is_some_and(|b| b.step == 0);
+    let at_last = b.is_some_and(|b| b.step + 1 >= n);
     let ran = b.is_some_and(|b| b.sim.is_ok());
     let cmd = |c: u16| ran.then_some(Action::Env(EnvId::BendSim, c));
     let any = b.is_some().then_some(());
@@ -183,10 +227,10 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
                 playing,
             )],
             vec![
-                tool("First Bend", "first", cmd(FIRST), false),
-                tool("Previous Bend", "stepback", cmd(BACK), false),
-                tool("Next Bend", "stepfwd", cmd(NEXT), false),
-                tool("Last Bend", "last", cmd(LAST), false),
+                tool("First Bend", "first", cmd(FIRST).filter(|_| !at_first), false),
+                tool("Previous Bend", "stepback", cmd(BACK).filter(|_| !at_first), false),
+                tool("Next Bend", "stepfwd", cmd(NEXT).filter(|_| !at_last), false),
+                tool("Last Bend", "last", cmd(LAST).filter(|_| !at_last), false),
             ],
         ),
         group(
@@ -390,6 +434,9 @@ pub(super) fn command(s: &mut Shell, c: u16) {
         SUGGEST => {
             b.pane = super::bendsim::Pane::Program;
             b.suggest = true;
+            if let Some(w) = infeasible(b) {
+                s.status = w;
+            }
         }
         WRITE => {
             if let Err(e) = b.write_doc() {
@@ -409,6 +456,15 @@ pub(super) fn command(s: &mut Shell, c: u16) {
             if let Some(fg) = s.fg.as_ref() {
                 let tooling = b.tooling.clone();
                 again(b, fg, &tooling);
+            }
+            // never silent: what the planner found, or why there is no order
+            let b = s.sheet.bend_sim.as_deref().unwrap();
+            s.status = infeasible(b).unwrap_or_else(|| match &b.sim {
+                Ok(x) => format!("Simulated again: {} bends, feasible", x.plan.steps.len()),
+                Err(e) => format!("Bend Simulation: {e}"),
+            });
+            if let Some(n) = b.note.clone() {
+                s.status = format!("{} · {n}", s.status);
             }
         }
         k => {
