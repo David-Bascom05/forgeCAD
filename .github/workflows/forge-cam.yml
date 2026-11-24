@@ -3,15 +3,16 @@
 # moves. Lean v4.36.0 with Mathlib v4.36.0, whose build comes from its cache (`lake exe cache
 # get`). A theorem that no longer checks, a `sorry`, `native_decide`, or any axiom past propext,
 # Classical.choice and Quot.sound fails the job. Kept apart from lean.yml so the jobs never edit
-# one file.
+# one file. It runs when any crate whose code the proofs guard changes (forge-cam, forge-cam-geom,
+# forge-cam-3d, forge-tooling, forge-cam-lang: verify/REMOVED-CHECKS.toml lists what rests on them).
 name: forge-cam
 
 on:
   push:
     branches: [main]
-    paths: ["verify/forge-cam/**", "kernel/forge-cam-geom/**", ".github/workflows/forge-cam.yml"]
+    paths: ["verify/forge-cam/**", "kernel/forge-cam*/**", "kernel/forge-tooling/**", "interface/forge-cam-lang/**", ".github/workflows/forge-cam.yml"]
   pull_request:
-    paths: ["verify/forge-cam/**", "kernel/forge-cam-geom/**", ".github/workflows/forge-cam.yml"]
+    paths: ["verify/forge-cam/**", "kernel/forge-cam*/**", "kernel/forge-tooling/**", "interface/forge-cam-lang/**", ".github/workflows/forge-cam.yml"]
   workflow_dispatch:
 
 jobs:
@@ -42,6 +43,19 @@ jobs:
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
           "$HOME/.elan/bin/elan" toolchain install "$(cat lean-toolchain)"
           "$HOME/.elan/bin/lake" exe cache get
+      - name: Lake cache key
+        id: lake
+        working-directory: .
+        run: python3 tools/ci/lake-cache.py forge-cam verify/forge-cam
+      - name: Lake build (restored; Lake rebuilds what changed, so a change to the guarded Rust alone rebuilds nothing)
+        id: restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
+          restore-keys: |
+            ${{ steps.lake.outputs.prefix }}
+            ${{ steps.lake.outputs.any }}
       - name: the proofs
         run: |
           ! grep -rnE "\bsorry\b|native_decide|^\s*axiom\b" --include=*.lean ForgeCam ForgeCam.lean
@@ -71,3 +85,9 @@ jobs:
           ! grep -q "error:" answers
           cargo run --release --locked -p forge-cam-geom --example oracle_segseg -- check ours answers | tee l6.txt
           grep -q "2000 cases, 0 outside" l6.txt
+      - name: save the Lake build (main only, even when a check failed)
+        if: ${{ always() && steps.lake.outcome == 'success' && steps.restore.outputs.cache-hit != 'true' && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.lake.outputs.paths }}
+          key: ${{ steps.lake.outputs.key }}
