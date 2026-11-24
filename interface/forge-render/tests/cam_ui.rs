@@ -14,7 +14,13 @@ fn generated(g: &Gui) -> bool {
         && g.shell
             .cam
             .as_ref()
-            .is_some_and(|w| w.run.is_some() && w.running.is_none() && !w.want_run)
+            .is_some_and(|w| {
+                w.running.is_none()
+                    && !w.want_run
+                    // the run shown, and its quality measured too (off the UI thread, after the
+                    // run is shown): what a test then reads or clicks does not race it
+                    && w.run.as_ref().is_some_and(|r| r.cam.is_none() || r.quality.is_some())
+            })
 }
 
 fn settle(h: &mut Headless) {
@@ -27,6 +33,34 @@ fn settle(h: &mut Headless) {
     assert!(generated(&h.gui), "never generated: {}", h.gui.shell.status);
     for _ in 0..4 {
         h.step();
+    }
+}
+
+/// A click by name once it is on screen and laid out (a panel just opened draws its widgets a
+/// frame or more later, and a change above a button can move it): steps until the place is there
+/// and has held still for a frame, then clicks it.
+fn tap(h: &mut Headless, name: &str) {
+    let t0 = std::time::Instant::now();
+    let mut last = None;
+    loop {
+        h.step();
+        let now = h.gui.shell.place(name);
+        if now.is_some() && now == last {
+            break;
+        }
+        assert!(t0.elapsed().as_secs() < 60, "`{name}` never on screen");
+        last = now;
+    }
+    assert!(h.click(name), "{name}");
+}
+
+/// Steps until `done` (a state a click or a job leads to), at most a minute.
+fn step_until(h: &mut Headless, what: &str, done: impl Fn(&Gui) -> bool) {
+    let t0 = std::time::Instant::now();
+    while !done(&h.gui) {
+        assert!(t0.elapsed().as_secs() < 60, "never: {what}");
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
     }
 }
 
@@ -189,30 +223,29 @@ fn post_process_shows_the_program_and_writes_it() {
     h.step();
     let line = forge_render::shell::cam::status_line(h.gui.shell.cam.as_ref().unwrap());
     assert_eq!(line, b.sentence);
-    assert!(h.click("tool:Post Process"));
+    tap(&mut h, "tool:Post Process");
     h.step();
     assert!(h.placed("cam:post:text").is_none(), "Post Process is off while not releasable");
     // the fix is seen whatever the words before it: never under the markup toggle
     let (fx, mk) = (h.gui.shell.place("status:fix").unwrap(), h.gui.shell.place("status:markup").unwrap());
     assert!(fx.right() <= mk.left(), "{fx:?} under {mk:?}");
-    assert!(h.click("status:fix"));
+    tap(&mut h, "status:fix");
     h.step();
     assert!(h.gui.shell.cam.as_ref().unwrap().setup_dlg.is_some(), "the fix opens the setup");
     h.gui.shell.cam.as_mut().unwrap().setup_dlg = None;
     // allowed uncertified: Post Process opens, writes the program stamped
     h.gui.shell.cam.as_mut().unwrap().allow_uncertified = true;
     h.step();
-    assert!(h.click("tool:Post Process"));
+    tap(&mut h, "tool:Post Process");
     h.step();
     assert!(h.placed("cam:post:text").is_some());
     shot(&mut h, "cam-post");
-    assert!(h.click("cam:post:write"));
+    tap(&mut h, "cam:post:write");
     // the write lands a few frames on (sooner or later under a loaded machine)
-    for _ in 0..200 {
+    let t0 = std::time::Instant::now();
+    while !file.with_file_name("prog.nc").exists() && t0.elapsed().as_secs() < 30 {
         h.step();
-        if file.with_file_name("prog.nc").exists() {
-            break;
-        }
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     let nc = std::fs::read_to_string(file.with_file_name("prog.nc")).expect("written");
     assert!(nc.lines().count() > 100, "{nc}");
@@ -226,29 +259,26 @@ fn post_process_shows_the_program_and_writes_it() {
 fn nc_programs_post_export_and_go_stale() {
     use forge_render::shell::cam::nc::Posted;
     let Some((mut h, file)) = open_unplaced("nc") else { return };
-    assert!(h.click("tool:NC Programs"));
+    tap(&mut h, "tool:NC Programs");
     h.step();
     shot(&mut h, "cam-nc-open");
     // a tab of the properties column: Quality beside it, back again
-    assert!(h.click("cam:dock:quality"));
-    h.step();
-    h.step();
-    let w = h.gui.shell.cam.as_ref().unwrap();
-    assert!(w.quality_open && !w.programs_open);
+    tap(&mut h, "cam:dock:quality");
+    step_until(&mut h, "the Quality tab", |g| g.shell.cam.as_ref().is_some_and(|w| w.quality_open && !w.programs_open));
     shot(&mut h, "cam-quality-tab");
-    assert!(h.click("cam:dock:programs"));
+    tap(&mut h, "cam:dock:programs");
     h.step();
     h.step();
-    assert!(h.click("cam:programs:allow"));
+    tap(&mut h, "cam:programs:allow");
     h.step();
     // the file's name and folder, typed: written to the statement when the field is left
-    assert!(h.click("cam:programs:prog:file"));
+    tap(&mut h, "cam:programs:prog:file");
     h.text("flange-1");
     h.step();
-    assert!(h.click("cam:programs:prog:out"));
+    tap(&mut h, "cam:programs:prog:out");
     h.text("nc");
     h.step();
-    assert!(h.click("cam:programs:prog:tools"));
+    tap(&mut h, "cam:programs:prog:tools");
     h.step();
     let t = text(&h);
     let w = h.gui.shell.cam.as_ref().unwrap();
@@ -261,7 +291,7 @@ fn nc_programs_post_export_and_go_stale() {
     assert_eq!(s[0].1, Posted::No, "{s:?}");
     assert!(t.contains("out: \"nc\""), "{t}");
     assert_eq!(s[0].2, "nc/flange-1.nc");
-    assert!(h.click("cam:programs:prog:post"));
+    tap(&mut h, "cam:programs:prog:post");
     h.step();
     h.step();
     let nc = std::fs::read_to_string(file.with_file_name("nc").join("flange-1.nc")).expect("posted");
@@ -269,7 +299,7 @@ fn nc_programs_post_export_and_go_stale() {
     assert_eq!(st(&mut h)[0].1, Posted::Current);
     shot(&mut h, "cam-nc-programs");
     // the same file for Export…: the host's Save As is asked
-    assert!(h.click("cam:programs:prog:export"));
+    tap(&mut h, "cam:programs:prog:export");
     h.step();
     let x = h.gui.shell.cam.as_mut().unwrap().export.take().expect("asked");
     assert_eq!(x.files.len(), 1);
@@ -280,12 +310,12 @@ fn nc_programs_post_export_and_go_stale() {
     w.edit(&forge_render::shell::cam::doc::Edit::Set { id: "prof".into(), arg: "leave".into(), text: "0.2".into() });
     settle(&mut h);
     assert_eq!(st(&mut h)[0].1, Posted::Stale);
-    assert!(h.click("cam:programs:repost"));
+    tap(&mut h, "cam:programs:repost");
     h.step();
     h.step();
     assert_eq!(st(&mut h)[0].1, Posted::Current);
     // the setup sheet and the tool list
-    assert!(h.click("cam:programs:sheet"));
+    tap(&mut h, "cam:programs:sheet");
     h.step();
     let x = h.gui.shell.cam.as_mut().unwrap().export.take().expect("asked");
     let names: Vec<&str> = x.files.iter().map(|f| f.path.as_str()).collect();

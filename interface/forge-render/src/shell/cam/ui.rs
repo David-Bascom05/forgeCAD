@@ -3727,7 +3727,9 @@ fn text_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
                             .desired_width(width - 28.0)
                             .desired_rows(8),
                     );
-                    places.push(("cam:text:edit".into(), r.rect));
+                    // what is seen of it (a long text runs past the scroll's viewport, where a
+                    // click is clipped): a click by name lands on the field
+                    places.push(("cam:text:edit".into(), r.rect.intersect(ui.clip_rect())));
                 });
             ui.horizontal(|ui| {
                 ui.add_space(14.0);

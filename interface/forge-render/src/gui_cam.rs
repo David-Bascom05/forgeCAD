@@ -41,11 +41,21 @@ impl Gui {
         // a finished run
         let done = w.job.lock().unwrap_or_else(|e| e.into_inner()).take();
         let mut changed = false;
+        // a run's quality, measured after it was taken in
+        let measured = w.quality_job.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let took = done.is_some();
         if let Some(r) = done {
             w.ran(r);
             changed = true;
             self.shell.status = crate::shell::cam::status_line(w);
-        } else if self.shell.status.is_empty() && w.run.is_some() && w.running.is_none() {
+        }
+        if let Some((text, q)) = measured
+            && let Some(r) = w.run.as_mut().filter(|r| r.text == text && r.quality.is_none())
+        {
+            r.quality = Some(q);
+            changed = true;
+        }
+        if !took && self.shell.status.is_empty() && w.run.is_some() && w.running.is_none() {
             // nothing else to say (a view loaded after the run cleared it): the run's state
             self.shell.status = crate::shell::cam::status_line(w);
         }
@@ -58,10 +68,19 @@ impl Gui {
             let waker = self.waker.clone();
             w.running = Some(text.clone());
             self.shell.status = "Generating: every op posted, read back and certified".into();
+            let qslot = w.quality_job.clone();
             crate::plat::spawn("forge-cam", move || {
-                let r = run::run(&text, &dir);
+                // the paths shown first, then the quality measured on them (it can take longer
+                // than the run): taken in only while the text is still the run's
+                let r = run::run_unmeasured(&text, &dir);
+                let cam = r.cam.clone();
                 *slot.lock().unwrap_or_else(|e| e.into_inner()) = Some(r);
                 waker();
+                if let Some(cam) = cam {
+                    let q = run::measure_cam(&cam);
+                    *qslot.lock().unwrap_or_else(|e| e.into_inner()) = Some((text, q));
+                    waker();
+                }
             });
         }
         // a check asked, none going: the run checked again off this thread

@@ -791,7 +791,7 @@ fn wall_rows(ui: &mut Ui, t: &Theme, m: &mut super::inspect::MeasurePanel, place
         None if m.busy => {
             ui.horizontal(|ui| {
                 ui.label(
-                    egui::RichText::new(format!("Working it out... {:.0}%", m.wall_done * 100.0))
+                    egui::RichText::new(format!("Measuring\u{2026} {:.0}%", m.wall_done * 100.0))
                         .font(sans(11.0))
                         .color(t.ink2),
                 );
@@ -801,6 +801,15 @@ fn wall_rows(ui: &mut Ui, t: &Theme, m: &mut super::inspect::MeasurePanel, place
                     m.wall_stop = true;
                 }
             });
+            // a thin bar under it: 0% reads as started, not stuck
+            let (bar, _) = ui.allocate_exact_size(vec2(ui.available_width(), 3.0), egui::Sense::hover());
+            ui.painter().rect_filled(bar, 1.5, t.line);
+            let done = Rect::from_min_size(
+                bar.min,
+                vec2(bar.width() * m.wall_done.clamp(0.0, 1.0), bar.height()),
+            );
+            ui.painter().rect_filled(done, 1.5, t.accent);
+            places.push(("measure:wall:bar".into(), bar));
             // its progress, as it comes: stepped each frame where jobs run on the page's thread
             ui.ctx().request_repaint_after(if crate::plat::INLINE_JOBS {
                 std::time::Duration::ZERO

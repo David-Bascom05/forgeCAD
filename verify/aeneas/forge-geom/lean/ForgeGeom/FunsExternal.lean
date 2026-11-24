@@ -28,6 +28,7 @@ def forge_math.tol.LINEAR : Result F64 := ok _root_.forge_math.tol.LINEAR
 def forge_math.tol.ANGULAR : Result F64 := ok _root_.forge_math.tol.ANGULAR
 def forge_math.tol.MIN_LENGTH : Result F64 := ok _root_.forge_math.tol.MIN_LENGTH
 def forge_math.vec.Vec3.Z : Result _root_.forge_math.vec.Vec3 := ok _root_.forge_math.vec.Vec3.Z
+def forge_math.vec.Vec3.ZERO : Result _root_.forge_math.vec.Vec3 := ok _root_.forge_math.vec.Vec3.ZERO
 
 /-- `forge_geom::intersect::plane_cylinder`: an open L4 gap. -/
 opaque intersect.plane_cylinder : surface.Plane → surface.Cylinder → Result intersect.SurfaceSurface
