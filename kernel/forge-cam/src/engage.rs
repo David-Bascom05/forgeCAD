@@ -2,12 +2,12 @@
 //! piece of the path set so that the chip the edge cuts (after radial thinning) is the cutting
 //! data's feed per tooth, never more.
 //!
-//! This is the offline feed optimisation of GE's US 5,828,574 (1997, expired 2017-05-19): the
-//! swept tool is taken from a model of the stock, the engagement of each move measured, and the
-//! largest feed within the limit chosen. The path's geometry is
-//! unchanged: a move is only split where its feed changes (lines into collinear pieces, arcs and
-//! helices into pieces of the same circle), and what is posted is certified as before. Feeds are
-//! no part of G1–G4; G5 checks every posted feed against the machine.
+//! This is offline feed optimisation: the swept tool is taken from a model of the stock, the
+//! engagement of each move measured, and the largest feed within the limit chosen, so the tool
+//! runs at full chip load in light cuts and is never overloaded in heavy ones. The path's
+//! geometry is unchanged: a move is only split where its feed changes (lines into collinear
+//! pieces, arcs and helices into pieces of the same circle), and what is posted is certified as
+//! before. Feeds are no part of G1–G4; G5 checks every posted feed against the machine.
 //!
 //! The model: a z-up dexel per cell (its centre) over the setup's stock box, lowered by every
 //! void the in-process stock proves cleared and by the tool's body along the path. It holds at
@@ -324,9 +324,9 @@ pub struct Sample {
 
 /// What the feeds are set from.
 ///
-/// The feed is set per
-/// FIXED-LENGTH sample from chip thinning and the chip load; the path is never split where the
-/// engagement changes, there is no abrasion term, and every sample is its own move: samples are
+/// The feed is set per FIXED-LENGTH sample from chip thinning and the chip load: block lengths
+/// stay predictable for the controller's lookahead, and the path is never split where the
+/// engagement changes. There is no abrasion term, and every sample is its own move: samples are
 /// never joined, whatever their feeds (equal F words are simply not repeated when posted).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Sched {
@@ -483,8 +483,11 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
 /// the next (the chip never above fz), at most cap · fz, the feed within [f_min, f_max]. A move
 /// is split at its sample boundaries, each sample its own move (never joined). Straight plunges, moves up and rapids keep their feeds. The caller keeps f_max
 /// under the machine's limit (G5 checks the posted F soundly, so the limit itself may fail).
-pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> OpPath {
-    let samples = schedule_samples(path, map, prof, s);
+/// The feed (mm/min) `schedule` gives each sample: the chip rule per sample (fz over the
+/// sample's max cos θ, at most `cap` fz), no faster than the next sample, within the machine's
+/// range. One place for it: `schedule` posts these, and whatever integrates over the samples
+/// (tool life) reads them here.
+pub fn sample_feeds(samples: &[Sample], s: &Sched) -> Vec<f64> {
     // the chip rule per sample
     let want = |e: &Option<Engage>| -> f64 {
         match e {
@@ -502,6 +505,13 @@ pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -
         }
         feed.push((fz * s.flutes * s.rpm).clamp(s.f_min, s.f_max.max(s.f_min)));
     }
+    feed
+}
+
+pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> OpPath {
+    let samples = schedule_samples(path, map, prof, s);
+    let feed = sample_feeds(&samples, s);
+    let n = samples.len();
     let mut out = Vec::with_capacity(path.moves.len() + n);
     let mut k = 0;
     for (mi, mv) in path.moves.iter().enumerate() {

@@ -8,12 +8,15 @@ repository.workspace = true
 
 [dependencies]
 forge-cam-lang = { path = "../../interface/forge-cam-lang" }
+forge-turn-lang = { path = "../../interface/forge-turn-lang" }
 forge-cam = { path = "../../kernel/forge-cam" }
 forge-cam-geom = { path = "../../kernel/forge-cam-geom" }
 forge-tooling = { path = "../../kernel/forge-tooling" }
 forge-machine = { path = "../../kernel/forge-machine" }
 forge-post = { path = "../../kernel/forge-post" }
 forge-math = { path = "../../kernel/forge-math" }
+forge-lang = { path = "../../interface/forge-lang" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
 
 [lints]
 workspace = true

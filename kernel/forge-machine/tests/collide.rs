@@ -191,6 +191,10 @@ fn clear_is_never_contradicted_by_samples() {
             t_stop: 0.0,
             joints: vec![],
             accel_missing: false,
+            t_la: 0.0,
+            seg_la: Vec::new(),
+            t_scurve: 0.0,
+            seg_scurve: Vec::new(),
         };
         let r = collide::check(&s, &tl, std::slice::from_ref(&stock));
         let pose = forge_machine::kin::pose(&m, &q);
@@ -442,6 +446,10 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                         t_stop: 0.0,
                         joints: Vec::new(),
                         accel_missing: false,
+                        t_la: 0.0,
+                        seg_la: Vec::new(),
+                        t_scurve: 0.0,
+                        seg_scurve: Vec::new(),
                     };
                     let rep = collide::check(&s2, &tl, &[]);
                     if let Some(c) = rep.contacts.first() {

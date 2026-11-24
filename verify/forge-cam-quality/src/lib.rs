@@ -15,6 +15,8 @@
 //! The stock is a height map (map.rs) over the setup's stock box: a measurement model within
 //! about a cell of the exact sweep. Spindle rotation is taken as M03 (clockwise from above), so
 //! material right of the direction of travel is climb. Everything here is deterministic.
+pub mod endstate;
+pub mod foreign;
 pub mod map;
 
 use forge_cam::ops::{PMove, Phase};
@@ -31,6 +33,137 @@ pub struct Config {
     pub cell: Option<f64>,
     /// The machine whose timeline gives cycle time; None: the setup's own.
     pub machine: Option<String>,
+    /// Feeds to run ops at instead of their own, by op name: (name, cut mm/min, plunge mm/min).
+    /// Straight-down feed moves take the plunge feed, every other feed move the cut feed; the
+    /// planned moves and the posted text alike (to compare paths at another program's feeds).
+    pub feeds: Vec<(String, f64, f64)>,
+    /// The lookahead planner's settings for t_la (None: forge-machine's grbl defaults).
+    pub lookahead: Option<forge_machine::lookahead::LookAhead>,
+}
+
+/// `moves` with every feed set from (cut, plunge): straight-down moves the plunge feed.
+pub fn override_moves(start: [f64; 3], moves: &[PMove], cut: f64, plunge: f64) -> Vec<PMove> {
+    let mut at = start;
+    moves
+        .iter()
+        .map(|m| {
+            let out = match *m {
+                PMove::Line { to, phase, .. } => {
+                    let down = to[2] < at[2] && (to[0] - at[0]).abs() < 1e-9 && (to[1] - at[1]).abs() < 1e-9;
+                    PMove::Line {
+                        to,
+                        f: if down { plunge } else { cut },
+                        phase,
+                    }
+                }
+                PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f: cut },
+                PMove::Cycle { .. } | PMove::Rapid { .. } => *m,
+            };
+            if let PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } = *m {
+                at = to;
+            }
+            out
+        })
+        .collect()
+}
+
+/// A posted program's text with the feeds of the lines `who` gives an override for (by 1-based
+/// line) set to it: on every feed motion line (G1 G2 G3 modal) its F replaced, straight-down Z
+/// moves at the plunge feed. Comments and rapids are left as they are.
+pub fn override_text(text: &str, who: &dyn Fn(usize) -> Option<(f64, f64)>) -> String {
+    let mut out = String::with_capacity(text.len() + text.len() / 8);
+    let mut g = 0u32;
+    let mut z = f64::INFINITY;
+    for (i, line) in text.lines().enumerate() {
+        // the words outside comments
+        let mut code = String::new();
+        let mut depth = 0;
+        for ch in line.chars() {
+            match ch {
+                '(' => depth += 1,
+                ')' => depth -= 1,
+                _ if depth == 0 => code.push(ch),
+                _ => {}
+            }
+        }
+        if code.contains(';') {
+            code.truncate(code.find(';').unwrap());
+        }
+        let up = code.to_uppercase();
+        let words: Vec<(char, String)> = {
+            let mut w = Vec::new();
+            let cs: Vec<char> = up.chars().collect();
+            let mut k = 0;
+            while k < cs.len() {
+                if cs[k].is_ascii_alphabetic() {
+                    let l = cs[k];
+                    let mut v = String::new();
+                    k += 1;
+                    while k < cs.len()
+                        && (cs[k].is_ascii_digit() || cs[k] == '.' || cs[k] == '-' || cs[k] == '+')
+                    {
+                        v.push(cs[k]);
+                        k += 1;
+                    }
+                    w.push((l, v));
+                } else {
+                    k += 1;
+                }
+            }
+            w
+        };
+        for (l, v) in &words {
+            if *l == 'G'
+                && let Ok(n) = v.parse::<f64>()
+                && (n == 0.0 || n == 1.0 || n == 2.0 || n == 3.0)
+            {
+                g = n as u32;
+            }
+        }
+        let has = |c: char| words.iter().any(|(l, _)| *l == c);
+        let nz = words
+            .iter()
+            .find(|(l, _)| *l == 'Z')
+            .and_then(|(_, v)| v.parse::<f64>().ok());
+        let motion = has('X') || has('Y') || has('Z');
+        let ov = who(i + 1);
+        if let (Some((cut, plunge)), true, true) = (ov, motion, g >= 1) {
+            let down = !has('X') && !has('Y') && nz.is_some_and(|v| v < z) && g == 1;
+            // the line without its F word
+            let mut kept = String::new();
+            let cs: Vec<char> = line.chars().collect();
+            let mut k = 0;
+            let mut depth = 0;
+            while k < cs.len() {
+                let ch = cs[k];
+                if ch == '(' {
+                    depth += 1;
+                }
+                if ch == ')' {
+                    depth -= 1;
+                }
+                if depth == 0 && (ch == 'F' || ch == 'f') {
+                    k += 1;
+                    while k < cs.len() && (cs[k].is_ascii_digit() || cs[k] == '.') {
+                        k += 1;
+                    }
+                    continue;
+                }
+                kept.push(ch);
+                k += 1;
+            }
+            let f = if down { plunge } else { cut };
+            out.push_str(kept.trim_end());
+            out.push_str(&format!(" F{f:.1}"));
+        } else {
+            out.push_str(line);
+        }
+        out.push('\n');
+        if let Some(v) = nz {
+            z = v;
+        }
+    }
+    out
 }
 
 /// Engagement-angle bins (degrees), upper ends: air is φ = 0.
@@ -57,6 +190,8 @@ pub struct OpQ {
     pub setup: usize,
     pub kind: String,
     pub status: String,
+    /// Why it was refused (as the op reports it).
+    pub refusal: Option<String>,
     pub tool: String,
     pub d: f64,
     pub flutes: u32,
@@ -72,6 +207,8 @@ pub struct OpQ {
     /// Timeline times of the op's blocks (s), tool change included.
     pub t_min: f64,
     pub t_stop: f64,
+    /// The lookahead planner's estimate (forge-machine lookahead: grbl's planner), op's blocks.
+    pub t_la: f64,
     pub retracts: usize,
     pub plunges: usize,
     pub ramps: usize,
@@ -128,6 +265,7 @@ pub struct ProgQ {
     pub machine: String,
     pub t_min: f64,
     pub t_stop: f64,
+    pub t_la: f64,
     pub tool_changes: usize,
     pub accel_missing: bool,
     pub violations: usize,
@@ -142,6 +280,8 @@ pub struct JobQ {
     pub ops: Vec<OpQ>,
     pub progs: Vec<ProgQ>,
     pub errors: Vec<String>,
+    /// The stock after every op, per setup (as `OpQ::setup`; a foreign program's is setup 0).
+    pub ends: Vec<Option<HeightMap>>,
 }
 
 fn dist(a: [f64; 3], b: [f64; 3]) -> f64 {
@@ -213,7 +353,7 @@ fn profile(t: &forge_tooling::Tool) -> Profile {
     }
 }
 
-fn side_mill(k: Kind) -> bool {
+pub(crate) fn side_mill(k: Kind) -> bool {
     matches!(k, Kind::Flat | Kind::Bull | Kind::Ball | Kind::Slot)
 }
 
@@ -253,8 +393,70 @@ pub fn measure(path: &Path, cfg: &Config) -> JobQ {
         }
     };
     let dir = path.parent().unwrap_or(Path::new("."));
+    if forge_turn_lang::is_turning(&src) {
+        return measure_turn(&forge_turn_lang::run(&src, dir), file);
+    }
     let cam = forge_cam_lang::run(&src, dir);
     measure_cam(&cam, file, cfg)
+}
+
+/// A turning document: its ops as built or refused (coverage); the path measures here are
+/// milling's (engagement round a cutter), so a turned op's numbers are left at zero.
+pub fn measure_turn(cam: &forge_turn_lang::TurnCam, file: String) -> JobQ {
+    let mut job = JobQ {
+        file,
+        ok: cam.ok,
+        errors: cam.errors.clone(),
+        ..JobQ::default()
+    };
+    for o in &cam.ops {
+        job.ops.push(OpQ {
+            name: o.name.clone(),
+            kind: o.kind.clone(),
+            status: o.status.clone(),
+            refusal: o.refusal.clone(),
+            moves: o.moves,
+            ..OpQ::default()
+        });
+    }
+    for p in &cam.programs {
+        job.progs.push(ProgQ {
+            name: p.name.clone(),
+            error: p
+                .error
+                .clone()
+                .or_else(|| p.text.is_none().then(|| "no program text".into())),
+            ..ProgQ::default()
+        });
+    }
+    job
+}
+
+/// Coverage: per document, the ops certified of all, and each refusal with its reason.
+pub fn coverage(jobs: &[JobQ]) -> String {
+    let mut o = String::new();
+    let (mut built, mut all) = (0, 0);
+    for j in jobs {
+        let b = j.ops.iter().filter(|q| q.status == "built").count();
+        built += b;
+        all += j.ops.len();
+        let _ = writeln!(o, "{}: {b} of {} ops certified", j.file, j.ops.len());
+        for q in j.ops.iter().filter(|q| q.status != "built") {
+            let _ = writeln!(
+                o,
+                "  {} {} {}: {}",
+                q.name,
+                q.kind,
+                q.status,
+                q.refusal.as_deref().unwrap_or("(no reason given)")
+            );
+        }
+        for e in &j.errors {
+            let _ = writeln!(o, "  error: {e}");
+        }
+    }
+    let _ = writeln!(o, "all: {built} of {all} ops certified");
+    o
 }
 
 pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
@@ -287,6 +489,9 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
         if maps.len() <= op.setup {
             maps.resize_with(op.setup + 1, || None);
         }
+        if std::env::var_os("FORGE_QUALITY_STOCK").is_some() {
+            eprintln!("stock {:?} {:?}", sv.stock.min, sv.stock.max);
+        }
         let m = maps[op.setup].get_or_insert_with(|| HeightMap::new(sv.stock.min, sv.stock.max, cell));
         let group = cam.cutting_group(sv.group);
         let mdef = mlib.get(cfg.machine.as_deref().unwrap_or(sv.machine)).ok();
@@ -299,6 +504,7 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             setup: op.setup,
             kind: op.kind.to_string(),
             status: op.status.to_string(),
+            refusal: op.refusal.clone(),
             moves: op.moves,
             hex_min: f64::INFINITY,
             ..OpQ::default()
@@ -311,242 +517,287 @@ pub fn measure_cam(cam: &Cam, file: String, cfg: &Config) -> JobQ {
             q.side = side_mill(t.kind);
             q.fz_target = group.map(|g| g.fz_at(t.dc)).unwrap_or(0.0);
         }
-        let mut phi_t = 0.0; // Σ φ dt
-        let mut side_t = 0.0; // time of side-engaged cutting
-        let mut hex_t = 0.0;
-        let mut hex_tt = 0.0;
-        let mut hexes: Vec<(f64, f64)> = Vec::new();
-        for (pi, p) in op.paths.iter().enumerate() {
-            let tu = &tools[p.tool];
-            let prof = profile(&tu.tool);
-            let r = prof.r();
-            let flutes = tu.tool.nof.max(1) as f64;
-            // as the post does (forge-cam-lang): the path's speed, else the op's feeds', else 3000
-            let rpm = if p.rpm > 0.0 {
-                p.rpm
-            } else {
-                op.feeds.map(|f| f.rpm).unwrap_or(3000.0)
-            };
-            q.rpm = rpm;
-            q.p_avail = power_at(&curve, rpm);
-            let l = cell.max((0.25 * r).min(0.5));
-            let mut at = p.start;
-            // the last feed direction (xy), for corners
-            let mut last_dir: Option<[f64; 2]> = None;
-            let mut was_descending = false;
-            for (mi, mv) in p.moves.iter().enumerate() {
-                let (f, phase) = match *mv {
-                    PMove::Rapid { .. } => (0.0, Phase::Rapid),
-                    PMove::Line { f, phase, .. } => (f, phase),
-                    PMove::Arc { f, .. } => (f, Phase::Cut),
-                    PMove::Cycle { holes, z, f, .. } => {
-                        q.cycles += 1;
-                        if rpm > 0.0 {
-                            q.f_rev = if q.f_rev > 0.0 {
-                                q.f_rev.min(f / rpm)
-                            } else {
-                                f / rpm
-                            };
-                        }
-                        let top = [holes[0], holes[1], m.top(holes[0], holes[1]).max(z)];
-                        q.removed += m.sweep(top, [holes[0], holes[1], z], &prof);
-                        continue;
+        let ov = cfg
+            .feeds
+            .iter()
+            .find(|(n, ..)| *n == op.name)
+            .map(|(_, c, p)| (*c, *p));
+        let owned: Vec<Vec<PMove>> = op
+            .paths
+            .iter()
+            .map(|p| match ov {
+                Some((c, pl)) => override_moves(p.start, &p.moves, c, pl),
+                None => p.moves.clone(),
+            })
+            .collect();
+        let paths: Vec<PathIn> = op
+            .paths
+            .iter()
+            .zip(&owned)
+            .map(|(p, mvs)| PathIn {
+                tool: &tools[p.tool].tool,
+                // as the post does (forge-cam-lang): the path's speed, else the op's feeds', else 3000
+                rpm: if p.rpm > 0.0 {
+                    p.rpm
+                } else {
+                    op.feeds.map(|f| f.rpm).unwrap_or(3000.0)
+                },
+                start: p.start,
+                moves: mvs,
+            })
+            .collect();
+        job.ops.push(measure_op(q, &paths, m, group, &curve, cell));
+    }
+    timeline(cam, cfg, &mlib, &mut job);
+    job.ends = maps;
+    job
+}
+
+/// One op's paths as measurement needs them.
+pub struct PathIn<'a> {
+    pub tool: &'a forge_tooling::Tool,
+    /// The spindle speed the post gives the path (rpm).
+    pub rpm: f64,
+    pub start: [f64; 3],
+    pub moves: &'a [PMove],
+}
+
+/// Measures one op's paths on the stock `m` (lowered as they cut), `q` holding its name, tool and
+/// target already.
+pub fn measure_op(
+    mut q: OpQ,
+    paths: &[PathIn],
+    m: &mut HeightMap,
+    group: Option<&forge_tooling::feeds::Group>,
+    curve: &[[f64; 2]],
+    cell: f64,
+) -> OpQ {
+    let mut phi_t = 0.0; // Σ φ dt
+    let mut side_t = 0.0; // time of side-engaged cutting
+    let mut hex_t = 0.0;
+    let mut hex_tt = 0.0;
+    let mut hexes: Vec<(f64, f64)> = Vec::new();
+    for (pi, p) in paths.iter().enumerate() {
+        let prof = profile(p.tool);
+        let r = prof.r();
+        let flutes = p.tool.nof.max(1) as f64;
+        let rpm = p.rpm;
+        q.rpm = rpm;
+        q.p_avail = power_at(&curve, rpm);
+        let l = cell.max((0.25 * r).min(0.5));
+        let mut at = p.start;
+        // the last feed direction (xy), for corners
+        let mut last_dir: Option<[f64; 2]> = None;
+        let mut was_descending = false;
+        for (mi, mv) in p.moves.iter().enumerate() {
+            let (f, phase) = match *mv {
+                PMove::Rapid { .. } => (0.0, Phase::Rapid),
+                PMove::Line { f, phase, .. } => (f, phase),
+                PMove::Arc { f, .. } => (f, Phase::Cut),
+                PMove::Cycle { holes, z, f, .. } => {
+                    q.cycles += 1;
+                    if rpm > 0.0 {
+                        q.f_rev = if q.f_rev > 0.0 {
+                            q.f_rev.min(f / rpm)
+                        } else {
+                            f / rpm
+                        };
                     }
-                };
-                let to = match *mv {
-                    PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-                    PMove::Cycle { .. } => unreachable!(),
-                };
-                let dxy = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
-                let dz = to[2] - at[2];
-                if dxy < 1e-9 && dz > 0.5 {
-                    q.retracts += 1;
-                }
-                if phase == Phase::Rapid {
-                    q.len_rapid += dist(at, to);
-                    let mut a = at;
-                    for b in pieces(at, mv, l) {
-                        if m.sweep(a, b, &prof) > AIR_VOL {
-                            q.rapid_cuts += 1;
-                        }
-                        a = b;
-                    }
-                    at = to;
-                    last_dir = None;
-                    was_descending = false;
+                    let top = [holes[0], holes[1], m.top(holes[0], holes[1]).max(z)];
+                    q.removed += m.sweep(top, [holes[0], holes[1], z], &prof);
                     continue;
                 }
-                // a direction change at feed, at the move's start
-                let start_dir = match *mv {
-                    PMove::Arc { c, cw, .. } => {
-                        let (rx, ry) = (at[0] - c[0], at[1] - c[1]);
-                        let n = (rx * rx + ry * ry).sqrt().max(1e-12);
-                        Some(if cw { [ry / n, -rx / n] } else { [-ry / n, rx / n] })
-                    }
-                    _ if dxy > 1e-9 => Some([(to[0] - at[0]) / dxy, (to[1] - at[1]) / dxy]),
-                    _ => None,
-                };
-                if let (Some(u), Some(v)) = (last_dir, start_dir) {
-                    let turn = forge_math::dmath::acos_clamped(u[0] * v[0] + u[1] * v[1]).to_degrees();
-                    q.turn_max = q.turn_max.max(turn);
-                    if turn > 30.0 {
-                        q.corners30 += 1;
-                    }
-                    if turn > 90.0 {
-                        q.corners90 += 1;
-                    }
-                }
-                let mut moved_in = false;
-                let mut mq = MoveQ {
-                    path: pi,
-                    mv: mi,
-                    ..MoveQ::default()
-                };
+            };
+            let to = match *mv {
+                PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+                PMove::Cycle { .. } => unreachable!(),
+            };
+            let dxy = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
+            let dz = to[2] - at[2];
+            if dxy < 1e-9 && dz > 0.5 {
+                q.retracts += 1;
+            }
+            if phase == Phase::Rapid {
+                q.len_rapid += dist(at, to);
                 let mut a = at;
                 for b in pieces(at, mv, l) {
-                    let len = dist(a, b);
-                    let dt = if f > 0.0 { 60.0 * len / f } else { 0.0 };
-                    let pxy = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
-                    let eng = if q.side && pxy > 1e-9 {
-                        let u = [(b[0] - a[0]) / pxy, (b[1] - a[1]) / pxy];
-                        Some((map::engage(m, b, u, r, EPS_Z), u))
-                    } else {
-                        None
-                    };
-                    let removed = m.sweep(a, b, &prof);
-                    q.removed += removed;
-                    if removed > AIR_VOL {
-                        moved_in = true;
-                        q.len_cut += len;
-                        q.t_cut += dt;
-                        let fz = if rpm > 0.0 { f / (rpm * flutes) } else { 0.0 };
-                        if let Some((e, _)) = eng.filter(|(e, _)| e.phi > 0.0) {
-                            phi_t += e.phi * dt;
-                            q.phi_max = q.phi_max.max(e.phi);
-                            let bin = PHI_BINS.iter().position(|&hi| e.phi <= hi).unwrap_or(5);
-                            q.phi_hist[bin] += dt;
-                            side_t += dt;
-                            // M03: material right of the travel is climb (the tooth enters
-                            // it at full chip and leaves at the wall at none)
-                            if e.edge_r && e.edge_l {
-                                q.slotting += dt;
-                            } else if e.edge_r || (!e.edge_l && e.right >= e.left) {
-                                q.climb += dt;
-                            } else {
-                                q.conventional += dt;
-                            }
-                            let hex = fz * e.cos_max;
-                            mq.phi = mq.phi.max(e.phi);
-                            mq.hex = mq.hex.max(hex);
-                            if std::env::var_os("FORGE_QUALITY_PIECES").is_some() {
-                                eprintln!(
-                                    "piece {} f={f:.1} dt={dt:.4} phi={:.1} r={:.1} l={:.1} hex={hex:.4} ap={:.3} at={:?}",
-                                    op.name, e.phi, e.right, e.left, e.ap, b
-                                );
-                            }
-                            q.hex_min = q.hex_min.min(hex);
-                            q.hex_max = q.hex_max.max(hex);
-                            hex_t += hex * dt;
-                            hex_tt += dt;
-                            hexes.push((hex, dt));
-                            if hex < 0.5 * q.fz_target {
-                                q.thin += dt;
-                            }
-                            if hex > 1.25 * q.fz_target {
-                                q.thick += dt;
-                            }
-                            if let Some(g) = group {
-                                let ap = e.ap.min(tu.tool.lcf.max(1e-3));
-                                let hm = (fz * e.cos_mean).max(1e-4);
-                                let kc = g.kc1_1 * forge_math::dmath::powf(hm, -g.mc);
-                                // the width of material across the travel: r (sin θhi − sin θlo)
-                                // for one arc; ae of a side cut, D for a slot
-                                let ae =
-                                    r * (1.0 - forge_math::dmath::cos(e.phi.to_radians())).clamp(0.0, 2.0);
-                                let mrr = ap * ae * f; // mm³/min
-                                q.p_max = q.p_max.max(mrr * kc / 6.0e7);
-                                if hex > 0.0 {
-                                    let fc = g.kc1_1 * ap * forge_math::dmath::powf(hex, 1.0 - g.mc);
-                                    q.fc_max = q.fc_max.max(fc);
-                                }
-                            }
-                        }
-                    } else {
-                        q.len_air += len;
-                        q.t_air += dt;
-                        if std::env::var_os("FORGE_QUALITY_AIR").is_some() {
-                            eprintln!("air {} {:?} f={f:.0} dt={dt:.4} at={:?}", op.name, phase, b);
-                        }
+                    if m.sweep(a, b, &prof) > AIR_VOL {
+                        q.rapid_cuts += 1;
                     }
                     a = b;
                 }
-                if q.fz_target > 0.0 {
-                    mq.load = mq.hex / q.fz_target;
-                }
-                q.moves_q.push(mq);
-                let descending = dz < -1e-9 && dxy >= 1e-9;
-                if moved_in && dz < -1e-9 {
-                    if dxy < 1e-9 {
-                        q.plunges += 1;
-                        if std::env::var_os("FORGE_QUALITY_TRACE").is_some() {
-                            eprintln!("{} plunge into material at {:?} -> {:?}", op.name, at, to);
-                        }
-                    } else if !was_descending {
-                        // a ramp entry: a run of descending moves with xy (a helix's arcs) counts once
-                        q.ramps += 1;
-                    }
-                }
-                was_descending = descending;
-                let end_dir = match *mv {
-                    PMove::Arc { c, cw, .. } => {
-                        let (rx, ry) = (to[0] - c[0], to[1] - c[1]);
-                        let n = (rx * rx + ry * ry).sqrt().max(1e-12);
-                        Some(if cw { [ry / n, -rx / n] } else { [-ry / n, rx / n] })
-                    }
-                    _ => start_dir,
-                };
-                if end_dir.is_some() {
-                    last_dir = end_dir;
-                } else if dxy < 1e-9 {
-                    // a pure z move breaks the run of feed moves: no corner across it
-                    last_dir = None;
-                }
                 at = to;
+                last_dir = None;
+                was_descending = false;
+                continue;
             }
-        }
-        if phi_t > 0.0 && side_t > 0.0 {
-            q.phi_mean = phi_t / side_t;
-            for h in &mut q.phi_hist {
-                *h /= side_t;
-            }
-            q.climb /= side_t;
-            q.conventional /= side_t;
-            q.slotting /= side_t;
-            q.thin /= side_t;
-            q.thick /= side_t;
-        }
-        if hex_tt > 0.0 {
-            q.hex_mean = hex_t / hex_tt;
-            hexes.sort_by(|a, b| a.0.total_cmp(&b.0));
-            let mut acc = 0.0;
-            for (h, dt) in &hexes {
-                acc += dt;
-                q.hex_p99 = *h;
-                if acc >= 0.99 * hex_tt {
-                    break;
+            // a direction change at feed, at the move's start
+            let start_dir = match *mv {
+                PMove::Arc { c, cw, .. } => {
+                    let (rx, ry) = (at[0] - c[0], at[1] - c[1]);
+                    let n = (rx * rx + ry * ry).sqrt().max(1e-12);
+                    Some(if cw { [ry / n, -rx / n] } else { [-ry / n, rx / n] })
+                }
+                _ if dxy > 1e-9 => Some([(to[0] - at[0]) / dxy, (to[1] - at[1]) / dxy]),
+                _ => None,
+            };
+            if let (Some(u), Some(v)) = (last_dir, start_dir) {
+                let turn = forge_math::dmath::acos_clamped(u[0] * v[0] + u[1] * v[1]).to_degrees();
+                q.turn_max = q.turn_max.max(turn);
+                if turn > 30.0 {
+                    q.corners30 += 1;
+                }
+                if turn > 90.0 {
+                    q.corners90 += 1;
                 }
             }
+            let mut moved_in = false;
+            let mut mq = MoveQ {
+                path: pi,
+                mv: mi,
+                ..MoveQ::default()
+            };
+            let mut a = at;
+            for b in pieces(at, mv, l) {
+                let len = dist(a, b);
+                let dt = if f > 0.0 { 60.0 * len / f } else { 0.0 };
+                let pxy = ((b[0] - a[0]).powi(2) + (b[1] - a[1]).powi(2)).sqrt();
+                let eng = if q.side && pxy > 1e-9 {
+                    let u = [(b[0] - a[0]) / pxy, (b[1] - a[1]) / pxy];
+                    Some((map::engage(m, b, u, r, EPS_Z), u))
+                } else {
+                    None
+                };
+                let removed = m.sweep(a, b, &prof);
+                q.removed += removed;
+                if removed > AIR_VOL {
+                    moved_in = true;
+                    q.len_cut += len;
+                    q.t_cut += dt;
+                    let fz = if rpm > 0.0 { f / (rpm * flutes) } else { 0.0 };
+                    if let Some((e, _)) = eng.filter(|(e, _)| e.phi > 0.0) {
+                        phi_t += e.phi * dt;
+                        q.phi_max = q.phi_max.max(e.phi);
+                        let bin = PHI_BINS.iter().position(|&hi| e.phi <= hi).unwrap_or(5);
+                        q.phi_hist[bin] += dt;
+                        side_t += dt;
+                        // M03: material right of the travel is climb (the tooth enters
+                        // it at full chip and leaves at the wall at none)
+                        if e.edge_r && e.edge_l {
+                            q.slotting += dt;
+                        } else if e.edge_r || (!e.edge_l && e.right >= e.left) {
+                            q.climb += dt;
+                        } else {
+                            q.conventional += dt;
+                        }
+                        let hex = fz * e.cos_max;
+                        mq.phi = mq.phi.max(e.phi);
+                        mq.hex = mq.hex.max(hex);
+                        if std::env::var_os("FORGE_QUALITY_PIECES").is_some() {
+                            eprintln!(
+                                "piece {} f={f:.1} dt={dt:.4} phi={:.1} r={:.1} l={:.1} hex={hex:.4} ap={:.3} at={:?}",
+                                q.name, e.phi, e.right, e.left, e.ap, b
+                            );
+                        }
+                        q.hex_min = q.hex_min.min(hex);
+                        q.hex_max = q.hex_max.max(hex);
+                        hex_t += hex * dt;
+                        hex_tt += dt;
+                        hexes.push((hex, dt));
+                        if hex < 0.5 * q.fz_target {
+                            q.thin += dt;
+                        }
+                        if hex > 1.25 * q.fz_target {
+                            q.thick += dt;
+                        }
+                        if let Some(g) = group {
+                            let ap = e.ap.min(p.tool.lcf.max(1e-3));
+                            let hm = (fz * e.cos_mean).max(1e-4);
+                            let kc = g.kc1_1 * forge_math::dmath::powf(hm, -g.mc);
+                            // the width of material across the travel: r (sin θhi − sin θlo)
+                            // for one arc; ae of a side cut, D for a slot
+                            let ae = r * (1.0 - forge_math::dmath::cos(e.phi.to_radians())).clamp(0.0, 2.0);
+                            let mrr = ap * ae * f; // mm³/min
+                            q.p_max = q.p_max.max(mrr * kc / 6.0e7);
+                            if hex > 0.0 {
+                                let fc = g.kc1_1 * ap * forge_math::dmath::powf(hex, 1.0 - g.mc);
+                                q.fc_max = q.fc_max.max(fc);
+                            }
+                        }
+                    }
+                } else {
+                    q.len_air += len;
+                    q.t_air += dt;
+                    if std::env::var_os("FORGE_QUALITY_AIR").is_some() {
+                        eprintln!("air {} {:?} f={f:.0} dt={dt:.4} at={:?}", q.name, phase, b);
+                    }
+                }
+                a = b;
+            }
+            if q.fz_target > 0.0 {
+                mq.load = mq.hex / q.fz_target;
+            }
+            q.moves_q.push(mq);
+            let descending = dz < -1e-9 && dxy >= 1e-9;
+            if moved_in && dz < -1e-9 {
+                if dxy < 1e-9 {
+                    q.plunges += 1;
+                    if std::env::var_os("FORGE_QUALITY_TRACE").is_some() {
+                        eprintln!("{} plunge into material at {:?} -> {:?}", q.name, at, to);
+                    }
+                } else if !was_descending {
+                    // a ramp entry: a run of descending moves with xy (a helix's arcs) counts once
+                    q.ramps += 1;
+                }
+            }
+            was_descending = descending;
+            let end_dir = match *mv {
+                PMove::Arc { c, cw, .. } => {
+                    let (rx, ry) = (to[0] - c[0], to[1] - c[1]);
+                    let n = (rx * rx + ry * ry).sqrt().max(1e-12);
+                    Some(if cw { [ry / n, -rx / n] } else { [-ry / n, rx / n] })
+                }
+                _ => start_dir,
+            };
+            if end_dir.is_some() {
+                last_dir = end_dir;
+            } else if dxy < 1e-9 {
+                // a pure z move breaks the run of feed moves: no corner across it
+                last_dir = None;
+            }
+            at = to;
         }
-        if !q.hex_min.is_finite() {
-            q.hex_min = 0.0;
-        }
-        if q.t_cut > 0.0 {
-            q.mrr = q.removed / (q.t_cut / 60.0);
-        }
-        job.ops.push(q);
     }
-    timeline(cam, cfg, &mlib, &mut job);
-    job
+    if phi_t > 0.0 && side_t > 0.0 {
+        q.phi_mean = phi_t / side_t;
+        for h in &mut q.phi_hist {
+            *h /= side_t;
+        }
+        q.climb /= side_t;
+        q.conventional /= side_t;
+        q.slotting /= side_t;
+        q.thin /= side_t;
+        q.thick /= side_t;
+    }
+    if hex_tt > 0.0 {
+        q.hex_mean = hex_t / hex_tt;
+        hexes.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut acc = 0.0;
+        for (h, dt) in &hexes {
+            acc += dt;
+            q.hex_p99 = *h;
+            if acc >= 0.99 * hex_tt {
+                break;
+            }
+        }
+    }
+    if !q.hex_min.is_finite() {
+        q.hex_min = 0.0;
+    }
+    if q.t_cut > 0.0 {
+        q.mrr = q.removed / (q.t_cut / 60.0);
+    }
+    q
 }
 
 /// Each program on the machine: its timeline, the ops' shares by their blocks.
@@ -602,12 +853,50 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                 });
                 s.h.push((tu.t, 100.0));
             }
-            sim::simulate(text, &s).map_err(|e| e.to_string())
+            if cfg.feeds.is_empty() {
+                return sim::simulate(text, &s).map_err(|e| e.to_string());
+            }
+            // the ops' feeds overridden: their blocks from their "(name kind)" comments on
+            let heads: Vec<(String, (f64, f64))> = cam
+                .ops
+                .iter()
+                .filter(|o| p.setups.contains(&o.setup))
+                .filter_map(|o| {
+                    let (_, c, pl) = cfg.feeds.iter().find(|(n, ..)| *n == o.name)?;
+                    Some((format!("({} {})", o.name, o.kind), (*c, *pl)))
+                })
+                .collect();
+            let all: Vec<String> = cam
+                .ops
+                .iter()
+                .filter(|o| p.setups.contains(&o.setup))
+                .map(|o| format!("({} {})", o.name, o.kind))
+                .collect();
+            let mut cur: Vec<Option<(f64, f64)>> = vec![None];
+            let mut now = None;
+            for line in text.lines() {
+                if all.iter().any(|h| line.contains(h.as_str())) {
+                    now = heads
+                        .iter()
+                        .find(|(h, _)| line.contains(h.as_str()))
+                        .map(|(_, v)| *v);
+                }
+                cur.push(now);
+            }
+            let t2 = override_text(text, &|l| cur.get(l).copied().flatten());
+            sim::simulate(&t2, &s).map_err(|e| e.to_string())
         })();
         match res {
             Ok(tl) => {
                 pq.t_min = tl.t_min;
                 pq.t_stop = tl.t_stop;
+                // the lookahead estimate: the timeline's (grbl defaults), or re-planned with the
+                // settings asked for
+                let (seg_la, t_la) = match (&cfg.lookahead, mlib.get(&mname)) {
+                    (Some(la), Ok(def)) => forge_machine::lookahead::plan(def, &tl, la),
+                    _ => (tl.seg_la.clone(), tl.t_la),
+                };
+                pq.t_la = t_la;
                 pq.accel_missing = tl.accel_missing;
                 pq.violations = tl.violations.len();
                 // text line (1-based) → op: the op whose comment "(name kind)" came last
@@ -626,10 +915,11 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                     }
                     op_of[i + 1] = cur;
                 }
-                for sg in &tl.segments {
+                for (si, sg) in tl.segments.iter().enumerate() {
                     if let Some(Some(k)) = op_of.get(sg.line) {
                         job.ops[*k].t_min += sg.t_min;
                         job.ops[*k].t_stop += sg.t_stop;
+                        job.ops[*k].t_la += seg_la.get(si).copied().unwrap_or(sg.t_stop);
                     }
                 }
                 for mk in &tl.marks {
@@ -644,6 +934,7 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                     if let Some(Some(k)) = op_of.get(mk.line) {
                         job.ops[*k].t_min += secs;
                         job.ops[*k].t_stop += secs;
+                        job.ops[*k].t_la += secs;
                     }
                 }
             }
@@ -743,10 +1034,11 @@ pub fn table(jobs: &[JobQ]) -> String {
                 None => {
                     let _ = writeln!(
                         o,
-                        "{stem}: program {} on {}: t_stop {} s, t_min {} s, {} tool changes, {} violations{}",
+                        "{stem}: program {} on {}: t_stop {} s, t_la {} s, t_min {} s, {} tool changes, {} violations{}",
                         p.name,
                         p.machine,
                         f(p.t_stop, 1),
+                        f(p.t_la, 1),
                         f(p.t_min, 1),
                         p.tool_changes,
                         p.violations,
@@ -813,7 +1105,7 @@ pub fn json(jobs: &[JobQ]) -> String {
             let _ = write!(
                 o,
                 "{{\"name\":{},\"setup\":{},\"kind\":{},\"status\":{},\"tool\":{},\"d\":{},\"flutes\":{},\"rpm\":{},\"moves\":{},\
-\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\
+\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
 \"fz_target\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
@@ -834,6 +1126,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.t_air),
                 jn(q.t_min),
                 jn(q.t_stop),
+                jn(q.t_la),
                 q.retracts,
                 q.plunges,
                 q.ramps,
@@ -871,7 +1164,7 @@ pub fn json(jobs: &[JobQ]) -> String {
             }
             let _ = write!(
                 o,
-                "{{\"name\":{},\"setups\":[{}],\"machine\":{},\"t_min\":{},\"t_stop\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
+                "{{\"name\":{},\"setups\":[{}],\"machine\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
                 js(&p.name),
                 p.setups
                     .iter()
@@ -881,6 +1174,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 js(&p.machine),
                 jn(p.t_min),
                 jn(p.t_stop),
+                jn(p.t_la),
                 p.tool_changes,
                 p.accel_missing,
                 p.violations,

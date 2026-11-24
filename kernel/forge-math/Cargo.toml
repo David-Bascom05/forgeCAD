@@ -10,6 +10,10 @@ repository.workspace = true
 # the scoped threads every parallel path runs on (a host's spawner where std has none)
 forge-par = { path = "../forge-par" }
 
+[features]
+# tests only: map_adaptive starts its helpers at once (par::force_helpers); never in a shipped build
+force_helpers = []
+
 [target.'cfg(target_family = "wasm")'.dependencies]
 forge-alloc = { path = "../forge-alloc" }
 
