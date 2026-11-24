@@ -211,6 +211,9 @@ pub struct OpQ {
     pub t_stop: f64,
     /// The lookahead planner's estimate (forge-machine lookahead: grbl's planner), op's blocks.
     pub t_la: f64,
+    /// The cycle-time ESTIMATE of the op's blocks (s): forge-machine's jerk-limited planner
+    /// (`seg_scurve`), tool change included. Shown only beside `t_min`, the lower bound.
+    pub t_scurve: f64,
     pub retracts: usize,
     pub plunges: usize,
     pub ramps: usize,
@@ -274,6 +277,8 @@ pub struct ProgQ {
     pub t_min: f64,
     pub t_stop: f64,
     pub t_la: f64,
+    /// The estimate (forge-machine's `t_scurve`: tool changes, dwells, indexes counted).
+    pub t_scurve: f64,
     pub tool_changes: usize,
     pub accel_missing: bool,
     pub violations: usize,
@@ -935,6 +940,7 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                     _ => (tl.seg_la.clone(), tl.t_la),
                 };
                 pq.t_la = t_la;
+                pq.t_scurve = tl.t_scurve;
                 pq.accel_missing = tl.accel_missing;
                 pq.violations = tl.violations.len();
                 // text line (1-based) → op: the op whose comment "(name kind)" came last
@@ -994,6 +1000,7 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                         job.ops[*k].t_min += sg.t_min;
                         job.ops[*k].t_stop += sg.t_stop;
                         job.ops[*k].t_la += seg_la.get(si).copied().unwrap_or(sg.t_stop);
+                        job.ops[*k].t_scurve += tl.seg_scurve.get(si).copied().unwrap_or(sg.t_stop);
                     }
                 }
                 for mk in &tl.marks {
@@ -1002,13 +1009,16 @@ fn timeline(cam: &Cam, cfg: &Config, mlib: &forge_machine::library::Library, job
                             pq.tool_changes += 1;
                             seconds
                         }
-                        Happening::Index { seconds, .. } | Happening::Dwell { seconds } => seconds,
+                        Happening::Index { seconds, .. }
+                        | Happening::Dwell { seconds }
+                        | Happening::PalletChange { seconds } => seconds,
                         _ => 0.0,
                     };
                     if let Some(Some(k)) = op_of.get(mk.line) {
                         job.ops[*k].t_min += secs;
                         job.ops[*k].t_stop += secs;
                         job.ops[*k].t_la += secs;
+                        job.ops[*k].t_scurve += secs;
                     }
                 }
             }
@@ -1179,7 +1189,7 @@ pub fn json(jobs: &[JobQ]) -> String {
             let _ = write!(
                 o,
                 "{{\"name\":{},\"setup\":{},\"kind\":{},\"status\":{},\"tool\":{},\"d\":{},\"flutes\":{},\"rpm\":{},\"moves\":{},\
-\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\
+\"len_cut\":{},\"len_air\":{},\"len_rapid\":{},\"t_cut\":{},\"t_air\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\
 \"retracts\":{},\"plunges\":{},\"ramps\":{},\"cycles\":{},\"corners30\":{},\"corners90\":{},\"turn_max\":{},\
 \"side\":{},\"phi_max\":{},\"phi_mean\":{},\"phi_hist\":[{}],\"climb\":{},\"conventional\":{},\"slotting\":{},\
 \"fz_target\":{},\"fz_class\":{},\"fz_class_rough\":{},\"hex_min\":{},\"hex_mean\":{},\"hex_max\":{},\"hex_p99\":{},\"thin\":{},\"thick\":{},\"removed\":{},\"mrr\":{},\
@@ -1201,6 +1211,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(q.t_min),
                 jn(q.t_stop),
                 jn(q.t_la),
+                jn(q.t_scurve),
                 q.retracts,
                 q.plunges,
                 q.ramps,
@@ -1240,7 +1251,7 @@ pub fn json(jobs: &[JobQ]) -> String {
             }
             let _ = write!(
                 o,
-                "{{\"name\":{},\"setups\":[{}],\"machine\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
+                "{{\"name\":{},\"setups\":[{}],\"machine\":{},\"t_min\":{},\"t_stop\":{},\"t_la\":{},\"t_scurve\":{},\"tool_changes\":{},\"accel_missing\":{},\"violations\":{},\"error\":{}}}",
                 js(&p.name),
                 p.setups
                     .iter()
@@ -1251,6 +1262,7 @@ pub fn json(jobs: &[JobQ]) -> String {
                 jn(p.t_min),
                 jn(p.t_stop),
                 jn(p.t_la),
+                jn(p.t_scurve),
                 p.tool_changes,
                 p.accel_missing,
                 p.violations,
