@@ -7,7 +7,7 @@
 //! ```text
 //! machining
 //! shared tol = 0.01
-//! f     = part("flange.fg", group: "N")             # the part, its ISO 513 material group
+//! f     = part("flange.fg", material: "6061-T6")    # the part and its stock material
 //! m     = machine("generic-vmc3")
 //! t1    = tool("face-50", t: 1, stickout: 30, holder: "bt40-er32")
 //! t2    = tool("flat-6", t: 2, stickout: 25, holder: "bt40-er32")
@@ -1122,6 +1122,14 @@ impl Cam {
                     Some(_) => return Err("part: `group` must be a string (ISO 513: P M K N S H)".into()),
                     None => mgroup.unwrap_or_default(),
                 };
+                // lint: a group alone leaves the generic defaults to the whole group (N: copper's
+                // speeds among aluminium's), so they are far slower than the alloy's
+                if material.is_none() && !group.is_empty() {
+                    self.warnings.push(format!(
+                        "part `{}` names only a material group ({group}): name the alloy (`material:`, a forge-material record such as \"6061-T6\") for realistic defaults; a tool with no maker data runs the whole group's slowest tenth",
+                        file
+                    ));
+                }
                 let body = run.body.ok_or("the part has no body")?;
                 let faces = forge_cam::lower::lower(&body)
                     .map_err(|e| format!("the part is outside this phase's CAM domain: {e:?}"))?;

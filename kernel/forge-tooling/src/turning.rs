@@ -146,8 +146,14 @@ fn opt_required(t: &Table, keys: &[&str], into: &mut Vec<String>) {
 /// An insert preset as picked for a cut: the preset, its cite, and how it was chosen.
 #[derive(Clone, Debug)]
 pub struct InsertPick<'a> {
+    /// The row the speed (and depth) is taken from.
     pub preset: &'a Preset,
     pub cite: Option<&'a Cite>,
+    /// The feed, mm/rev: the speed row's own where a material's row was picked; else the
+    /// 10th percentile of the same rows' feeds (picked separately: `f_row`).
+    pub f: f64,
+    pub f_row: &'a Preset,
+    pub f_cite: Option<&'a Cite>,
     pub why: String,
 }
 
@@ -188,6 +194,10 @@ impl Insert {
             let q = crate::feeds::Quantiles::of(rows.iter().map(|p| p.vc).collect())?;
             rows.into_iter().find(|p| p.vc == q.p10)
         }
+        fn p10_f(rows: Vec<&Preset>) -> Option<&Preset> {
+            let q = crate::feeds::Quantiles::of(rows.iter().map(|p| p.fz).collect())?;
+            rows.into_iter().find(|p| p.fz == q.p10)
+        }
         // a grade's material rows (its lead row where it prints none)
         let rows_of = |g: Option<&str>| -> Vec<&Preset> {
             let m: Vec<&Preset> = parts
@@ -220,16 +230,19 @@ impl Insert {
                 .map(|x| x.1),
             _ => None,
         };
-        let (p, why) = match (matched, grade) {
-            (Some(p), Some(g)) => (p, format!("grade {g}; the maker's row for the stock material")),
+        let (p, fr, why) = match (matched, grade) {
+            (Some(p), Some(g)) => (p, p, format!("grade {g}; the maker's row for the stock material")),
             (_, Some(g)) => {
                 let rows = rows_of(Some(g));
                 let n = rows.len();
-                let Some(p) = p10(rows) else { return Ok(None) };
+                let (Some(p), Some(fr)) = (p10(rows.clone()), p10_f(rows)) else {
+                    return Ok(None);
+                };
                 (
                     p,
+                    fr,
                     format!(
-                        "grade {g}; {}: the 10th percentile by speed of the grade's {n} rows",
+                        "grade {g}; {}: the 10th percentiles by speed and, separately, by feed of the grade's {n} rows",
                         if material.is_some() {
                             "no row names the stock material"
                         } else {
@@ -241,21 +254,30 @@ impl Insert {
             (_, None) => {
                 let rows = rows_of(None);
                 let n = rows.len();
-                let Some(p) = p10(rows) else { return Ok(None) };
+                let (Some(p), Some(fr)) = (p10(rows.clone()), p10_f(rows)) else {
+                    return Ok(None);
+                };
                 (
                     p,
+                    fr,
                     format!(
-                        "grade not stated: the 10th percentile by speed of the insert's {n} rows for {group} over its {} grades ({}); give the insert's grade (and the stock material) to use its own",
+                        "grade not stated: the 10th percentiles by speed and, separately, by feed of the insert's {n} rows for {group} over its {} grades ({}); give the insert's grade (and the stock material) to use its own",
                         grades.len(),
                         grades.join(", ")
                     ),
                 )
             }
         };
-        let path = format!("preset.{}", p.name);
+        let cite_of = |p: &Preset| {
+            let path = format!("preset.{}", p.name);
+            self.cites.iter().find(|c| c.path == path)
+        };
         Ok(Some(InsertPick {
             preset: p,
-            cite: self.cites.iter().find(|c| c.path == path),
+            cite: cite_of(p),
+            f: fr.fz,
+            f_row: fr,
+            f_cite: cite_of(fr),
             why,
         }))
     }

@@ -557,6 +557,14 @@ fn insert_preset_for_grade_and_material() {
         .collect();
     let q = forge_tooling::feeds::Quantiles::of(rows).unwrap();
     assert_eq!(d.preset.vc, q.p10);
+    // and the feed, separately: the 10th percentile of the same rows' feeds
+    let fs: Vec<f64> = ins
+        .presets
+        .iter()
+        .filter(|q| q.group == "P" && q.name.split(' ').count() > 3)
+        .map(|q| q.fz)
+        .collect();
+    assert_eq!(d.f, forge_tooling::feeds::Quantiles::of(fs).unwrap().p10);
     assert!(d.why.contains("grade not stated"), "{}", d.why);
     // a named material picks its row in the grade: Sumitomo's medium/high carbon steel row
     let m = ins

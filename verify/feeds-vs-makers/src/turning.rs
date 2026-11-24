@@ -89,7 +89,7 @@ pub fn rows(raw: &Path) -> Vec<TurnRow> {
                     ins.preset_for(&group, grade, mat)
                         .ok()
                         .flatten()
-                        .map(|p| (p.preset.vc, p.preset.fz, p.preset.ap))
+                        .map(|p| (p.preset.vc, p.f, p.preset.ap))
                 };
                 // the row's own preset: its grade and its very material text
                 let own_name = format!("{group} {} {grade} {material}", ins.chipbreaker);
@@ -124,7 +124,7 @@ pub fn rows(raw: &Path) -> Vec<TurnRow> {
                     ap: printed(r.get("ap")),
                     own,
                     graded: run(Some(&grade), None),
-                    default: dflt.as_ref().map(|p| (p.preset.vc, p.preset.fz, p.preset.ap)),
+                    default: dflt.as_ref().map(|p| (p.preset.vc, p.f, p.preset.ap)),
                     default_why: dflt.map_or(String::new(), |p| p.why),
                     generic_held_out: generic,
                     url: s("url"),
@@ -190,11 +190,11 @@ pub fn markdown(rows: &[TurnRow]) -> String {
     s.push_str("\n| path | pairs | vc ours/theirs | f ours/theirs |\n|---|---|---|---|\n");
     s.push_str(&line("own (grade + material)", &|r| r.ratio(r.own)));
     s.push_str(&line(
-        "graded (grade, no material: P10 by speed of the grade's rows)",
+        "graded (grade, no material: P10 by speed, and by feed, of the grade's rows)",
         &|r| r.ratio(r.graded),
     ));
     s.push_str(&line(
-        "default (no grade, no material: P10 by speed of the insert's rows)",
+        "default (no grade, no material: P10 by speed, and by feed, of the insert's rows)",
         &|r| r.ratio(r.default),
     ));
     s.push_str(&line(
@@ -211,7 +211,7 @@ pub fn markdown(rows: &[TurnRow]) -> String {
     let (a, n, fa, fv) = share(&|r| r.ratio(r.default));
     let (ga, gn, gfa, gfv) = share(&|r| r.ratio(r.generic_held_out));
     s.push_str(&format!(
-        "\n- Above the maker's start value for the row: the insert's default (no grade, no material) in {a} of {n} pairs on speed, {fa} of {fv} on feed; the generic default held out (a tool with no preset, its class built from the other makers) in {ga} of {gn} on speed, {gfa} of {gfv} on feed. The insert's default is a row of its own table (P10 by speed of every grade's printed rows), so it is above only the slowest few rows.\n"
+        "\n- Above the maker's start value for the row: the insert's default (no grade, no material) in {a} of {n} pairs on speed, {fa} of {fv} on feed; the generic default held out (a tool with no preset, its class built from the other makers) in {ga} of {gn} on speed, {gfa} of {gfv} on feed. The insert's default takes its speed from one row of its own table and its feed from another (each the 10th percentile of every grade's printed rows), so it is above only the slowest few rows.\n"
     ));
     s.push_str("\n| maker | pairs | default vc ours/theirs | default f ours/theirs |\n|---|---|---|---|\n");
     for m in ["sumitomo", "tungaloy", "korloy", "ingersoll"] {

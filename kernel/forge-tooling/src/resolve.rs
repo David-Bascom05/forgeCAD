@@ -1039,11 +1039,16 @@ impl TurnData {
                 c.source
             )
         });
+        let f_from = if std::ptr::eq(p.f_row, p.preset) {
+            String::new()
+        } else {
+            format!("; the feed from its {} preset", p.f_row.name)
+        };
         TurnData {
             vc: Some(p.preset.vc),
-            f: Some(p.preset.fz),
+            f: Some(p.f),
             ap: p.preset.ap,
-            source: format!("the insert's {} preset, {}; {cite}", p.preset.name, p.why),
+            source: format!("the insert's {} preset, {}; {cite}{f_from}", p.preset.name, p.why),
             kr,
             layer: Source::Library,
             spread: None,

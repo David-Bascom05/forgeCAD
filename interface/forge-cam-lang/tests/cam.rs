@@ -843,7 +843,7 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
     // a material group with no cutting data: no op falls back to a guessed speed (it was S3000,
     // refused at post by the spindle's range): each is refused before posting, with the fix
     machine("[5000, 24000]", "10000");
-    let cam = forge_cam_lang::run(&src.replace("group: \"N\"", "group: \"X\""), &dir);
+    let cam = forge_cam_lang::run(&src.replace("material: \"6061-T6\"", "group: \"X\""), &dir);
     assert!(!cam.ok && cam.program_text().is_none());
     for o in &cam.ops {
         assert_eq!(o.status, "refused", "{}", o.name);
@@ -1121,13 +1121,8 @@ fn stock_material_sets_the_cutting_data() {
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
     let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
     // aluminium by name: group N from the family
-    let cam = forge_cam_lang::run(
-        &src.replace(
-            "part(\"flange.fg\", group: \"N\")",
-            "part(\"flange.fg\", material: \"6061-T6\")",
-        ),
-        &dir,
-    );
+    // (the example names its alloy)
+    let cam = forge_cam_lang::run(&src, &dir);
     assert!(
         cam.ok,
         "{:?} {:?}",
@@ -1148,7 +1143,7 @@ fn stock_material_sets_the_cutting_data() {
     // generic S default, the lower quartile of the makers' S rows, is under the rows' 40 m/min)
     let cam = forge_cam_lang::run(
         &src.replace(
-            "part(\"flange.fg\", group: \"N\")",
+            "part(\"flange.fg\", material: \"6061-T6\")",
             "part(\"flange.fg\", material: \"Ti-6Al-4V annealed\")",
         )
         .replace("facing(op1, tool: t1,", "facing(op1, tool: t1, vc: 55,"),
@@ -1184,7 +1179,10 @@ fn stock_material_sets_the_cutting_data() {
     );
     // nothing known: refused, with the fix
     let cam = forge_cam_lang::run(
-        &src.replace("part(\"flange.fg\", group: \"N\")", "part(\"flange.fg\")"),
+        &src.replace(
+            "part(\"flange.fg\", material: \"6061-T6\")",
+            "part(\"flange.fg\")",
+        ),
         &dir,
     );
     assert!(!cam.ok);
@@ -1201,11 +1199,14 @@ fn stock_material_sets_the_cutting_data() {
     assert!(skim.fix.as_deref().unwrap().contains("material"));
     // but speeds and chips given on the tool are enough (power then not checked)
     let cam = forge_cam_lang::run(
-        &src.replace("part(\"flange.fg\", group: \"N\")", "part(\"flange.fg\")")
-            .replace(
-                "holder: \"bt40-er32\")",
-                "holder: \"bt40-er32\", rpm: 8000, chip: 0.04)",
-            ),
+        &src.replace(
+            "part(\"flange.fg\", material: \"6061-T6\")",
+            "part(\"flange.fg\")",
+        )
+        .replace(
+            "holder: \"bt40-er32\")",
+            "holder: \"bt40-er32\", rpm: 8000, chip: 0.04)",
+        ),
         &dir,
     );
     let skim = cam.ops.iter().find(|o| o.name == "skim").unwrap();
@@ -1404,7 +1405,7 @@ fn material_group_kienzle_value() {
     let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
         .unwrap()
         .replace(
-            "part(\"flange.fg\", group: \"N\")",
+            "part(\"flange.fg\", material: \"6061-T6\")",
             "part(\"flange.fg\", material: \"Inconel 718 aged\")",
         );
     let cam = forge_cam_lang::run(&src, &dir);
@@ -1435,7 +1436,7 @@ fn plastics_have_their_own_group_and_no_power_check() {
     let src = std::fs::read_to_string(dir.join("flange_cam.fg"))
         .unwrap()
         .replace(
-            "part(\"flange.fg\", group: \"N\")",
+            "part(\"flange.fg\", material: \"6061-T6\")",
             "part(\"flange.fg\", material: \"PEEK\")",
         );
     let cam = forge_cam_lang::run(&src, &dir);
@@ -1468,7 +1469,7 @@ fn a_makers_tool_takes_its_row_for_the_stock_material() {
     let run = |m: &str| {
         let cam = forge_cam_lang::run(
             &src.replace(
-                "part(\"flange.fg\", group: \"N\")",
+                "part(\"flange.fg\", material: \"6061-T6\")",
                 &format!("part(\"flange.fg\", material: \"{m}\")"),
             ),
             &dir,
@@ -1505,11 +1506,8 @@ fn generic_tools_take_their_class_by_material_family() {
             .clone()
             .unwrap()
     };
-    let al = skim(&src.replace(
-        "part(\"flange.fg\", group: \"N\")",
-        "part(\"flange.fg\", material: \"6061-T6\")",
-    ));
-    let n = skim(&src);
+    let al = skim(&src);
+    let n = skim(&src.replace("material: \"6061-T6\"", "group: \"N\""));
     assert_eq!(al.vc.source, Source::Material);
     let sp = al.spread.clone().unwrap();
     assert!(sp.class.contains("aluminium"), "{}", sp.class);
@@ -1522,4 +1520,20 @@ fn generic_tools_take_their_class_by_material_family() {
         spn.class
     );
     assert!(n.vc.v < al.vc.v, "{} {}", n.vc.v, al.vc.v);
+}
+
+/// A part that names only its material group is linted: the generic defaults then cover the
+/// whole group; naming the alloy is not.
+#[test]
+fn a_group_only_part_is_linted() {
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let lint = |src: &str| {
+        forge_cam_lang::run(src, &dir)
+            .warnings
+            .iter()
+            .any(|w| w.contains("names only a material group"))
+    };
+    assert!(!lint(&src));
+    assert!(lint(&src.replace("material: \"6061-T6\"", "group: \"N\"")));
 }

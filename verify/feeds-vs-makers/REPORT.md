@@ -341,24 +341,24 @@ All: rpm 0.60 (0.34–1.00, n 3124), fz 0.56 (0.30–0.96, n 3108), feed rate 0.
 | path | pairs | vc ours/theirs | f ours/theirs |
 |---|---|---|---|
 | own (grade + material) | 1154 | 1.00 (1.00–1.00, n 1154) | 1.00 (1.00–1.00, n 465) |
-| graded (grade, no material: P10 by speed of the grade's rows) | 1154 | 1.00 (0.62–1.00, n 1154) | 1.00 (1.00–1.00, n 465) |
-| default (no grade, no material: P10 by speed of the insert's rows) | 1154 | 0.77 (0.47–1.00, n 1154) | 1.00 (0.71–1.20, n 465) |
+| graded (grade, no material: P10 by speed, and by feed, of the grade's rows) | 1154 | 1.00 (0.62–1.00, n 1154) | 1.00 (0.71–1.00, n 465) |
+| default (no grade, no material: P10 by speed, and by feed, of the insert's rows) | 1154 | 0.77 (0.47–1.00, n 1154) | 1.00 (0.71–1.00, n 465) |
 | generic, held out (no preset: P10 of the class from the other makers) | 1077 | 0.75 (0.48–1.12, n 1077) | 0.40 (0.29–0.50, n 465) |
 
-- Above the maker's start value for the row: the insert's default (no grade, no material) in 70 of 1154 pairs on speed, 56 of 465 on feed; the generic default held out (a tool with no preset, its class built from the other makers) in 204 of 1077 on speed, 0 of 465 on feed. The insert's default is a row of its own table (P10 by speed of every grade's printed rows), so it is above only the slowest few rows.
+- Above the maker's start value for the row: the insert's default (no grade, no material) in 70 of 1154 pairs on speed, 0 of 465 on feed; the generic default held out (a tool with no preset, its class built from the other makers) in 204 of 1077 on speed, 0 of 465 on feed. The insert's default takes its speed from one row of its own table and its feed from another (each the 10th percentile of every grade's printed rows), so it is above only the slowest few rows.
 
 | maker | pairs | default vc ours/theirs | default f ours/theirs |
 |---|---|---|---|
-| sumitomo | 348 | 0.69 (0.53–1.00, n 348) | 1.00 (0.71–1.20, n 348) |
+| sumitomo | 348 | 0.69 (0.53–1.00, n 348) | 0.83 (0.71–1.00, n 348) |
 | tungaloy | 117 | 0.42 (0.28–1.00, n 117) | 1.00 (1.00–1.00, n 117) |
 | korloy | 186 | 0.90 (0.61–1.00, n 174) | – |
 | ingersoll | 515 | 0.82 (0.51–1.00, n 515) | – |
 
 | group | pairs | default vc ours/theirs | default f ours/theirs |
 |---|---|---|---|
-| P | 502 | 0.77 (0.42–1.00, n 502) | 1.00 (1.00–1.00, n 197) |
+| P | 502 | 0.77 (0.42–1.00, n 502) | 1.00 (0.71–1.00, n 197) |
 | M | 374 | 0.69 (0.53–1.00, n 374) | 1.00 (0.71–1.00, n 160) |
-| K | 201 | 0.85 (0.57–1.00, n 201) | 1.00 (1.00–1.20, n 108) |
+| K | 201 | 0.85 (0.57–1.00, n 201) | 0.83 (0.83–1.00, n 108) |
 | S | 65 | 0.78 (0.70–1.00, n 65) | – |
 | H | 12 | 1.00 (0.90–1.00, n 12) | – |
 
