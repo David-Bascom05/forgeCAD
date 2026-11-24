@@ -11,6 +11,7 @@ pub mod asmpart;
 pub mod asmtools;
 mod banner;
 pub mod bendsim;
+mod bendsim_cards;
 mod bendsim_env;
 pub mod cam;
 pub mod content;
@@ -756,9 +757,10 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
+        let dock_w = self.env_dock_width();
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width()), snap(bottom)),
+            pos2(snap(s.width() - dock_w), snap(bottom)),
         );
 
         p.rect_filled(
@@ -786,6 +788,18 @@ impl Shell {
         self.ribbon(ui, s.width());
         self.side(ui, side);
         self.side_splitter(ui, side, s.width());
+        if dock_w > 0.0 {
+            // an environment's properties, docked at the right edge
+            let r = Rect::from_min_max(
+                pos2(snap(s.width() - dock_w), snap(top)),
+                pos2(s.width(), snap(bottom)),
+            );
+            ui.painter().rect_filled(r, 0.0, t.surface);
+            ui.painter()
+                .vline(r.left(), r.y_range(), Stroke::new(1.0, t.line));
+            self.view_blocks.push(r);
+            self.env_dock(ui, r);
+        }
         self.docs_and_status(ui, s, bottom);
         if !self.view_owned {
             self.navbar(&ctx);

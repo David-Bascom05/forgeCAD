@@ -178,6 +178,13 @@ pub(in crate::shell) trait Environment: Sync {
     }
     /// Its windows and panels, once a frame.
     fn panels(&self, _s: &mut Shell, _ctx: &egui::Context) {}
+    /// The width of its properties panel, docked at the window's right edge from the ribbon to
+    /// the documents bar (docs/ux/STANDARD.md §1); 0: none, the view runs to the edge.
+    fn dock_width(&self, _s: &Shell) -> f32 {
+        0.0
+    }
+    /// Its properties panel, in `r` (the view stops at its left edge).
+    fn dock(&self, _s: &mut Shell, _ui: &mut Ui, _r: Rect) {}
     /// What it draws over the view; true: it takes the view's pointer too (hit-testing is its).
     fn draw(&self, _s: &mut Shell, _ui: &mut Ui, _view: Rect) -> bool {
         false
@@ -298,6 +305,17 @@ impl Shell {
         match self.env {
             Some(id) => id.imp().browser(self, ui, r),
             None => false,
+        }
+    }
+
+    /// The docked properties panel's width (0 outside an environment or with none).
+    pub(super) fn env_dock_width(&self) -> f32 {
+        self.env.map_or(0.0, |id| id.imp().dock_width(self))
+    }
+
+    pub(super) fn env_dock(&mut self, ui: &mut Ui, r: Rect) {
+        if let Some(id) = self.env {
+            id.imp().dock(self, ui, r);
         }
     }
 

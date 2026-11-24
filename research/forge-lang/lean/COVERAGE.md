@@ -232,8 +232,9 @@ scope).
   never read): fixed by URDF (`ReservedName`, test urdf_robot::a_reserved_name_is_not_bound).
 * A machining document passes over a bare call statement silently (`facing(op1, ..)` with no
   name does nothing, reports nothing): reported to CAM-CORE / CAM-TURN.
-* A bending document likewise (`read`: `StmtKind::Expr(_) => Ok(())`, so `bend("left")` with no
-  name is no step and no error): reported to BEND-SIM.
+* A bending document likewise (`read` passed `StmtKind::Expr` over, so `bend("left")` with no
+  name was no step and no error): fixed by BEND-SIM (`Unnamed`, test bending::refusals_are_typed;
+  the header word alone is still taken).
 * A `fn`'s name and params may take a built-in's name (no `ShadowsBuiltin`): harmless, they are
   read before built-ins, so no family extension changes them.
 

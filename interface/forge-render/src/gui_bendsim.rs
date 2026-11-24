@@ -7,6 +7,7 @@ use super::Gui;
 use crate::mesh::{FaceRange, Lod, PartMesh};
 use crate::render::Renderer;
 use crate::scene::{Placement, Scene};
+use crate::shell::bendsim::Framing;
 use crate::shell::env::EnvId;
 use forge_brake::scene::{Body, Look, Mesh};
 
@@ -26,6 +27,11 @@ pub struct BendView {
     ours: Option<u64>,
     /// The camera framed on the press once per entry.
     framed: bool,
+    /// The working station's place along the bed when framed: the part moved to another
+    /// station, the eye follows it there.
+    station: Option<u64>,
+    /// The press's parts cut away for the framed eye (the Work framing's near walls).
+    cut: Vec<String>,
 }
 
 /// Unit normal to octahedral i16x2 (as tess.rs packs them).
@@ -102,7 +108,130 @@ pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
         Look::Gauge => [0.16, 0.16, 0.17, 0.6],
         Look::Floor => [0.30, 0.30, 0.29, 0.0],
         Look::Witness => [0.95, 0.10, 0.08, 0.0],
+        // the bend being made: an annotation colour of the panel's, not a material
+        Look::BendZone => [0.98, 0.60, 0.10, 0.0],
     })
+}
+
+/// Axis-aligned bounds of meshes, (lo, hi); None when empty.
+fn bounds<'a>(meshes: impl Iterator<Item = &'a Mesh>) -> Option<([f32; 3], [f32; 3])> {
+    let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
+    for m in meshes {
+        if let Some((a, c)) = m.bounds() {
+            for k in 0..3 {
+                lo[k] = lo[k].min(a[k]);
+                hi[k] = hi[k].max(c[k]);
+            }
+        }
+    }
+    (lo[0] <= hi[0]).then_some((lo, hi))
+}
+
+/// The eye for a framing (docs/ux/STANDARD.md §2), from the 3/4 front-right-top view (the
+/// operator's side, -x; the bed's right-hand end, -y), perspective, the subject filling about
+/// 70 % of the view's shorter side. `Work`'s subject is the working zone: the part through the
+/// whole step's motion (`envelope`: its bounds at every instant sampled) and the working
+/// station's punch and die, their length cut to the part's plus a margin; held through the
+/// step. `Overview`'s is the whole press. Returns the eye and the subject's bounds.
+pub fn framing(
+    bodies: &[Body],
+    envelope: Option<([f32; 3], [f32; 3])>,
+    how: Framing,
+    size: (u32, u32),
+) -> Option<(crate::camera::Camera, [f32; 3], [f32; 3])> {
+    let (mut lo, mut hi) = match envelope {
+        Some(e) => e,
+        None => bounds(bodies.iter().filter(|x| x.look.is_sheet()).map(|x| &x.mesh))?,
+    };
+    let (ylo, yhi) = (lo[1] - 60.0, hi[1] + 60.0);
+    for x in bodies {
+        let on = match how {
+            Framing::Work => {
+                x.look == Look::Tool && (x.name.starts_with("punch:") || x.name.starts_with("die:"))
+            }
+            Framing::Overview => !matches!(x.look, Look::Floor),
+        };
+        if let (true, Some((mut a, mut c))) = (on, x.mesh.bounds()) {
+            if how == Framing::Work {
+                a[1] = a[1].max(ylo);
+                c[1] = c[1].min(yhi);
+            }
+            for k in 0..3 {
+                lo[k] = lo[k].min(a[k]);
+                hi[k] = hi[k].max(c[k]);
+            }
+        }
+    }
+    let center = [
+        0.5 * (lo[0] + hi[0]),
+        0.5 * (lo[1] + hi[1]),
+        0.5 * (lo[2] + hi[2]),
+    ];
+    let radius = 0.5 * ((hi[0] - lo[0]).powi(2) + (hi[1] - lo[1]).powi(2) + (hi[2] - lo[2]).powi(2)).sqrt();
+    let mut cam = crate::camera::Camera::fit(center, radius);
+    let (yaw, pitch) = match how {
+        Framing::Work => (215f32, 24f32),
+        Framing::Overview => (220f32, 20f32),
+    };
+    cam.yaw = yaw.to_radians();
+    cam.pitch = pitch.to_radians();
+    // the bounding sphere fills ~70 % of the shorter side
+    cam.dist = cam.fit_dist(radius, size.0.max(1), size.1.max(1)) / 0.7;
+    Some((cam, lo, hi))
+}
+
+/// Does the segment a-b pass through the box (lo, hi)? (slabs)
+fn hits(a: [f32; 3], b: [f32; 3], lo: [f32; 3], hi: [f32; 3]) -> bool {
+    let (mut t0, mut t1) = (0f32, 1f32);
+    for k in 0..3 {
+        let d = b[k] - a[k];
+        if d.abs() < 1e-9 {
+            if a[k] < lo[k] || a[k] > hi[k] {
+                return false;
+            }
+            continue;
+        }
+        let (mut u, mut v) = ((lo[k] - a[k]) / d, (hi[k] - a[k]) / d);
+        if u > v {
+            std::mem::swap(&mut u, &mut v);
+        }
+        t0 = t0.max(u);
+        t1 = t1.min(v);
+        if t0 > t1 {
+            return false;
+        }
+    }
+    true
+}
+
+/// The press's parts cut away for an eye: those (frame, beams, backgauge) that stand between it
+/// and the subject (its centre and corners), or that hold it (docs/ux/STANDARD.md §2: the eye
+/// outside every body, the machine's near walls cut away). The tools and the part are never cut.
+pub fn cutaway(bodies: &[Body], eye: [f32; 3], lo: [f32; 3], hi: [f32; 3]) -> Vec<String> {
+    let mut aims = vec![[
+        0.5 * (lo[0] + hi[0]),
+        0.5 * (lo[1] + hi[1]),
+        0.5 * (lo[2] + hi[2]),
+    ]];
+    for k in 0..8 {
+        aims.push([
+            if k & 1 == 0 { lo[0] } else { hi[0] },
+            if k & 2 == 0 { lo[1] } else { hi[1] },
+            if k & 4 == 0 { lo[2] } else { hi[2] },
+        ]);
+    }
+    bodies
+        .iter()
+        .filter(|x| matches!(x.look, Look::Frame | Look::Gauge))
+        .filter(|x| {
+            x.mesh.bounds().is_some_and(|(a, c)| {
+                // a little inside its box: a face the subject rests on is not in the way
+                let (a2, c2) = (a.map(|v| v + 1.0), c.map(|v| v - 1.0));
+                aims.iter().any(|&m| hits(eye, m, a2, c2))
+            })
+        })
+        .map(|x| x.name.clone())
+        .collect()
 }
 
 impl BendView {
@@ -140,14 +269,56 @@ impl Gui {
         }
         let step = b.step.min(n - 1);
         let key = (sim as *const _ as usize, step, b.t.to_bits());
-        if self.bend.shown == Some(key) {
+        if self.bend.shown == Some(key) && b.frame.is_none() {
             return;
         }
         let mut sc = forge_brake::scene::Scene::new(&sim.model, &sim.tooling, &sim.plan);
         if let Some(h) = b.table_height {
             sc.table_height = h;
         }
-        let bodies = sc.bodies(step, b.t);
+        let mut bodies = sc.bodies(step, b.t);
+        // framed: on entry, when asked (the View tools, F), and when the part moves to another
+        // station (a new subject); held through the step otherwise
+        let at = {
+            let st = &sim.plan.steps[step].setup;
+            sim.tooling.station(st.punch, st.die).map(|x| x.y.to_bits())
+        };
+        let ask = b.frame;
+        let moved = self.bend.framed && self.bend.station != at;
+        let mut eye = None;
+        if !self.bend.framed || ask.is_some() || moved {
+            let how = ask.unwrap_or(Framing::Work);
+            // the part's whole motion through the step, from gauging to the ram's return
+            let envelope = match how {
+                Framing::Work => {
+                    let samples: Vec<Vec<Body>> = [0.2, 0.35, 0.5, 0.6, 0.7, 0.78, 0.9]
+                        .iter()
+                        .map(|&tt| sc.bodies(step, tt))
+                        .collect();
+                    bounds(
+                        samples
+                            .iter()
+                            .flatten()
+                            .chain(bodies.iter())
+                            .filter(|x| x.look.is_sheet())
+                            .map(|x| &x.mesh),
+                    )
+                }
+                Framing::Overview => None,
+            };
+            if let Some((cam, lo, hi)) = framing(&bodies, envelope, how, v.size) {
+                self.bend.cut = match how {
+                    Framing::Work => cutaway(&bodies, cam.eye(), lo, hi),
+                    Framing::Overview => Vec::new(),
+                };
+                eye = Some(cam);
+            }
+            self.bend.framed = true;
+            self.bend.station = at;
+        }
+        if !self.bend.cut.is_empty() {
+            bodies.retain(|x| !self.bend.cut.contains(&x.name));
+        }
         let parts: Vec<PartMesh> = bodies.iter().map(|x| part_of(&x.mesh)).collect();
         let material = b.material.as_deref();
         let placements: Vec<Placement> = bodies
@@ -196,30 +367,11 @@ impl Gui {
             }
             self.bend.names = names;
         }
-        if !self.bend.framed {
-            // the part on the working station, seen along the bed from its near end and a
-            // little in front (the operator's side) and above: the punch, the V and the part's
-            // section in view, the ram and frame behind
-            let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
-            for x in bodies.iter().filter(|x| x.look == Look::Sheet) {
-                if let Some((a, c)) = x.mesh.bounds() {
-                    for k in 0..3 {
-                        lo[k] = lo[k].min(a[k]);
-                        hi[k] = hi[k].max(c[k]);
-                    }
-                }
-            }
-            if lo[0] <= hi[0] {
-                let center = [0.5 * (lo[0] + hi[0]), 0.5 * (lo[1] + hi[1]), 40.0];
-                let reach = (hi[0] - lo[0]).max(hi[1] - lo[1]).max(hi[2] - lo[2]);
-                // a perspective eye of its own (the design's may be parallel)
-                let mut cam = crate::camera::Camera::fit(center, reach);
-                cam.yaw = 262f32.to_radians();
-                cam.pitch = 12f32.to_radians();
-                cam.dist = (2.6 * reach).max(450.0);
-                v.nav.jump_to(cam);
-            }
-            self.bend.framed = true;
+        if let Some(b) = self.shell.sheet.bend_sim.as_mut() {
+            b.frame = None;
+        }
+        if let Some(cam) = eye {
+            v.nav.jump_to(cam);
         }
         // a failure located: the eye turned on its place, at its distance
         if let Some(at) = self.shell.sheet.bend_sim.as_mut().and_then(|b| b.locate.take()) {
@@ -235,6 +387,7 @@ impl Gui {
 
     fn bendsim_put_back(&mut self) {
         self.bend.framed = false;
+        self.bend.cut.clear();
         self.bend.shown = None;
         self.bend.names.clear();
         self.bend.ours = None;
