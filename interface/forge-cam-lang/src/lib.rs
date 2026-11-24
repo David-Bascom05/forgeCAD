@@ -624,6 +624,417 @@ pub const ARGS: &[(&str, &[&str])] = &[
             "tools",
         ],
     ),
+    // the 3-axis ops (`step` the step-down, `down` its old name until the next train; parallel
+    // lists `step` only to refuse it with the fix)
+    (
+        "parallel",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "stepover",
+            "angle",
+            "sample",
+            "step",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "waterline",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "step",
+            "down",
+            "grid",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "zlevel",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "step",
+            "down",
+            "stepover",
+            "grid",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "pencil",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "grid",
+            "sample",
+            "cusp",
+            "stay",
+            "lift",
+            "kink",
+            "min_len",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "scallop",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "grid",
+            "sample",
+            "cusp",
+            "stay",
+            "lift",
+            "stepover",
+            "walls",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "rest",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "grid",
+            "sample",
+            "cusp",
+            "stay",
+            "lift",
+            "after",
+            "after_leave",
+            "stepover",
+            "min",
+            "margin",
+            "angle",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "steep_shallow",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "grid",
+            "sample",
+            "cusp",
+            "stay",
+            "lift",
+            "threshold",
+            "step",
+            "down",
+            "stepover",
+            "overlap",
+            "angle",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "spiral",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "grid",
+            "sample",
+            "cusp",
+            "stay",
+            "lift",
+            "stepover",
+            "center",
+            "r0",
+            "r1",
+            "direction",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "radial",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "grid",
+            "sample",
+            "cusp",
+            "stay",
+            "lift",
+            "stepover",
+            "center",
+            "r0",
+            "r1",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "ramping",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "grid",
+            "sample",
+            "cusp",
+            "stay",
+            "lift",
+            "slope_min",
+            "step",
+            "down",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
+    (
+        "flat",
+        &[
+            "#0",
+            "tool",
+            "leave",
+            "leave_axial",
+            "floor",
+            "area",
+            "from",
+            "to",
+            "grid",
+            "sample",
+            "cusp",
+            "stay",
+            "lift",
+            "stepover",
+            "angle",
+            "vc",
+            "rpm",
+            "chip",
+            "fz",
+            "feed",
+            "ap",
+            "ae",
+            "max_angle",
+            "tilt",
+            "plunge_feed",
+            "ramp_feed",
+            "lead_in_feed",
+            "max_power",
+            "max_torque",
+            "max_deflection",
+            "min_feed",
+            "max_feed",
+        ],
+    ),
     ("box", &["margin", "below", "min", "max"]),
     ("cylinder", &["d", "margin", "below"]),
     ("tube", &["d", "id", "margin", "below"]),
@@ -1291,6 +1702,33 @@ impl Cam {
             }
         }
         Ok(m)
+    }
+}
+
+/// The 3-axis surfacing and finishing ops.
+fn surf3d(kind: &str) -> bool {
+    matches!(
+        kind,
+        "parallel"
+            | "waterline"
+            | "zlevel"
+            | "pencil"
+            | "scallop"
+            | "rest"
+            | "steep_shallow"
+            | "spiral"
+            | "radial"
+            | "ramping"
+            | "flat"
+    )
+}
+
+/// A 3-axis op's step-down: `step:`, or its old name `down:` (both given is refused by op()).
+fn step_down(a: &BTreeMap<String, V>, default: f64) -> Result<f64, String> {
+    if a.contains_key("step") {
+        get_num(a, "step", Some(default))
+    } else {
+        get_num(a, "down", Some(default))
     }
 }
 
@@ -3482,7 +3920,28 @@ impl Cam {
                 }
 
                 let d = t.tool.dc;
-                let step = get_num(a, "step", Some(0.5 * d))?;
+                // the 3-axis ops: `step:` is the step-down (as in 2D), `sample:` the spacing along a
+                // pass; `down:` is step's old name, accepted for one train with a warning
+                if surf3d(kind) {
+                    if a.contains_key("down") && a.contains_key("step") {
+                        return Err(format!(
+                            "{kind}: `down:` and `step:` both given: `down:` is the old name of `step:` (the step-down); keep `step:` only"
+                        ));
+                    }
+                    if kind == "parallel" && a.contains_key("step") {
+                        return Err("parallel: `step:` no longer means the spacing along a pass: write `sample:` for that (`step:` is the step-down, which parallel has none of)".into());
+                    }
+                    if a.contains_key("down") {
+                        self.warnings.push(format!(
+                            "{name}: `down:` is now `step:` (the step-down, as in the 2D ops); `down:` is accepted until the next train"
+                        ));
+                    }
+                }
+                let step = if surf3d(kind) {
+                    step_down(a, 0.5 * d)?
+                } else {
+                    get_num(a, "step", Some(0.5 * d))?
+                };
                 // a helical entry at this angle (degrees) where it fits; else plunges
                 let ramp = match a.get("ramp") {
                     None => None,
@@ -3947,13 +4406,13 @@ impl Cam {
                 area,
                 get_num(a, "stepover", Some(0.1 * d))?,
                 get_num(a, "angle", Some(0.0))?,
-                get_num(a, "step", Some(0.5))?,
+                get_num(a, "sample", Some(0.5))?,
             )
             .map_err(e)?,
             "waterline" => {
                 let top = get_num(a, "from", Some(part.bbox.1[2]))?;
                 let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
-                let zs = ops::levels(top, bottom, get_num(a, "down", Some(1.0))?);
+                let zs = ops::levels(top, bottom, step_down(a, 1.0)?);
                 surf::waterline(&sf, c, area, &zs, grid).map_err(e)?
             }
             "zlevel" => {
@@ -3965,7 +4424,7 @@ impl Cam {
                     area,
                     top,
                     bottom,
-                    get_num(a, "down", Some(0.5 * d))?,
+                    step_down(a, 0.5 * d)?,
                     get_num(a, "stepover", Some(0.4 * d))?,
                     grid,
                 )
@@ -4070,7 +4529,7 @@ impl Cam {
             }
         };
         let dr = Drape {
-            step: get_num(a, "step", Some(0.5 * d))?,
+            step: get_num(a, "sample", Some(0.5 * d))?,
             slack: 0.5 * tol,
             leave: tol,
             zmin: floor,
@@ -4104,10 +4563,7 @@ impl Cam {
                         .map_err(|x| format!("{x:?}"))?;
                         (waterline_step(sp, sn), raster_step(sp, cs))
                     }
-                    None => (
-                        get_num(a, "down", Some(0.1 * d))?,
-                        get_num(a, "stepover", Some(0.1 * d))?,
-                    ),
+                    None => (step_down(a, 0.1 * d)?, get_num(a, "stepover", Some(0.1 * d))?),
                 };
                 fin.stepover = so;
                 fin.stepdown = dz;
@@ -4182,7 +4638,7 @@ impl Cam {
                         .map_err(|x| format!("{x:?}"))?;
                         waterline_step(sp, sn)
                     }
-                    None => get_num(a, "down", Some(0.1 * d))?,
+                    None => step_down(a, 0.1 * d)?,
                 };
                 fin.stepdown = dz;
                 let mut lv = vec![
