@@ -205,6 +205,7 @@ fn arc_by_chords(
     tol: f64,
 ) -> Option<f64> {
     use forge_cam_geom::drop::Gap;
+    use forge_cam_geom::ival::Ival;
     let Move::Arc { c, x, y, r, t0, t1 } = *m else {
         return None;
     };
@@ -232,12 +233,14 @@ fn arc_by_chords(
             c[2] + r * (x[2] * u + y[2] * v),
         ]
     };
+    // outward-rounded, as `contact::clear_arc`
+    let lim = Ival::pt(limit).add(Ival::pt(sag)).hi;
     let mut least = f64::INFINITY;
     let mut a = at(t0);
     for k in 1..=n {
         let e = if k == n { at(t1) } else { at(t0 + h * k as f64) };
         let ch = Move::Line { a, b: e };
-        match forge_cam_geom::contact::clear(body, f, &ch, limit + sag) {
+        match forge_cam_geom::contact::clear(body, f, &ch, lim) {
             Some(Verdict::Clear { lower }) => least = least.min(lower),
             _ => match forge_cam_geom::drop::gap_move(&grown, f, &ch, limit, tol / 4.0, 2_000).0 {
                 Gap::Clear { lower } => least = least.min(lower),
@@ -246,7 +249,7 @@ fn arc_by_chords(
         }
         a = e;
     }
-    Some(least - sag)
+    Some(Ival::pt(least).sub(Ival::pt(sag)).lo)
 }
 
 /// The moves of a path as the checker's (arcs cut into pieces of at most a quarter turn, cycles
