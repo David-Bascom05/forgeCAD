@@ -7,6 +7,7 @@ pub mod camera;
 pub mod camsim;
 pub mod dwgview;
 pub mod explode;
+pub mod frame;
 pub mod library_mesh;
 pub mod livegpu;
 pub mod look;
