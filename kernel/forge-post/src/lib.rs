@@ -115,7 +115,7 @@ pub struct Cite {
 }
 
 /// The template keys a dialect may set; with `cite_required`, each one it sets is cited.
-pub const KEYS: [&str; 37] = [
+pub const KEYS: [&str; 41] = [
     "program_open",
     "program_close",
     "comment",
@@ -153,6 +153,13 @@ pub const KEYS: [&str; 37] = [
     "sign",
     "g_digits",
     "tool_word",
+    // cutter radius compensation (CAM-2D-FINISH): G41/G42 with the register, G40, and what the
+    // control does at an outside corner under it (`arc` or `intersection`); comp is posted only
+    // where all four are set and cited
+    "comp_left",
+    "comp_right",
+    "comp_off",
+    "comp_corner",
 ];
 
 impl Dialect {
@@ -331,10 +338,21 @@ pub enum Coolant {
     Off,
 }
 
+/// The side cutter radius compensation puts the tool on, as it travels (G41 left, G42 right).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CompSide {
+    Left,
+    Right,
+}
+
 /// A program record, in mm, mm/min, rpm, seconds.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Rec {
     Comment(String),
+    /// Cutter radius compensation on (the side and the offset register D), or off (G40). The
+    /// path around it is the tool centre's for a zero register: the control adds the
+    /// register's value (wear). It turns on and off only before a straight feed move in XY.
+    Comp(Option<(CompSide, u32)>),
     Wcs(u32),
     ToolChange {
         t: u32,
@@ -386,6 +404,7 @@ pub type Q = i64;
 #[derive(Clone, Debug, PartialEq)]
 pub enum QRec {
     Comment(String),
+    Comp(Option<(CompSide, u32)>),
     Wcs(u32),
     ToolChange {
         t: u32,
@@ -425,6 +444,8 @@ pub enum QRec {
 /// What the control does: the motion and the machine-state events, in integer units.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Motion {
+    /// Cutter radius compensation on or off: the motions around it are the programmed path.
+    Comp(Option<(CompSide, u32)>),
     Rapid([Q; 3]),
     Feed([Q; 3], Q),
     /// `full`: a whole turn (helical if Z moves). A control decides it from X and Y alone:
@@ -532,6 +553,58 @@ pub fn digits(q: Q, k: u32, point: Point) -> String {
     s
 }
 
+/// Cutter compensation's rules, as controls state them (RS274/NGC and LinuxCNC's reference):
+/// it turns on and off only immediately before a straight feed move (G1) that moves in X or Y
+/// (no arc, rapid, Z-only move or cycle in between: comments may be); while it is on, no tool
+/// change, cycle, dwell or machine-home move; and it is off when the program ends.
+fn comp_rules(p: &Program) -> Result<(), PostError> {
+    let bad = |what: &str| {
+        PostError::Unsupported {
+        what: format!("cutter compensation: {what}"),
+        fix: "turn compensation on and off on a straight lead line in XY, and off before tool changes, cycles and the end".into(),
+    }
+    };
+    let mut on = false;
+    let mut at: Option<[f64; 3]> = None;
+    let mut want_line = false;
+    for r in &p.recs {
+        match r {
+            Rec::Comment(_) => continue,
+            Rec::Comp(c) => {
+                if c.is_some() == on {
+                    return Err(bad(if on {
+                        "turned on while on"
+                    } else {
+                        "turned off while off"
+                    }));
+                }
+                on = c.is_some();
+                want_line = true;
+                continue;
+            }
+            Rec::Line(v, _) if want_line => {
+                let moves_xy = at.is_none_or(|a| a[0] != v[0] || a[1] != v[1]);
+                if !moves_xy {
+                    return Err(bad("the move after G41/G42/G40 does not move in X or Y"));
+                }
+                want_line = false;
+            }
+            _ if want_line => return Err(bad("the move after G41/G42/G40 is not a straight feed move")),
+            Rec::ToolChange { .. } | Rec::Cycle { .. } | Rec::Dwell(_) | Rec::Home if on => {
+                return Err(bad("a tool change, cycle, dwell or home move while it is on"));
+            }
+            _ => {}
+        }
+        if let Rec::Rapid(v) | Rec::Line(v, _) | Rec::Arc { to: v, .. } = r {
+            at = Some(*v);
+        }
+    }
+    if on || want_line {
+        return Err(bad("still on at the program's end"));
+    }
+    Ok(())
+}
+
 pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
     let k = d.decimals;
     let fk = d.feed_decimals;
@@ -541,6 +614,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
     let mut out = Vec::new();
     // where the tool is, as the program states it (an arc's start)
     let mut at: Option<[f64; 3]> = None;
+    comp_rules(p)?;
     for r in &p.recs {
         let from = at;
         match r {
@@ -573,6 +647,7 @@ pub fn quantize(p: &Program, d: &Dialect) -> Result<QProgram, PostError> {
         }
         out.push(match r {
             Rec::Comment(s) => QRec::Comment(s.clone()),
+            Rec::Comp(c) => QRec::Comp(*c),
             Rec::Wcs(n) => QRec::Wcs(*n),
             Rec::ToolChange { t, h, name } => QRec::ToolChange {
                 t: *t,
@@ -707,6 +782,7 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
     for r in &p.recs {
         match r {
             QRec::Comment(_) | QRec::Wcs(_) => {}
+            QRec::Comp(c) => out.push(Motion::Comp(*c)),
             QRec::ToolChange { t, .. } => out.push(Motion::Tool(*t)),
             QRec::Spindle { rpm, cw } => out.push(Motion::Spindle(*rpm, *cw)),
             QRec::SpindleStop => out.push(Motion::SpindleStop),
@@ -731,7 +807,9 @@ pub fn motions_with(p: &QProgram, params: (f64, f64)) -> Vec<Motion> {
                 f,
             } => {
                 for h in holes {
-                    expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out);
+                    expand_hole(
+                        *kind, *h, *z, *r, *clear, *q, *dwell, *f, p.decimals, params, &mut out,
+                    );
                 }
             }
             QRec::Dwell(ms) => out.push(Motion::Dwell(*ms)),
@@ -857,6 +935,26 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
     for r in &p.recs {
         match r {
             QRec::Comment(s) => w.comment(s),
+            QRec::Comp(c) => {
+                // a control's corner behaviour under compensation must be declared (and cited)
+                // for the checks' claim to hold: without it, refused
+                let key = match c {
+                    Some((CompSide::Left, _)) => "comp_left",
+                    Some((CompSide::Right, _)) => "comp_right",
+                    None => "comp_off",
+                };
+                let tpl = d.s(key).to_string();
+                if tpl.is_empty() || tpl == "refuse" || d.s("comp_corner").is_empty() {
+                    return Err(PostError::Unsupported {
+                        what: format!("cutter compensation on {} (no cited G41/G42/G40 or corner behaviour)", d.name),
+                        fix: "post the tool centre (comp: \"computer\"), or a dialect that declares compensation".into(),
+                    });
+                }
+                let dd = c.map(|(_, d)| d).unwrap_or(0);
+                w.emit(&fill(&tpl, &[("d", dd.to_string())]));
+                // the next move states its G word again
+                motion = None;
+            }
             QRec::Wcs(n) => {
                 let first = d.n("wcs_first").unwrap_or(54.0) as u32;
                 let count = d.n("wcs_count").unwrap_or(6.0) as u32;
@@ -987,7 +1085,19 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                 if tpl == "expand" {
                     let mut ms = Vec::new();
                     for h in holes {
-                        expand_hole(*kind, *h, *z, *r, *clear, *q, *dwell, *f, k, (PECK_CLEAR, CHIP_LIFT), &mut ms);
+                        expand_hole(
+                            *kind,
+                            *h,
+                            *z,
+                            *r,
+                            *clear,
+                            *q,
+                            *dwell,
+                            *f,
+                            k,
+                            (PECK_CLEAR, CHIP_LIFT),
+                            &mut ms,
+                        );
                     }
                     for m in ms {
                         let rr = match m {
@@ -1197,6 +1307,8 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
     let mut motion: Option<u32> = None;
     let mut cycle: Option<(CycleKind, Q, Q, Q, Q, Q)> = None; // kind, z, r, q, dwell ms, clear
     let mut rpm: Q = 0;
+    // cutter compensation: on (G41/G42) until G40; a G40 with it off (a safe start) is no event
+    let mut comp_on = false;
     // the dialect's extras: an end-of-line comment mark, a block terminator, G codes that carry
     // no motion (ignored) or that make the block carry none (skipped), more word letters
     let eol = d.s("comment_eol").chars().next();
@@ -1284,6 +1396,7 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     what: format!("M{v}"),
                 })?),
                 'N' | 'O' | 'X' | 'Y' | 'Z' | 'I' | 'J' | 'F' | 'R' | 'Q' | 'P' | 'S' | 'T' | 'H' | 'K' => {}
+                'D' if d.s("comp_left").contains("D{d}") => {}
                 c if more_words.contains(*c) => {}
                 c => {
                     return Err(ReadError {
@@ -1393,6 +1506,25 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
                     out.push(Motion::Dwell(ms));
                     skip_motion = true;
                 }
+                41 | 42 => {
+                    let dv = get('D').ok_or_else(|| ReadError {
+                        line: ln,
+                        what: format!("G{g} with no D"),
+                    })?;
+                    let dn: u32 = dv.parse().map_err(|_| ReadError {
+                        line: ln,
+                        what: format!("D{dv}"),
+                    })?;
+                    let side = if *g == 41 { CompSide::Left } else { CompSide::Right };
+                    out.push(Motion::Comp(Some((side, dn))));
+                    comp_on = true;
+                    skip_motion = true;
+                }
+                40 if comp_on => {
+                    out.push(Motion::Comp(None));
+                    comp_on = false;
+                    skip_motion = true;
+                }
                 90 | 94 | 17 | 21 | 40 | 49 | 98 | 64 | 54..=59 | 187 => {}
                 43 => skip_motion = true,
                 g if g_ignore.contains(g) => {}
@@ -1443,7 +1575,19 @@ pub fn read(text_: &str, d: &Dialect) -> Result<Vec<Motion>, ReadError> {
             Some(80) => {
                 let (kind, z, r, q, dw, clear) = cycle.unwrap();
                 let (x, y) = (to[0].unwrap_or(0), to[1].unwrap_or(0));
-                expand_hole(kind, [x, y], z, r, clear, q, dw, feed, k, (PECK_CLEAR, CHIP_LIFT), &mut out);
+                expand_hole(
+                    kind,
+                    [x, y],
+                    z,
+                    r,
+                    clear,
+                    q,
+                    dw,
+                    feed,
+                    k,
+                    (PECK_CLEAR, CHIP_LIFT),
+                    &mut out,
+                );
                 pos = [Some(x), Some(y), Some(clear)];
                 continue;
             }

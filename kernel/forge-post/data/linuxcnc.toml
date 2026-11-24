@@ -39,3 +39,39 @@ cycle_cancel = "G80"
 source = "forgecad, restated from NIST RS274NGC v3 and the LinuxCNC G-code reference"
 taken = "2026-11-23"
 note = "verify with your configuration"
+# cutter radius compensation (G41/G42 D = the tool number whose tool-table diameter is the
+# offset; for wear, the table holds only the measured-minus-nominal difference). comp_corner is
+# not set: the reference does not say whether an outside corner gets an arc or the lines'
+# intersection, so the post refuses compensation on LinuxCNC (UNKNOWN, not guessed)
+comp_left = "G41 D{d}"
+comp_right = "G42 D{d}"
+comp_off = "G40"
+
+[[dialect.cite]]
+key = "comp_left"
+source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
+taken = "2026-11-24"
+where = "LinuxCNC G-code reference, 26. G41, G42 Cutter Compensation"
+note = "G41 <D-> left of the path; D the tool number (read through a summary of the page; check the section)"
+
+[[dialect.cite]]
+key = "comp_right"
+source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
+taken = "2026-11-24"
+where = "LinuxCNC G-code reference, 26. G41, G42 Cutter Compensation"
+note = "G42 <D-> right of the path; D the tool number (read through a summary of the page; check the section)"
+
+[[dialect.cite]]
+key = "comp_off"
+source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
+taken = "2026-11-24"
+where = "LinuxCNC G-code reference, 25. G40 Compensation Off; tool-compensation.html 4.1.2 Programming Entry Moves"
+note = "the move after G40 must be linear and longer than the tool diameter; the entry move at least the cutter radius (tool-compensation.html, verbatim)"
+
+[[dialect.cite]]
+key = "comp_corner"
+status = "refused"
+source = "https://linuxcnc.org/docs/html/gcode/tool-compensation.html"
+taken = "2026-11-24"
+where = "4. Cutter Radius Compensation"
+note = "states only: an outside corner moves 'to the end point of the compensated cut line', an inside one 'will stop short'; arc or intersection is not stated: UNKNOWN"
