@@ -619,3 +619,47 @@ fn a_reserved_name_is_not_bound() {
     .expect("reads");
     assert_eq!(r.geometry[0].spec, robot::GeoSpec::Hull);
 }
+
+/// The robot reader's call arms (`"name" =>` in read, statement and value) are exactly
+/// forge-lang's word lists for the document kind (`shared` is its own statement kind), so the
+/// lists LANG-PROOFS' coverage reads cannot drift from what the reader takes.
+#[test]
+fn the_readers_arms_are_the_languages_word_lists() {
+    use std::collections::BTreeSet;
+    let src = include_str!("../src/robot.rs");
+    let mut arms = BTreeSet::new();
+    for line in src.lines() {
+        let t = line.trim_start();
+        let Some(head) = t
+            .strip_suffix('{')
+            .map(str::trim_end)
+            .unwrap_or(t)
+            .strip_suffix("=>")
+        else {
+            continue;
+        };
+        let head = head.split(" if ").next().unwrap_or("").trim();
+        let words: Vec<&str> = head.split(" | ").collect();
+        if words.iter().all(|w| {
+            w.len() > 2
+                && w.starts_with('"')
+                && w.ends_with('"')
+                && w[1..w.len() - 1]
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c == '_')
+        }) {
+            arms.extend(words.iter().map(|w| w[1..w.len() - 1].to_string()));
+        }
+    }
+    assert!(
+        src.contains("StmtKind::Shared"),
+        "shared is read as its own statement kind"
+    );
+    let want: BTreeSet<String> = forge_lang::robot::STATEMENTS
+        .iter()
+        .chain(forge_lang::robot::VALUES.iter())
+        .filter(|w| **w != "shared")
+        .map(|w| w.to_string())
+        .collect();
+    assert_eq!(arms, want);
+}
