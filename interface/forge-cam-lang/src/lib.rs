@@ -27,6 +27,7 @@ use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod export;
 pub mod holes;
 pub mod life;
+mod memo;
 pub mod sim;
 pub mod toollog;
 pub mod toolstore;
@@ -50,6 +51,39 @@ pub static FULL_STOCK: std::sync::atomic::AtomicBool = std::sync::atomic::Atomic
 #[doc(hidden)]
 pub static CYCLE_PARAMS: std::sync::Mutex<(f64, f64)> =
     std::sync::Mutex::new((forge_post::PECK_CLEAR, forge_post::CHIP_LIFT));
+
+/// A surfacing op's path and z-level's voids, or its refusal.
+type Surfaced = Result<(OpPath, Vec<(Region, f64)>), String>;
+static SURFACED: memo::Memo<Surfaced> = memo::Memo::new();
+
+/// The certifications made by earlier runs of documents in this process (memo.rs).
+static CERTIFIED: memo::Memo<ops::CheckSummary> = memo::Memo::new();
+
+/// `ops::certify_with`, taken from an earlier run when every argument is the same (each
+/// number the same number): it is a function of these arguments alone (no clock, file or other
+/// state; the kernel's own memos are by content), so the summary is the one it would make. An
+/// edit to one op re-certifies only the ops whose posted path, tool, target faces, stock
+/// stages, fixture, clearances or tolerance it changed.
+#[allow(clippy::too_many_arguments)]
+fn certify_memo(
+    p: &OpPath,
+    tool: &ops::ToolUse,
+    part: &[Face],
+    stages: &[(usize, Vec<Face>)],
+    fixture: &[Face],
+    fclear: f64,
+    tol: f64,
+    clearance: f64,
+    column: bool,
+) -> ops::CheckSummary {
+    let key = format!(
+        "certify_with/1 {:?}",
+        (p, tool, part, stages, fixture, fclear, tol, clearance, column)
+    );
+    CERTIFIED.get_or(key, || {
+        ops::certify_with(p, tool, part, stages, fixture, fclear, tol, clearance, column)
+    })
+}
 
 /// Whether a source is a machining document.
 pub fn is_machining(src: &str) -> bool {
@@ -4564,43 +4598,71 @@ impl Cam {
         };
         let grid = get_num(a, "grid", Some(0.25 * d))?;
         let e = |x: forge_cam::ops::OpError| format!("{x:?}");
-        let p = match kind {
-            "parallel" => surf::parallel(
-                &sf,
-                c,
+        // the op's path (and z-level's voids) from an earlier run when every input is the same:
+        // the generators are functions of these alone (the kind, its arguments, the part's faces
+        // and box, the cutter's body and diameter (surf.rs reads no other part of the tool: not
+        // its stickout or holder, which only the certification sees; surfacing_memo_tests::
+        // the_generators_read_no_other_part_of_the_tool fails if one starts to), the tool's
+        // index, the heights and feeds, the stock box, the setup's tolerance), see memo.rs.
+        // A generator that starts reading the in-process stock (s.ip, stock_before) must put it
+        // in this key: the voids it returns feed later ops' stock stages.
+        let key = format!(
+            "surfacing/2 {kind} {:?} {:?}",
+            (a, &part.faces, body, d, ti, h, feed, leave),
+            (
+                s.tol,
+                floor,
                 area,
-                get_num(a, "stepover", Some(0.1 * d))?,
-                get_num(a, "angle", Some(0.0))?,
-                get_num(a, "sample", Some(0.5))?,
+                grid,
+                part.bbox,
+                &s.stock,
+                c.ramp_feed,
+                c.lead_feed
             )
-            .map_err(e)?,
-            "waterline" => {
-                let top = get_num(a, "from", Some(part.bbox.1[2]))?;
-                let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
-                let zs = ops::levels(top, bottom, step_down(a, 1.0)?);
-                surf::waterline(&sf, c, area, &zs, grid).map_err(e)?
-            }
-            "zlevel" => {
-                let top = get_num(a, "from", Some(s.stock.max[2]))?;
-                let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
-                let (p, vs) = surf::zlevel_voids(
+        );
+        let made = SURFACED.get_or(key, || -> Surfaced {
+            let mut made_voids = Vec::new();
+            let p = match kind {
+                "parallel" => surf::parallel(
                     &sf,
                     c,
                     area,
-                    top,
-                    bottom,
-                    step_down(a, 0.5 * d)?,
-                    get_num(a, "stepover", Some(0.4 * d))?,
-                    grid,
+                    get_num(a, "stepover", Some(0.1 * d))?,
+                    get_num(a, "angle", Some(0.0))?,
+                    get_num(a, "sample", Some(0.5))?,
                 )
-                .map_err(e)?;
-                for (r, z) in vs {
-                    voids.push((Some(r), z));
+                .map_err(e)?,
+                "waterline" => {
+                    let top = get_num(a, "from", Some(part.bbox.1[2]))?;
+                    let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
+                    let zs = ops::levels(top, bottom, step_down(a, 1.0)?);
+                    surf::waterline(&sf, c, area, &zs, grid).map_err(e)?
                 }
-                p
-            }
-            _ => return Err(format!("{kind}: not a surfacing op")),
-        };
+                "zlevel" => {
+                    let top = get_num(a, "from", Some(s.stock.max[2]))?;
+                    let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
+                    let (p, vs) = surf::zlevel_voids(
+                        &sf,
+                        c,
+                        area,
+                        top,
+                        bottom,
+                        step_down(a, 0.5 * d)?,
+                        get_num(a, "stepover", Some(0.4 * d))?,
+                        grid,
+                    )
+                    .map_err(e)?;
+                    made_voids = vs;
+                    p
+                }
+                _ => return Err(format!("{kind}: not a surfacing op")),
+            };
+            Ok((p, made_voids))
+        });
+        let (p, vs) = made?;
+        for (r, z) in vs {
+            voids.push((Some(r), z));
+        }
         Ok(vec![p])
     }
 
@@ -6555,7 +6617,7 @@ impl Cam {
                 | "ramping"
                 | "flat"
         );
-        let mut sum = ops::certify_with(
+        let mut sum = certify_memo(
             posted,
             &tool,
             target,
@@ -7469,5 +7531,268 @@ mod feed_tests {
         assert!(feed_over(37_264, 1, 3726.3));
         assert!(!feed_over(37_262, 1, 3726.3));
         assert!(feed_over(1, 1, f64::NAN));
+    }
+}
+
+#[cfg(test)]
+mod certify_memo_tests {
+    use super::*;
+    use forge_cam::ops::Stock;
+
+    /// certify_fixtured's arguments.
+    type Args = (
+        OpPath,
+        ToolUse,
+        Vec<Face>,
+        Vec<(usize, Vec<Face>)>,
+        Vec<Face>,
+        f64,
+        f64,
+        f64,
+    );
+
+    fn tool(id: &str, stickout: f64) -> ToolUse {
+        let l = Library::builtin();
+        let t = l.tool(id).unwrap().clone();
+        let shape = t.shape(stickout, Some(l.holder("bt40-er32").unwrap())).unwrap();
+        ToolUse {
+            t: 1,
+            tool: t,
+            holder: Some("bt40-er32".into()),
+            stickout,
+            shape,
+        }
+    }
+
+    fn path(x: f64) -> OpPath {
+        OpPath {
+            tool: 0,
+            start: [x, 5.0, 30.0],
+            moves: vec![
+                PMove::Line {
+                    to: [x, 5.0, 12.0],
+                    f: 300.0,
+                    phase: Phase::Plunge,
+                },
+                PMove::Line {
+                    to: [x + 20.0, 5.0, 12.0],
+                    f: 900.0,
+                    phase: Phase::Cut,
+                },
+                PMove::Rapid {
+                    to: [x + 20.0, 5.0, 30.0],
+                },
+            ],
+            rpm: 8000.0,
+            coolant: forge_post::Coolant::Off,
+        }
+    }
+
+    /// Every argument class is in the key: changing any one of them (the path, the tool, a part
+    /// face, the stock, the fixture, its clearance, the tolerance, the clearance) certifies anew,
+    /// and the summary equals a fresh certification of the changed inputs; the same arguments
+    /// again take the memo. A stale summary (a Clear for inputs it was not made for) is the bug
+    /// this guards.
+    #[test]
+    fn each_input_class_certifies_anew() {
+        let part = Stock {
+            min: [0.0, 0.0, 0.0],
+            max: [40.0, 30.0, 10.0],
+        }
+        .faces();
+        let stock = Stock {
+            min: [-2.0, -2.0, 0.0],
+            max: [42.0, 32.0, 14.0],
+        }
+        .faces();
+        let fix = Stock {
+            min: [-50.0, -50.0, -10.0],
+            max: [90.0, 80.0, 0.0],
+        }
+        .faces();
+        let base = (
+            path(10.0),
+            tool("flat-6", 30.0),
+            part.clone(),
+            vec![(0usize, stock.clone())],
+            fix.clone(),
+            1.0,
+            0.01,
+            2.0,
+        );
+        let run = |a: &Args| certify_memo(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7, false);
+        let fresh = |a: &Args| ops::certify_fixtured(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7);
+        let same = |x: &ops::CheckSummary, y: &ops::CheckSummary| format!("{x:?}") == format!("{y:?}");
+        let n0 = CERTIFIED.computed();
+        let s0 = run(&base);
+        assert!(same(&s0, &fresh(&base)));
+        let n1 = CERTIFIED.computed();
+        assert!(n1 > n0);
+        // the same again: from the memo
+        let _ = run(&base);
+        // each class changed by a little
+        let mut edits = Vec::new();
+        let mut e = base.clone();
+        e.0 = path(10.000001);
+        edits.push(("path", e));
+        let mut e = base.clone();
+        e.1 = tool("flat-6", 30.5);
+        edits.push(("tool", e));
+        let mut e = base.clone();
+        e.2[3].mu *= 2.0;
+        edits.push(("part face", e));
+        let mut e = base.clone();
+        e.3 = vec![(
+            0,
+            Stock {
+                min: [-2.0, -2.0, 0.0],
+                max: [42.0, 32.0, 13.0],
+            }
+            .faces(),
+        )];
+        edits.push(("stock", e));
+        let mut e = base.clone();
+        e.4 = Stock {
+            min: [-50.0, -50.0, -10.0],
+            max: [90.0, 80.0, 0.5],
+        }
+        .faces();
+        edits.push(("fixture", e));
+        let mut e = base.clone();
+        e.5 = 1.5;
+        edits.push(("fixture clearance", e));
+        let mut e = base.clone();
+        e.6 = 0.02;
+        edits.push(("tolerance", e));
+        let mut e = base.clone();
+        e.7 = 2.5;
+        edits.push(("clearance", e));
+        for (what, e) in &edits {
+            let before = CERTIFIED.computed();
+            let s = run(e);
+            assert!(CERTIFIED.computed() > before, "{what}: not certified anew");
+            assert!(same(&s, &fresh(e)), "{what}: the summary is not the fresh one");
+        }
+        // and the unchanged arguments still from the memo, the same summary
+        let before = CERTIFIED.computed();
+        assert!(same(&run(&base), &s0));
+        assert_eq!(CERTIFIED.computed(), before, "the same arguments certified again");
+    }
+}
+
+#[cfg(test)]
+mod surfacing_memo_tests {
+    /// Every input class of a surfacing op is in its memo key: the op's arguments (stepover,
+    /// area, leave, floor), the cutter, the part's faces, the setup's tolerance and stock each
+    /// make the path anew; the same text, and an edit only the certification sees (the tool's
+    /// stickout: surf.rs reads no part of the tool but its cutter's body and diameter), take it
+    /// from the memo. Each changed run's path is the one it posts (its reply is ok).
+    #[test]
+    fn each_input_class_makes_the_path_anew() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/surfacing_memo_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let part = std::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
+        std::fs::write(dir.join("mold_core.fg"), &part).unwrap();
+        let doc = "machining\nf = part(\"mold_core.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt2 = tool(\"ball-6\", t: 2, stickout: 40, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (0, 0, 2)), origin: \"top-center\", tol: 0.01)\nfin = parallel(op1, tool: t2, stepover: 6, area: (-12, -9, 12, 9))\n";
+        let run = |d: &str| {
+            let before = super::SURFACED.computed();
+            let cam = super::run(d, &dir);
+            assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+            (
+                super::SURFACED.computed() - before,
+                cam.ops[0].paths.iter().map(|p| p.moves.len()).sum::<usize>(),
+            )
+        };
+        let (n, moves) = run(doc);
+        assert_eq!(n, 1);
+        assert!(moves > 0);
+        assert_eq!(run(doc).0, 0, "the same text made the path again");
+        assert_eq!(
+            run(&doc.replace("stickout: 40", "stickout: 42")).0,
+            0,
+            "a stickout edit made the path again"
+        );
+        for (what, d) in [
+            ("stepover", doc.replace("stepover: 6", "stepover: 5")),
+            ("area", doc.replace("(-12, -9, 12, 9)", "(-12, -9, 12, 8)")),
+            ("leave", doc.replace("area: (", "leave: 0.1, area: (")),
+            ("floor", doc.replace("area: (", "floor: 1, area: (")),
+            ("cutter", doc.replace("\"ball-6\"", "\"bull-10-r1\"")),
+            ("tolerance", doc.replace("tol: 0.01", "tol: 0.02")),
+            ("stock", doc.replace("margin: (0, 0, 2)", "margin: (0, 0, 3)")),
+        ] {
+            assert_eq!(run(&d).0, 1, "{what}: the path was not made anew");
+        }
+        // the part: one of its numbers changed
+        let edited = part.replacen("shared bw = 40", "shared bw = 38", 1);
+        assert_ne!(edited, part);
+        std::fs::write(dir.join("mold_core.fg"), &edited).unwrap();
+        assert_eq!(run(doc).0, 1, "part: the path was not made anew");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The surfacing key leaves out the tool's stickout, holder and number: surf.rs's
+    /// generators read the cutter (through the Surfacer) and the Cut's index, heights and feeds
+    /// only. Each generator run with the same cutter but a tool differing in all the rest
+    /// (stickout, holder, T number, its shape's other bodies) makes the same path; this fails if
+    /// a generator starts reading any of them, and the key must then take them.
+    #[test]
+    fn the_generators_read_no_other_part_of_the_tool() {
+        use forge_cam::ops::{Cut, Heights, ToolUse};
+        use forge_cam::surf::{self, Surfacer};
+        use forge_tooling::Library;
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let src = std::fs::read_to_string(src_dir.join("mold_core.fg")).unwrap();
+        let (run, _) = forge_lang::run(&src, forge_lang::Options::default(), Default::default());
+        let faces = forge_cam::lower3d::lower_surfacing(&run.body.unwrap()).unwrap().0;
+        let lib = Library::builtin();
+        let tl = lib.tool("ball-6").unwrap().clone();
+        let a = ToolUse {
+            t: 2,
+            tool: tl.clone(),
+            holder: Some("bt40-er32".into()),
+            stickout: 40.0,
+            shape: tl.shape(40.0, Some(lib.holder("bt40-er32").unwrap())).unwrap(),
+        };
+        let b = ToolUse {
+            t: 9,
+            tool: tl.clone(),
+            holder: None,
+            stickout: 61.0,
+            shape: tl.shape(61.0, None).unwrap(),
+        };
+        let cutter = a
+            .shape
+            .bodies
+            .iter()
+            .find(|x| x.part == forge_cam_geom::tool::Part::Cutter)
+            .unwrap()
+            .clone();
+        let sf = Surfacer::new(&faces, &cutter, 0.0, 0.01, -1.0).unwrap();
+        let cut = |t: &ToolUse| {
+            let c = Cut {
+                tool: t,
+                tidx: 1,
+                h: Heights {
+                    clear: 40.0,
+                    retract: 30.0,
+                },
+                feed: (1200.0, 400.0),
+                ramp_feed: None,
+                lead_feed: None,
+            };
+            let area = [-12.0, -9.0, 12.0, 9.0];
+            format!(
+                "{:?}\n{:?}\n{:?}",
+                surf::parallel(&sf, c, area, 6.0, 0.0, 0.5),
+                surf::waterline(&sf, c, area, &[20.0, 14.0], 1.0),
+                surf::zlevel_voids(&sf, c, area, 26.0, 12.0, 7.0, 3.0, 1.0)
+            )
+        };
+        let (pa, pb) = (cut(&a), cut(&b));
+        assert!(pa.contains("moves"), "the generators made no path: {pa}");
+        assert_eq!(pa, pb, "a generator read the tool beyond its cutter");
     }
 }
