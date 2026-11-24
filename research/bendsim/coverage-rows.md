@@ -19,7 +19,7 @@ Arguments:
 
 | Kind | Item | Names | Rust site | Lean |
 |---|---|---|---|---|
-| args | `bend` | `sheet` (part), `punch`, `die`, `y`, `length`, `punch_length`, `die_length` (station), `at`, `rotate` (bend), `format` (program) | `interface/forge-bend-lang/src/lib.rs` `known(..)` per built-in: an argument not listed is refused | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` (the list exists: every call is checked) |
+| args | `bend` | `#0`, `sheet` (part); `#0` (press, tooling); `punch`, `die`, `y`, `length`, `punch_length`, `die_length` (station); `#0`, `at`, `rotate` (bend); `format` (program: `cincinnati` written, others ProgramFormatUnavailable) | `interface/forge-bend-lang/src/lib.rs` `known(..)` per built-in: an argument not listed is refused | `FamiliesArgs.checkArgs_ok_iff`, `FamiliesArgs.misspelled_refused` (the list exists: every call is checked) |
 
 Edit ops: none new (MoveFeature, SetArg, AddFeature, DeleteFeature, ReplaceFeature, Undo/Redo
 on the document's statements).

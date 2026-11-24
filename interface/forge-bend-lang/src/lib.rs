@@ -26,6 +26,12 @@ use std::path::Path;
 
 pub const SCHEMA: &str = "forgecad.bending/1";
 
+/// Press-brake program formats written: those whose specification is openly published
+/// (research/bendsim/env/data/program-formats.md). `cincinnati`: Cincinnati Incorporated's XML
+/// program (`*.pgm`), EM-503 (R-09/09) "XML FILE FORMAT" (research/bendsim/env/data/
+/// cincinnati-xml.md).
+pub const FORMATS: &[&str] = &["cincinnati"];
+
 /// The document's built-ins (a closed namespace: looked up among these only).
 pub const NAMES: &[&str] = &[
     "part",
@@ -398,12 +404,14 @@ pub fn run_with(src: &str, part: &str, pdir: Option<&Path>) -> Bending {
         }
     };
     let mut errors = Vec::new();
-    if let Some(f) = &doc.program {
+    if let Some(f) = doc.program.as_deref().filter(|f| !FORMATS.contains(f)) {
         errors.push((
             "program".into(),
             format!(
                 "ProgramFormatUnavailable: no openly published specification of the `{f}` press-brake \
-                 program format was found (research/bendsim/environment.md §8); the setup sheet is the output"
+                 program format was found (research/bendsim/env/data/program-formats.md); the formats \
+                 written are: {}",
+                FORMATS.join(", ")
             ),
         ));
     }
@@ -482,6 +490,20 @@ impl Bending {
                 self.sim.as_ref().map_or(Json::Null, |s| s.answer.json.clone()),
             ),
         ])
+    }
+
+    /// The press-brake program in the format the document asks for (`program(format: ..)`):
+    /// the file's text and extension, and what it leaves to the control (said, not guessed).
+    pub fn program_text(&self) -> Option<Result<Program, String>> {
+        let f = self.doc.program.as_deref()?;
+        let sim = match &self.sim {
+            Some(s) => s,
+            None => return Some(Err("not simulated".into())),
+        };
+        Some(match f {
+            "cincinnati" => Ok(cincinnati(sim, &self.doc)).map(|(t, n)| (t, "pgm", n)),
+            other => Err(format!("ProgramFormatUnavailable: `{other}`")),
+        })
     }
 
     /// The setup sheet: the press, the tool layout along the bed, and the steps (HTML).
@@ -617,4 +639,192 @@ fn num(x: f64) -> String {
     } else {
         format!("{r}")
     }
+}
+
+/// A written program: its text, its file extension, and what it leaves to the control.
+pub type Program = (String, &'static str, Vec<String>);
+
+/// A number in inches as the format stores it: no trailing zeros (EM-503 p. 27), 4 decimals.
+fn inch(mm: f64) -> String {
+    let v = (mm / 25.4 * 10_000.0).round() / 10_000.0;
+    let mut t = format!("{v:.4}");
+    while t.contains('.') && (t.ends_with('0') || t.ends_with('.')) {
+        t.pop();
+    }
+    if t == "-0" { "0".into() } else { t }
+}
+
+fn deg(x: f64) -> String {
+    let v = (x * 10_000.0).round() / 10_000.0;
+    let mut t = format!("{v:.4}");
+    while t.contains('.') && (t.ends_with('0') || t.ends_with('.')) {
+        t.pop();
+    }
+    t
+}
+
+fn attr(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// Cincinnati's material code (EM-503 pp. 29-30) for a forge-material name: only where the
+/// family is plain (mild steel 0, stainless 2, aluminium: soft 3 / hard 4 by temper, copper 5);
+/// anything else is left to the control (said in the notes).
+fn mat_type(material: Option<&str>) -> Option<u32> {
+    let m = material?.to_ascii_lowercase();
+    if m.contains("stainless") || m.starts_with("30") || m.starts_with("31") {
+        Some(2)
+    } else if m.starts_with("50")
+        || m.starts_with("60")
+        || m.starts_with("1100")
+        || m.starts_with("3003")
+        || m.contains("alumin")
+    {
+        // soft: O and H1x/H3x of 1xxx/3xxx/5xxx; hard: T tempers
+        Some(if m.contains("-t") { 4 } else { 3 })
+    } else if m.contains("copper") || m.starts_with("c1") {
+        Some(5)
+    } else if m.contains("mild")
+        || m.contains("1008")
+        || m.contains("1010")
+        || m.contains("a36")
+        || m == "steel"
+    {
+        Some(0)
+    } else {
+        None
+    }
+}
+
+/// The program as Cincinnati's XML (`<Document><PressBrakeProgram>`), from the simulated steps:
+/// each station a ToolSetup upper and lower (ID by station, Location from the bed's centre,
+/// plus to the right seen from the front; its segment stack where the tool's lengths make it);
+/// each step in angle mode at its included angle, its bend length, its tools, the X gauge (as the
+/// flange dimension, EM-503 p. 26) where the backgauge was checked. Everything else is left
+/// out, so the control's defaults hold (p. 26); the notes say what was left and why.
+pub fn cincinnati(sim: &Sim, doc: &Doc) -> (String, Vec<String>) {
+    let tl = &sim.tooling;
+    let mut notes = vec![
+        "values in inches, angles in degrees (EM-503 p. 27)".to_string(),
+        "ToolSetup Name is forgecad's tool id: the control's Tool Library must hold tools of these names"
+            .to_string(),
+    ];
+    // the stations: the document's, else one per distinct punch and die of the steps, centred
+    let stations: Vec<(usize, usize, f64, f64, f64)> = if tl.stations.is_empty() {
+        let mut v: Vec<(usize, usize, f64, f64, f64)> = Vec::new();
+        for st in &sim.plan.steps {
+            if !v.iter().any(|x| (x.0, x.1) == (st.setup.punch, st.setup.die)) {
+                v.push((
+                    st.setup.punch,
+                    st.setup.die,
+                    0.0,
+                    st.punch_length.unwrap_or(0.0),
+                    st.die_length.unwrap_or(0.0),
+                ));
+            }
+        }
+        if v.len() > 1 {
+            notes.push("no stations stated: every tool pair at the bed's centre (one at a time)".into());
+        }
+        v
+    } else {
+        tl.stations
+            .iter()
+            .map(|s| (s.punch, s.die, s.y, s.punch_length, s.die_length))
+            .collect()
+    };
+    let mut x = String::from("<?xml version=\"1.0\" ?>\n<Document>");
+    let t = sim.model.t;
+    x.push_str(&format!(
+        "<PressBrakeProgram Version=\"9\" MatThick=\"{}\"",
+        inch(t)
+    ));
+    let material = sim
+        .answer
+        .json
+        .get("material")
+        .and_then(|m| m.str().map(str::to_string));
+    match mat_type(material.as_deref()) {
+        Some(m) => x.push_str(&format!(" MatType=\"{m}\"")),
+        None => notes.push(format!(
+            "MatType left to the control (default 0, mild steel): {} has no plain Cincinnati code",
+            material.as_deref().unwrap_or("the material")
+        )),
+    }
+    x.push_str(&format!(" NumSteps=\"{}\">", sim.plan.steps.len()));
+    for (upper, list) in [(true, "UpperToolSets"), (false, "LowerToolSets")] {
+        x.push_str(&format!("<{list}><ToolList Count=\"{}\">", stations.len()));
+        for (k, (p, d, y, pl, dl)) in stations.iter().enumerate() {
+            let (name, len, segs) = if upper {
+                (&tl.punches[*p].id, *pl, &tl.punches[*p].segments)
+            } else {
+                (&tl.dies[*d].id, *dl, &tl.dies[*d].segments)
+            };
+            // Location: + right seen from the front; the press's y runs to the operator's left
+            x.push_str(&format!(
+                "<ToolSetup Name=\"{}\" ID=\"{}\" Length=\"{}\" Location=\"{}\"",
+                attr(name),
+                k + 1,
+                inch(len),
+                inch(-y)
+            ));
+            match forge_brake::tooling::cover_within(segs, len, len).filter(|c| (c.0 - len).abs() < 0.05) {
+                Some((_, pieces)) => {
+                    let all: Vec<f64> = pieces
+                        .iter()
+                        .flat_map(|(l, n)| std::iter::repeat_n(*l, *n as usize))
+                        .collect();
+                    x.push_str(&format!(" NumSegs=\"{}\"><SegStackup>", all.len()));
+                    for l in all {
+                        x.push_str(&format!("<SegEntry SegValue=\"{}\" />", inch(l)));
+                    }
+                    x.push_str("</SegStackup></ToolSetup>");
+                }
+                None => x.push_str(" />"),
+            }
+        }
+        x.push_str(&format!("</ToolList></{list}>"));
+    }
+    x.push_str("<StepData>");
+    let mut no_gauge = Vec::new();
+    for (i, st) in sim.plan.steps.iter().enumerate() {
+        let k = stations
+            .iter()
+            .position(|s| (s.0, s.1) == (st.setup.punch, st.setup.die))
+            .unwrap_or(0)
+            + 1;
+        let included = 180.0 - st.angle.to_degrees();
+        let len = sim.model.bends[st.bend].len;
+        x.push_str(&format!(
+            "<Step RevMode=\"0\" RevAngle=\"{}\" BendLen=\"{}\" UpperID=\"{k}\" LowerID=\"{k}\"",
+            deg(included),
+            inch(len)
+        ));
+        match &st.gauge {
+            Some(g) => {
+                x.push_str(&format!(" XLeft=\"{0}\" XRight=\"{0}\"", inch(g.x)));
+            }
+            None => no_gauge.push(format!("{}", i + 1)),
+        }
+        x.push_str(&format!(
+            "><UIDSelectList Size=\"1\"><UID IntValue=\"{k}\" /></UIDSelectList><LIDSelectList Size=\"1\"><LID IntValue=\"{k}\" /></LIDSelectList><ProgOutputs>"
+        ));
+        for _ in 0..8 {
+            x.push_str("<ProgOutData />");
+        }
+        x.push_str("</ProgOutputs></Step>");
+    }
+    x.push_str("</StepData></PressBrakeProgram></Document>\n");
+    if !no_gauge.is_empty() {
+        notes.push(format!(
+            "X gauge left to the control (default: max travel - 1.0 in) at step(s) {}: the press's backgauge ranges are not published, so no stop was checked",
+            no_gauge.join(", ")
+        ));
+    }
+    notes.push("orientation (PartOrient), R/Z gauge, speeds and outputs left to the control: their bit meanings and datums are not stated in EM-503".into());
+    let _ = doc;
+    (x, notes)
 }
