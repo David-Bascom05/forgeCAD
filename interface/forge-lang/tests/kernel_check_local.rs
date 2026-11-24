@@ -148,7 +148,7 @@ fn a_fault_in_any_one_entity_is_found() {
         });
         for i in 0..good.vertices.len() {
             run(format!("vertex {i} point"), &|b| b.vertices[i].point.x += 0.01);
-            run(format!("vertex {i} tolerance"), &|b| b.vertices[i].tol = 1e3);
+            run(format!("vertex {i} tolerance"), &|b| b.grow_vertex_tol(forge_topo::VertexId(i as u32), 1e3));
         }
         for i in 0..good.coedges.len() {
             run(format!("coedge {i} way"), &|b| b.coedges[i].forward ^= true);

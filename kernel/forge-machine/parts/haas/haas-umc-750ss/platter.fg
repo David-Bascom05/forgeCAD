@@ -1,0 +1,17 @@
+# haas-umc-750ss platter: 500 mm published, 60 mm thick (estimate)
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared cx = 0
+shared cy = 0
+shared z0 = -59
+shared R = 249
+shared H = 58
+shared rb = 20
+
+sketch plan(on: offset(xy, z0)) {
+  outline = circle((cx, cy), R)
+}
+body = extrude(plan.outline, H)
+sketch bb(on: body.end) {
+  c = circle((cx, cy), rb)
+}
+through = cut(bb.c, H)

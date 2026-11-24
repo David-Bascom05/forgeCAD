@@ -1,0 +1,252 @@
+# MASSO G3 (mill): restated from MASSO's documentation (docs.masso.com.au, updated 5 Oct 2026);
+# every code is cited below. MASSO skips a whole line containing a code it does not support, so only
+# listed codes are written: no G43/G49 (length offsets are applied at the tool change), no G84/G85.
+[dialect]
+name = "masso"
+extension = "nc"
+decimals = 4
+feed_decimals = 1
+units_mm = "G21"
+units_inch = "G20"
+inch_decimals = 4
+inch_feed_decimals = 2
+point = "always"
+program_open = ["({title})"]
+program_close = ["M30"]
+comment = "({text})"
+comment_strip = "()"
+line_numbers = false
+safe_start = ["G17 {units} G40 G80 G90 G94"]
+tool_change = ["T{t} M06"]
+spindle_cw = "S{rpm} M03"
+spindle_ccw = "S{rpm} M04"
+spindle_stop = "M05"
+wcs = "G{n}"
+wcs_first = 54
+wcs_count = 6
+arc = "ijk"
+retract_home = ["G53 G00 Z0"]
+coolant_flood = "M08"
+coolant_mist = "M07"
+coolant_off = "M09"
+dwell = "G04 P{ms}"
+cycle_drill = "G98 G81 X{x} Y{y} Z{z} R{r} F{f}"
+cycle_dwell = "G98 G82 X{x} Y{y} Z{z} R{r} P{ms} F{f}"
+cycle_peck = "expand"
+cycle_chipbreak = "expand"
+cycle_tap = "refuse"
+cycle_ream = "expand"
+cycle_next = "X{x} Y{y}"
+cycle_cancel = "G80"
+source = "MASSO documentation, docs.masso.com.au (cited per code)"
+taken = "2026-11-23"
+note = "the program must stop the spindle (M05) before M06; T before M06 on the line"
+cite_required = true
+
+[[dialect.cite]]
+key = "program_open"
+source = "https://docs.masso.com.au/supported-g-codes/comments"
+taken = "2026-11-23"
+where = "MASSO Documentation: ( ) - Comments, web page, 'Last updated 5 October 2026'; whole page"
+note = "a ( ) comment names the program"
+
+[[dialect.cite]]
+key = "program_close"
+source = "https://docs.masso.com.au/supported-m-codes/m30-end-the-program-and-rewind"
+taken = "2026-11-23"
+where = "MASSO Documentation: M30 - End The Program And Rewind, web page, 'Last updated 5 October 2026'; whole page"
+note = "M30"
+
+[[dialect.cite]]
+key = "comment"
+source = "https://docs.masso.com.au/supported-g-codes/comments"
+taken = "2026-11-23"
+where = "MASSO Documentation: ( ) - Comments, web page, 'Last updated 5 October 2026'; whole page"
+note = "( ) not nested"
+
+[[dialect.cite]]
+key = "line_numbers"
+source = "https://docs.masso.com.au/supported-g-codes/n-number"
+taken = "2026-11-23"
+where = "MASSO Documentation: N - Number, web page, 'Last updated 5 October 2026'; whole page"
+note = "N optional: not written"
+
+[[dialect.cite]]
+key = "safe_start"
+source = "https://docs.masso.com.au/supported-g-codes/g04-dwell"
+taken = "2026-11-23"
+where = "MASSO Documentation: MASSO docs navigation: Supported G-codes / Supported M-codes list (as on the G04 page sidebar), web page, 'Last updated 5 October 2026'; Supported G-codes list; S3 Invalid Gcode"
+note = "G17 G21 G40 G80 G90 G94 (G49 is not supported)"
+
+[[dialect.cite]]
+key = "tool_change"
+source = "https://docs.masso.com.au/supported-m-codes/m06-tool-change"
+taken = "2026-11-23"
+where = "MASSO Documentation: M06 - Tool Change, web page, 'Last updated 5 October 2026'; whole page"
+note = "T before M06; the control applies the length offset itself"
+
+[[dialect.cite]]
+key = "spindle_cw"
+source = "https://docs.masso.com.au/supported-g-codes/g04-dwell"
+taken = "2026-11-23"
+where = "MASSO Documentation: MASSO docs navigation: Supported G-codes / Supported M-codes list (as on the G04 page sidebar), web page, 'Last updated 5 October 2026'; Supported M-codes list"
+note = "S M03"
+
+[[dialect.cite]]
+key = "spindle_ccw"
+source = "https://docs.masso.com.au/supported-g-codes/g04-dwell"
+taken = "2026-11-23"
+where = "MASSO Documentation: MASSO docs navigation: Supported G-codes / Supported M-codes list (as on the G04 page sidebar), web page, 'Last updated 5 October 2026'; Supported M-codes list"
+note = "S M04"
+
+[[dialect.cite]]
+key = "spindle_stop"
+source = "https://docs.masso.com.au/supported-g-codes/g04-dwell"
+taken = "2026-11-23"
+where = "MASSO Documentation: MASSO docs navigation: Supported G-codes / Supported M-codes list (as on the G04 page sidebar), web page, 'Last updated 5 October 2026'; Supported M-codes list"
+note = "M05"
+
+[[dialect.cite]]
+key = "wcs"
+source = "https://docs.masso.com.au/supported-g-codes/g54.1-extended-work-offsets"
+taken = "2026-11-23"
+where = "MASSO Documentation: G54.1 - Extended Work Offsets, web page, 'Last updated 5 October 2026'; whole page"
+note = "G54..G59"
+
+[[dialect.cite]]
+key = "arc"
+source = "https://docs.masso.com.au/supported-g-codes/g02-circular-interpolation-clockwise"
+taken = "2026-11-23"
+where = "MASSO Documentation: G02 - Circular Interpolation (Clockwise), web page, 'Last updated 5 October 2026'; Parameters / CAUTION"
+note = "I J K always incremental from the start"
+
+[[dialect.cite]]
+key = "retract_home"
+source = "https://docs.masso.com.au/supported-g-codes/g53-move-in-absolute-machine-coordinates"
+taken = "2026-11-23"
+where = "MASSO Documentation: G53 - Move In Absolute Machine Coordinates, web page, 'Last updated 5 October 2026'; whole page; S5 multi-head example"
+note = "G53 G00 Z0: Z to the top of travel"
+
+[[dialect.cite]]
+key = "coolant_flood"
+source = "https://docs.masso.com.au/supported-m-codes/m07-turn-mist-coolant-on"
+taken = "2026-11-23"
+where = "MASSO Documentation: M07 - Mist Coolant On, web page, 'Last updated 5 October 2026'; whole page"
+note = "M08"
+
+[[dialect.cite]]
+key = "coolant_mist"
+source = "https://docs.masso.com.au/supported-m-codes/m07-turn-mist-coolant-on"
+taken = "2026-11-23"
+where = "MASSO Documentation: M07 - Mist Coolant On, web page, 'Last updated 5 October 2026'; whole page"
+note = "M07"
+
+[[dialect.cite]]
+key = "coolant_off"
+source = "https://docs.masso.com.au/supported-m-codes/m07-turn-mist-coolant-on"
+taken = "2026-11-23"
+where = "MASSO Documentation: M07 - Mist Coolant On, web page, 'Last updated 5 October 2026'; whole page"
+note = "M09"
+
+[[dialect.cite]]
+key = "dwell"
+source = "https://docs.masso.com.au/supported-g-codes/g04-dwell"
+taken = "2026-11-23"
+where = "MASSO Documentation: G04 - Dwell, web page, 'Last updated 5 October 2026'; whole page"
+note = "G04 P milliseconds"
+
+[[dialect.cite]]
+key = "cycle_drill"
+source = "https://docs.masso.com.au/supported-g-codes/g81-drilling-cycle"
+taken = "2026-11-23"
+where = "MASSO Documentation: G81 - Drilling Cycle, web page, 'Last updated 5 October 2026'; whole page"
+note = "G81 (R required)"
+
+[[dialect.cite]]
+key = "cycle_dwell"
+source = "https://docs.masso.com.au/supported-g-codes/g82-drilling-canned-cycle-with-dwell"
+taken = "2026-11-23"
+where = "MASSO Documentation: G82 - Drilling Canned Cycle With Dwell, web page, 'Last updated 5 October 2026'; whole page"
+note = "G82 P milliseconds"
+
+[[dialect.cite]]
+key = "cycle_peck"
+source = "https://docs.masso.com.au/supported-g-codes/g83-peck-drilling-for-deeper-holes"
+taken = "2026-11-23"
+where = "MASSO Documentation: G83 - Peck Drilling For Deeper Holes, web page, 'Last updated 5 October 2026'; whole page"
+note = "posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_chipbreak"
+source = "https://docs.masso.com.au/supported-g-codes/g73-high-speed-peck-drilling"
+taken = "2026-11-23"
+where = "MASSO Documentation: G73 - High Speed Peck Drilling, web page, 'Last updated 5 October 2026'; whole page"
+note = "G73 retracts a fixed 1.0 mm: posted as moves: the control's peck retract/clearance is a parameter (or fixed differently) and forge-post's cycle model would not match it"
+
+[[dialect.cite]]
+key = "cycle_ream"
+source = "https://docs.masso.com.au/supported-g-codes/g04-dwell"
+taken = "2026-11-23"
+where = "MASSO Documentation: MASSO docs navigation: Supported G-codes / Supported M-codes list (as on the G04 page sidebar), web page, 'Last updated 5 October 2026'; Supported G-codes list"
+note = "G85 is not supported: posted as G00/G01 moves"
+
+[[dialect.cite]]
+key = "cycle_next"
+source = "https://docs.masso.com.au/supported-g-codes/g81-drilling-cycle"
+taken = "2026-11-23"
+where = "MASSO Documentation: G81 - Drilling Cycle, web page, 'Last updated 5 October 2026'; whole page"
+note = "cycles modal: further holes as X Y"
+
+[[dialect.cite]]
+key = "cycle_cancel"
+source = "https://docs.masso.com.au/supported-g-codes/g80-cancel-modal-motion"
+taken = "2026-11-23"
+where = "MASSO Documentation: G80 - Cancel Modal Motion, web page, 'Last updated 5 October 2026'; whole page"
+note = "G80"
+
+[[dialect.cite]]
+key = "point"
+source = "https://docs.masso.com.au/supported-g-codes/f-feed-rate"
+taken = "2026-11-23"
+where = "MASSO Documentation: F - Feed rate, web page, 'Last updated 5 October 2026'; whole page"
+note = "written with a point"
+
+[[dialect.cite]]
+key = "decimals"
+source = "https://docs.masso.com.au/supported-g-codes/f-feed-rate"
+taken = "2026-11-23"
+where = "MASSO Documentation: F - Feed rate, web page, 'Last updated 5 October 2026'; whole page"
+note = "4 decimals written"
+
+[[dialect.cite]]
+key = "cycle_tap"
+status = "refused"
+note = "G84 is not in MASSO's supported list"
+
+[[dialect.cite]]
+key = "units_mm"
+source = "https://docs.masso.com.au/supported-g-codes/g04-dwell"
+taken = "2026-11-23"
+where = "MASSO Documentation: MASSO docs navigation: Supported G-codes / Supported M-codes list (as on the G04 page sidebar), web page, 'Last updated 5 October 2026'; Supported G-codes list; S3 Invalid Gcode"
+note = "G21 (the safe start's)"
+
+[[dialect.cite]]
+key = "units_inch"
+source = "https://docs.masso.com.au/supported-g-codes/g20-set-machine-units-to-inches"
+taken = "2026-11-24"
+where = "MASSO Documentation: G20 - Set Machine Units To Inches, web page; whole page (G21: the G21 page)"
+note = "G20 sets the machine units to inches. All G-code values after it are read as inches"
+
+[[dialect.cite]]
+key = "inch_decimals"
+source = "https://docs.masso.com.au/supported-g-codes/f-feed-rate"
+taken = "2026-11-23"
+where = "MASSO Documentation: F - Feed rate, web page, 'Last updated 5 October 2026'; whole page"
+note = "the number format reads decimals (inch increment not stated): 4 written, 0.0001 in"
+
+[[dialect.cite]]
+key = "inch_feed_decimals"
+source = "https://docs.masso.com.au/supported-g-codes/f-feed-rate"
+taken = "2026-11-23"
+where = "MASSO Documentation: F - Feed rate, web page, 'Last updated 5 October 2026'; whole page"
+note = "the number format reads decimals (inch feed increment not stated): 2 written"

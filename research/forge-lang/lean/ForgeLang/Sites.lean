@@ -450,7 +450,7 @@ theorem split_independent {D : Defs} {σ : Site → Int} {ρ : Env} {i w : Name}
         subst hhead
         have hk0 : k0 < qs.length := hk k0 (by simp)
         obtain ⟨Δl, ml, ll, Δr, mr, lr, hl, hr, e1⟩ := execS_cons h1
-        cases execOne_unique hl (split_let (f := 0) (D := D) (σ := σ) (ρ := ρ) (w := w) hk0)
+        cases split_let_ok hk0 hl
         simp only [Prod.mk.injEq] at e1
         obtain ⟨-, rfl, -⟩ := e1
         have S := (sitesIn n).s hr

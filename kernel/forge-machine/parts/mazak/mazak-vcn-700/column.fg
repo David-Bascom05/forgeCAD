@@ -1,0 +1,14 @@
+# mazak-vcn-700 column: behind the spindle from the published spindle-to-column distance; width and depth estimates.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -450
+shared y0 = 760
+shared z0 = -400
+shared L = 900
+shared W = 450
+shared H = 1850
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

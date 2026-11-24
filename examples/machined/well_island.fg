@@ -1,0 +1,22 @@
+# A well with an island: a plate with a rectangular pocket and a round boss standing in it to the plate's top
+# (an island), for CAM's pocket with islands (well_island_cam.fg).
+
+shared L = 60
+shared W = 40
+shared t = 12
+shared rim = 8
+shared depth = 6
+shared boss_r = 5
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+plate = extrude(plan, t)
+sketch pk(on: plate.end) {
+  well = rect(corner: (rim, rim), size: (L - 2 * rim, W - 2 * rim))
+}
+pocket = cut(pk.well, depth)
+sketch bs(on: pocket.floor) {
+  c = circle((L / 2, W / 2), boss_r)
+}
+boss = extrude(bs.c, depth)

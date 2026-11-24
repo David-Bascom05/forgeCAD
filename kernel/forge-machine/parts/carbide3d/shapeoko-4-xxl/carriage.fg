@@ -1,0 +1,14 @@
+# shapeoko-4-xxl carriage: a conservative envelope solid from published dimensions (see the
+# machine's [[machine.cite]] for body.carriage); not the maker's CAD.
+# frame: the machine's base frame at the home pose.
+shared b0x0 = -79.5
+shared b0y0 = 45.5
+shared b0z0 = 102.1
+shared b0sx = 159
+shared b0sy = 24
+shared b0h = 249.0
+
+sketch sb0(on: offset(xy, b0z0)) {
+  outline = rect(corner: (b0x0, b0y0), size: (b0sx, b0sy))
+}
+b0 = extrude(sb0, b0h)

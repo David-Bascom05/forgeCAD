@@ -1,0 +1,161 @@
+{
+ "vendor": "CHIRON",
+ "model": "MILL 800 (five axis)",
+ "family": "MILL Series",
+ "source": [
+  "https://chiron-group.com/products/mill-series",
+  "https://chiron-group.com/storage/technicaldata/en/cg_a4h_machinedata_website_2026_brmill.pdf"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "head-table",
+ "architecture": "Vertical travelling column (maker wording) with swivel head; MILL 800 five axis for 5-axis simultaneous work (series text: 'expandable to four or five axes'). Exact rotary configuration of MILL 800 not published on fetched pages.",
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": null,
+  "Y": null,
+  "Z": null
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 12000,
+  "rpm_min": null,
+  "taper_or_interface": "SK40",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 75
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 24,
+  "options": [
+   "24 - 170 tools (series)"
+  ],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": 2.9,
+  "max_tool_dia_mm": 160,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": 370,
+  "max_tool_kg": 8
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.tool_to_tool_s",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "milling_head",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "pallet.change_s",
+  "pallet.count",
+  "pallet.load_kg",
+  "pallet.size_mm",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "rotary.A",
+  "rotary.B",
+  "rotary.C",
+  "rotary_table_dia_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle_center_to_column_mm",
+  "spindle_center_to_pallet_top_mm",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "table_load_kg",
+  "table_mm",
+  "travel_mm.X",
+  "travel_mm.Y",
+  "travel_mm.Z",
+  "weight_kg"
+ ],
+ "options": [
+  "20,000 rpm",
+  "HSK-A63",
+  "torque up to 180 Nm (series)"
+ ],
+ "notes": "ONLY series-level data published (MILL sheet covers MILL 800 ... MILL 12000: travel X-Y-Z max 12,000-895-715 mm, rapid 75-75-75 m/min, accel 11-12-17 m/s2). These are series maxima and are NOT recorded as MILL 800 values. Spindle/changer values are series ranges (lower bound recorded). kind 'head-table' is from 'swivel head' highlight - unverified for MILL 800 specifically.",
+ "_not_applicable": [
+  "swing_over_bed_mm",
+  "max_turning_dia_mm",
+  "max_turning_length_mm",
+  "chuck_size_in",
+  "bar_capacity_mm",
+  "spindle_nose_type",
+  "sub_spindle",
+  "live_tool",
+  "turret_stations",
+  "turret_index_s",
+  "tailstock"
+ ]
+}

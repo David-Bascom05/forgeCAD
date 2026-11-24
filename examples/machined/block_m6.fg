@@ -1,0 +1,17 @@
+# A block with an M6 tapped hole whose thread is recorded, not modelled (`fit: "tap"`): the
+# thread is milled, declared as a cosmetic thread (block_m6_cam.fg).
+
+shared L = 30
+shared W = 30
+shared t = 14
+shared hd = 12
+shared tip = 118deg
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+block = extrude(plan, t)
+sketch hs(on: block.end) {
+  c = pt(L / 2, W / 2)
+}
+m6 = hole(at: hs.c, screw: "M6", fit: "tap", depth: hd, point: tip)

@@ -1,0 +1,10 @@
+# generic-mill-turn sub-spindle head on Z2, behind the sub chuck.
+# frame: the machine's base frame at the home pose.
+shared S = 360
+shared z0 = 970
+shared H = 280
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(center: (0, 0), size: (S, S))
+}
+body = extrude(plan, H)

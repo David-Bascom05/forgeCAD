@@ -1,0 +1,2891 @@
+{
+ "vendor": "Maritool",
+ "blocked": [],
+ "records": [
+  {
+   "kind": "holder",
+   "id": "CAT40-ER16-3.0",
+   "name": "CAT40 ER16 3.0 COLLET CHUCK TOOL HOLDER - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-ER-Collet-Chucks/c23_25_42/p100/CAT40-ER16-3.0-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/b7ce44b5_CAT40-ER16-3.0-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Size: ER 16"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length: 3.0 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "grip_range": {
+     "v": ".020-.4375 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .020-.4375 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.38, 2.12, 2.41, 3.125",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Ø1.10 between ordinates 2.41 and 3.125 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.38 and 2.12"
+    },
+    {
+     "z": 53.848,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.38 and 2.12"
+    },
+    {
+     "z": 61.214,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 2.41 and 3.125"
+    },
+    {
+     "z": 79.375,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 2.41 and 3.125"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-ER16-5.0",
+   "name": "CAT40 ER16 5.0 COLLET CHUCK TOOL HOLDER - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-ER-Collet-Chucks/c23_25_42/p101/CAT40-ER16-5.0-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/31e885a9_CAT40-ER16-5.0-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Size: ER 16"
+    },
+    "gauge_length": {
+     "v": 127.0,
+     "unit": "mm",
+     "stated": "Gage Length: 5.0 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "grip_range": {
+     "v": ".020-.4375 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .020-.4375 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.38, 4.12, 4.41, 5.125",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Ø1.10 between ordinates 4.41 and 5.125 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.38 and 4.12"
+    },
+    {
+     "z": 104.648,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.38 and 4.12"
+    },
+    {
+     "z": 112.014,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 4.41 and 5.125"
+    },
+    {
+     "z": 130.175,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 4.41 and 5.125"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-ER20-2.5",
+   "name": "CAT40 ER20 2.5 COLLET CHUCK TOOL HOLDER - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-ER-Collet-Chucks/c23_25_42/p16436/CAT40-ER20-2.5-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/7e2ce88c_CAT40-ER20-2.5-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Size: ER 20"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Gage Length: 2.5 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "grip_range": {
+     "v": ".024-.5625 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .024-.5625 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.42, 1.75, 2.595",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 33.782,
+     "unit": "mm",
+     "stated": "Ø1.33 between ordinates 1.75 and 2.595 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 0.75 and 1.42"
+    },
+    {
+     "z": 36.068,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 0.75 and 1.42"
+    },
+    {
+     "z": 44.45,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 1.75 and 2.595"
+    },
+    {
+     "z": 65.913,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 1.75 and 2.595"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-ER16-2.0",
+   "name": "CAT40 ER16 2.0 COLLET CHUCK TOOL HOLDER - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-ER-Collet-Chucks/c23_25_42/p17024/CAT40-ER16-2.0-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/8b8422fb_CAT40-ER16-2.0-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Size: ER 16"
+    },
+    "gauge_length": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Gage Length: 2.0 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "grip_range": {
+     "v": ".020-.4375 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .020-.4375 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.08, 1.31, 2.025",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Ø1.10 between ordinates 1.31 and 2.025 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 0.75 and 1.08"
+    },
+    {
+     "z": 27.432,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 0.75 and 1.08"
+    },
+    {
+     "z": 33.274,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 1.31 and 2.025"
+    },
+    {
+     "z": 51.435,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 1.31 and 2.025"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-ER16-3.5",
+   "name": "CAT40 ER16 3.5 COLLET CHUCK TOOL HOLDER - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-ER-Collet-Chucks/c23_25_42/p17026/CAT40-ER16-3.5-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/3aa6222a_CAT40-ER16-3.5-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Size: ER 16"
+    },
+    "gauge_length": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "Gage Length: 3.5 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "grip_range": {
+     "v": ".020-.4375 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .020-.4375 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 2.52, 2.81, 3.525",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Ø1.10 between ordinates 2.81 and 3.525 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 0.75 and 2.52"
+    },
+    {
+     "z": 64.008,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 0.75 and 2.52"
+    },
+    {
+     "z": 71.374,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 2.81 and 3.525"
+    },
+    {
+     "z": 89.535,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 2.81 and 3.525"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-ER20-3.5",
+   "name": "CAT40 ER20 3.5 COLLET CHUCK TOOL HOLDER - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-ER-Collet-Chucks/c23_25_42/p17173/CAT40-ER20-3.5-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/ed8efe8d_CAT40-ER20-3.5-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Size: ER 20"
+    },
+    "gauge_length": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "Gage Length: 3.5 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "grip_range": {
+     "v": ".024-.5625 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .024-.5625 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 2.42, 2.75, 3.595",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 33.782,
+     "unit": "mm",
+     "stated": "Ø1.33 between ordinates 2.75 and 3.595 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 0.75 and 2.42"
+    },
+    {
+     "z": 61.468,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 0.75 and 2.42"
+    },
+    {
+     "z": 69.85,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 2.75 and 3.595"
+    },
+    {
+     "z": 91.313,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 2.75 and 3.595"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-ER16-4.0",
+   "name": "CAT40 ER16 4.0 COLLET CHUCK TOOL HOLDER - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-ER-Collet-Chucks/c23_25_42/p2607/CAT40-ER16-4.0-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/5a5759e4_CAT40-ER16-4.0-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Size: ER 16"
+    },
+    "gauge_length": {
+     "v": 101.6,
+     "unit": "mm",
+     "stated": "Gage Length: 4.0 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "grip_range": {
+     "v": ".020-.4375 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .020-.4375 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.38, 3.12, 3.41, 4.125",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Ø1.10 between ordinates 3.41 and 4.125 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.38 and 3.12"
+    },
+    {
+     "z": 79.248,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.38 and 3.12"
+    },
+    {
+     "z": 86.614,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 3.41 and 4.125"
+    },
+    {
+     "z": 104.775,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 3.41 and 4.125"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-ER20-3.0",
+   "name": "CAT40 ER20 3.0 COLLET CHUCK TOOL HOLDER - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-ER-Collet-Chucks/c23_25_42/p342/CAT40-ER20-3.0-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/5aa7065f_CAT40-ER20-3.0-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Size: ER 20"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length: 3.0 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "grip_range": {
+     "v": ".024-.5625 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .024-.5625 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.38, 1.95, 2.26, 3.105",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 33.782,
+     "unit": "mm",
+     "stated": "Ø1.33 between ordinates 2.26 and 3.105 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 1.38 and 1.95"
+    },
+    {
+     "z": 49.53,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 1.38 and 1.95"
+    },
+    {
+     "z": 57.404,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 2.26 and 3.105"
+    },
+    {
+     "z": 78.867,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 2.26 and 3.105"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-EM.3125-2.5",
+   "name": "CAT40 5/16 END MILL HOLDER 2.5 Gage Length - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-End-Mill-Holders/c23_25_43/p104/CAT40-5/16-END-MILL-TOOL-HOLDER-.3125-2.5/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/c50b7500_CAT40-EM.3125-2.5-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "end mill .3125 in",
+     "unit": "text",
+     "stated": "Shank Size: .3125"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Gage Length: 2.5 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.38, 2.21, 2.515",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 22.352,
+     "unit": "mm",
+     "stated": "Ø.88 between ordinates 1.38 and 2.21 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 22.352,
+     "stated": "Ø.88 between ordinates 1.38 and 2.21"
+    },
+    {
+     "z": 56.134,
+     "d": 22.352,
+     "stated": "Ø.88 between ordinates 1.38 and 2.21"
+    }
+   ],
+   "unknown": [
+    "coolant",
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-EM.250-2.5",
+   "name": "CAT40 1/4 END MILL TOOL HOLDER 2.5 Gage Length - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-End-Mill-Holders/c23_25_43/p106/CAT40-1/4-END-MILL-TOOL-HOLDER-.250-2.5/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/45631ed7_CAT40-EM.250-2.5-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "end mill .250 in",
+     "unit": "text",
+     "stated": "Shank Size: .250"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Gage Length: 2.5 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.38, 2.21, 2.515",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 22.352,
+     "unit": "mm",
+     "stated": "Ø.88 between ordinates 1.38 and 2.21 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 22.352,
+     "stated": "Ø.88 between ordinates 1.38 and 2.21"
+    },
+    {
+     "z": 56.134,
+     "d": 22.352,
+     "stated": "Ø.88 between ordinates 1.38 and 2.21"
+    }
+   ],
+   "unknown": [
+    "coolant",
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-EM.375-3.0",
+   "name": "CAT40 3/8 END MILL TOOL HOLDER 3.0 gage length - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-End-Mill-Holders/c23_25_43/p128/CAT40-3/8-END-MILL-TOOL-HOLDER-.375-3.0/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/7c08c3c4_CAT40-EM.375-3.0-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "end mill .375 in",
+     "unit": "text",
+     "stated": "Shank Size: .375"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length: 3.0 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.38, 2.61, 3.015",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "Ø1.00 between ordinates 1.38 and 2.61 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 25.4,
+     "stated": "Ø1.00 between ordinates 1.38 and 2.61"
+    },
+    {
+     "z": 66.294,
+     "d": 25.4,
+     "stated": "Ø1.00 between ordinates 1.38 and 2.61"
+    }
+   ],
+   "unknown": [
+    "coolant",
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-EM.500-3.0",
+   "name": "CAT40 1/2 END MILL TOOL HOLDER .500-3.0 - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-End-Mill-Holders/c23_25_43/p129/CAT40-1/2-END-MILL-TOOL-HOLDER-.500-3.0/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/c77a8796_CAT40-EM.500-3.0-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "end mill .500 in",
+     "unit": "text",
+     "stated": "Shank Size: .500"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length: 3.0 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.38, 2.52, 3.015",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 34.798,
+     "unit": "mm",
+     "stated": "Ø1.37 between ordinates 1.38 and 2.52 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 34.798,
+     "stated": "Ø1.37 between ordinates 1.38 and 2.52"
+    },
+    {
+     "z": 64.008,
+     "d": 34.798,
+     "stated": "Ø1.37 between ordinates 1.38 and 2.52"
+    }
+   ],
+   "unknown": [
+    "coolant",
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-EM.250-1.75",
+   "name": "CAT40 1/4-1.75 END MILL TOOL HOLDER 1.75 Gage Length MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-End-Mill-Holders/c23_25_43/p144/CAT40-1/4-END-MILL-TOOL-HOLDER-.250-1.75/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/86507dd8_CAT40-EM.250-1.75-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "end mill .250 in",
+     "unit": "text",
+     "stated": "Shank Size: .250"
+    },
+    "gauge_length": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "Gage Length: 1.75 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.46, 1.765",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 22.352,
+     "unit": "mm",
+     "stated": "Ø.88 between ordinates 0.75 and 1.46 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 22.352,
+     "stated": "Ø.88 between ordinates 0.75 and 1.46"
+    },
+    {
+     "z": 37.084,
+     "d": 22.352,
+     "stated": "Ø.88 between ordinates 0.75 and 1.46"
+    }
+   ],
+   "unknown": [
+    "coolant",
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-EM.1875-2.25",
+   "name": "CAT40 3/16 END MILL TOOL HOLDER .1875-2.25 - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-End-Mill-Holders/c23_25_43/p14969/CAT40-3/16-END-MILL-TOOL-HOLDER-.1875-2.25/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/da4b264b_CAT40-EM.1875-2.25-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "end mill .1875 in",
+     "unit": "text",
+     "stated": "Shank Size: .1875"
+    },
+    "gauge_length": {
+     "v": 57.15,
+     "unit": "mm",
+     "stated": "Gage Length: 2.250 (inches)"
+    },
+    "nose_d": {
+     "v": 22.225,
+     "unit": "mm",
+     "stated": "Nose Diameter: .875 Inches"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, 1.38, 2.275",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 44.45,
+     "stated": "Ø1.75 between ordinates 0.75 and 1.38"
+    },
+    {
+     "z": 35.052,
+     "d": 22.352,
+     "stated": "Ø.88 between ordinates 1.38 and 2.275"
+    },
+    {
+     "z": 57.785,
+     "d": 22.352,
+     "stated": "Ø.88 between ordinates 1.38 and 2.275"
+    }
+   ],
+   "unknown": [
+    "coolant",
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "BT40-ER20-80",
+   "name": "BT40 ER20 80 COLLET CHUCK TOOL HOLDER MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT40-ER-Collet-Chucks/c23_26_36/p331/BT40-ER20-80-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/ed7901ff_BT40-ER20-80-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "Taper: BT40"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Size: ER 20"
+    },
+    "gauge_length": {
+     "v": 80.0,
+     "unit": "mm",
+     "stated": "Gage Length: 80mm"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "M16 X 2.0",
+     "unit": "text",
+     "stated": "Rear Thread: M16 X 2.0"
+    },
+    "grip_range": {
+     "v": ".024-.5625 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .024-.5625 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.58, .00, .079, 1.06, 2.05, 2.29, 3.150",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 33.782,
+     "unit": "mm",
+     "stated": "Ø1.33 between ordinates 2.29 and 3.15 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 2.007,
+     "d": 62.992,
+     "stated": "Ø2.48 between ordinates 0.079 and 1.06"
+    },
+    {
+     "z": 26.924,
+     "d": 62.992,
+     "stated": "Ø2.48 between ordinates 0.079 and 1.06"
+    },
+    {
+     "z": 26.924,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 1.06 and 2.05"
+    },
+    {
+     "z": 52.07,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 1.06 and 2.05"
+    },
+    {
+     "z": 58.166,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 2.29 and 3.15"
+    },
+    {
+     "z": 80.01,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 2.29 and 3.15"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "BT40-ER20-120",
+   "name": "BT40 ER20 120 COLLET CHUCK TOOL HOLDER MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT40-ER-Collet-Chucks/c23_26_36/p482/BT40-ER20-120-COLLET-CHUCK-TOOL-HOLDER/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "Taper: BT40"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Size: ER 20"
+    },
+    "gauge_length": {
+     "v": 120.0,
+     "unit": "mm",
+     "stated": "Gage Length: 120mm"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "M16 X 2.0",
+     "unit": "text",
+     "stated": "Rear Thread: M16 X 2.0"
+    },
+    "grip_range": {
+     "v": ".024-.5625 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .024-.5625 inches"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "nose_d",
+    "max_rpm",
+    "profile (no dimensioned drawing linked)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "BT40-ER16-120",
+   "name": "BT40 ER16 Collet Chuck with 120mm Gage Length - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT40-ER-Collet-Chucks/c23_26_36/p483/BT40-ER16-120-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/ea04bb99_BT40-ER16-120-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "Taper: BT40"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Size: ER 16"
+    },
+    "gauge_length": {
+     "v": 120.0,
+     "unit": "mm",
+     "stated": "Gage Length: 120mm"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "M16 X 2.0",
+     "unit": "text",
+     "stated": "Rear Thread: M16 X 2.0"
+    },
+    "grip_range": {
+     "v": ".020-.4375 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .020-.4375 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.58, .00, .079, 1.06, 3.65, 4.02, 4.724",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Ø1.10 between ordinates 4.02 and 4.724 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 2.007,
+     "d": 62.992,
+     "stated": "Ø2.48 between ordinates 0.079 and 1.06"
+    },
+    {
+     "z": 26.924,
+     "d": 62.992,
+     "stated": "Ø2.48 between ordinates 0.079 and 1.06"
+    },
+    {
+     "z": 26.924,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.06 and 3.65"
+    },
+    {
+     "z": 92.71,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.06 and 3.65"
+    },
+    {
+     "z": 102.108,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 4.02 and 4.724"
+    },
+    {
+     "z": 119.99,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 4.02 and 4.724"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "BT40-ER16-100",
+   "name": "BT40 ER16 100mm COLLET CHUCK TOOL HOLDER MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT40-ER-Collet-Chucks/c23_26_36/p484/BT40-ER16-100-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/746333ab_BT40-ER16-100-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "Taper: BT40"
+    },
+    "clamp": {
+     "v": "ER16",
+     "unit": "text",
+     "stated": "Collet Size: ER 16"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "Gage Length: 100mm"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "M16 X 2.0",
+     "unit": "text",
+     "stated": "Rear Thread: M16 X 2.0"
+    },
+    "grip_range": {
+     "v": ".020-.4375 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .020-.4375 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.58, .00, .079, 1.06, 2.86, 3.22, 3.937",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 27.94,
+     "unit": "mm",
+     "stated": "Ø1.10 between ordinates 3.22 and 3.937 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 2.007,
+     "d": 62.992,
+     "stated": "Ø2.48 between ordinates 0.079 and 1.06"
+    },
+    {
+     "z": 26.924,
+     "d": 62.992,
+     "stated": "Ø2.48 between ordinates 0.079 and 1.06"
+    },
+    {
+     "z": 26.924,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.06 and 2.86"
+    },
+    {
+     "z": 72.644,
+     "d": 28.194,
+     "stated": "Ø1.11 between ordinates 1.06 and 2.86"
+    },
+    {
+     "z": 81.788,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 3.22 and 3.937"
+    },
+    {
+     "z": 100.0,
+     "d": 27.94,
+     "stated": "Ø1.10 between ordinates 3.22 and 3.937"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "BT40-ER20-100",
+   "name": "BT40 ER20 100 COLLET CHUCK TOOL HOLDER MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT40-ER-Collet-Chucks/c23_26_36/p61/BT40-ER20-100-COLLET-CHUCK-TOOL-HOLDER/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/edffefda_BT40-ER20-100-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "Taper: BT40"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Size: ER 20"
+    },
+    "gauge_length": {
+     "v": 100.0,
+     "unit": "mm",
+     "stated": "Gage Length: 100mm"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "M16 X 2.0",
+     "unit": "text",
+     "stated": "Rear Thread: M16 X 2.0"
+    },
+    "grip_range": {
+     "v": ".024-.5625 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .024-.5625 inches"
+    },
+    "drawing_ordinates": {
+     "v": "2.58, .00, .079, 1.06, 2.84, 3.07, 3.937",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "nose_d": {
+     "v": 33.782,
+     "unit": "mm",
+     "stated": "Ø1.33 between ordinates 3.07 and 3.937 (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 2.007,
+     "d": 62.992,
+     "stated": "Ø2.48 between ordinates 0.079 and 1.06"
+    },
+    {
+     "z": 26.924,
+     "d": 62.992,
+     "stated": "Ø2.48 between ordinates 0.079 and 1.06"
+    },
+    {
+     "z": 26.924,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 1.06 and 2.84"
+    },
+    {
+     "z": 72.136,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 1.06 and 2.84"
+    },
+    {
+     "z": 77.978,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 3.07 and 3.937"
+    },
+    {
+     "z": 100.0,
+     "d": 33.782,
+     "stated": "Ø1.33 between ordinates 3.07 and 3.937"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-APU13",
+   "name": "CAT 40 DRILL CHUCK TOOL HOLDER 13mm MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-Drill-Chucks/c23_25_41/p35/CAT40-DRILL-CHUCK-TOOL-HOLDER-13mm/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/c58a0913_CAT40-APU13-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "item CAT40-APU13"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm, but rated safe operation speed is 7000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 @ 20,000 rpm, but rated safe operation speed is 7000 rpm"
+    },
+    "max_rpm": {
+     "v": 7000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 @ 20,000 rpm, but rated safe operation speed is 7000 rpm"
+    },
+    "gauge_length": {
+     "v": 91.44,
+     "unit": "mm",
+     "stated": "Gage length is 3.6 Inches"
+    },
+    "body_d": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Body diameter of chuck is 2.0 Inches"
+    },
+    "clamp_range": {
+     "v": "This Drill Chuck can hold shanks from .019-.511 (.5-13mm)",
+     "unit": "text",
+     "stated": "This Drill Chuck can hold shanks from .019-.511 (.5-13mm)"
+    },
+    "coolant": {
+     "v": "no",
+     "unit": "text",
+     "stated": "Not coolant thru capable"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, .89, 1.54, 2.48, 2.68, 3.47, 3.965",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "clamp": {
+     "v": "drill chuck",
+     "unit": "text",
+     "stated": "CAT 40 DRILL CHUCK TOOL HOLDER 13mm MariTool"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 38.1,
+     "stated": "Ø1.50 between ordinates 0.75 and 0.89"
+    },
+    {
+     "z": 22.606,
+     "d": 38.1,
+     "stated": "Ø1.50 between ordinates 0.75 and 0.89"
+    },
+    {
+     "z": 22.606,
+     "d": 48.006,
+     "stated": "Ø1.89 between ordinates 0.89 and 1.54"
+    },
+    {
+     "z": 39.116,
+     "d": 48.006,
+     "stated": "Ø1.89 between ordinates 0.89 and 1.54"
+    },
+    {
+     "z": 39.116,
+     "d": 50.546,
+     "stated": "Ø1.99 between ordinates 1.54 and 2.48"
+    },
+    {
+     "z": 62.992,
+     "d": 50.546,
+     "stated": "Ø1.99 between ordinates 1.54 and 2.48"
+    },
+    {
+     "z": 62.992,
+     "d": 49.276,
+     "stated": "Ø1.94 between ordinates 2.48 and 2.68"
+    },
+    {
+     "z": 68.072,
+     "d": 49.276,
+     "stated": "Ø1.94 between ordinates 2.48 and 2.68"
+    },
+    {
+     "z": 88.138,
+     "d": 37.592,
+     "stated": "Ø1.48 at the chuck body end; the jaws protrude to the last ordinate (diameter not given)"
+    }
+   ],
+   "unknown": [
+    "nose_d (jaw diameter)"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-APU08",
+   "name": "CAT 40 DRILL CHUCK TOOL HOLDER 8mm MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-Drill-Chucks/c23_25_41/p462/CAT40-DRILL-CHUCK-TOOL-HOLDER-8mm/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/4078d7f3_CAT40-APU08-REV1.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "item CAT40-APU08"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm, but rated safe operation speed is 8000 rpm",
+     "unit": "text",
+     "stated": "Balanced to G2.5 @ 20,000 rpm, but rated safe operation speed is 8000 rpm"
+    },
+    "max_rpm": {
+     "v": 8000,
+     "unit": "rpm",
+     "stated": "Balanced to G2.5 @ 20,000 rpm, but rated safe operation speed is 8000 rpm"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage length is 3.0 inches"
+    },
+    "body_d": {
+     "v": 38.1,
+     "unit": "mm",
+     "stated": "Body diameter of chuck is 1.5 Inches"
+    },
+    "clamp_range": {
+     "v": "This Drill Chuck can hold shanks from .01-.315 (.25-8mm)",
+     "unit": "text",
+     "stated": "This Drill Chuck can hold shanks from .01-.315 (.25-8mm)"
+    },
+    "coolant": {
+     "v": "no",
+     "unit": "text",
+     "stated": "Not coolant thru capable"
+    },
+    "drawing_ordinates": {
+     "v": "2.69, .00, .125, .75, .89, 1.42, 2.17, 2.86, 3.147",
+     "unit": "text",
+     "stated": "ordinate labels on drawing (inches)"
+    },
+    "clamp": {
+     "v": "drill chuck",
+     "unit": "text",
+     "stated": "CAT 40 DRILL CHUCK TOOL HOLDER 8mm MariTool"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 between ordinates 0.125 and 0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 29.972,
+     "stated": "Ø1.18 between ordinates 0.75 and 0.89"
+    },
+    {
+     "z": 22.606,
+     "d": 29.972,
+     "stated": "Ø1.18 between ordinates 0.75 and 0.89"
+    },
+    {
+     "z": 22.606,
+     "d": 36.068,
+     "stated": "Ø1.42 between ordinates 0.89 and 1.42"
+    },
+    {
+     "z": 36.068,
+     "d": 36.068,
+     "stated": "Ø1.42 between ordinates 0.89 and 1.42"
+    },
+    {
+     "z": 36.068,
+     "d": 38.1,
+     "stated": "Ø1.50 between ordinates 1.42 and 2.17"
+    },
+    {
+     "z": 55.118,
+     "d": 38.1,
+     "stated": "Ø1.50 between ordinates 1.42 and 2.17"
+    },
+    {
+     "z": 72.644,
+     "d": 24.638,
+     "stated": "Ø.97 at the chuck body end; the jaws protrude to the last ordinate (diameter not given)"
+    }
+   ],
+   "unknown": [
+    "nose_d (jaw diameter)"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-SF.500-3.5",
+   "name": "CAT40 1/2 SHRINK FIT TOOL HOLDER .500-3.5 - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-Shrink-Fit-Holders/c23_25_503/p17819/CAT40-1/2-SHRINK-FIT-TOOL-HOLDER-.500-3.5/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/331706f0_CAT40-SF.500-3.5.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "shrink .500 in",
+     "unit": "text",
+     "stated": "Shank Size: .500"
+    },
+    "gauge_length": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "Gage Length: 3.5 (inches)"
+    },
+    "nose_d": {
+     "v": 33.02,
+     "unit": "mm",
+     "stated": "Nose Diameter: 1.3 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Tool holder is coolant thru compatible"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.175,
+     "d": 63.5,
+     "stated": "Ø2.50 flange, ordinates .125-.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.50 flange, ordinates .125-.75"
+    },
+    {
+     "z": 19.05,
+     "d": 33.274,
+     "stated": "Ø1.31 body, ordinates .75-2.20"
+    },
+    {
+     "z": 55.88,
+     "d": 33.274,
+     "stated": "Ø1.31 body, ordinates .75-2.20"
+    },
+    {
+     "z": 88.9,
+     "d": 22.86,
+     "stated": "Ø.90 at nose, ordinate 3.50 (cone from 2.20)"
+    }
+   ],
+   "unknown": [
+    "max_rpm"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-SF.375-3.5",
+   "name": "CAT40 3/8 SHRINK FIT TOOL HOLDER .375-3.5 - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-Shrink-Fit-Holders/c23_25_503/p17939/CAT40-3/8-SHRINK-FIT-TOOL-HOLDER-.375-3.5/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "shrink .375 in",
+     "unit": "text",
+     "stated": "Shank Size: .375"
+    },
+    "gauge_length": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "Gage Length: 3.5 (inches)"
+    },
+    "nose_d": {
+     "v": 30.48,
+     "unit": "mm",
+     "stated": "Nose Diameter: 1.2 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Tool holder is coolant thru compatible"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "max_rpm",
+    "profile (no dimensioned drawing linked)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-SF.250-3.5",
+   "name": "CAT40 1/4 Shrink Fit Tool Holder .250-3.5 - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-Shrink-Fit-Holders/c23_25_503/p17943/CAT40-1/4-SHRINK-FIT-TOOL-HOLDER-.250-3.5/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "shrink .250 in",
+     "unit": "text",
+     "stated": "Shank Size: .250"
+    },
+    "gauge_length": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "Gage Length: 3.5 (inches)"
+    },
+    "nose_d": {
+     "v": 25.4,
+     "unit": "mm",
+     "stated": "Nose Diameter: 1.0 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Tool holder is coolant thru compatible"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "max_rpm",
+    "profile (no dimensioned drawing linked)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-SF.125-3.5",
+   "name": "CAT40 1/8 Shrink Fit Tool Holder .125-3.5 - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-Shrink-Fit-Holders/c23_25_503/p18588/CAT40-1/8-SHRINK-FIT-TOOL-HOLDER-.125-3.5/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "shrink .125 in",
+     "unit": "text",
+     "stated": "Shank Size: .125"
+    },
+    "gauge_length": {
+     "v": 88.9,
+     "unit": "mm",
+     "stated": "Gage Length: 3.5 (inches)"
+    },
+    "nose_d": {
+     "v": 22.098,
+     "unit": "mm",
+     "stated": "Nose Diameter: .870 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "coolant": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "Tool holder is coolant thru compatible"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "max_rpm",
+    "profile (no dimensioned drawing linked)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-HC.500-2.5",
+   "name": "CAT40 1/2 Hydraulic Chuck .500-2.5 MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-Hydraulic-Chucks/c23_25_929/p20505/CAT40-1/2-Hydraulic-Chuck-.500-2.5/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/a6f51f95_CAT40-HC.500-2.5.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "hydraulic .500 in",
+     "unit": "text",
+     "stated": "Shank Size: .500"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Gage Length: 2.5 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 25,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 25,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    },
+    "nose_d": {
+     "v": 32.004,
+     "unit": "mm",
+     "stated": "Ø1.26 at nose, ordinate 2.50 (Ø1.75 chamfers down to Ø1.26; chamfer start not dimensioned) (drawing)"
+    }
+   },
+   "profile": [
+    {
+     "z": 3.302,
+     "d": 63.5,
+     "stated": "Ø2.500 flange, ordinates 0.13-0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 63.5,
+     "stated": "Ø2.500 flange, ordinates 0.13-0.75"
+    },
+    {
+     "z": 19.05,
+     "d": 44.45,
+     "stated": "Ø1.75 body from ordinate 0.75"
+    },
+    {
+     "z": 63.5,
+     "d": 32.004,
+     "stated": "Ø1.26 at nose, ordinate 2.50 (Ø1.75 chamfers down to Ø1.26; chamfer start not dimensioned)"
+    }
+   ],
+   "unknown": [
+    "max_rpm",
+    "meaning of the 2.25 dimension on the drawing",
+    "end of the Ø1.75 section"
+   ],
+   "note": "profile z from the drawing's .00 ordinate (on the CAT/BT drawings: the end of the taper at the flange, where the taper gauge diameter is dimensioned); ordinates and diameters read from the dimensioned drawing PDF (inches, converted)"
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-HC.750-2.3",
+   "name": "CAT40 3/4 Hydraulic Chuck .750-2.3 MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-Hydraulic-Chucks/c23_25_929/p20507/CAT40-3/4-Hydraulic-Chuck-.750-2.3/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/049724f6_CAT40-HC.750-2.3.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "hydraulic .750 in",
+     "unit": "text",
+     "stated": "Shank Size: .750"
+    },
+    "gauge_length": {
+     "v": 58.42,
+     "unit": "mm",
+     "stated": "Gage Length: 2.3 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 25,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 25,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "nose_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "CAT40-HC.250-2.5",
+   "name": "CAT40 1/4 Hydraulic Chuck .250-2.5 MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-CAT40-Hydraulic-Chucks/c23_25_929/p20819/CAT40-1/4-Hydraulic-Chuck-.250-2.5/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/9fd05343_CAT40-HC.250-2.5.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Taper: CAT40"
+    },
+    "clamp": {
+     "v": "hydraulic .250 in",
+     "unit": "text",
+     "stated": "Shank Size: .250"
+    },
+    "gauge_length": {
+     "v": 63.5,
+     "unit": "mm",
+     "stated": "Gage Length: 2.5 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 25,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 25,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "Rear Thread: 5/8-11"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "nose_d",
+    "max_rpm"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "BT40-EM.500-3.0",
+   "name": "BT40 1/2 END MILL TOOL HOLDER .500-3.0 - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT40-End-Mill-Holders/c23_26_38/p1182/BT40-1/2-END-MILL-TOOL-HOLDER-.500-3.0/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/d5d9047e_BT40 EM.500-3.0.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "Taper: BT40"
+    },
+    "clamp": {
+     "v": "end mill .500 in",
+     "unit": "text",
+     "stated": "Shank Size: .500"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length: 3.00 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "M16 X 2.0",
+     "unit": "text",
+     "stated": "Rear Thread: M16 X 2.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "nose_d",
+    "coolant",
+    "max_rpm",
+    "profile (drawing not parsed; labels not machine-readable)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "BT40-EM.750-3.0",
+   "name": "BT40 3/4 END MILL TOOL HOLDER .750-3.0 MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT40-End-Mill-Holders/c23_26_38/p1188/BT40-3/4-END-MILL-TOOL-HOLDER-.750-3.0/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/d9d1e64f_BT40 EM.750-3.0.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "Taper: BT40"
+    },
+    "clamp": {
+     "v": "end mill .750 in",
+     "unit": "text",
+     "stated": "Shank Size: .750"
+    },
+    "gauge_length": {
+     "v": 76.2,
+     "unit": "mm",
+     "stated": "Gage Length: 3.00 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "M16 X 2.0",
+     "unit": "text",
+     "stated": "Rear Thread: M16 X 2.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "nose_d",
+    "coolant",
+    "max_rpm",
+    "profile (drawing not parsed; labels not machine-readable)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "BT40-EM.500-2.0",
+   "name": "BT40 1/2\" END MILL TOOL HOLDER - 2.0 gage length - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT40-End-Mill-Holders/c23_26_38/p12730/BT40-1/2-END-MILL-TOOL-HOLDER-.500-2.0/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/198590a1_BT40 EM.500-2.0.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT40",
+     "unit": "text",
+     "stated": "Taper: BT40"
+    },
+    "clamp": {
+     "v": "end mill .500 in",
+     "unit": "text",
+     "stated": "Shank Size: .500"
+    },
+    "gauge_length": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Gage Length: 2.00 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "M16 X 2.0",
+     "unit": "text",
+     "stated": "Rear Thread: M16 X 2.0"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "nose_d",
+    "coolant",
+    "max_rpm",
+    "profile (drawing not parsed; labels not machine-readable)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "BT30-ER20-7.8",
+   "name": "BT30 ER20 7.8\" Collet Chuck Tool Holder - Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT30-ER-Collet-Chucks/c23_33_35/p27684/BT30-ER20-7.8-Collet-Chuck-Tool-Holder/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/c3534f01_BT30 ER20-7.8.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "Taper: BT30"
+    },
+    "clamp": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "Collet Size: ER 20"
+    },
+    "gauge_length": {
+     "v": 198.12,
+     "unit": "mm",
+     "stated": "Gage Length: 7.8 Inches"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "coolant": {
+     "v": "Yes",
+     "unit": "text",
+     "stated": "Coolant Thru: Yes"
+    },
+    "rear_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread: M12 x 1.75"
+    },
+    "grip_range": {
+     "v": ".024-.5625 inches",
+     "unit": "text",
+     "stated": "Collet Grip Range: .024-.5625 inches"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "nose_d",
+    "max_rpm",
+    "profile (drawing not parsed; labels not machine-readable)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "BT30-EM.500-2.0",
+   "name": "BT30 1/2 END MILL TOOL HOLDER .500-2.0 Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT30-End-Mill-Holders/c23_33_55/p136/BT30-1/2-END-MILL-TOOL-HOLDER-.500-2.0/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "Taper: BT30"
+    },
+    "clamp": {
+     "v": "end mill .500 in",
+     "unit": "text",
+     "stated": "Shank Size: .500"
+    },
+    "gauge_length": {
+     "v": 50.8,
+     "unit": "mm",
+     "stated": "Gage Length: 2.0 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread: M12 x 1.75"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "nose_d",
+    "coolant",
+    "max_rpm",
+    "profile (no dimensioned drawing linked)"
+   ]
+  },
+  {
+   "kind": "holder",
+   "id": "BT30-EM.375-1.75",
+   "name": "BT30 3/8 END MILL TOOL HOLDER .375-1.75 Made in USA MariTool",
+   "url": "https://www.maritool.com/Mill-Tool-Holders-BT30-End-Mill-Holders/c23_33_55/p137/BT30-3/8-END-MILL-TOOL-HOLDER-.375-1.75/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "Taper: BT30"
+    },
+    "clamp": {
+     "v": "end mill .375 in",
+     "unit": "text",
+     "stated": "Shank Size: .375"
+    },
+    "gauge_length": {
+     "v": 44.45,
+     "unit": "mm",
+     "stated": "Gage Length: 1.75 (inches)"
+    },
+    "balance": {
+     "v": "G2.5 @ 20,000 rpm",
+     "unit": "text",
+     "stated": "Balance Spec: G2.5 @ 20,000 rpms"
+    },
+    "rear_thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "Rear Thread: M12 x 1.75"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "nose_d",
+    "coolant",
+    "max_rpm",
+    "profile (no dimensioned drawing linked)"
+   ]
+  },
+  {
+   "kind": "pull_stud",
+   "id": "PS-71125-HS",
+   "name": "High Strength CAT40 Pull Stud PS-71125 Made in USA MariTool",
+   "url": "https://www.maritool.com/Retention-Knobs-CAT40-Pull-Studs/c67_68/p16281/Pull-Stud-71125-High-Strength/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/3d110f28_PS-71125-HS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "High Strength CAT40 Pull Stud PS-71125 Made in USA MariTool"
+    },
+    "thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "5/8-11 THREAD (drawing)"
+    },
+    "length": {
+     "v": 51.054,
+     "unit": "mm",
+     "stated": "overall dimension on drawing: 2.01 (inches)"
+    },
+    "angle": {
+     "v": 15.0,
+     "unit": "deg",
+     "stated": "15° as drawn at the head (measured from the face, not from the axis)"
+    },
+    "coolant_hole": {
+     "v": "no",
+     "unit": "text",
+     "stated": "no (drawing note: CAT40 NON-COOLANT THRU RETENTION KNOB)"
+    },
+    "collar_d": {
+     "v": 22.86,
+     "unit": "mm",
+     "stated": "Øcollar_d: .90 (inches)"
+    },
+    "neck_d": {
+     "v": 13.97,
+     "unit": "mm",
+     "stated": "Øneck_d: .55 (inches)"
+    },
+    "head_d": {
+     "v": 19.05,
+     "unit": "mm",
+     "stated": "Øhead_d: .75 (inches)"
+    },
+    "head_face_d": {
+     "v": 15.748,
+     "unit": "mm",
+     "stated": "Øhead_face_d: .62 (inches)"
+    },
+    "pilot_d": {
+     "v": "16.180-16.231 mm",
+     "unit": "text",
+     "stated": "Ø.639-.637 (drawing)"
+    },
+    "thread_length": {
+     "v": 24.892,
+     "unit": "mm",
+     "stated": "thread_length: .98 (inches)"
+    },
+    "collar_to_head_end": {
+     "v": 26.162,
+     "unit": "mm",
+     "stated": "collar_to_head_end: 1.03 (inches)"
+    },
+    "collar_to_underhead": {
+     "v": 20.066,
+     "unit": "mm",
+     "stated": "collar_to_underhead: .79 (inches)"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "PS-31814A-HS",
+   "name": "Coolant Thru Pull Stud 31814A High Strength MariTool",
+   "url": "https://www.maritool.com/Retention-Knobs-CAT40-Pull-Studs/c67_68/p17264/Coolant-Thru-Pull-Stud-31814A-High-Strength/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/c9a7f9aa_PS-31814A-HS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "CAT40",
+     "unit": "text",
+     "stated": "Coolant Thru Pull Stud 31814A High Strength MariTool"
+    },
+    "thread": {
+     "v": "5/8-11",
+     "unit": "text",
+     "stated": "5/8-11 THREAD (drawing)"
+    },
+    "length": {
+     "v": 57.15,
+     "unit": "mm",
+     "stated": "overall dimension on drawing: 2.25 (inches)"
+    },
+    "angle": {
+     "v": 60.0,
+     "unit": "deg",
+     "stated": "60° as drawn at the head (measured from the face, not from the axis)"
+    },
+    "coolant_hole": {
+     "v": "yes",
+     "unit": "text",
+     "stated": "yes (drawing note: CAT40 COOLANT THRU RETENTION KNOB; Ø.2 bore)"
+    },
+    "collar_d": {
+     "v": 22.86,
+     "unit": "mm",
+     "stated": "Øcollar_d: .90 (inches)"
+    },
+    "neck_d": {
+     "v": 9.957,
+     "unit": "mm",
+     "stated": "Øneck_d: .392 (inches)"
+    },
+    "head_d": {
+     "v": 14.986,
+     "unit": "mm",
+     "stated": "Øhead_d: .59 (inches)"
+    },
+    "head_face_d": {
+     "v": 10.795,
+     "unit": "mm",
+     "stated": "Øhead_face_d: .425 (inches)"
+    },
+    "pilot_d": {
+     "v": "16.180-16.231 mm",
+     "unit": "text",
+     "stated": "Ø.639-.637 (drawing)"
+    },
+    "coolant_hole_d": {
+     "v": 5.08,
+     "unit": "mm",
+     "stated": "Øcoolant_hole_d: .2 (inches)"
+    },
+    "thread_length": {
+     "v": 24.892,
+     "unit": "mm",
+     "stated": "thread_length: .98 (inches)"
+    },
+    "collar_to_head_end": {
+     "v": 32.258,
+     "unit": "mm",
+     "stated": "collar_to_head_end: 1.27 (inches)"
+    },
+    "collar_to_underhead": {
+     "v": 25.095,
+     "unit": "mm",
+     "stated": "collar_to_underhead: .988 (inches)"
+    },
+    "collar_thickness": {
+     "v": 6.35,
+     "unit": "mm",
+     "stated": "collar_thickness: .25 (inches)"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "pull_stud",
+   "id": "PS-31109A-HS",
+   "name": "High Strength BT30 Pull Stud 31109A High - Made in USA MariTool",
+   "url": "https://www.maritool.com/Retention-Knobs-BT30-Pull-Studs/c67_76/p17603/Pull-Stud-31109A-High-Strength/product_info.html ; drawing: https://d1hdtb64aspgjo.cloudfront.net/84d8c5f2_PS-31109A-HS.pdf",
+   "taken": "2026-11-23",
+   "values": {
+    "interface": {
+     "v": "BT30",
+     "unit": "text",
+     "stated": "High Strength BT30 Pull Stud 31109A High - Made in USA MariTool"
+    },
+    "thread": {
+     "v": "M12 x 1.75",
+     "unit": "text",
+     "stated": "M12 x 1.75 THREAD (drawing)"
+    },
+    "length": {
+     "v": 42.926,
+     "unit": "mm",
+     "stated": "overall dimension on drawing: 1.69 (inches)"
+    },
+    "angle": {
+     "v": 60.0,
+     "unit": "deg",
+     "stated": "60° as drawn at the head (measured from the face, not from the axis)"
+    },
+    "coolant_hole": {
+     "v": "no",
+     "unit": "text",
+     "stated": "no (drawing note: BT30 NON-COOLANT THRU RETENTION KNOB)"
+    },
+    "collar_d": {
+     "v": 16.51,
+     "unit": "mm",
+     "stated": "Øcollar_d: .65 (inches)"
+    },
+    "neck_d": {
+     "v": 7.112,
+     "unit": "mm",
+     "stated": "Øneck_d: .28 (inches)"
+    },
+    "head_d": {
+     "v": 10.922,
+     "unit": "mm",
+     "stated": "Øhead_d: .43 (inches)"
+    },
+    "head_face_d": {
+     "v": 7.112,
+     "unit": "mm",
+     "stated": "Øhead_face_d: .28 (inches)"
+    },
+    "pilot_d": {
+     "v": 12.471,
+     "unit": "mm",
+     "stated": "Øpilot_d: .491 (inches)"
+    },
+    "thread_length": {
+     "v": 20.066,
+     "unit": "mm",
+     "stated": "thread_length: .79 (inches)"
+    },
+    "collar_to_head_end": {
+     "v": 23.114,
+     "unit": "mm",
+     "stated": "collar_to_head_end: .91 (inches)"
+    },
+    "collar_to_underhead": {
+     "v": 18.034,
+     "unit": "mm",
+     "stated": "collar_to_underhead: .71 (inches)"
+    },
+    "collar_thickness": {
+     "v": 4.826,
+     "unit": "mm",
+     "stated": "collar_thickness: .19 (inches)"
+    }
+   },
+   "profile": [],
+   "unknown": []
+  },
+  {
+   "kind": "collet",
+   "id": ".157-ER32-4mm",
+   "name": "ER32 COLLET 4mm MariTool",
+   "url": "https://www.maritool.com/Collets-And-Sleeves-ER-Collets-ER32-Collets/c21_56_59/p201/ER32-COLLET-4mm/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32 COLLET 4mm MariTool"
+    },
+    "bore": {
+     "v": "4mm",
+     "unit": "text",
+     "stated": "Size: 4mm"
+    },
+    "clamp_min": {
+     "v": 3.01,
+     "unit": "mm",
+     "stated": "Collet Grip Range: .1185 (inches)"
+    },
+    "clamp_max": {
+     "v": 4.0,
+     "unit": "mm",
+     "stated": "Collet Grip Range: .1575 (inches)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": ".197-ER32-5mm",
+   "name": "ER32 COLLET 5mm MariTool",
+   "url": "https://www.maritool.com/Collets-And-Sleeves-ER-Collets-ER32-Collets/c21_56_59/p202/ER32-COLLET-5mm/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER32",
+     "unit": "text",
+     "stated": "ER32 COLLET 5mm MariTool"
+    },
+    "bore": {
+     "v": "5mm",
+     "unit": "text",
+     "stated": "Size: 5mm"
+    },
+    "clamp_min": {
+     "v": 4.011,
+     "unit": "mm",
+     "stated": "Collet Grip Range: .1579 (inches)"
+    },
+    "clamp_max": {
+     "v": 5.001,
+     "unit": "mm",
+     "stated": "Collet Grip Range: .1969 (inches)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": ".0625-ER20-1/16",
+   "name": "ER20 COLLET 1/16 MariTool",
+   "url": "https://www.maritool.com/Collets-And-Sleeves-ER-Collets-ER20-Collets/c21_56_62/p1117/ER20-COLLET-1/16/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20 COLLET 1/16 MariTool"
+    },
+    "bore": {
+     "v": "1/16",
+     "unit": "text",
+     "stated": "Size: 1/16"
+    },
+    "clamp_min": {
+     "v": 1.206,
+     "unit": "mm",
+     "stated": "Collet Grip Range: .0475 (inches)"
+    },
+    "clamp_max": {
+     "v": 1.587,
+     "unit": "mm",
+     "stated": "Collet Grip Range: .0625 (inches)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  },
+  {
+   "kind": "collet",
+   "id": ".177-ER20-4.5mm",
+   "name": "ER20 COLLET 4.5mm MariTool",
+   "url": "https://www.maritool.com/Collets-And-Sleeves-ER-Collets-ER20-Collets/c21_56_62/p23716/ER20-COLLET-4.5mm/product_info.html",
+   "taken": "2026-11-23",
+   "values": {
+    "system": {
+     "v": "ER20",
+     "unit": "text",
+     "stated": "ER20 COLLET 4.5mm MariTool"
+    },
+    "bore": {
+     "v": "4.5mm",
+     "unit": "text",
+     "stated": "Size: 4.5mm"
+    },
+    "clamp_min": {
+     "v": 3.51,
+     "unit": "mm",
+     "stated": "Collet Grip Range: .1382 (inches)"
+    },
+    "clamp_max": {
+     "v": 4.501,
+     "unit": "mm",
+     "stated": "Collet Grip Range: .1772 (inches)"
+    }
+   },
+   "profile": [],
+   "unknown": [
+    "length",
+    "od"
+   ]
+  }
+ ],
+ "notes": [
+  "Product pages for BT40 pull studs (PS-71122-HS, PS-31113F, PS-31113-HS), CAT40 tap holders (CAT40-TER16/20), three CAT40 shrink-fit holders and the BT30 end mill holders link no drawing PDF; only their spec tables were used. ER collet pages give grip range only."
+ ]
+}

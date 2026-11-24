@@ -1,30 +1,33 @@
-{"fillets": 325, "first": {"unjudged": 30, "refused": 42, "right": 226, "wrong": 23, "invalid": 4}, "final": {"unjudged": 30, "refused": 42, "right": 239, "wrong": 10, "invalid": 4}, "overruled": {"OCCT's fillet is ours": 13}, "parts": 231, "parts_final": {"unjudged": 27, "refused": 42, "right": 149, "wrong": 10, "invalid": 3}}
 00007878 5 unjudged unjudged 
 00009025 9 unjudged unjudged 
 00009520 5 refused refused 
-00012606 5 refused refused 
-00028758 21 right right 
 00010966 5 right right 
+00012606 5 refused refused 
+00016380 5 right right 
+00028758 21 right right 
+00033108 21 wrong right matches the Parasolid STEP at 1e-4 (OCCT refuses)
+00033703 10 right right 
+00033703 9 right right 
 00035608 10 unjudged unjudged 
 00036033 9 right right 
-00033703 9 right right 
-00033703 10 right right 
 00036857 11 refused refused 
-00045098 5 right right 
 00039871 11 right right 
 00039871 15 right right 
+00045098 5 right right 
 00054282 9 right right 
-00057004 11 wrong unsure OCCT no reference, no STEP comparison
-00057004 12 right right 
-00055306 9 right right 
 00055306 16 right right 
 00055306 20 refused refused 
-00060693 5 right right 
+00055306 9 right right 
+00057004 11 right right 
+00057004 12 right right 
 00058582 56 right right 
+00060693 5 right right 
+00076326 5 right right 
 00079433 5 unjudged unjudged 
 00095058 5 right right 
 00097963 5 unjudged unjudged 
-00076326 5 right right 
+00100295 5 right right 
+00100295 6 right right 
 00100761 17 right right 
 00100761 18 unjudged unjudged 
 00101289 5 refused refused 
@@ -32,16 +35,15 @@
 00103932 21 right right 
 00107721 5 right right 
 00108812 7 refused refused 
-00100295 5 right right 
-00100295 6 right right 
+00110487 21 right right 
 00111275 5 unjudged unjudged 
 00111275 8 refused refused 
-00116142 9 right right 
 00116142 10 right right 
-00117636 5 wrong right OCCT's fillet is ours
+00116142 9 right right 
+00117636 5 right right 
 00123784 9 refused refused 
-00125208 8 right right 
 00125208 13 right right 
+00125208 8 right right 
 00130101 7 right right 
 00139607 5 right right 
 00140075 5 right right 
@@ -50,13 +52,10 @@
 00145978 5 right right 
 00146953 5 right right 
 00153157 10 invalid invalid 
-00016380 5 right right 
-00033108 21 wrong right matches the Parasolid STEP at 1e-4
-00110487 21 wrong right matches the Parasolid STEP at 1e-4
 00156780 11 right right 
 00156780 12 right right 
 00158115 5 right right 
-00168606 6 wrong right OCCT's fillet is ours
+00168606 6 right right 
 00168606 7 refused refused 
 00176817 5 refused refused 
 00177637 5 right right 
@@ -68,7 +67,7 @@
 00196819 12 refused refused 
 00198710 30 right right 
 00198710 31 right right 
-00198710 32 wrong right OCCT's fillet is ours
+00198710 32 right right 
 00198710 35 right right 
 00198710 50 right right 
 00200216 5 right right 
@@ -82,8 +81,8 @@
 00273373 11 right right 
 00273373 14 refused refused 
 00273373 8 right right 
-00273783 5 wrong unsure OCCT no reference, no STEP comparison
-00274674 5 wrong right matches the Parasolid STEP at 1e-4
+00273783 5 right right 
+00274674 5 right right 
 00277975 5 right right 
 00277975 6 right right 
 00277975 7 right right 
@@ -123,7 +122,7 @@
 00383942 17 right right 
 00383942 18 unjudged unjudged 
 00383942 19 unjudged unjudged 
-00394145 7 wrong right OCCT's fillet is ours
+00394145 7 right right 
 00394634 5 right right 
 00402272 11 refused refused 
 00402272 7 right right 
@@ -179,7 +178,7 @@
 00553446 8 right right 
 00562974 10 right right 
 00562974 9 right right 
-00563732 6 wrong right OCCT's fillet is ours
+00563732 6 right right 
 00565731 5 right right 
 00569015 16 right right 
 00569015 17 right right 
@@ -215,7 +214,7 @@
 00626079 7 right right 
 00628177 8 right right 
 00635672 10 refused refused 
-00645924 8 wrong right matches the Parasolid STEP at 1e-4
+00645924 8 right right 
 00647071 5 unjudged unjudged 
 00652306 10 right right 
 00652306 9 right right 
@@ -233,7 +232,7 @@
 00685754 6 right right 
 00685754 7 right right 
 00685754 8 unjudged unjudged 
-00702917 6 wrong right OCCT's fillet is ours
+00702917 6 right right 
 00705275 5 right right 
 00710676 5 refused refused 
 00711503 10 right right 
@@ -241,27 +240,29 @@
 00722722 5 right right 
 00722722 6 right right 
 00726877 9 right right 
-00731664 55 wrong right OCCT's fillet is ours
-00731664 56 wrong right OCCT's fillet is ours
+00731664 55 right right 
+00731664 56 right right 
 00731664 57 right right 
 00731664 64 invalid invalid 
 00733853 17 refused refused 
 00740860 5 right right 
-00740860 6 right right 
+00740860 6 wrong right OCCT's fillet is ours
 00745590 7 right right 
 00760349 10 right right 
 00761058 5 unjudged unjudged 
-00761058 6 wrong right OCCT's fillet is ours
-00761058 7 wrong right OCCT's fillet is ours
+00761058 6 right right 
+00761058 7 right right 
+00764509 15 right right 
+00764509 20 right right 
 00784391 5 refused refused 
 00786044 5 right right 
 00793323 19 unjudged unjudged 
 00793323 5 right right 
 00797256 5 right right 
 00801110 18 right right 
-00801110 19 wrong right matches the Parasolid STEP at 1e-4
+00801110 19 right right 
 00807159 10 wrong right OCCT's fillet is ours
-00807159 11 wrong right OCCT's fillet is ours
+00807159 11 right right 
 00807159 12 right right 
 00807159 9 right right 
 00817256 11 refused refused 
@@ -285,12 +286,12 @@
 00880703 5 refused refused 
 00881273 9 right right 
 00883497 8 right right 
-00888942 10 wrong right OCCT's fillet is ours
+00888942 10 right right 
 00888942 9 right right 
 00898674 11 right right 
 00904630 5 right right 
-00912781 21 wrong right matches the Parasolid STEP at 1e-4
-00918074 10 wrong unsure OCCT no reference, no STEP comparison
+00912781 21 right right 
+00918074 10 right right 
 00918074 12 right right 
 00924177 25 unjudged unjudged 
 00924177 26 right right 
@@ -308,7 +309,7 @@
 00960496 8 right right 
 00962276 139 right right 
 00962276 140 refused refused 
-00972891 11 wrong right matches the Parasolid STEP at 1e-4
+00972891 11 right right 
 00973400 5 right right 
 00974207 6 right right 
 00974207 7 right right 
@@ -322,6 +323,4 @@
 00986946 5 right right 
 00999987 5 right right 
 00999987 6 right right 
-00764509 15 right right 
-00764509 20 right right 
-00154651 ? unjudged unjudged label_body stack overflow
+00154651 7 refused refused 

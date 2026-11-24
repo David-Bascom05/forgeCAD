@@ -1,0 +1,14 @@
+# hyundai-wia-f500plus table: the published table top; thickness an estimate.
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -600
+shared y0 = -250
+shared z0 = -100
+shared L = 1200
+shared W = 500
+shared H = 100
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

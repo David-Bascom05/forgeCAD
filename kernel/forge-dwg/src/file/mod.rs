@@ -111,8 +111,10 @@ pub fn sections(buf: &[u8]) -> R<Sections> {
     let Some(ver) = buf.get(0..6).and_then(Version::from_magic) else {
         return bad("not a DWG file this reads (AC1015..AC1032)");
     };
-    let maint = buf[11];
-    let codepage = u16::from_le_bytes([buf[0x13], buf[0x14]]);
+    let Some(&[maint, .., c0, c1]) = buf.get(11..0x15) else {
+        return bad("a DWG file cut short in its first 0x15 bytes");
+    };
+    let codepage = u16::from_le_bytes([c0, c1]);
     match ver {
         Version::R2000 => r2000::sections(buf),
         Version::R2007 => {

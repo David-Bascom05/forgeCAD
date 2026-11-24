@@ -1,0 +1,22 @@
+# generic-vmc3 saddle: on the bed's Y ways, carrying the table's X ways.
+# frame: the machine's base frame at the home pose.
+shared L = 700
+shared W = 400
+shared H = 100
+shared z0 = -250
+shared way_w = 40
+shared way_d = 10
+shared way_in = 60
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(center: (0, 0), size: (L, W))
+}
+body = extrude(plan, H)
+sketch w0(on: body.end) {
+  r = rect(center: (0, -W / 2 + way_in), size: (L, way_w))
+}
+way0 = cut(w0.r, way_d)
+sketch w1(on: body.end) {
+  r = rect(center: (0, W / 2 - way_in), size: (L, way_w))
+}
+way1 = cut(w1.r, way_d)

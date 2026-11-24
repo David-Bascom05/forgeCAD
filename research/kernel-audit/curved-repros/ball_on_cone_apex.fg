@@ -1,0 +1,18 @@
+# cone_sphere/pole_on_apex/Add (scoreboard degen_cone_sphere/2).
+# A ball resting on an upward cone's apex, touching it at one point. The ball's axis is
+# horizontal (its sketch plane is vertical).
+# Exact reference: non-manifold at the apex. Kernel: builds 2 618.0 mm³ (cone 2 094.4 + ball
+# 523.6), one valid body; it must refuse ZeroThickness.
+shared R = 10
+shared H = 20
+shared r = 5
+
+sketch low(on: xz) {
+  tri = poly([(0, 0), (R, -H), (0, -H)])
+  ax = line((0, 0), (0, -H), construction: true)
+}
+base = revolve(low.tri, axis: low.ax, angle: 360deg)
+sketch c(on: xz) {
+  p = pt(0, r)
+}
+knob = ball(c.p, r)

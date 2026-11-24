@@ -1,0 +1,17 @@
+# sphere_sphere/tangent_outside/Add (scoreboard degen_sphere_sphere/2).
+# Two balls touching at one point, one above the other. Their axes are horizontal (sketch
+# planes vertical), so the contact is on both equators.
+# Exact reference: non-manifold (the spheres touch at a point; the union keeps both and not
+# the gap). Kernel: builds 4 712.4 mm³ (4 188.8 + 523.6), one valid body; it must refuse
+# ZeroThickness.
+shared R = 10
+shared r = 5
+
+sketch low(on: xz) {
+  p = pt(0, -R)
+}
+base = ball(low.p, R)
+sketch high(on: xz) {
+  p = pt(0, r)
+}
+knob = ball(high.p, r)

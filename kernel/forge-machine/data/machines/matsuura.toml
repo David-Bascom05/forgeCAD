@@ -1,0 +1,712 @@
+# Matsuura machines: the maker's published specifications, restated (never copied); each record's
+# `source` is the page or catalogue read and `taken` the date. Estimates and UNKNOWNs are named in
+# each record's `note` and beside the field. Bodies are conservative envelopes from published
+# overall dimensions, not the maker's CAD. Format: docs/cam-machine.md.
+
+# ---------------------------------------------------------------------------------------------
+# Matsuura MX-330: MX series 5-axis VMC, Matsuura G-Tech 31i (FANUC based; DE: G-Tech 31iB).
+# X 435 Y 465 Z 560; 15000 rpm BT40 (DE also SK40/HSK63); 30 tools.
+[[machine]]
+name = "matsuura-mx-330"
+kind = "table-table"
+control = "fanuc"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.matsuurausa.com/model/mx-330/ | https://www.matsuurausa.com/wp-content/uploads/MX-330-GD0-Panel.pdf | https://www.matsuura.de/produkte/detail/matsuura-mx-330 | https://www.matsuura.de/fileadmin/user_upload/dokumente/MX-330.pdf"
+taken = "2026-11-23"
+note = "A tilts the cradle about X (-125..10 deg, published) and carries C; the sense of +A (which way the table tips) is UNKNOWN: modelled right-handed about +x; A's pivot below the table top UNKNOWN: 100 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate); spindle power as published: cont 5.5 kW; peak/other: 7.5 (DE sheet '5,5 / 7,5 kW', rating durations not stated); torque max 65.1 N.m (no curve: no power check); max tool diameter 80 with the neighbouring pockets full, 150 with them empty; magazine options: 60, 90; some numbers from https://www.matsuura.de/produkte/detail/matsuura-mx-330, https://www.matsuura.de/fileadmin/user_upload/dokumente/MX-330.pdf (not the maker's own site): see the research file; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-217.5, 217.5]
+rapid = 40000
+max_feed = 40000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-232.5, 232.5]
+rapid = 40000
+max_feed = 40000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-560, 0]
+rapid = 40000
+max_feed = 40000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "A"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [1, 0, 0]
+pivot = [0, 0, -100]
+range = [-125, 10]
+rapid = 7200
+max_feed = 7200   # rotary max feed UNKNOWN: = rapid
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "A"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 14400
+max_feed = 14400   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 660]
+rpm = [50, 15000]
+max = [300, 80]
+interface = "BT40 (DE also SK40/HSK63)"
+
+[[machine.changer]]
+pockets = 30
+change_s = 1.1   # tool to tool, published (chip to chip UNKNOWN): a lower bound
+max_tool_kg = 10
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 660]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/matsuura/matsuura-mx-330/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-517.5, -532.5, -716.13915]
+max = [517.5, 532.5, -316.13915]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/matsuura/matsuura-mx-330/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-365, -185, -500]
+max = [-225, 185, 50]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/matsuura/matsuura-mx-330/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [225, -185, -500]
+max = [365, 185, 50]
+
+[[machine.body]]
+name = "cradle"
+link = "A"
+part = "parts/matsuura/matsuura-mx-330/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-205, -145, -200]
+max = [205, 145, -80]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/matsuura/matsuura-mx-330/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 125
+h = 80
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/matsuura/matsuura-mx-330/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 660]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/matsuura/matsuura-mx-330/head.fg"
+[[machine.body.box]]
+min = [-150, -150, 810]
+max = [150, 150, 1260]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "X stroke 435 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "Y stroke 465 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "Z stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "-125..10 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "7200 deg/min"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "14400 deg/min"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "50..15000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "30"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "tool to tool, published (chip to chip UNKNOWN): a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-330/"
+taken = "2026-11-23"
+value = "10 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+# ---------------------------------------------------------------------------------------------
+# Matsuura MX-520: MX series 5-axis VMC, Matsuura G-Tech 31i (FANUC based; DE: G-Tech 31iB).
+# X 630 Y 560 Z 510; 12000 rpm CAT40/BT40 std; HSK-A63 option; 60 tools.
+[[machine]]
+name = "matsuura-mx-520"
+kind = "table-table"
+control = "fanuc"
+length_joint = "Z"
+coolants = ["flood"]
+clearance = 1
+source = "https://www.matsuurausa.com/model/mx-520/ | https://www.matsuurausa.com/wp-content/uploads/Tech-MX-520.pdf | https://www.matsuura.de/produkte/detail/matsuura-mx-520 | https://www.matsuura.de/fileadmin/user_upload/dokumente/MX-520.pdf"
+taken = "2026-11-23"
+note = "A tilts the cradle about X (-125..10 deg, published) and carries C; the sense of +A (which way the table tips) is UNKNOWN: modelled right-handed about +x; A's pivot below the table top UNKNOWN: 150 mm (estimate); which unit carries X/Y/Z: see the header (where not published, all on the head here); the tool-to-part motion is the same either way; spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate); spindle power as published: cont 11 kW; peak/other: 25 (DE sheet '11 / 25 kW', durations not stated); torque max 159 N.m (no curve: no power check); max tool diameter 80 with the neighbouring pockets full, 150 with them empty; magazine options: 90 (US), up to 120 (DE web); some numbers from https://www.matsuura.de/produkte/detail/matsuura-mx-520, https://www.matsuura.de/fileadmin/user_upload/dokumente/MX-520.pdf (not the maker's own site): see the research file; an unpublished required field takes the value that makes its check vacuous (rapid high, max feed = rapid, change time 0.001 s, tool weight 99 kg), named UNKNOWN beside it; joint 0 = mid-travel for X and Y and the top of travel for Z; the control's machine zero is at a travel end (which: UNKNOWN), so a real G54 differs by a constant per axis; bodies are single boxes/cylinders from published overall sizes; head, column, saddle, bed and turret sizes are estimates, the spindle housing radius kept large; the enclosure is not modelled."
+real = true
+
+[[machine.joint]]
+name = "X"
+parent = "base"
+side = "head"
+type = "linear"
+axis = [1, 0, 0]
+range = [-315, 315]
+rapid = 40000
+max_feed = 40000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Y"
+parent = "X"
+side = "head"
+type = "linear"
+axis = [0, 1, 0]
+range = [-280, 280]
+rapid = 40000
+max_feed = 40000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "Z"
+parent = "Y"
+side = "head"
+type = "linear"
+axis = [0, 0, 1]
+range = [-510, 0]
+rapid = 40000
+max_feed = 40000   # max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp
+
+[[machine.joint]]
+name = "A"
+parent = "base"
+side = "table"
+type = "rotary"
+axis = [1, 0, 0]
+pivot = [0, 0, -150]
+range = [-125, 10]
+rapid = 6120
+max_feed = 6120   # rotary max feed UNKNOWN: = rapid
+tcp = true
+preference = 1
+
+[[machine.joint]]
+name = "C"
+parent = "A"
+side = "table"
+type = "rotary"
+axis = [0, 0, 1]
+pivot = [0, 0, 0]
+range = [-360, 360]
+rapid = 11880
+max_feed = 11880   # rotary max feed UNKNOWN: = rapid
+cyclic = true
+tcp = true
+
+[[machine.spindle]]
+name = "S1"
+link = "Z"
+kind = "milling"
+axis = [0, 0, 1]
+nose = [0, 0, 610]
+rpm = [40, 12000]
+max = [300, 80]
+interface = "CAT40/BT40 std; HSK-A63 option"
+
+[[machine.changer]]
+pockets = 60
+change_s = 1.1   # tool to tool, published (chip to chip UNKNOWN): a lower bound
+max_tool_kg = 10
+
+[[machine.mount]]
+name = "spindle"
+kind = "tool"
+link = "Z"
+at = [0, 0, 610]
+dir = [0, 0, -1]
+
+[[machine.mount]]
+name = "table"
+kind = "part"
+link = "C"
+at = [0, 0, 0]
+dir = [0, 0, 1]
+xdir = [1, 0, 0]
+
+[[machine.body]]
+name = "bed"
+link = "base"
+part = "parts/matsuura/matsuura-mx-520/bed.fg"
+ignore = ["support-l", "support-r"]
+[[machine.body.box]]
+min = [-615, -580, -816.715681]
+max = [615, 580, -416.715681]
+
+[[machine.body]]
+name = "support-l"
+link = "base"
+part = "parts/matsuura/matsuura-mx-520/support-l.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [-390, -210, -550]
+max = [-250, 210, 0]
+
+[[machine.body]]
+name = "support-r"
+link = "base"
+part = "parts/matsuura/matsuura-mx-520/support-r.fg"
+ignore = ["bed", "cradle"]
+[[machine.body.box]]
+min = [250, -210, -550]
+max = [390, 210, 0]
+
+[[machine.body]]
+name = "cradle"
+link = "A"
+part = "parts/matsuura/matsuura-mx-520/cradle.fg"
+ignore = ["rotary", "support-l", "support-r"]
+[[machine.body.box]]
+min = [-230, -170, -200]
+max = [230, 170, -80]
+
+[[machine.body]]
+name = "rotary"
+link = "C"
+part = "parts/matsuura/matsuura-mx-520/rotary.fg"
+ignore = ["cradle"]
+[[machine.body.cyl]]
+base = [0, 0, -80]
+axis = [0, 0, 1]
+r = 150
+h = 80
+
+[[machine.body]]
+name = "nose"
+link = "Z"
+part = "parts/matsuura/matsuura-mx-520/nose.fg"
+[[machine.body.cyl]]
+base = [0, 0, 610]
+axis = [0, 0, 1]
+r = 110
+h = 150
+
+[[machine.body]]
+name = "head"
+link = "Z"
+part = "parts/matsuura/matsuura-mx-520/head.fg"
+[[machine.body.box]]
+min = [-150, -150, 760]
+max = [150, 150, 1210]
+
+[[machine.cite]]
+path = "joint.X.range"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "X stroke 630 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.X.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.X.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Y.range"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "Y stroke 560 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Y.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.Y.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.Z.range"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "Z stroke 510 mm; where it sits is this record's convention (note)"
+
+[[machine.cite]]
+path = "joint.Z.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "40000 mm/min"
+
+[[machine.cite]]
+path = "joint.Z.max_feed"
+status = "unknown"
+basis = "max cutting feed UNKNOWN (unpublished): = rapid, no feed clamp; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.range"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "-125..10 deg"
+
+[[machine.cite]]
+path = "joint.A.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "6120 deg/min"
+
+[[machine.cite]]
+path = "joint.A.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.A.pivot"
+status = "estimate"
+basis = "the tilt axis's height (or the head pivot's offset) is not published; placed as the note says"
+
+[[machine.cite]]
+path = "joint.C.range"
+status = "estimate"
+basis = "a continuous rotary: the format's cyclic output range, not a travel limit"
+
+[[machine.cite]]
+path = "joint.C.rapid"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "11880 deg/min"
+
+[[machine.cite]]
+path = "joint.C.max_feed"
+status = "unknown"
+basis = "rotary max feed UNKNOWN: = rapid; no false feed clamp"
+
+[[machine.cite]]
+path = "joint.C.pivot"
+status = "estimate"
+basis = "through the table/pallet (or spindle) centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "spindle.S1.rpm"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "40..12000 rpm"
+
+[[machine.cite]]
+path = "spindle.S1.nose"
+status = "estimate"
+value = "from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate)"
+
+[[machine.cite]]
+path = "spindle.S1.max"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "max tool length and diameter"
+
+[[machine.cite]]
+path = "changer.pockets"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "60"
+
+[[machine.cite]]
+path = "changer.change_s"
+status = "unknown"
+basis = "tool to tool, published (chip to chip UNKNOWN): a lower bound"
+
+[[machine.cite]]
+path = "changer.max_tool_kg"
+status = "published"
+source = "https://www.matsuurausa.com/model/mx-520/"
+taken = "2026-11-23"
+value = "10 kg"
+
+[[machine.cite]]
+path = "mount.spindle.at"
+status = "estimate"
+value = "the spindle nose, from the published spindle-nose-to-table distance at the top of Z"
+basis = "spindle nose to table at tilt 0 UNKNOWN: 100 to 100 + Z (estimate)"
+
+[[machine.cite]]
+path = "mount.table.at"
+status = "estimate"
+basis = "the table / pallet top centre or chuck face centre: this record's origin, by construction"
+
+[[machine.cite]]
+path = "body.bed"
+status = "estimate"
+basis = "the base under the cradle's swing (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-l"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.support-r"
+status = "estimate"
+basis = "trunnion support (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.cradle"
+status = "estimate"
+basis = "the tilting cradle under the rotary table (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.rotary"
+status = "estimate"
+basis = "the published rotary table diameter; thickness an estimate; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.nose"
+status = "estimate"
+basis = "the spindle housing around the tool: radius an estimate, kept large; one box/cylinder from published overall sizes, kept large where the tool and part move"
+
+[[machine.cite]]
+path = "body.head"
+status = "estimate"
+basis = "the spindle head (estimate); one box/cylinder from published overall sizes, kept large where the tool and part move"

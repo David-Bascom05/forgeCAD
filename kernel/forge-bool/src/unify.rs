@@ -378,6 +378,9 @@ fn log_same(body: &Body, a: FaceId, b: FaceId, same: bool) {
         tol::LINEAR,
     );
     let yes = crate::ssi::coincident(&fa.surface, &fb.surface);
+    if same {
+        crate::carrier_key::log(&fa.surface, &fb.surface, "unify: same_surface");
+    }
     let site = Site::Named("unify: ssi::coincident (the boolean's test)");
     d::decide(Kind::Coincident, key, None, None, yes as u8, site, gap, f64::NAN);
 }

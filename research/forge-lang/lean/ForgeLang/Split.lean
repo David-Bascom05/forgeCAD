@@ -30,11 +30,23 @@ theorem let_lit {f D σ ρ w p r} (h : execOne f D σ ρ (.let_ w (.lit p)) = .o
   match f, h with
   | f + 2, h => simpa [execOne, evalE] using h.symm
 
-theorem split_let {f D σ ρ i w} {qs : List Site} {j : Nat} (hj : j < qs.length) :
+theorem split_let {f D σ ρ i w} {qs : List Site} {j : Nat} (hj : j < qs.length) (hm : (j : Int) ≤ maxList) :
     execOne (f + 3) D σ ((i, .num (.const j)) :: ρ) (.let_ w (.sel (qs.map .lit) (.var i))) =
       .ok ([(w, .num (.site qs[j]))], [], []) := by
   have h0 : ¬ ((j : Int) < 0) := by omega
-  simp [execOne, evalE, lookupNum, List.lookup, toIx, Tr.den, obs, Tr.sites, h0, hj]
+  have h1 : ¬ (maxList < (j : Int)) := by omega
+  simp [execOne, evalE, lookupNum, List.lookup, toIx, Tr.den, obs, Tr.sites, h0, h1, hj]
+
+/-- What a split instance's `let` gives when it runs: its own literal (an index past `maxList`
+does not run). -/
+theorem split_let_ok {f D σ ρ i w r} {qs : List Site} {j : Nat} (hj : j < qs.length)
+    (h : execOne f D σ ((i, .num (.const j)) :: ρ) (.let_ w (.sel (qs.map .lit) (.var i))) = .ok r) :
+    r = ([(w, .num (.site qs[j]))], [], []) := by
+  by_cases hm : maxList < (j : Int)
+  · exfalso
+    rcases f with _ | _ | _ | f <;>
+      simp [execOne, evalE, lookupNum, List.lookup, toIx, Tr.den, obs, Tr.sites, hm] at h
+  · exact execOne_unique h (split_let (f := 0) hj (by omega))
 
 def splitBody (w : Name) (qs : List Site) (i : Name) (rest : List Stmt) : List Stmt :=
   .let_ w (.sel (qs.map .lit) (.var i)) :: rest
@@ -42,7 +54,7 @@ def splitBody (w : Name) (qs : List Site) (i : Name) (rest : List Stmt) : List S
 theorem split_loop {θ σA σB} (hσ : ∀ s, σB s = σA (θ s)) {qs : List Site} {p : Site}
     (hθ : SplitTheta θ qs p) {D : Defs} {ρ : Env} {i w : Name} {rest : List Stmt}
     (fix : Fix θ (codeB rest ++ D.code)) :
-    ∀ (ks : List Nat) {n mm l}, (∀ j ∈ ks, j < qs.length) →
+    ∀ (ks : List Nat) {n mm l}, (∀ j ∈ ks, j < qs.length ∧ (j : Int) ≤ maxList) →
       loopN n D σA (ρ.ren θ) i (.let_ w (.lit p) :: rest) ks = .ok (mm, l) →
       ∃ N r', loopN N D σB ρ i (splitBody w qs i rest) ks = .ok r' ∧ (r'.1.ren θ, r'.2.map θ) = (mm, l)
   | [], n, mm, l, _, h => by
@@ -61,7 +73,8 @@ theorem split_loop {θ σA σB} (hσ : ∀ s, σB s = σA (θ s)) {qs : List Sit
       cases h
       obtain ⟨Δl, ml, ll, Δr, mr, lr, hl, hr, e⟩ := execS_cons h1
       cases let_lit hl
-      have hj : j < qs.length := hk j (by simp)
+      have hj : j < qs.length := (hk j (by simp)).1
+      have hjm : (j : Int) ≤ maxList := (hk j (by simp)).2
       have envEq : ([(w, Bind.num (Tr.site p))] ++ (i, Bind.num (Tr.const j)) :: ρ.ren θ) =
           Env.ren θ ((w, .num (.site qs[j])) :: (i, .num (.const j)) :: ρ) := by
         simp [Env.ren, Bind.ren, Tr.ren, hθ _ (List.getElem_mem hj)]
@@ -70,7 +83,7 @@ theorem split_loop {θ σA σB} (hσ : ∀ s, σB s = σA (θ s)) {qs : List Sit
       simp only [Prod.mk.injEq] at er e
       obtain ⟨-, rfl, rfl⟩ := er
       obtain ⟨-, rfl, rfl⟩ := e
-      obtain ⟨N1, hN1⟩ := execS_cons_compose (split_let (f := 0) (D := D) (σ := σB) (ρ := ρ) (w := w) hj) hr'
+      obtain ⟨N1, hN1⟩ := execS_cons_compose (split_let (f := 0) (D := D) (σ := σB) (ρ := ρ) (w := w) hj hjm) hr'
       obtain ⟨N2, ⟨m2', l2'⟩, hN2, e2⟩ := split_loop hσ hθ fix ks (fun j hj => hk j (by simp [hj])) h2
       simp only [Prod.mk.injEq] at e2
       obtain ⟨rfl, rfl⟩ := e2
@@ -103,12 +116,17 @@ theorem split_stmt {θ σA σB} (hσ : ∀ s, σB s = σA (θ s)) {qs : List Sit
       split at hk
       · cases hk
       · cases hk; exact this
+    have kmax : (k : Int) ≤ maxList := by
+      unfold toIx at hk
+      split at hk
+      · cases hk
+      · cases hk; omega
     obtain ⟨⟨tc', lc'⟩, hc', ec⟩ := (ren hσ n).e hc (fx fix fun s hs => by simp at *; grind)
     simp only [Prod.mk.injEq] at ec
     obtain ⟨rfl, rfl⟩ := ec
     rw [Tr.den_ren hσ] at hk
     obtain ⟨N, ⟨mm', l'⟩, hN, el⟩ := split_loop hσ hθ (fx fix fun s hs => by simp at *; grind)
-      (List.range k) (fun j hj => by simp at hj; omega) hl
+      (List.range k) (fun j hj => by simp at hj; constructor <;> omega) hl
     simp only [Prod.mk.injEq] at el
     obtain ⟨rfl, rfl⟩ := el
     refine ⟨max n N + 1, ([(x, .frag mm')], pre [.nm x] mm', lc' ++ obs D tc' ++ l'), ?_, ?_⟩

@@ -1,0 +1,146 @@
+{
+ "vendor": "Willemin-Macodel",
+ "model": "408MT",
+ "family": "Series 40",
+ "source": [
+  "https://willemin-macodel.com/en/machining-centers/408mt/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "mill-turn",
+ "architecture": "Bar-fed multi-process (milling + turning) centre, 6-7 axes: horizontal workpiece spindle = A axis (bar through, milling 200 rpm indexing/contouring, turning 6,000 rpm); B-axis swivel by torque motor (-15..+100 deg); motor spindle S1 HSK-E40; X/Y/Z linear axes; 2-position pick-up unit (vise or collets) for 6-side machining; pallets possible on A axis and pick-up. Maker page does not say which unit carries B (memory says the spindle head swivels -- unverified).",
+ "control": {
+  "standard": "FANUC 31i-B5 PLUS iHMI Pro",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 250,
+  "Y": 200,
+  "Z": 310
+ },
+ "rotary": {
+  "A": {
+   "range_deg": null,
+   "rapid_rpm": 200,
+   "indexing_or_full": "full; workpiece spindle, A4 cone, turning mode 6,000 rpm"
+  },
+  "B": {
+   "range_deg": [
+    -15,
+    100
+   ],
+   "rapid_rpm": 250,
+   "indexing_or_full": "full, torque motor, 0.0001 deg"
+  },
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": 36,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 30000,
+  "rpm_min": null,
+  "taper_or_interface": "HSK-E40 (HSK-A40 / CAPTO C4 opt)",
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": 40,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 48,
+  "options": [
+   "72"
+  ],
+  "tool_to_tool_s": 0.8,
+  "chip_to_chip_s": 3,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": false,
+  "notes": "through-spindle via rotary union optional; HP paper filter 80/150 bar option"
+ },
+ "overall_mm": {
+  "W": 1685,
+  "D": 1795,
+  "H": 2305
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "changer.max_tool_dia_mm",
+  "changer.max_tool_kg",
+  "changer.max_tool_len_mm",
+  "live_tool.power_kw",
+  "live_tool.rpm_max",
+  "max_turning_dia_mm",
+  "milling_head",
+  "rapid_m_min.A_or_B_rpm",
+  "rapid_m_min.C_rpm",
+  "rapid_m_min.X",
+  "rapid_m_min.Y",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "sub_spindle",
+  "table_height_from_floor_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "42,000 rpm spindle",
+  "72 tools",
+  "grease-lubricated spindle",
+  "bar pusher/loader",
+  "robot automation"
+ ],
+ "notes": "Footprint 3 m2. 'Max feed speed 40 m/min' published for linear axes (rapid not separately given). Chip-to-chip '< 3 s'. Spindle power/torque, weight not published on page."
+}

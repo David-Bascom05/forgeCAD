@@ -1,0 +1,123 @@
+{
+ "vendor": "Hyundai WIA (WIA Machine Tools)",
+ "model": "SE2600",
+ "family": "SE2600 Series (SE series)",
+ "source": [
+  "https://www.wiamachine.com/en/contents/product/series.html?seriesSeq=72&productType=TC",
+  "https://www.wiamachine.com/api/public/series/detail"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe",
+ "architecture": "Horizontal 2-axis lathe, 30-degree slanted one-piece bed, belt-driven spindle, servo turret, roller LM guides on X/Z.",
+ "control": {
+  "standard": "FANUC (latest, model not named)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 265,
+  "Z": 680
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": 460,
+ "max_turning_length_mm": 671,
+ "chuck_size_in": 10,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 3500,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": null,
+   "peak/other": 18.5
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 470.9
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 10,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 30,
+  "Z": 30
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "bar_capacity_mm",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.power_kw.cont",
+  "spindle.rpm_min",
+  "spindle.taper_or_interface",
+  "spindle.torque_nm.cont",
+  "spindle_nose_type",
+  "swing_over_bed_mm",
+  "table_height_from_floor_mm",
+  "tailstock",
+  "turret_index_s",
+  "weight_kg"
+ ],
+ "options": [
+  "12-station turret",
+  "SE2600L: Z 1100, 1091 mm turning length",
+  "SE2600M/LM: 12 stations, 6000 r/min rotary tools, 380 mm turning dia, X 255",
+  "SE2600Y/SY/LY/LSY Y-axis series (Y 110, 6000 r/min rotary)"
+ ],
+ "notes": "Source is the maker's current machine-tool site www.wiamachine.com (WIA MACHINE TOOLS; linked from en.hyundai-wia.com machine-tool page). Data read from its public JSON endpoint https://www.wiamachine.com/api/public/series/detail (POST seriesSeq=72, productType=TC) that the series page renders; units are implied by the site's labels (mm, r/min, kW, N·m, m/min, kg). Brackets [] are options on the site. Spindle power/torque published as an unlabeled pair (first value placed in peak/other / max; second listed in notes). Catalogue PDF requires an applicant form (not used). Pairs: power 18.5/15 kW, torque 470.9/286.4 N·m. No. of tools published '10 [12]' (12 optional). Task asked for 'L2600 (SE series)': current maker lineup has SE2600; L2600 appears on the maker site only as L2600Y/SY/LY (Y-axis). Not applicable to this machine kind (left null, not listed in unknown): spindle_nose_to_table_mm, spindle_center_to_column_mm, spindle_center_to_pallet_top_mm, table_mm, table_load_kg, rotary_table_dia_mm, pallet, changer, milling_head, rotary, travel_mm.Y, rapid_m_min.Y, rapid_m_min.A_or_B_rpm, rapid_m_min.C_rpm, live_tool, sub_spindle."
+}

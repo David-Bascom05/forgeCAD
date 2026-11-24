@@ -1,0 +1,23 @@
+# generic-vmc3 head: the spindle housing on the Z slide, the nose below it (gauge line z = 500).
+# frame: the machine's base frame at the home pose.
+shared hw = 220
+shared y1 = 450
+shared z1 = 620
+shared hh = 180
+shared nose_r = 60
+shared gauge = 500
+shared bore = 70
+shared taper_d = 60
+
+sketch plan(on: offset(xy, z1)) {
+  outline = rect(corner: (-hw / 2, -hw / 2), size: (hw, y1 + hw / 2))
+}
+housing = extrude(plan, hh)
+sketch nk(on: offset(plan, gauge - z1)) {
+  c = circle((0, 0), nose_r)
+}
+nose = extrude(nk.c, z1 - gauge)
+sketch tb(on: nk) {
+  c = circle((0, 0), bore / 2)
+}
+taper = cut(tb.c, -taper_d)

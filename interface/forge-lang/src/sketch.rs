@@ -564,6 +564,30 @@ impl Sk {
     /// entity's name path, so adding entities elsewhere renames nothing.
     pub fn seg_id(&self, e: EntityId) -> u64 {
         let name = self.ents.iter().find(|x| x.0 == e).map_or("?", |x| x.1.as_str());
+        self.seg_id_of(name)
+    }
+
+    /// `seg_id` for every entity at once: a lookup built once (`seg_id` searches the entities,
+    /// and a profile of every segment of a large sketch was quadratic).
+    fn seg_ids(&self) -> impl Fn(EntityId) -> u64 + '_ {
+        // (a small sketch searches, as `seg_id` does: the map costs more than it saves there)
+        let mut by: std::collections::HashMap<EntityId, &str> = std::collections::HashMap::new();
+        if self.ents.len() > 64 {
+            for x in &self.ents {
+                by.entry(x.0).or_insert(x.1.as_str());
+            }
+        }
+        move |e| {
+            let name = if by.is_empty() {
+                self.ents.iter().find(|x| x.0 == e).map_or("?", |x| x.1.as_str())
+            } else {
+                by.get(&e).copied().unwrap_or("?")
+            };
+            self.seg_id_of(name)
+        }
+    }
+
+    fn seg_id_of(&self, name: &str) -> u64 {
         let mut h = 0xcbf2_9ce4_8422_2325u64;
         for b in self.id.bytes().chain(*b"/").chain(name.bytes()) {
             h = (h ^ b as u64).wrapping_mul(0x0100_0000_01b3);
@@ -622,10 +646,11 @@ impl Sk {
                 })?
                 .clone(),
         };
+        let seg_id = self.seg_ids();
         for l in &mut p.loops {
             for g in &mut l.segments {
                 let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
-                g.1 = piece | self.seg_id(e);
+                g.1 = piece | seg_id(e);
             }
         }
         Ok(p)
@@ -635,13 +660,14 @@ impl Sk {
     pub fn profiles(&self, span: Span) -> R<Vec<Profile>> {
         let ps = self.regions(span)?.into_owned();
         const PIECE: u64 = 0xffff << 48;
+        let seg_id = self.seg_ids();
         Ok(ps
             .into_iter()
             .map(|mut p| {
                 for l in &mut p.loops {
                     for g in &mut l.segments {
                         let (piece, e) = (g.1 & PIECE, EntityId(g.1 & !PIECE));
-                        g.1 = piece | self.seg_id(e);
+                        g.1 = piece | seg_id(e);
                     }
                 }
                 p
@@ -709,3 +735,75 @@ impl std::fmt::Debug for Sk {
 // instantiates stay out of the evaluator's codegen units
 #[path = "sketch_whole.rs"]
 mod whole;
+
+#[cfg(test)]
+mod release {
+    use crate::eval::{Eval, Value};
+
+    /// The app's release between builds (forge-render's `plat::release_sketches`, the CLI
+    /// server's), done here as they do it.
+    fn release() {
+        for x in forge_keep::take_all() {
+            if let Ok(sk) = x.downcast::<std::cell::RefCell<super::Sk>>() {
+                let named = std::mem::take(&mut sk.borrow_mut().named);
+                drop(named);
+            }
+        }
+    }
+
+    /// A sketch's named entities read through it for as long as its run's values are used
+    /// (`plan.outline`, `plan.bore`, a text's loops), and it is freed once let go: a sketch with
+    /// a named entity is an `Rc` cycle, which outlived its evaluation (every run and edit of a
+    /// part kept its sketches). A run frees none itself; it keeps each (`forge_keep`).
+    #[test]
+    fn kept_sketches_are_freed_when_let_go_and_read_till_then() {
+        let src = "sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (60, 30))
+  bore = circle((15, 15), 3)
+  word = text(\"AB\", at: (30, 10), size: 8)
+}
+base = extrude(plan.outline, 6)
+";
+        release();
+        let prog = crate::syntax::parse(src).expect("parses");
+        let mut ev = Eval::new(src, Default::default(), true, Default::default());
+        ev.run(&prog);
+        assert!(ev.errors.is_empty(), "{:?}", ev.errors);
+        let Some((_, Value::Sketch(sk))) = ev.top_level().into_iter().find(|(n, _)| n == "plan") else {
+            panic!("no sketch plan");
+        };
+        for name in ["outline", "bore", "word"] {
+            let v = sk
+                .borrow()
+                .named
+                .iter()
+                .find(|x| x.0 == name)
+                .map(|x| x.1.clone());
+            let ents: Vec<_> = match v {
+                Some(Value::Ent(e)) => vec![e],
+                Some(Value::List(xs)) => xs
+                    .iter()
+                    .map(|x| match x {
+                        Value::Ent(e) => e.clone(),
+                        _ => panic!("{name}: not entities"),
+                    })
+                    .collect(),
+                _ => panic!("{name}: not kept"),
+            };
+            assert!(
+                !ents.is_empty() && ents.iter().all(|e| std::rc::Rc::ptr_eq(&e.sk, &sk)),
+                "{name}"
+            );
+        }
+        let gone = std::rc::Rc::downgrade(&sk);
+        drop(sk);
+        drop(ev);
+        // the cycle: kept till let go
+        assert!(
+            gone.upgrade().is_some(),
+            "freed with no release: the cycle is gone?"
+        );
+        release();
+        assert!(gone.upgrade().is_none(), "let go, the sketch was not freed");
+    }
+}

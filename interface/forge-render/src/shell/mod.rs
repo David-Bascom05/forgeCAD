@@ -11,6 +11,9 @@ pub mod asmpart;
 pub mod asmtools;
 mod banner;
 pub mod bendsim;
+mod bendsim_cards;
+mod bendsim_env;
+pub mod cam;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -24,6 +27,8 @@ mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
 mod empty;
+pub mod capture;
+pub mod env;
 pub mod fg;
 pub mod fgasm;
 pub mod fgdialog;
@@ -36,6 +41,12 @@ pub mod harness_look;
 pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
+pub mod lib_form;
+pub mod machine;
+pub mod machine_brake;
+mod machine_parts;
+pub mod machine_tooling;
+pub mod machine_workholding;
 pub mod markup;
 pub mod materials;
 mod measure_ui;
@@ -43,15 +54,18 @@ pub mod occedit;
 pub mod panel;
 pub(crate) mod placed;
 mod ribbon;
+pub mod robot;
 pub mod settings;
 pub mod sheet;
 mod sheetui;
 pub mod sketching;
+pub mod studio_env;
 pub mod theme;
 pub mod thermo;
 pub mod thermo_material;
 pub mod thermo_ui;
 mod tree;
+pub mod ux;
 pub mod vendorui;
 pub mod versions;
 mod visual_style;
@@ -77,6 +91,8 @@ pub const ASM_TAB: usize = 8;
 pub const HARNESS_TAB: usize = 9;
 /// A part's Weldments tab: structural members, their ends and plates, the cut list.
 pub const WELD_TAB: usize = 10;
+/// A machining document's Manufacture tab: setups, operations, posts (`cam/`).
+pub const CAM_TAB: usize = 11;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -171,8 +187,21 @@ pub enum Action {
     DialogCancel,
     /// A Forge file's ribbon command.
     Fg(FgCmd),
+    /// Into an environment (`env/`), from its tile, a deep link or the agent; out of the one in
+    /// (its Finish); one of its own ribbon commands.
+    EnterEnv(env::EnvId),
+    ExitEnv,
+    Env(env::EnvId, u16),
+    /// Photo, Record and their settings (`capture.rs`), on every environment's ribbon.
+    Capture(capture::Capture),
+    /// The Manufacture workspace's command.
+    Cam(cam::Ask),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
     Versions(versions::VersionsCmd),
+    /// The Machine Builder workspace (shell/machine.rs), opened or closed.
+    MachineBuilder,
+    /// A Machine Builder command (its ribbon groups, the environment).
+    Machine(machine::MachineCmd),
     /// Measure, Section, iProperties and the centre of gravity.
     Inspect(inspect::InspectCmd),
     /// A sheet metal command, from the Sheet Metal or Flat Pattern tab.
@@ -328,6 +357,8 @@ pub struct Shell {
     pub cube_region: Option<[i8; 3]>,
     /// The part's picture, drawn by the renderer this same frame.
     pub view_tex: Option<egui::TextureId>,
+    /// Laid over `view_tex` when an environment draws the view itself: its view cube.
+    pub view_over_tex: Option<egui::TextureId>,
     /// The view cube's words, in the view's device pixels: real type over its picture.
     pub cube_labels: Vec<crate::viewcube::Label>,
     pub cube_place: Option<crate::viewcube::Place>,
@@ -366,6 +397,15 @@ pub struct Shell {
     pub file_menu: bool,
     /// The sheet metal environment: its tabs, dialogs and flat pattern.
     pub sheet: sheet::SheetUi,
+    /// The environment the document is in (`env/`), if any.
+    pub env: Option<env::EnvId>,
+    /// The Render Studio's choices (`studio_env.rs`): appearances, light, camera, output.
+    pub studio: studio_env::StudioUi,
+    /// Photo and Record's settings and progress (`capture.rs`).
+    pub capture: capture::CaptureUi,
+    /// This frame, the environment draws the view itself: the view's own chrome (its toolbar,
+    /// the cube's words, the navigation bar) stands down.
+    pub view_owned: bool,
     style_set: Option<bool>,
     /// Measure, the section views, iProperties (`inspect.rs`).
     pub inspect: inspect::Inspect,
@@ -375,12 +415,22 @@ pub struct Shell {
     pub new_drawing: Option<drawing::NewDrawing>,
     /// A DWG file is open: AutoCAD's layout instead of the model's (`dwgdoc.rs`).
     pub dwgdoc: Option<dwgdoc::DwgDoc>,
+    /// A robot document is open: its panel beside its source (`robot_ui.rs`).
+    pub robot: Option<robot::RobotPanel>,
+    /// A machining document is open: the Manufacture workspace over its part (`cam/`).
+    pub cam: Option<cam::CamWs>,
+    /// A machining document's toolpath and stock simulation (`gui_camsim_panel.rs`).
+    pub camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
+    /// The simulation being made off the window's thread, and the workspace focus it last took.
+    pub camsim_job: crate::gui_camsim_panel::SimJob,
     /// What's set in Settings, and its window.
     pub settings: settings::Settings,
     pub prefs: settings::Window,
     /// The left panel's Agent tab (`agent.rs`).
     pub agent: agent::AgentTab,
     pub versions: versions::Versions,
+    /// The Machine Builder workspace, while it is open.
+    pub machine: Option<machine::MachineUi>,
     /// The open documents' tabs, and which is in the window.
     pub doc_tabs: Vec<docs::DocTab>,
     pub active_doc: usize,
@@ -397,6 +447,7 @@ pub struct Shell {
 
 impl Default for Shell {
     fn default() -> Shell {
+        capture::install();
         Shell {
             theme: theme::DARK,
             tab: 0,
@@ -410,6 +461,7 @@ impl Default for Shell {
             cube_menu_fresh: false,
             cube_region: None,
             view_tex: None,
+            view_over_tex: None,
             cube_labels: Vec::new(),
             cube_place: None,
             camera: None,
@@ -431,15 +483,24 @@ impl Default for Shell {
             overlays: [PART_OVERLAYS, ASM_OVERLAYS],
             file_menu: false,
             sheet: sheet::SheetUi::new(),
+            env: None,
+            studio: Default::default(),
+            capture: Default::default(),
+            view_owned: false,
             style_set: None,
             inspect: Default::default(),
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            robot: None,
+            cam: None,
+            camsim: None,
+            camsim_job: Default::default(),
             settings: Default::default(),
             prefs: Default::default(),
             agent: Default::default(),
             versions: Default::default(),
+            machine: None,
             doc_tabs: Vec::new(),
             active_doc: 0,
             close_ask: None,
@@ -515,7 +576,7 @@ impl Shell {
 
     /// The view's switches, top left over a Forge file's view: on ones filled.
     fn view_toolbar(&mut self, ctx: &egui::Context) {
-        if self.fg.is_none() || self.view_rect.width() < 200.0 {
+        if self.fg.is_none() || self.view_rect.width() < 200.0 || self.view_owned {
             return;
         }
         let t = self.theme;
@@ -523,6 +584,12 @@ impl Shell {
         let o = self.overlays();
         let mut flip = None;
         let mut places = Vec::new();
+        // short of the view cube: a narrow view (a small window, the properties column open)
+        // shows the switches that fit left of it (all of them stay in Settings)
+        let ppp = ctx.pixels_per_point();
+        let limit = self
+            .cube_place
+            .map_or(self.view_rect.right(), |c| self.view_rect.min.x + c.at.0 / ppp - 8.0);
         let r = egui::Area::new(egui::Id::unique("view-toolbar"))
             .fixed_pos(at)
             .order(egui::Order::Middle)
@@ -532,6 +599,9 @@ impl Shell {
                     for (name, word) in OVERLAY_SWITCHES {
                         let on = o.get(name);
                         let g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(12.0), t.ink));
+                        if ui.cursor().min.x + g.size().x + 18.0 > limit {
+                            break;
+                        }
                         let (r, resp) = ui.allocate_exact_size(vec2(g.size().x + 18.0, 24.0), Sense::click());
                         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::CheckBox, true, on, word));
                         let p = ui.painter();
@@ -687,6 +757,7 @@ impl Shell {
         }
         self.places.clear();
         self.view_blocks.clear();
+        self.env_sync();
         self.doc_keys(ui);
         self.voice_keys(&ctx);
         let s = ctx.content_rect();
@@ -712,9 +783,11 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
+        // an environment's docked properties take the right of the window
+        let props_w = self.env_properties_width();
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width()), snap(bottom)),
+            pos2(snap(s.width() - props_w), snap(bottom)),
         );
 
         p.rect_filled(
@@ -725,8 +798,16 @@ impl Shell {
         if let Some(tex) = self.view_tex {
             let whole = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
             p.image(tex, self.view_rect, whole, Color32::WHITE);
+            // what an environment lays over a picture of its own (the Render Studio's view cube)
+            if let Some(over) = self.view_over_tex {
+                p.image(over, self.view_rect, whole, Color32::WHITE);
+            }
         }
-        self.cube_words(ui, ppp);
+        self.view_owned = false;
+        self.env_draw(ui);
+        if !self.view_owned {
+            self.cube_words(ui, ppp);
+        }
         // nothing open: where to start
         if self.fg.is_none() && self.cube_place.is_none() {
             self.empty_state(ui);
@@ -737,16 +818,25 @@ impl Shell {
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
         self.side(ui, side);
+        if props_w > 0.0 {
+            let r = Rect::from_min_max(pos2(s.width() - props_w, top), pos2(s.width(), bottom));
+            self.env_properties(ui, r);
+        }
         self.side_splitter(ui, side, s.width());
         self.docs_and_status(ui, s, bottom);
-        self.navbar(&ctx);
+        if !self.view_owned {
+            self.navbar(&ctx);
+        }
         self.window_ui(&ctx);
+        self.camsim_ui(&ctx);
         // a dialog holds its numbers while it's up; a sketch has its own
         if self.fg.as_ref().is_some_and(|p| p.tool.is_none()) && self.sketch.is_none() {
             self.fg_dim_ui(&ctx);
         }
         self.thermo_probes(&ctx);
         self.thermo_ui(&ctx);
+        self.env_panels(&ctx);
+        self.cam_ui(&ctx);
         self.harness_ui(&ctx);
         self.fg_dialog(&ctx);
         self.fg_sketches_ui(&ctx);
@@ -758,10 +848,12 @@ impl Shell {
         self.fg_issues_window(&ctx);
         self.cutlist_window(&ctx);
         self.sheet_ui(&ctx);
+        self.machine_ui(&ctx);
         self.build_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
+        capture::panels(self, &ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
         self.settings_window(&ctx);
@@ -897,12 +989,19 @@ impl Shell {
         );
         self.note("title:name", r);
 
+        // a page has no window of its own to minimize, maximize or close: none drawn there
+        // (they were, and did nothing)
         let wins = [
             ("minimize", "minimize", "Minimize", Action::Minimize),
             ("maximize", "maximize", "Maximize", Action::Maximize),
             ("close", "close", "Close", Action::Close),
         ];
-        for (k, (name, icon, tip, action)) in wins.into_iter().enumerate() {
+        let wins = if cfg!(target_arch = "wasm32") {
+            &[][..]
+        } else {
+            &wins[..]
+        };
+        for (k, &(name, icon, tip, action)) in wins.iter().enumerate() {
             let r = Rect::from_min_size(pos2(w - 110.0 + k as f32 * 36.0, 3.0), vec2(34.0, 30.0));
             if self.icon_button(ui, name, r, icon, tip, Color32::WHITE).clicked() {
                 self.out.push(action);
@@ -971,7 +1070,9 @@ impl Shell {
                 ASM_TAB => &"Assemble",
                 HARNESS_TAB => &"Harness",
                 WELD_TAB => &"Weldments",
-                k => &TABS[k],
+                CAM_TAB => &"Manufacture",
+                k if k < TABS.len() => &TABS[k],
+                k => &self.env_tab_name(k).unwrap_or("?"),
             };
             let on = k == self.tab;
             let w = ui
@@ -1011,16 +1112,23 @@ impl Shell {
 
     /// The tabs shown, in order: a sheet metal part's Sheet Metal first, the flat pattern's tab
     /// alone with Inspect, View and Manage.
+    /// In an environment, its own tabs then Inspect, View and Manage; else the design's, then
+    /// Environments (Thermoform, Flat Pattern and the rest are entered from there).
     pub fn tab_order(&self) -> Vec<usize> {
+        if let Some(v) = self.env_tabs() {
+            return v;
+        }
         let fg = self.fg.is_some() && !self.is_asm();
-        if fg && self.sheet.flat_env {
+        if self.cam.is_some() {
+            vec![CAM_TAB, 2, 3, 4]
+        } else if fg && self.sheet.flat_env {
             vec![FLAT_TAB, 2, 3, 4]
         } else if fg && self.sheet.env {
-            vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4]
+            vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4, env::ENV_TAB]
         } else if self.fg.is_some() {
-            vec![0, 1, ASM_TAB, WELD_TAB, HARNESS_TAB, THERMO_TAB, 2, 3, 4]
+            vec![0, 1, ASM_TAB, WELD_TAB, HARNESS_TAB, 2, 3, 4, env::ENV_TAB]
         } else {
-            vec![0, 1, THERMO_TAB, 2, 3, 4]
+            vec![0, 1, 2, 3, 4, env::ENV_TAB]
         }
     }
 
@@ -1043,6 +1151,7 @@ impl Shell {
             self.agent_ui(ui, tree);
         } else if self.agent.tab == agent::SideTab::Versions {
             self.versions_ui(ui, tree);
+        } else if self.env_browser(ui, tree) {
         } else if self.is_asm() && self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {
@@ -1085,17 +1194,48 @@ impl Shell {
         let st = Rect::from_min_size(pos2(0.0, bottom + DOCS_H), vec2(s.width(), STATUS_H));
         p.rect_filled(st, 0.0, t.bar);
         let x = self.voice_status(ui, 6.0, st);
-        let said = p.text(
-            pos2(x + 4.0, st.center().y),
-            Align2::LEFT_CENTER,
-            if self.status.is_empty() && self.unshown {
-                "This part built but some of it can't be drawn: fix or delete what the tree marks"
-            } else {
-                &self.status
-            },
-            sans(12.0),
-            Color32::WHITE,
-        );
+        // an environment owns the status bar too
+        let env_line = self.env_status();
+        let status = shown(&self.status);
+        let line: &str = if let Some(l) = &env_line {
+            l
+        } else if self.status.is_empty() && self.unshown {
+            "This part built but some of it can't be drawn: fix or delete what the tree marks"
+        } else {
+            &status
+        };
+        // a refusal's fix a click away (Manufacture: the unplaced setup's dialog): always seen,
+        // the words before it cut to fit (the whole on hover), never under the markup toggle
+        let fix = if self.tab == CAM_TAB { self.cam.as_ref().and_then(cam::status_fix) } else { None };
+        let fix_g = fix.as_ref().map(|(label, _)| ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), sans(12.0), Color32::WHITE)));
+        let room = (s.width() - 330.0 - 12.0 - fix_g.as_ref().map_or(0.0, |g| g.size().x + 28.0) - (x + 4.0)).max(40.0);
+        let mut job = egui::text::LayoutJob::simple_singleline(line.to_string(), sans(12.0), Color32::WHITE);
+        job.wrap = egui::text::TextWrapping { max_width: room, max_rows: 1, break_anywhere: true, overflow_character: Some('\u{2026}') };
+        let g = ui.fonts_mut(|f| f.layout_job(job));
+        let elided = g.size().x >= room - 1.0;
+        let said = Rect::from_min_size(pos2(x + 4.0, st.center().y - g.size().y * 0.5), g.size());
+        p.galley(said.min, g, Color32::WHITE);
+        // the whole line on hover when cut; a release refusal's detail (its rule, the syntax) too
+        let detail = if self.tab == CAM_TAB { self.cam.as_ref().and_then(cam::release_words).map(|b| b.detail) } else { None };
+        if elided || detail.is_some() {
+            let r = ui.interact(said, ui.scope_id().with("status-line"), Sense::hover());
+            r.on_hover_text(match (elided, detail) {
+                (true, Some(d)) => format!("{line}\n\n{d}"),
+                (false, Some(d)) => d,
+                _ => line.to_string(),
+            });
+        }
+        if let (Some((label, action)), Some(g)) = (fix, fix_g) {
+            let fr = Rect::from_min_size(pos2(said.right() + 12.0, st.top() + 2.0), vec2(g.size().x + 16.0, STATUS_H - 4.0));
+            let r = ui.interact(fr, ui.scope_id().with("status-fix"), Sense::click());
+            r.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, label));
+            p.rect_filled(fr, 3.0, Color32::from_white_alpha(if r.hovered() { 56 } else { 36 }));
+            p.galley(pos2(fr.left() + 8.0, fr.center().y - g.size().y * 0.5), g, Color32::WHITE);
+            self.note("status:fix", fr);
+            if r.clicked() {
+                self.out.push(action);
+            }
+        }
         // markup for the agent, on or off
         let mr = Rect::from_min_size(
             pos2(s.width() - 330.0, st.top() + 2.0),
@@ -1211,6 +1351,7 @@ impl Shell {
 
     /// Esc backs out one level, wherever one is: never two, and never none.
     fn escape_one_level(&mut self, ctx: &egui::Context) {
+        fgasm::escape_clear(ctx);
         if !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             return;
         }
@@ -1224,11 +1365,21 @@ impl Shell {
             self.file_menu = false;
             self.cube_menu = None;
             self.marking = None;
+        } else if let Some(w) = self.cam.as_mut().filter(|w| w.escape_level()) {
+            // the Manufacture workspace: its dialog, else its floating window
+            w.escape();
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.renaming.is_some()) {
             p.renaming = None;
         } else if let Some(p) = self.fg.as_mut().filter(|p| p.tool.is_some()) {
             p.tool = None;
             self.status.clear();
+        // the dialogs up over the view, each as its Cancel or × (Esc closed none of them)
+        } else if self.content.open {
+            self.content.open = false;
+        } else if let Some(p) = self.fg.as_mut().filter(|p| p.occ_edit.is_some()) {
+            p.occ_edit = None;
+        } else if let Some(t) = self.fg.as_ref().and_then(|p| p.asm.as_ref()?.tool.as_ref()) {
+            fgasm::escape_to(ctx, t.head());
         } else if let Some(p) = self
             .fg
             .as_mut()
@@ -1405,7 +1556,8 @@ impl Shell {
     }
 
     fn resize_edges(&mut self, ui: &mut Ui, s: Rect) {
-        if self.view.maximized {
+        // a page's edges are the browser's: no resize cursor there for a resize that never comes
+        if self.view.maximized || cfg!(target_arch = "wasm32") {
             return;
         }
         let Some(at) = ui.ctx().input(|i| i.pointer.hover_pos()) else {
@@ -1450,13 +1602,16 @@ impl Shell {
             // a Forge file is written when asked (Ctrl+S too)
             items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
             items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
-            // the part's mesh for printing and viewers: written natively, beside the part
-            if cfg!(not(target_arch = "wasm32")) {
+            // the part's mesh for printing and viewers: natively where the file dialog says, in a
+            // page to the browser's downloads
+            {
                 use forge_lang::meshfile::Format;
+                // ("..." where a file dialog follows: in a page the file downloads at once)
+                let page = cfg!(target_arch = "wasm32");
                 for (label, f) in [
-                    ("Export STL...", Format::Stl),
-                    ("Export 3MF...", Format::ThreeMf),
-                    ("Export OBJ...", Format::Obj),
+                    (if page { "Export STL" } else { "Export STL..." }, Format::Stl),
+                    (if page { "Export 3MF" } else { "Export 3MF..." }, Format::ThreeMf),
+                    (if page { "Export OBJ" } else { "Export OBJ..." }, Format::Obj),
                 ] {
                     items.push((label, model_open.then_some(Action::ExportMesh(f))));
                 }
@@ -1706,6 +1861,17 @@ enum MenuResult {
 }
 
 /// A flat menu at a point; closes on Esc or a press outside it.
+/// What the status bar shows of `s`: in a page, the project's files by their path in the
+/// project ("weldments/gate_frame-cutlist.csv"): where the page keeps them (`/project`) is its own
+/// business.
+pub fn shown(s: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(target_arch = "wasm32") && s.contains("/project/") {
+        s.replace("/project/", "").into()
+    } else {
+        s.into()
+    }
+}
+
 fn menu_at(
     ctx: &egui::Context,
     id: &str,
@@ -1762,12 +1928,27 @@ fn menu_at(
                 }
             }
         });
-    let outside = ctx.input(|i| {
-        i.pointer.any_pressed()
-            && i.pointer
-                .interact_pos()
-                .is_some_and(|p| !inner.response.rect.contains(p))
+    // the frame a menu first shows, the press that opened it is no press outside it: when the
+    // press and its release came in one frame (a tap, or a page whose frames lag the mouse) the
+    // menu shut in the frame it opened, so File never opened in a browser
+    let frame = ctx.cumulative_frame_nr();
+    let shown = egui::Id::unique(id).with("shown");
+    // (the frame it first showed in, the last): shown again the frame after, it is still open
+    let opened_now = ctx.data_mut(|d| {
+        let first = match d.get_temp::<(u64, u64)>(shown) {
+            Some((first, last)) if last + 1 >= frame => first,
+            _ => frame,
+        };
+        d.insert_temp(shown, (first, frame));
+        first == frame
     });
+    let outside = !opened_now
+        && ctx.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|p| !inner.response.rect.contains(p))
+        });
     if matches!(out, MenuResult::Open) && (outside || ctx.input(|i| i.key_pressed(egui::Key::Escape))) {
         out = MenuResult::Close;
     }

@@ -1,0 +1,6 @@
+group eu, 2026-11-23
+No host refused and no gated document was needed.
+- cache.industry.siemens.com: 200 for PGM_0407_en.pdf, PGsl_0313_en_en-US.pdf, PGZ_1106_en.pdf
+- content.heidenhain.de: 200 for 892909-2C.pdf, 1303406-22.pdf
+Not found on an open Siemens host: an ISO Milling/ISO Dialects manual newer than 04.2007 in English (2009/2012/2019 editions seen only on scribd.com/manualmachine.com, third-party, not used).
+Not fetched (time): TNC 620 and TNC7 ISO manuals.

@@ -1,0 +1,127 @@
+{
+ "vendor": "Brother",
+ "model": "M200X3",
+ "family": "SPEEDIO M-X3 compact multi-tasking",
+ "source": [
+  "https://machinetool.global.brother/en-eu/mx3/spec/index.aspx (redirects to https://machinetool.global.brother/en-eu/all-products/mx3/m200x3)"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "mill-turn",
+ "architecture": "Vertical BT30 milling spindle over a table-side trunnion: published as tilt axis A (-30 to +120 deg, roller gear cam, backlashless, clampless) carrying a C turning spindle (built-in direct-drive motor; used as indexing table, turning spindle and cutting-feed rotary). The trunnion has a 'table side' (C spindle) and a 'tail side' support (separate load ratings). Turning is done with stationary turning tools held in the milling spindle (double plunger lock). Brother publishes this tilt as A (by ISO convention, about X); the brief's 'B tilt' is NOT what Brother publishes. Which unit carries X/Y/Z is not stated on the fetched page.",
+ "control": {
+  "standard": "Brother CNC-C00 (12.1in LCD), 5 axes X,Y,Z,A,C; linear interp 4 axes",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 200,
+  "Y": 440,
+  "Z": 305
+ },
+ "rotary": {
+  "A": {
+   "range_deg": [
+    -30,
+    120
+   ],
+   "rapid_rpm": 60,
+   "indexing_or_full": "full; roller gear cam, backlashless"
+  },
+  "B": null,
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 200,
+   "indexing_or_full": "full; turning spindle max 2,000 rpm, 3.6 kW motor, 55 N·m / 8.7 kW max"
+  }
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 40,
+ "rotary_table_dia_mm": 140,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": "Table top per ISO 702-4 nose No.5 (JIS B6109-2)",
+ "spindle": {
+  "rpm_max": 10000,
+  "rpm_min": 10,
+  "taper_or_interface": "7/24 No.30 MAS-BT30, pull stud MAS-P30T-2",
+  "power_kw": {
+   "cont": 7.0,
+   "30min": null,
+   "peak/other": "10.1 (10-min); 18.9 max output"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 40
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": "tail-side support on trunnion (load 11 kg)",
+ "rapid_m_min": {
+  "X": 50,
+  "Y": 50,
+  "Z": 50,
+  "A_or_B_rpm": 60,
+  "C_rpm": 200
+ },
+ "max_cutting_feed_m_min": 30,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 22,
+  "options": [],
+  "tool_to_tool_s": 0.8,
+  "chip_to_chip_s": 1.5,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": 200,
+  "max_tool_kg": 3
+ },
+ "coolant": {
+  "through_spindle": "optional",
+  "notes": "CTS optional (cyclone filter tank special option on M-X3)"
+ },
+ "overall_mm": {
+  "W": 1280,
+  "D": 3862,
+  "H": 2603
+ },
+ "weight_kg": 2750,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.max_tool_dia_empty_adjacent_mm",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.torque_nm.cont",
+  "table_height_from_floor_mm"
+ ],
+ "options": [
+  "16,000 rpm spindle (7.4/5.1 kW)",
+  "BIG-PLUS",
+  "CTS",
+  "BV7-870 loading system (weight 3,050 kg with it)"
+ ],
+ "notes": "Sibling M300X3 on same page: X300, table D170, 75 kg, turning 1,500 rpm 102 N·m 9.9 kW, A index 50 rpm, weight 2,880 kg. M200X3: table-side 40 kg / 0.29 kg·m², tail-side 11 kg / 0.04 kg·m². Tool-to-tool 0.8 s in spec table but 0.9 s in the overview text (table value recorded). Max jig size dia 300 x H300 mm reported in a search snippet only (not verified on fetched page). Page lists M-X3 as 'Discontinued'; current successors M200Xd1/M300Xd1/M300Xd2. Overall W x D = required floor space. Cutting feed 30 m/min only in high accuracy mode B."
+}

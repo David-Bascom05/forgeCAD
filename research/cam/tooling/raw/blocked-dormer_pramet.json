@@ -1,0 +1,10 @@
+{
+ "source": "Dormer Pramet",
+ "blocked": [
+  {
+   "url": "https://dormerpramet.com/p/7977112",
+   "why": "HTTP 200, 2.8 kB Angular shell (\"Loading...\"); product data only via JavaScript/backend API - not used"
+  }
+ ],
+ "records": []
+}

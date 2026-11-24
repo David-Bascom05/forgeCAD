@@ -1,0 +1,14 @@
+# generic-mill-turn main chuck on C (r 105, 90 long, face at z = 0).
+# frame: the machine's base frame at the home pose.
+shared R = 105
+shared L = 90
+shared bore = 60
+
+sketch plan(on: offset(xy, -L)) {
+  outline = circle((0, 0), R)
+}
+body = extrude(plan.outline, L)
+sketch bb(on: body.end) {
+  c = circle((0, 0), bore / 2)
+}
+through = cut(bb.c, L)

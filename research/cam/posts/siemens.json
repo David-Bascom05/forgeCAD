@@ -1,0 +1,219 @@
+{
+ "dialect": "siemens",
+ "control": "SINUMERIK 840D sl / 828D in ISO Dialect Milling mode (G291)",
+ "sources": [
+  {
+   "id": "S1",
+   "url": "https://cache.industry.siemens.com/dl/files/188/28755188/att_27502/v1/PGM_0407_en.pdf",
+   "title": "SINUMERIK 802D sl/840D/840D sl/840Di/840Di sl/810D Programming Manual ISO Milling (PGM)",
+   "edition": "04.2007, 6FC5398-7BP10-0BA0; valid for 840D sl/DE sl SW 1.4 (828D not in validity list)",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S2",
+   "url": "https://cache.industry.siemens.com/dl/files/554/74475554/att_56792/v1/PGsl_0313_en_en-US.pdf",
+   "title": "SINUMERIK 840D sl / 828D Fundamentals Programming Manual",
+   "edition": "03/2013, 6FC5398-1BP40-3BA1; CNC software 4.5 SP2",
+   "taken": "2026-11-23"
+  }
+ ],
+ "items": {
+  "native_language_and_iso_mode": {
+   "value": "Native = Siemens G-code mode (G290, default on boot). ISO Dialect mode selected with G291, programmed alone in its own block; G290 returns to Siemens mode. Machine data can make the control boot directly in ISO Dialect mode. ISO and Siemens code cannot be mixed in one block; Siemens functions other than subprogram calls need a switch to G290 first. Active tool, tool offsets and zero offsets are unchanged by the switch.",
+   "source": "S1",
+   "where": "1.1.1-1.1.3, pp. 1-11..1-12; G code table group 31, p. C-214",
+   "note": ""
+  },
+  "program_open": {
+   "value": "G291 (own block) as first block of an ISO program unless the machine boots in ISO mode; then e.g. G21 in its own block at the beginning (manual example: 'G291;' then 'G20;').",
+   "source": "S1",
+   "where": "1.1.3 p. 1-12; 3.2.2 p. 3-60 (Fig. 3-13)",
+   "note": "No O-number / '%' program header is described for ISO mode in S1. File-transfer naming (%_N_NAME_MPF) is from Siemens native docs, see siemens-native.json."
+  },
+  "program_close": {
+   "value": "M30 (end of tape: NC reset) or M02 (end of program: NC reset); behavior after end is machine-builder defined. M99 = end of subprogram, M98 = subprogram call.",
+   "source": "S1",
+   "where": "3.6.3 pp. 3-87..3-88; 3.6.4 p. 3-88",
+   "note": ""
+  },
+  "comment": {
+   "value": "Both: round brackets ( ) are the ISO-mode comment; ';' to end of line is also accepted in ISO mode. Nested '(' must all be closed before the comment ends.",
+   "source": "S1",
+   "where": "1.1.7 p. 1-15",
+   "note": ""
+  },
+  "line_numbers": {
+   "value": "N word allowed (manual examples: N5, N01, N0120, N3000). Required? not stated. Maximum: not stated in S1.",
+   "source": "S1",
+   "where": "examples 1.1.7 p. 1-15, 4.1.15 p. 4-129",
+   "note": "max N value UNKNOWN for ISO mode; native-mode block rules (S2 p. 37) say N + positive integer, block max 512 chars."
+  },
+  "block_end": {
+   "value": "Newline (LF). Manual shows ';' at end of ISO example blocks, but in this control ';' starts a comment, so a trailing ';' is harmless (treated as empty comment).",
+   "source": "S1",
+   "where": "1.1.7 p. 1-15 (';' = comment); S2 2.2.2 p. 37 (block ends with LF)",
+   "note": "LF rule from S2 (native manual); S1 does not separately define block end."
+  },
+  "safe_start": {
+   "value": "G291 (own block, mode switch); G21 (metric, own block at program start); G90; G94; G17 (power-on default); G40; G49 (or H00); G80.",
+   "source": "S1",
+   "where": "G291 1-12; G21 3.2.2 p. 3-60; G90/G91 3.2.1 p. 3-59; G94 1.2.4 p. 1-21; G17 p. 2-27; G40 3.5.3 p. 3-76; G49 3.5.2 p. 3-74; G80 4.1.14 p. 4-127",
+   "note": "G71/G70 are NOT the metric/inch codes in ISO mode (G20/G21 are); G70/G71 are native Siemens."
+  },
+  "tool_change": {
+   "value": "T function format is machine-builder defined (S1 3.6.2 refers to MTB). Manual example uses 'T11 M6' in one block. M6 may also be mapped to a macro via $MN_EXTERN_M_NO_MAC_CYCLE.",
+   "source": "S1",
+   "where": "3.6.2 p. 3-87; example 4.1.15 p. 4-129 (N006 G90 G00 Z250.0 T11 M6); 3.6.5 p. 3-88..3-89",
+   "note": "D word in ISO mode is the radius-offset number; H is the length-offset number (mapped to Siemens T/D via $TC_DPH)."
+  },
+  "tool_length_comp": {
+   "value": "G43 Z.. H.. (add) / G44 (subtract) / G49 or H00 cancel; modal, group 08; only allowed in G00/G01 mode.",
+   "source": "S1",
+   "where": "3.5.1-3.5.2 pp. 3-73..3-74",
+   "note": ""
+  },
+  "spindle": {
+   "value": "S up to 5 digits, rpm; M03 CW, M04 CCW, M05 stop (M03<->M04 needs M05 between, generally).",
+   "source": "S1",
+   "where": "3.6.1 p. 3-86; Table 3-16 p. 3-90",
+   "note": ""
+  },
+  "work_offset": {
+   "value": "G54..G59, plus G54 P1..P100 (extended); power-on default G54; G92 set; G52 local; G53 machine coords (one-shot).",
+   "source": "S1",
+   "where": "3.1.4 p. 3-45; G53 3.1.1 p. 3-42",
+   "note": "p. 3-46 says G54 P{1...93} for the frame-mapping variant; range depends on version/MD."
+  },
+  "arc_format": {
+   "value": "G17 G02/G03 X Y with I J (signed distance start->center, i.e. incremental) or R (radius). G18: K I; G19: J K. End point per G90/G91. Helical: add 3rd axis.",
+   "source": "S1",
+   "where": "2.1.3 pp. 2-26..2-29; 2.1.4 p. 2-32",
+   "note": ""
+  },
+  "rapid_linear": {
+   "value": "G00 rapid positioning (axes may move independently, non-straight path unless MD EXTERN_G0_LINEAR_MODE); G01 linear at F.",
+   "source": "S1",
+   "where": "2.1.1 pp. 2-23..2-24; 2.1.2 p. 2-25",
+   "note": ""
+  },
+  "feed_word": {
+   "value": "F in mm/min under G94 (6-digit); G95 per rev; G93 inverse time. F0 gives an alarm (or rapid if F1-digit feed active); negative F not allowed.",
+   "source": "S1",
+   "where": "1.2.2 pp. 1-17..1-19; 1.2.4-1.2.5 p. 1-21",
+   "note": ""
+  },
+  "decimal_point": {
+   "value": "Machine-data dependent (MD 10884): 'pocket calculator' notation -> X1000 = 1000 mm; 'standard' notation -> value without point times increment: IS-B X1000 = 1 mm, IS-C X1000 = 0.1 mm. With a decimal point the value is always mm. Applies to X Y Z U V W A B C I J K Q R F.",
+   "source": "S1",
+   "where": "1.1.6 pp. 1-13..1-14 (Table 1-1)",
+   "note": "Post should always write a decimal point on these addresses in ISO mode."
+  },
+  "max_digits": {
+   "value": "F: 6 digits; S: 5 digits; M: up to 3 digits, up to 5 M codes per block. IS-B resolution 0.001 mm, IS-C 0.0001 mm; G04 X range IS-B 0.001..99999.999.",
+   "source": "S1",
+   "where": "1.2.2 p. 1-17; 3.6.1 p. 3-86; 3.6.3 p. 3-87; p. 3-90; Table 1-1 p. 1-13; Table 3-7 p. 3-67",
+   "note": "Axis-word max digits not stated."
+  },
+  "retract_home": {
+   "value": "G28 X.. Y.. Z.. (via intermediate point to reference point; manual uses 'G28 G91 X0 Y0 Z0'); or G53 X.. Y.. Z.. (machine coordinates, one-shot, absolute only).",
+   "source": "S1",
+   "where": "2.2.1 p. 2-34; example 4.1.4 p. 4-104; G53 3.1.1 p. 3-42",
+   "note": ""
+  },
+  "coolant_flood": {
+   "value": "M08 coolant ON (listed as general M code; function defined by machine builder).",
+   "source": "S1",
+   "where": "Table 3-16 p. 3-90",
+   "note": ""
+  },
+  "coolant_mist": {
+   "value": null,
+   "source": "UNKNOWN",
+   "where": null,
+   "note": "Not listed in S1. Memory says M07 commonly, unverified."
+  },
+  "coolant_through_spindle": {
+   "value": null,
+   "source": "UNKNOWN",
+   "where": null,
+   "note": "Not in S1; machine-builder M code."
+  },
+  "coolant_off": {
+   "value": "M09 coolant OFF (general M code, MTB defined).",
+   "source": "S1",
+   "where": "Table 3-16 p. 3-90",
+   "note": ""
+  },
+  "dwell": {
+   "value": "G04 X_ (seconds, decimal allowed) or G04 P_ (no decimal, units of 0.001 s) in G94 mode; in G95 mode unit is spindle revolutions. Block must contain only G04.",
+   "source": "S1",
+   "where": "3.3.1 p. 3-67 (Tables 3-7, 3-8)",
+   "note": ""
+  },
+  "drill_G81": {
+   "value": "G81 X.. Y.. Z.. R.. F.. K..; Z = hole bottom, R = R level, K = repeats; modal until G80/G00-G03.",
+   "source": "S1",
+   "where": "4.1.4 pp. 4-103..4-104",
+   "note": ""
+  },
+  "dwell_drill_G82": {
+   "value": "G82 X.. Y.. Z.. R.. P.. F.. K..; P = dwell at bottom (example P1000 = 1 s).",
+   "source": "S1",
+   "where": "4.1.5 pp. 4-105..4-106",
+   "note": ""
+  },
+  "peck_G83": {
+   "value": "G83 X.. Y.. Z.. R.. Q.. F.. K..; Q = depth per peck, incremental, no sign; retract to R each peck; re-approach distance d from GUD _ZSFR[10].",
+   "source": "S1",
+   "where": "4.1.6 pp. 4-107..4-108",
+   "note": ""
+  },
+  "chip_break_G73": {
+   "value": "G73 X.. Y.. Z.. R.. Q.. F.. K..; retract amount d from GUD _ZSFR[1] (0 means 1 mm).",
+   "source": "S1",
+   "where": "4.1.2 p. 4-98; Table 4-2 p. 4-92",
+   "note": ""
+  },
+  "rigid_tap_G84": {
+   "value": "G84 X.. Y.. Z.. R.. P.. F.. K..; under G94 F = feed mm/min (lead = F/S); under G95 F = lead mm/rev. P = dwell at bottom and at R. MD $MC_EXTERN_FUNCTION_MASK bit 8 = 1 makes F the thread pitch. Left-hand: G74. Rigid vs floating chosen by GUD _ZSFI[1].",
+   "source": "S1",
+   "where": "4.1.11 pp. 4-118..4-120; 1.1.6 p. 1-14; Table 4-2 p. 4-93",
+   "note": ""
+  },
+  "bore_ream_G85": {
+   "value": "G85 X.. Y.. R.. F.. K.. (Z = bottom); feed in and feed out.",
+   "source": "S1",
+   "where": "4.1.7 p. 4-109; Table 4-3 p. 4-93",
+   "note": ""
+  },
+  "return_level_G98_G99": {
+   "value": "G98 return to initial level (usual power-on default); G99 return to R level; modal.",
+   "source": "S1",
+   "where": "4.1.1 pp. 4-96..4-97",
+   "note": ""
+  },
+  "cycle_cancel_G80": {
+   "value": "G80 cancels canned cycle and clears R/Z and all cycle addresses; G00-G03 also cancel.",
+   "source": "S1",
+   "where": "4.1.14 p. 4-127; p. 4-97",
+   "note": ""
+  },
+  "peck_depth_word": {
+   "value": "Q (incremental, unsigned)",
+   "source": "S1",
+   "where": "4.1.6 p. 4-107",
+   "note": ""
+  },
+  "cycle_dwell_units": {
+   "value": "P in milliseconds (example G82 ... P1000 = dwell 1 s).",
+   "source": "S1",
+   "where": "4.1.5 p. 4-106",
+   "note": "Units inferred from the worked example; P for G04 is stated as 0.001 s units (p. 3-67)."
+  }
+ },
+ "notes": "ISO canned cycles are implemented as shell cycles that call standard Siemens cycles; cycle parameters live in GUD7 (_ZFPR/_ZSFR/_ZSFI) set by the machine builder. 'Tool offsets are ignored in the canned cycle mode' is stated for each cycle while p. 4-95 says tool length comp must be selected before the cycle; read as length comp applied at R positioning (p. 4-119). Only a 2007 English ISO Milling manual was found openly on Siemens hosts; 2009/2012/2019 editions seen only as third-party copies (Scribd/manualmachine), not used.",
+ "unknown": [
+  "coolant_mist",
+  "coolant_through_spindle"
+ ]
+}

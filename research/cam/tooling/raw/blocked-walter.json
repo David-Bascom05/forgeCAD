@@ -1,0 +1,10 @@
+{
+ "source": "Walter",
+ "blocked": [
+  {
+   "url": "https://www.walter-tools.com/en-us",
+   "why": "HTTP 200, but static HTML has no product or catalogue links; product search is JavaScript - not pursued further"
+  }
+ ],
+ "records": []
+}

@@ -1,6 +1,9 @@
 //! A kernel switch a step's result depends on (the imprint's mode) is in the key of a kept stage:
 //! the same text built after the switch changed is built again, as fresh. Its own binary: the
 //! switch is the whole process's.
+//! The switch exists only under the `imprint_column` feature (off in shipped builds):
+//! `cargo test -p forge-lang --test kept_switches --features imprint_column`.
+#![cfg(feature = "imprint_column")]
 
 use forge_lang::build::Cache;
 use forge_lang::{Options, report};

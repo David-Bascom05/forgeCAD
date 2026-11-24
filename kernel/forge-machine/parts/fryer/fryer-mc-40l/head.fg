@@ -1,0 +1,23 @@
+# fryer-mc-40l head: a conservative envelope solid from published dimensions (see the
+# machine's [[machine.cite]] for body.head); not the maker's CAD.
+# frame: the machine's base frame at the home pose.
+shared b0x0 = -169.5
+shared b0y0 = -169.5
+shared b0z0 = 760.9
+shared b0sx = 339
+shared b0sy = 753.2
+shared b0h = 479.0
+shared c0x = 0
+shared c0y = 0
+shared c0z0 = 660.9
+shared c0r = 74.5
+shared c0h = 99
+
+sketch sb0(on: offset(xy, b0z0)) {
+  outline = rect(corner: (b0x0, b0y0), size: (b0sx, b0sy))
+}
+b0 = extrude(sb0, b0h)
+sketch sc0(on: offset(xy, c0z0)) {
+  c = circle((c0x, c0y), c0r)
+}
+c0 = extrude(sc0.c, c0h)

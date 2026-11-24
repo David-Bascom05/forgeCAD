@@ -1,0 +1,13 @@
+# The arm's base: a square plinth with the shoulder pivot `o` on top.
+shared w = 80
+shared h = 20
+properties(part_number: "ARM-BASE", description: "arm base", material: "A36")
+
+sketch plan(on: xy) {
+  outline = rect(center: (0, 0), size: (w, w))
+}
+plinth = extrude(plan, h)
+sketch top(on: plinth.end) {
+  p = pt(0, 0)
+}
+o = anchor(plane(at: top.p, normal: top.plane.normal, x: plan.outline[0].dir))

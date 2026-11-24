@@ -480,9 +480,9 @@ theorem flood_sound (h : Nat) : ∀ fuel seen stack, (∀ x ∈ seen, b.Reach h 
     | cons f st =>
       simp only [flood] at hx
       have hf := hst f (by simp)
-      have hnew : ∀ y ∈ (b.nbrs f).filter (· ∉ seen), b.Reach h y := by
+      have hnew : ∀ y ∈ ((b.nbrs f).filter (· ∉ seen)).eraseDups, b.Reach h y := by
         intro y hy
-        exact Reach.step hf (List.mem_filter.1 hy).1
+        exact Reach.step hf (List.mem_filter.1 (List.mem_eraseDups.1 hy)).1
       refine ih _ _ ?_ ?_ x hx
       · intro y hy
         rcases List.mem_append.1 hy with hy | hy

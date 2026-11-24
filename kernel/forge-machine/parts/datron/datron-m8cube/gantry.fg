@@ -1,0 +1,34 @@
+# datron-m8cube gantry: a conservative envelope solid from published dimensions (see the
+# machine's [[machine.cite]] for body.gantry); not the maker's CAD.
+# frame: the machine's base frame at the home pose.
+shared b0x0 = -1179.5
+shared b0y0 = 75.5
+shared b0z0 = 200.5
+shared b0sx = 1339
+shared b0sy = 149
+shared b0h = 149
+shared b1x0 = -1179.5
+shared b1y0 = 75.5
+shared b1z0 = -99.5
+shared b1sx = 79
+shared b1sy = 149
+shared b1h = 299
+shared b2x0 = 80.5
+shared b2y0 = 75.5
+shared b2z0 = -99.5
+shared b2sx = 79
+shared b2sy = 149
+shared b2h = 299
+
+sketch sb0(on: offset(xy, b0z0)) {
+  outline = rect(corner: (b0x0, b0y0), size: (b0sx, b0sy))
+}
+b0 = extrude(sb0, b0h)
+sketch sb1(on: offset(xy, b1z0)) {
+  outline = rect(corner: (b1x0, b1y0), size: (b1sx, b1sy))
+}
+b1 = extrude(sb1, b1h)
+sketch sb2(on: offset(xy, b2z0)) {
+  outline = rect(corner: (b2x0, b2y0), size: (b2sx, b2sy))
+}
+b2 = extrude(sb2, b2h)

@@ -1,0 +1,22 @@
+# fadal-vmc-2015h-s-ii table: 25.6 x 15 in published, thickness estimated
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -324.12
+shared y0 = -189.5
+shared z0 = -99
+shared lx = 648.24
+shared ly = 379
+shared lz = 98
+shared cx = 0
+shared cy = 0
+shared cw = 650.24
+shared cl = 18
+shared cd = 14
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)
+sketch top(on: block.end) {
+  r = rect(center: (cx, cy), size: (cw, cl))
+}
+tslot = cut(top.r, cd)

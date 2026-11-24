@@ -25,8 +25,12 @@ id_type!(ShellId);
 pub struct Vertex {
     pub point: Point3,
     pub name: Name,
-    /// The radius of the ball every curve and surface through the vertex meets: LINEAR, or
-    /// more where a boolean could not settle the vertex within LINEAR of all of them.
+    /// The radius of the ball every curve ending at the vertex meets: LINEAR, or more where a
+    /// boolean could not settle the vertex within LINEAR of all of them. Each face through the
+    /// vertex then lies within this and the tolerance of the face's edges at the vertex
+    /// (`Edge::tol`): the bound `check::vertices_off_planes` asks of planes in debug builds. Not
+    /// within this alone: a vertex settled on an edge whose curve is itself near the edge's
+    /// tolerance off its face can sit up to both off it (research/booleans/drift.md §5).
     pub tol: f64,
 }
 
@@ -44,7 +48,9 @@ pub struct Edge {
     pub coedges: Small<CoedgeId, 2>,
     pub name: Name,
     /// How far the edge may lie from its faces: `tol::LINEAR`, or more on an edge read from a
-    /// file, the deviation measured there. Only import sets it; pieces of an edge inherit it.
+    /// file, the deviation measured there, or on an edge a boolean imprinted on a face of the
+    /// other body that it strays from further (`forge_bool`'s `imprint_tols`). Pieces of an edge
+    /// inherit it.
     pub tol: f64,
     /// False once no face uses the edge (after an in-place edit).
     pub alive: bool,
@@ -81,6 +87,10 @@ impl Loop {
             at: self.first,
             end: self.first + self.len,
         }
+    }
+    /// The loop's first coedge's index and its count (as stored: `check` tests them).
+    pub fn span(&self) -> (u32, u32) {
+        (self.first, self.len)
     }
     /// The loop's `i`th coedge.
     pub fn coedge(&self, i: usize) -> CoedgeId {
@@ -134,10 +144,15 @@ pub struct Face {
     pub bbox: Cached<Box3>,
     /// A point-in-face index, kept by whoever built it (the booleans) across edits that leave
     /// the face alone or only add loops to it; compaction drops it (coedge ids change there).
-    pub query: Cached<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
+    pub query: Cached<FaceQuery>,
     /// False once the face is removed by an in-place edit.
     pub alive: bool,
 }
+
+/// A face's point-in-face index, of a type its builder knows (forge-bool's `FaceInfo`): named so
+/// that the translation can hold it as an opaque value.
+#[derive(Clone)]
+pub struct FaceQuery(pub std::sync::Arc<dyn std::any::Any + Send + Sync>);
 
 /// Data derived from an entity and kept with it so it is worked out once.
 /// It takes no part in equality.
@@ -247,6 +262,11 @@ pub struct Body {
     pub unverified: Option<String>,
     /// What of the file was not read into this body, in plain words: solids the reader refused.
     pub left_out: Option<String>,
+    /// At least every vertex's `tol` (0 when none was ever more than `LINEAR`): what a point's
+    /// nearness to the boundary must look past (forge-bool's point_in_face, CacheOK G9). Kept by
+    /// `add_tolerant_vertex` and `grow_vertex_tol`: a vertex's `tol` is raised through those only.
+    /// (Kept as an f32 rounded up, so the body grows by nothing: read it with `vertex_tol()`.)
+    pub vertex_tol: f32,
 }
 
 /// Boxes over runs of face ids (a chunk of 16 faces, a block of 16 chunks), each the hull of
@@ -301,6 +321,7 @@ impl Body {
             unplaced: self.unplaced,
             unverified: self.unverified.clone(),
             left_out: self.left_out.clone(),
+            vertex_tol: self.vertex_tol,
         }
     }
 }
@@ -359,6 +380,15 @@ impl Body {
         }
     }
 
+    /// Coedge `c` is no longer a use of its edge; an edge left with none dies.
+    fn drop_use(&mut self, c: CoedgeId) {
+        let e = self.coedges[c.index()].edge;
+        self.edges[e.index()].coedges.retain(|&x| x != c);
+        if self.edges[e.index()].coedges.is_empty() {
+            self.edges[e.index()].alive = false;
+        }
+    }
+
     /// Removes a face (and its loops) in place. Edges left with no uses die
     /// with it; vertices are left for `compact` to drop.
     pub fn kill_face(&mut self, f: FaceId) {
@@ -375,12 +405,7 @@ impl Body {
         for li in 0..self.faces[f.index()].loops.len() {
             let l = self.faces[f.index()].loops[li];
             for c in self.loops[l.index()].coedges() {
-                let e = self.coedges[c.index()].edge;
-                let edge = &mut self.edges[e.index()];
-                edge.coedges.retain(|&x| x != c);
-                if edge.coedges.is_empty() {
-                    edge.alive = false;
-                }
+                self.drop_use(c);
             }
         }
     }
@@ -530,6 +555,7 @@ impl Body {
             split: std::mem::take(&mut self.split),
             from_file: self.from_file,
             unplaced: self.unplaced,
+            vertex_tol: self.vertex_tol,
             unverified: self.unverified.take(),
             left_out: self.left_out.take(),
         };
@@ -607,6 +633,7 @@ impl Body {
         out.unplaced = self.unplaced;
         out.unverified = self.unverified.clone();
         out.left_out = self.left_out.clone();
+        out.vertex_tol = self.vertex_tol;
         out.joins = self.joins.clone();
         out.vertices.reserve(self.vertices.len());
         out.edges.reserve(self.edges.len());
@@ -793,8 +820,44 @@ impl Body {
     }
 
     /// A vertex with its own tolerance (at least LINEAR).
+    /// Vertex `v`'s tolerance raised to at least `tol`, the body's bound with it.
+    pub fn grow_vertex_tol(&mut self, v: VertexId, tol: f64) {
+        let x = &mut self.vertices[v.index()];
+        x.tol = x.tol.max(tol);
+        let t = x.tol;
+        self.bound_vertex_tol(t);
+    }
+
+    /// The bound raised to at least `tol`, for a writer that raised vertices' tolerances in place
+    /// itself (a scale): `grow_vertex_tol` does both for one vertex.
+    pub fn note_vertex_tol(&mut self, tol: f64) {
+        if tol > forge_math::tol::LINEAR {
+            self.bound_vertex_tol(tol);
+        }
+    }
+
+    /// The bound at least `tol` (an f32 at or above it).
+    fn bound_vertex_tol(&mut self, tol: f64) {
+        if tol > f64::from(self.vertex_tol) {
+            let mut b = tol as f32;
+            if f64::from(b) < tol {
+                b = b.next_up();
+            }
+            self.vertex_tol = b;
+        }
+    }
+
+    /// At least every vertex's tolerance (0 when none was raised past `LINEAR`).
+    pub fn vertex_tol(&self) -> f64 {
+        f64::from(self.vertex_tol)
+    }
+
     pub fn add_tolerant_vertex(&mut self, point: Point3, tol: f64, name: Name) -> VertexId {
         let tol = tol.max(forge_math::tol::LINEAR);
+        // (the bound is read as at least LINEAR: only a tolerant vertex moves it)
+        if tol > forge_math::tol::LINEAR {
+            self.bound_vertex_tol(tol);
+        }
         self.vertices.push(Vertex { point, name, tol });
         VertexId(self.vertices.len() as u32 - 1)
     }
@@ -841,9 +904,9 @@ impl Body {
         self.shells[shell.index()].faces.push(id);
         // the new face is the last: so are its chunk and block
         if let Some(h) = self.hulls.get_mut() {
-            h.chunks.resize_with(id.index() / RUN + 1, Cached::default);
+            h.chunks.resize_with(id.index() / RUN + 1, || Cached::default());
             h.blocks
-                .resize_with(id.index() / (RUN * RUN) + 1, Cached::default);
+                .resize_with(id.index() / (RUN * RUN) + 1, || Cached::default());
             h.chunks[id.index() / RUN].clear();
             h.blocks[id.index() / (RUN * RUN)].clear();
         }
@@ -1094,7 +1157,7 @@ impl Body {
     /// a corner runs counterclockwise from a leaving edge to the next arriving one. Edges are
     /// ordered as they stand a vertex tolerance out along each (to second order: a line and a circle
     /// tangent to it leave in one direction and part by their curvature).
-    fn corners(&self, f: FaceId, v: VertexId) -> Vec<(CoedgeId, CoedgeId)> {
+    pub(crate) fn corners(&self, f: FaceId, v: VertexId) -> Vec<(CoedgeId, CoedgeId)> {
         let at = self.vertex(v);
         let uses: Vec<CoedgeId> = self
             .face(f)
@@ -1165,6 +1228,26 @@ impl Body {
     pub fn partner(&self, c: CoedgeId) -> Option<CoedgeId> {
         let e = self.edge(self.coedge(c).edge);
         e.coedges.iter().copied().find(|&o| o != c)
+    }
+
+    /// The face's outward normal at its point `p`: `face_normal` there, and at a ball's pole,
+    /// where the chart is singular (du = 0) but the sphere is not, its geometric normal
+    /// (p - c) / r. None only where the surface itself has no tangent plane (a cone's apex).
+    pub fn face_normal_at(&self, f: FaceId, p: Point3) -> Option<UnitVec3> {
+        self.face_normal(f, self.face(f).surface.project(p))
+            .or_else(|| self.pole_normal(f, p))
+    }
+
+    /// A ball's geometric normal at `p` (where its chart, not it, is singular); None off a ball.
+    #[cold]
+    #[inline(never)]
+    fn pole_normal(&self, f: FaceId, p: Point3) -> Option<UnitVec3> {
+        let face = self.face(f);
+        let Surface::Sphere(s) = &face.surface else {
+            return None;
+        };
+        let n = (p - s.frame.origin).normalize()?;
+        Some(if face.same_sense { n } else { -n })
     }
 
     /// The face's outward normal at surface parameters `uv`.

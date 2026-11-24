@@ -10,7 +10,7 @@ fn closed(c: (f64, f64), v: &[(f64, f64)]) -> Spline {
         .map(|&(x, y)| Point3::new(c.0 + x, c.1 + y, 0.0))
         .collect();
     p.push(p[0]);
-    Spline::through(&p, None, None).unwrap()
+    Spline::through_periodic(&p).unwrap()
 }
 
 fn pair() -> (Spline, Spline) {
