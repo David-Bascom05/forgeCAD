@@ -54,6 +54,8 @@ enum Ask {
     Apply(forge_lang::error::Op),
     /// The next frame's pixels, for the page (`app_pixels`).
     Pixels(js_sys::Function),
+    /// An environment by name (`?env=`), entered once the document has built.
+    Env(String),
 }
 
 thread_local! {
@@ -403,6 +405,7 @@ impl Host {
                 Ask::Open(p) => self.gui.open(&p),
                 Ask::SaveAs(p) => self.gui.save_as(&p),
                 Ask::Save => self.gui.fg_save(),
+                Ask::Env(e) => self.gui.env_asked = Some(e),
                 Ask::Rebuild => {
                     if let Some(s) = &mut self.gui.fg {
                         s.rebuild();
@@ -637,6 +640,13 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("done", doc.map_or(Json::Null, |s| num(s.done as f64))),
         ("dirty", doc.is_some_and(|s| s.dirty()).into()),
         ("status", g.shell.status.clone().into()),
+        // the environment in (shell/env), its tab, the tabs shown
+        ("env", g.shell.env.map_or(Json::Null, |e| e.key().into())),
+        ("tab", num(g.shell.tab as f64)),
+        (
+            "tabs",
+            Json::Arr(g.shell.tab_order().into_iter().map(|t| num(t as f64)).collect()),
+        ),
         // the last build's time in the worker, ms
         ("build_ms", doc.map_or(Json::Null, |s| num(s.build_ms))),
         ("built", built.unwrap_or(Json::Null)),
@@ -750,6 +760,13 @@ pub fn app_save_as(path: String) {
 #[wasm_bindgen]
 pub fn app_rebuild() {
     ask(Ask::Rebuild);
+}
+
+/// Into an environment (shell/env) by its key or name, once the open document has built;
+/// "exit" leaves the one in.
+#[wasm_bindgen]
+pub fn app_env(name: String) {
+    ask(Ask::Env(name));
 }
 
 #[wasm_bindgen]
