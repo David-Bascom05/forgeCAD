@@ -13,6 +13,7 @@ const SHOTS = [
   ["cam-8-setup.png", ["new-setup"], (s) => s.cam.dialogs.includes("setup")],
   ["cam-9-setup-stock.png", ["new-setup", "tab 1"], (s) => s.cam.dialogs.includes("setup")],
   ["cam-10-checks.png", ["select op1", "checks"], (s) => s.cam.dialogs.includes("checks")],
+  ["cam-12-op-linking.png", ["select prof", "edit prof", "tab 4"], (s) => s.cam.dialogs.includes("op")],
   ["cam-11-new-pocket.png", ["select bore", "new-op pocket", "tab 1"], (s) => s.cam.dialogs.includes("op")],
 ];
 const only = process.argv[3];
