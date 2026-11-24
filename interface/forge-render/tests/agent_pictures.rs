@@ -19,12 +19,23 @@ fn real_png() -> Vec<u8> {
     forge_render::agent::apptools::png(12, 8, &rgb).unwrap()
 }
 
-const JPEG: &[u8] = &[0xFF, 0xD8, 0xFF, 0xE0, 0, 16];
+/// A real 12×8 JPEG (yellow and green halves), so its chip's thumbnail is drawn as a person's
+/// would be.
+const JPEG: &[u8] = include_bytes!("fixtures/tiny.jpg");
 
 #[test]
 fn a_picture_is_known_by_its_bytes_not_its_name() {
     assert_eq!(Picture::sniff(PNG.to_vec()).map(|p| p.media), Some("image/png"));
     assert_eq!(Picture::sniff(JPEG.to_vec()).map(|p| p.media), Some("image/jpeg"));
+    // and both read, for their chips' thumbnails
+    assert_eq!(
+        forge_render::look::decode_image(JPEG).map(|(w, h, _)| (w, h)),
+        Some((12, 8))
+    );
+    assert_eq!(
+        forge_render::look::decode_image(&real_png()).map(|(w, h, _)| (w, h)),
+        Some((12, 8))
+    );
     assert_eq!(
         Picture::sniff(b"GIF89a....".to_vec()).map(|p| p.media),
         Some("image/gif")

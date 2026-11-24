@@ -3199,7 +3199,11 @@ impl Shell {
             // the pictures pasted or dropped, each with its ×
             let mut unpick = None;
             for (k, pic) in self.agent.pictures.iter().enumerate() {
-                let label = format!("Picture {} · {}", k + 1, pic.ext().to_uppercase());
+                let kind = match pic.ext() {
+                    "jpeg" => "JPG".to_string(),
+                    e => e.to_uppercase(),
+                };
+                let label = format!("Picture {} · {kind}", k + 1);
                 let thumb = picture_thumb(ui.ctx(), pic);
                 let cr = picture_chip(ui, &t, pos2(x, y), &label, thumb, box_r.right() - 6.0 - x);
                 let xr = Rect::from_min_size(pos2(cr.right() - 16.0, cr.top()), vec2(16.0, cr.height()));
@@ -3807,11 +3811,14 @@ fn picture_chip(
             Color32::WHITE,
         );
     }
-    p.galley(
-        pos2(r.left() + 7.0 + lead, r.center().y - g.size().y * 0.5),
-        g,
-        t.ink,
-    );
+    // the name stops short of the ×
+    ui.painter()
+        .with_clip_rect(Rect::from_min_max(r.min, pos2(r.right() - 18.0, r.bottom())))
+        .galley(
+            pos2(r.left() + 7.0 + lead, r.center().y - g.size().y * 0.5),
+            g,
+            t.ink,
+        );
     p.text(
         pos2(r.right() - 9.0, r.center().y),
         Align2::CENTER_CENTER,
@@ -3825,6 +3832,34 @@ fn picture_chip(
 /// An id in words, for a chip's hover: "End face of extrude1" for `extrude1.end`; the id as it
 /// is otherwise.
 pub fn describe(id: &str) -> String {
+    // an edge as Forge names it, between two faces: "Edge between extrude1's side and start face"
+    if let Some(inner) = id
+        .strip_prefix("edges(between: (")
+        .or_else(|| id.strip_prefix("edge(between: ("))
+        .and_then(|r| r.strip_suffix("))"))
+        && let Some((a, b)) = split_top(inner)
+    {
+        let face = |f: &str| -> Option<(String, String)> {
+            // a face's own selector less its argument: extrude1.side(sk1.r1[0]) is a side
+            let f = f.split_once('(').map_or(f, |x| x.0).trim();
+            let (feat, role) = f.rsplit_once('.')?;
+            let word = match role {
+                "end" => "end face",
+                "start" => "start face",
+                "side" | "sides" => "side",
+                "bore" => "bore",
+                r => r,
+            };
+            Some((feat.to_string(), word.to_string()))
+        };
+        if let (Some((fa, ra)), Some((fb, rb))) = (face(a), face(b)) {
+            return if fa == fb {
+                format!("Edge between {fa}'s {ra} and {rb}")
+            } else {
+                format!("Edge between {fa}'s {ra} and {fb}'s {rb}")
+            };
+        }
+    }
     let Some((feat, role)) = id.rsplit_once('.') else {
         return id.to_string();
     };
@@ -3838,6 +3873,20 @@ pub fn describe(id: &str) -> String {
         _ => return id.to_string(),
     };
     format!("{what} of {feat}")
+}
+
+/// A selector's two arguments, split at the comma outside any brackets.
+fn split_top(s: &str) -> Option<(&str, &str)> {
+    let mut depth = 0i32;
+    for (k, c) in s.char_indices() {
+        match c {
+            '(' | '[' => depth += 1,
+            ')' | ']' => depth -= 1,
+            ',' if depth == 0 => return Some((s[..k].trim(), s[k + 1..].trim())),
+            _ => {}
+        }
+    }
+    None
 }
 
 /// `describe` mid-sentence: "end face of extrude1"; an id it has no words for, as it is.
@@ -4490,6 +4539,20 @@ mod tests {
         // a table's row whole, in mono: its columns line up
         let t = runs("| a | b |");
         assert_eq!((t.len(), t[0].1.font_id.clone()), (1, mono(12.0)));
+    }
+
+    #[test]
+    fn an_edge_between_two_faces_is_said_in_words() {
+        assert_eq!(
+            describe("edges(between: (extrude1.side(sk1.r1[0]), extrude1.start))"),
+            "Edge between extrude1's side and start face"
+        );
+        assert_eq!(
+            describe_lower("edge(between: (extrude1.end, fillet1.faces))"),
+            "edge between extrude1's end face and fillet1's faces"
+        );
+        // what it has no words for stays as it is
+        assert_eq!(describe("edges(of: extrude1)"), "edges(of: extrude1)");
     }
 
     #[test]
