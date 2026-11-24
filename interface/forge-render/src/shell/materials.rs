@@ -107,6 +107,9 @@ pub struct Browser {
     pub dir: Option<PathBuf>,
     /// The part's material, by the library's name.
     pub assigned: Option<String>,
+    /// In the narrow layout (theme::NARROW), the chosen material's details shown in place of
+    /// the list; "‹ Materials" and Esc go back.
+    pub narrow_detail: bool,
 }
 
 fn hex(c: [u8; 3]) -> Color32 {
@@ -463,6 +466,13 @@ impl Shell {
         // placed where it fits whole: egui lays a window out where it was put, then moves it
         let area = super::dialog_area(ctx);
         let h = H.min(area.height() - 16.0).max(420.0);
+        // as wide as the window allows; under theme::NARROW, master-detail: the libraries fold
+        // above the list, and a chosen material's details take the list's place (UX-LEAD)
+        let w = W.min(area.width() - 16.0).max(300.0);
+        let narrow = w < super::theme::NARROW;
+        if !narrow {
+            b.narrow_detail = false;
+        }
         let r = egui::Window::new("Material Browser")
             .id(egui::Id::unique("material-browser"))
             .title_bar(false)
@@ -471,20 +481,30 @@ impl Shell {
             .movable(true)
             .fade_in(false)
             .default_pos(pos2(
-                (v.left() + 20.0).min(area.right() - W - 8.0).max(area.left()),
+                (v.left() + 20.0).min(area.right() - w - 8.0).max(area.left()),
                 (v.top() + 20.0).min(area.bottom() - h - 8.0).max(area.top()),
             ))
-            .fixed_size(vec2(W, h))
+            .fixed_size(vec2(w, h))
             .frame(dialog_frame(&t).inner_margin(0))
             .constrain_to(area)
             .show_placed(ctx, &mut places, |ui, places| {
-                let all = Rect::from_min_size(ui.max_rect().min, vec2(W, h));
+                let all = Rect::from_min_size(ui.max_rect().min, vec2(w, h));
                 ui.allocate_rect(all, Sense::hover());
-                let head = Rect::from_min_size(all.min, vec2(W, HEAD_H));
+                let head = Rect::from_min_size(all.min, vec2(w, HEAD_H));
                 let body = Rect::from_min_max(pos2(all.left(), head.bottom()), all.max);
-                let libs = Rect::from_min_size(body.min, vec2(LIBS_W, body.height()));
-                let list = Rect::from_min_size(pos2(libs.right(), body.top()), vec2(LIST_W, body.height()));
-                let detail = Rect::from_min_max(pos2(list.right(), body.top()), body.max);
+                let (libs, list, detail) = if narrow {
+                    // one pane: the list (its library folded above it), or the details
+                    let none = Rect::from_min_size(body.min, vec2(0.0, body.height()));
+                    if b.narrow_detail {
+                        (none, none, body)
+                    } else {
+                        (none, body, Rect::from_min_size(body.right_top(), vec2(0.0, body.height())))
+                    }
+                } else {
+                    let libs = Rect::from_min_size(body.min, vec2(LIBS_W, body.height()));
+                    let list = Rect::from_min_size(pos2(libs.right(), body.top()), vec2(LIST_W, body.height()));
+                    (libs, list, Rect::from_min_max(pos2(list.right(), body.top()), body.max))
+                };
                 let p = ui.painter().clone();
                 p.rect_filled(
                     libs,
@@ -501,15 +521,46 @@ impl Shell {
                 p.vline(list.right() - 0.5, body.y_range(), Stroke::new(1.0, t.line));
                 close |= Self::browser_head(ui, &t, head, &mut b, places);
                 let region = |r: Rect, m: egui::Vec2| egui::UiBuilder::new().max_rect(r.shrink2(m));
-                ui.scope_builder(region(libs, vec2(10.0, 10.0)), |ui| {
-                    Self::browser_libraries(ui, &t, &mut b, places)
-                });
-                ui.scope_builder(region(list, vec2(0.0, 0.0)), |ui| {
-                    Self::browser_list(ui, &t, &mut b, places)
-                });
-                ui.scope_builder(region(detail, vec2(0.0, 0.0)), |ui| {
-                    Self::browser_detail(ui, &t, &mut b, part, places, &mut assign, &mut close)
-                });
+                if !narrow {
+                    ui.scope_builder(region(libs, vec2(10.0, 10.0)), |ui| {
+                        Self::browser_libraries(ui, &t, &mut b, places)
+                    });
+                }
+                if list.width() > 0.0 {
+                    ui.scope_builder(region(list, vec2(0.0, 0.0)), |ui| {
+                        if narrow {
+                            // the libraries, folded above the list
+                            egui::CollapsingHeader::new(egui::RichText::new("Libraries").font(sans(12.0)).color(t.ink2))
+                                .id_salt("mat-libs-narrow")
+                                .show(ui, |ui| Self::browser_libraries(ui, &t, &mut b, places));
+                        }
+                        let was = b.chosen.clone();
+                        Self::browser_list(ui, &t, &mut b, places);
+                        if narrow && b.chosen.is_some() && b.chosen != was {
+                            b.narrow_detail = true;
+                        }
+                    });
+                }
+                if detail.width() > 0.0 {
+                    ui.scope_builder(region(detail, vec2(0.0, 0.0)), |ui| {
+                        if narrow {
+                            ui.horizontal(|ui| {
+                                ui.add_space(12.0);
+                                let back = ui.add(
+                                    egui::Button::new(
+                                        egui::RichText::new("\u{2039} Materials").font(sans(13.0)).color(t.accent),
+                                    )
+                                    .frame(false),
+                                );
+                                places.push(("materials:back".into(), back.rect));
+                                if back.clicked() {
+                                    b.narrow_detail = false;
+                                }
+                            });
+                        }
+                        Self::browser_detail(ui, &t, &mut b, part, places, &mut assign, &mut close)
+                    });
+                }
             });
         if let Some(r) = r {
             self.view_blocks.push(r.response.rect);

@@ -1505,8 +1505,13 @@ impl Shell {
         } else if self.content.open {
             self.content.open = false;
         // the windows over the view that had no Esc (the UI audit): after a feature's dialog
-        } else if self.inspect.browser.is_some() {
-            self.inspect.browser = None;
+        } else if let Some(b) = &mut self.inspect.browser {
+            // the narrow browser's details step back to its list first
+            if b.narrow_detail {
+                b.narrow_detail = false;
+            } else {
+                self.inspect.browser = None;
+            }
         } else if self.capture.settings_open {
             self.capture.settings_open = false;
         } else if self.inspect.props.is_some() {
