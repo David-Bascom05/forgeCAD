@@ -740,3 +740,45 @@ fn an_unchanged_part_is_answered_from_the_kept_plan() {
     assert!(c.ok);
     assert_ne!(a.json, c.json);
 }
+
+/// `begin` / `step` / `finish` (what the app drives a slice at a time, or a worker drives) give
+/// the very reply `simulate` gives; the scene (model, tooling) is there before anything is
+/// planned; the simulation can be sent from a worker thread.
+#[test]
+fn a_simulation_planned_a_little_at_a_time_is_the_simulation() {
+    fn send<T: Send>() {}
+    send::<forge_lang::bendsim::Sim>();
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap();
+    for (part, ask) in [
+        (src.clone(), Ask::default()),
+        (channel(), Ask::default()),
+        (
+            src.clone(),
+            Ask {
+                programs: Some(2),
+                ..Ask::default()
+            },
+        ),
+    ] {
+        forge_lang::bendsim::forget_plans();
+        let whole = ask_src(&part, None, None, &ask);
+        forge_lang::bendsim::forget_plans();
+        let mut p = forge_lang::bendsim::begin(&part, None, None, &ask).expect("begun");
+        assert!(!p.model().bends.is_empty() && !p.tooling().punches.is_empty());
+        assert!(!p.progress().done);
+        let mut ticks = 0;
+        while !p.step(3).done {
+            ticks += 1;
+            assert!(ticks < 100_000);
+        }
+        if ask.programs.is_none() && part == src {
+            assert!(ticks > 1, "planned in slices");
+        }
+        let sim = p.finish();
+        assert_eq!(sim.answer.json, whole.json);
+    }
+}

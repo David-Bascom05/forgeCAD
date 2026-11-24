@@ -22,7 +22,10 @@ pub mod tooling;
 pub mod view;
 
 pub use model::{Model, ModelError};
-pub use plan::{Blocking, Options, Plan, Program, Suggestion, plan, plan_and_programs, programs, simulate};
+pub use plan::{
+    Blocking, Options, Plan, PlanJob, Planner, Program, Progress, Suggestion, plan, plan_and_programs,
+    programs, simulate,
+};
 pub use sim::{Check, PartRef, Phase, Rule, Setup, Severity, Step, Surface};
 pub use stage::{StageFail, Staged, StationUse, stage};
 pub use tooling::{

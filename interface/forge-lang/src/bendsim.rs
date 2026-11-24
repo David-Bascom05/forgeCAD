@@ -203,6 +203,14 @@ type Made = (
 static PLANS: std::sync::Mutex<Vec<(String, Made)>> = std::sync::Mutex::new(Vec::new());
 const PLANS_KEPT: usize = 8;
 
+/// Forget every kept plan (tests: a plan made afresh).
+#[doc(hidden)]
+pub fn forget_plans() {
+    if let Ok(mut v) = PLANS.lock() {
+        v.clear();
+    }
+}
+
 fn memo_get(key: &str) -> Option<Made> {
     let v = PLANS.lock().ok()?;
     v.iter().find(|(k, _)| k == key).map(|(_, m)| m.clone())
@@ -246,6 +254,12 @@ impl Phases {
 
 /// The part's sheet simulated: Err is the typed error reply.
 pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Result<Sim, Answer> {
+    let sh = built(src, dir.clone(), root, ask)?;
+    simulate_sheet(&sh, dir.as_deref(), ask)
+}
+
+/// The part built and the sheet asked for (its first, unless `ask.sheet` names one).
+fn built(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Result<SheetOut, Answer> {
     let opts = Options {
         dir: dir.clone(),
         root,
@@ -293,12 +307,166 @@ pub fn simulate(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &As
         },
         None => &r.sheets[0],
     };
-    simulate_sheet(sh, dir.as_deref(), ask)
+    Ok(sh.clone())
 }
 
 /// One built sheet simulated (for a caller that has run the part already, as `query F dfm`
 /// does): its vendor's tooling unless `ask` names other.
 pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Sim, Answer> {
+    let p = prepare(sh, dir, ask)?;
+    let made = match memo_get(&p.key) {
+        Some(hit) => hit,
+        None => {
+            let m = make(sh, dir, &p);
+            memo_put(p.key.clone(), m.clone());
+            m
+        }
+    };
+    Ok(assemble(sh, p, made))
+}
+
+/// A simulation made a little at a time, for an app that must not wait on it: `begin` builds the
+/// part and the tooling (milliseconds), so the press, its tools and the flat part can be drawn at
+/// once (`model`, `tooling`); `step(n)` plans until about `n` more setups are simulated and says how
+/// far it has got; `finish` is the very `Sim` that `simulate` gives. A kept plan (an unchanged
+/// part) is done at `begin`. A staged program or ranked programs are made whole by the first step.
+/// It holds what it reads (no references) but is not `Send` (the search's verdict memo is shared
+/// within it): a worker makes it on its own thread and sends back `Progress` and the `Sim`.
+pub struct Planning {
+    sh: SheetOut,
+    dir: Option<PathBuf>,
+    prep: Prep,
+    job: Option<fb::PlanJob>,
+    /// The plan found, its handling checked one step at a time: (plan, next step, checks).
+    handling: Option<(fb::Plan, usize, Vec<(usize, fb::Check)>)>,
+    made: Option<Made>,
+}
+
+/// `simulate`, begun: the part built, the tooling and the model made, nothing planned yet.
+pub fn begin(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Result<Planning, Answer> {
+    let sh = built(src, dir.clone(), root, ask)?;
+    let prep = prepare(&sh, dir.as_deref(), ask)?;
+    let made = memo_get(&prep.key);
+    Ok(Planning {
+        sh,
+        dir,
+        prep,
+        job: None,
+        handling: None,
+        made,
+    })
+}
+
+impl Planning {
+    pub fn model(&self) -> &fb::Model {
+        &self.prep.model
+    }
+
+    /// The tooling as asked (a staged program's stations come with the plan).
+    pub fn tooling(&self) -> &fb::Tooling {
+        &self.prep.tooling
+    }
+
+    pub fn names(&self) -> &[String] {
+        &self.prep.bend_names
+    }
+
+    pub fn progress(&self) -> fb::Progress {
+        let bends = self.prep.model.bends.len();
+        match (&self.made, &self.job) {
+            (Some(m), _) => fb::Progress {
+                bends_planned: m.1.steps.len(),
+                bends,
+                setups_tried: m.1.explored,
+                done: true,
+            },
+            (None, Some(j)) => j.progress(&self.prep.model),
+            (None, None) if self.handling.is_some() => {
+                let h = self.handling.as_ref().unwrap();
+                fb::Progress {
+                    bends_planned: h.0.steps.len(),
+                    bends,
+                    setups_tried: h.0.explored,
+                    done: false,
+                }
+            }
+            (None, None) => fb::Progress {
+                bends_planned: 0,
+                bends,
+                setups_tried: 0,
+                done: false,
+            },
+        }
+    }
+
+    /// Plans on until about `n` more setups are simulated (a frame's slice, a worker's loop).
+    pub fn step(&mut self, n: usize) -> fb::Progress {
+        if self.made.is_some() {
+            return self.progress();
+        }
+        let p = &self.prep;
+        // a plain plan goes a slice at a time; a staged program or ranked programs whole
+        if p.ask.stage || p.ask.programs.is_some() {
+            let m = make(&self.sh, self.dir.as_deref(), p);
+            memo_put(p.key.clone(), m.clone());
+            self.made = Some(m);
+            return self.progress();
+        }
+        // the operator's move into each step after the first, checked one step a call (as
+        // fb::scene::annotate_handling does all at once)
+        if let Some((plan, k, checks)) = &mut self.handling {
+            if *k < plan.steps.len() {
+                let mut sc = fb::scene::Scene::new(&p.model, &p.tooling, plan);
+                if let Some(c) = sc.handling_check(*k) {
+                    checks.push((*k, c));
+                }
+                *k += 1;
+            }
+            if *k >= plan.steps.len() {
+                let (mut plan, _, checks) = self.handling.take().unwrap();
+                for (k, c) in checks {
+                    plan.steps[k].checks.push(c);
+                }
+                let m = (p.tooling.clone(), plan, None, None, None);
+                memo_put(p.key.clone(), m.clone());
+                self.made = Some(m);
+            }
+            return self.progress();
+        }
+        let job = self
+            .job
+            .get_or_insert_with(|| fb::PlanJob::new(&p.model, &p.tooling, &p.opts));
+        let pr = job.step(&p.model, &p.tooling, &p.opts, n);
+        if pr.done
+            && let Some(job) = self.job.take()
+            && let Some(plan) = job.plan(&p.model, &p.tooling, &p.opts)
+        {
+            self.handling = Some((plan, 1, Vec::new()));
+        }
+        self.progress()
+    }
+
+    /// The simulation (planned to the end first, if it is not yet).
+    pub fn finish(mut self) -> Sim {
+        while !self.step(usize::MAX / 2).done {}
+        let made = self.made.take().expect("planned");
+        assemble(&self.sh, self.prep, made)
+    }
+}
+
+/// A simulation's question, answered up to the plan: the tooling (stations set), the model, the
+/// bends' names, the options, and the memo's key.
+struct Prep {
+    ask: Ask,
+    tooling: fb::Tooling,
+    tsource: Json,
+    model: fb::Model,
+    bend_names: Vec<String>,
+    opts: fb::Options,
+    key: String,
+}
+
+fn prepare(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Prep, Answer> {
     // a program's stations: their tools are the ones on the press
     let mut ask = ask.clone();
     if !ask.stations.is_empty() {
@@ -309,9 +477,8 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         ask.punches.get_or_insert(ps);
         ask.dies.get_or_insert(ds);
     }
-    let ask = &ask;
     let mut ph = Phases::start();
-    let (mut tooling, tsource) = tooling(ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
+    let (mut tooling, tsource) = tooling(&ask, dir, sh.vendor.as_ref().map(|v| v.id.as_str()))?;
     ph.lap("tooling");
     for st in &ask.stations {
         let (Some(p), Some(d)) = (
@@ -398,70 +565,87 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         "{model:?}|{tooling:?}|{opts:?}|{:?}|{}|{bend_names:?}|{:?}",
         ask.programs, ask.stage, ask.press
     );
-    let (tooling, plan, ranked, staged, stage_json) = match memo_get(&key) {
-        Some(hit) => {
-            ph.lap("memo");
-            hit
-        }
-        None => {
-            // stage bending: the program's tools laid out along the bed, simulated all on the press
-            let mut tooling = tooling;
-            let mut staged: Option<fb::Staged> = None;
-            let mut stage_json: Option<Json> = None;
-            let mut shared: Option<Vec<fb::Program>> = None;
-            let mut plan = if ask.stage && tooling.stations.is_empty() && opts.sequence.is_none() {
-                match fb::stage(&model, &tooling, &opts, 8) {
-                    Ok(s) => {
-                        let speeds = ask
-                            .press
-                            .as_deref()
-                            .and_then(|p| catalog(dir).ok().and_then(|c| c.press(p).map(|r| r.speeds)));
-                        stage_json = Some(staged_json(sh, &s, &bend_names, speeds.as_ref()));
-                        tooling = s.tooling.clone();
-                        let p = s.plan.clone();
-                        staged = Some(s);
-                        p
-                    }
-                    Err(fb::StageFail::NoProgram(p)) => {
-                        stage_json = Some(Json::obj(vec![
-                            ("ok", false.into()),
-                            (
-                                "why",
-                                "no feasible program to lay out: `blocking` says why".into(),
-                            ),
-                        ]));
-                        p
-                    }
-                    Err(fb::StageFail::NoLayout { why, .. }) => {
-                        stage_json = Some(Json::obj(vec![
-                            ("ok", false.into()),
-                            ("why", why.as_str().into()),
-                        ]));
-                        fb::plan(&model, &tooling, &opts)
-                    }
-                }
-            } else if let Some(n) = ask.programs {
-                // the plan and the ranked programs from one search's learning
-                let (p, r) = fb::plan_and_programs(&model, &tooling, &opts, n);
-                shared = Some(r);
+    Ok(Prep {
+        ask,
+        tooling,
+        tsource,
+        model,
+        bend_names,
+        opts,
+        key,
+    })
+}
+
+/// The plan made (not kept): staged, or with its ranked programs, or alone; the handling checked.
+fn make(sh: &SheetOut, dir: Option<&Path>, p: &Prep) -> Made {
+    let (ask, model, opts, bend_names) = (&p.ask, &p.model, &p.opts, &p.bend_names);
+    let mut ph = Phases::start();
+    // stage bending: the program's tools laid out along the bed, simulated all on the press
+    let mut tooling = p.tooling.clone();
+    let mut staged: Option<fb::Staged> = None;
+    let mut stage_json: Option<Json> = None;
+    let mut shared: Option<Vec<fb::Program>> = None;
+    let mut plan = if ask.stage && tooling.stations.is_empty() && opts.sequence.is_none() {
+        match fb::stage(model, &tooling, opts, 8) {
+            Ok(s) => {
+                let speeds = ask
+                    .press
+                    .as_deref()
+                    .and_then(|p| catalog(dir).ok().and_then(|c| c.press(p).map(|r| r.speeds)));
+                stage_json = Some(staged_json(sh, &s, bend_names, speeds.as_ref()));
+                tooling = s.tooling.clone();
+                let p = s.plan.clone();
+                staged = Some(s);
                 p
-            } else {
-                fb::plan(&model, &tooling, &opts)
-            };
-            ph.lap(if ask.stage { "stage" } else { "plan" });
-            let ranked = match shared {
-                Some(r) => Some(r),
-                None => ask.programs.map(|n| fb::programs(&model, &tooling, &opts, n)),
-            };
-            ph.lap("programs");
-            // the operator's move into each step after the first, checked (a warning if not proven clear)
-            fb::scene::annotate_handling(&model, &tooling, &mut plan);
-            ph.lap("handling");
-            let made = (tooling, plan, ranked, staged, stage_json);
-            memo_put(key, made.clone());
-            made
+            }
+            Err(fb::StageFail::NoProgram(p)) => {
+                stage_json = Some(Json::obj(vec![
+                    ("ok", false.into()),
+                    (
+                        "why",
+                        "no feasible program to lay out: `blocking` says why".into(),
+                    ),
+                ]));
+                p
+            }
+            Err(fb::StageFail::NoLayout { why, .. }) => {
+                stage_json = Some(Json::obj(vec![
+                    ("ok", false.into()),
+                    ("why", why.as_str().into()),
+                ]));
+                fb::plan(model, &tooling, opts)
+            }
         }
+    } else if let Some(n) = ask.programs {
+        // the plan and the ranked programs from one search's learning
+        let (p, r) = fb::plan_and_programs(model, &tooling, opts, n);
+        shared = Some(r);
+        p
+    } else {
+        fb::plan(model, &tooling, opts)
     };
+    ph.lap(if ask.stage { "stage" } else { "plan" });
+    let ranked = match shared {
+        Some(r) => Some(r),
+        None => ask.programs.map(|n| fb::programs(model, &tooling, opts, n)),
+    };
+    ph.lap("programs");
+    // the operator's move into each step after the first, checked (a warning if not proven clear)
+    fb::scene::annotate_handling(model, &tooling, &mut plan);
+    ph.lap("handling");
+    (tooling, plan, ranked, staged, stage_json)
+}
+
+/// The simulation from its question and its plan: the reply, the tooling as laid out.
+fn assemble(sh: &SheetOut, p: Prep, made: Made) -> Sim {
+    let (tooling, plan, ranked, staged, stage_json) = made;
+    let Prep {
+        tsource,
+        model,
+        bend_names,
+        ..
+    } = p;
+    let mut ph = Phases::start();
     let mut answer = answer(sh, &model, &tooling, &plan, &bend_names);
     ph.lap("reply");
     if let Json::Obj(f) = &mut answer.json {
@@ -473,7 +657,7 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
             f.push(("stage".into(), j));
         }
     }
-    Ok(Sim {
+    Sim {
         model,
         tooling,
         plan,
@@ -481,7 +665,7 @@ pub fn simulate_sheet(sh: &SheetOut, dir: Option<&Path>, ask: &Ask) -> Result<Si
         answer,
         programs: ranked.unwrap_or_default(),
         stage: staged,
-    })
+    }
 }
 
 /// The simulation's findings in `query F dfm`'s Item shape: one per failing check of each step
