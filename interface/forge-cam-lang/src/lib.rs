@@ -194,7 +194,11 @@ pub struct OpOut {
     pub pairs: usize,
     pub cells: usize,
     pub status: &'static str,
+    /// Why it was refused, for a person (units, a subject, where).
     pub refusal: Option<String>,
+    /// The refusal's typed code, for a program: a check's rule (`gouge`, `holder_collision`,
+    /// `rapid_clear`, ..) or a refusal's own (`NeedTool`, `WrongPitch`, `NotPrism`, ..).
+    pub code: Option<String>,
     pub fix: Option<String>,
     pub moves: usize,
     pub length_cut: f64,
@@ -802,9 +806,8 @@ impl Cam {
         let mut secs = vec![];
         for w in zs.windows(2) {
             let zm = 0.5 * (w[0] + w[1]);
-            let sec = forge_cam::section::section(&p.faces, zm, 1e-5).map_err(|e| {
-                format!("stock: the part's section at z = {zm}: {e:?} (a shaped stock needs a 2.5D part)")
-            })?;
+            let sec = forge_cam::section::section(&p.faces, zm, 1e-5)
+                .map_err(|e| e.refusal(&format!("A shaped stock needs a 2.5D part: at z = {} mm", mm(zm))))?;
             secs.push((zm, sec));
         }
         let (st, outline) = match spec {
@@ -876,7 +879,7 @@ impl Cam {
                 }
                 let body = run.body.ok_or("the stock has no body")?;
                 let faces = forge_cam::lower::lower(&body)
-                    .map_err(|e| format!("the stock `{file}` is outside this phase's CAM domain: {e:?}"))?;
+                    .map_err(|e| e.refusal(&format!("The stock `{file}` cannot be used")))?;
                 let mut lo = [f64::INFINITY; 3];
                 let mut hi = [f64::NEG_INFINITY; 3];
                 for fc in &faces {
@@ -906,7 +909,7 @@ impl Cam {
                 }
                 let zm = 0.5 * (lo[2] + hi[2]);
                 let outline = forge_cam::section::section(&faces, zm, 1e-5)
-                    .map_err(|e| format!("the stock `{file}`'s section: {e:?}"))?;
+                    .map_err(|e| e.refusal(&format!("The stock `{file}` cannot be used: its section")))?;
                 (Stock { min: lo, max: hi }, outline)
             }
             _ => unreachable!("shaped_stock takes a round or modelled stock"),
@@ -1691,7 +1694,7 @@ impl Cam {
                 }
                 let body = run.body.ok_or("the part has no body")?;
                 let faces = forge_cam::lower::lower(&body)
-                    .map_err(|e| format!("the part is outside this phase's CAM domain: {e:?}"))?;
+                    .map_err(|e| e.refusal("The part cannot be machined yet"))?;
                 let mut lo = [f64::INFINITY; 3];
                 let mut hi = [f64::NEG_INFINITY; 3];
                 for fc in &faces {
@@ -1729,7 +1732,7 @@ impl Cam {
                 };
                 let shape = t
                     .shape(stickout, holder.as_ref())
-                    .map_err(|e| format!("tool `{id}`: {e:?}"))?;
+                    .map_err(|e| tool_words(&id, &t, stickout, &e))?;
                 self.tools.push(ToolUse {
                     t: tn,
                     tool: t,
@@ -2501,21 +2504,28 @@ impl Cam {
             return Err(not_down(&hn, hole.dir));
         }
         if t.tool.kind != Kind::ThreadMill {
-            return Err(format!("thread_mill: `{}` is not a thread mill", t.tool.id));
+            return Err(format!(
+                "NotThreadMill: Tool `{}` is not a thread mill.",
+                t.tool.id
+            ));
         }
         if (t.tool.tp - pitch).abs() > 1e-9 {
             out.fix = Some(format!("a thread mill of pitch {pitch}"));
             return Err(format!(
-                "thread_mill: the tool's pitch {} is not the thread's {pitch}",
-                t.tool.tp
+                "WrongPitch: Thread mill `{}` cuts a {} mm pitch; the thread needs {} mm.",
+                t.tool.id,
+                mm(t.tool.tp),
+                mm(pitch)
             ));
         }
         let (rb, rm, rt) = (0.5 * hole.d, 0.5 * major, 0.5 * t.tool.dc);
         if rt >= rb {
             out.fix = Some(format!("a thread mill under {:.3} mm across", hole.d));
             return Err(format!(
-                "thread_mill: the tool ({} mm) does not go down the bore ({} mm)",
-                t.tool.dc, hole.d
+                "ToolTooBig: Thread mill `{}` is {} mm across; it does not fit down the {} mm bore.",
+                t.tool.id,
+                mm(t.tool.dc),
+                mm(hole.d)
             ));
         }
         let rc = rm - rt;
@@ -2526,7 +2536,9 @@ impl Cam {
         let len = get_num(a, "length", Some(depth - 2.0 * pitch))?;
         if !(len > 0.0 && len <= depth) {
             return Err(format!(
-                "thread_mill: length {len} must be over 0 and at most the hole's depth {depth}"
+                "BadLength: The thread length must be over 0 mm and at most the hole's depth, {} mm (it is {} mm).",
+                mm(depth),
+                mm(len)
             ));
         }
         // the target: P ∖ Δ's boundary (a superset's), for every place
@@ -2634,7 +2646,10 @@ impl Cam {
         let part = &self.parts[self.setups[su].part];
         if t.tool.kind != Kind::Chamfer || (t.tool.angle - 90.0).abs() > 1e-9 {
             out.fix = Some("a 90° chamfer mill (chamfer-10-90)".into());
-            return Err(format!("edge_break: `{}` is not a 90° chamfer mill", t.tool.id));
+            return Err(format!(
+                "NotChamferMill: Tool `{}` is not a 90° chamfer mill; an edge break needs one.",
+                t.tool.id
+            ));
         }
         let ztop = part.bbox.1[2];
         let z = get_num(a, "at", Some(ztop))?;
@@ -2964,7 +2979,7 @@ impl Cam {
             true,
         )
         .map(|p| vec![p])
-        .map_err(|e| format!("{e:?}"))
+        .map_err(|e| e.refusal(""))
     }
 
     fn feeds_for(&self, su: usize, t: &ToolUse, ae: f64, ap: f64) -> Option<feeds::Feeds> {
@@ -3020,6 +3035,7 @@ impl Cam {
             cells: 0,
             status: "built",
             refusal: None,
+            code: None,
             fix: None,
             moves: 0,
             length_cut: 0.0,
@@ -3106,7 +3122,7 @@ impl Cam {
                         let zmid = 0.5 * (top + bottom);
                         let r = 0.5 * d;
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
-                            .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                            .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                         let islands = outer_or_inner(&sec, true)?;
                         // the tool may pass wholly outside the stock: a strip between the part
                         // and the stock's face narrower than the tool is still cleared
@@ -3146,7 +3162,7 @@ impl Cam {
                             get_num(a, "leave", Some(0.0))?,
                             ramp,
                         )
-                        .map_err(|e| format!("{e:?}"))?;
+                        .map_err(|e| e.refusal(""))?;
                         if stepover <= r
                             && let Some(o) = opening(&rg, r)
                         {
@@ -3162,7 +3178,7 @@ impl Cam {
                         let passes = contour_passes(a, d)?;
                         let zmid = 0.5 * (top + bottom);
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
-                            .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                            .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                         let rg = outer_or_inner(&sec, side == "outside")?;
                         if side == "outside" {
                             // the band the loop sweeps is cleared
@@ -3201,7 +3217,7 @@ impl Cam {
                                 passes,
                             )
                             .map(|p| vec![p])
-                            .map_err(|e| format!("{e:?}"))
+                            .map_err(|e| e.refusal(""))
                         } else {
                             ops::contour_passes(
                                 &rg,
@@ -3219,7 +3235,7 @@ impl Cam {
                                 passes,
                             )
                             .map(|p| vec![p])
-                            .map_err(|e| format!("{e:?}"))
+                            .map_err(|e| e.refusal(""))
                         }
                     }
                     _ => {
@@ -3230,7 +3246,7 @@ impl Cam {
                             let bottom = get_num(a, "to", None)? + ax;
                             let zmid = 0.5 * (top + bottom);
                             let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
-                                .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
+                                .map_err(|e| e.refusal(&format!("At z = {} mm", mm(zmid))))?;
                             let pockets = pockets_of(&sec)?;
                             let stepover = get_num(a, "stepover", Some(0.4 * d))?;
                             let leave = get_num(a, "leave", Some(0.0))?;
@@ -3287,7 +3303,7 @@ impl Cam {
                                         skipped.push(region_box(&rg));
                                         continue;
                                     }
-                                    Err(e) => return Err(format!("{e:?}")),
+                                    Err(e) => return Err(e.refusal("")),
                                 }
                                 let o = if stepover <= 0.5 * d {
                                     opening(&rg, 0.5 * d)
@@ -3378,7 +3394,7 @@ impl Cam {
                                         get_num(a, "leave", Some(0.0))?,
                                         ramp,
                                     )
-                                    .map_err(|e| format!("{e:?}"))?,
+                                    .map_err(|e| e.refusal(""))?,
                                 );
                                 if stepover <= 0.5 * d
                                     && let Some(o) = opening(&rg, 0.5 * d)
@@ -3396,7 +3412,9 @@ impl Cam {
             Ok(p) => p,
             Err(e) => {
                 out.status = "refused";
-                out.refusal = Some(e);
+                let (code, words) = split_code(&e);
+                out.code = code;
+                out.refusal = Some(words);
                 self.ops.push(out);
                 return Ok(V::Op(self.ops.len() - 1));
             }
@@ -3469,7 +3487,10 @@ impl Cam {
                         "add a {} mm {class} reamer to the project's cam/*.tools.toml",
                         hole.d
                     ));
-                    return Err(format!("NeedTool: no {} mm reamer for `{hn}` ({class})", hole.d));
+                    return Err(format!(
+                        "NeedTool: No {} mm reamer for hole `{hn}` ({class} fit) in the tool library.",
+                        mm(hole.d)
+                    ));
                 };
                 Some((reamer, class))
             }
@@ -3511,7 +3532,8 @@ impl Cam {
                 "add a drill of {drill_d} mm to the project's cam/*.tools.toml"
             ));
             return Err(format!(
-                "NeedTool: no {drill_d} mm drill in the library for `{hn}`"
+                "NeedTool: No {} mm drill for hole `{hn}` in the tool library.",
+                mm(drill_d)
             ));
         };
         let spot = self
@@ -3539,7 +3561,11 @@ impl Cam {
                     .cloned();
                 if t.is_none() {
                     out.fix = Some(format!("add a tap M{major}x{pitch}"));
-                    return Err(format!("NeedTool: no tap {major} x {pitch} for `{hn}`"));
+                    return Err(format!(
+                        "NeedTool: No M{} × {} mm tap for hole `{hn}` in the tool library.",
+                        mm(major),
+                        mm(pitch)
+                    ));
                 }
                 t
             }
@@ -3831,7 +3857,9 @@ impl Cam {
                     "add a counterbore of {cd} mm, or an end mill under {cd} mm with {cdep} mm of flute"
                 ));
                 return Err(format!(
-                    "NeedTool: no counterbore of {cd} mm nor end mill to pocket it for `{hn}`"
+                    "NeedTool: No {} mm counterbore, nor an end mill under {} mm to pocket it, for hole `{hn}` in the tool library.",
+                    mm(cd),
+                    mm(cd)
                 ));
             }
         }
@@ -3853,7 +3881,9 @@ impl Cam {
             let Some(ct) = ct else {
                 out.fix = Some(format!("add a {ang} deg countersink of at least {csd} mm"));
                 return Err(format!(
-                    "NeedTool: no {ang} deg countersink of at least {csd} mm for `{hn}`"
+                    "NeedTool: No {}° countersink of at least {} mm for hole `{hn}` in the tool library.",
+                    mm(ang),
+                    mm(csd)
                 ));
             };
             let ti = add(self, ct, base_t + 4)?;
@@ -4543,6 +4573,217 @@ fn loop_band(
         return None;
     }
     Some(region_of(&band))
+}
+
+/// A kernel error as a refusal: its typed code and its words for a person.
+trait Words {
+    fn code(&self) -> &'static str;
+    fn words(&self) -> String;
+    /// `Code: Context, words.`, which `split_code` takes apart into the code and the sentence.
+    fn refusal(&self, context: &str) -> String {
+        let w = self.words();
+        if context.is_empty() {
+            let mut c = w.chars();
+            let w = match c.next() {
+                Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+                None => w,
+            };
+            format!("{}: {w}.", self.code())
+        } else {
+            format!("{}: {context}, {w}.", self.code())
+        }
+    }
+}
+
+impl Words for ops::OpError {
+    fn code(&self) -> &'static str {
+        match self {
+            ops::OpError::Region(_) => "BadRegion",
+            ops::OpError::ToolTooBig { .. } => "ToolTooBig",
+            ops::OpError::NeedTool { .. } => "NeedTool",
+        }
+    }
+    fn words(&self) -> String {
+        match self {
+            ops::OpError::Region(why) => format!("the area to cut is not a usable region ({why})"),
+            ops::OpError::ToolTooBig { tool_d, why } => {
+                format!("the {} mm tool does not fit: {why}", mm(*tool_d))
+            }
+            ops::OpError::NeedTool { what } => format!("no tool in the library for this: {what}"),
+        }
+    }
+}
+
+impl Words for forge_cam::section::SectionError {
+    fn code(&self) -> &'static str {
+        match self {
+            forge_cam::section::SectionError::NotPrism { .. } => "NotPrism",
+            forge_cam::section::SectionError::Open { .. } => "OpenSection",
+            forge_cam::section::SectionError::Empty => "EmptySection",
+        }
+    }
+    fn words(&self) -> String {
+        match self {
+            forge_cam::section::SectionError::NotPrism { face } => format!(
+                "the part's face {face} is not straight-sided (a wall along z) there, so a 2.5D op cannot cut it: use a 3D op (zlevel) for that height"
+            ),
+            forge_cam::section::SectionError::Open { at } => format!(
+                "the part's section there does not close into loops (it is open near ({}, {}))",
+                mm(at.x),
+                mm(at.y)
+            ),
+            forge_cam::section::SectionError::Empty => "the part has no section there".into(),
+        }
+    }
+}
+
+impl Words for forge_cam::lower::LowerError {
+    fn code(&self) -> &'static str {
+        "UnsupportedFace"
+    }
+    fn words(&self) -> String {
+        match self {
+            forge_cam::lower::LowerError::Unsupported { face, why } => {
+                format!("its face {face} cannot be checked yet ({why})")
+            }
+        }
+    }
+}
+
+/// A tool that cannot be built, for a person: which dimension, its value, what it must be.
+fn tool_words(
+    id: &str,
+    t: &forge_tooling::Tool,
+    stickout: f64,
+    e: &forge_cam_geom::tool::ToolError,
+) -> String {
+    use forge_cam_geom::tool::ToolError;
+    match e {
+        ToolError::Bad("stickout") => format!(
+            "BadTool: Tool `{id}`: its stick-out ({} mm) must be longer than its flute length ({} mm).",
+            mm(stickout),
+            mm(t.lcf)
+        ),
+        ToolError::Bad("lcf") => format!(
+            "BadTool: Tool `{id}`: its flute length ({} mm) is shorter than its cutting tip.",
+            mm(t.lcf)
+        ),
+        ToolError::Bad("dcon") => format!("BadTool: Tool `{id}`: its shank diameter must be over 0 mm."),
+        ToolError::Bad("dc") => format!(
+            "BadTool: Tool `{id}`: its cutting diameter ({} mm) is out of range for its kind.",
+            mm(t.dc)
+        ),
+        ToolError::Bad("re") => format!(
+            "BadTool: Tool `{id}`: its corner radius ({} mm) is out of range for its diameter.",
+            mm(t.re)
+        ),
+        ToolError::Bad("angle") => format!(
+            "BadTool: Tool `{id}`: its point angle ({}°) is out of range.",
+            mm(t.angle)
+        ),
+        ToolError::Bad(what) => format!("BadTool: Tool `{id}`: its {what} is missing or out of range."),
+        ToolError::Chain => format!("BadTool: Tool `{id}`: its profile does not close on its axis."),
+    }
+}
+
+/// A refusal's typed code and its words: an error that starts `Code: ` with a code in
+/// CamelCase (`NeedTool: no 6 mm reamer ..`) gives that code and the rest; any other has no code.
+fn split_code(e: &str) -> (Option<String>, String) {
+    if let Some((head, rest)) = e.split_once(": ")
+        && !head.is_empty()
+        && head.chars().all(|c| c.is_ascii_alphanumeric())
+        && head.starts_with(|c: char| c.is_ascii_uppercase())
+    {
+        return (Some(head.to_string()), rest.to_string());
+    }
+    (None, e.to_string())
+}
+
+/// A length in mm for a person: at most three decimals, no trailing zeros.
+fn mm(x: f64) -> String {
+    let s = format!("{x:.3}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.into() }
+}
+
+/// A check that refused an op, for a person: what part of the tool meets what, by how much, what
+/// it must keep, and where (the move, its kind, the point). The check itself stays in `checks`,
+/// typed, and its rule is the op's `code`.
+fn check_words(c: &CheckOut) -> String {
+    let kind = match c.phase {
+        "cut" => "a cutting move",
+        "plunge" => "a plunge",
+        "link" => "a link",
+        "rapid" => "a rapid",
+        "touch" => "a probing move",
+        other => other,
+    };
+    let at = if c.at.iter().all(|x| x.is_finite()) {
+        format!(" at ({}, {}, {})", mm(c.at[0]), mm(c.at[1]), mm(c.at[2]))
+    } else {
+        String::new()
+    };
+    let place = format!("on move {} ({kind}){at}", c.move_index);
+    // "part face 12" -> the part, face 12
+    let (thing, face) = match c.other.rsplit_once(" face ") {
+        Some((w, id)) => (
+            match w {
+                "part" => "the part",
+                "stock" => "the stock",
+                "fixture" => "the workholding",
+                x => x,
+            }
+            .to_string(),
+            format!(" (its face {id})"),
+        ),
+        None => (c.other.clone(), String::new()),
+    };
+    match c.rule {
+        "machine_limit" | "axis_limit" | "containment" => {
+            let what = match c.rule {
+                "machine_limit" => "The machine cannot run this op",
+                "axis_limit" => "The path leaves the machine's travel",
+                _ => "This move cannot be checked: the tool's top is not above the part and stock",
+            };
+            if c.rule == "containment" {
+                format!(
+                    "{what} {place} (the tool reaches z = {} mm; the part and stock rise to z = {} mm).",
+                    mm(c.value),
+                    mm(c.limit)
+                )
+            } else {
+                format!("{what}: {}.", c.other)
+            }
+        }
+        _ => {
+            let subject = match (c.rule, c.tool_part) {
+                ("probe_clear", _) => "The probe",
+                ("rapid_clear", "cutter") => "On a rapid, the cutter",
+                ("rapid_clear", _) => "On a rapid, the tool's shank or holder",
+                (_, "cutter") => "The cutter",
+                _ => "The tool's shank or holder",
+            };
+            let (d, lim) = (c.value, c.limit);
+            let met = if c.verdict == "undecided" {
+                format!(
+                    "could not be proven clear of {thing}{face}: the closest it is proven to stay is {} mm",
+                    mm(d)
+                )
+            } else if d < 0.0 {
+                format!("would go {} mm into {thing}{face}", mm(-d))
+            } else {
+                format!("would come within {} mm of {thing}{face}", mm(d))
+            };
+            let need = if lim > 0.0 {
+                format!("it must stay at least {} mm clear", mm(lim))
+            } else if lim < 0.0 {
+                format!("at most {} mm is allowed (the tolerance)", mm(-lim))
+            } else {
+                "it must not touch it".to_string()
+            };
+            format!("{subject} {met} {place}; {need}.")
+        }
+    }
 }
 
 /// A region's box: its segments' ends and each arc's extreme points that lie on it (in f64).
@@ -5602,10 +5843,8 @@ impl Cam {
             if !sum.clear && op.status == "built" {
                 op.status = "refused";
                 let c = &op.checks[0];
-                op.refusal = Some(format!(
-                    "{} {} at move {} ({}): {} vs {} on {}",
-                    c.rule, c.verdict, c.move_index, c.phase, c.value, c.limit, c.other
-                ));
+                op.code = Some(c.rule.to_string());
+                op.refusal = Some(check_words(c));
                 op.fix = Some(match c.rule {
                     "machine_limit" => "a tool or feeds the machine can run (its spindle range and feed limit are in the machine's record), or another machine".into(),
                     "axis_limit" => "SetArg at: a work offset that keeps the program within travel, or the part placed elsewhere on the table (or a shorter tool for Z)".into(),
@@ -5839,6 +6078,7 @@ impl Cam {
                         )]),
                     ),
                     ("refusal", o.refusal.clone().map(Json::Str).unwrap_or(Json::Null)),
+                    ("code", o.code.clone().map(Json::Str).unwrap_or(Json::Null)),
                 ])
             })
             .collect();
@@ -5868,7 +6108,7 @@ impl Cam {
         let suggestions: Vec<Json> = self
             .ops
             .iter()
-            .filter(|o| o.refusal.as_ref().is_some_and(|r| r.starts_with("NeedTool")))
+            .filter(|o| o.code.as_deref() == Some("NeedTool"))
             .map(|o| {
                 Json::obj(vec![
                     ("kind", Json::Str("NeedTool".into())),
