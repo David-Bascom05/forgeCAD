@@ -2747,7 +2747,7 @@ impl Gui {
                             if s.previewing {
                                 s.preview(None);
                             }
-                            format!("{label} refused: {}: {}", e.kind(), e.text())
+                            format!("{label} refused: {}", e.text())
                         }
                     };
                     self.fg_text();
@@ -2768,7 +2768,7 @@ impl Gui {
                     self.shell.status = match s.refactor(&r) {
                         Ok(files) if files.is_empty() => "Done: one undo step".into(),
                         Ok(files) => format!("Wrote {}", files.join(", ")),
-                        Err(e) => format!("{}: {}", e.kind(), e.text()),
+                        Err(e) => e.text(),
                     };
                 }
             }
@@ -2806,11 +2806,12 @@ impl Gui {
                 Ok(())
             }
             Err(e) => {
+                // typed for the agent and the tests; in words for a person (no error code)
                 let why = format!("{}: {}", e.kind(), e.text());
                 if let Some(p) = p {
                     p.refused = Some(why.clone());
                 }
-                self.shell.status = format!("{label} refused: {why}");
+                self.shell.status = format!("{label} refused: {}", e.text());
                 Err(why)
             }
         }
@@ -3086,7 +3087,7 @@ impl Gui {
             }
             Err(e) => {
                 s.preview(None);
-                Some(format!("{}: {}", e.kind(), e.text()))
+                Some(e.text())
             }
         };
         if let Some(t) = self.shell.fg.as_mut().and_then(|p| p.tool.as_mut()) {
@@ -3184,9 +3185,9 @@ impl Gui {
     pub fn fg_refuse(&mut self, e: crate::shell::fgtool::ToolError) {
         let why = format!("{}: {}", e.kind(), e.text());
         if let Some(p) = &mut self.shell.fg {
-            p.refused = Some(why.clone());
+            p.refused = Some(why);
         }
-        self.shell.status = why;
+        self.shell.status = e.text();
     }
 
     /// Clicks on the part with Project Geometry on: each edge or face picked (a click's one, or all
@@ -3345,7 +3346,7 @@ impl Gui {
                         None => self.shell.status = format!("{t} is not a plane to sketch on"),
                     }
                 }
-                (_, Err(e)) => self.shell.status = format!("{}: {}", e.kind(), e.text()),
+                (_, Err(e)) => self.shell.status = e.text(),
                 _ => {
                     self.shell.status =
                         format!("a sketch goes on a planar face or an origin plane, not a {what}")
@@ -3496,7 +3497,7 @@ impl Gui {
         }
         let got = o
             .write_back(&m.rows, m.kept())
-            .map_err(|e| format!("{}: {}", e.kind(), e.text()));
+            .map_err(|e| e.text());
         let got = got.and_then(|ops| {
             if ops.is_empty() {
                 return Ok(());
@@ -3509,7 +3510,7 @@ impl Gui {
                 } else {
                     format!(" (fix: {})", fixes.join(", "))
                 };
-                format!("{}: {}{fix}", e.kind(), e.text())
+                format!("{}{fix}", e.text())
             })
         });
         match got {

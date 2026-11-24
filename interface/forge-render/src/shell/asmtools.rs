@@ -1571,7 +1571,7 @@ impl Shell {
                 // what forge-lang would refuse, said here before OK
                 f.refused = forge_lang::edit::apply_all_checked(src, o)
                     .err()
-                    .map(|e| format!("{}: {}", e.kind(), e.text()));
+                    .map(|e| e.text());
                 out.push(FgAct::AsmPreview(Some(o.clone())));
             }
             Err(_) if f.sent.is_some() => {
@@ -1808,7 +1808,13 @@ pub fn command(fg: &mut super::fg::FgPanel, c: super::FgCmd) -> String {
                     .iter()
                     .find(|i| i.path == k && !i.path.contains('.') && !i.sub)
             }) else {
-                return "Choose a top-level part in the browser first".into();
+                // each says which it is: Mirror then Copy, both refused, read as nothing
+                return if c == C::Mirror {
+                    "Mirror: choose a top-level part in the browser first"
+                } else {
+                    "Copy: choose a top-level part in the browser first"
+                }
+                .into();
             };
             let mirror = c == C::Mirror;
             let stem = i

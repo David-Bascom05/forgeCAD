@@ -308,6 +308,10 @@ pub struct SketchMode {
     pub would_pick: Option<String>,
     /// The constraint row whose mark the pointer's on.
     pub glyph_over: Option<usize>,
+    /// What the sketcher last put in the status line, and a command's own words there (a save,
+    /// a refusal) with when they came: kept a while, not written over the next frame.
+    status_was: String,
+    said: Option<(String, f64)>,
     /// The rows it opened with: nothing changed, nothing to commit.
     opened: Vec<Row>,
     /// Which opened row each of the first rows is (the rows after it are new).
@@ -506,6 +510,8 @@ impl SketchMode {
             units: "mm",
             would_pick: None,
             glyph_over: None,
+            status_was: String::new(),
+            said: None,
             more: More::default(),
         };
         m.solve();
@@ -2579,13 +2585,28 @@ impl Shell {
                 m.more.placing,
             )
         });
-        self.status = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
+        let own = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
             _ if asks.is_some() => asks.unwrap_or_default().to_string(),
             _ if drawing.is_some() => drawing.unwrap_or_default().to_string(),
             Some(0) => "Fully constrained".to_string(),
             Some(n) => format!("{n} degrees of freedom"),
             None => String::new(),
         };
+        // something else spoke in the status line since the last frame (a save, a refusal, a
+        // command that can't run while sketching): its words stay a few seconds rather than being
+        // written over by the sketch's own before they're seen
+        let now = ctx.input(|i| i.time);
+        if self.status != m.status_was && !self.status.trim().is_empty() {
+            m.said = Some((self.status.clone(), now));
+        }
+        if m.said.as_ref().is_some_and(|(_, at)| now - at > 4.0) {
+            m.said = None;
+        }
+        if m.said.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(500));
+        }
+        self.status = m.said.as_ref().map_or(own, |(w, _)| w.clone());
+        m.status_was = self.status.clone();
         self.sketch_options(ctx, &mut m);
         if let Some(e) = &m.error {
             let g = ctx.fonts_mut(|f| f.layout(e.clone(), sans(12.0), Color32::WHITE, 420.0));

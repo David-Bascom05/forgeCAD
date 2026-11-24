@@ -443,7 +443,7 @@ impl Shell {
             Asked::Nothing => {}
         }
         self.status = match &tool.error {
-            Some(e) => format!("{}: {}", e.kind(), e.text()),
+            Some(e) => e.text(),
             None => tool.prompt(),
         };
         fg.tool = Some(tool);

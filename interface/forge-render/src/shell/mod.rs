@@ -1571,21 +1571,21 @@ impl Shell {
             let mut items = vec![
                 ("New", Some(Action::New)),
                 ("New Sheet Metal", Some(Action::Sheet(sheet::SheetCmd::NewPart))),
-                ("Open...", Some(Action::Open)),
+                ("Open…", Some(Action::Open)),
             ];
             // a Forge file is written when asked (Ctrl+S too)
             items.push(("Save", model_open.then_some(Action::Fg(FgCmd::Save))));
-            items.push(("New Drawing...", model_open.then_some(Action::NewDrawing)));
+            items.push(("New Drawing…", model_open.then_some(Action::NewDrawing)));
             // the part's mesh for printing and viewers: natively where the file dialog says, in a
             // page to the browser's downloads
             {
                 use forge_lang::meshfile::Format;
-                // ("..." where a file dialog follows: in a page the file downloads at once)
+                // ("…" where a file dialog follows: in a page the file downloads at once)
                 let page = cfg!(target_arch = "wasm32");
                 for (label, f) in [
-                    (if page { "Export STL" } else { "Export STL..." }, Format::Stl),
-                    (if page { "Export 3MF" } else { "Export 3MF..." }, Format::ThreeMf),
-                    (if page { "Export OBJ" } else { "Export OBJ..." }, Format::Obj),
+                    (if page { "Export STL" } else { "Export STL…" }, Format::Stl),
+                    (if page { "Export 3MF" } else { "Export 3MF…" }, Format::ThreeMf),
+                    (if page { "Export OBJ" } else { "Export OBJ…" }, Format::Obj),
                 ] {
                     items.push((label, model_open.then_some(Action::ExportMesh(f))));
                 }
@@ -1595,9 +1595,15 @@ impl Shell {
             }
             if self.dwgdoc.is_some() {
                 items.push(("Save", Some(Action::DwgDoc(dwgdoc::Cmd::Run("QSAVE")))));
-                items.push(("Save As...", Some(Action::DwgDoc(dwgdoc::Cmd::Run("SAVEAS")))));
+                items.push(("Save As…", Some(Action::DwgDoc(dwgdoc::Cmd::Run("SAVEAS")))));
             }
-            match menu_at(ctx, "file-menu", at, &t, &items, &mut self.places) {
+            // an item drawn off says why on hover (STANDARD §7)
+            let why = if self.drawing.is_some() {
+                "Not in a drawing: File > Close Drawing first"
+            } else {
+                "Open or create a part first (File > New or Open…)"
+            };
+            match menu_at(ctx, "file-menu", at, &t, &items, why, &mut self.places) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);
                     self.file_menu = false;
@@ -1646,7 +1652,7 @@ impl Shell {
                 Some(Action::Parallel(false)),
             ));
             let fresh = std::mem::take(&mut self.cube_menu_fresh);
-            match menu_at(ctx, "cube-menu", at, &t, &items, &mut self.places) {
+            match menu_at(ctx, "cube-menu", at, &t, &items, "", &mut self.places) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);
                     self.cube_menu = None;
@@ -1852,6 +1858,7 @@ fn menu_at(
     at: egui::Pos2,
     t: &Theme,
     items: &[(&str, Option<Action>)],
+    off_why: &str,
     places: &mut Vec<(String, Rect)>,
 ) -> MenuResult {
     let mut out = MenuResult::Open;
@@ -1875,7 +1882,10 @@ fn menu_at(
                 } else {
                     Sense::hover()
                 };
-                let resp = ui.interact(r, ui.scope_id().with(k), sense);
+                let mut resp = ui.interact(r, ui.scope_id().with(k), sense);
+                if action.is_none() && !off_why.is_empty() {
+                    resp = resp.on_hover_text(off_why);
+                }
                 places.push((format!("{id}:{label}"), r));
                 resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, action.is_some(), *label));
                 if (resp.hovered() || resp.has_focus()) && action.is_some() {
