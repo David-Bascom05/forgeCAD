@@ -190,6 +190,10 @@ pub struct Resolved {
     pub held_chip: bool,
     /// Material removal rate, cm³/min.
     pub mrr: f64,
+    /// Power and torque at the upper ends of the material's cited kc1.1/mc ranges (the nominal
+    /// values where it cites none).
+    pub power_hi: f64,
+    pub torque_hi: f64,
     /// Spindle power and torque available at the resolved rpm, when the curve covers it.
     pub power_avail: Option<f64>,
     pub torque_avail: Option<f64>,
@@ -520,9 +524,36 @@ pub fn milling(
     let power_avail = power_at(spindle.power, n);
     let torque_avail = power_avail.map(|p| torque_of(p, n));
     let kc_note = group.map(|g| format!("kc1.1 {} mc {} (group {}: {})", g.kc1_1, g.mc, g.group, g.source));
-    for (what, have, avail, unit) in [
-        ("power", derived.power, power_avail, "kW"),
-        ("torque", derived.torque, torque_avail, "N·m"),
+    // the same cut at the upper ends of the cited kc1.1/mc ranges
+    let (power_hi, torque_hi) = match group {
+        Some(g) if g.kc1_1_range.is_some() || g.mc_range.is_some() => {
+            let (kc_hi, mc_hi) = g.upper();
+            let hi = Group {
+                kc1_1: kc_hi,
+                mc: mc_hi,
+                ..g.clone()
+            };
+            let f = feeds::at(
+                &hi,
+                &Cut {
+                    d,
+                    flutes: tool.flutes,
+                    ball: tool.ball,
+                    carbide: tool.carbide,
+                    ap: ap.v,
+                    ae: ae.v,
+                },
+                fz.v,
+                n,
+                d_eff,
+            );
+            (f.power, f.torque)
+        }
+        _ => (derived.power, derived.torque),
+    };
+    for (what, have, hi, avail, unit) in [
+        ("power", derived.power, power_hi, power_avail, "kW"),
+        ("torque", derived.torque, torque_hi, torque_avail, "N·m"),
     ] {
         let check = match (group, avail) {
             (None, _) => Check {
@@ -544,6 +575,19 @@ pub fn milling(
                 } else {
                     format!("{n:.0} rpm is outside the machine's power curve")
                 },
+            },
+            (Some(_), Some(lim)) if have <= lim && hi > lim => Check {
+                what,
+                verdict: Verdict::Warn,
+                value: hi,
+                limit: lim,
+                unit,
+                why: format!(
+                    "{:.0}% of the spindle's at {n:.0} rpm with the data's nominal kc, {:.0}% at the upper ends of its measured range; {}",
+                    100.0 * have / lim,
+                    100.0 * hi / lim,
+                    kc_note.clone().unwrap_or_default()
+                ),
             },
             (Some(_), Some(lim)) => Check {
                 what,
@@ -627,6 +671,8 @@ pub fn milling(
         feeds: derived,
         held_chip: ask.feed.is_none() && ask.fz.is_none(),
         mrr,
+        power_hi,
+        torque_hi,
         power_avail,
         torque_avail,
         checks,
@@ -958,6 +1004,7 @@ mod tests {
             mc: 0.25,
             source: "test group".into(),
             note: String::new(),
+            ..Group::default()
         }
     }
     fn preset() -> Preset {
@@ -1274,5 +1321,35 @@ mod tests {
         let r = turning(&ask, &turn_tool(), Some(&g), &sp, [10.0, 80.0]).unwrap();
         assert!(r.at.iter().all(|p| p.rpm == 1000.0));
         assert!((r.vc.v - PI * 80.0).abs() < 1e-9);
+    }
+
+    /// With a cited range, the power is also checked at its upper ends: within the spindle at
+    /// the nominal kc but over it at the upper ends warns (never a silent pass).
+    #[test]
+    fn power_at_the_upper_ends_warns() {
+        let mut g = group();
+        g.kc1_1_range = Some([350.0, 1400.0]);
+        g.mc_range = Some([0.2, 0.3]);
+        let ask = Ask {
+            rpm: Some(5000.0),
+            fz: Some(0.05),
+            ae: Some(12.7),
+            ap: Some(12.7),
+            ..Ask::default()
+        };
+        let r = milling(&ask, &tool(None), Some(&g), &spindle(), (0.0, 0.0)).unwrap();
+        // hm = 2 fz/π; P ∝ kc1.1 hm^(−mc)
+        let hm = 2.0 * 0.05 / PI;
+        let ratio = 1400.0 * forge_math::dmath::powf(hm, -0.3) / (700.0 * forge_math::dmath::powf(hm, -0.25));
+        assert!((r.power_hi / r.feeds.power - ratio).abs() < 1e-9);
+        let lim = r.power_avail.unwrap();
+        assert!(
+            r.feeds.power < lim && r.power_hi > lim,
+            "{} {} {lim}",
+            r.feeds.power,
+            r.power_hi
+        );
+        let p = r.checks.iter().find(|c| c.what == "power").unwrap();
+        assert_eq!(p.verdict, Verdict::Warn);
     }
 }

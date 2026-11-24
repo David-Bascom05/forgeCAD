@@ -1,75 +1,252 @@
-# Cutting data per ISO 513 group: our own round mid-range numbers for general carbide and HSS
-# end milling, restated from the public ranges tool makers' handbooks give. A starting point:
-# verify with the tool maker for the tool and the material.
+# Cutting data per ISO 513 group for general carbide and HSS end milling, each value cited
+# (cite.rs): `published` where a source states it, `estimate` where it is our number with its
+# basis, `unknown` where nothing was read. The speeds and chips are forgeCAD's own round starting
+# points: verify with the tool maker for the tool and the material. A tool's own data
+# ([[tool.preset]]) and the user's values are used over these (forge_tooling::resolve).
+#
+# Measured Kienzle data: Klippel H., Suessmaier S., Kuffa M., Wegener K., "Dry Cutting
+# Experiments Database Ti6Al4V and Ck45", arXiv:2209.04197 (2022), licensed CC BY 4.0
+# (https://creativecommons.org/licenses/by/4.0/). Values restated as ranges with attribution.
 
 [[group]]
 group = "P"
 name = "steels"
+real = true
 vc_carbide = 180
 vc_hss = 30
 fz_d1 = 0.008
 fz_d20 = 0.08
 kc1_1 = 1700
 mc = 0.25
-source = "forgecad generic mid-range, restated from public handbook ranges"
+kc1_1_range = [1368, 1935]
+mc_range = [0.17, 0.51]
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; mid-range for unalloyed carbon steel, verify with the tool maker"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; mid-range for unalloyed carbon steel, verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "estimate"
+basis = "inside the measured Ck45 (AISI 1045) range 1368-1935 N/mm2 over vc 10-450 m/min (orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, fitted per vc by extrapolating kc to h = 1 mm (paper section 3.7)); a round mid value, not one measurement; other P steels not covered"
+[[group.cite]]
+path = "mc"
+status = "estimate"
+basis = "inside the measured Ck45 range 0.17-0.51 (orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, fitted per vc by extrapolating kc to h = 1 mm (paper section 3.7)); the power is also checked at the range's upper end"
+[[group.cite]]
+path = "kc1_1_range"
+status = "published"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ck45 kc1.1 [N/mm2] at vc 10,30,50,70,100,150,200,250,300,350,450 m/min: 1935,1803,1417,1729,1672,1707,1716,1794,1851,1575,1368"
+note = "Klippel, Suessmaier, Kuffa, Wegener, 'Dry Cutting Experiments Database Ti6Al4V and Ck45', ETH Zurich IWF, arXiv:2209.04197 v1 (2022), CC BY 4.0; read from the authors' TeX source (Kienzle_LtxTabelle_*.inc, the paper's Tables 16/17); orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, fitted per vc by extrapolating kc to h = 1 mm (paper section 3.7). Ck45 only"
+[[group.cite]]
+path = "mc_range"
+status = "published"
+source = "https://arxiv.org/abs/2209.04197"
+taken = "2026-11-24"
+value = "Ck45 mc at the same vc: 0.19,0.17,0.51,0.35,0.32,0.28,0.26,0.22,0.22,0.27,0.29"
+note = "Klippel, Suessmaier, Kuffa, Wegener, 'Dry Cutting Experiments Database Ti6Al4V and Ck45', ETH Zurich IWF, arXiv:2209.04197 v1 (2022), CC BY 4.0; read from the authors' TeX source (Kienzle_LtxTabelle_*.inc, the paper's Tables 16/17); orthogonal dry turning, uncoated Sandvik CCMW 09T304 H13A, rake 0 deg, kr 90 deg, fitted per vc by extrapolating kc to h = 1 mm (paper section 3.7). Ck45 only"
 
 [[group]]
 group = "M"
 name = "stainless steels"
+real = true
 vc_carbide = 110
 vc_hss = 15
 fz_d1 = 0.006
 fz_d20 = 0.06
 kc1_1 = 2100
 mc = 0.21
-source = "forgecad generic mid-range, restated from public handbook ranges"
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read for any M-group material"
+[[group.cite]]
+path = "mc"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read"
 
 [[group]]
 group = "K"
 name = "cast irons"
+real = true
 vc_carbide = 160
 vc_hss = 25
 fz_d1 = 0.01
 fz_d20 = 0.1
 kc1_1 = 1100
 mc = 0.28
-source = "forgecad generic mid-range, restated from public handbook ranges"
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read for any K-group material"
+[[group.cite]]
+path = "mc"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read"
 
 [[group]]
 group = "N"
 name = "non-ferrous (aluminium, copper alloys)"
+real = true
 vc_carbide = 400
 vc_hss = 90
 fz_d1 = 0.01
 fz_d20 = 0.12
 kc1_1 = 700
 mc = 0.25
-source = "forgecad generic mid-range, restated from public handbook ranges"
+kc1_1_range = [350, 700]
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; errs slow for wrought aluminium: Helical states 2100 SFM (640 m/min) for its H45AL-3 in wrought aluminium (the helical tool records cite it)"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; at 12.7 mm it interpolates to 0.0777 mm, near Helical's 1/2 in slot chip 0.0032 in (0.0813 mm) for H45AL-3 (feeds-speeds.md section 8)"
+[[group.cite]]
+path = "kc1_1"
+status = "estimate"
+basis = "the top of the Sandvik N-group range 350-700 N/mm2 per research/cam/libraries-machines-posts-feeds.md section 3.1 (Sandvik Coromant material pages, read by TOOLPATH-RESEARCH in an earlier session; not re-read here): the high end, so the power errs high"
+[[group.cite]]
+path = "mc"
+status = "estimate"
+basis = "Sandvik's 'typically 0.25' per research/cam/libraries-machines-posts-feeds.md section 3.1 (Sandvik Coromant material pages, read by TOOLPATH-RESEARCH in an earlier session; not re-read here); no measured aluminium mc read (feeds-speeds.md section 3.1)"
+[[group.cite]]
+path = "kc1_1_range"
+status = "estimate"
+basis = "the Sandvik N-group range per research/cam/libraries-machines-posts-feeds.md section 3.1 (Sandvik Coromant material pages, read by TOOLPATH-RESEARCH in an earlier session; not re-read here)"
 
 [[group]]
 group = "S"
 name = "heat-resistant alloys and titanium"
+real = true
 vc_carbide = 45
 vc_hss = 8
 fz_d1 = 0.005
 fz_d20 = 0.05
 kc1_1 = 2500
 mc = 0.24
-source = "forgecad generic mid-range, restated from public handbook ranges"
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; above every measured Ti6Al4V value (662-1299 N/mm2, Klippel et al. 2022, https://arxiv.org/abs/2209.04197), so it errs high (more power) for titanium; nickel and cobalt superalloys: no value read"
+[[group.cite]]
+path = "mc"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; Ti6Al4V measured 0.21-0.41 (Klippel et al. 2022, https://arxiv.org/abs/2209.04197); superalloys: no value read"
 
 [[group]]
 group = "H"
 name = "hardened steels"
+real = true
 vc_carbide = 60
 vc_hss = 5
 fz_d1 = 0.004
 fz_d20 = 0.04
 kc1_1 = 3400
 mc = 0.2
-source = "forgecad generic mid-range, restated from public handbook ranges"
+source = "per value: see the cites"
 note = "verify with the tool maker"
+[[group.cite]]
+path = "vc_carbide"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "vc_hss"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; verify with the tool maker"
+[[group.cite]]
+path = "fz_d1"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "fz_d20"
+status = "estimate"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; a starting chip, verify with the tool maker"
+[[group.cite]]
+path = "kc1_1"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read for any H-group material"
+[[group.cite]]
+path = "mc"
+status = "unknown"
+basis = "forgeCAD's own round placeholder (the generic set since the first CAM commit); no source behind the number; no measured value read"

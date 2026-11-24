@@ -21,10 +21,10 @@
 //!
 //! The data is per group, in our own numbers restated from public handbook ranges; it is a
 //! starting point. Every value is marked "verify with the tool maker".
-use crate::LibError;
-use crate::toml::{Table, num, text};
+use crate::toml::{Table, num, nums, text};
+use crate::{Cite, LibError, cite};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Group {
     /// P M K N S H.
     pub group: String,
@@ -38,8 +38,16 @@ pub struct Group {
     /// Specific cutting force at 1 mm chip, N/mm², and its exponent.
     pub kc1_1: f64,
     pub mc: f64,
+    /// Measured spread of kc1.1 and mc for the group's cited material, where one is cited: the
+    /// power is also checked at the upper ends (h^(−mc) rises with mc for h < 1 mm, and the
+    /// power rises with kc, so the upper ends bound it within the data: feeds-speeds.md §10.5).
+    pub kc1_1_range: Option<[f64; 2]>,
+    pub mc_range: Option<[f64; 2]>,
     pub source: String,
     pub note: String,
+    /// Every value cited (cite.rs): `real = true` records must cite all of them.
+    pub real: bool,
+    pub cites: Vec<Cite>,
 }
 
 impl Group {
@@ -59,7 +67,34 @@ impl Group {
                 fix: format!("give `{k}`"),
             })
         };
+        let range = |k: &'static str| -> Result<Option<[f64; 2]>, LibError> {
+            match nums(t, k) {
+                None => Ok(None),
+                Some(v) if v.len() == 2 && v[0] <= v[1] => Ok(Some([v[0], v[1]])),
+                Some(_) => Err(LibError::Bad {
+                    record: rec.clone(),
+                    field: k,
+                    why: "is [low, high]".into(),
+                }),
+            }
+        };
+        let (kc1_1_range, mc_range) = (range("kc1_1_range")?, range("mc_range")?);
+        let mut required: Vec<String> = ["vc_carbide", "vc_hss", "fz_d1", "fz_d20", "kc1_1", "mc"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        if kc1_1_range.is_some() {
+            required.push("kc1_1_range".into());
+        }
+        if mc_range.is_some() {
+            required.push("mc_range".into());
+        }
+        let (real, cites) = cite::read(t, &rec, &required, &[])?;
         Ok(Group {
+            kc1_1_range,
+            mc_range,
+            real,
+            cites,
             name: text(t, "name").unwrap_or("").to_string(),
             vc_carbide: n("vc_carbide")?,
             vc_hss: n("vc_hss")?,
@@ -71,6 +106,14 @@ impl Group {
             note: text(t, "note").unwrap_or("").to_string(),
             group: g,
         })
+    }
+
+    /// kc1.1 and mc at the upper ends of their cited ranges (the point values where none).
+    pub fn upper(&self) -> (f64, f64) {
+        (
+            self.kc1_1_range.map_or(self.kc1_1, |r| r[1].max(self.kc1_1)),
+            self.mc_range.map_or(self.mc, |r| r[1].max(self.mc)),
+        )
     }
 
     pub fn fz_at(&self, d: f64) -> f64 {
@@ -214,6 +257,7 @@ mod tests {
             mc: 0.25,
             source: String::new(),
             note: String::new(),
+            ..Group::default()
         };
         let full = feeds(
             &g,
@@ -274,6 +318,7 @@ mod tests {
             mc: 0.25,
             source: String::new(),
             note: String::new(),
+            ..Group::default()
         }
     }
 

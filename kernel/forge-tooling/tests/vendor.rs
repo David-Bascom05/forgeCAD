@@ -177,3 +177,38 @@ fn builtin_files_are_named_by_vendor() {
     }
     assert_eq!(l, Library::builtin());
 }
+
+/// The cutting data cites every value (published, estimate with its basis, or unknown); the
+/// P group carries Klippel et al.'s measured Ck45 Kienzle ranges (CC BY 4.0) and its point
+/// values lie inside them.
+#[test]
+fn cutting_data_is_cited_per_value() {
+    let lib = Library::builtin();
+    assert_eq!(lib.cutting.len(), 6);
+    for g in &lib.cutting {
+        assert!(g.real, "group {}", g.group);
+        for f in ["vc_carbide", "vc_hss", "fz_d1", "fz_d20", "kc1_1", "mc"] {
+            let c = g
+                .cites
+                .iter()
+                .find(|c| c.path == f)
+                .unwrap_or_else(|| panic!("{} {f}", g.group));
+            assert!(
+                c.status == CiteStatus::Published || !c.basis.is_empty(),
+                "{} {f}",
+                g.group
+            );
+        }
+    }
+    let p = lib.group("P").unwrap();
+    assert_eq!(
+        (p.kc1_1_range, p.mc_range),
+        (Some([1368.0, 1935.0]), Some([0.17, 0.51]))
+    );
+    let r = p.kc1_1_range.unwrap();
+    assert!(p.kc1_1 >= r[0] && p.kc1_1 <= r[1]);
+    let c = p.cites.iter().find(|c| c.path == "kc1_1_range").unwrap();
+    assert_eq!(c.status, CiteStatus::Published);
+    assert!(c.source.contains("2209.04197") && c.note.contains("CC BY 4.0"));
+    assert_eq!(p.upper(), (1935.0, 0.51));
+}
