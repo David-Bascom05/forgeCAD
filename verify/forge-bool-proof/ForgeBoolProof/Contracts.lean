@@ -294,7 +294,7 @@ def D7 : Prop := ∀ A B Aex Bex op fs cs, Ctx δ abs Size A B Aex Bex → ArrOK
 def ApplyPost (A B : Body) (op : Op) (a : Arr E) (SA SB : Set E) (R : Body) : Prop :=
   ∃ Rs, exactOf δ (abs R) = some Rs ∧
     (∀ i (h : i < (abs R).edges.length), EdgeIsolated δ (abs R) i (abs R).edges[i]) ∧
-    WellFormed Rs ∧ BoundsFaces Rs a.FacesG (Res a.G (keepRoom a.G SA SB op)) ∧
+    VertexIsolated Rs ∧ WellFormed Rs ∧ BoundsFaces Rs a.FacesG (Res a.G (keepRoom a.G SA SB op)) ∧
     Faithful δ (abs R) ∧ Names A B op R
 
 def D8 : Prop := ∀ A B Aex Bex op fs kp, Ctx δ abs Size A B Aex Bex → ArrOK Aex Bex (V.arr fs) →

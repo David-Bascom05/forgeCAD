@@ -345,6 +345,11 @@ condition). -/
 def EdgeIsolated (δ : ℝ) (b : BodyModel E) (i : Nat) (e : EdgeModel E) : Prop :=
   IsPreconnected (edgeMeet δ b i e)
 
+/-- **Each vertex's zone meets only its incident faces** (a validity condition, as
+`EdgeIsolated`; ledger D8.iso): a face point in vertex `u`'s zone is on a face using `u`. -/
+def VertexIsolated (b : BodyModel E) : Prop :=
+  ∀ u z, b.zones[u]? = some z → ∀ f ∈ b.faces, ∀ y ∈ f.region, y ∈ z → IncV b u f
+
 /-- The exact edges a face's loops use. -/
 def faceEdges (δ : ℝ) (b : BodyModel E) (f : FaceModel E) : Set E :=
   ⋃ i, ⋃ (_ : IncE f i), ⋃ e ∈ b.edges[i]?, edgeMeet δ b i e
