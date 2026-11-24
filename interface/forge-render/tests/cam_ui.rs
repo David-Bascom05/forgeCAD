@@ -44,6 +44,15 @@ fn shot(h: &mut Headless, name: &str) {
 
 /// The flange and its machining document, copied to a directory of the test's own.
 fn open(tag: &str) -> Option<(Headless, std::path::PathBuf)> {
+    open_with(tag, false)
+}
+
+/// The same with the setup not placed (no `at:`): its machine positions unchecked (G5).
+fn open_unplaced(tag: &str) -> Option<(Headless, std::path::PathBuf)> {
+    open_with(tag, true)
+}
+
+fn open_with(tag: &str, unplaced: bool) -> Option<(Headless, std::path::PathBuf)> {
     let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
     let dir = std::env::temp_dir().join(format!("fg-cam-ui-{}-{tag}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -51,6 +60,11 @@ fn open(tag: &str) -> Option<(Headless, std::path::PathBuf)> {
         std::fs::copy(ex.join(f), dir.join(f)).unwrap();
     }
     let file = dir.join("flange_cam.fg");
+    if unplaced {
+        let t = std::fs::read_to_string(&file).unwrap().replace(", at: (0, 0, -250)", "");
+        assert!(!t.contains("at: ("));
+        std::fs::write(&file, t).unwrap();
+    }
     let mut h = match Headless::new((1500.0, 1000.0), 1.0) {
         Ok(h) => h,
         Err(e) => {
@@ -74,7 +88,7 @@ fn a_machining_document_opens_on_manufacture_and_generates() {
     assert_eq!(h.gui.shell.tab, CAM_TAB);
     assert!(h.gui.shell.place("tab:Manufacture").is_some());
     let w = h.gui.shell.cam.as_ref().unwrap();
-    assert_eq!(w.run.as_ref().unwrap().certification, "except G5");
+    assert_eq!(w.run.as_ref().unwrap().certification, "full");
     for op in ["skim", "top", "prof", "bore", "bolts"] {
         assert_eq!(w.status(op), "built", "{op}");
         assert!(h.gui.shell.place(&format!("cam:row:{op}")).is_some(), "{op} row");
@@ -148,7 +162,7 @@ fn the_op_dialog_edits_the_text_and_marks_it_stale() {
 
 #[test]
 fn post_process_shows_the_program_and_writes_it() {
-    let Some((mut h, file)) = open("post") else { return };
+    let Some((mut h, file)) = open_unplaced("post") else { return };
     assert!(h.click("tool:Post Process"));
     h.step();
     assert!(h.placed("cam:post:text").is_some());
@@ -174,7 +188,7 @@ fn post_process_shows_the_program_and_writes_it() {
 #[test]
 fn nc_programs_post_export_and_go_stale() {
     use forge_render::shell::cam::nc::Posted;
-    let Some((mut h, file)) = open("nc") else { return };
+    let Some((mut h, file)) = open_unplaced("nc") else { return };
     assert!(h.click("tool:NC Programs"));
     h.step();
     shot(&mut h, "cam-nc-open");
@@ -252,4 +266,33 @@ fn the_tool_library_adds_a_tool_to_the_document() {
     assert!(h.click(&row));
     h.step();
     assert!(text(&h).contains("tool(\"flat-6\", t: 2"), "{}", text(&h));
+}
+
+/// The dialogs' parity arguments are the language's: a contour with axial stock, conventional
+/// direction, finishing and spring passes, on bar stock, generates (no GPU needed).
+#[test]
+fn parity_arguments_the_dialogs_write_generate() {
+    let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+    let src = std::fs::read_to_string(ex.join("flange_cam.fg")).unwrap();
+    let prof = src.lines().find(|l| l.starts_with("prof")).unwrap();
+    let new = prof.replacen(
+        "step: 4",
+        "step: 4, leave_axial: 0.1, direction: \"conventional\", finish: 2, finish_step: 0.5, spring: 1",
+        1,
+    );
+    let src = src.replace(prof, &new);
+    let cam = forge_cam_lang::run(&src, ex);
+    let op = cam.ops.iter().find(|o| o.name == "prof").expect("prof");
+    assert!(op.refusal.is_none(), "{:?}", op.refusal);
+    // the parity fields are offered only on the ops that take them
+    for s in forge_render::shell::cam::schema::OPS {
+        for f in s.fields {
+            if f.arg == "direction" || f.arg.starts_with("finish") || f.arg == "spring" {
+                assert_eq!(s.func, "contour", "{} offers {}", s.func, f.arg);
+            }
+            if f.arg == "leave_axial" {
+                assert!(["facing", "clear", "contour", "pocket"].contains(&s.func), "{}", s.func);
+            }
+        }
+    }
 }

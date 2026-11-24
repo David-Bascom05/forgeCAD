@@ -1566,6 +1566,9 @@ fn setup_dialog(
                     let kinds = [
                         ("margin".to_string(), "Box: the part's box plus offsets".to_string()),
                         ("box".to_string(), "Box: fixed size (min, max)".to_string()),
+                        ("cylinder".to_string(), "Cylinder: a bar along z".to_string()),
+                        ("tube".to_string(), "Tube: a bar with a bore".to_string()),
+                        ("solid".to_string(), "From a solid: its own part file".to_string()),
                         ("from".to_string(), "From the earlier setup".to_string()),
                     ];
                     arg_choice(ui, t, "Mode", &mut k, &kinds, "cam:setup:stock", places);
@@ -1579,13 +1582,35 @@ fn setup_dialog(
                             }
                         }
                         "from" => note(ui, "The stock that setup provably left, turned over about x.", DLG_W, t.ink2),
+                        "cylinder" | "tube" => {
+                            let mut rows = vec![("d", "Diameter", "the part's reach + the radial margin")];
+                            if k == "tube" {
+                                rows.push(("id", "Bore diameter", "required"));
+                            }
+                            rows.push(("margin", "Margin (radial, above)", "(2, 1)"));
+                            rows.push(("below", "Below the part", "0"));
+                            for (key, label, hint) in rows {
+                                let mut s = get(d, key);
+                                arg_field(ui, t, label, &mut s, hint, "mm", &format!("cam:setup:{key}"), places);
+                                set(d, key, s);
+                            }
+                            note(ui, "Along z about the part's centre; it must hold the part, band by band, or the setup is refused.", DLG_W, t.ink2);
+                        }
+                        "solid" => {
+                            let mut s = get(d, "file");
+                            arg_field(ui, t, "Stock part file", &mut s, "blank.fg", "", "cam:setup:file", places);
+                            set(d, "file", s);
+                            note(ui, "A prism along z in the part's frame, beside the document.", DLG_W, t.ink2);
+                        }
                         _ => {
                             let mut s = get(d, "margin");
                             arg_field(ui, t, "Offsets (x, y, z)", &mut s, "(3, 3, 2)", "mm", "cam:setup:margin", places);
                             set(d, "margin", s);
+                            let mut s = get(d, "below");
+                            arg_field(ui, t, "Below the part", &mut s, "0", "mm", "cam:setup:below", places);
+                            set(d, "below", s);
                         }
                     }
-                    note(ui, "Cylinder and tube stock and stock from a solid are not in this phase's language yet.", DLG_W, t.ink2);
                 }
                 2 => {
                     for (key, label, hint) in [

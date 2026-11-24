@@ -25,9 +25,9 @@ closes it:
 | Geometry: pick model edges / faces / holes / sketches | holes and sketches from history or picked in the view | done (holes, sketches); edge chains LANG |
 | Heights: clearance, retract, feed, top, bottom — each a reference + offset | setup clearance and retract (setup dialog Heights); op top/bottom (`from:`/`to:`) as numbers | partly; references (`to: f.plate.end`) LANG |
 | Passes: multiple depths / max stepdown | `step:` | done |
-| Passes: stock to leave radial and axial, negative | `leave:` (one value) | partly; axial/radial LANG |
-| Passes: finishing passes, spring pass, even stepdowns | none | LANG |
-| Passes: direction climb / conventional / both ways (R4, R5) | none (climb by construction) | LANG |
+| Passes: stock to leave radial and axial, negative | `leave:` radial (walls) and `leave_axial:` (floors) on facing, clear, contour, pocket | done on cam/ui-parity (with CAM-CORE's cam/parity); negative: not yet |
+| Passes: finishing passes, spring pass, even stepdowns | contour: `finish:`, `finish_step:`, `spring:` | done on cam/ui-parity (contour); other ops and even stepdowns: LANG |
+| Passes: direction climb / conventional / both ways (R4, R5) | contour: `direction:` climb / conventional | done on cam/ui-parity (contour); pocket/clear: QUAL |
 | Passes: tolerance, smoothing (arc fit) (S17) | setup `tol:`; arcs posted where the path is arcs | partly |
 | Linking: retraction policy, high-feed mode, stay-down, lift height, safe distance (L1–L5, L11) | retract to the setup's retract height; Linking tab says so and opens Setup Heights | partly; policies LANG |
 | Linking: leads (horizontal / vertical radii) (L6) | none | LANG |
@@ -40,7 +40,7 @@ closes it:
 | Fusion | here | state |
 |---|---|---|
 | Machine, WCS orientation and origin, stock modes, fixture | machine, origin (stock top centre/corner, part origin, point), work offset, `at:`, fixture (soft jaws, vise), `from:` (turned over), stock box+offsets or fixed box | done |
-| Stock: cylinder, tube, from solid, relative/fixed | box only | LANG (CAM-CORE) |
+| Stock: cylinder, tube, from solid, relative/fixed | setup dialog Stock: box (offsets + below, or fixed), cylinder, tube, solid("blank.fg"), from the earlier setup | done on cam/ui-parity |
 | WCS origin picked in the view | numbers / named choices | UI next (needs a pick → part-frame point; anchors give names, not points) |
 | Probe WCS | none | LANG |
 | Lathe setup: chuck, bar, Z0, machine | done (lathe dialog) | done |

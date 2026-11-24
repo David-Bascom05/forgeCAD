@@ -1037,10 +1037,22 @@ impl CamWs {
         if d.lathe {
             return LATHE_KW.iter().map(|k| (*k, get(k))).collect();
         }
+        // a stock call of its keyword arguments that are given
+        let call = |f: &str, keys: &[&str]| {
+            let a: Vec<String> = keys
+                .iter()
+                .filter(|k| !get(k).is_empty())
+                .map(|k| format!("{k}: {}", get(k)))
+                .collect();
+            format!("{f}({})", a.join(", "))
+        };
         let stock = match get("stock_kind").as_str() {
             "box" => format!("box(min: {}, max: {})", get("min"), get("max")),
             "from" => String::new(),
-            _ => format!("box(margin: {})", get("margin")),
+            "cylinder" => call("cylinder", &["d", "margin", "below"]),
+            "tube" => call("tube", &["d", "id", "margin", "below"]),
+            "solid" => format!("solid(\"{}\")", get("file").trim_matches('"')),
+            _ => call("box", &["margin", "below"]),
         };
         let mut out = vec![
             ("from", get("from")),
@@ -1178,6 +1190,39 @@ pub fn lathes() -> Vec<String> {
         .collect()
 }
 
+/// A call's arguments as written, split at top-level commas: (keyword, text).
+fn call_args(inner: &str) -> Vec<(Option<String>, String)> {
+    let mut out = vec![];
+    let (mut depth, mut start, mut quote) = (0i32, 0usize, false);
+    let mut push = |piece: &str| {
+        let piece = piece.trim();
+        if piece.is_empty() {
+            return;
+        }
+        // `key: value` when the text before the first colon is a name
+        match piece.split_once(':') {
+            Some((k, v)) if k.trim().chars().all(|c| c.is_alphanumeric() || c == '_') && !k.trim().is_empty() => {
+                out.push((Some(k.trim().to_string()), v.trim().to_string()))
+            }
+            _ => out.push((None, piece.to_string())),
+        }
+    };
+    for (i, c) in inner.char_indices() {
+        match c {
+            '"' => quote = !quote,
+            '(' | '[' if !quote => depth += 1,
+            ')' | ']' if !quote => depth -= 1,
+            ',' if depth == 0 && !quote => {
+                push(&inner[start..i]);
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+    push(&inner[start..]);
+    out
+}
+
 /// A setup statement's arguments as the dialog edits them.
 pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
     let mut a: Vec<(String, String)> = vec![];
@@ -1185,25 +1230,23 @@ pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
         let Some(k) = &x.key else { continue };
         if k == "stock" {
             let t = x.text.trim();
-            if let Some(inner) = t.strip_prefix("box(").and_then(|r| r.strip_suffix(')')) {
-                if let Some(m) = inner.trim().strip_prefix("margin:") {
-                    a.push(("stock_kind".into(), "margin".into()));
-                    a.push(("margin".into(), m.trim().into()));
-                } else {
-                    a.push(("stock_kind".into(), "box".into()));
-                    // min: (..), max: (..)
-                    if let (Some(i), Some(j)) = (inner.find("min:"), inner.find("max:")) {
-                        let (lo, hi) = if i < j { (i, j) } else { (j, i) };
-                        let first = inner[lo..hi].trim().trim_end_matches(',');
-                        let second = inner[hi..].trim();
-                        for part in [first, second] {
-                            if let Some(v) = part.strip_prefix("min:") {
-                                a.push(("min".into(), v.trim().into()));
-                            } else if let Some(v) = part.strip_prefix("max:") {
-                                a.push(("max".into(), v.trim().into()));
-                            }
-                        }
-                    }
+            let Some((head, inner)) = t.split_once('(') else { continue };
+            let inner = inner.strip_suffix(')').unwrap_or(inner);
+            let kws = call_args(inner);
+            let kind = match head.trim() {
+                "box" if kws.iter().any(|(k, _)| k.as_deref() == Some("min")) => "box",
+                "box" => "margin",
+                "cylinder" => "cylinder",
+                "tube" => "tube",
+                "solid" => "solid",
+                _ => continue,
+            };
+            a.push(("stock_kind".into(), kind.into()));
+            for (key, v) in kws {
+                match key {
+                    Some(key) => a.push((key, v)),
+                    None if kind == "solid" => a.push(("file".into(), v.trim_matches('"').to_string())),
+                    None => {}
                 }
             }
             continue;
@@ -1220,6 +1263,33 @@ pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Each stock shape reads into the setup dialog and is written back as it was.
+    #[test]
+    fn stock_shapes_round_trip_through_the_setup_dialog() {
+        for stock in [
+            "box(margin: (3, 3, 2), below: 3)",
+            "box(min: (-50, -50, 0), max: (50, 50, 25))",
+            "cylinder(d: 60, margin: (2, 1), below: 4)",
+            "cylinder(margin: (2, 1))",
+            "tube(d: 60, id: 20, margin: (1, 1))",
+            "solid(\"blank.fg\")",
+        ] {
+            let text = format!("machining\nf = part(\"p.fg\")\nop1 = setup(f, stock: {stock})\n");
+            let st = doc::read(&text).unwrap();
+            let s = st.iter().find(|s| s.name == "op1").unwrap();
+            let d = SetupDlg {
+                id: Some("op1".into()),
+                name: "op1".into(),
+                tab: 1,
+                args: setup_args(s),
+                error: None,
+                lathe: false,
+            };
+            let kw = CamWs::setup_kw(&d);
+            assert_eq!(kw.iter().find(|k| k.0 == "stock").unwrap().1, stock, "{:?}", d.args);
+        }
+    }
 
     const DOC: &str = "machining
 shared tol = 0.01

@@ -80,7 +80,7 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     await p.evaluate(() => window.forgecad.loaded);
     await p.evaluate((d) => window.forgecad.fc.app_open(d), doc);
     let st = await t.until(p, generated, "the document generated");
-    assert.equal(st.cam.certification, "except G5", JSON.stringify(st.cam));
+    assert.equal(st.cam.certification, "full", JSON.stringify(st.cam));
     assert.deepEqual(
       st.cam.ops.map((o) => [o.name, o.status]),
       [["skim", "built"], ["top", "built"], ["prof", "built"], ["bore", "built"], ["bolts", "built"]],
