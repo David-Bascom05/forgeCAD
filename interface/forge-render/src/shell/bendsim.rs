@@ -461,6 +461,7 @@ fn status_mark(s: Option<Status>) -> (&'static str, egui::Color32) {
     match s {
         Some(Status::Published) => ("P", look::PASS),
         Some(Status::Estimate) => ("E", look::WARN),
+        Some(Status::User) => ("Y", egui::Color32::from_rgb(0xA0, 0x80, 0xE0)),
         Some(Status::Conflict) => ("C", look::WARN),
         Some(Status::Unknown) | None => ("U", look::MUTED),
     }
@@ -580,7 +581,7 @@ pub fn setup_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
             .show(ui, |ui| {
                 ui.label(
                     egui::RichText::new(
-                        "P published · E estimate · C conflict · U unknown; the source on hover",
+                        "P published · E estimate · C conflict · U unknown · Y yours; the source on hover",
                     )
                     .small()
                     .color(t.ink2),

@@ -47,6 +47,9 @@ pub enum Status {
     Estimate,
     Unknown,
     Conflict,
+    /// The user's own value (entered in the library builder): not a maker's number; its basis
+    /// says so. A real record holds none.
+    User,
 }
 
 impl Status {
@@ -56,6 +59,7 @@ impl Status {
             Status::Estimate => "estimate",
             Status::Unknown => "unknown",
             Status::Conflict => "conflict",
+            Status::User => "user",
         }
     }
 
@@ -65,6 +69,7 @@ impl Status {
             "estimate" => Status::Estimate,
             "unknown" => Status::Unknown,
             "conflict" => Status::Conflict,
+            "user" => Status::User,
             _ => return None,
         })
     }
@@ -101,14 +106,15 @@ impl Prov {
         self.cites.iter().filter(|c| c.path == path).collect()
     }
 
-    /// The weakest status among a path's cites (conflict < unknown < estimate < published), or
-    /// None if uncited.
+    /// The weakest status among a path's cites (conflict < unknown < user < estimate <
+    /// published), or None if uncited.
     pub fn status(&self, path: &str) -> Option<Status> {
         let rank = |s: Status| match s {
             Status::Conflict => 0,
             Status::Unknown => 1,
-            Status::Estimate => 2,
-            Status::Published => 3,
+            Status::User => 2,
+            Status::Estimate => 3,
+            Status::Published => 4,
         };
         self.of(path)
             .into_iter()
@@ -361,7 +367,7 @@ impl<'a> Rd<'a> {
                 let status = s("status")
                     .as_deref()
                     .and_then(Status::parse)
-                    .ok_or_else(|| cerr("status: published, estimate, unknown or conflict"))?;
+                    .ok_or_else(|| cerr("status: published, estimate, unknown, conflict or user"))?;
                 let c = Cite {
                     path: path.clone(),
                     status,
@@ -378,8 +384,11 @@ impl<'a> Rd<'a> {
                     Status::Published | Status::Conflict if c.source.is_none() || c.taken.is_none() => {
                         return Err(cerr("a published or conflict cite needs source and taken"));
                     }
-                    Status::Estimate | Status::Unknown if c.basis.is_none() => {
-                        return Err(cerr("an estimate or unknown cite needs a basis"));
+                    Status::Estimate | Status::Unknown | Status::User if c.basis.is_none() => {
+                        return Err(cerr("an estimate, unknown or user cite needs a basis"));
+                    }
+                    Status::User if real => {
+                        return Err(cerr("a real record holds no user value (real = false)"));
                     }
                     Status::Conflict if c.note.is_none() => return Err(cerr("a conflict cite needs a note")),
                     _ => {}
@@ -1054,6 +1063,33 @@ taken = "2026-11-24"
             Catalog::from_sources(&[("t.toml", &bad)]),
             Err(CatalogError::Cite { .. })
         ));
+    }
+
+    #[test]
+    fn a_users_value_is_cited_user_and_never_in_a_real_record() {
+        let mine = r#"
+[[punch]]
+id = "me/p"
+maker = "Mine"
+real = false
+clamp = "promecam"
+kind = "straight"
+height = 100
+[[punch.cite]]
+path = "height"
+status = "user"
+basis = "the user's own value, entered in forgecad's library builder"
+"#;
+        let c = Catalog::from_sources(&[("t.toml", mine)]).unwrap();
+        assert_eq!(c.punch("me/p").unwrap().prov.status("height"), Some(Status::User));
+        // a user cite needs its basis; a real record holds no user value
+        let bare = mine.replace(
+            "basis = \"the user's own value, entered in forgecad's library builder\"\n",
+            "",
+        );
+        assert!(Catalog::from_sources(&[("t.toml", &bare)]).is_err());
+        let real = mine.replace("real = false", "real = true");
+        assert!(Catalog::from_sources(&[("t.toml", &real)]).is_err());
     }
 }
 
