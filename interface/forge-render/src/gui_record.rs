@@ -420,7 +420,7 @@ impl Gui {
             #[cfg(not(target_arch = "wasm32"))]
             Some(Sink::Video(video)) if cancelled => {
                 video.cancel();
-                "Recording stopped".to_string()
+                "Recording cancelled".to_string()
             }
             #[cfg(not(target_arch = "wasm32"))]
             Some(Sink::Video(video)) => {
@@ -437,7 +437,7 @@ impl Gui {
             #[cfg(target_arch = "wasm32")]
             Some(Sink::Web(video)) if cancelled => {
                 video.cancel();
-                "Recording stopped".to_string()
+                "Recording cancelled".to_string()
             }
             #[cfg(target_arch = "wasm32")]
             Some(Sink::Web(video)) => {
