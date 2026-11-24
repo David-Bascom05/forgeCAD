@@ -287,6 +287,7 @@ speed (stats counter)  @ forge-bool/src/imprint.rs|static|static TAKEN: std::syn
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|static PICK: AtomicUsize = AtomicUsize::new(0);
 no-output (work index, counter or stop flag)  @ forge-bool/src/nary.rs|atomic|use std::sync::atomic::{AtomicUsize, Ordering};
 speed (picks how many threads run the work, never what an item computes: answers in item order; bits identical at 1, 2, 4 and 16 threads, W1)  @ forge-bool/src/nary.rs|clock|let born = forge_math::clock::Instant::now();
+speed (per-call, per-tool plane groups made once and shared by its pairs: a function of the tool alone, whichever pair thread makes it)  @ forge-bool/src/nary.rs|lazy|let plane_groups: Vec<std::sync::OnceLock<Vec<forge_math::Box3>>> =
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let merge_start = forge_math::clock::Instant::now();
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let mut clock = forge_math::clock::Instant::now();
 speed (timing stats; a clock that picks a path is must-fix 5)  @ forge-bool/src/nary.rs|clock|let now = forge_math::clock::Instant::now();
