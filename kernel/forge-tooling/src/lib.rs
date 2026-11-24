@@ -1079,6 +1079,24 @@ pub fn builtin_files() -> &'static [(&'static str, &'static str)] {
     BUILTIN
 }
 
+/// The makers' published libraries imported in bulk (data/libraries/), by name; empty unless
+/// the crate is built with the `maker-libraries` feature.
+pub fn maker_library_files() -> &'static [(&'static str, &'static str)] {
+    MAKER_LIBRARIES
+}
+
+impl Library {
+    /// The built-in library plus the makers' published libraries (the `maker-libraries`
+    /// feature; without it, the built-in library alone).
+    pub fn with_maker_libraries() -> Library {
+        let mut l = Library::builtin();
+        for (f, s) in MAKER_LIBRARIES {
+            l.add(f, s).expect("the maker libraries read");
+        }
+        l
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

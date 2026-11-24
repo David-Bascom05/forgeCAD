@@ -188,6 +188,7 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-bend-lang",
+ "forge-cam-import",
  "forge-cam-lang",
  "forge-dirs",
  "forge-geom",

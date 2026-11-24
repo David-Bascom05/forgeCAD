@@ -396,3 +396,55 @@ fn shop_part_tools() {
     let tm = l.tool("tungaloy-MTEC0807C171.5ISO").unwrap();
     assert_eq!((tm.dc, tm.tp, tm.nof), (7.0, 1.5, 3));
 }
+
+/// RobbJack's own Fusion library, imported in bulk (the `maker-libraries` feature): its end
+/// mills read, cite every value to the library file, and shape.
+#[cfg(feature = "maker-libraries")]
+#[test]
+fn robbjack_library() {
+    let l = Library::with_maker_libraries();
+    let rj: Vec<_> = l.tools.iter().filter(|t| t.vendor == "RobbJack").collect();
+    assert!(rj.len() >= 5000, "{}", rj.len());
+    let t = l.tool("robbjack-A1-201-04").unwrap();
+    assert_eq!(
+        (t.dc, t.lcf, t.dcon, t.oal, t.nof),
+        (3.175, 4.7625, 3.175, 38.1, 2)
+    );
+    let p = t.presets.iter().find(|p| p.name == "N rough").unwrap();
+    // 1965 ft/min, 0.0032 in/tooth (6061, RobbJack tested)
+    assert!((p.vc - 1965.0 * 0.3048).abs() < 1e-6 && (p.fz - 0.0032 * 25.4).abs() < 1e-9);
+    for t in rj.iter().step_by(97) {
+        assert!(
+            t.real
+                && t.cites
+                    .iter()
+                    .all(|c| c.source.starts_with("https://robbjack.com/"))
+        );
+        t.shape(t.lcf + 2.0, None)
+            .unwrap_or_else(|e| panic!("{}: {e:?}", t.id));
+    }
+}
+
+/// H7 reamers (Guhring HR 500: 1686 steel, 7286 aluminium) and DIN 373 counterbores (Guhring
+/// 324) for CAM-CORE's reaming and counterbored holes.
+#[test]
+fn reamers_and_counterbores() {
+    let l = Library::builtin();
+    for d in [3, 4, 5, 6, 8, 10, 12] {
+        for series in ["1686", "7286"] {
+            let id = format!("guhring-90{series}0{d:0>2}0000");
+            let t = l.tool(&id).unwrap_or_else(|e| panic!("{id}: {e:?}"));
+            assert_eq!(t.dc, d as f64, "{id}");
+            assert!(t.real && t.note.contains("H7"), "{id}");
+        }
+    }
+    for (id, d) in [
+        ("guhring-9003240060000", 6.0),
+        ("guhring-9003240110000", 11.0),
+        ("guhring-9003240200000", 20.0),
+    ] {
+        let t = l.tool(id).unwrap();
+        assert_eq!(t.dc, d);
+        t.shape(t.lcf + 2.0, None).unwrap();
+    }
+}

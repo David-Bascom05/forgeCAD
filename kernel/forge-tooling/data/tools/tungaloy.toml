@@ -22,7 +22,27 @@ group = "P"
 vc = 160.0
 fz = 0.04
 [[tool.preset]]
+name = "P general Low carbon steels (C < 0.3) SS400, SM490, S25C, etc. -200 HB"
+group = "P"
+vc = 160.0
+fz = 0.04
+[[tool.preset]]
+name = "P general Carbon steels (C > 0.3) S45C, S55C, etc. C45, C55, etc. -300 HB"
+group = "P"
+vc = 80.0
+fz = 0.06
+[[tool.preset]]
+name = "P general Low alloy steels SCM415, etc. -200 HB"
+group = "P"
+vc = 160.0
+fz = 0.06
+[[tool.preset]]
 name = "M general"
+group = "M"
+vc = 100.0
+fz = 0.04
+[[tool.preset]]
+name = "M general Stainless steels (Austenitic) SUS304, SUS316, etc. -200 HB"
 group = "M"
 vc = 100.0
 fz = 0.04
@@ -32,7 +52,17 @@ group = "K"
 vc = 80.0
 fz = 0.06
 [[tool.preset]]
+name = "K general Grey cast irons FC250, etc. 150-250 HB"
+group = "K"
+vc = 80.0
+fz = 0.06
+[[tool.preset]]
 name = "N general"
+group = "N"
+vc = 200.0
+fz = 0.12
+[[tool.preset]]
+name = "N general Aluminium alloy A2017, ADC12, etc."
 group = "N"
 vc = 200.0
 fz = 0.12
@@ -72,33 +102,81 @@ path = "preset.P general"
 status = "estimate"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
 taken = "2026-11-24"
-value = "Low carbon steels (C < 0.3) SS400, SM490, S25C, etc. -200 HB; Series 4D,5D; ø17.5 ~ ø26; vc 160 - 320; 0.04 - 0.1"
+value = "Low carbon steels (C < 0.3) SS400, SM490, S25C, etc. -200 HB; Low carbon steels (C < 0.3) SS400, SM490, S25C, etc. -200 HB; Series 4D,5D; ø17.5 ~ ø26; vc 160 - 320; 0.04 - 0.1"
 basis = "vc is the low end of the printed range; feed is the low end of the printed range"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev"
+[[tool.cite]]
+path = "preset.P general Low carbon steels (C < 0.3) SS400, SM490, S25C, etc. -200 HB"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+taken = "2026-11-24"
+value = "Low carbon steels (C < 0.3) SS400, SM490, S25C, etc. -200 HB; Low carbon steels (C < 0.3) SS400, SM490, S25C, etc. -200 HB; Series 4D,5D; ø17.5 ~ ø26; vc 160 - 320; 0.04 - 0.1"
+basis = "vc is the low end of the printed range; feed is the low end of the printed range"
+note = "fz is the feed per revolution, mm/rev"
+[[tool.cite]]
+path = "preset.P general Carbon steels (C > 0.3) S45C, S55C, etc. C45, C55, etc. -300 HB"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+taken = "2026-11-24"
+value = "Carbon steels (C > 0.3) S45C, S55C, etc. C45, C55, etc. -300 HB; Carbon steels (C > 0.3) S45C, S55C, etc. C45, C55, etc. -300 HB; 4D,5D; ø17.5 ~ ø26; vc 80 - 250; 0.06 - 0.1"
+basis = "vc is the low end of the printed range; feed is the low end of the printed range"
+note = "fz is the feed per revolution, mm/rev"
+[[tool.cite]]
+path = "preset.P general Low alloy steels SCM415, etc. -200 HB"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+taken = "2026-11-24"
+value = "Low alloy steels SCM415, etc. -200 HB; Low alloy steels SCM415, etc. -200 HB; 4D,5D; ø17.5 ~ ø26; vc 160 - 250; 0.06 - 0.12"
+basis = "vc is the low end of the printed range; feed is the low end of the printed range"
+note = "fz is the feed per revolution, mm/rev"
 [[tool.cite]]
 path = "preset.M general"
 status = "estimate"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
 taken = "2026-11-24"
-value = "Stainless steels (Austenitic) SUS304, SUS316, etc. -200 HB; 4D,5D; ø17.5 ~ ø26; vc 100 - 200; 0.04 - 0.1"
+value = "Stainless steels (Austenitic) SUS304, SUS316, etc. -200 HB; Stainless steels (Austenitic) SUS304, SUS316, etc. -200 HB; 4D,5D; ø17.5 ~ ø26; vc 100 - 200; 0.04 - 0.1"
 basis = "vc is the low end of the printed range; feed is the low end of the printed range"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev"
+[[tool.cite]]
+path = "preset.M general Stainless steels (Austenitic) SUS304, SUS316, etc. -200 HB"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+taken = "2026-11-24"
+value = "Stainless steels (Austenitic) SUS304, SUS316, etc. -200 HB; Stainless steels (Austenitic) SUS304, SUS316, etc. -200 HB; 4D,5D; ø17.5 ~ ø26; vc 100 - 200; 0.04 - 0.1"
+basis = "vc is the low end of the printed range; feed is the low end of the printed range"
+note = "fz is the feed per revolution, mm/rev"
 [[tool.cite]]
 path = "preset.K general"
 status = "estimate"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
 taken = "2026-11-24"
-value = "Grey cast irons FC250, etc. 150-250 HB; 4D,5D; ø17.5 ~ ø26; vc 80 - 250; 0.06 - 0.12"
+value = "Grey cast irons FC250, etc. 150-250 HB; Grey cast irons FC250, etc. 150-250 HB; 4D,5D; ø17.5 ~ ø26; vc 80 - 250; 0.06 - 0.12"
 basis = "vc is the low end of the printed range; feed is the low end of the printed range"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev"
+[[tool.cite]]
+path = "preset.K general Grey cast irons FC250, etc. 150-250 HB"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+taken = "2026-11-24"
+value = "Grey cast irons FC250, etc. 150-250 HB; Grey cast irons FC250, etc. 150-250 HB; 4D,5D; ø17.5 ~ ø26; vc 80 - 250; 0.06 - 0.12"
+basis = "vc is the low end of the printed range; feed is the low end of the printed range"
+note = "fz is the feed per revolution, mm/rev"
 [[tool.cite]]
 path = "preset.N general"
 status = "estimate"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
 taken = "2026-11-24"
-value = "Aluminium alloy A2017, ADC12, etc.; 4D,5D; ø17.5 ~ ø26; vc 200 - 400; 0.12 - 0.16"
+value = "Aluminium alloy A2017, ADC12, etc.; Aluminium alloy A2017, ADC12, etc.; 4D,5D; ø17.5 ~ ø26; vc 200 - 400; 0.12 - 0.16"
 basis = "vc is the low end of the printed range; feed is the low end of the printed range"
 note = "of the maker's materials for this group, the first printed; fz is the feed per revolution, mm/rev"
+[[tool.cite]]
+path = "preset.N general Aluminium alloy A2017, ADC12, etc."
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_J_DrillingTool.pdf#page=78"
+taken = "2026-11-24"
+value = "Aluminium alloy A2017, ADC12, etc.; Aluminium alloy A2017, ADC12, etc.; 4D,5D; ø17.5 ~ ø26; vc 200 - 400; 0.12 - 0.16"
+basis = "vc is the low end of the printed range; feed is the low end of the printed range"
+note = "fz is the feed per revolution, mm/rev"
 
 [[tool]]
 id = "tungaloy-MTEC0807C171.5ISO"
@@ -122,12 +200,32 @@ group = "P"
 vc = 100.0
 fz = 0.06
 [[tool.preset]]
+name = "P general Non-alloy steel and cast steel, free cutting steel < 0.25 %C Annealed 420 N/mm2 125 HB"
+group = "P"
+vc = 100.0
+fz = 0.06
+[[tool.preset]]
+name = "P general same row"
+group = "P"
+vc = 100.0
+fz = 0.07
+[[tool.preset]]
 name = "M general"
 group = "M"
 vc = 85.0
 fz = 0.03
 [[tool.preset]]
+name = "M general Stainless steel Austenitic 600 N/mm2 180 HB"
+group = "M"
+vc = 85.0
+fz = 0.03
+[[tool.preset]]
 name = "N general"
+group = "N"
+vc = 160.0
+fz = 0.06
+[[tool.preset]]
+name = "N general Aluminum- wrought alloy Not cureable 60 HB"
 group = "N"
 vc = 160.0
 fz = 0.06
@@ -178,22 +276,50 @@ path = "preset.P general"
 status = "estimate"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=120"
 taken = "2026-11-24"
-value = "Non-alloy steel and cast steel, free cutting steel < 0.25 %C Annealed 420 N/mm2 125 HB; Tool dia. DC ø6 column; vc Vc AH725 100-250; Feed: f (mm/t) ø6 0.06"
+value = "Non-alloy steel and cast steel, free cutting steel < 0.25 %C Annealed 420 N/mm2 125 HB; Non-alloy steel and cast steel, free cutting steel < 0.25 %C Annealed 420 N/mm2 125 HB; Tool dia. DC ø6 column; vc Vc AH725 100-250; Feed: f (mm/t) ø6 0.06"
 basis = "vc is the low end of the printed range; the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed"
+[[tool.cite]]
+path = "preset.P general Non-alloy steel and cast steel, free cutting steel < 0.25 %C Annealed 420 N/mm2 125 HB"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=120"
+taken = "2026-11-24"
+value = "Non-alloy steel and cast steel, free cutting steel < 0.25 %C Annealed 420 N/mm2 125 HB; Non-alloy steel and cast steel, free cutting steel < 0.25 %C Annealed 420 N/mm2 125 HB; Tool dia. DC ø6 column; vc Vc AH725 100-250; Feed: f (mm/t) ø6 0.06"
+basis = "vc is the low end of the printed range; the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
+[[tool.cite]]
+path = "preset.P general same row"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=121"
+taken = "2026-11-24"
+value = "same row; same row; Tool dia. DC ø8 column; vc Vc AH725 100-250; Feed: f (mm/t) ø8 0.07"
+basis = "vc is the low end of the printed range; the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 [[tool.cite]]
 path = "preset.M general"
 status = "estimate"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=121"
 taken = "2026-11-24"
-value = "Stainless steel Austenitic 600 N/mm2 180 HB; DC ø6 / ø8 columns; vc 85-100; ø6 0.03, ø8 0.04"
+value = "Stainless steel Austenitic 600 N/mm2 180 HB; Stainless steel Austenitic 600 N/mm2 180 HB; DC ø6 / ø8 columns; vc 85-100; ø6 0.03, ø8 0.04"
 basis = "vc is the low end of the printed range; feed is the low end of the printed range; the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed"
+[[tool.cite]]
+path = "preset.M general Stainless steel Austenitic 600 N/mm2 180 HB"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=121"
+taken = "2026-11-24"
+value = "Stainless steel Austenitic 600 N/mm2 180 HB; Stainless steel Austenitic 600 N/mm2 180 HB; DC ø6 / ø8 columns; vc 85-100; ø6 0.03, ø8 0.04"
+basis = "vc is the low end of the printed range; feed is the low end of the printed range; the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 [[tool.cite]]
 path = "preset.N general"
 status = "estimate"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=121"
 taken = "2026-11-24"
-value = "Aluminum- wrought alloy Not cureable 60 HB; DC ø6 / ø8 columns; vc 160-300; ø6 0.06, ø8 0.07"
+value = "Aluminum- wrought alloy Not cureable 60 HB; Aluminum- wrought alloy Not cureable 60 HB; DC ø6 / ø8 columns; vc 160-300; ø6 0.06, ø8 0.07"
 basis = "vc is the low end of the printed range; feed is the low end of the printed range; the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"
 note = "of the maker's materials for this group, the first printed"
+[[tool.cite]]
+path = "preset.N general Aluminum- wrought alloy Not cureable 60 HB"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_I_EndMill.pdf#page=121"
+taken = "2026-11-24"
+value = "Aluminum- wrought alloy Not cureable 60 HB; Aluminum- wrought alloy Not cureable 60 HB; DC ø6 / ø8 columns; vc 160-300; ø6 0.06, ø8 0.07"
+basis = "vc is the low end of the printed range; feed is the low end of the printed range; the feed is tabulated per diameter column, not for this diameter: the first (smaller) column printed"

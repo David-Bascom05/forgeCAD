@@ -1835,20 +1835,23 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
             .push("not a machining document: its first statement must be `machining`".into());
         return cam;
     }
-    // a project library beside the document
-    let proj = dir.join("cam");
-    if let Ok(rd) = forge_dirs::fs::read_dir(&proj) {
-        let mut files: Vec<PathBuf> = rd
-            .filter_map(|e| e.ok().map(|e| e.path()))
-            .filter(|p| p.extension().is_some_and(|x| x == "toml"))
-            .collect();
-        files.sort();
-        for f in files {
-            if let Ok(s) = forge_dirs::fs::read_to_string(&f)
-                && let Err(e) = cam.lib.add(&f.display().to_string(), &s)
-            {
-                cam.errors.push(e.to_string());
-                cam.ok = false;
+    // the user's own library (`forgecad tool import FILE --user`), then a project library
+    // beside the document
+    let user = forge_dirs::config().map(|c| c.join("forgecad").join("cam").join("tools"));
+    for proj in user.into_iter().chain(std::iter::once(dir.join("cam"))) {
+        if let Ok(rd) = forge_dirs::fs::read_dir(&proj) {
+            let mut files: Vec<PathBuf> = rd
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.extension().is_some_and(|x| x == "toml"))
+                .collect();
+            files.sort();
+            for f in files {
+                if let Ok(s) = forge_dirs::fs::read_to_string(&f)
+                    && let Err(e) = cam.lib.add(&f.display().to_string(), &s)
+                {
+                    cam.errors.push(e.to_string());
+                    cam.ok = false;
+                }
             }
         }
     }

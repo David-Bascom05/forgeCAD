@@ -18,5 +18,6 @@ target*/
 # vendor CAD a user downloaded themselves (stdparts/README.md): never committed
 vendor-parts/
 
-# Fusion 360 Gallery Dataset cache (tools/fetch-fusion-gallery.sh): licence forbids committing it
+# Fusion 360 Gallery Dataset and makers' tool-library caches (tools/fetch-fusion-gallery.sh,
+# tools/fetch-tool-libraries.sh): their terms forbid committing them
 /.cache/
