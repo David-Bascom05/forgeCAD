@@ -140,8 +140,14 @@ The parts:
     carriers, are limits both of points where Φ_u holds and of points where it fails). The zones
     are now the open δ-balls (they were the closed ones).
   - Proven: `bounds_of_weak`. For a body `exactOf` builds, `Bounds` as first stated (`BoundsW`)
-    gives the strong one, so `validSolid_of_weak`: the old validity of the counterpart gives the
-    new `ValidSolid`. No code change, and no new obligation on the code.
+    gives the strong one, so `validSolid_of_weak`. No code change.
+  - What changed for an input: its validity is now read on the trimmed counterpart (regions cut to
+    their frontier part inside the zones, open zones). `BoundsW` of that body is not the same
+    proposition as `BoundsW` of the untrimmed one. `frontier_sub` and `local_formula` carry over
+    (a frontier point inside a zone is in `zoneFr`). `oriented` and `seeded` are read on the
+    trimmed faces, and `faces_sub` now also covers the zones' boundary spheres. Inputs' validity
+    is a hypothesis throughout, and outputs get the strong form from the pipeline, so nothing
+    proven depends on the difference.
   - `Refines.face` now compares regions up to the zones: a stored face point is within δ of the
     exact region or of a zone. `exactOf_refines` still takes `hface` against `regionMeet`.
   - The boolean preserves the strong form: the result's faces are the closure of the kept facets,
