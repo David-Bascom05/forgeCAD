@@ -417,7 +417,7 @@ pub struct Node {
 pub type R = u32;
 
 /// A node's identity, for sharing: equal keys are the same exact value, built once.
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum Key {
     Lit(bool, Vec<u32>, i64),
     Op(u8, u32, u32),
@@ -426,8 +426,9 @@ enum Key {
 /// The arena of exact reals. Nodes are only appended, so children precede parents; `mark` and
 /// `release` drop temporaries in a stack discipline.
 ///
-/// Nodes are shared by a sorted index (an ordered map on each node's key, no hashing, so no seed
-/// and the same structure on every target): an expression built twice is one node, and constants fold: an
+/// Nodes are shared by an index on each node's key (a hash map with a fixed, unseeded hasher:
+/// which node a key finds is the same on every target and run; only lookups go through it, never
+/// its order): an expression built twice is one node, and constants fold: an
 /// operation on two literals that is exact in dyadics is a literal. So `x − x` is the literal 0
 /// by construction, and the separation bound counts each distinct radical once.
 #[derive(Clone, Debug, Default)]
@@ -435,8 +436,54 @@ pub struct Ctx {
     pub nodes: Vec<Node>,
     /// How many exact (big-float) evaluations were needed: for tracing the filter's rate.
     pub exact_evals: u64,
-    memo: std::collections::BTreeMap<Key, R>,
+    memo: Memo,
     keys: Vec<Key>,
+}
+
+/// The node memo: key to node, lookups only. It must never be iterated (a hash map's order is
+/// not a result to depend on), so it offers get, insert and remove and nothing else.
+#[derive(Clone, Debug, Default)]
+struct Memo(std::collections::HashMap<Key, R, std::hash::BuildHasherDefault<Fx>>);
+
+impl Memo {
+    fn get(&self, k: &Key) -> Option<&R> {
+        self.0.get(k)
+    }
+    fn insert(&mut self, k: Key, r: R) {
+        self.0.insert(k, r);
+    }
+    fn remove(&mut self, k: &Key) {
+        self.0.remove(k);
+    }
+}
+
+/// A fixed (unseeded) multiplicative hasher for the memo.
+#[derive(Default, Clone, Copy)]
+pub struct Fx(u64);
+impl std::hash::Hasher for Fx {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+    fn write(&mut self, bytes: &[u8]) {
+        for b in bytes {
+            self.0 = (self.0.rotate_left(5) ^ *b as u64).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+        }
+    }
+    fn write_u32(&mut self, i: u32) {
+        self.0 = (self.0.rotate_left(5) ^ i as u64).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+    fn write_u64(&mut self, i: u64) {
+        self.0 = (self.0.rotate_left(5) ^ i).wrapping_mul(0x51_7c_c1_b7_27_22_0a_95);
+    }
+    fn write_u8(&mut self, i: u8) {
+        self.write_u64(i as u64)
+    }
+    fn write_usize(&mut self, i: usize) {
+        self.write_u64(i as u64)
+    }
+    fn write_i64(&mut self, i: i64) {
+        self.write_u64(i as u64)
+    }
 }
 
 fn upadd(a: f64, b: f64) -> f64 {
