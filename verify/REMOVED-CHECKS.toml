@@ -133,15 +133,17 @@ id = "contact-ball-arc-chords"
 owner = "CAM-3D-FINISH"
 removed = "certify_bb (via check::closed_form, in certify_shared and certify_with's column route) skipped where a level arc's chords clear by contact::clear: the bound"
 rust = { file = "kernel/forge-cam-geom/src/contact.rs", fn = "clear_arc" }
-reviewed_at = "bcb7b2aee70ecc9d"
+reviewed_at = "28ff80e2ba4d1e08"
 level = "L1"
-hyp = "H.contact (5) (verify/forge-cam/RESUME.md): signed distance 1-Lipschitz in translation; an arc piece of angle <= 2h (a step h in t = tan(theta/2)) within r h^2/2 of its chord; a Move::Arc's x and y orthonormal (not checked here)"
+hyp = "H.contact (5) (verify/forge-cam/RESUME.md): signed distance 1-Lipschitz in translation; an arc piece of angle <= 2h (a step h in t = tan(theta/2)) within r h^2/2 of its chord; a Move::Arc's x and y orthonormal: checked by contact::arc_frame_ok to 1e-13, so each point within about r 1e-13 of the circle and the sagitta within a factor 1 + 1e-13, both inside the 1e-12 (1 + r + |c|) widening"
 lemmas = []
 tests = [
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "arcs_by_chords_never_above_the_true_minimum", kind = "sampling" },
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "arcs_with_bad_data_are_refused", kind = "mutation" },
   # s dropped from the chords' limit (lim = limit): fails
   { file = "kernel/forge-cam-geom/src/contact.rs", name = "clear_arc_keeps_the_sagitta", kind = "mutation" },
+  # arc_frame_ok dropped from clear_arc: a frame 0.001 off orthonormal is cleared
+  { file = "kernel/forge-cam-geom/src/contact.rs", name = "an_arc_frame_must_be_orthonormal", kind = "mutation" },
   # clear_arc forced to Clear: "an arc 0.05 into the cap was certified"
   { file = "kernel/forge-cam/tests/surf.rs", name = "a_level_arc_round_the_cap_is_cleared_by_its_chords_and_one_into_it_refused", kind = "mutation" },
 ]
@@ -174,9 +176,9 @@ id = "contact-arc-chords-column"
 owner = "CAM-3D-FINISH"
 removed = "gap_move's search on a level arc on the column route, skipped where every chord is proven at limit + s (contact::clear) or by gap_move on the column grown by s"
 rust = { file = "kernel/forge-cam/src/ops.rs", fn = "arc_by_chords" }
-reviewed_at = "46e0a21a55cd9b2d"
+reviewed_at = "b41ccf83cee44ef3"
 level = "L1"
-hyp = "H.contact (5), and Column::grow(s) is the Minkowski sum with a ball of radius s (verify/forge-cam/RESUME.md); a Move::Arc's x and y orthonormal (not checked here)"
+hyp = "H.contact (5), and Column::grow(s) is the Minkowski sum with a ball of radius s (verify/forge-cam/RESUME.md); a Move::Arc's x and y orthonormal: checked by contact::arc_frame_ok to 1e-13, inside the sagitta's 1.01 factor and 1e-12 (1 + r + |c|) term"
 lemmas = []
 tests = [
   { file = "kernel/forge-cam/src/ops.rs", name = "an_arc_cleared_by_its_chords_is_never_over_by_the_search", kind = "sampling" },
