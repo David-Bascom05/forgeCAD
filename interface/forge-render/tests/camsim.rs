@@ -326,7 +326,11 @@ fn the_flanges_posted_program_on_its_machine() {
     let st = sim.setups[0].stock;
     for k in mv.markers.iter().filter(|k| k.text.contains("hits table")) {
         assert!(k.at[2] <= 1e-6, "{:?}", k.at);
-        assert!(k.at[0] >= st.min[0] - 6.0 && k.at[0] <= st.max[0] + 6.0, "{:?}", k.at);
+        assert!(
+            k.at[0] >= st.min[0] - 6.0 && k.at[0] <= st.max[0] + 6.0,
+            "{:?}",
+            k.at
+        );
     }
     // T12 is loaded where T1 stood (M06 with no retract before it): its first rapid starts
     // inside the stock; the check flags it (line 394, N3930), and the stock shows it below

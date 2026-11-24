@@ -63,6 +63,7 @@ pub const UNDO: u16 = 2;
 pub const HOME: u16 = 3;
 pub const AXES: u16 = 4;
 pub const COM: u16 = 5;
+pub const FINISH: u16 = 6;
 const TREE: [(u16, TreeOp); 6] = [
     (10, TreeOp::MakeRoot),
     (11, TreeOp::Drop),
@@ -72,10 +73,9 @@ const TREE: [(u16, TreeOp); 6] = [
     (15, TreeOp::Hull),
 ];
 
-/// The environment's ribbon: Robot (export, undo, the export pose), Show (joint axes, centres of
-/// mass), Structure (the tree's operations on the selection, off where they don't apply).
-// called by the Environments framework's adapter (ui/environments, shell/env/robot.rs)
-#[allow(dead_code)]
+/// The environment's ribbon (docs/ux/STANDARD.md §1): Robot (export, undo), Drive (the export
+/// pose, joint axes, centres of mass), Structure (the tree's operations on the selection, off
+/// where they don't apply), Exit (Finish Robot).
 pub(in crate::shell) fn groups(s: &Shell, act: &dyn Fn(u16) -> Action) -> Vec<Group> {
     let Some(p) = &s.robot else { return vec![] };
     let tool = |name, icon, c: u16, on: bool, enabled: bool| Tool {
@@ -88,18 +88,15 @@ pub(in crate::shell) fn groups(s: &Shell, act: &dyn Fn(u16) -> Action) -> Vec<Gr
         Group {
             name: "Robot",
             big: vec![tool("Export URDF", "export", EXPORT, false, p.view.is_some())],
-            small: vec![
-                tool("Undo", "undo", UNDO, false, !p.undo.is_empty()),
-                tool("Export pose", "home", HOME, false, !p.q.is_empty()),
-            ],
+            small: vec![tool("Undo", "undo", UNDO, false, !p.undo.is_empty())],
             icons: vec![],
         },
         Group {
-            name: "Show",
-            big: vec![],
+            name: "Drive",
+            big: vec![tool("Export Pose", "home", HOME, false, !p.q.is_empty())],
             small: vec![
                 tool("Joint axes", "axis", AXES, p.show_axes, true),
-                tool("Centres of mass", "point", COM, p.show_com, true),
+                tool("Centres of mass", "cg", COM, p.show_com, true),
             ],
             icons: vec![],
         },
@@ -108,8 +105,14 @@ pub(in crate::shell) fn groups(s: &Shell, act: &dyn Fn(u16) -> Action) -> Vec<Gr
             big: vec![],
             small: TREE
                 .iter()
-                .map(|&(c, op)| tool(op.label(), "jrevolute", c, false, p.tree_edit(op).is_ok()))
+                .map(|&(c, op)| tool(op.label(), op.icon(), c, false, p.tree_edit(op).is_ok()))
                 .collect(),
+            icons: vec![],
+        },
+        Group {
+            name: "Exit",
+            big: vec![tool("Finish Robot", "finish", FINISH, false, true)],
+            small: vec![],
             icons: vec![],
         },
     ]
@@ -117,6 +120,14 @@ pub(in crate::shell) fn groups(s: &Shell, act: &dyn Fn(u16) -> Action) -> Vec<Gr
 
 /// One of the ribbon's commands.
 pub fn command(s: &mut Shell, c: u16) {
+    if c == FINISH {
+        // out of the environment: the source stays open in 3D Model, the robot kept for coming back
+        if let Some(p) = &mut s.robot {
+            p.open = false;
+        }
+        s.tab = 0;
+        return;
+    }
     let Some(p) = &mut s.robot else { return };
     match c {
         EXPORT => p.out.push(RobotAct::Export),

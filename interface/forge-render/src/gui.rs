@@ -1086,6 +1086,10 @@ impl Gui {
                         }
                         continue;
                     }
+                    Action::Robot(c) => {
+                        crate::shell::robot::command(&mut self.shell, c);
+                        continue;
+                    }
                     Action::Fg(c) => {
                         self.shell.fg_command(c);
                         self.apply_fg();

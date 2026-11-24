@@ -168,6 +168,8 @@ impl Gui {
         }
         self.robot_reload(&mut panel);
         self.shell.robot = Some(panel);
+        // into the environment: its tab, browser and sheet; the view framed once the parts are placed
+        self.shell.tab = crate::shell::ROBOT_TAB;
         true
     }
 
@@ -277,9 +279,27 @@ impl Gui {
             self.robot_reload(&mut p);
             self.shell.robot = Some(p);
         }
+        let want = self.view_px();
         let Some(p) = &mut self.shell.robot else {
             return false;
         };
+        // framed on entering (docs/ux/STANDARD.md §2): the robot at its drive pose, in the view
+        // its browser and sheet leave, once that view has its size and the parts their places
+        if p.open
+            && !p.framed
+            && !p.changed
+            && p.view.is_some()
+            && let Some(v) = &mut self.view
+            && v.nav.size == want
+        {
+            p.framed = true;
+            // the iso fit, not a Home the user set (kept for their Home)
+            let set = v.nav.home_view.take();
+            v.nav.home(&v.scene);
+            v.nav.home_view = set;
+            v.dirty = true;
+            return true;
+        }
         if !p.changed {
             return false;
         }

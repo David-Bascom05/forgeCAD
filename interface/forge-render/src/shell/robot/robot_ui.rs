@@ -5,9 +5,9 @@
 //! The host (gui_robot.rs) reads `q` and moves the parts; nothing here edits a document yet.
 
 use crate::shell::Shell;
-use crate::shell::placed::Placed;
-use crate::shell::theme::{medium, mono, sans};
-use egui::{RichText, Ui, pos2, vec2};
+use crate::shell::icons;
+use crate::shell::theme::{Theme, medium, mono, sans};
+use egui::{Align2, RichText, Sense, Stroke, Ui, pos2, vec2};
 use forge_urdf::robot::Edit;
 use forge_urdf::{Conflict, Exported, RobotView, UrdfError, ViewJoint};
 use std::collections::BTreeMap;
@@ -51,6 +51,16 @@ impl TreeOp {
             TreeOp::Freeze => "Freeze here",
             TreeOp::Frame => "Add frame",
             TreeOp::Hull => "Collision: hull",
+        }
+    }
+    pub fn icon(self) -> &'static str {
+        match self {
+            TreeOp::MakeRoot => "groundplane",
+            TreeOp::Drop => "delete",
+            TreeOp::Merge => "combine",
+            TreeOp::Freeze => "jfastened",
+            TreeOp::Frame => "ucs",
+            TreeOp::Hull => "solids",
         }
     }
     pub fn tip(self) -> &'static str {
@@ -108,6 +118,8 @@ pub struct RobotPanel {
     pub show_axes: bool,
     pub show_com: bool,
     pub open: bool,
+    /// The view was fitted to the robot since the environment was entered.
+    pub framed: bool,
 }
 
 impl RobotPanel {
@@ -332,597 +344,1052 @@ impl RobotPanel {
     }
 }
 
-fn mm(x: f64) -> String {
-    format!("{x:.3}")
+/// Where a value shown came from (docs/ux/STANDARD.md §6).
+#[derive(Clone, Debug, PartialEq)]
+enum Prov {
+    /// Linked: the source assembly's (its mass from its materials).
+    Linked,
+    /// The robot document's own; with the source's value it replaced, if it had one.
+    Yours(Option<String>),
+    /// Not given anywhere.
+    Unknown,
+}
+
+/// The badge's colours: blue linked, violet yours, grey unknown.
+const BLUE: egui::Color32 = egui::Color32::from_rgb(59, 130, 246);
+const VIOLET: egui::Color32 = egui::Color32::from_rgb(139, 92, 246);
+
+/// One badge, one column wide, the hover its detail.
+fn badge(ui: &mut Ui, t: &Theme, b: &Prov) {
+    let (text, ink, tip) = match b {
+        Prov::Linked => (
+            "from assembly",
+            BLUE,
+            "linked: the source assembly's value".to_string(),
+        ),
+        Prov::Yours(Some(was)) => (
+            "yours",
+            VIOLET,
+            format!("the robot's override; the assembly has {}", pretty(was)),
+        ),
+        Prov::Yours(None) => (
+            "yours",
+            VIOLET,
+            "the robot's own: the assembly has none".to_string(),
+        ),
+        Prov::Unknown => (
+            "unknown",
+            t.ink2,
+            "not given: the export refuses it, or writes a placeholder".to_string(),
+        ),
+    };
+    let font = sans(10.0);
+    let w = ui
+        .fonts_mut(|f| f.layout_no_wrap(text.to_string(), font.clone(), ink))
+        .size()
+        .x
+        + 12.0;
+    let (r, resp) = ui.allocate_exact_size(vec2(w.max(76.0), 16.0), Sense::hover());
+    let pill = egui::Rect::from_center_size(r.center(), vec2(w, 16.0));
+    ui.painter().rect_filled(pill, 8.0, ink.gamma_multiply(0.14));
+    let italic = matches!(b, Prov::Unknown);
+    let mut job = egui::text::LayoutJob::single_section(
+        text.to_string(),
+        egui::TextFormat {
+            font_id: font,
+            color: ink,
+            italics: italic,
+            ..Default::default()
+        },
+    );
+    job.halign = egui::Align::Center;
+    let g = ui.fonts_mut(|f| f.layout_job(job));
+    ui.painter()
+        .galley(pos2(pill.center().x, pill.center().y - g.size().y / 2.0), g, ink);
+    resp.on_hover_text(tip);
+}
+
+/// A value in the document's words made readable: `(-135deg, 135deg)` → `−135…135°`.
+fn pretty(text: &str) -> String {
+    let t = text.trim();
+    let inner = t.strip_prefix('(').and_then(|x| x.strip_suffix(')')).unwrap_or(t);
+    let parts: Vec<String> = inner
+        .split(',')
+        .map(|x| {
+            let x = x.trim();
+            let (n, deg) = match x.strip_suffix("deg") {
+                Some(n) => (n.trim(), true),
+                None => (x, false),
+            };
+            let n = n.replacen('-', "−", 1);
+            if deg { format!("{n}°") } else { n }
+        })
+        .collect();
+    match &parts[..] {
+        [a, b] => match (a.strip_suffix('°'), b.strip_suffix('°')) {
+            (Some(a), Some(_)) => format!("{a}…{b}"),
+            _ => format!("{a}…{b}"),
+        },
+        _ => parts.join(", "),
+    }
+}
+
+/// A number to the precision it carries, at most `dec` places, at least one.
+fn num(x: f64, dec: usize) -> String {
+    let s = format!("{x:.dec$}");
+    let s = if s.contains('.') {
+        let s = s.trim_end_matches('0');
+        if s.ends_with('.') {
+            format!("{s}0")
+        } else {
+            s.to_string()
+        }
+    } else {
+        s
+    };
+    let s = if s == "-0.0" { "0.0".to_string() } else { s };
+    s.replacen('-', "−", 1)
+}
+
+/// A length given in metres, in the user's unit.
+fn len(m: f64, inch: bool) -> String {
+    if inch {
+        format!("{} in", num(m / 0.0254, 4))
+    } else {
+        format!("{} mm", num(m * 1000.0, 3))
+    }
+}
+
+/// An axis as a direction: `+Z` along a frame axis, else its components.
+fn axis_text(a: [f64; 3]) -> String {
+    for (k, n) in ["X", "Y", "Z"].iter().enumerate() {
+        let other = (0..3).filter(|&i| i != k).all(|i| a[i].abs() < 1e-9);
+        if other && (a[k].abs() - 1.0).abs() < 1e-9 {
+            return format!("{}{n}", if a[k] > 0.0 { "+" } else { "−" });
+        }
+    }
+    format!("({}, {}, {})", num(a[0], 4), num(a[1], 4), num(a[2], 4))
+}
+
+/// A joint type's human name.
+fn kind_name(k: &str) -> &'static str {
+    match k {
+        "revolute" => "Revolute",
+        "continuous" => "Continuous",
+        "prismatic" => "Prismatic",
+        "fixed" => "Fixed",
+        "floating" => "Floating",
+        "planar" => "Planar",
+        _ => "Joint",
+    }
+}
+
+/// A joint type's icon.
+fn kind_icon(k: &str) -> &'static str {
+    match k {
+        "revolute" | "continuous" => "jrevolute",
+        "prismatic" => "jslider",
+        "fixed" => "jfastened",
+        "planar" => "jmate",
+        _ => "ball",
+    }
+}
+
+/// Upper case first.
+fn cap(s: &str) -> String {
+    let mut c = s.chars();
+    c.next()
+        .map_or_else(String::new, |f| f.to_uppercase().chain(c).collect())
+}
+
+/// A titled section of the sheet.
+fn section(ui: &mut Ui, t: &Theme, title: &str) {
+    ui.add_space(10.0);
+    ui.label(RichText::new(title).font(medium(12.0)).color(t.ink));
+    ui.separator();
+}
+
+/// A sheet's row: label (its raw key on hover), the value right-aligned in a fixed column, a
+/// badge. In a three-column grid.
+fn row(ui: &mut Ui, t: &Theme, label: &str, key: &str, value: &str, prov: Option<&Prov>) {
+    let l = ui.label(RichText::new(label).font(sans(12.0)).color(t.ink2));
+    if !key.is_empty() {
+        l.on_hover_text(RichText::new(key).font(mono(11.0)));
+    }
+    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.set_min_width(VALUE_W);
+        ui.label(RichText::new(value).font(sans(12.0)).color(t.ink));
+    });
+    match prov {
+        Some(b) => badge(ui, t, b),
+        None => {
+            ui.label("");
+        }
+    }
+    ui.end_row();
+}
+
+/// The sheet's value column.
+const VALUE_W: f32 = 120.0;
+/// The browser's rows.
+const ROW_H: f32 = 22.0;
+const INDENT: f32 = 16.0;
+
+/// One of the browser's rows.
+struct TreeRow {
+    depth: usize,
+    sel: Sel,
+    name: String,
+    icon: &'static str,
+    /// At the right edge: a link's mass, a joint's type.
+    right: String,
+    badge: Option<&'static str>,
+    /// Whether a sibling follows it (its tree line goes on down).
+    more: bool,
 }
 
 impl Shell {
-    /// The environment's browser: the robot's tree. True: drawn (the panel then leaves it out).
-    /// Called by the Environments framework's adapter (ui/environments).
-    #[allow(dead_code)]
+    /// The environment's browser: the robot's links and joints as a tree from the root, with tree
+    /// lines, an icon per kind and each link's mass at the right.
     pub(in crate::shell) fn robot_side(&mut self, ui: &mut Ui, r: egui::Rect) -> bool {
         let Some(mut p) = self.robot.take() else {
             return false;
         };
         let t = self.theme;
-        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink(8.0)));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r));
+        let width = r.width();
+        let (head, _) = child.allocate_exact_size(vec2(width, ROW_H + 6.0), Sense::hover());
+        icons::draw(
+            child.painter(),
+            pos2(head.left() + 10.0, head.top() + 6.0),
+            16.0,
+            "jrevolute",
+            1.5,
+            t.ink,
+        );
         let title = if p.name.is_empty() {
             "Robot".to_string()
         } else {
             p.name.clone()
         };
-        child.label(RichText::new(title).font(medium(13.0)).color(t.ink));
-        if let Some(view) = p.view.clone() {
-            egui::ScrollArea::vertical()
-                .id_salt("robot-side")
-                .show(&mut child, |ui| {
-                    Self::robot_tree(ui, &t, &mut p, &view);
+        child.painter().text(
+            pos2(head.left() + 32.0, head.center().y),
+            Align2::LEFT_CENTER,
+            title,
+            medium(13.0),
+            t.ink,
+        );
+        if let Some(v) = &p.view {
+            let moving = v.joints.iter().filter(|j| j.position.len() == 1).count();
+            child.painter().text(
+                pos2(head.right() - 10.0, head.center().y),
+                Align2::RIGHT_CENTER,
+                format!(
+                    "{} links · {moving} moving",
+                    v.links.iter().filter(|l| !l.dummy).count()
+                ),
+                sans(11.0),
+                t.ink2,
+            );
+        }
+        match p.view.clone() {
+            Some(view) => {
+                let rows = tree_rows(&view);
+                egui::ScrollArea::vertical()
+                    .id_salt("robot-side")
+                    .auto_shrink([false, false])
+                    .show(&mut child, |ui| {
+                        // the tree lines still open at each depth
+                        let mut open: Vec<bool> = vec![];
+                        for row in &rows {
+                            // open[d]: rows at depth d still to come, their line in column d - 1
+                            open.truncate(row.depth);
+                            open.resize(row.depth, false);
+                            let (rr, resp) = ui.allocate_exact_size(vec2(width, ROW_H), Sense::click());
+                            let on = p.sel.as_ref() == Some(&row.sel);
+                            let pt = ui.painter();
+                            if on {
+                                pt.rect_filled(rr, 0.0, t.selection);
+                            } else if resp.hovered() {
+                                pt.rect_filled(rr, 0.0, t.hover);
+                            }
+                            let x0 = rr.left() + 12.0;
+                            let line = Stroke::new(1.0, t.line);
+                            for (d, &o) in open.iter().enumerate().skip(1) {
+                                if o {
+                                    let x = x0 + (d - 1) as f32 * INDENT + 4.0;
+                                    pt.vline(x, rr.y_range(), line);
+                                }
+                            }
+                            if row.depth > 0 {
+                                let x = x0 + (row.depth - 1) as f32 * INDENT + 4.0;
+                                let bottom = if row.more { rr.bottom() } else { rr.center().y };
+                                pt.vline(x, rr.top()..=bottom, line);
+                                pt.hline(x..=x + INDENT - 6.0, rr.center().y, line);
+                            }
+                            let ix = x0 + row.depth as f32 * INDENT;
+                            icons::draw(pt, pos2(ix, rr.top() + 3.0), 16.0, row.icon, 1.3, t.ink);
+                            let mut right_x = rr.right() - 10.0;
+                            if !row.right.is_empty() {
+                                let g = pt.layout_no_wrap(row.right.clone(), sans(11.0), t.ink2);
+                                pt.galley(
+                                    pos2(right_x - g.size().x, rr.center().y - g.size().y / 2.0),
+                                    g.clone(),
+                                    t.ink2,
+                                );
+                                right_x -= g.size().x + 8.0;
+                            }
+                            if let Some(b) = row.badge {
+                                let g = pt.layout_no_wrap(b.to_string(), sans(10.0), t.ink2);
+                                let pill = egui::Rect::from_min_size(
+                                    pos2(right_x - g.size().x - 10.0, rr.center().y - 8.0),
+                                    vec2(g.size().x + 10.0, 16.0),
+                                );
+                                pt.rect_filled(pill, 8.0, t.ink2.gamma_multiply(0.14));
+                                pt.galley(
+                                    pos2(pill.left() + 5.0, pill.center().y - g.size().y / 2.0),
+                                    g,
+                                    t.ink2,
+                                );
+                                right_x = pill.left() - 6.0;
+                            }
+                            let name_x = ix + 22.0;
+                            let room = (right_x - name_x).max(20.0);
+                            let job = egui::text::LayoutJob {
+                                wrap: egui::text::TextWrapping::truncate_at_width(room),
+                                ..egui::text::LayoutJob::simple_singleline(
+                                    row.name.clone(),
+                                    sans(12.0),
+                                    t.ink,
+                                )
+                            };
+                            let g = ui.fonts_mut(|f| f.layout_job(job));
+                            let cut = g.elided;
+                            ui.painter()
+                                .galley(pos2(name_x, rr.center().y - g.size().y / 2.0), g, t.ink);
+                            let resp = if cut { resp.on_hover_text(&row.name) } else { resp };
+                            if resp.clicked() {
+                                p.sel = if on { None } else { Some(row.sel.clone()) };
+                            }
+                            self.places.push((
+                                match &row.sel {
+                                    Sel::Link(n) => format!("robot:link:{n}"),
+                                    Sel::Joint(n) => format!("robot:joint:{n}"),
+                                },
+                                rr,
+                            ));
+                            open.push(row.more);
+                        }
+                    });
+            }
+            None => {
+                child.add_space(8.0);
+                child.horizontal(|ui| {
+                    ui.add_space(12.0);
+                    ui.spinner();
+                    ui.label(
+                        RichText::new("Building the robot…")
+                            .font(sans(12.0))
+                            .color(t.ink2),
+                    );
                 });
-        } else {
-            child.label(RichText::new("building…").font(sans(12.0)).color(t.ink2));
+            }
         }
         p.side_drawn = true;
         self.robot = Some(p);
         true
     }
 
-    /// The environment's panel, once a frame (its tree too, unless the browser has it).
-    pub(in crate::shell) fn robot_ui(&mut self, ctx: &egui::Context) {
+    /// The environment's property sheet, docked at the right edge, full height, scrolling: the
+    /// robot and its link, the selected link's or joint's sheet, the drive, the checks.
+    pub(in crate::shell) fn robot_dock(&mut self, ui: &mut Ui, r: egui::Rect) {
         let Some(mut p) = self.robot.take() else { return };
-        if !p.open {
-            self.robot = Some(p);
-            return;
-        }
         let t = self.theme;
-        let v = self.view_rect;
-        let mut places = Vec::new();
-        let mut close = false;
-        let w = 340.0;
-        let shown = egui::Window::new("Robot")
-            .id(egui::Id::unique("robot-panel"))
-            .title_bar(false)
-            .collapsible(false)
-            .resizable(false)
-            .auto_sized()
-            .movable(true)
-            .fade_in(false)
-            .default_pos(pos2(v.right() - w - 24.0, v.top() + 16.0))
-            .min_width(w)
-            .max_width(w)
-            .frame(crate::shell::fgasm::dialog_frame(&t))
-            .constrain_to(crate::shell::dialog_area(ctx))
-            .show_placed(ctx, &mut places, |ui, places| {
+        let inch = self.units == "in";
+        let pt = ui.painter().clone();
+        pt.rect_filled(r, 0.0, t.surface);
+        pt.vline(r.left(), r.y_range(), Stroke::new(1.0, t.line));
+        let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(vec2(12.0, 8.0))));
+        child.set_clip_rect(r);
+        egui::ScrollArea::vertical()
+            .id_salt("robot-dock")
+            .auto_shrink([false, false])
+            .show(&mut child, |ui| {
+                ui.spacing_mut().item_spacing.y = 4.0;
+                // the robot: its name, what it is linked to
                 let title = if p.name.is_empty() {
                     "Robot".to_string()
                 } else {
-                    format!("Robot · {}", p.name)
+                    p.name.clone()
                 };
-                close = crate::shell::fgasm::dialog_head(ui, &t, "jrevolute", &title, "robot", places);
-                if let Some(s) = &p.source {
-                    ui.label(
-                        RichText::new(format!("linked to {s}"))
+                ui.label(RichText::new(title).font(medium(15.0)).color(t.ink));
+                let doc = std::path::Path::new(&p.file)
+                    .file_name()
+                    .map_or_else(|| p.file.clone(), |n| n.to_string_lossy().into_owned());
+                match &p.source {
+                    Some(s) => ui.label(
+                        RichText::new(format!("Linked to {s} · {doc}"))
                             .font(sans(11.0))
                             .color(t.ink2),
-                    );
-                } else {
-                    ui.label(RichText::new("unlinked").font(sans(11.0)).color(t.ink2));
-                }
-                if let Some((kind, text, fixes)) = p.error.clone() {
-                    ui.add_space(4.0);
-                    egui::Frame::new()
-                        .fill(t.error.gamma_multiply(0.15))
-                        .corner_radius(4.0)
-                        .inner_margin(6.0)
-                        .show(ui, |ui| {
-                            ui.label(RichText::new(kind).font(medium(12.0)).color(t.error));
-                            ui.label(RichText::new(text).font(sans(11.0)).color(t.ink));
-                            for f in fixes {
-                                ui.label(RichText::new(format!("fix: {f}")).font(mono(11.0)).color(t.ink2));
-                            }
-                        });
-                }
-                for c in p.conflicts.clone() {
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            RichText::new(format!("line {}: {} {}", c.line, c.what, c.field))
-                                .font(sans(11.0))
-                                .color(t.ink),
-                        );
-                        if ui
-                            .small_button("Keep")
-                            .on_hover_text(format!("keep {} over the source's new {}", c.set, c.now))
-                            .clicked()
-                        {
-                            p.out.push(RobotAct::Edit(Edit::Set {
-                                line: Some(c.line),
-                                call: String::new(),
-                                target: String::new(),
-                                field: format!("{}_was", c.field),
-                                text: c.now.clone(),
-                                was: None,
-                            }));
-                        }
-                        if ui
-                            .small_button("Reset")
-                            .on_hover_text(format!("take the source's {}", c.now))
-                            .clicked()
-                        {
-                            p.out.push(RobotAct::Edit(Edit::Reset {
-                                line: c.line,
-                                field: c.field.clone(),
-                            }));
-                        }
-                    });
-                }
-                ui.horizontal(|ui| {
-                    ui.checkbox(&mut p.show_axes, "Joint axes");
-                    ui.checkbox(&mut p.show_com, "Centres of mass");
-                });
-                ui.horizontal(|ui| {
-                    if ui
-                        .add_enabled(!p.undo.is_empty(), egui::Button::new("Undo"))
-                        .clicked()
-                    {
-                        p.out.push(RobotAct::Undo);
-                    }
-                    if ui.button("Export URDF").clicked() {
-                        p.out.push(RobotAct::Export);
-                    }
-                    if !p.said.is_empty() {
-                        ui.label(RichText::new(&p.said).font(sans(11.0)).color(t.ink2));
-                    }
-                });
-                let Some(view) = p.view.clone() else {
-                    ui.label(RichText::new("building…").font(sans(12.0)).color(t.ink2));
-                    return;
+                    ),
+                    None => ui.label(
+                        RichText::new(format!("Unlinked · {doc}"))
+                            .font(sans(11.0))
+                            .color(t.ink2),
+                    ),
                 };
-                ui.add_space(4.0);
-                let moving = view.joints.iter().filter(|j| j.position.len() == 1).count();
-                ui.label(
-                    RichText::new(format!(
-                        "{} links · {} joints ({moving} moving) · root {}",
-                        view.links.len(),
-                        view.joints.len(),
-                        view.root
-                    ))
-                    .font(sans(11.0))
-                    .color(t.ink2),
-                );
-                // the window grows with what is shown, up to the view's height, then scrolls
-                egui::ScrollArea::vertical()
-                    .auto_shrink([false, true])
-                    .max_height((v.height() - 120.0).max(240.0))
-                    .show(ui, |ui| {
-                        if !p.side_drawn {
-                            Self::robot_tree(ui, &t, &mut p, &view);
-                        }
-                        ui.add_space(6.0);
-                        Self::robot_sliders(ui, &t, &mut p, &view);
-                        ui.add_space(6.0);
-                        Self::robot_detail(ui, &t, &mut p, &view);
+                if !p.said.is_empty() {
+                    ui.label(RichText::new(&p.said).font(sans(11.0)).color(t.ink2));
+                }
+                Self::robot_problems(ui, &t, &mut p);
+                match p.view.clone() {
+                    None => {
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            ui.spinner();
+                            ui.label(
+                                RichText::new("Building the robot…")
+                                    .font(sans(12.0))
+                                    .color(t.ink2),
+                            );
+                        });
+                    }
+                    Some(view) => {
+                        Self::robot_detail(ui, &t, &mut p, &view, inch);
+                        Self::robot_sliders(ui, &t, &mut p, &view, inch);
                         if !p.warnings.is_empty() || !p.notes.is_empty() {
-                            ui.add_space(6.0);
-                            ui.label(RichText::new("Checks").font(medium(12.0)).color(t.ink));
+                            section(ui, &t, "Checks");
                             for w in &p.warnings {
-                                ui.label(
-                                    RichText::new(format!("warning: {w}"))
-                                        .font(sans(11.0))
-                                        .color(t.warn),
-                                );
+                                ui.label(RichText::new(w).font(sans(11.0)).color(t.warn));
                             }
                             for n in &p.notes {
-                                ui.label(RichText::new(format!("· {n}")).font(sans(11.0)).color(t.ink2));
+                                ui.label(RichText::new(n).font(sans(11.0)).color(t.ink2));
                             }
                         }
-                    });
+                    }
+                }
             });
-        if let Some(r) = shown {
-            self.view_blocks.push(r.response.rect);
-        }
-        if close {
-            p.open = false;
-        }
-        self.places.extend(places);
+        self.places.push(("robot:sheet".into(), r));
         p.side_drawn = false;
         self.robot = Some(p);
     }
 
-    fn robot_tree(ui: &mut Ui, t: &crate::shell::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
-        ui.label(RichText::new("Links and joints").font(medium(12.0)).color(t.ink));
-        // depth first from the root: each joint, then the subtree it carries (document order)
-        enum Item {
-            Link(String, usize),
-            Joint(usize, usize),
-        }
-        let mut rows: Vec<(usize, Sel, String)> = vec![];
-        let mut stack = vec![Item::Link(view.root.clone(), 0)];
-        while let Some(it) = stack.pop() {
-            match it {
-                Item::Link(link, d) => {
-                    let tag = match view.links.iter().find(|l| l.name == link) {
-                        Some(l) if l.dummy => " (massless)".to_string(),
-                        Some(l) => l.mass.map_or(String::new(), |m| format!("  {m:.3} kg")),
-                        None => String::new(),
-                    };
-                    rows.push((d, Sel::Link(link.clone()), format!("{link}{tag}")));
-                    let kids: Vec<usize> = (0..view.joints.len())
-                        .filter(|&k| view.joints[k].parent == link)
-                        .collect();
-                    for &k in kids.iter().rev() {
-                        stack.push(Item::Joint(k, d + 1));
-                    }
-                }
-                Item::Joint(k, d) => {
-                    let j = &view.joints[k];
-                    let kind = if j.mimic.is_some() {
-                        format!("{} · mimic", j.kind)
-                    } else {
-                        j.kind.to_string()
-                    };
-                    rows.push((d, Sel::Joint(j.name.clone()), format!("· {} ({kind})", j.name)));
-                    stack.push(Item::Link(j.child.clone(), d + 1));
-                }
+    /// The export's refusal, inline: conflicts as sentences each with its two answers, any other
+    /// refusal in its words with its fixes.
+    fn robot_problems(ui: &mut Ui, t: &Theme, p: &mut RobotPanel) {
+        let src = p.source.clone().unwrap_or_else(|| "the source".into());
+        if !p.conflicts.is_empty() {
+            section(ui, t, "Changed in the assembly");
+            for c in p.conflicts.clone() {
+                let name = c
+                    .what
+                    .split_once('(')
+                    .map_or(c.what.as_str(), |(_, x)| x.trim_end_matches(')'));
+                let sentence = format!(
+                    "{} {} changed in {src}: {} → {}. The robot overrides it: {}.",
+                    cap(name),
+                    c.field,
+                    pretty(&c.was),
+                    pretty(&c.now),
+                    pretty(&c.set)
+                );
+                egui::Frame::new()
+                    .fill(t.warn.gamma_multiply(0.12))
+                    .corner_radius(4.0)
+                    .inner_margin(8.0)
+                    .show(ui, |ui| {
+                        ui.set_width(ui.available_width());
+                        ui.label(RichText::new(sentence).font(sans(12.0)).color(t.ink))
+                            .on_hover_text(format!(
+                                "line {} of the robot document: {} {}",
+                                c.line, c.what, c.field
+                            ));
+                        ui.horizontal(|ui| {
+                            if ui
+                                .button("Keep override")
+                                .on_hover_text(format!(
+                                    "keep {} over the assembly's new {}",
+                                    pretty(&c.set),
+                                    pretty(&c.now)
+                                ))
+                                .clicked()
+                            {
+                                p.out.push(RobotAct::Edit(Edit::Set {
+                                    line: Some(c.line),
+                                    call: String::new(),
+                                    target: String::new(),
+                                    field: format!("{}_was", c.field),
+                                    text: c.now.clone(),
+                                    was: None,
+                                }));
+                            }
+                            if ui
+                                .button("Use source")
+                                .on_hover_text(format!("drop the override: {} from {src}", pretty(&c.now)))
+                                .clicked()
+                            {
+                                p.out.push(RobotAct::Edit(Edit::Reset {
+                                    line: c.line,
+                                    field: c.field.clone(),
+                                }));
+                            }
+                        });
+                    });
             }
-        }
-        for (d, sel, text) in rows {
-            ui.horizontal(|ui| {
-                ui.add_space(d as f32 * 12.0);
-                let on = p.sel.as_ref() == Some(&sel);
-                let r = ui.selectable_label(on, RichText::new(text).font(sans(12.0)).color(t.ink));
-                if r.clicked() {
-                    p.sel = if on { None } else { Some(sel) };
-                }
-            });
+        } else if let Some((kind, text, fixes)) = p.error.clone() {
+            ui.add_space(6.0);
+            egui::Frame::new()
+                .fill(t.error.gamma_multiply(0.12))
+                .corner_radius(4.0)
+                .inner_margin(8.0)
+                .show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    ui.label(RichText::new(text).font(sans(12.0)).color(t.ink))
+                        .on_hover_text(RichText::new(kind).font(mono(11.0)));
+                    for f in fixes {
+                        ui.label(RichText::new(format!("Fix: {f}")).font(sans(11.0)).color(t.ink2));
+                    }
+                });
         }
     }
 
-    fn robot_sliders(ui: &mut Ui, t: &crate::shell::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
-        ui.horizontal(|ui| {
-            ui.label(RichText::new("Drive").font(medium(12.0)).color(t.ink));
-            if ui.small_button("Export pose").clicked() {
-                p.home();
-            }
-        });
+    /// The drive: a slider per moving joint (a mimic follows its leader), in degrees or the
+    /// user's length unit.
+    fn robot_sliders(ui: &mut Ui, t: &Theme, p: &mut RobotPanel, view: &RobotView, inch: bool) {
+        let moving: Vec<&ViewJoint> = view.joints.iter().filter(|j| j.position.len() == 1).collect();
+        if moving.is_empty() {
+            return;
+        }
+        section(ui, t, "Drive");
         egui::Grid::new("robot-drive")
             .num_columns(2)
             .spacing(vec2(8.0, 4.0))
             .show(ui, |ui| {
-                for j in view.joints.iter().filter(|j| j.position.len() == 1) {
-                    ui.label(RichText::new(&j.name).font(sans(12.0)).color(t.ink));
+                for j in moving {
                     let angular = j.kind != "prismatic";
                     let (lo, hi) = j.limit.unwrap_or(if angular {
                         (-std::f64::consts::PI, std::f64::consts::PI)
                     } else {
                         (-0.1, 0.1)
                     });
-                    let mut v = p.value(j);
-                    // shown in degrees or mm, held in URDF's units
                     let k = if angular {
                         180.0 / std::f64::consts::PI
+                    } else if inch {
+                        1.0 / 0.0254
                     } else {
                         1000.0
                     };
-                    let mut shown = v * k;
+                    let label = if j.mimic.is_some() {
+                        format!("{} (mimic)", j.name)
+                    } else {
+                        j.name.clone()
+                    };
+                    let l = ui.label(RichText::new(label).font(sans(12.0)).color(t.ink));
+                    if let Some((leader, m, off)) = &j.mimic {
+                        l.on_hover_text(format!("follows {leader} × {} + {}", num(*m, 4), num(*off, 4)));
+                    }
+                    let mut shown = p.value(j) * k;
                     let s = egui::Slider::new(&mut shown, lo * k..=hi * k)
-                        .suffix(if angular { "°" } else { " mm" })
+                        .suffix(match (angular, inch) {
+                            (true, _) => "°",
+                            (false, true) => " in",
+                            _ => " mm",
+                        })
                         .fixed_decimals(1);
                     let r = ui.add_enabled(j.mimic.is_none(), s);
                     if r.changed() {
-                        v = shown / k;
-                        p.set(&j.name, v);
+                        p.set(&j.name, shown / k);
                     }
                     ui.end_row();
                 }
             });
     }
 
-    fn robot_detail(ui: &mut Ui, t: &crate::shell::theme::Theme, p: &mut RobotPanel, view: &RobotView) {
-        let mark = |ui: &mut Ui, linked: Option<&str>| {
-            if let Some(l) = linked {
-                let was = if l.is_empty() {
-                    "robot only".to_string()
-                } else {
-                    format!("source: {l}")
-                };
-                ui.label(
-                    RichText::new(format!("overridden ({was})"))
-                        .font(sans(10.0))
-                        .color(t.accent),
-                );
-            } else {
-                ui.label(RichText::new("linked").font(sans(10.0)).color(t.ink2));
-            }
-        };
-        let row = |ui: &mut Ui, k: &str, v: String| {
-            ui.label(RichText::new(k).font(sans(11.0)).color(t.ink2));
-            ui.label(RichText::new(v).font(mono(11.0)).color(t.ink));
-            ui.end_row();
-        };
+    /// The selected joint's or link's sheet: titled sections, every value with its unit and where
+    /// it came from.
+    fn robot_detail(ui: &mut Ui, t: &Theme, p: &mut RobotPanel, view: &RobotView, inch: bool) {
         match p.sel.clone() {
             Some(Sel::Joint(n)) => {
-                let Some(j) = view.joints.iter().find(|j| j.name == n).cloned() else {
-                    return;
-                };
-                let what = format!("joint({})", j.name);
-                let line = p.line_of(&what);
-                ui.label(
-                    RichText::new(format!("Joint {}", j.name))
-                        .font(medium(12.0))
-                        .color(t.ink),
-                );
-                egui::Grid::new("robot-joint")
-                    .num_columns(2)
-                    .spacing(vec2(10.0, 3.0))
-                    .show(ui, |ui| {
-                        row(ui, "type", j.kind.to_string());
-                        row(ui, "parent, child", format!("{}, {}", j.parent, j.child));
-                        let o = j.origin.origin;
-                        row(
-                            ui,
-                            "origin (mm)",
-                            format!("{}, {}, {}", mm(o.x), mm(o.y), mm(o.z)),
-                        );
-                        if let Some(a) = j.axis {
-                            row(ui, "axis", format!("{:.4}, {:.4}, {:.4}", a[0], a[1], a[2]));
-                        }
-                        if let Some((l, m, off)) = &j.mimic {
-                            row(ui, "mimics", format!("{l} × {m} + {off}"));
-                        }
-                        row(ui, "source joint", j.of.clone());
-                    });
-                // the limits: shown in degrees or mm, sent in the document's units
-                if matches!(j.kind, "revolute" | "prismatic" | "continuous") {
-                    let angular = j.kind != "prismatic";
-                    let k = if angular {
-                        180.0 / std::f64::consts::PI
-                    } else {
-                        1000.0
-                    };
-                    let unit = if angular { "deg" } else { "" };
-                    let txt = |lo: f64, hi: f64| {
-                        let f = |x: f64| format!("{}{unit}", (x * 1e6).round() / 1e6);
-                        format!("({}, {})", f(lo), f(hi))
-                    };
-                    let (lo0, hi0) = j.limit.map_or((-180.0, 180.0), |(a, b)| (a * k, b * k));
-                    let over = p.overridden(&what, "limit").map(str::to_string);
-                    ui.add_space(4.0);
-                    ui.horizontal(|ui| {
-                        ui.label(RichText::new("limits").font(sans(11.0)).color(t.ink2));
-                        mark(ui, over.as_deref());
-                    });
-                    let lo_key = format!("{n}.lo");
-                    let hi_key = format!("{n}.hi");
-                    let mut lo = *p.draft.get(&lo_key).unwrap_or(&lo0);
-                    let mut hi = *p.draft.get(&hi_key).unwrap_or(&hi0);
-                    ui.horizontal(|ui| {
-                        let suffix = if angular { "°" } else { " mm" };
-                        if ui
-                            .add(egui::DragValue::new(&mut lo).speed(0.5).suffix(suffix))
-                            .changed()
-                        {
-                            p.draft.insert(lo_key.clone(), lo);
-                        }
-                        if ui
-                            .add(egui::DragValue::new(&mut hi).speed(0.5).suffix(suffix))
-                            .changed()
-                        {
-                            p.draft.insert(hi_key.clone(), hi);
-                        }
-                        if ui.button("Override").clicked() && lo <= hi {
-                            let was = j.limit.map(|_| txt(lo0, hi0));
-                            p.set_joint(&j, "limit", txt(lo, hi), was);
-                            p.draft.remove(&lo_key);
-                            p.draft.remove(&hi_key);
-                        }
-                    });
-                    if over.is_some()
-                        && let Some(l) = line
-                    {
-                        ui.horizontal(|ui| {
-                            if ui.button("Reset to linked").clicked() {
-                                p.out.push(RobotAct::Edit(Edit::Reset {
-                                    line: l,
-                                    field: "limit".into(),
-                                }));
-                            }
-                            // a single-freedom joint's `limit:` (a chain's freedoms have their own words)
-                            if p.source.is_some()
-                                && j.of == j.name
-                                && ui
-                                    .button("Apply to assembly")
-                                    .on_hover_text("write these limits in the source assembly, and drop the robot's override")
-                                    .clicked()
-                            {
-                                p.out.push(RobotAct::Assembly {
-                                    joint: j.of.clone(),
-                                    arg: "limit".into(),
-                                    text: txt(lo0, hi0),
-                                    then: Edit::Reset {
-                                        line: l,
-                                        field: "limit".into(),
-                                    },
-                                });
-                            }
-                        });
-                    }
+                if let Some(j) = view.joints.iter().find(|j| j.name == n).cloned() {
+                    Self::joint_sheet(ui, t, p, view, &j, inch);
                 }
-                // fixed at its value now: a freeze, the robot's own (merging across it needs one)
-                if let Ok(e) = p.tree_edit(TreeOp::Freeze)
-                    && ui
-                        .button(TreeOp::Freeze.label())
-                        .on_hover_text(TreeOp::Freeze.tip())
-                        .clicked()
-                {
-                    p.out.push(RobotAct::Edit(e));
-                }
-                // what URDF adds: actuation and dynamics, the robot's own
-                ui.add_space(4.0);
-                egui::Grid::new("robot-act")
-                    .num_columns(3)
-                    .spacing(vec2(8.0, 3.0))
-                    .show(ui, |ui| {
-                        for (field, unit) in [
-                            ("effort", "N or N m"),
-                            ("velocity", "m/s or rad/s"),
-                            ("damping", ""),
-                            ("friction", ""),
-                        ] {
-                            if j.position.len() != 1 {
-                                break;
-                            }
-                            let now = p
-                                .overrides
-                                .iter()
-                                .find(|o| o.1 == what && o.2 == field)
-                                .map(|o| o.4.clone());
-                            // what the export writes: the joint's own, the document's actuation(..), or none
-                            let written = match field {
-                                "effort" => j.effort,
-                                "velocity" => j.velocity,
-                                "damping" => j.dynamics.map(|d| d.0),
-                                _ => j.dynamics.map(|d| d.1),
-                            };
-                            let tip = match (&now, field) {
-                                (Some(_), _) => format!("{unit}; this joint's own"),
-                                (None, "effort" | "velocity") if written.is_some() => {
-                                    format!("{unit}; from actuation(..)")
-                                }
-                                (None, "effort" | "velocity") => {
-                                    format!("{unit}; not given: the export refuses (or writes a placeholder)")
-                                }
-                                _ => format!("{unit}; not given (0)"),
-                            };
-                            let ink = if now.is_some() { t.accent } else { t.ink2 };
-                            ui.label(RichText::new(field).font(sans(11.0)).color(ink))
-                                .on_hover_text(tip);
-                            let key = format!("{n}.{field}");
-                            let mut v = *p.draft.get(&key).unwrap_or(&written.unwrap_or(0.0));
-                            if ui
-                                .add(egui::DragValue::new(&mut v).speed(0.1).range(0.0..=f64::MAX))
-                                .changed()
-                            {
-                                p.draft.insert(key.clone(), v);
-                            }
-                            ui.horizontal(|ui| {
-                                if ui.small_button("Set").clicked() {
-                                    p.set_joint(&j, field, format!("{v}"), None);
-                                    p.draft.remove(&key);
-                                }
-                                if now.is_some()
-                                    && let Some(l) = line
-                                    && ui.small_button("Reset").clicked()
-                                {
-                                    p.out.push(RobotAct::Edit(Edit::Reset {
-                                        line: l,
-                                        field: field.into(),
-                                    }));
-                                }
-                            });
-                            ui.end_row();
-                        }
-                    });
             }
             Some(Sel::Link(n)) => {
-                let Some(l) = view.links.iter().find(|l| l.name == n).cloned() else {
-                    return;
-                };
-                let what = format!("inertial({})", l.name);
-                ui.label(
-                    RichText::new(format!("Link {}", l.name))
-                        .font(medium(12.0))
-                        .color(t.ink),
-                );
-                egui::Grid::new("robot-link")
-                    .num_columns(2)
-                    .spacing(vec2(10.0, 3.0))
-                    .show(ui, |ui| {
-                        row(ui, "bodies", l.bodies.join(" "));
-                        let c = l.com;
-                        row(
-                            ui,
-                            "centre of mass (mm)",
-                            format!("{}, {}, {}", mm(c[0]), mm(c[1]), mm(c[2])),
-                        );
-                        row(ui, "visuals", format!("{}", l.visuals.len()));
-                        let shapes: Vec<String> = l
-                            .collisions
-                            .iter()
-                            .map(|c| match &c.shape {
-                                forge_urdf::Shape::Mesh { file, .. } => {
-                                    file.rsplit('/').next().unwrap_or(file).to_string()
-                                }
-                                forge_urdf::Shape::Box(_) => "box".into(),
-                                forge_urdf::Shape::Cylinder { .. } => "cylinder".into(),
-                                forge_urdf::Shape::Sphere(_) => "sphere".into(),
-                            })
-                            .collect();
-                        row(ui, "collision", shapes.join(", "));
-                    });
-                let over = p.overridden(&what, "mass").map(str::to_string);
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("mass").font(sans(11.0)).color(t.ink2));
-                    mark(ui, over.as_deref());
-                });
-                let key = format!("{n}.mass");
-                let m0 = l.mass.unwrap_or(0.0);
-                let mut m = *p.draft.get(&key).unwrap_or(&m0);
-                ui.horizontal(|ui| {
-                    if ui
-                        .add(
-                            egui::DragValue::new(&mut m)
-                                .speed(0.001)
-                                .range(1e-9..=f64::MAX)
-                                .suffix(" kg"),
-                        )
-                        .changed()
-                    {
-                        p.draft.insert(key.clone(), m);
-                    }
-                    if !l.dummy && ui.button("Override").clicked() {
-                        let target = match l.bodies.first() {
-                            Some(b) if p.source.is_some() => format!("src.{b}"),
-                            _ => format!("\"{}\"", l.name),
-                        };
-                        p.out.push(RobotAct::Edit(Edit::Set {
-                            line: p.line_of(&what),
-                            call: "inertial".into(),
-                            target,
-                            field: "mass".into(),
-                            text: format!("{m}"),
-                            was: if over.is_some() {
-                                None
-                            } else {
-                                Some(format!("{m0}"))
-                            },
-                        }));
-                        p.draft.remove(&key);
-                    }
-                    if over.is_some()
-                        && let Some(line) = p.line_of(&what)
-                        && ui.button("Reset to linked").clicked()
-                    {
-                        p.out.push(RobotAct::Edit(Edit::Reset {
-                            line,
-                            field: "mass".into(),
-                        }));
-                    }
-                });
-                Self::link_actions(ui, p, view, &l);
+                if let Some(l) = view.links.iter().find(|l| l.name == n).cloned() {
+                    Self::link_sheet(ui, t, p, view, &l, inch);
+                }
             }
             None => {
+                ui.add_space(10.0);
                 ui.label(
-                    RichText::new("Select a link or a joint for its values.")
-                        .font(sans(11.0))
+                    RichText::new("Select a link or a joint in the browser for its properties.")
+                        .font(sans(12.0))
                         .color(t.ink2),
                 );
             }
         }
     }
 
-    /// The selected link's place in the tree, changed: made the root, dropped, merged into its
-    /// parent (across a fixed joint only), a frame hung on it, its collision made its hull.
-    fn link_actions(ui: &mut Ui, p: &mut RobotPanel, _view: &RobotView, _l: &forge_urdf::ViewLink) {
-        ui.add_space(4.0);
+    fn joint_sheet(ui: &mut Ui, t: &Theme, p: &mut RobotPanel, _view: &RobotView, j: &ViewJoint, inch: bool) {
+        let what = format!("joint({})", j.name);
+        let line = p.line_of(&what);
+        let key = |f: &str| match line {
+            Some(l) => format!("{what}.{f} · line {l}"),
+            None => format!("{what}.{f}"),
+        };
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            icons::draw(
+                ui.painter(),
+                ui.cursor().min + vec2(0.0, 1.0),
+                18.0,
+                kind_icon(j.kind),
+                1.4,
+                t.ink,
+            );
+            ui.add_space(24.0);
+            ui.label(RichText::new(&j.name).font(medium(14.0)).color(t.ink));
+            ui.label(
+                RichText::new(format!("{} joint", kind_name(j.kind)))
+                    .font(sans(12.0))
+                    .color(t.ink2),
+            );
+        });
+        let angular = j.kind != "prismatic";
+        section(ui, t, "Joint");
+        egui::Grid::new("robot-joint")
+            .num_columns(3)
+            .spacing(vec2(10.0, 4.0))
+            .show(ui, |ui| {
+                row(
+                    ui,
+                    t,
+                    "Type",
+                    &key("type"),
+                    kind_name(j.kind),
+                    Some(&Prov::Linked),
+                );
+                row(
+                    ui,
+                    t,
+                    "Parent → child",
+                    "parent, child",
+                    &format!("{} → {}", j.parent, j.child),
+                    None,
+                );
+                if !j.of.is_empty() && j.of != j.name {
+                    row(ui, t, "Source joint", "of", &j.of, None);
+                }
+                if let Some((l, m, off)) = &j.mimic {
+                    row(
+                        ui,
+                        t,
+                        "Follows",
+                        "mimic",
+                        &format!("{l} × {} + {}", num(*m, 4), num(*off, 4)),
+                        Some(&Prov::Linked),
+                    );
+                }
+            });
+        section(ui, t, "Placement");
+        egui::Grid::new("robot-joint-at")
+            .num_columns(3)
+            .spacing(vec2(10.0, 4.0))
+            .show(ui, |ui| {
+                let o = j.origin.origin;
+                for (a, v) in [("X", o.x), ("Y", o.y), ("Z", o.z)] {
+                    row(
+                        ui,
+                        t,
+                        &format!("Origin {a}"),
+                        "origin xyz (in the parent link)",
+                        &len(v, inch),
+                        None,
+                    );
+                }
+                if let Some(a) = j.axis {
+                    row(ui, t, "Axis", "axis (in the joint's frame)", &axis_text(a), None);
+                }
+            });
+        // limits: shown in degrees or the user's unit, sent in the document's
+        if matches!(j.kind, "revolute" | "prismatic" | "continuous") {
+            let k = if angular {
+                180.0 / std::f64::consts::PI
+            } else if inch {
+                1.0 / 0.0254
+            } else {
+                1000.0
+            };
+            let to_doc = |x: f64| {
+                if angular {
+                    format!("{}deg", (x * 1e6).round() / 1e6)
+                } else {
+                    // the document's lengths are mm
+                    let mm = if inch { x * 25.4 } else { x };
+                    format!("{}", (mm * 1e6).round() / 1e6)
+                }
+            };
+            let txt = |lo: f64, hi: f64| format!("({}, {})", to_doc(lo), to_doc(hi));
+            let unit = if angular {
+                "°"
+            } else if inch {
+                " in"
+            } else {
+                " mm"
+            };
+            let (lo0, hi0) = j.limit.map_or((-180.0, 180.0), |(a, b)| (a * k, b * k));
+            let over = p.overridden(&what, "limit").map(str::to_string);
+            let prov = match &over {
+                Some(w) if w.is_empty() => Prov::Yours(None),
+                Some(w) => Prov::Yours(Some(w.clone())),
+                None if j.limit.is_some() => Prov::Linked,
+                None => Prov::Unknown,
+            };
+            section(ui, t, "Limits");
+            egui::Grid::new("robot-joint-lim")
+                .num_columns(3)
+                .spacing(vec2(10.0, 4.0))
+                .show(ui, |ui| match j.limit {
+                    Some(_) => {
+                        row(
+                            ui,
+                            t,
+                            "Lower",
+                            &key("limit"),
+                            &format!("{}{unit}", num(lo0, 3)),
+                            Some(&prov),
+                        );
+                        row(
+                            ui,
+                            t,
+                            "Upper",
+                            &key("limit"),
+                            &format!("{}{unit}", num(hi0, 3)),
+                            Some(&prov),
+                        );
+                    }
+                    None => row(ui, t, "Range", &key("limit"), "none (turns freely)", Some(&prov)),
+                });
+            let lo_key = format!("{}.lo", j.name);
+            let hi_key = format!("{}.hi", j.name);
+            let mut lo = *p.draft.get(&lo_key).unwrap_or(&lo0);
+            let mut hi = *p.draft.get(&hi_key).unwrap_or(&hi0);
+            ui.horizontal(|ui| {
+                if ui
+                    .add(egui::DragValue::new(&mut lo).speed(0.5).suffix(unit))
+                    .changed()
+                {
+                    p.draft.insert(lo_key.clone(), lo);
+                }
+                ui.label("…");
+                if ui
+                    .add(egui::DragValue::new(&mut hi).speed(0.5).suffix(unit))
+                    .changed()
+                {
+                    p.draft.insert(hi_key.clone(), hi);
+                }
+                let ok = lo <= hi;
+                if ui
+                    .add_enabled(ok, egui::Button::new("Override"))
+                    .on_hover_text("the robot's own limits; the assembly keeps its")
+                    .on_disabled_hover_text("lower above upper")
+                    .clicked()
+                {
+                    let was = j.limit.map(|_| txt(lo0, hi0));
+                    p.set_joint(j, "limit", txt(lo, hi), was);
+                    p.draft.remove(&lo_key);
+                    p.draft.remove(&hi_key);
+                }
+            });
+            if over.is_some()
+                && let Some(l) = line
+            {
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("Use source")
+                        .on_hover_text("drop the robot's limits")
+                        .clicked()
+                    {
+                        p.out.push(RobotAct::Edit(Edit::Reset {
+                            line: l,
+                            field: "limit".into(),
+                        }));
+                    }
+                    // a single-freedom joint's `limit:` (a chain's freedoms have their own words)
+                    if p.source.is_some()
+                        && j.of == j.name
+                        && ui
+                            .button("Apply to assembly")
+                            .on_hover_text(
+                                "write these limits in the source assembly, and drop the robot's override",
+                            )
+                            .clicked()
+                    {
+                        p.out.push(RobotAct::Assembly {
+                            joint: j.of.clone(),
+                            arg: "limit".into(),
+                            text: txt(lo0, hi0),
+                            then: Edit::Reset {
+                                line: l,
+                                field: "limit".into(),
+                            },
+                        });
+                    }
+                });
+            }
+        }
+        // what URDF adds: actuation and dynamics, the robot's own
+        if j.position.len() == 1 {
+            section(ui, t, "Actuation");
+            let (eu, vu, du, fu) = if angular {
+                ("N·m", "rad/s", "N·m·s/rad", "N·m")
+            } else {
+                ("N", "m/s", "N·s/m", "N")
+            };
+            egui::Grid::new("robot-act")
+                .num_columns(3)
+                .spacing(vec2(10.0, 4.0))
+                .show(ui, |ui| {
+                    for (field, label, unit) in [
+                        ("effort", "Effort", eu),
+                        ("velocity", "Velocity", vu),
+                        ("damping", "Damping", du),
+                        ("friction", "Friction", fu),
+                    ] {
+                        let own = p.overrides.iter().any(|o| o.1 == what && o.2 == field);
+                        let written = match field {
+                            "effort" => j.effort,
+                            "velocity" => j.velocity,
+                            "damping" => j.dynamics.map(|d| d.0),
+                            _ => j.dynamics.map(|d| d.1),
+                        };
+                        let prov = match (own, written) {
+                            (true, _) => Prov::Yours(None),
+                            (false, Some(_)) => Prov::Yours(None),
+                            (false, None) => Prov::Unknown,
+                        };
+                        let k = format!("{what}.{field}");
+                        let l = ui.label(RichText::new(label).font(sans(12.0)).color(t.ink2));
+                        l.on_hover_text(
+                            RichText::new(if own {
+                                k.clone()
+                            } else {
+                                format!("{k} · actuation(..)")
+                            })
+                            .font(mono(11.0)),
+                        );
+                        let dk = format!("{}.{field}", j.name);
+                        let mut v = *p.draft.get(&dk).unwrap_or(&written.unwrap_or(0.0));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.set_min_width(VALUE_W);
+                            if ui
+                                .add(
+                                    egui::DragValue::new(&mut v)
+                                        .speed(0.1)
+                                        .range(0.0..=f64::MAX)
+                                        .suffix(format!(" {unit}")),
+                                )
+                                .changed()
+                            {
+                                p.draft.insert(dk.clone(), v);
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            badge(ui, t, &prov);
+                            let dirty = p.draft.contains_key(&dk);
+                            if dirty
+                                && ui
+                                    .small_button("Set")
+                                    .on_hover_text("the robot's own value")
+                                    .clicked()
+                            {
+                                p.set_joint(j, field, format!("{v}"), None);
+                                p.draft.remove(&dk);
+                            }
+                            if own
+                                && !dirty
+                                && let Some(l) = line
+                                && ui
+                                    .small_button("Clear")
+                                    .on_hover_text("drop the joint's own value")
+                                    .clicked()
+                            {
+                                p.out.push(RobotAct::Edit(Edit::Reset {
+                                    line: l,
+                                    field: field.into(),
+                                }));
+                            }
+                        });
+                        ui.end_row();
+                    }
+                });
+        }
+        // fixed at its value now: a freeze, the robot's own (merging across it needs one)
+        if let Ok(e) = p.tree_edit(TreeOp::Freeze) {
+            ui.add_space(6.0);
+            if ui
+                .button(TreeOp::Freeze.label())
+                .on_hover_text(TreeOp::Freeze.tip())
+                .clicked()
+            {
+                p.out.push(RobotAct::Edit(e));
+            }
+        }
+    }
+
+    fn link_sheet(
+        ui: &mut Ui,
+        t: &Theme,
+        p: &mut RobotPanel,
+        view: &RobotView,
+        l: &forge_urdf::ViewLink,
+        inch: bool,
+    ) {
+        let what = format!("inertial({})", l.name);
+        let line = p.line_of(&what);
+        let key = |f: &str| match line {
+            Some(n) => format!("{what}.{f} · line {n}"),
+            None => format!("{what}.{f}"),
+        };
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            icons::draw(
+                ui.painter(),
+                ui.cursor().min + vec2(0.0, 1.0),
+                18.0,
+                "part",
+                1.4,
+                t.ink,
+            );
+            ui.add_space(24.0);
+            ui.label(RichText::new(&l.name).font(medium(14.0)).color(t.ink));
+            let kind = if view.root == l.name {
+                "Root link"
+            } else if l.dummy {
+                "Massless link"
+            } else {
+                "Link"
+            };
+            ui.label(RichText::new(kind).font(sans(12.0)).color(t.ink2));
+        });
+        if !l.bodies.is_empty() {
+            section(ui, t, "Bodies");
+            for b in &l.bodies {
+                ui.label(RichText::new(b).font(sans(12.0)).color(t.ink));
+            }
+        }
+        section(ui, t, "Mass properties");
+        let over = p.overridden(&what, "mass").map(str::to_string);
+        let prov = match &over {
+            Some(w) if w.is_empty() => Prov::Yours(None),
+            Some(w) => Prov::Yours(Some(format!("{w} kg"))),
+            None if l.dummy => Prov::Linked,
+            None if l.mass.is_some() => Prov::Linked,
+            None => Prov::Unknown,
+        };
+        egui::Grid::new("robot-link")
+            .num_columns(3)
+            .spacing(vec2(10.0, 4.0))
+            .show(ui, |ui| {
+                let m = match l.mass {
+                    Some(m) => format!("{} kg", num(m, 4)),
+                    None if l.dummy => "none (massless)".into(),
+                    None => "unknown".into(),
+                };
+                row(ui, t, "Mass", &key("mass"), &m, Some(&prov));
+                if !l.dummy {
+                    let c = l.com;
+                    for (a, v) in [("X", c[0]), ("Y", c[1]), ("Z", c[2])] {
+                        row(
+                            ui,
+                            t,
+                            &format!("Centre of mass {a}"),
+                            "inertial origin (in the link)",
+                            &len(v, inch),
+                            Some(&prov),
+                        );
+                    }
+                }
+            });
+        if !l.dummy {
+            let dk = format!("{}.mass", l.name);
+            let m0 = l.mass.unwrap_or(0.0);
+            let mut m = *p.draft.get(&dk).unwrap_or(&m0);
+            ui.horizontal(|ui| {
+                if ui
+                    .add(
+                        egui::DragValue::new(&mut m)
+                            .speed(0.001)
+                            .range(1e-9..=f64::MAX)
+                            .suffix(" kg"),
+                    )
+                    .changed()
+                {
+                    p.draft.insert(dk.clone(), m);
+                }
+                if ui
+                    .button("Override")
+                    .on_hover_text("the robot's own mass; the assembly keeps its")
+                    .clicked()
+                {
+                    p.out.push(RobotAct::Edit(Edit::Set {
+                        line,
+                        call: "inertial".into(),
+                        target: p.link_target(l),
+                        field: "mass".into(),
+                        text: format!("{m}"),
+                        was: if over.is_some() {
+                            None
+                        } else {
+                            Some(format!("{m0}"))
+                        },
+                    }));
+                    p.draft.remove(&dk);
+                }
+                if over.is_some()
+                    && let Some(n) = line
+                    && ui
+                        .button("Use source")
+                        .on_hover_text("the mass from the parts' materials")
+                        .clicked()
+                {
+                    p.out.push(RobotAct::Edit(Edit::Reset {
+                        line: n,
+                        field: "mass".into(),
+                    }));
+                }
+            });
+        }
+        section(ui, t, "Geometry");
+        egui::Grid::new("robot-link-geo")
+            .num_columns(3)
+            .spacing(vec2(10.0, 4.0))
+            .show(ui, |ui| {
+                row(ui, t, "Visuals", "visual", &format!("{}", l.visuals.len()), None);
+                let shapes: Vec<String> = l
+                    .collisions
+                    .iter()
+                    .map(|c| match &c.shape {
+                        forge_urdf::Shape::Mesh { file, .. } => {
+                            if file.contains("hull") {
+                                "convex hull".to_string()
+                            } else {
+                                "mesh".to_string()
+                            }
+                        }
+                        forge_urdf::Shape::Box(_) => "box".into(),
+                        forge_urdf::Shape::Cylinder { .. } => "cylinder".into(),
+                        forge_urdf::Shape::Sphere(_) => "sphere".into(),
+                    })
+                    .collect();
+                let c = if shapes.is_empty() {
+                    "none".to_string()
+                } else {
+                    shapes.join(", ")
+                };
+                row(ui, t, "Collision", "collision", &c, None);
+            });
+        section(ui, t, "Structure");
         ui.horizontal_wrapped(|ui| {
             for op in [
                 TreeOp::MakeRoot,
@@ -945,4 +1412,52 @@ impl Shell {
             }
         });
     }
+}
+
+/// The browser's rows: depth first from the root, each joint then the link it carries, in
+/// document order.
+fn tree_rows(view: &RobotView) -> Vec<TreeRow> {
+    let mut rows = vec![];
+    // (link, depth, more siblings after it)
+    fn link(view: &RobotView, name: &str, depth: usize, more: bool, rows: &mut Vec<TreeRow>) {
+        let l = view.links.iter().find(|l| l.name == name);
+        let (right, badge) = match l {
+            Some(l) if l.dummy => (String::new(), Some("massless")),
+            Some(l) => (
+                l.mass.map_or(String::new(), |m| format!("{} kg", num(m, 3))),
+                None,
+            ),
+            None => (String::new(), None),
+        };
+        let badge = if view.root == name { Some("root") } else { badge };
+        rows.push(TreeRow {
+            depth,
+            sel: Sel::Link(name.to_string()),
+            name: name.to_string(),
+            icon: "part",
+            right,
+            badge,
+            more,
+        });
+        let kids: Vec<&ViewJoint> = view.joints.iter().filter(|j| j.parent == name).collect();
+        for (i, j) in kids.iter().enumerate() {
+            let last = i + 1 == kids.len();
+            rows.push(TreeRow {
+                depth: depth + 1,
+                sel: Sel::Joint(j.name.clone()),
+                name: j.name.clone(),
+                icon: kind_icon(j.kind),
+                right: if j.mimic.is_some() {
+                    format!("{} · mimic", j.kind)
+                } else {
+                    j.kind.to_string()
+                },
+                badge: None,
+                more: !last,
+            });
+            link(view, &j.child, depth + 2, false, rows);
+        }
+    }
+    link(view, &view.root, 0, false, &mut rows);
+    rows
 }

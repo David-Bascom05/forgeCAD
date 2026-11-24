@@ -262,6 +262,9 @@ fn groups(s: &Shell) -> Vec<Group> {
             .collect();
     }
     let v = s.view;
+    if s.tab == super::ROBOT_TAB {
+        return super::robot::groups(s, &Action::Robot);
+    }
     if s.tab == super::HARNESS_TAB {
         return super::harness_ui::groups(s)
             .into_iter()

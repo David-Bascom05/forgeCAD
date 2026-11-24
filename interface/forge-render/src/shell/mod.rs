@@ -83,6 +83,10 @@ pub const HARNESS_TAB: usize = 9;
 pub const WELD_TAB: usize = 10;
 /// A machining document's Manufacture tab: setups, operations, posts (`cam/`).
 pub const CAM_TAB: usize = 11;
+/// The Robot environment's tab (`robot/`), in the slot the Environments framework keeps for it.
+pub const ROBOT_TAB: usize = 13;
+/// The Robot environment's property sheet, docked at the window's right edge.
+pub const ROBOT_PROPS_W: f32 = 360.0;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -179,6 +183,8 @@ pub enum Action {
     Fg(FgCmd),
     /// The Manufacture workspace's command.
     Cam(cam::Ask),
+    /// The Robot environment's command (`robot::command`).
+    Robot(u16),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
     Versions(versions::VersionsCmd),
     /// The Machine Builder workspace (shell/machine.rs), opened or closed.
@@ -482,6 +488,11 @@ impl Shell {
         self.fg.as_ref().is_some_and(|f| f.assembly)
     }
 
+    /// The Robot environment is up: its tab, browser and docked sheet (left by its Finish).
+    pub fn robot_on(&self) -> bool {
+        self.robot.as_ref().is_some_and(|p| p.open)
+    }
+
     pub fn side_w(&self) -> f32 {
         self.side_px
             .unwrap_or(if self.is_asm() { ASM_SIDE_W } else { SIDE_W })
@@ -737,9 +748,11 @@ impl Shell {
         let side = Rect::from_min_max(pos2(0.0, top), pos2(side_w, bottom));
         let ppp = ctx.pixels_per_point();
         let snap = |v: f32| (v * ppp).round() / ppp;
+        // the Robot environment's sheet docked right: the view is what is left
+        let props_w = if self.robot_on() { ROBOT_PROPS_W } else { 0.0 };
         self.view_rect = Rect::from_min_max(
             pos2(snap(side_w + 1.0), snap(top)),
-            pos2(snap(s.width()), snap(bottom)),
+            pos2(snap(s.width() - props_w), snap(bottom)),
         );
 
         p.rect_filled(
@@ -763,6 +776,10 @@ impl Shell {
         self.ribbon(ui, s.width());
         self.side(ui, side);
         self.side_splitter(ui, side, s.width());
+        if props_w > 0.0 {
+            let dock = Rect::from_min_max(pos2(s.width() - props_w, top), pos2(s.width(), bottom));
+            self.robot_dock(ui, dock);
+        }
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
         self.window_ui(&ctx);
@@ -783,7 +800,6 @@ impl Shell {
         self.content_window(&ctx);
         self.fg_params_window(&ctx);
         self.fg_issues_window(&ctx);
-        self.robot_ui(&ctx);
         self.cutlist_window(&ctx);
         self.sheet_ui(&ctx);
         self.machine_ui(&ctx);
@@ -1001,6 +1017,7 @@ impl Shell {
                 HARNESS_TAB => &"Harness",
                 WELD_TAB => &"Weldments",
                 CAM_TAB => &"Manufacture",
+                ROBOT_TAB => &"Robot",
                 k => &TABS[k],
             };
             let on = k == self.tab;
@@ -1043,7 +1060,9 @@ impl Shell {
     /// alone with Inspect, View and Manage.
     pub fn tab_order(&self) -> Vec<usize> {
         let fg = self.fg.is_some() && !self.is_asm();
-        if self.cam.is_some() {
+        if self.robot_on() {
+            vec![ROBOT_TAB, 2, 3, 4]
+        } else if self.cam.is_some() {
             vec![CAM_TAB, 2, 3, 4]
         } else if fg && self.sheet.flat_env {
             vec![FLAT_TAB, 2, 3, 4]
@@ -1075,6 +1094,8 @@ impl Shell {
             self.agent_ui(ui, tree);
         } else if self.agent.tab == agent::SideTab::Versions {
             self.versions_ui(ui, tree);
+        } else if self.robot_on() {
+            self.robot_side(ui, tree);
         } else if self.cam.is_some() {
             self.cam_side(ui, tree);
         } else if self.is_asm() && self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
