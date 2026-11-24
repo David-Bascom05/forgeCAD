@@ -1454,3 +1454,48 @@ fn nary_a_plane_is_flush_with_all_of_a_planes_faces_or_none() {
         }
     }
 }
+
+/// Two walls flush (5.5e-6 off) against a plate's y = 0 wall, the second almost wholly inside the
+/// first, its front a hair off the first's: unioned, the second crossed the first's front at 6e-7
+/// rad, one edge of that crossing was made and the pieces closing it, within tolerance, were not;
+/// the classifier dropped the plate's bottom and the first wall's front below it, and the union
+/// came out an open shell (eight edges used once), a wrong Ok. An open shell the boolean makes is
+/// refused (OpenShell). Two ops of `drift_adv edge`, by their original indices
+/// (research/booleans/drift.md §8).
+#[test]
+fn a_union_left_open_is_refused() {
+    let ops: [(usize, [f64; 6]); 2] = [
+        (
+            25,
+            [
+                -0.4870355810546001,
+                0.1901779229804108,
+                -0.27625441155899466,
+                -0.295604682866215,
+                -0.9833093286502677,
+                1.0,
+            ],
+        ),
+        (
+            43,
+            [
+                0.029814267349035806,
+                -0.5315581713293835,
+                -0.2762644949939368,
+                -1.0,
+                -0.8423443716357213,
+                0.4469800308709223,
+            ],
+        ),
+    ];
+    let mut body = wall_plate(Frame::WORLD);
+    for (i, q) in ops {
+        let (tool, op) = edge_wall_in(Frame::WORLD, i, q);
+        // a refusal is an honest answer; an Ok must be a valid solid
+        if let Ok(r) = boolean(&body, &tool, op, 100 + i as u64) {
+            let p = check(&r);
+            assert!(p.is_empty(), "op {i} ({op:?}): {p:?}");
+            body = r;
+        }
+    }
+}
