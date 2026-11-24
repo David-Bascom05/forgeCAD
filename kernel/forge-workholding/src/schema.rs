@@ -316,6 +316,9 @@ impl Record {
         if !self.note.is_empty() {
             o += &q("note", &self.note);
         }
+        if !self.taken.is_empty() {
+            o += &q("taken", &self.taken);
+        }
         if !self.unknown.is_empty() {
             let u: Vec<String> = self.unknown.iter().map(|x| js(x)).collect();
             o += &format!("unknown = [{}]\n", u.join(", "));
@@ -452,11 +455,9 @@ mod tests {
         for (r, _) in &l.records {
             let back = crate::parse_file("x.toml", &r.to_toml())
                 .unwrap_or_else(|e| panic!("{}: {e}\n{}", r.name, r.to_toml()));
-            let mut a = r.clone();
-            a.taken.clear();
-            let mut b = back[0].clone();
-            b.taken.clear();
-            assert_eq!(a, b, "{}", r.name);
+            assert_eq!(*r, back[0], "{}", r.name);
+            // canonical: written again, byte for byte the same
+            assert_eq!(back[0].to_toml(), r.to_toml(), "{}", r.name);
         }
     }
 
