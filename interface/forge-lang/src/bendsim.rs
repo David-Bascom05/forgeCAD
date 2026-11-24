@@ -49,6 +49,10 @@ pub struct Ask {
     /// Bends locked to a station (`lock rear=2,tab=1`: a bend's name or number, a station's
     /// number from 1, into `stations`): each made there; the order and the rest are searched.
     pub locks: Vec<(String, usize)>,
+    /// Answer only where the part and the tools collide (`collisions`), and of one step
+    /// (`step N`, from 1).
+    pub collisions: bool,
+    pub step: Option<usize>,
 }
 
 /// A station: its punch and die (library ids), its centre along the bed from the bed's centre,
@@ -101,6 +105,16 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
                     a.locks.push((b.trim().to_string(), k - 1));
                 }
             }
+            "collisions" => a.collisions = true,
+            "step" => {
+                a.step = Some(
+                    val("step")?
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|n| *n >= 1)
+                        .ok_or("step takes a step's number, from 1")?,
+                )
+            }
             "stations" => match val("stations")?.as_str() {
                 "auto" => a.stage = true,
                 other => {
@@ -130,7 +144,7 @@ pub fn parse(words: &[String]) -> Result<Ask, String> {
             }
             other => {
                 return Err(format!(
-                    "bendsim takes press P, punches A,B, dies C,D, tooling T, vendor V, sequence S, stations auto, lock B=N, sheet NAME, uts MPA; not `{other}`"
+                    "bendsim takes press P, punches A,B, dies C,D, tooling T, vendor V, sequence S, stations auto, lock B=N, collisions, step N, sheet NAME, uts MPA; not `{other}`"
                 ));
             }
         }
@@ -168,8 +182,49 @@ pub fn ask_file(path: &Path, root: Option<PathBuf>, ask: &Ask) -> Answer {
 
 pub fn ask_src(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Answer {
     match simulate(src, dir, root, ask) {
+        Ok(s) if ask.collisions => collisions(&s.answer, ask.step),
         Ok(s) => s.answer,
         Err(a) => a,
+    }
+}
+
+/// `bendsim collisions [step N]`: where the part and the tools collide, step by step (or one
+/// step's), schema `forgecad.bendsim.collisions/1`: every contact's faces on both bodies, its
+/// region (points, box), depth, when, and a line of words.
+pub fn collisions(full: &Answer, step: Option<usize>) -> Answer {
+    let j = &full.json;
+    let all = match j.get("contacts") {
+        Some(Json::Arr(v)) => v.clone(),
+        _ => Vec::new(),
+    };
+    let picked: Vec<Json> = all
+        .into_iter()
+        .filter(|c| step.is_none_or(|n| c.get("step").and_then(Json::num) == Some(n as f64)))
+        .collect();
+    let mut text = String::new();
+    for c in &picked {
+        if let Some(t) = c.get("text").and_then(Json::str) {
+            text.push_str(t);
+            text.push('\n');
+        }
+    }
+    if picked.is_empty() {
+        text.push_str("no collisions: every step's part is proven clear of the tools\n");
+    }
+    let keep = |k: &str| j.get(k).cloned().unwrap_or(Json::Null);
+    Answer {
+        ok: true,
+        text,
+        json: Json::obj(vec![
+            ("ok", true.into()),
+            ("schema", "forgecad.bendsim.collisions/1".into()),
+            ("sheet", keep("sheet")),
+            ("tooling", keep("tooling")),
+            ("feasible", keep("feasible")),
+            ("sequence", keep("sequence")),
+            ("step", step.map_or(Json::Null, |n| n.into())),
+            ("contacts", Json::Arr(picked)),
+        ]),
     }
 }
 
@@ -659,6 +714,10 @@ fn assemble(sh: &SheetOut, p: Prep, made: Made) -> Sim {
         if let Some(j) = stage_json {
             f.push(("stage".into(), j));
         }
+        f.push((
+            "contacts".into(),
+            Json::Arr(contacts_json(sh, &model, &tooling, &plan, &bend_names)),
+        ));
     }
     Sim {
         model,
@@ -1183,6 +1242,211 @@ fn staged_json(
                 ),
             ]),
         ),
+    ])
+}
+
+/// A tool body's words: `punch:trumpf/OW300-S/body` the punch trumpf/OW300-S's body, ...
+fn tool_words(name: &str) -> String {
+    let (station, rest) = match name.strip_prefix("station").and_then(|r| r.split_once(':')) {
+        Some((k, r)) => (Some(k.to_string()), r),
+        None => (None, name),
+    };
+    let what = if let Some(r) = rest.strip_prefix("punch:") {
+        match r.rsplit_once('/') {
+            Some((id, part)) if part == "body" || part == "tip" => format!("the punch {id}'s {part}"),
+            _ => format!("the punch {r}"),
+        }
+    } else if let Some(id) = rest.strip_prefix("die:") {
+        format!("the die {id}")
+    } else if let Some(f) = rest.strip_prefix("backgauge:") {
+        format!("the backgauge's {f}")
+    } else if let Some(side) = rest.strip_prefix("frame:") {
+        format!("the press frame's {side} housing")
+    } else {
+        format!("the press's {rest}")
+    };
+    match station {
+        Some(k) => format!("{what} (station {k})"),
+        None => what,
+    }
+}
+
+/// Where a step's part and the tools come within the clearance, on both bodies: `contacts`.
+/// Only a step (or a blocked bend's best attempt) whose tool check failed or is Near pays for it.
+fn contacts_json(
+    sh: &SheetOut,
+    m: &fb::Model,
+    tl: &fb::Tooling,
+    plan: &fb::Plan,
+    names: &[String],
+) -> Vec<Json> {
+    let mut out = Vec::new();
+    let mut done = vec![false; m.bends.len()];
+    let mut items: Vec<(Option<usize>, Vec<bool>, &fb::Step)> = Vec::new();
+    for (i, st) in plan.steps.iter().enumerate() {
+        items.push((Some(i + 1), done.clone(), st));
+        done[st.bend] = true;
+    }
+    for b in &plan.blocking {
+        // a blocked bend not among the steps: its best attempt, after the bends it followed
+        if plan.steps.iter().any(|st| st.bend == b.bend) {
+            continue;
+        }
+        let mut d = vec![false; m.bends.len()];
+        for k in &b.after {
+            d[*k] = true;
+        }
+        items.push((None, d, &b.attempt));
+    }
+    for (n, done, st) in items {
+        for c in fb::contacts_of(m, tl, &done, st) {
+            out.push(contact_json(sh, m, &c, n, st, names));
+        }
+    }
+    out
+}
+
+fn contact_json(
+    sh: &SheetOut,
+    m: &fb::Model,
+    c: &fb::Contact,
+    n: Option<usize>,
+    st: &fb::Step,
+    names: &[String],
+) -> Json {
+    let res = (c.limit / 4.0).max(0.01);
+    let verdict = if c.depth.is_some() {
+        "hit"
+    } else if c.near.is_some() {
+        "near"
+    } else {
+        "undecided"
+    };
+    let bend = &names[st.bend];
+    let half = 0.5 * m.bends[st.bend].len;
+    let (ylo, yhi) = c.points.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |a, p| {
+        (a.0.min(p[1]), a.1.max(p[1]))
+    });
+    let faces: Vec<Json> = c
+        .faces
+        .iter()
+        .map(|f| {
+            let mut j = part(sh, &f.part);
+            if let Json::Obj(v) = &mut j {
+                v.push(("cells".into(), f.cells.len().into()));
+                v.push(("proven".into(), f.proven.into()));
+            }
+            j
+        })
+        .collect();
+    let anchor = c
+        .faces
+        .iter()
+        .max_by_key(|f| (f.proven, f.cells.len()))
+        .and_then(|f| {
+            part(sh, &f.part)
+                .get("anchor")
+                .and_then(Json::str)
+                .map(str::to_string)
+        })
+        .unwrap_or_else(|| "the part".into());
+    let how = match (verdict, c.depth) {
+        (_, Some(d)) if d < 0.0 => format!("runs {} mm into", r6s(-d)),
+        (_, Some(d)) => format!(
+            "comes within {} mm (under the {} mm clearance) of",
+            r6s(d),
+            r6s(c.limit)
+        ),
+        ("near", _) => format!(
+            "comes within the {} mm resolution of the {} mm clearance to",
+            r6s(res),
+            r6s(c.limit)
+        ),
+        _ => format!("is not proven {} mm clear of", r6s(c.limit)),
+    };
+    let deg = |x: f64| (x.to_degrees() * 10.0).round() / 10.0;
+    let (when, span) = match c.phase {
+        fb::Phase::Bend => {
+            let (a, b) = (deg(c.span.0), deg(c.span.1));
+            let at = if (b - a).abs() < 0.05 {
+                format!("{a}°")
+            } else {
+                format!("{a}°–{b}°")
+            };
+            (
+                format!("at {at} of"),
+                Json::obj(vec![("angle_deg", Json::Arr(vec![a.into(), b.into()]))]),
+            )
+        }
+        fb::Phase::Approach | fb::Phase::Return => (
+            if c.phase == fb::Phase::Approach {
+                "as the ram comes down for".to_string()
+            } else {
+                "as the ram goes back up after".to_string()
+            },
+            Json::obj(vec![("ram_mm", Json::Arr(vec![r6(c.span.0), r6(c.span.1)]))]),
+        ),
+        fb::Phase::Static => ("lying on the die for".to_string(), Json::obj(vec![])),
+    };
+    let step = match n {
+        Some(n) => format!("step {n} (bend {bend})"),
+        None => format!("bend {bend}'s best attempt"),
+    };
+    let text = format!(
+        "{anchor} {how} {} {}–{} mm from the bend's left end, {when} {step}",
+        tool_words(&c.tool),
+        r6s(ylo + half),
+        r6s(yhi + half)
+    );
+    // at most 64 points each way, spread over the region
+    let pick = |v: &[[f64; 3]]| -> Json {
+        let k = v.len().div_ceil(64).max(1);
+        Json::Arr(
+            v.iter()
+                .step_by(k)
+                .map(|p| Json::Arr(p.iter().map(|x| r6(*x)).collect()))
+                .collect(),
+        )
+    };
+    let cells: usize = c.faces.iter().map(|f| f.cells.len()).sum();
+    let proven: usize = c.faces.iter().map(|f| f.proven).sum();
+    Json::obj(vec![
+        ("step", n.map_or(Json::Null, |n| n.into())),
+        ("bend", bend.as_str().into()),
+        ("rule", c.rule.word().into()),
+        ("severity", if c.severity == Severity::Error { "error" } else { "warning" }.into()),
+        ("verdict", verdict.into()),
+        ("phase", c.phase.word().into()),
+        ("tool", c.tool.as_str().into()),
+        ("estimate", c.estimate.into()),
+        ("faces", Json::Arr(faces)),
+        ("depth", c.depth.map_or(Json::Null, r6)),
+        ("lower", r6(c.lower)),
+        ("limit", r6(c.limit)),
+        ("when", span),
+        (
+            "region",
+            Json::obj(vec![
+                ("points", pick(&c.points)),
+                ("tool_points", pick(&c.tool_points)),
+                (
+                    "bbox",
+                    Json::Arr(vec![
+                        Json::Arr(c.bbox.0.iter().map(|x| r6(*x)).collect()),
+                        Json::Arr(c.bbox.1.iter().map(|x| r6(*x)).collect()),
+                    ]),
+                ),
+                ("cells", cells.into()),
+                ("proven", proven.into()),
+                ("complete", c.complete.into()),
+                (
+                    "exact",
+                    "proven cells hold a real point under the limit; the rest are bounded: the region is never smaller than the true contact"
+                        .into(),
+                ),
+            ]),
+        ),
+        ("text", text.as_str().into()),
     ])
 }
 

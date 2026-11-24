@@ -48,6 +48,8 @@ pub struct Blocking {
     pub punch: String,
     pub die: String,
     pub checks: Vec<Check>,
+    /// The attempt itself (its setup, station and gauge), for where it collides.
+    pub attempt: Box<Step>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -980,6 +982,7 @@ fn blocking(s: &Search) -> Vec<Blocking> {
                 punch: step.punch.clone(),
                 die: step.die.clone(),
                 checks: step.failures().into_iter().cloned().collect(),
+                attempt: Box::new(step.clone()),
             })
         })
         .collect()
@@ -1053,6 +1056,7 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
                     punch: full.punch.clone(),
                     die: full.die.clone(),
                     checks: full.failures().into_iter().cloned().collect(),
+                    attempt: Box::new(full.clone()),
                 });
             }
             steps.push(full);
@@ -1075,6 +1079,7 @@ pub fn simulate(m: &Model, tl: &Tooling, seq: &[usize], opts: &Options) -> Plan 
                         punch: full.punch.clone(),
                         die: full.die.clone(),
                         checks: full.failures().into_iter().cloned().collect(),
+                        attempt: Box::new(full.clone()),
                     });
                     steps.push(full);
                 }

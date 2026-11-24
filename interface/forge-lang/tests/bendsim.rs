@@ -782,3 +782,101 @@ fn a_simulation_planned_a_little_at_a_time_is_the_simulation() {
         assert_eq!(sim.answer.json, whole.json);
     }
 }
+
+/// `contacts` and `bendsim collisions [step N]`: where the part and the tools collide, on both
+/// bodies. A narrow, tall channel on straight punches, in a stated order: its second bend runs
+/// its first flange into the punch (a proven hit, its depth, its faces by name, points on both
+/// bodies, a box, when, words); load_tray on its own tooling has none.
+#[test]
+fn collisions_name_both_bodies_and_where() {
+    let src = "shared t = 2\nshared r = 2\nshared k = ratio(0.4)\n\
+sketch plan(on: xy) {\n  outline = rect(corner: (0, 0), size: (30, 200))\n}\n\
+base = sheet(plan, t: t, r: r, bend: kfactor(k))\n\
+right = flange(base.edge(plan.outline[1]), height: 60)\n\
+left = flange(base.edge(plan.outline[3]), height: 60)\n";
+    let words = [
+        "punches",
+        "std-eu/P85-R08-H120,std-eu/P88-R08",
+        "sequence",
+        "1,2",
+        "collisions",
+        "step",
+        "2",
+    ];
+    let ask = forge_lang::bendsim::parse(&words.map(String::from)).unwrap();
+    assert!(ask.collisions && ask.step == Some(2));
+    let a = ask_src(src, None, None, &ask);
+    assert!(a.ok, "{}", a.text);
+    let j = &a.json;
+    assert_eq!(
+        j.get("schema").and_then(Json::str),
+        Some("forgecad.bendsim.collisions/1")
+    );
+    let cs = arr(j, "contacts");
+    assert!(!cs.is_empty());
+    for c in &cs {
+        has(
+            c,
+            &[
+                "step", "bend", "rule", "severity", "verdict", "phase", "tool", "estimate", "faces", "depth",
+                "lower", "limit", "when", "region", "text",
+            ],
+        );
+        has(
+            c.get("region").unwrap(),
+            &[
+                "points",
+                "tool_points",
+                "bbox",
+                "cells",
+                "proven",
+                "complete",
+                "exact",
+            ],
+        );
+        assert_eq!(c.get("step").and_then(Json::num), Some(2.0));
+        for f in arr(c, "faces") {
+            has(&f, &["anchor", "strip", "name", "surface", "cells", "proven"]);
+        }
+        assert_eq!(
+            arr(c.get("region").unwrap(), "points").len(),
+            arr(c.get("region").unwrap(), "tool_points").len()
+        );
+    }
+    let hit = cs
+        .iter()
+        .find(|c| {
+            c.get("verdict").and_then(Json::str) == Some("hit")
+                && c.get("rule").and_then(Json::str) == Some("closes_on_punch")
+        })
+        .expect("the flange closes on the punch");
+    let depth = hit.get("depth").and_then(Json::num).unwrap();
+    assert!(depth < 0.0, "into the punch: {depth}");
+    let text = hit.get("text").and_then(Json::str).unwrap();
+    assert!(
+        text.contains("right.top")
+            && text.contains("runs")
+            && text.contains("P85-R08-H120")
+            && text.contains("step 2"),
+        "{text}"
+    );
+    assert!(a.text.contains("runs"));
+    // the same contacts sit in the whole reply
+    let mut whole_ask = ask.clone();
+    whole_ask.collisions = false;
+    let w = ask_src(src, None, None, &whole_ask);
+    assert!(arr(&w.json, "contacts").len() >= cs.len());
+    // a part that bends clear has none
+    let tray = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../examples/sheetmetal/load_tray.fg"
+    ))
+    .unwrap();
+    let t = ask_src(
+        &tray,
+        None,
+        None,
+        &forge_lang::bendsim::parse(&["collisions".to_string()]).unwrap(),
+    );
+    assert!(arr(&t.json, "contacts").is_empty(), "{}", t.text);
+}

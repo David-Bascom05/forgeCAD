@@ -251,6 +251,55 @@ impl Regions {
     }
 }
 
+/// Where a step's part and a tool come within the clearance (or into each other): the part's
+/// faces and the cells of them (parameters u, v, w and the motion s), points on both bodies, how
+/// near or how deep, and when in the motion. The cells are never fewer than the true contact
+/// (`crate::contact`): `proven` cells hold a real point under the limit, the rest are bounded.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Contact {
+    pub rule: Rule,
+    pub phase: Phase,
+    pub severity: Severity,
+    /// The tool's body (`punch:ID/body`, `die:ID`, `ram`, `bed`, `backgauge:finger1`,
+    /// `station2:punch:ID/tip`, ..).
+    pub tool: String,
+    /// The tool's envelope is an estimate (errs large).
+    pub estimate: bool,
+    pub limit: f64,
+    /// The least distance a real point of the region is proven to have (negative: that deep
+    /// into the tool); None when no point is proven under the limit (a Near, an undecided).
+    pub depth: Option<f64>,
+    /// No point of the region is nearer than this.
+    pub lower: f64,
+    /// A Near: every point proven at least this far (within the check's resolution of the
+    /// limit, not at it).
+    pub near: Option<f64>,
+    /// Every cell settled within the extraction's budget (else what is left was kept whole).
+    pub complete: bool,
+    pub faces: Vec<ContactFace>,
+    /// The motion's span over the region: the bend's turn (radians), or the ram's height (mm,
+    /// approach and return).
+    pub span: (f64, f64),
+    /// Press frame, mm: the region's points on the part (a proven point where a cell holds one,
+    /// else the cell's centre) and the tool's nearest points to them.
+    pub points: Vec<[f64; 3]>,
+    pub tool_points: Vec<[f64; 3]>,
+    /// Press frame, mm: a box holding every cell's every point through its stretch of motion.
+    pub bbox: ([f64; 3], [f64; 3]),
+}
+
+/// One face of the part in a contact: its cells (u, v, w, s) and how many hold a proven point.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ContactFace {
+    pub part: PartRef,
+    pub cells: Vec<[Interval; 4]>,
+    pub proven: usize,
+}
+
+/// The cells an extraction may examine per piece and tool (a contact's region is small; what is
+/// left past this is kept whole).
+const REGION_BUDGET: usize = 20_000;
+
 /// One step's tooling and orientation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Setup {
@@ -1249,6 +1298,134 @@ impl<'a> StepCtx<'a> {
         }
     }
 
+    /// The motion's interval in a phase (as the checks search it).
+    fn phase_span(&self, phase: Phase) -> Interval {
+        match phase {
+            Phase::Static => Interval::point(0.0),
+            Phase::Approach => Interval::new(self.ztip(0.0), self.z_tdc.max(self.ztip(0.0))),
+            Phase::Bend => Interval::new(0.0, self.phimax),
+            Phase::Return => Interval::new(self.ztip(self.theta), self.z_tdc.max(self.ztip(self.theta))),
+        }
+    }
+
+    /// Every contact in a phase: each piece against each tool not proven clear of the clearance
+    /// (a decision, cheap), and for those the region (`crate::contact`). For a phase whose check
+    /// failed or is Near; a passing pair costs a decision only.
+    pub fn contacts(&self, phase: Phase, gauge: Option<&Gauged>) -> Vec<Contact> {
+        let s = self.phase_span(phase);
+        let limit = self.tl.clearance;
+        let res = (limit / 4.0).max(0.01);
+        let mut out = Vec::new();
+        for el in self.elements(phase, gauge) {
+            for pc in &self.pieces {
+                if el.work != Work::None && matches!(pc.kind, Kind::ZoneJ { .. }) {
+                    continue;
+                }
+                let pb = ToolPb {
+                    ctx: self,
+                    pc,
+                    el: &el,
+                    phase,
+                };
+                let roots = self.roots(pc, s);
+                let near = match bb::certify(&pb, &roots, limit, res, BUDGET, false) {
+                    Verdict::Clear { lower, .. } if lower >= limit => continue,
+                    Verdict::Clear { lower, .. } => Some(lower),
+                    _ => None,
+                };
+                let r = crate::contact::region(&pb, &roots, limit, res, REGION_BUDGET);
+                if r.cells.is_empty() {
+                    continue;
+                }
+                let rule = if phase == Phase::Return {
+                    Rule::Withdraw
+                } else if el.punchy && pc.folded {
+                    Rule::ClosesOnPunch
+                } else {
+                    Rule::ToolCollision
+                };
+                let mut faces: Vec<ContactFace> = Vec::new();
+                let mut points = Vec::new();
+                let mut tool_points = Vec::new();
+                let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+                for c in &r.cells {
+                    let (q, a) = match c.proven {
+                        Some((_, q, a)) => (q, a),
+                        None => {
+                            let q = c.cell.mid();
+                            (q, pb.image(q))
+                        }
+                    };
+                    let part = self.part_ref(pc, q);
+                    match faces.iter_mut().find(|f| f.part == part) {
+                        Some(f) => {
+                            f.cells.push(c.cell.p);
+                            f.proven += usize::from(c.proven.is_some());
+                        }
+                        None => faces.push(ContactFace {
+                            part,
+                            cells: vec![c.cell.p],
+                            proven: usize::from(c.proven.is_some()),
+                        }),
+                    }
+                    points.push(self.press_point(a, el.attach, phase, Some(q)));
+                    // the tool's surface nearest the point: its section's boundary, its length
+                    let p2 = Point2::new(a[0], a[2]);
+                    let near = el
+                        .sec
+                        .bound
+                        .iter()
+                        .map(|sg| sg.closest(p2))
+                        .min_by(|x, y| x.distance(p2).total_cmp(&y.distance(p2)))
+                        .unwrap_or(p2);
+                    let ty = a[1].clamp(el.y.0, el.y.1);
+                    tool_points.push(self.press_point([near.x, ty, near.y], el.attach, phase, Some(q)));
+                    // the box: the cell's enclosure, lifted by the ram over the cell's motion
+                    let e = pb.enclose(&c.cell);
+                    let lift = match (el.attach, phase) {
+                        (Attach::Die, _) => Interval::point(0.0),
+                        (Attach::Punch, Phase::Bend) => self.ztip(c.cell.p[3]),
+                        (Attach::Punch, Phase::Approach | Phase::Return) => c.cell.p[3],
+                        (Attach::Punch, Phase::Static) => Interval::point(self.ztip(0.0)),
+                    };
+                    let z = e[2] + lift;
+                    for (k, iv) in [e[0], e[1], z].into_iter().enumerate() {
+                        lo[k] = lo[k].min(iv.lo);
+                        hi[k] = hi[k].max(iv.hi);
+                    }
+                }
+                let estimate = self
+                    .tl
+                    .press
+                    .estimated
+                    .iter()
+                    .any(|e| el.name.starts_with(e.as_str()));
+                out.push(Contact {
+                    rule,
+                    phase,
+                    severity: if rule == Rule::Withdraw {
+                        Severity::Warning
+                    } else {
+                        Severity::Error
+                    },
+                    tool: el.name.clone(),
+                    estimate,
+                    limit,
+                    depth: r.depth(),
+                    lower: near.unwrap_or(r.lower()).max(r.lower()),
+                    near,
+                    complete: r.complete,
+                    faces,
+                    span: r.span().unwrap_or((s.lo, s.hi)),
+                    points,
+                    tool_points,
+                    bbox: (lo, hi),
+                });
+            }
+        }
+        out
+    }
+
     /// The moving side against the rest of the part, through the bend.
     pub fn self_check(&self, quick: bool) -> Check {
         // the least gap allowed (0: touching is the limit), less the touch tolerance
@@ -2071,5 +2248,194 @@ mod tests {
         );
         // sin really reaches 1: the upper bound is at least it
         assert!(hi >= 1.0);
+    }
+}
+
+/// A planned step's contacts: in each phase whose tool check failed or is Near (`withdraw`
+/// included), every piece against every tool not proven clear, with its region. A step whose
+/// tool checks all pass has none, and costs nothing.
+pub fn contacts_of(m: &Model, tl: &Tooling, done: &[bool], step: &Step) -> Vec<Contact> {
+    let mut phases: Vec<Phase> = step
+        .checks
+        .iter()
+        .filter(|c| matches!(c.rule, Rule::ToolCollision | Rule::ClosesOnPunch | Rule::Withdraw))
+        .filter(|c| !c.pass || c.near.is_some())
+        .filter_map(|c| c.phase)
+        .collect();
+    phases.sort_by_key(|p| *p as u8);
+    phases.dedup();
+    if phases.is_empty() {
+        return Vec::new();
+    }
+    let mut ctx = StepCtx::new(m, tl, done, step.bend, step.setup, step.overbend);
+    if let Some(k) = step.station {
+        ctx = ctx.at_station(k);
+    }
+    let mut out = Vec::new();
+    for ph in phases {
+        out.extend(ctx.contacts(ph, step.gauge.as_ref()));
+    }
+    out
+}
+
+#[cfg(test)]
+mod contact_tests {
+    use super::*;
+    use crate::plan::{Options, plan};
+    use forge_math::Frame;
+    use forge_ops::{ProfileLoop, Segment};
+    use forge_sheet::{BendRule, FeatureId, Gauge, Sheet};
+
+    fn channel(w: f64, len: f64, h: f64) -> Sheet {
+        let pts = [(0.0, 0.0), (w, 0.0), (w, len), (0.0, len)];
+        let lp = ProfileLoop::new(
+            (0..4)
+                .map(|i| {
+                    let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                    (
+                        Segment::Line {
+                            a: Point2::new(a.0, a.1),
+                            b: Point2::new(b.0, b.1),
+                        },
+                        i as u64,
+                    )
+                })
+                .collect(),
+        );
+        let (mut s, base) = Sheet::face(
+            FeatureId(1),
+            Gauge {
+                thickness: 2.0,
+                radius: 2.0,
+                rule: BendRule::K(0.4),
+            },
+            Frame::WORLD,
+            &[lp],
+        )
+        .unwrap();
+        let q = dmath::PI / 2.0;
+        s.flange(base, 1, q, h).unwrap();
+        s.flange(base, 3, q, h).unwrap();
+        s
+    }
+
+    /// A narrow, tall channel on straight punches only: its second flange closes on the punch.
+    /// Sampled densely through the failing phase, every point of every piece under the clearance
+    /// lies in a cell of a contact with that tool (the region is never smaller than the truth);
+    /// the faces it touches are among the contact's; the contact's lower bound is at most the
+    /// sampled least distance, and its proven depth within a leaf of it.
+    #[test]
+    fn a_contact_holds_every_point_that_collides() {
+        let s = channel(30.0, 200.0, 60.0);
+        let m = Model::new(&s).unwrap();
+        let tl = crate::library::std_eu();
+        let straight: Vec<usize> = (0..tl.punches.len())
+            .filter(|&k| tl.punches[k].kind == crate::tooling::PunchKind::Straight)
+            .collect();
+        let p = plan(
+            &m,
+            &tl,
+            &Options {
+                punches: Some(straight),
+                sequence: Some(vec![0, 1]),
+                ..Options::default()
+            },
+        );
+        assert!(!p.feasible);
+        let st = &p.steps[1];
+        let done = vec![st.bend != 0, st.bend != 1];
+        let cs = contacts_of(&m, &tl, &done, st);
+        assert!(!cs.is_empty(), "{:?}", st.failures());
+        assert!(
+            cs.iter()
+                .any(|c| c.rule == Rule::ClosesOnPunch && c.depth.is_some())
+        );
+        for c in &cs {
+            assert!(!c.faces.is_empty() && c.points.len() == c.tool_points.len());
+            assert!(c.lower < c.limit);
+            for k in 0..3 {
+                assert!(c.bbox.0[k] <= c.bbox.1[k]);
+            }
+        }
+        // brute force, the failing phases' every piece against every tool
+        let mut ctx = StepCtx::new(&m, &tl, &done, st.bend, st.setup, st.overbend);
+        if let Some(k) = st.station {
+            ctx = ctx.at_station(k);
+        }
+        let phases: Vec<Phase> = cs.iter().map(|c| c.phase).collect();
+        let mut checked = 0;
+        for ph in [Phase::Static, Phase::Approach, Phase::Bend, Phase::Return] {
+            if !phases.contains(&ph) {
+                continue;
+            }
+            let span = ctx.phase_span(ph);
+            for el in ctx.elements(ph, st.gauge.as_ref()) {
+                for pc in &ctx.pieces {
+                    if el.work != Work::None && matches!(pc.kind, Kind::ZoneJ { .. }) {
+                        continue;
+                    }
+                    let mine: Vec<&Contact> =
+                        cs.iter().filter(|c| c.phase == ph && c.tool == el.name).collect();
+                    let mut least = f64::INFINITY;
+                    for root in ctx.roots(pc, span) {
+                        let n = 24;
+                        for i in 0..=n {
+                            for j in 0..=n {
+                                for w in [root.p[2].lo, root.p[2].hi] {
+                                    for k in 0..=8 {
+                                        let f = |iv: Interval, t: usize, n: usize| {
+                                            iv.lo + iv.width() * t as f64 / n as f64
+                                        };
+                                        let q =
+                                            [f(root.p[0], i, n), f(root.p[1], j, n), w, f(root.p[3], k, 8)];
+                                        let pt = Cell {
+                                            p: q.map(Interval::point),
+                                            tag: root.tag,
+                                        };
+                                        if !StepCtx::may_hold(pc, &pt) || ctx.on_working(pc, &pt, el.work) {
+                                            continue;
+                                        }
+                                        let a = ctx.image(pc, q, ph, el.attach).arr();
+                                        let d = sd_prism(&el.sec, el.y.0, el.y.1, a);
+                                        least = least.min(d);
+                                        if d < tl.clearance - 1e-6 {
+                                            checked += 1;
+                                            let inside = mine.iter().any(|c| {
+                                                c.faces.iter().any(|fc| {
+                                                    fc.cells.iter().any(|cl| {
+                                                        (0..4).all(|t| cl[t].lo <= q[t] && q[t] <= cl[t].hi)
+                                                    })
+                                                })
+                                            });
+                                            assert!(
+                                                inside,
+                                                "{ph:?} {} {:?} {q:?} at {d}: in no contact cell",
+                                                el.name, pc.strip
+                                            );
+                                            let face = ctx.part_ref(pc, q);
+                                            assert!(
+                                                mine.iter().any(|c| c
+                                                    .faces
+                                                    .iter()
+                                                    .any(|fc| fc.part.strip == face.strip)),
+                                                "{:?} not among the contact's faces",
+                                                face
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if least < tl.clearance {
+                        let c = mine.iter().min_by(|a, b| a.lower.total_cmp(&b.lower)).unwrap();
+                        assert!(c.lower <= least + 1e-9, "lower {} vs sampled {least}", c.lower);
+                    }
+                }
+            }
+        }
+        assert!(checked > 0, "the sample found the collision");
+        let deepest = cs.iter().filter_map(|c| c.depth).fold(f64::INFINITY, f64::min);
+        assert!(deepest < tl.clearance);
     }
 }

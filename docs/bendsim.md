@@ -90,6 +90,7 @@ blocking[]          (infeasible) bend, after[], punch, die, checks[] (the failin
 fixes[]             typed edit ops (SetParam on a flange height's param, else SetArg)
 suggestions[]       {kind: LengthenFlange, bend, wall, by} | {kind: NeedTool, bend, rule, what}
 explored, exhausted the setups simulated; whether the search hit its budget
+contacts[]          where the part and a tool collide (below)
 ```
 
 A check: `rule`, `pass`, `severity` (error|warning), `value`, `limit`, `compare` (`>=` or `<=`:
@@ -126,6 +127,30 @@ z up from the die's top.
 | `segments` | the shortest tooling length the segments make vs the bend less its allowed ends |
 | `tonnage` | air-bending force (1.42 UTS t² / V per metre) vs the press, or kN/m vs a tool |
 | `withdraw` | (warning) the punch coming back up past the sprung part |
+
+### Contacts: where it collides, on both bodies
+
+For every step (and every blocked bend's best attempt) whose tool check failed or is Near, every
+piece of the part against every tool not proven clear gets its region: the branch and bound's cells
+kept down to its leaf size wherever they are not proven at least the clearance away. A cell is
+`proven` when a real point of it, at a real instant, is under the clearance; the rest are bounded.
+The cells are never fewer than the true contact. A step whose tool checks pass pays nothing.
+
+```
+contacts[]  step (null: a blocked bend's attempt), bend, rule, severity, verdict (hit | near |
+            undecided), phase, tool (`punch:ID/body`, `die:ID`, `ram`, `backgauge:finger1`,
+            `station2:..`), estimate, faces[{anchor, strip, name, surface, segment, cells, proven}],
+            depth (the least proven distance of a real point, negative: that deep into the tool),
+            lower, limit, when {angle_deg [a, b]} | {ram_mm [a, b]},
+            region {points (press frame, up to 64), tool_points (the tool's nearest), bbox,
+                    cells, proven, complete, exact}, text
+```
+
+`text` says it in a line: "right.top runs 3.252 mm into the punch std-eu/P85-R08-H120's body
+50–198.438 mm from the bend's left end, at 0°–90° of step 2 (bend left)".
+`query F bendsim collisions [step N]` answers only the contacts (schema
+`forgecad.bendsim.collisions/1`), one line each in text; the kernel's `forge_brake::contacts_of`
+gives each contact's cells in the piece's own parameters (u, v, w and the motion) for drawing.
 
 ### Exactness
 
