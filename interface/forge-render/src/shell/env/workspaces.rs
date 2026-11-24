@@ -75,23 +75,81 @@ impl Environment for Manufacture {
     fn properties_width(&self, s: &Shell) -> Option<f32> {
         let w = s.cam.as_ref()?;
         let sheet = w.op_dlg.is_some() || w.setup_dlg.is_some();
-        (sheet || s.camsim.is_some()).then_some(super::super::cam::DOCK_W)
+        (sheet || s.camsim.is_some()).then_some(super::super::cam::dock_w(w.screen_w))
     }
 
+    /// Wide (1280 px and over): the sheet on top (80 % of the height while one is open), the
+    /// simulation under it. Narrow: one or the other, as tabs at the column's top, the sheet's
+    /// chosen while it is open.
     fn properties(&self, s: &mut Shell, ui: &mut Ui, r: Rect) {
-        let sheet = s.cam.as_ref().is_some_and(|w| w.op_dlg.is_some() || w.setup_dlg.is_some());
+        let Some(w) = s.cam.as_ref() else { return };
+        let sheet = w.op_dlg.is_some() || w.setup_dlg.is_some();
         let sim = s.camsim.is_some();
-        // the sheet on top (most of the height while one is open), the simulation under it
-        let split = if sheet && sim { r.top() + r.height() * 0.8 } else if sheet { r.bottom() } else { r.top() };
-        if let Some(w) = &mut s.cam {
-            w.dock = sheet.then(|| Rect::from_min_max(r.min, egui::pos2(r.right(), split)));
-        }
-        if sim {
-            let rest = Rect::from_min_max(egui::pos2(r.left() + 8.0, split + 6.0), egui::pos2(r.right() - 8.0, r.bottom()));
-            if sheet {
-                ui.painter().hline(r.x_range(), split, egui::Stroke::new(1.0, s.theme.line));
+        let narrow = super::super::cam::narrow(w.screen_w);
+        let t = s.theme;
+        let mut dock = None;
+        let mut sim_rect = None;
+        let mut hidden = false;
+        if sheet && sim && narrow {
+            // the tabs: the sheet's name, Simulation
+            let title = w
+                .op_dlg
+                .as_ref()
+                .map(|d| format!("{} · {}", d.name, super::super::cam::schema::spec(&d.func).map_or("", |sp| sp.label)))
+                .or_else(|| w.setup_dlg.as_ref().map(|d| format!("{} · Setup", d.name)))
+                .unwrap_or_default();
+            let mut sim_tab = w.sim_tab;
+            let bar = Rect::from_min_max(r.min, egui::pos2(r.right(), r.top() + 32.0));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(bar.shrink2(egui::vec2(8.0, 4.0))), |ui| {
+                ui.horizontal(|ui| {
+                    let a = ui.selectable_label(!sim_tab, title);
+                    let b = ui.selectable_label(sim_tab, "Simulation");
+                    s.places.push(("cam:dock:sheet".into(), a.rect));
+                    s.places.push(("cam:dock:sim".into(), b.rect));
+                    if a.clicked() {
+                        sim_tab = false;
+                    }
+                    if b.clicked() {
+                        sim_tab = true;
+                    }
+                });
+            });
+            ui.painter().hline(r.x_range(), bar.bottom(), egui::Stroke::new(1.0, t.line));
+            let rest = Rect::from_min_max(egui::pos2(r.left(), bar.bottom() + 1.0), r.max);
+            if sim_tab {
+                sim_rect = Some(rest.shrink2(egui::vec2(8.0, 4.0)));
+                hidden = true;
+            } else {
+                dock = Some(rest);
             }
+            if let Some(w) = &mut s.cam {
+                w.sim_tab = sim_tab;
+            }
+        } else {
+            let split = if sheet && sim { r.top() + r.height() * 0.8 } else if sheet { r.bottom() } else { r.top() };
+            if sheet {
+                dock = Some(Rect::from_min_max(r.min, egui::pos2(r.right(), split)));
+            }
+            if sim {
+                if sheet {
+                    ui.painter().hline(r.x_range(), split, egui::Stroke::new(1.0, t.line));
+                }
+                sim_rect = Some(Rect::from_min_max(egui::pos2(r.left() + 8.0, split + 6.0), egui::pos2(r.right() - 8.0, r.bottom())));
+            }
+        }
+        if let Some(w) = &mut s.cam {
+            w.dock = dock;
+            w.sheet_hidden = hidden;
+            if !sheet {
+                // a new sheet opens on its own tab
+                w.sim_tab = false;
+            }
+        }
+        if let Some(rest) = sim_rect {
             s.camsim_properties(ui, rest);
+        } else if hidden_sim(sheet, sim, narrow) && let Some(st) = s.camsim.as_deref_mut() {
+            // behind its tab: hosted all the same (it does not float over the view meanwhile)
+            st.hosted = true;
         }
     }
 }
@@ -128,4 +186,9 @@ impl Environment for MachineBuilder {
     fn still(&self, s: &Shell) -> bool {
         s.machine.is_some()
     }
+}
+
+/// A narrow column showing the sheet's tab: the simulation is behind its own tab.
+fn hidden_sim(sheet: bool, sim: bool, narrow: bool) -> bool {
+    sheet && sim && narrow
 }

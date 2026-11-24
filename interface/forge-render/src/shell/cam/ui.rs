@@ -503,6 +503,7 @@ impl Shell {
     /// The workspace's windows.
     pub(in crate::shell) fn cam_ui(&mut self, ctx: &egui::Context) {
         let Some(mut w) = self.cam.take() else { return };
+        w.screen_w = ctx.content_rect().width();
         // docked this frame only if the environment's properties column said so this frame
         let dock = w.dock.take();
         w.dock = dock;
@@ -511,14 +512,18 @@ impl Shell {
         let v = self.camsim_free(self.view_rect);
         let mut places: Places = vec![];
         let mut blocks: Vec<Rect> = vec![];
-        if let Some(mut d) = w.op_dlg.take() {
+        if !w.sheet_hidden
+            && let Some(mut d) = w.op_dlg.take()
+        {
             let (keep, r) = op_dialog(ctx, &t, v, &mut w, &mut d, &mut places);
             blocks.extend(r);
             if keep {
                 w.op_dlg = Some(d);
             }
         }
-        if let Some(mut d) = w.setup_dlg.take() {
+        if !w.sheet_hidden
+            && let Some(mut d) = w.setup_dlg.take()
+        {
             let (keep, r) = setup_dialog(ctx, &t, v, &mut w, &mut d, &mut places);
             blocks.extend(r);
             if keep {
@@ -548,6 +553,7 @@ impl Shell {
         }
         // docked only in a frame whose properties column set it (it draws before this)
         w.dock = None;
+        w.sheet_hidden = false;
         self.view_blocks.extend(blocks);
         self.places.extend(places);
         self.cam = Some(w);
@@ -1267,6 +1273,7 @@ fn op_dialog(
         .map(|s| (format!("{}.{s}", part.name), s.clone()))
         .collect();
     let new = d.id.is_none();
+    let docked = w.dock.is_some();
     let r = dialog_host(w.dock, "cam-op-dialog", t, egui::Window::new("cam-op")
         .id(egui::Id::unique("cam-op-dialog"))
         .title_bar(false)
@@ -1403,9 +1410,15 @@ fn op_dialog(
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
-            (ok, cancel, apply) = foot(ui, t, "cam:op", true, places);
+            if !docked {
+                (ok, cancel, apply) = foot(ui, t, "cam:op", true, places);
+            }
         });
     let rect = r.map(|r| r.response.rect);
+    // docked: the commit buttons pinned under the sheet's body, always in sight
+    if let Some(dock) = w.dock {
+        (ok, cancel, apply) = docked_foot(ctx, t, dock, "cam:op", true, places);
+    }
     // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
     ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok || apply {
@@ -1501,6 +1514,7 @@ fn setup_dialog(
             .map(|s| (s.name.clone(), format!("{} (turned over)", s.name))),
     );
     let new = d.id.is_none();
+    let docked = w.dock.is_some();
     let r = dialog_host(w.dock, "cam-setup-dialog", t, egui::Window::new("cam-setup")
         .id(egui::Id::unique("cam-setup-dialog"))
         .title_bar(false)
@@ -1639,9 +1653,15 @@ fn setup_dialog(
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
-            (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+            if !docked {
+                (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+            }
         });
     let rect = r.map(|r| r.response.rect);
+    // docked: the commit buttons pinned under the sheet's body, always in sight
+    if let Some(dock) = w.dock {
+        (ok, cancel, _) = docked_foot(ctx, t, dock, "cam:setup", false, places);
+    }
     // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
     ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok && let Err(e) = w.setup_ok(d) {
@@ -1699,6 +1719,7 @@ fn lathe_dialog(
         "a new chuck (face −70, grip 30, jaw 15)".into(),
     ));
     let new = d.id.is_none();
+    let docked = w.dock.is_some();
     let r = dialog_host(w.dock, "cam-lathe-dialog", t, egui::Window::new("cam-lathe")
         .id(egui::Id::unique("cam-lathe-dialog"))
         .title_bar(false)
@@ -1769,9 +1790,15 @@ fn lathe_dialog(
             if let Some(e) = &d.error {
                 note(ui, e, DLG_W, t.error);
             }
-            (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+            if !docked {
+                (ok, cancel, _) = foot(ui, t, "cam:setup", false, places);
+            }
         });
     let rect = r.map(|r| r.response.rect);
+    // docked: the commit buttons pinned under the sheet's body, always in sight
+    if let Some(dock) = w.dock {
+        (ok, cancel, _) = docked_foot(ctx, t, dock, "cam:setup", false, places);
+    }
     // Enter is OK (Esc cancels: the shell's one level back, CamWs::escape; Tab moves on)
     ok |= ctx.input(|i| i.key_pressed(egui::Key::Enter));
     if ok && let Err(e) = w.setup_ok(d) {
@@ -3124,7 +3151,38 @@ fn below_chips(v: Rect) -> Rect {
 /// it has one (`CamWs::dock`, set by the environment each frame), else floating over the view.
 fn dialog_host<'a>(dock: Option<Rect>, id: &str, t: &Theme, win: egui::Window<'a>) -> Host<'a> {
     match dock {
-        Some(r) => Host::Dock(egui::Id::unique(("cam-dock", id)), r, frame(t)),
+        Some(r) => Host::Dock(
+            egui::Id::unique(("cam-dock", id)),
+            Rect::from_min_max(r.min, pos2(r.right(), r.bottom() - FOOT_H)),
+            frame(t),
+        ),
         None => Host::Float(Box::new(win)),
     }
+}
+
+/// A docked sheet's footer height: its OK, Cancel and Apply.
+const FOOT_H: f32 = 48.0;
+
+/// A docked sheet's commit buttons, pinned at the bottom of its rect (outside the body's scroll).
+fn docked_foot(
+    ctx: &egui::Context,
+    t: &Theme,
+    dock: Rect,
+    key: &str,
+    apply: bool,
+    places: &mut Places,
+) -> (bool, bool, bool) {
+    let r = Rect::from_min_max(pos2(dock.left(), dock.bottom() - FOOT_H), dock.max);
+    egui::Area::new(egui::Id::unique(("cam-dock-foot", key)))
+        .fixed_pos(r.min)
+        .order(egui::Order::Middle)
+        .fade_in(false)
+        .show(ctx, |ui| {
+            ui.set_width(r.width());
+            ui.painter().rect_filled(r, 0.0, t.surface);
+            ui.painter().hline(r.x_range(), r.top(), Stroke::new(1.0, t.line));
+            ui.add_space(2.0);
+            foot(ui, t, key, apply, places)
+        })
+        .inner
 }

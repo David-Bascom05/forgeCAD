@@ -371,7 +371,9 @@ impl Shell {
         let Some(st) = self.camsim.as_deref() else {
             return v;
         };
-        let panel_w = covered_w(st);
+        // a machining document is in Manufacture, whose properties column hosts the panel
+        // (outside `v`), from before the column has first drawn it
+        let panel_w = if self.cam.is_some() { -8.0 } else { covered_w(st) };
         Rect::from_min_max(
             v.min,
             pos2(v.right() - panel_w - 8.0, v.bottom() - TIMELINE_H - 16.0),
@@ -530,13 +532,20 @@ fn timeline(ui: &mut Ui, st: &mut CamSimUi, t: &crate::shell::theme::Theme, w: f
             st.jump(total);
         }
         ui.separator();
-        ui.label(
-            egui::RichText::new(format!("{} / {}", clock(st.t), clock(total)))
-                .monospace()
-                .color(t.ink),
-        );
+        // a narrow view (a small window with the properties column open): the time now, the
+        // total on hover, and the speed without its label, so the row stays in the bar
+        let compact = w < 440.0;
+        let now = if compact {
+            clock(st.t)
+        } else {
+            format!("{} / {}", clock(st.t), clock(total))
+        };
+        ui.label(egui::RichText::new(now).monospace().color(t.ink))
+            .on_hover_text(format!("{} of {}", clock(st.t), clock(total)));
         ui.separator();
-        ui.label(egui::RichText::new("Speed").color(t.ink2));
+        if !compact {
+            ui.label(egui::RichText::new("Speed").color(t.ink2));
+        }
         egui::ComboBox::from_id_salt("camsim:speed")
             .width(64.0)
             .selected_text(format!("{}×", st.speed))

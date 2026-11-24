@@ -9,8 +9,17 @@
 pub mod doc;
 pub mod nc;
 
-/// The Manufacture environment's properties column, px: a dialog (DLG_W) and its frame.
-pub const DOCK_W: f32 = 410.0;
+/// The Manufacture environment's properties column, px: a dialog (its 382 px body) and its
+/// frame; the same in a narrow window (the sheet's fields set the floor), which shows the sheet
+/// or the simulation as tabs instead of both.
+pub fn dock_w(_screen_w: f32) -> f32 {
+    410.0
+}
+
+/// A window too narrow for the sheet and the simulation stacked (UX-LEAD: under 1280 px).
+pub fn narrow(screen_w: f32) -> bool {
+    screen_w > 0.0 && screen_w < 1280.0
+}
 pub mod run;
 pub mod schema;
 pub mod turnview;
@@ -276,6 +285,17 @@ pub struct CamWs {
     /// The rect of the environment's properties column the op and setup dialogs dock in (None:
     /// they float); set by the Manufacture environment each frame.
     pub dock: Option<egui::Rect>,
+    /// The window's width, px (the environment's column narrows below 1280).
+    pub screen_w: f32,
+    /// A narrow window's column shows the sheet or the simulation, as tabs: the sheet hidden
+    /// (the Simulation tab chosen) keeps its dialog open, not drawn.
+    pub sheet_hidden: bool,
+    /// The narrow column's tab: the simulation chosen over an open sheet.
+    pub sim_tab: bool,
+    /// The view's width last frame (re-framed when the column comes or goes), and the camera
+    /// this workspace last framed (the user's own moves are left alone).
+    pub view_w: f32,
+    pub framed: Option<crate::camera::Camera>,
     pub posted_cache: Option<(u64, Vec<nc::PostedRow>)>,
 }
 
@@ -330,6 +350,11 @@ impl CamWs {
             exported: 0,
             posted_cache: None,
             dock: None,
+            screen_w: 0.0,
+            sheet_hidden: false,
+            sim_tab: false,
+            view_w: 0.0,
+            framed: None,
             prog_field: None,
         };
         ws.read_parts();

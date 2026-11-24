@@ -53,6 +53,10 @@ fn open_unplaced(tag: &str) -> Option<(Headless, std::path::PathBuf)> {
 }
 
 fn open_with(tag: &str, unplaced: bool) -> Option<(Headless, std::path::PathBuf)> {
+    open_sized(tag, unplaced, (1500.0, 1000.0))
+}
+
+fn open_sized(tag: &str, unplaced: bool, size: (f32, f32)) -> Option<(Headless, std::path::PathBuf)> {
     let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
     let dir = std::env::temp_dir().join(format!("fg-cam-ui-{}-{tag}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -65,7 +69,7 @@ fn open_with(tag: &str, unplaced: bool) -> Option<(Headless, std::path::PathBuf)
         assert!(!t.contains("at: ("));
         std::fs::write(&file, t).unwrap();
     }
-    let mut h = match Headless::new((1500.0, 1000.0), 1.0) {
+    let mut h = match Headless::new(size, 1.0) {
         Ok(h) => h,
         Err(e) => {
             eprintln!("skipped: {e}");
@@ -461,4 +465,42 @@ fn the_op_dialog_docks_in_the_properties_column() {
     assert!(col.contains_rect(ok), "OK {ok:?} outside the column {col:?}");
     assert!(h.gui.shell.view_rect.right() <= col.left() + 1.0, "the view gives up the column");
     assert!(h.gui.shell.view_rect.width() <= view_before.width());
+}
+
+/// A narrow window (under 1280 px): the column shows the open sheet or the simulation, as tabs,
+/// the sheet's first; choosing Simulation keeps the dialog open; its commit buttons are pinned
+/// in the column; the view is framed again when the column narrows it.
+#[test]
+fn a_narrow_window_tabs_the_sheet_and_the_simulation() {
+    let Some((mut h, _)) = open_sized("narrow", false, (1100.0, 800.0)) else { return };
+    for _ in 0..20 {
+        h.step();
+    }
+    let before = h.gui.view.as_ref().unwrap().nav.camera;
+    let w0 = h.gui.shell.view_rect.width();
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    for _ in 0..30 {
+        h.step();
+    }
+    let has_sim = h.gui.shell.camsim.is_some();
+    let col = h.placed("env:manufacture:properties").expect("the column");
+    let ok = h.placed("cam:op:ok").expect("OK in sight");
+    assert!(col.contains_rect(ok), "OK {ok:?} in the column {col:?}");
+    shot(&mut h, "cam-narrow-sheet");
+    if has_sim {
+        assert!(h.click("cam:dock:sim"), "the Simulation tab");
+        h.step();
+        h.step();
+        let w = h.gui.shell.cam.as_ref().unwrap();
+        assert!(w.op_dlg.is_some(), "the sheet kept open behind its tab");
+        assert!(h.placed("cam:op:ok").is_none(), "not drawn");
+        assert!(h.click("cam:dock:sheet"));
+        h.step();
+        h.step();
+        assert!(h.placed("cam:op:ok").is_some());
+    }
+    // the column came only if it was not there before: then the view was framed again
+    if h.gui.shell.view_rect.width() < w0 - 1.0 {
+        assert_ne!(h.gui.view.as_ref().unwrap().nav.camera, before, "framed again");
+    }
 }

@@ -32,6 +32,7 @@ const SHOTS = [
   ["cam-40-small-op.png", ["select prof"], (s) => s.cam.selected === "prof", undefined, "1024x700"],
   ["cam-41-small-tools.png", ["tools"], (s) => s.cam.dialogs.includes("tools"), undefined, "1024x700"],
   ["cam-42-small-programs.png", ["programs"], (s) => s.cam.dialogs.includes("programs"), undefined, "1024x700"],
+  ["cam-44-small-sheet.png", ["select prof", "edit prof"], (s) => s.cam.dialogs.includes("op"), undefined, "1024x700"],
 ];
 const only = process.argv[3];
 const s = http.createServer((q, r) => { const u = decodeURIComponent(new URL(q.url, "http://x").pathname); const f = path.join(root, u === "/" ? "index.html" : u);
