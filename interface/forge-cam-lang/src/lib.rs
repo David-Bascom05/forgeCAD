@@ -24,6 +24,7 @@
 //! and the stock, rapids against both. An op whose checks are not all `pass` is refused, with the
 //! check, where, and a fix. The reply is `forgecad.cam/1`.
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
+pub mod export;
 pub mod holes;
 pub mod sim;
 
