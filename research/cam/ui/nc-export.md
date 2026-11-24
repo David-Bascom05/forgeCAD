@@ -124,7 +124,7 @@ Each needed forge-cam-lang or forge-post first; the window then got a field each
   part per setup, named `prog/op1`, `prog/op2`, with O-numbers `number`, `number + 1`, …. Each part
   is written as `{file}-{setup}.{ext}` with the statement's settings. The window's
   "One file per setup" checkbox writes it; the row shows the parts' worst state.
-- **Post options**: `decimals:`, `feed_decimals:` and `coolant:` (flood, mist, air, off) are in
+- **Post options**: `decimals:`, `feed_decimals:` and `coolant:` (flood, mist, through, off) are in
   the program row (cam/ui-parity). An empty field means the dialect's own default. units,
   line_numbers and safe_start wait on CAM-MACHINE's `Dialect::with` (cam/post-options) and then
   CAM-CORE's language side.
