@@ -3613,8 +3613,10 @@ impl Cam {
                         ("vc", n(f.vc)),
                         ("fz", n(f.fz)),
                         ("hex", n(f.hex)),
+                        ("hm", n(f.hm)),
                         ("f", n(f.vf)),
                         ("power_kw", n(f.power)),
+                        ("torque_nm", n(f.torque)),
                     ])
                 });
                 let checks: Vec<Json> = o

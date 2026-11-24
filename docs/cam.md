@@ -97,7 +97,7 @@ setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, ma
            pieces[] {name, min, max}} | null
 ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mill|edge_break), setup, status (built|refused),
            tool {id, T, H, type, d, holder, stickout} | null, plan[] (hole plans),
-           feeds {rpm, vc, fz, hex, f, power_kw} | null,
+           feeds {rpm, vc, fz, hex, hm, f, power_kw, torque_nm} | null,
            path {moves, length_cut, length_rapid, time_s},
            certificate {verdict (pass|fail), certified, pairs, cells, least_cutter_distance, against},
            checks[] (failures only) {rule, verdict (fail|undecided), certified, value, limit, unit,
