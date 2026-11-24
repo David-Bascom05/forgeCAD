@@ -113,7 +113,12 @@ pub fn disk(c: forge_cam_geom::region::P2, r: f64) -> Region {
     let a = p2(c.x + r, c.y);
     Region {
         loops: vec![Loop {
-            segs: vec![Seg::Arc { a, b: a, c, ccw: true }],
+            segs: vec![Seg::Arc {
+                a,
+                b: a,
+                c,
+                ccw: true,
+            }],
         }],
     }
 }
@@ -225,13 +230,45 @@ impl InProcess {
             let exposed = match (&below, &m) {
                 (None, Some(m)) => vec![m.clone()],
                 (Some(b), Some(m)) => {
+                    // what changes at z0: voids whose floor is z0 start, regions cleared from
+                    // below up to z0 end (`material` takes a void from its floor, an under-region
+                    // below its ceiling; every floor and ceiling is a level)
+                    let new: Vec<&Region> = self
+                        .voids
+                        .iter()
+                        .filter(|(_, f)| *f == z0)
+                        .map(|(r, _)| r)
+                        .collect();
+                    let ended = self.under.iter().any(|(_, c)| *c == z0);
                     let mut v = vec![];
-                    for (x, y) in [(b, m), (m, b)] {
+                    let diff = |x: &Region, y: &Region, v: &mut Vec<Region>| -> Result<(), String> {
                         match boolean(x, y, Op::Diff) {
+                            Ok(d) if d.is_empty() => Ok(()),
+                            Ok(d) => {
+                                v.push(region_of(&d));
+                                Ok(())
+                            }
+                            Err(e) => Err(format!("{e:?}")),
+                        }
+                    };
+                    if !ended && new.len() == 1 {
+                        // only a void starts: above = below ∖ V, so below ∖ above = below ∩ V
+                        // and above ∖ below is empty (the same sets, without comparing the two
+                        // materials' shared edges, every one an exact tie)
+                        match boolean(b, new[0], Op::Inter) {
                             Ok(d) if d.is_empty() => {}
                             Ok(d) => v.push(region_of(&d)),
                             Err(e) => return Err(format!("{e:?}")),
                         }
+                    } else if !ended {
+                        // voids only: above ⊆ below
+                        diff(b, m, &mut v)?;
+                    } else if new.is_empty() {
+                        // under-regions only end: below ⊆ above
+                        diff(m, b, &mut v)?;
+                    } else {
+                        diff(b, m, &mut v)?;
+                        diff(m, b, &mut v)?;
                     }
                     v
                 }
