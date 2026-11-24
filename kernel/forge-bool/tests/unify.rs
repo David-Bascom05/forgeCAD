@@ -285,3 +285,82 @@ fn a_face_of_slits_alone_goes_whole() {
     let r = unified(b);
     assert_eq!(r.face_ids().count(), before - 1, "the slit face is gone");
 }
+
+/// A cone to its apex in two halves, one of the rulings between them split in two by a vertex (as
+/// a boolean's imprint leaves it, Haas TRT210 #65625): the halves stay apart. Joined across the
+/// piece off the apex, the piece at the apex went too, walked there and back, and the cone was one
+/// face bounded by its circle alone (FaceWrongSide, no region for mass or mesh).
+#[test]
+fn a_split_ruling_keeps_a_cones_tip_in_halves() {
+    use forge_geom::CurveGeom;
+    let pts = [(0.0, 0.0), (5.0, 0.0), (0.0, 10.0)];
+    let mirrored: Vec<(f64, f64)> = pts.iter().map(|p| (-p.0, p.1)).collect();
+    let mut halves = boolean(
+        &revolved_by(&pts, forge_math::dmath::PI, 1),
+        &revolved_by(&mirrored, forge_math::dmath::PI, 2),
+        Op::Union,
+        3,
+    )
+    .unwrap();
+    let cones = |b: &Body| {
+        b.face_ids()
+            .filter(|&f| matches!(b.face(f).surface, Surface::Cone(_)))
+            .count()
+    };
+    assert_eq!(cones(&halves), 2);
+    // a ruling between the two half cones
+    let e = halves
+        .edge_ids()
+        .find(|&e| {
+            let x = halves.edge(e);
+            matches!(x.curve, forge_geom::Curve::Line(_))
+                && x.coedges.len() == 2
+                && x.coedges
+                    .iter()
+                    .all(|&c| matches!(halves.face(halves.coedge_face(c)).surface, Surface::Cone(_)))
+        })
+        .expect("a ruling between the halves");
+    let x = halves.edge(e).clone();
+    let mid = x.range.mid();
+    let m = halves.add_vertex(x.curve.eval(mid), forge_topo::Name::feature(901));
+    let lo = halves.add_edge(
+        x.curve.clone(),
+        forge_math::Interval::new(x.range.lo, mid),
+        x.start,
+        m,
+        forge_topo::Name::feature(902),
+    );
+    let hi = halves.add_edge(
+        x.curve.clone(),
+        forge_math::Interval::new(mid, x.range.hi),
+        m,
+        x.end,
+        forge_topo::Name::feature(903),
+    );
+    let swaps: Vec<_> = x
+        .coedges
+        .iter()
+        .map(|&c| {
+            let lp = halves.coedge(c).lp;
+            let f = halves.coedge_face(c);
+            let uses: Vec<(forge_topo::EdgeId, bool)> = halves
+                .lp(lp)
+                .coedges()
+                .flat_map(|d| {
+                    let u = (halves.coedge(d).edge, halves.coedge(d).forward);
+                    match (u.0 == e, u.1) {
+                        (false, _) => vec![u],
+                        (true, true) => vec![(lo, true), (hi, true)],
+                        (true, false) => vec![(hi, false), (lo, false)],
+                    }
+                })
+                .collect();
+            (f, lp, uses)
+        })
+        .collect();
+    for (f, lp, uses) in swaps {
+        halves.replace_loop(f, lp, &uses);
+    }
+    let u = unified(halves);
+    assert_eq!(cones(&u), 2);
+}

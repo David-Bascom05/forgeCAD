@@ -311,15 +311,29 @@ fn between_same(body: &Body, keys: &[(u8, f64)], x: &forge_topo::Edge) -> bool {
         return false;
     }
     let same = same_surface(body, a, b)
-        // (not along a line from the apex: a whole cone there would have no seam)
+        // (not along a line from the apex: a whole cone there would have no seam. Every line on a
+        // cone is a ruling, so not along a piece of one either, where a face reaches the apex:
+        // the other pieces would go with it, there and back, leaving the face one circle)
         && (ka.0 != 3
             || [x.start, x.end].iter().all(|&v| {
                 let s = &body.face(a).surface;
                 !s.singular(s.project(body.vertex(v).point))
-            }));
+            }) && (!matches!(x.curve, Curve::Line(_)) || !(reaches_apex(body, a) || reaches_apex(body, b))));
     decided!(log_same(body, a, b, same));
     // unless a feature split the face there on purpose
     same && !kept(body, x.name)
+}
+
+/// Whether cone face `f` has a vertex at its surface's apex.
+#[cold]
+#[inline(never)]
+fn reaches_apex(body: &Body, f: FaceId) -> bool {
+    let s = &body.face(f).surface;
+    body.face(f)
+        .loops
+        .iter()
+        .flat_map(|&l| body.lp(l).coedges())
+        .any(|c| s.singular(s.project(body.vertex(body.coedge_start(c)).point)))
 }
 
 /// Whether faces `a` and `b` lie on one surface and face the same way: the boolean's own test of
