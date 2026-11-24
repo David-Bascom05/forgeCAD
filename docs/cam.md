@@ -86,6 +86,7 @@ every `tool(..)` takes these args; an op's value wins over its tool's (kernel/fo
 | `chip:`, `fz:` or `feed:` | mm, mm, mm/min | the peak chip to hold (thinned for ae < D/2); a feed per tooth used as given (not thinned); or the feed |
 | `ap:` (= `step:`) | mm | axial depth per level (one of the two) |
 | `ae:` (= `stepover:`) or `max_angle:` | mm, degrees | radial width (clear and pocket cut their stepover wide), or the largest engagement angle |
+| `tilt:` | degrees | the tool's tilt toward the feed: a ball's contact moves out to D sin(α + tilt) |
 | `plunge_feed:`, `ramp_feed:`, `lead_in_feed:` | mm/min | entry feeds (default 30%, 30%, 100% of the feed: labelled "no data behind it"). Posted today: the plunge feed (plunges and helical ramps) and the feed; `ramp_feed` and `lead_in_feed` are resolved and reported but not yet posted on their own (forge-cam's `Cut` carries two feeds) |
 | `max_power:`, `max_torque:` | kW, N·m | limits: the feed (only the feed) is lowered to meet them; P ∝ fz^(1−mc), so exactly |
 | `min_feed:`, `max_feed:` | mm/min | the feed range (engagement feed stays in it) |
@@ -106,7 +107,7 @@ stock's data, else its group in cutting.toml) → `library` (the tool's `[[tool.
 `machine-clamped` (rpm range; max feed, held 1 mm/min under it) and `limited` (the user's own
 limits). A user's value is never changed silently. Formulas (feeds.rs, with sources): chip thinning
 hex = fz sin φ, φ = acos(1 − 2ae/D); the mean chip hm = fz (1 − cos φ)/φ for Kienzle's
-kc = kc1.1 hm^(−mc); Pc = ap ae vf kc / 6e7 kW; Mc = Pc 30e3/(π n) N·m; ball D_eff = 2√(ap(D − ap)).
+kc = kc1.1 hm^(−mc); Pc = ap ae vf kc / 6e7 kW; Mc = Pc 30e3/(π n) N·m. Contact (feeds::contact): for ap < re (bull re, ball D/2), D_eff = D − 2re + 2√(re² − (re − ap)²) and the axial thinning sin κ = √(1 − (1 − ap/re)²) (a ball: D_eff/D, its width cut at D_eff); a tilted ball D_eff = D sin(min(α + tilt, 90°)), α = acos(1 − 2ap/D). Thinning together is capped at 3×: past it the chip is held under the target.
 
 Checks per op: rpm (a clamp warns), power and torque against the machine's spindle curve at the
 rpm (over: the op is refused, with the numbers), feed against the machine's maximum, the peak chip

@@ -375,13 +375,73 @@ pub fn thinning(r: f64) -> f64 {
     }
 }
 
+/// Where the edge cuts at axial depth ap: the effective diameter and the axial thinning sin κ
+/// (the chip normal to the edge is fz sin κ sin θ).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Contact {
+    pub d_eff: f64,
+    pub sin_kappa: f64,
+}
+
+/// The contact of a tool of diameter d and corner radius re (0 flat, d/2 ball) at depth ap,
+/// tilted by `tilt` degrees (a ball only; other tools are taken untilted). feeds-speeds.md
+/// §1.2–1.3 (derived, and checked there against Sandvik's round-insert and ball formulas):
+/// for ap < re, D_eff = D − 2 re + 2 √(re² − (re − ap)²) and sin κ = √(1 − (1 − ap/re)²), the
+/// local entering angle at the bottom of the cut (for a ball, Sandvik's fz = D hex / D_cap:
+/// sin κ = D_eff/D); for a ball tilted by β the contact band runs from polar angle β to β + α,
+/// α = acos(1 − 2 ap/D), so D_eff = D sin(min(α + β, 90°)) and sin κ = D_eff/D; else D and 1.
+pub fn contact(d: f64, re: f64, ap: f64, tilt: f64) -> Contact {
+    let re = re.clamp(0.0, 0.5 * d);
+    if re <= 0.0 || ap >= re {
+        return Contact {
+            d_eff: d,
+            sin_kappa: 1.0,
+        };
+    }
+    let ap = ap.max(0.0);
+    let ball = re >= 0.5 * d;
+    if ball && tilt != 0.0 {
+        let alpha = forge_math::dmath::acos_clamped(1.0 - 2.0 * ap / d);
+        let a = (alpha + tilt.abs().to_radians()).min(std::f64::consts::FRAC_PI_2);
+        let s = forge_math::dmath::sin(a);
+        return Contact {
+            d_eff: d * s,
+            sin_kappa: s,
+        };
+    }
+    let u = 1.0 - ap / re;
+    let sk = (1.0 - u * u).max(0.0).sqrt();
+    Contact {
+        d_eff: d - 2.0 * re + 2.0 * re * sk,
+        sin_kappa: sk,
+    }
+}
+
 /// The numbers of a cut at a given fz and rpm: chips, feed, power, torque.
 pub fn at(g: &Group, c: &Cut, fz: f64, rpm: f64, d_eff: f64) -> Feeds {
-    let r = (c.ae / c.d).clamp(0.0, 1.0);
-    let hex = fz * thinning(r);
+    at_contact(
+        g,
+        c,
+        fz,
+        rpm,
+        Contact {
+            d_eff,
+            sin_kappa: 1.0,
+        },
+        c.d,
+    )
+}
+
+/// As `at`, with the contact's axial thinning, and the radial immersion taken against
+/// `d_radial` (the diameter the width ae is cut at: D_eff for a ball, Sandvik's side-milling
+/// form, D otherwise).
+pub fn at_contact(g: &Group, c: &Cut, fz: f64, rpm: f64, k: Contact, d_radial: f64) -> Feeds {
+    let d_eff = k.d_eff;
+    let r = (c.ae / d_radial.max(1e-9)).clamp(0.0, 1.0);
+    let hex = fz * k.sin_kappa * thinning(r);
     let vf = fz * rpm * c.flutes.max(1) as f64;
     let phi = engagement_angle(r);
-    let hm = fz * mean_chip_factor(r, phi);
+    let hm = fz * k.sin_kappa * mean_chip_factor(r, phi);
     // the floor only guards kc's pole at a zero chip (ae → 0, where the power → 0 anyway)
     let kc = g.kc1_1 * forge_math::dmath::powf(hm.max(1e-4), -g.mc);
     let power = c.ap * c.ae * vf * kc / 6.0e7;
@@ -600,5 +660,37 @@ mod tests {
             [0.0, 1e9],
         );
         assert!((f.d_eff / 25.4 - 0.27129).abs() < 5e-6, "{}", f.d_eff / 25.4);
+    }
+
+    /// Contact geometry: a ball by the bull formula at re = D/2 is the CNCCookbook D_eff; its
+    /// sin κ is D_eff/D (Sandvik's ball fz = D hex / D_cap); a bull nose's axial thinning is the
+    /// round insert's √(1 − (1 − ap/re)²); a ball tilted 0 is untilted, tilted past 90° − α cuts
+    /// at its full diameter.
+    #[test]
+    fn contact_flat_bull_ball_tilt() {
+        let d = 12.7;
+        let ap = 0.04 * 25.4;
+        let b = contact(d, 0.5 * d, ap, 0.0);
+        assert!((b.d_eff - effective_diameter(d, true, ap)).abs() < 1e-12);
+        assert!((b.sin_kappa - b.d_eff / d).abs() < 1e-12);
+        assert_eq!(
+            contact(d, 0.0, 3.0, 0.0),
+            Contact {
+                d_eff: d,
+                sin_kappa: 1.0
+            }
+        );
+        let bull = contact(10.0, 1.0, 0.5, 0.0);
+        assert!((bull.sin_kappa - (1.0f64 - 0.25).sqrt()).abs() < 1e-12);
+        assert!((bull.d_eff - (8.0 + 2.0 * (1.0f64 - 0.25).sqrt())).abs() < 1e-12);
+        assert_eq!(contact(10.0, 1.0, 2.0, 0.0).d_eff, 10.0);
+        let t0 = contact(d, 0.5 * d, ap, 1e-300);
+        assert!((t0.d_eff - b.d_eff).abs() < 1e-9);
+        let t = contact(d, 0.5 * d, ap, 80.0);
+        assert!((t.d_eff - d).abs() < 1e-12 && t.sin_kappa == 1.0);
+        // 15° of tilt: D sin(α + 15°)
+        let alpha = forge_math::dmath::acos(1.0 - 2.0 * ap / d);
+        let t = contact(d, 0.5 * d, ap, 15.0);
+        assert!((t.d_eff - d * forge_math::dmath::sin(alpha + 15f64.to_radians())).abs() < 1e-12);
     }
 }

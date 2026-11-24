@@ -78,6 +78,9 @@ pub struct Ask {
     pub ap: Option<f64>,
     pub ae: Option<f64>,
     pub max_angle: Option<f64>,
+    /// Tool tilt from the surface normal toward the feed, degrees (a ball's contact moves out
+    /// to a larger diameter): feeds::contact.
+    pub tilt: Option<f64>,
     /// Entry feeds, mm/min.
     pub plunge: Option<f64>,
     pub ramp: Option<f64>,
@@ -101,6 +104,7 @@ impl Ask {
             ap: self.ap.or(base.ap),
             ae: self.ae.or(base.ae),
             max_angle: self.max_angle.or(base.max_angle),
+            tilt: self.tilt.or(base.tilt),
             plunge: self.plunge.or(base.plunge),
             ramp: self.ramp.or(base.ramp),
             lead_in: self.lead_in.or(base.lead_in),
@@ -118,6 +122,8 @@ pub struct ToolData<'a> {
     pub d: f64,
     pub flutes: u32,
     pub ball: bool,
+    /// Corner radius, mm: 0 flat, d/2 ball (`ball` implies it), between for a bull nose.
+    pub re: f64,
     /// Its substrate (picks the group's carbide or HSS speed; others have no generic speed)
     /// and coating as the record states it (no generic factor is applied for a coating: the
     /// maker's preset carries it).
@@ -288,7 +294,12 @@ pub fn milling_on(
         Some(v) => Val::new(v, "mm", Source::User, ""),
         None => Val::new(nominal.1, "mm", Source::Default, "the op's nominal depth"),
     };
-    let d_eff = feeds::effective_diameter(d, tool.ball, ap.v);
+    // where the edge cuts: D_eff and the axial thinning sin κ (flat, bull, ball, tilted ball)
+    let re = if tool.ball { 0.5 * d } else { tool.re };
+    let ct = feeds::contact(d, re, ap.v, ask.tilt.unwrap_or(0.0));
+    let d_eff = ct.d_eff;
+    // the width is cut at D_eff on a ball (Sandvik's side-milling form), at D otherwise
+    let d_radial = if re >= 0.5 * d { d_eff } else { d };
 
     // speed
     let preset = tool.preset;
@@ -378,8 +389,8 @@ pub fn milling_on(
     };
 
     // chip and feed
-    let r = (ae.v / d).clamp(0.0, 1.0);
-    let k = feeds::thinning(r);
+    let r = (ae.v / d_radial.max(1e-9)).clamp(0.0, 1.0);
+    let k = feeds::thinning(r) * ct.sin_kappa;
     let (chip, fz) = if let Some(f) = ask.feed {
         let fz = f / (n * z);
         (
@@ -456,7 +467,7 @@ pub fn milling_on(
         };
         for (cap, what) in [(ask.max_power, "max power"), (ask.max_torque, "max torque")] {
             let Some(cap) = cap else { continue };
-            let f = feeds::at(g, &cut, fz.v, n, d_eff);
+            let f = feeds::at_contact(g, &cut, fz.v, n, ct, d_radial);
             let now = if what == "max power" { f.power } else { f.torque };
             if now > cap && now > 0.0 && g.mc < 1.0 {
                 let s = forge_math::dmath::powf(cap / now, 1.0 / (1.0 - g.mc));
@@ -527,7 +538,7 @@ pub fn milling_on(
 
     // derived numbers and checks
     let derived = match group {
-        Some(g) => feeds::at(
+        Some(g) => feeds::at_contact(
             g,
             &Cut {
                 d,
@@ -539,14 +550,15 @@ pub fn milling_on(
             },
             fz.v,
             n,
-            d_eff,
+            ct,
+            d_radial,
         ),
         None => feeds::Feeds {
             rpm: n,
             vc: vc_val.v,
             fz: fz.v,
             hex: fz.v * k,
-            hm: fz.v * feeds::mean_chip_factor(r, feeds::engagement_angle(r)),
+            hm: fz.v * ct.sin_kappa * feeds::mean_chip_factor(r, feeds::engagement_angle(r)),
             phi: feeds::engagement_angle(r),
             vf: vf.v,
             power: f64::NAN,
@@ -568,7 +580,7 @@ pub fn milling_on(
                 mc: mc_hi,
                 ..g.clone()
             };
-            let f = feeds::at(
+            let f = feeds::at_contact(
                 &hi,
                 &Cut {
                     d,
@@ -580,7 +592,8 @@ pub fn milling_on(
                 },
                 fz.v,
                 n,
-                d_eff,
+                ct,
+                d_radial,
             );
             (f.power, f.torque)
         }
@@ -1076,6 +1089,7 @@ mod tests {
             d: 12.7,
             flutes: 3,
             ball: false,
+            re: 0.0,
             substrate: Substrate::Carbide,
             coating: "",
             preset: p,
@@ -1387,5 +1401,50 @@ mod tests {
         );
         let p = r.checks.iter().find(|c| c.what == "power").unwrap();
         assert_eq!(p.verdict, Verdict::Warn);
+    }
+
+    /// A ball at shallow depth: speed set at D_eff, and the chip held counting both the axial
+    /// (sin κ = D_eff/D) and the radial thinning (ae against D_eff); a tilt moves D_eff out.
+    #[test]
+    fn ball_and_tilt_through_the_resolver() {
+        let g = group();
+        let ball = ToolData {
+            ball: true,
+            ..tool(None)
+        };
+        let wide = Spindle {
+            rpm: [100.0, 60_000.0],
+            ..spindle()
+        };
+        let ask = Ask {
+            vc: Some(300.0),
+            chip: Some(0.05),
+            ap: Some(1.0),
+            ae: Some(2.0),
+            ..Ask::default()
+        };
+        // narrower, the combined thinning would pass THIN_CAP: the chip is then held under target
+        let thin = milling(&Ask { ae: Some(0.5), ..ask }, &ball, Some(&g), &wide, (0.0, 0.0)).unwrap();
+        assert!((thin.fz.v - THIN_CAP * 0.05).abs() < 1e-12 && thin.feeds.hex < 0.05);
+        let r = milling(&ask, &ball, Some(&g), &wide, (0.0, 0.0)).unwrap();
+        let ct = feeds::contact(12.7, 6.35, 1.0, 0.0);
+        assert!((r.feeds.d_eff - ct.d_eff).abs() < 1e-12);
+        assert!((r.rpm.v - 1000.0 * 300.0 / (PI * ct.d_eff)).abs() < 1e-9);
+        assert!((r.feeds.hex - 0.05).abs() < 1e-12, "{}", r.feeds.hex);
+        let k = feeds::thinning(2.0 / ct.d_eff) * ct.sin_kappa;
+        assert!((r.fz.v - 0.05 / k).abs() < 1e-12);
+        let tilted = milling(
+            &Ask {
+                tilt: Some(20.0),
+                ..ask
+            },
+            &ball,
+            Some(&g),
+            &wide,
+            (0.0, 0.0),
+        )
+        .unwrap();
+        assert!(tilted.feeds.d_eff > r.feeds.d_eff && tilted.rpm.v < r.rpm.v);
+        assert!((tilted.feeds.hex - 0.05).abs() < 1e-12);
     }
 }
