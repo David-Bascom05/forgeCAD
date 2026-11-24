@@ -20,11 +20,21 @@ open TopoCheck
 section
 variable {T : Type} (FI : topo_fans.FanTopo T) (t : T) (b : Body) {corners : Nat → Nat → List (Nat × Nat)}
 
-/-- What a `FanTopo` instance reads of model body `b`, with the model's corner table. -/
+/-- What a `FanTopo` instance reads of model body `b`: the topology, and geometry that answers. -/
+structure FanBase : Prop where
+  base : Reads FI.topoTopoInst t b
+  fwd : ∀ c : Usize, c.val < b.coedges.size → FI.coedge_forward t c ⦃ x => x = (b.co c.val).fwd ⦄
+  /-- Face ids are u32, below `u32::MAX`. -/
+  nf_lt : b.faces.size < U32.max
+  /-- The geometry answers (which answer is its own). -/
+  frame_ok : ∀ f v : Usize, FI.corner_frame t f v ⦃ _ => True ⦄
+  closing_ok : ∀ (f v c : Usize) (a : Slice Usize), FI.closing t f v c a ⦃ _ => True ⦄
+
+/-- As `FanBase`, with the corner table `corners` the translated `corners` computes. -/
 structure FanReads (corners : Nat → Nat → List (Nat × Nat)) : Prop where
   base : Reads FI.topoTopoInst t b
   fwd : ∀ c : Usize, c.val < b.coedges.size → FI.coedge_forward t c ⦃ x => x = (b.co c.val).fwd ⦄
-  corners : ∀ f v : Usize, FI.corners t f v ⦃ r =>
+  corners : ∀ f v : Usize, f.val < b.faces.size → topo_fans.corners FI t f v ⦃ r =>
     r.val.map (fun p => (p.1.val, p.2.val)) = corners f.val v.val ⦄
   /-- Face ids are u32, below `u32::MAX`. -/
   nf_lt : b.faces.size < U32.max
@@ -883,6 +893,154 @@ theorem before_some_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) 
 
 end beforeS
 
+/-! ## The corner table, as shipped -/
+
+section cornersS
+variable {T : Type} (FI : topo_fans.FanTopo T) (t : T) {b : Body}
+
+theorem startB_spec (R : FanBase FI t b) (c : Usize) (hc : c.val < b.coedges.size)
+    (he : (b.co c.val).edge < b.edges.size) :
+    topo_fans.start FI t c ⦃ r => r.val = b.start c.val ⦄ := by
+  unfold topo_fans.start
+  step with R.base.coedge_edge c hc as ⟨e, hev⟩
+  step with R.base.edge_ends e (by rw [hev]; exact he) as ⟨x, y, hx, hy⟩
+  step with R.fwd c hc as ⟨f, hf⟩
+  unfold Body.start
+  split <;> rename_i h <;> rw [hf] at h <;> simp [h, hx, hy, hev]
+
+theorem stopB_spec (R : FanBase FI t b) (c : Usize) (hc : c.val < b.coedges.size)
+    (he : (b.co c.val).edge < b.edges.size) :
+    topo_fans.stop FI t c ⦃ r => r.val = b.stop c.val ⦄ := by
+  unfold topo_fans.stop
+  step with R.base.coedge_edge c hc as ⟨e, hev⟩
+  step with R.base.edge_ends e (by rw [hev]; exact he) as ⟨x, y, hx, hy⟩
+  step with R.fwd c hc as ⟨f, hf⟩
+  unfold Body.stop
+  split <;> rename_i h <;> rw [hf] at h <;> simp [h, hx, hy, hev]
+
+/-- What `corners` returns for face `f`: distinct coedges of `f`, each with a use. -/
+def CornerList (b : Body) (f : Nat) (L : List (Nat × Nat)) : Prop :=
+  (L.map (·.1)).Nodup ∧ ∀ p ∈ L, p.1 < b.coedges.size ∧ b.face p.1 = f ∧ Use b p.2
+
+/-- A face lists each of its loops once. -/
+theorem faceLoops_nodup (H : Sound b) (W : b.WF) {f : Nat} (hf : f < b.faces.size) : (b.faceLoops f).Nodup := by
+  rw [List.nodup_iff_count_le_one]
+  intro l
+  by_cases hl : l ∈ b.faceLoops f
+  · have ⟨hln, hlf, hl1⟩ := H.loops f hf l hl
+    unfold Body.listed at hl1
+    rw [if_pos ⟨hln, by rw [hlf]; exact hf⟩, hlf] at hl1
+    omega
+  · rw [List.count_eq_zero.2 hl]; omega
+
+/-- The coedges of a face's loops so far: all distinct uses of the face. -/
+def FaceUses (b : Body) (f : Nat) (D : List Nat) (U : List Nat) : Prop :=
+  U.Nodup ∧ ∀ x ∈ U, Use b x ∧ b.face x = f ∧ x < b.coedges.size ∧ x ∈ D
+
+theorem faceUses_push (H : Sound b) (W : b.WF) {f : Nat} {D U : List Nat} (hU : FaceUses b f D U)
+    (D' : List Nat) (hD : ∀ x ∈ D, x ∈ D') (c : Nat) (hcU : c ∉ U) (hcu : Use b c) (hcf : b.face c = f)
+    (hcn : c < b.coedges.size) (hcD : c ∈ D') : FaceUses b f D' (U ++ [c]) := by
+  refine ⟨List.nodup_append.2 ⟨hU.1, by simp, ?_⟩, fun x hx => ?_⟩
+  · intro x hx y hy hxy; simp at hy; subst hy; subst hxy; exact hcU hx
+  · rcases List.mem_append.1 hx with hx | hx
+    · obtain ⟨h1, h2, h3, h4⟩ := hU.2 x hx; exact ⟨h1, h2, h3, hD x h4⟩
+    · simp at hx; subst hx; exact ⟨hcu, hcf, hcn, hcD⟩
+
+theorem faceUses_len {f : Nat} {D U : List Nat} (hU : FaceUses b f D U) : U.length ≤ b.coedges.size := by
+  have := (hU.1.subperm fun x hx => List.mem_range.2 (hU.2 x hx).2.2.1).length_le
+  simpa using this
+
+theorem loop_uses_spec (R : FanBase FI t b) (H : Sound b) (W : b.WF) (f : Nat) (hf : f < b.faces.size)
+    (l : Nat) (hlm : l ∈ b.faceLoops f) (v first len : Usize)
+    (hfirst : first.val = (b.lo l).first) (hlen : len.val = (b.lo l).len)
+    (D : List Nat) (hdis : ∀ x ∈ b.loopCoedges l, x ∉ D)
+    (uses : alloc.vec.Vec Usize) (n : Usize) (hU : FaceUses b f D (uses.val.map (·.val))) (hn : n.val ≤ 2) :
+    topo_fans.corners_loop0_loop0 FI t v uses n first len 0#usize ⦃ r =>
+      FaceUses b f (D ++ b.loopCoedges l) (r.1.val.map (·.val)) ∧ r.2.val ≤ 2 ⦄ := by
+  obtain ⟨hln, hlf, hl1⟩ := H.loops f hf l hlm
+  obtain ⟨m, hm⟩ := WP.spec_exists R.base.nc
+  have hmx := le_max m
+  have hmb := m.hBounds
+  have h1 : (1#usize).val = 1 := rfl
+  have hbig : 3 ≤ Usize.max := usize_le_max_of_lt 3 (succ_lt_usize 2 (by rw [u32max_eq]; omega))
+  unfold topo_fans.corners_loop0_loop0
+  apply loop.spec_decr_nat (fun (y : alloc.vec.Vec Usize × Usize × Usize) => len.val - y.2.2.val)
+    (fun y => y.2.2.val ≤ len.val ∧ FaceUses b f (D ++ (b.loopCoedges l).take y.2.2.val) (y.1.val.map (·.val)) ∧
+      y.2.1.val ≤ 2)
+  · rintro ⟨u, nl, k⟩ ⟨hle, hU0, hn0⟩
+    simp only at hle hU0 hn0 ⊢
+    unfold topo_fans.corners_loop0_loop0.body
+    split
+    · rename_i hlt
+      have hlt' : k.val < len.val := by scalar_tac
+      have hk : k.val < (b.lo l).len := by omega
+      have hcm : (b.lo l).first + k.val ∈ b.loopCoedges l := by rw [mem_loopCoedges]; omega
+      obtain ⟨hcn, hce, hcuse⟩ := H.coedges l hln hl1 _ hcm
+      have hfk : first.val + k.val < b.coedges.size := by omega
+      step with usize_add_wspec first k (le_max_of_lt_val m _ (by omega)) as ⟨c, hc⟩
+      have hcv : c.val = (b.lo l).first + k.val := by
+        rw [hc, add_val first k (lt_size_of_le_max _ (le_max_of_lt_val m _ (by omega))), hfirst]
+      have hcu : Use b c.val := ⟨_, hce, by rw [hcv]; exact hcuse⟩
+      have hclp : (b.co c.val).lp = l := by rw [hcv]; exact W.loop_lp l hln hl1 _ hcm
+      have hcf : b.face c.val = f := by unfold Body.face; rw [hclp, hlf]
+      have hcD : c.val ∉ D := by rw [hcv]; exact hdis _ hcm
+      have htk : (b.loopCoedges l).take (k.val + 1) = (b.loopCoedges l).take k.val ++ [c.val] := by
+        rw [List.take_succ_eq_append_getElem (by simp [Body.loopCoedges]; omega)]; simp [Body.loopCoedges, hcv]
+      have hcT : c.val ∉ (b.loopCoedges l).take k.val := by
+        intro h; rw [List.mem_take_iff_getElem] at h
+        obtain ⟨i, hi, hie⟩ := h
+        simp [Body.loopCoedges] at hie hi; omega
+      have hcU : c.val ∉ u.val.map (·.val) := by
+        intro h; have := (hU0.2 _ h).2.2.2
+        rcases List.mem_append.1 this with h' | h'
+        · exact hcD h'
+        · exact hcT h'
+      have hpush := faceUses_push H W hU0 (D ++ (b.loopCoedges l).take (k.val + 1))
+        (fun x hx => by rw [htk]; rcases List.mem_append.1 hx with h | h <;> simp [h]) c.val hcU hcu hcf
+        (by rw [hcv]; exact hcn) (by rw [htk]; simp)
+      have hpl : u.val.length < Usize.max := by
+        have := faceUses_len hpush; simp at this; omega
+      have hU1 : FaceUses b f (D ++ (b.loopCoedges l).take (k.val + 1)) (u.val.map (·.val)) :=
+        ⟨hU0.1, fun x hx => by
+          obtain ⟨a1, a2, a3, a4⟩ := hU0.2 x hx
+          refine ⟨a1, a2, a3, ?_⟩; rw [htk]; rcases List.mem_append.1 a4 with h | h <;> simp [h]⟩
+      obtain ⟨hcn', hce'⟩ : c.val < b.coedges.size ∧ (b.co c.val).edge < b.edges.size := by
+        rw [hcv]; exact ⟨hcn, hce⟩
+      step with startB_spec FI t R c hcn' hce' as ⟨st, hst⟩
+      apply WP.spec_bind (Pₘ := fun n1 : Usize => n1.val ≤ 2)
+      · split
+        · split
+          · rename_i _ h2; step with usize_add_wspec nl 1#usize (by rw [h1]; omega) as ⟨n1, hn1⟩
+            rw [hn1, add_val nl 1#usize (lt_size_of_le_max _ (by rw [h1]; omega)), h1]; scalar_tac
+          · simp only [WP.spec_ok]; exact hn0
+        · simp only [WP.spec_ok]; exact hn0
+      intro n1 hn1
+      apply WP.spec_bind (Pₘ := fun u1 : alloc.vec.Vec Usize =>
+        FaceUses b f (D ++ (b.loopCoedges l).take (k.val + 1)) (u1.val.map (·.val)))
+      · split
+        · apply WP.spec_mono (alloc.vec.Vec.push_spec u c hpl)
+          intro u1 hu1; rw [hu1]; simpa using hpush
+        · step with stopB_spec FI t R c hcn' hce' as ⟨sp, hsp⟩
+          split
+          · apply WP.spec_mono (alloc.vec.Vec.push_spec u c hpl)
+            intro u1 hu1; rw [hu1]; simpa using hpush
+          · simp only [WP.spec_ok]; exact hU1
+      intro u1 hu1
+      step with usize_add_wspec k 1#usize (succ_le_max k len hlt') as ⟨k1, hk1⟩
+      have hk1v : k1.val = k.val + 1 := by rw [hk1]; exact succ_val k len hlt'
+      rw [hk1v]
+      exact ⟨by omega, hu1, hn1, by omega⟩
+    · rename_i hlt
+      have hk : k.val = len.val := by scalar_tac
+      simp only [WP.spec_ok]
+      have htk : (b.loopCoedges l).take k.val = b.loopCoedges l := by
+        rw [hk, hlen]; apply List.take_of_length_le; simp [Body.loopCoedges]
+      rw [htk] at hU0; exact ⟨hU0, hn0⟩
+  · have h0 : (0#usize).val = 0 := rfl
+    simp only [h0, List.take_zero, List.append_nil]; exact ⟨by simp, hU, hn⟩
+
+end cornersS
+
 /-! ## Building the corner table -/
 
 section table
@@ -1063,7 +1221,7 @@ theorem table_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (hC : 
         have hcfl : cf.val.length = (facesOf b (S.take k.val)).length := by
           have := congrArg List.length hcfm; simpa using this
         step with alloc.vec.Vec.push_spec cf f (by omega) as ⟨cf1, hcf1⟩
-        step with R.corners f vtx as ⟨cr, hcr⟩
+        step with R.corners f vtx (by rw [hf]; exact face_lt W H hcu) as ⟨cr, hcr⟩
         have hnd := eraseDups_nodup ((S.take (k.val + 1)).map b.face)
         have htl := table_len hC vtx.val (facesOf b (S.take (k.val + 1))) hnd
         rw [hfac, if_neg hin'] at htl

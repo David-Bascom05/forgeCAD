@@ -81,22 +81,23 @@ structure topo_shell.ShellTopo (Self : Type _) where
   shell_face : Self → Std.Usize → Std.Usize → Result Std.Usize
 
 /-- Trait declaration: [forge_topo::topo_fans::FanTopo]
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 12:0-18:1
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 13:0-21:1
     Visibility: public -/
 structure topo_fans.FanTopo (Self : Type _) where
   topoTopoInst : topo.Topo Self
   coedge_forward : Self → Std.Usize → Result Bool
-  corners : Self → Std.Usize → Std.Usize → Result (alloc.vec.Vec
-    (Std.Usize × Std.Usize))
+  corner_frame : Self → Std.Usize → Std.Usize → Result Bool
+  closing : Self → Std.Usize → Std.Usize → Std.Usize → Slice Std.Usize
+    → Result Std.Usize
 
 /-- Trait declaration: [forge_topo::topo_fans::FanSink]
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 21:0-24:1
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 24:0-27:1
     Visibility: public -/
 structure topo_fans.FanSink (Self : Type _) where
   vertex_fans : Self → Std.Usize → Std.Usize → Result Self
 
 /-- [forge_topo::topo_fans::Closes]
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 90:0-94:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 93:0-97:1 -/
 structure topo_fans.Closes where
   cf : alloc.vec.Vec Std.Usize
   cl : alloc.vec.Vec (Std.Usize × Std.Usize)

@@ -1026,12 +1026,18 @@ impl crate::topo_fans::FanTopo for FanView<'_> {
     fn coedge_forward(&self, c: usize) -> bool {
         crate::topo_edges::EdgeTopo::coedge_forward(&self.view, c)
     }
-    fn corners(&self, f: usize, v: usize) -> Vec<(usize, usize)> {
+    fn corner_frame(&self, f: usize, v: usize) -> bool {
+        self.body.corner_frame(FaceId(f as u32), VertexId(v as u32)).is_some()
+    }
+    fn closing(&self, f: usize, v: usize, c: usize, arriving: &[usize]) -> usize {
+        let Some(frame) = self.body.corner_frame(FaceId(f as u32), VertexId(v as u32)) else {
+            return usize::MAX;
+        };
+        let arriving: Vec<CoedgeId> = arriving.iter().map(|&x| CoedgeId(x as u32)).collect();
+        let angles = self.body.arriving_angles(&frame, &arriving);
         self.body
-            .corners(FaceId(f as u32), VertexId(v as u32))
-            .into_iter()
-            .map(|(a, b)| (a.index(), b.index()))
-            .collect()
+            .closing_at(&frame, CoedgeId(c as u32), &arriving, &angles)
+            .unwrap_or(usize::MAX)
     }
 }
 

@@ -1099,7 +1099,6 @@ impl Body {
     /// ordered as they stand a vertex tolerance out along each (to second order: a line and a circle
     /// tangent to it leave in one direction and part by their curvature).
     pub(crate) fn corners(&self, f: FaceId, v: VertexId) -> Vec<(CoedgeId, CoedgeId)> {
-        let at = self.vertex(v);
         let uses: Vec<CoedgeId> = self
             .face(f)
             .loops
@@ -1110,59 +1109,73 @@ impl Body {
         if uses.iter().filter(|&&c| self.coedge_start(c) == v).count() < 2 {
             return Vec::new();
         }
-        let surface = &self.face(f).surface;
-        let Some(n) = self.face_normal(f, surface.project(at.point)) else {
+        let Some(frame) = self.corner_frame(f, v) else {
             return Vec::new();
         };
-        let e1 = n.any_perpendicular();
-        let e2 = n.cross(e1);
-        let reach = at.tol.max(forge_math::tol::LINEAR);
-        // the angle round n of the point `reach` out along the coedge's edge from v
-        let angle = |c: CoedgeId, leaving: bool| {
-            let co = self.coedge(c);
-            let edge = self.edge(co.edge);
-            // the edge's end at v: its start when the coedge leaves v forward or arrives backward
-            let at_start = leaving == co.forward;
-            let (t, sign) = if at_start {
-                (edge.range.lo, 1.0)
-            } else {
-                (edge.range.hi, -1.0)
-            };
-            let d = edge.curve.deriv(t);
-            let dt = sign * reach / d.d1.length().max(f64::MIN_POSITIVE);
-            let off = d.d1 * dt + d.d2 * (0.5 * dt * dt);
-            forge_math::dmath::atan2(e2.dot(off), e1.dot(off))
-        };
-        let arriving: Vec<(CoedgeId, f64)> = uses
-            .iter()
-            .filter(|&&c| self.coedge_end(c) == v)
-            .map(|&c| (c, angle(c, false)))
-            .collect();
-        let tau = forge_math::dmath::TAU;
+        let arriving: Vec<CoedgeId> = uses.iter().copied().filter(|&c| self.coedge_end(c) == v).collect();
+        let angles = self.arriving_angles(&frame, &arriving);
         uses.iter()
             .filter(|&&c| self.coedge_start(c) == v)
-            .filter_map(|&c| {
-                let a = angle(c, true);
-                // the other use of its own edge (a seam's) leaves the same way: it closes the
-                // corner only after a whole turn, never before another edge
-                let own = self.coedge(c).edge;
-                arriving
-                    .iter()
-                    .map(|&(x, b)| {
-                        (
-                            x,
-                            if self.coedge(x).edge == own {
-                                tau
-                            } else {
-                                (b - a).rem_euclid(tau)
-                            },
-                        )
-                    })
-                    .filter(|x| x.0 != c)
-                    .min_by(|x, y| x.1.total_cmp(&y.1))
-                    .map(|x| (c, x.0))
-            })
+            .filter_map(|&c| self.closing_at(&frame, c, &arriving, &angles).map(|i| (c, arriving[i])))
             .collect()
+    }
+
+    /// The plane round vertex `v` on face `f` that `corners` measures angles in: two directions
+    /// across the face's normal there, and how far out along an edge to look (none: no normal).
+    pub(crate) fn corner_frame(&self, f: FaceId, v: VertexId) -> Option<(UnitVec3, forge_math::Vec3, f64)> {
+        let at = self.vertex(v);
+        let surface = &self.face(f).surface;
+        let n = self.face_normal(f, surface.project(at.point))?;
+        let e1 = n.any_perpendicular();
+        let e2 = n.cross(e1);
+        Some((e1, e2, at.tol.max(forge_math::tol::LINEAR)))
+    }
+
+    /// The angle round the frame's normal of the point `reach` out along coedge `c`'s edge from
+    /// its end at the vertex (its start when `leaving`).
+    fn corner_angle(&self, frame: &(UnitVec3, forge_math::Vec3, f64), c: CoedgeId, leaving: bool) -> f64 {
+        let (e1, e2, reach) = *frame;
+        let co = self.coedge(c);
+        let edge = self.edge(co.edge);
+        // the edge's end at v: its start when the coedge leaves v forward or arrives backward
+        let at_start = leaving == co.forward;
+        let (t, sign) = if at_start {
+            (edge.range.lo, 1.0)
+        } else {
+            (edge.range.hi, -1.0)
+        };
+        let d = edge.curve.deriv(t);
+        let dt = sign * reach / d.d1.length().max(f64::MIN_POSITIVE);
+        let off = d.d1 * dt + d.d2 * (0.5 * dt * dt);
+        forge_math::dmath::atan2(e2.dot(off), e1.dot(off))
+    }
+
+    pub(crate) fn arriving_angles(&self, frame: &(UnitVec3, forge_math::Vec3, f64), arriving: &[CoedgeId]) -> Vec<f64> {
+        arriving.iter().map(|&c| self.corner_angle(frame, c, false)).collect()
+    }
+
+    /// Which of `arriving` (with their `angles`) closes the corner leaving coedge `c` opens: the
+    /// first counterclockwise from it, not `c` itself.
+    pub(crate) fn closing_at(
+        &self,
+        frame: &(UnitVec3, forge_math::Vec3, f64),
+        c: CoedgeId,
+        arriving: &[CoedgeId],
+        angles: &[f64],
+    ) -> Option<usize> {
+        let a = self.corner_angle(frame, c, true);
+        let tau = forge_math::dmath::TAU;
+        // the other use of its own edge (a seam's) leaves the same way: it closes the corner only
+        // after a whole turn, never before another edge
+        let own = self.coedge(c).edge;
+        arriving
+            .iter()
+            .zip(angles)
+            .enumerate()
+            .map(|(i, (&x, &b))| (i, x, if self.coedge(x).edge == own { tau } else { (b - a).rem_euclid(tau) }))
+            .filter(|x| x.1 != c)
+            .min_by(|x, y| x.2.total_cmp(&y.2))
+            .map(|x| x.0)
     }
 
     /// The other use of the same edge.

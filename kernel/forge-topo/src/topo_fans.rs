@@ -8,13 +8,16 @@
 
 use crate::topo::Topo;
 
-/// What `fans` reads besides: each coedge's sense, and the corners of a face at a vertex.
+/// What `fans` reads besides: each coedge's sense, and the geometry that orders a face's edges at
+/// a vertex (taken as given: `corners` uses it only to choose among coedges it lists itself).
 pub trait FanTopo: Topo {
     /// Whether coedge `c` runs along its edge.
     fn coedge_forward(&self, c: usize) -> bool;
-    /// `Body::corners`: where face `f` meets vertex `v` more than once, each coedge leaving `v`
-    /// with the arriving one that closes its corner (geometry: taken as given).
-    fn corners(&self, f: usize, v: usize) -> Vec<(usize, usize)>;
+    /// Whether face `f` has a normal at vertex `v`, to order its edges round it.
+    fn corner_frame(&self, f: usize, v: usize) -> bool;
+    /// Which of `arriving` (coedges of face `f` arriving at `v`) closes the corner coedge `c`
+    /// (leaving `v`) opens: the first counterclockwise, not `c`; `usize::MAX` for none.
+    fn closing(&self, f: usize, v: usize, c: usize, arriving: &[usize]) -> usize;
 }
 
 /// Where `fans` puts what it finds.
@@ -91,6 +94,61 @@ struct Closes {
     cf: Vec<usize>,
     cl: Vec<(usize, usize)>,
     cs: Vec<usize>,
+}
+
+/// `Body::corners`: where face `f` meets vertex `v` more than once, each coedge leaving `v` with
+/// the arriving one that closes its corner (empty where `f` meets `v` once, or has no normal
+/// there). Which arriving coedge closes a corner is geometry (`FanTopo::closing`); which coedges
+/// are paired is read here.
+pub fn corners<T: FanTopo>(t: &T, f: usize, v: usize) -> Vec<(usize, usize)> {
+    let mut uses: Vec<usize> = Vec::new();
+    // how many leave `v`, up to 2
+    let mut n_leave: usize = 0;
+    let nl = t.face_n_loops(f);
+    let mut j = 0;
+    while j < nl {
+        let l = t.face_loop(f, j);
+        let first = t.loop_first(l);
+        let len = t.loop_len(l);
+        let mut k = 0;
+        while k < len {
+            let c = first + k;
+            let s = start(t, c);
+            if s == v && n_leave < 2 {
+                n_leave += 1;
+            }
+            if s == v || stop(t, c) == v {
+                uses.push(c);
+            }
+            k += 1;
+        }
+        j += 1;
+    }
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    if n_leave < 2 || !t.corner_frame(f, v) {
+        return out;
+    }
+    let mut arriving: Vec<usize> = Vec::new();
+    let nu = uses.len();
+    let mut i = 0;
+    while i < nu {
+        if stop(t, uses[i]) == v {
+            arriving.push(uses[i]);
+        }
+        i += 1;
+    }
+    let mut i = 0;
+    while i < nu {
+        let c = uses[i];
+        if start(t, c) == v {
+            let x = t.closing(f, v, c, &arriving);
+            if x < arriving.len() {
+                out.push((c, arriving[x]));
+            }
+        }
+        i += 1;
+    }
+    out
 }
 
 /// The coedge that closes `c`'s corner: from the corners where they have `c`, else the one before
@@ -182,7 +240,7 @@ fn n_fans<T: FanTopo>(t: &T, items: &[usize], lo: usize, hi: usize, seen: &mut V
         let f = face_of(t, seen[k]);
         if !contains(&closes.cf, closes.cf.len(), f) {
             closes.cf.push(f);
-            let cr = t.corners(f, v);
+            let cr = corners(t, f, v);
             let m = cr.len();
             if m > 0 {
                 any = true;

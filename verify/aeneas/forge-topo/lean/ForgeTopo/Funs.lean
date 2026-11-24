@@ -978,12 +978,12 @@ def topo_euler.shell_euler
     n_faces edge_at vert_at 0#usize
 
 /-- [forge_topo::topo_fans::NONE]
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 27:0-27:31 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 30:0-30:31 -/
 @[global_simps, irreducible]
 def topo_fans.NONE : Std.Usize := core.num.Usize.MAX
 
 /-- [forge_topo::topo_fans::start]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 30:0-33:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 33:0-36:1 -/
 def topo_fans.start
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
   Result Std.Usize
@@ -996,7 +996,7 @@ def topo_fans.start
   else ok b
 
 /-- [forge_topo::topo_fans::stop]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 36:0-39:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 39:0-42:1 -/
 def topo_fans.stop
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
   Result Std.Usize
@@ -1009,7 +1009,7 @@ def topo_fans.stop
   else ok a
 
 /-- [forge_topo::topo_fans::face_of]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 42:0-44:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 45:0-47:1 -/
 def topo_fans.face_of
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
   Result Std.Usize
@@ -1018,7 +1018,7 @@ def topo_fans.face_of
   FanTopoInst.topoTopoInst.loop_face t i
 
 /-- [forge_topo::topo_fans::prev_of]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 48:0-56:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 51:0-59:1 -/
 def topo_fans.prev_of
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
   Result Std.Usize
@@ -1033,7 +1033,7 @@ def topo_fans.prev_of
   else c - 1#usize
 
 /-- [forge_topo::topo_fans::partner]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 65:4-71:5 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 68:4-74:5 -/
 @[rust_loop_body]
 def topo_fans.partner_loop.body
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize)
@@ -1054,7 +1054,7 @@ def topo_fans.partner_loop.body
   else ok (done found)
 
 /-- [forge_topo::topo_fans::partner]: loop 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 65:4-71:5 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 68:4-74:5 -/
 @[rust_loop]
 def topo_fans.partner_loop
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize)
@@ -1067,7 +1067,7 @@ def topo_fans.partner_loop
     (i, found)
 
 /-- [forge_topo::topo_fans::partner]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 60:0-73:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 63:0-76:1 -/
 def topo_fans.partner
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (c : Std.Usize) :
   Result Std.Usize
@@ -1077,7 +1077,7 @@ def topo_fans.partner
   topo_fans.partner_loop FanTopoInst t c e n 0#usize topo_fans.NONE
 
 /-- [forge_topo::topo_fans::contains]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 79:4-86:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 82:4-89:1 -/
 @[rust_loop_body]
 def topo_fans.contains_loop.body
   (xs : Slice Std.Usize) (n : Std.Usize) (x : Std.Usize) (i : Std.Usize) :
@@ -1093,7 +1093,7 @@ def topo_fans.contains_loop.body
   else ok (done false)
 
 /-- [forge_topo::topo_fans::contains]: loop 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 79:4-86:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 82:4-89:1 -/
 @[rust_loop]
 def topo_fans.contains_loop
   (xs : Slice Std.Usize) (n : Std.Usize) (x : Std.Usize) (i : Std.Usize) :
@@ -1104,14 +1104,220 @@ def topo_fans.contains_loop
     i
 
 /-- [forge_topo::topo_fans::contains]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 77:0-86:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 80:0-89:1 -/
 @[reducible]
 def topo_fans.contains
   (xs : Slice Std.Usize) (n : Std.Usize) (x : Std.Usize) : Result Bool := do
   topo_fans.contains_loop xs n x 0#usize
 
+/-- [forge_topo::topo_fans::corners]: loop body 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 114:8-124:9
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.corners_loop0_loop0.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (v : Std.Usize)
+  (first : Std.Usize) (len : Std.Usize) (uses : alloc.vec.Vec Std.Usize)
+  (n_leave : Std.Usize) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize × Std.Usize)
+    ((alloc.vec.Vec Std.Usize) × Std.Usize))
+  := do
+  if k < len
+  then
+    let c ← first + k
+    let s ← topo_fans.start FanTopoInst t c
+    let n_leave1 ←
+      if s = v
+      then if n_leave < 2#usize
+           then n_leave + 1#usize
+           else ok n_leave
+      else ok n_leave
+    let uses1 ←
+      if s = v
+      then alloc.vec.Vec.push uses c
+      else
+        do
+        let i ← topo_fans.stop FanTopoInst t c
+        if i = v
+        then alloc.vec.Vec.push uses c
+        else ok uses
+    let k1 ← k + 1#usize
+    ok (cont (uses1, n_leave1, k1))
+  else ok (done (uses, n_leave))
+
+/-- [forge_topo::topo_fans::corners]: loop 1:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 114:8-124:9
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.corners_loop0_loop0
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (v : Std.Usize)
+  (uses : alloc.vec.Vec Std.Usize) (n_leave : Std.Usize) (first : Std.Usize)
+  (len : Std.Usize) (k : Std.Usize) :
+  Result ((alloc.vec.Vec Std.Usize) × Std.Usize)
+  := do
+  loop
+    (fun (uses1, n_leave1, k1) => topo_fans.corners_loop0_loop0.body
+      FanTopoInst t v first len uses1 n_leave1 k1)
+    (uses, n_leave, k)
+
+/-- [forge_topo::topo_fans::corners]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 109:4-126:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.corners_loop0.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (f : Std.Usize)
+  (v : Std.Usize) (nl : Std.Usize) (uses : alloc.vec.Vec Std.Usize)
+  (n_leave : Std.Usize) (j : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize × Std.Usize)
+    ((alloc.vec.Vec Std.Usize) × Std.Usize))
+  := do
+  if j < nl
+  then
+    let l ← FanTopoInst.topoTopoInst.face_loop t f j
+    let first ← FanTopoInst.topoTopoInst.loop_first t l
+    let len ← FanTopoInst.topoTopoInst.loop_len t l
+    let (uses1, n_leave1) ←
+      topo_fans.corners_loop0_loop0 FanTopoInst t v uses n_leave first len
+        0#usize
+    let j1 ← j + 1#usize
+    ok (cont (uses1, n_leave1, j1))
+  else ok (done (uses, n_leave))
+
+/-- [forge_topo::topo_fans::corners]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 109:4-126:5
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.corners_loop0
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (f : Std.Usize)
+  (v : Std.Usize) (uses : alloc.vec.Vec Std.Usize) (n_leave : Std.Usize)
+  (nl : Std.Usize) (j : Std.Usize) :
+  Result ((alloc.vec.Vec Std.Usize) × Std.Usize)
+  := do
+  loop
+    (fun (uses1, n_leave1, j1) => topo_fans.corners_loop0.body FanTopoInst t f
+      v nl uses1 n_leave1 j1)
+    (uses, n_leave, j)
+
+/-- [forge_topo::topo_fans::corners]: loop body 2:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 134:4-139:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.corners_loop1.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (v : Std.Usize)
+  (uses : alloc.vec.Vec Std.Usize) (nu : Std.Usize)
+  (arriving : alloc.vec.Vec Std.Usize) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.Usize) × Std.Usize) (alloc.vec.Vec
+    Std.Usize))
+  := do
+  if i < nu
+  then
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+        uses i
+    let i2 ← topo_fans.stop FanTopoInst t i1
+    let arriving1 ←
+      if i2 = v
+      then alloc.vec.Vec.push arriving i1
+      else ok arriving
+    let i3 ← i + 1#usize
+    ok (cont (arriving1, i3))
+  else ok (done arriving)
+
+/-- [forge_topo::topo_fans::corners]: loop 2:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 134:4-139:5
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.corners_loop1
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (v : Std.Usize)
+  (uses : alloc.vec.Vec Std.Usize) (arriving : alloc.vec.Vec Std.Usize)
+  (nu : Std.Usize) (i : Std.Usize) :
+  Result (alloc.vec.Vec Std.Usize)
+  := do
+  loop
+    (fun (arriving1, i1) => topo_fans.corners_loop1.body FanTopoInst t v uses
+      nu arriving1 i1)
+    (arriving, i)
+
+/-- [forge_topo::topo_fans::corners]: loop body 3:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 141:4-150:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_fans.corners_loop2.body
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (f : Std.Usize)
+  (v : Std.Usize) (uses : alloc.vec.Vec Std.Usize)
+  (arriving : alloc.vec.Vec Std.Usize) (nu : Std.Usize)
+  (out : alloc.vec.Vec (Std.Usize × Std.Usize)) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec (Std.Usize × Std.Usize)) × Std.Usize)
+    (alloc.vec.Vec (Std.Usize × Std.Usize)))
+  := do
+  if i < nu
+  then
+    let c ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.Usize)
+        uses i
+    let i1 ← topo_fans.start FanTopoInst t c
+    let out1 ←
+      if i1 = v
+      then
+        do
+        let s := alloc.vec.Vec.deref arriving
+        let x ← FanTopoInst.closing t f v c s
+        let i2 := alloc.vec.Vec.len arriving
+        if x < i2
+        then
+          let i3 ←
+            alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice
+              Std.Usize) arriving x
+          alloc.vec.Vec.push out (c, i3)
+        else ok out
+      else ok out
+    let i2 ← i + 1#usize
+    ok (cont (out1, i2))
+  else ok (done out)
+
+/-- [forge_topo::topo_fans::corners]: loop 3:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 141:4-150:5
+    Visibility: public -/
+@[rust_loop]
+def topo_fans.corners_loop2
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (f : Std.Usize)
+  (v : Std.Usize) (uses : alloc.vec.Vec Std.Usize)
+  (out : alloc.vec.Vec (Std.Usize × Std.Usize))
+  (arriving : alloc.vec.Vec Std.Usize) (nu : Std.Usize) (i : Std.Usize) :
+  Result (alloc.vec.Vec (Std.Usize × Std.Usize))
+  := do
+  loop
+    (fun (out1, i1) => topo_fans.corners_loop2.body FanTopoInst t f v uses
+      arriving nu out1 i1)
+    (out, i)
+
+/-- [forge_topo::topo_fans::corners]:
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 103:0-152:1
+    Visibility: public -/
+def topo_fans.corners
+  {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (f : Std.Usize)
+  (v : Std.Usize) :
+  Result (alloc.vec.Vec (Std.Usize × Std.Usize))
+  := do
+  let nl ← FanTopoInst.topoTopoInst.face_n_loops t f
+  let (uses, n_leave) ←
+    topo_fans.corners_loop0 FanTopoInst t f v (alloc.vec.Vec.new Std.Usize)
+      0#usize nl 0#usize
+  if n_leave < 2#usize
+  then ok (alloc.vec.Vec.new (Std.Usize × Std.Usize))
+  else
+    let b ← FanTopoInst.corner_frame t f v
+    if b
+    then
+      let nu := alloc.vec.Vec.len uses
+      let arriving ←
+        topo_fans.corners_loop1 FanTopoInst t v uses (alloc.vec.Vec.new
+          Std.Usize) nu 0#usize
+      topo_fans.corners_loop2 FanTopoInst t f v uses (alloc.vec.Vec.new
+        (Std.Usize × Std.Usize)) arriving nu 0#usize
+    else ok (alloc.vec.Vec.new (Std.Usize × Std.Usize))
+
 /-- [forge_topo::topo_fans::before]: loop body 1:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 109:16-116:17 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 167:16-174:17 -/
 @[rust_loop_body]
 def topo_fans.before_loop0_loop0.body
   (v : alloc.vec.Vec (Std.Usize × Std.Usize)) (c : Std.Usize)
@@ -1134,7 +1340,7 @@ def topo_fans.before_loop0_loop0.body
     else ok (done (into, found))
 
 /-- [forge_topo::topo_fans::before]: loop 1:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 109:16-116:17 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 167:16-174:17 -/
 @[rust_loop]
 def topo_fans.before_loop0_loop0
   (v : alloc.vec.Vec (Std.Usize × Std.Usize)) (c : Std.Usize)
@@ -1147,7 +1353,7 @@ def topo_fans.before_loop0_loop0
     (into, found, j)
 
 /-- [forge_topo::topo_fans::before]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 105:8-121:9 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 163:8-179:9 -/
 @[rust_loop_body]
 def topo_fans.before_loop0.body
   (v : alloc.vec.Vec Std.Usize) (v1 : alloc.vec.Vec (Std.Usize × Std.Usize))
@@ -1176,7 +1382,7 @@ def topo_fans.before_loop0.body
   else ok (done (into, found))
 
 /-- [forge_topo::topo_fans::before]: loop 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 105:8-121:9 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 163:8-179:9 -/
 @[rust_loop]
 def topo_fans.before_loop0
   (v : alloc.vec.Vec Std.Usize) (v1 : alloc.vec.Vec (Std.Usize × Std.Usize))
@@ -1190,7 +1396,7 @@ def topo_fans.before_loop0
     (into, found, k)
 
 /-- [forge_topo::topo_fans::before]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 98:0-124:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 156:0-182:1 -/
 def topo_fans.before
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
   (closes : topo_fans.Closes) (by_corners : Bool) (c : Std.Usize) :
@@ -1209,7 +1415,7 @@ def topo_fans.before
   else topo_fans.prev_of FanTopoInst t c
 
 /-- [forge_topo::topo_fans::count_fans]: loop body 1:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 147:12-160:13 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 205:12-218:13 -/
 @[rust_loop_body]
 def topo_fans.count_fans_loop0_loop0.body
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
@@ -1245,7 +1451,7 @@ def topo_fans.count_fans_loop0_loop0.body
   else ok (done (seen, sl))
 
 /-- [forge_topo::topo_fans::count_fans]: loop 1:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 147:12-160:13 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 205:12-218:13 -/
 @[rust_loop]
 def topo_fans.count_fans_loop0_loop0
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
@@ -1260,7 +1466,7 @@ def topo_fans.count_fans_loop0_loop0
     (seen, sl, c, go)
 
 /-- [forge_topo::topo_fans::count_fans]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 141:4-163:5 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 199:4-221:5 -/
 @[rust_loop_body]
 def topo_fans.count_fans_loop0.body
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
@@ -1288,7 +1494,7 @@ def topo_fans.count_fans_loop0.body
   else ok (done (seen, count, sl))
 
 /-- [forge_topo::topo_fans::count_fans]: loop 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 141:4-163:5 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 199:4-221:5 -/
 @[rust_loop]
 def topo_fans.count_fans_loop0
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
@@ -1303,7 +1509,7 @@ def topo_fans.count_fans_loop0
     (seen, count, sl, i)
 
 /-- [forge_topo::topo_fans::count_fans]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 129:0-165:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 187:0-223:1 -/
 def topo_fans.count_fans
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
   (items : Slice Std.Usize) (lo : Std.Usize) (hi : Std.Usize)
@@ -1317,7 +1523,7 @@ def topo_fans.count_fans
   ok ((count, sl), seen1)
 
 /-- [forge_topo::topo_fans::n_fans]: loop body 1:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 191:12-194:13 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 249:12-252:13 -/
 @[rust_loop_body]
 def topo_fans.n_fans_loop0_loop0.body
   (cr : alloc.vec.Vec (Std.Usize × Std.Usize)) (m : Std.Usize)
@@ -1336,7 +1542,7 @@ def topo_fans.n_fans_loop0_loop0.body
   else ok (done v)
 
 /-- [forge_topo::topo_fans::n_fans]: loop 1:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 191:12-194:13 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 249:12-252:13 -/
 @[rust_loop]
 def topo_fans.n_fans_loop0_loop0
   (v : alloc.vec.Vec (Std.Usize × Std.Usize))
@@ -1349,7 +1555,7 @@ def topo_fans.n_fans_loop0_loop0
     (v, j)
 
 /-- [forge_topo::topo_fans::n_fans]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 181:4-198:5 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 239:4-256:5 -/
 @[rust_loop_body]
 def topo_fans.n_fans_loop0.body
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
@@ -1375,7 +1581,7 @@ def topo_fans.n_fans_loop0.body
          ok (cont (v1, v2, v3, any, k1))
     else
       let v4 ← alloc.vec.Vec.push v1 f
-      let cr ← FanTopoInst.corners t f v
+      let cr ← topo_fans.corners FanTopoInst t f v
       let m := alloc.vec.Vec.len cr
       let any1 ← if m > 0#usize
                    then ok true
@@ -1388,7 +1594,7 @@ def topo_fans.n_fans_loop0.body
   else ok (done (v1, v2, v3, any))
 
 /-- [forge_topo::topo_fans::n_fans]: loop 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 181:4-198:5 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 239:4-256:5 -/
 @[rust_loop]
 def topo_fans.n_fans_loop0
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
@@ -1404,7 +1610,7 @@ def topo_fans.n_fans_loop0
     (v, v1, v2, any, k)
 
 /-- [forge_topo::topo_fans::n_fans]: loop body 3:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 220:16-225:17 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 278:16-283:17 -/
 @[rust_loop_body]
 def topo_fans.n_fans_loop1_loop0.body
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (a : Std.Usize)
@@ -1422,7 +1628,7 @@ def topo_fans.n_fans_loop1_loop0.body
   else ok (done used)
 
 /-- [forge_topo::topo_fans::n_fans]: loop 3:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 220:16-225:17 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 278:16-283:17 -/
 @[rust_loop]
 def topo_fans.n_fans_loop1_loop0
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T) (a : Std.Usize)
@@ -1435,7 +1641,7 @@ def topo_fans.n_fans_loop1_loop0
     (used, j)
 
 /-- [forge_topo::topo_fans::n_fans]: loop body 2:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 208:4-234:5 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 266:4-292:5 -/
 @[rust_loop_body]
 def topo_fans.n_fans_loop1.body
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
@@ -1487,7 +1693,7 @@ def topo_fans.n_fans_loop1.body
   else ok (done ok1)
 
 /-- [forge_topo::topo_fans::n_fans]: loop 2:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 208:4-234:5 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 266:4-292:5 -/
 @[rust_loop]
 def topo_fans.n_fans_loop1
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
@@ -1503,7 +1709,7 @@ def topo_fans.n_fans_loop1
     (into, ok1, i)
 
 /-- [forge_topo::topo_fans::n_fans]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 170:0-239:1 -/
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 228:0-297:1 -/
 def topo_fans.n_fans
   {T : Type _} (FanTopoInst : topo_fans.FanTopo T) (t : T)
   (items : Slice Std.Usize) (lo : Std.Usize) (hi : Std.Usize)
@@ -1543,7 +1749,7 @@ def topo_fans.n_fans
     else ok (count, seen1)
 
 /-- [forge_topo::topo_fans::fans]: loop body 1:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 252:8-256:9
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 310:8-314:9
     Visibility: public -/
 @[rust_loop_body]
 def topo_fans.fans_loop0_loop0.body
@@ -1567,7 +1773,7 @@ def topo_fans.fans_loop0_loop0.body
   else ok (done off)
 
 /-- [forge_topo::topo_fans::fans]: loop 1:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 252:8-256:9
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 310:8-314:9
     Visibility: public -/
 @[rust_loop]
 def topo_fans.fans_loop0_loop0
@@ -1582,7 +1788,7 @@ def topo_fans.fans_loop0_loop0
     (off, i)
 
 /-- [forge_topo::topo_fans::fans]: loop body 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 249:4-258:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 307:4-316:5
     Visibility: public -/
 @[rust_loop_body]
 def topo_fans.fans_loop0.body
@@ -1600,7 +1806,7 @@ def topo_fans.fans_loop0.body
   else ok (done off)
 
 /-- [forge_topo::topo_fans::fans]: loop 0:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 249:4-258:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 307:4-316:5
     Visibility: public -/
 @[rust_loop]
 def topo_fans.fans_loop0
@@ -1613,7 +1819,7 @@ def topo_fans.fans_loop0
     (off, e)
 
 /-- [forge_topo::topo_fans::fans]: loop body 2:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 260:4-263:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 318:4-321:5
     Visibility: public -/
 @[rust_loop_body]
 def topo_fans.fans_loop1.body
@@ -1636,7 +1842,7 @@ def topo_fans.fans_loop1.body
   else ok (done off)
 
 /-- [forge_topo::topo_fans::fans]: loop 2:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 260:4-263:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 318:4-321:5
     Visibility: public -/
 @[rust_loop]
 def topo_fans.fans_loop1
@@ -1648,7 +1854,7 @@ def topo_fans.fans_loop1
     (off, v)
 
 /-- [forge_topo::topo_fans::fans]: loop body 4:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 271:8-277:9
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 329:8-335:9
     Visibility: public -/
 @[rust_loop_body]
 def topo_fans.fans_loop2_loop0.body
@@ -1679,7 +1885,7 @@ def topo_fans.fans_loop2_loop0.body
   else ok (done («at», items))
 
 /-- [forge_topo::topo_fans::fans]: loop 4:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 271:8-277:9
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 329:8-335:9
     Visibility: public -/
 @[rust_loop]
 def topo_fans.fans_loop2_loop0
@@ -1694,7 +1900,7 @@ def topo_fans.fans_loop2_loop0
     («at», items, i)
 
 /-- [forge_topo::topo_fans::fans]: loop body 3:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 268:4-279:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 326:4-337:5
     Visibility: public -/
 @[rust_loop_body]
 def topo_fans.fans_loop2.body
@@ -1714,7 +1920,7 @@ def topo_fans.fans_loop2.body
   else ok (done items)
 
 /-- [forge_topo::topo_fans::fans]: loop 3:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 268:4-279:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 326:4-337:5
     Visibility: public -/
 @[rust_loop]
 def topo_fans.fans_loop2
@@ -1729,7 +1935,7 @@ def topo_fans.fans_loop2
     («at», items, e)
 
 /-- [forge_topo::topo_fans::fans]: loop body 5:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 282:4-288:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 340:4-346:5
     Visibility: public -/
 @[rust_loop_body]
 def topo_fans.fans_loop3.body
@@ -1758,7 +1964,7 @@ def topo_fans.fans_loop3.body
   else ok (done out)
 
 /-- [forge_topo::topo_fans::fans]: loop 5:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 282:4-288:5
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 340:4-346:5
     Visibility: public -/
 @[rust_loop]
 def topo_fans.fans_loop3
@@ -1774,7 +1980,7 @@ def topo_fans.fans_loop3
     (out, seen, v)
 
 /-- [forge_topo::topo_fans::fans]:
-    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 242:0-289:1
+    Source: 'kernel/forge-topo/src/topo_fans.rs', lines 300:0-347:1
     Visibility: public -/
 def topo_fans.fans
   {T : Type _} {S : Type _} (FanTopoInst : topo_fans.FanTopo T) (FanSinkInst :
