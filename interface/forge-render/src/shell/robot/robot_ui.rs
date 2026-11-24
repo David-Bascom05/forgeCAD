@@ -1233,11 +1233,12 @@ impl Shell {
                         let dk = format!("{}.{field}", j.name);
                         let dirty = p.draft.contains_key(&dk);
                         let mut v = *p.draft.get(&dk).unwrap_or(&written.unwrap_or(0.0));
-                        // an unknown shows no number: `unknown · Set…`, the field once asked for
+                        // value column, then the badge, as every row has them: an unknown shows
+                        // no number but a muted `unknown` and Set… (the field once asked for)
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             ui.set_min_width(VALUE_W);
-                            if (written.is_some() || dirty)
-                                && ui
+                            if written.is_some() || dirty {
+                                if ui
                                     .add(
                                         egui::DragValue::new(&mut v)
                                             .speed(0.1)
@@ -1245,13 +1246,10 @@ impl Shell {
                                             .suffix(format!(" {unit}")),
                                     )
                                     .changed()
-                            {
-                                p.draft.insert(dk.clone(), v);
-                            }
-                        });
-                        ui.horizontal(|ui| {
-                            badge(ui, t, &prov);
-                            if written.is_none() && !dirty {
+                                {
+                                    p.draft.insert(dk.clone(), v);
+                                }
+                            } else {
                                 if ui
                                     .small_button("Set…")
                                     .on_hover_text("give the robot's own value")
@@ -1259,7 +1257,13 @@ impl Shell {
                                 {
                                     p.draft.insert(dk.clone(), 0.0);
                                 }
-                            } else if dirty {
+                                ui.add_space(6.0);
+                                ui.label(RichText::new("unknown").font(sans(12.0)).italics().color(t.ink2));
+                            }
+                        });
+                        ui.horizontal(|ui| {
+                            badge(ui, t, &prov);
+                            if dirty {
                                 if ui
                                     .small_button("Set")
                                     .on_hover_text("the robot's own value")

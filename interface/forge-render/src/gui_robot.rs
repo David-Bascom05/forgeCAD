@@ -292,7 +292,14 @@ impl Gui {
 
     /// Each frame: the parts where the panel's joint values put them. True when the view moved.
     pub(super) fn robot_tick(&mut self) -> bool {
+        let moved = self.robot_step();
+        // the joints' names where the arrows are now: after this tick's framing and placing (an
+        // idle page draws no frame after this one to put them right)
         self.robot_labels();
+        moved
+    }
+
+    fn robot_step(&mut self) -> bool {
         if self.shell.robot.as_ref().is_some_and(|p| !p.out.is_empty()) {
             self.robot_acts();
         }
