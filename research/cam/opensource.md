@@ -111,7 +111,7 @@ composable transforms of a path (tabs, lead-in, ramp, dogbone) fit forgeCAD's fe
   describes it as GPL [S] (https://github.com/Heeks/libactp-old, 2026-11-23). Freesteel (Julian
   Todd, Martin Dunschen) claim adaptive clearing from ~2004 and Todd later worked on HSMWorks
   [S] (https://www.practicalmachinist.com/forum/threads/adaptive-clearing.298696/, forum claim).
-  Value to us: published 2004-2006 prior art for engagement-limited clearing (see patents.md).
+  Value to us: published 2004-2006 work on engagement-limited clearing.
 - **HeeksCNC**: CAM add-on to HeeksCAD; Zig Zag via OCL, Pocket via libarea [S]
   (https://github.com/90PlusWorks/heekscnc). HeeksCAD is New BSD [S]
   (https://github.com/Heeks/heekscad/wiki, https://launchpad.net/heekscad); HeeksCNC's own
@@ -150,8 +150,7 @@ July 2018 (was GPL-3.0). Few releases; slow activity.
 **Learn.** Voronoi-based offsets are exact and give the medial axis for V-carve, trochoidal
 slot centrelines, and "pocket from the middle". Held's papers (and his VRONI book) are the
 reading; topology-first robustness with floats is relevant to bit-identical output because it
-keeps combinatorics consistent even when numbers wobble. Note Celeritive's US 10,579,040
-claims Voronoi-derived toolpaths with added branches (patents.md) - read before building.
+keeps combinatorics consistent even when numbers wobble.
 
 ## 6. Clipper / Clipper2 and cavalier_contours
 
@@ -265,7 +264,7 @@ product.
 | **Not open source / unknown** | Estlcam (proprietary), MakerCAM (defunct), CAMlab (not found), `g-code` crate (licence unread) |
 
 Caveat: "read for ideas" means learning the published algorithm and writing our own code
-without copying structure or text. Check with counsel before any port; verify each COPYING file
+without copying structure or text. Before any port, verify each COPYING file
 rather than repository metadata.
 
 ## 13. What forgeCAD should take away
@@ -277,8 +276,7 @@ rather than repository metadata.
    adaptive, v-carve, engrave. Write these in-house for `kernel/`; Clipper2's integer approach
    is the best model for bit-identical native/wasm results.
 3. **Adaptive clearing** is well documented in the open (Freesteel 2004-2006, FreeCAD 2018).
-   Design ours as "cleared-area state + target removed area per step", and keep an eye on the
-   Celeritive/SolidCAM claims (patents.md) for linking moves and engagement-angle bands.
+   Design ours as "cleared-area state + target removed area per step".
 4. **3-axis finishing** = drop-cutter and push-cutter/waterline per cutter class; reimplement
    from the literature (OCL is the open reference).
 5. **Posts are data.** A typed path IR -> per-controller post; GRBL (subset) and LinuxCNC (NGC)
