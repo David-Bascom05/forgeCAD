@@ -1030,7 +1030,9 @@ fn the_mould_core_is_surfaced_and_certified() {
         cam.ops.iter().map(|o| (&o.name, &o.refusal)).collect::<Vec<_>>()
     );
     assert!(cam.ops.iter().all(|o| o.status == "built" && o.pairs > 0));
-    assert_eq!(cam.certification(), "full");
+    // the leftover is not computed for a part outside the 2.5D section: G4 is not claimed
+    assert!(!cam.leftover_done);
+    assert_eq!(cam.certification(), "full except G4 (leftover not computed)");
     let cam = forge_cam_lang::run(&format!("{head}{fin}{prog}"), &dir);
     assert!(!cam.ok);
     assert!(cam.ops.iter().any(|o| o.status == "refused"));

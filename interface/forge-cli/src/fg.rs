@@ -259,6 +259,9 @@ impl Session {
                 "certification: except G5 (unchecked: no `at:` on a setup; the spans fit the travel)\n"
                     .to_string()
             }
+            "full except G4 (leftover not computed)" => {
+                "certification: full except G4 (G1-G3, G5, G6; the leftover was not computed)\n".to_string()
+            }
             c => format!("certification: {c}\n"),
         });
         let file = if a.words.first().is_some_and(|w| w == "sheet") {

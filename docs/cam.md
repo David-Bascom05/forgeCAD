@@ -25,7 +25,7 @@ Fanuc and Haas, `G53 G0 Z0` on LinuxCNC; GRBL, which changes tools by hand, goes
 
 ```
 forgecad cam F.fg [--json] [-o PROGRAM]     the reply, and the program if released; exit 0 certified
-                                             in full, 3 released but certified except G5 (a setup
+                                             in full, 3 released but certified except G5 or G4 (a setup
                                              not placed with `at:`), 1 refused
 forgecad cam F.fg sheet -o SHEET.html        the setup sheet
 ```
@@ -100,7 +100,7 @@ the document (formats: research/cam/libraries-tools.md §5). A Fusion tool libra
 ## The reply: `forgecad.cam/1`
 
 ```
-ok, schema: "forgecad.cam/1", certification (full | except G5 | refused), errors[], warnings[],
+ok, schema: "forgecad.cam/1", certification (full | except G5 | full except G4 (leftover not computed) | except G4 and G5 (..) | refused), errors[], warnings[],
 setups[]   name, part, machine, wcs {origin, axes, offset}, stock {kind, min, max}, tol, clearance, at,
            heights {clear, retract}, fixture {kind, name, across, jaw_top, clamp, clearance,
            pieces[] {name, min, max}} | null
@@ -113,7 +113,7 @@ ops[]      name, kind (facing|clear|contour|pocket|drill|engrave|slot|thread_mil
                     at, tool_part (cutter|shank/holder), other, phase (cut|plunge|link|rapid), move, path (which of a hole plan's paths `move` counts in)},
            removals[] (declared Δ, e.g. cosmetic threads), leftover {status}, refusal | null
 blocking[] {op, why}      fixes[] {op, fix}      suggestions[] {kind: NeedTool, op, why}
-programs[] {name, post, lines, round_trip, certified (full | except G5 (unchecked: no `at:`) | no),
+programs[] {name, post, lines, round_trip, certified (full | except G5 (unchecked: no `at:`) | full except G4 (leftover not computed) | except G4 and G5 (..) | no),
            error | null}
 leftover   {computed, rule, regions[] {setup, z, boxes, why, r, below}}: decided at the end of each
            chain of setups (a setup another continues with `from:` hands its stock on). `why`, each

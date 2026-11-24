@@ -3848,15 +3848,21 @@ impl Cam {
         p.setups.iter().all(|&i| self.setups[i].at.is_some())
     }
 
-    /// "full": every check proven, G5 on every position; "except G5": released, but a posted
-    /// setup is not placed, so G5 checked spans only; "refused": not released.
+    /// "full": every check proven, G5 on every position, G4's leftover computed; "except G5":
+    /// released, but a posted setup is not placed, so G5 checked spans only; "full except G4
+    /// (leftover not computed)" / "except G4 and G5 (..)": released, but the leftover could not
+    /// be computed (a part outside the 2.5D section, as 3-axis surfacing's), so G4 is not
+    /// claimed; "refused": not released.
     pub fn certification(&self) -> &'static str {
+        let placed = self.programs.iter().all(|p| self.placed(p));
         if !self.ok {
             "refused"
-        } else if self.programs.iter().all(|p| self.placed(p)) {
-            "full"
+        } else if self.leftover_done {
+            if placed { "full" } else { "except G5" }
+        } else if placed {
+            "full except G4 (leftover not computed)"
         } else {
-            "except G5"
+            "except G4 and G5 (leftover not computed; no `at:`)"
         }
     }
 
@@ -4086,6 +4092,12 @@ impl Cam {
                         Json::Str(
                             if p.error.is_some() {
                                 "no"
+                            } else if !self.leftover_done {
+                                if self.placed(p) {
+                                    "full except G4 (leftover not computed)"
+                                } else {
+                                    "except G4 and G5 (leftover not computed; no `at:`)"
+                                }
                             } else if self.placed(p) {
                                 "full"
                             } else {
