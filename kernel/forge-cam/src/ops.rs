@@ -577,6 +577,9 @@ fn push_loop(out: &mut Vec<PMove>, segs: &[Seg], z: f64, f: f64) {
     }
 }
 
+/// Half-width of the band a pocket's link at depth is tested in (mm).
+const LINK_EPS: f64 = 1e-6;
+
 /// The depths from top down to bottom in steps of at most `step` (equal steps).
 pub fn levels(top: f64, bottom: f64, step: f64) -> Vec<f64> {
     let n = ((top - bottom) / step - 1e-9).ceil().max(1.0) as usize;
@@ -596,7 +599,7 @@ pub enum OpError {
 }
 
 /// Contour: the region's boundary, offset by the tool radius plus `leave` (outside for the
-/// part's outline: `outside` true), at each level.
+/// part's outline: `outside` true), at each level, each loop through all its levels in turn.
 pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Result<OpPath, OpError> {
     let Cut { tool, tidx, h, feed } = c;
     let Span { top, bottom, step } = sp;
@@ -613,27 +616,43 @@ pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Resu
             why: "the tool does not fit the contour".into(),
         });
     }
+    // climb with the spindle clockwise (M03): the part on the tool's right. An offset loop has
+    // its region on the left: inside, the region is where the tool goes (the part on the
+    // right); outside, it is the part grown, so the loops are run backwards.
+    let loops: Vec<Vec<Seg>> = loops
+        .iter()
+        .map(|l| {
+            if outside {
+                l.segs.iter().rev().map(|s| s.reversed()).collect()
+            } else {
+                l.segs.clone()
+            }
+        })
+        .collect();
     let mut mv = Vec::new();
-    let first = loops[0].segs[0].start();
+    let first = loops[0][0].start();
     let start = [first.x, first.y, h.clear];
-    for z in levels(top, bottom, step) {
-        for l in &loops {
-            let s = l.segs[0].start();
-            mv.push(PMove::Rapid {
-                to: [s.x, s.y, h.retract],
-            });
+    // each loop through all its levels: down at its start from the retract height, then from
+    // each level straight down at the start to the next (the column the plunge from the retract
+    // height would pass through), and up once at the end
+    for l in &loops {
+        let s = l[0].start();
+        mv.push(PMove::Rapid {
+            to: [s.x, s.y, h.retract],
+        });
+        for z in levels(top, bottom, step) {
             mv.push(PMove::Line {
                 to: [s.x, s.y, z],
                 f: feed.1,
                 phase: Phase::Plunge,
             });
-            push_loop(&mut mv, &l.segs, z, feed.0);
-            mv.push(PMove::Line {
-                to: [s.x, s.y, h.retract],
-                f: feed.0,
-                phase: Phase::Link,
-            });
+            push_loop(&mut mv, l, z, feed.0);
         }
+        mv.push(PMove::Line {
+            to: [s.x, s.y, h.retract],
+            f: feed.0,
+            phase: Phase::Link,
+        });
     }
     mv.push(PMove::Rapid {
         to: [first.x, first.y, h.clear],
@@ -648,7 +667,9 @@ pub fn contour(rg: &Region, c: Cut, sp: Span, leave: f64, outside: bool) -> Resu
 }
 
 /// Pocket: the region cleared by offset passes, each offset from the original boundary at
-/// r + leave + k · stepover, innermost first, at each level.
+/// r + leave + k · stepover, innermost first, at each level. Within a level the tool stays down
+/// from one pass to the next where the straight link lies in the tool centres' region (the
+/// outermost pass's region); elsewhere it retracts and enters again (a helix where it fits).
 pub fn pocket(
     rg: &Region,
     c: Cut,
@@ -703,6 +724,41 @@ pub fn pocket(
             Ok(d) if d.is_empty()
         )
     };
+    // a link at depth from one pass's start to the next's: when the straight segment lies in
+    // the tool centres' region (then the tool stays in the pocket as on the passes). Tested
+    // exactly, as a rectangle of half-width LINK_EPS about the segment shortened by 2 LINK_EPS
+    // at each end (the ends lie on passes, in the region) less the region being empty.
+    let link_ok = |a: forge_cam_geom::region::P2, b: forge_cam_geom::region::P2| -> bool {
+        let (dx, dy) = (b.x - a.x, b.y - a.y);
+        let l = (dx * dx + dy * dy).sqrt();
+        if l <= 8.0 * LINK_EPS {
+            return false;
+        }
+        let (ux, uy) = (dx / l, dy / l);
+        let (nx, ny) = (-uy * LINK_EPS, ux * LINK_EPS);
+        let a1 = (a.x + 2.0 * LINK_EPS * ux, a.y + 2.0 * LINK_EPS * uy);
+        let b1 = (b.x - 2.0 * LINK_EPS * ux, b.y - 2.0 * LINK_EPS * uy);
+        let q = [
+            forge_cam_geom::region::p2(a1.0 - nx, a1.1 - ny),
+            forge_cam_geom::region::p2(b1.0 - nx, b1.1 - ny),
+            forge_cam_geom::region::p2(b1.0 + nx, b1.1 + ny),
+            forge_cam_geom::region::p2(a1.0 + nx, a1.1 + ny),
+        ];
+        let band = Region {
+            loops: vec![forge_cam_geom::region::Loop {
+                segs: (0..4)
+                    .map(|i| Seg::Line {
+                        a: q[i],
+                        b: q[(i + 1) % 4],
+                    })
+                    .collect(),
+            }],
+        };
+        matches!(
+            forge_cam_geom::boolean::boolean(&band, &c0, forge_cam_geom::boolean::Op::Diff),
+            Ok(d) if d.is_empty()
+        )
+    };
     let fits: Vec<Vec<bool>> = passes
         .iter()
         .map(|ls| {
@@ -711,72 +767,103 @@ pub fn pocket(
                 .collect()
         })
         .collect();
+    // the order the passes are cut in, the same at every level, and whether each is reached
+    // from the one before at depth: greedily the innermost pass that is ready (no uncut pass
+    // starts inside it) and linkable at depth, else the first ready pass, entered from above
+    let order = pass_order(&passes, &link_ok);
     let mut mv = Vec::new();
-    let s0 = passes[0][0].segs[0].start();
+    let s0 = passes[order[0].0][order[0].1].segs[0].start();
     let start = [s0.x, s0.y, h.clear];
     let mut above = top;
     for z in levels(top, bottom, step) {
-        for (li, loops) in passes.iter().enumerate() {
-            for (lj, l) in loops.iter().enumerate() {
-                let s = l.segs[0].start();
-                if let (true, Some(deg)) = (fits[li][lj], ramp) {
-                    // down to the level above in air (it, and this disk, were cleared there),
-                    // then turns of the helix at the ramp angle, then in to the pass's start
-                    let p = [s.x + rh, s.y];
-                    mv.push(PMove::Rapid {
-                        to: [p[0], p[1], h.retract],
-                    });
-                    mv.push(PMove::Line {
-                        to: [p[0], p[1], above],
-                        f: feed.1,
-                        phase: Phase::Plunge,
-                    });
-                    let (sa, ca) = dmath::sin_cos(deg.to_radians());
-                    let per_turn = std::f64::consts::TAU * rh * sa / ca;
-                    let turns = ((above - z) / per_turn - 1e-9).ceil().max(1.0) as usize;
-                    let quarters = 4 * turns;
-                    for k in 1..=quarters {
-                        let a = std::f64::consts::FRAC_PI_2 * k as f64;
-                        let (sn, cs) = dmath::sin_cos(a);
-                        // the quarter points, the last exactly the start (a whole number of turns)
-                        let (x, y) = if k % 4 == 0 {
-                            (p[0], p[1])
-                        } else {
-                            (s.x + rh * cs, s.y + rh * sn)
-                        };
-                        let zk = above + (z - above) * k as f64 / quarters as f64;
-                        mv.push(PMove::Arc {
-                            to: [x, y, if k == quarters { z } else { zk }],
-                            c: [s.x, s.y],
-                            cw: false,
-                            f: feed.1,
+        // where the tool is when it stayed down after a pass (each pass ends at its start)
+        let mut down: Option<forge_cam_geom::region::P2> = None;
+        for &(li, lj, link) in &order {
+            let l = &passes[li][lj];
+            let s = l.segs[0].start();
+            let linked = match down {
+                Some(p) if link => {
+                    if p != s {
+                        mv.push(PMove::Line {
+                            to: [s.x, s.y, z],
+                            f: feed.0,
+                            phase: Phase::Link,
                         });
                     }
-                    mv.push(PMove::Line {
-                        to: [s.x, s.y, z],
-                        f: feed.0,
-                        phase: Phase::Cut,
-                    });
-                } else {
-                    mv.push(PMove::Rapid {
-                        to: [s.x, s.y, h.retract],
-                    });
-                    mv.push(PMove::Line {
-                        to: [s.x, s.y, z],
-                        f: feed.1,
-                        phase: Phase::Plunge,
-                    });
+                    true
                 }
-                let point = l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b);
-                if !point {
-                    push_loop(&mut mv, &l.segs, z, feed.0);
+                Some(p) => {
+                    mv.push(PMove::Line {
+                        to: [p.x, p.y, h.retract],
+                        f: feed.0,
+                        phase: Phase::Link,
+                    });
+                    false
+                }
+                None => false,
+            };
+            if linked {
+                // at the pass's start, at depth
+            } else if let (true, Some(deg)) = (fits[li][lj], ramp) {
+                // down to the level above in air (it, and this disk, were cleared there),
+                // then turns of the helix at the ramp angle, then in to the pass's start
+                let p = [s.x + rh, s.y];
+                mv.push(PMove::Rapid {
+                    to: [p[0], p[1], h.retract],
+                });
+                mv.push(PMove::Line {
+                    to: [p[0], p[1], above],
+                    f: feed.1,
+                    phase: Phase::Plunge,
+                });
+                let (sa, ca) = dmath::sin_cos(deg.to_radians());
+                let per_turn = std::f64::consts::TAU * rh * sa / ca;
+                let turns = ((above - z) / per_turn - 1e-9).ceil().max(1.0) as usize;
+                let quarters = 4 * turns;
+                for k in 1..=quarters {
+                    let a = std::f64::consts::FRAC_PI_2 * k as f64;
+                    let (sn, cs) = dmath::sin_cos(a);
+                    // the quarter points, the last exactly the start (a whole number of turns)
+                    let (x, y) = if k % 4 == 0 {
+                        (p[0], p[1])
+                    } else {
+                        (s.x + rh * cs, s.y + rh * sn)
+                    };
+                    let zk = above + (z - above) * k as f64 / quarters as f64;
+                    mv.push(PMove::Arc {
+                        to: [x, y, if k == quarters { z } else { zk }],
+                        c: [s.x, s.y],
+                        cw: false,
+                        f: feed.1,
+                    });
                 }
                 mv.push(PMove::Line {
-                    to: [s.x, s.y, h.retract],
+                    to: [s.x, s.y, z],
                     f: feed.0,
-                    phase: Phase::Link,
+                    phase: Phase::Cut,
+                });
+            } else {
+                mv.push(PMove::Rapid {
+                    to: [s.x, s.y, h.retract],
+                });
+                mv.push(PMove::Line {
+                    to: [s.x, s.y, z],
+                    f: feed.1,
+                    phase: Phase::Plunge,
                 });
             }
+            let point = l.segs.len() == 1 && matches!(l.segs[0], Seg::Line { a, b } if a == b);
+            if !point {
+                push_loop(&mut mv, &l.segs, z, feed.0);
+            }
+            down = Some(s);
+        }
+        if let Some(p) = down {
+            mv.push(PMove::Line {
+                to: [p.x, p.y, h.retract],
+                f: feed.0,
+                phase: Phase::Link,
+            });
         }
         above = z;
     }
@@ -790,6 +877,105 @@ pub fn pocket(
         rpm: 0.0,
         coolant: forge_post::Coolant::Flood,
     })
+}
+
+/// Whether q is inside a closed loop (even–odd, arcs as 32 chords a turn): for ordering passes
+/// only, never for a check.
+fn inside_loop_approx(segs: &[Seg], q: forge_cam_geom::region::P2) -> bool {
+    let mut pts: Vec<(f64, f64)> = Vec::new();
+    for sg in segs {
+        match *sg {
+            Seg::Line { a, .. } => pts.push((a.x, a.y)),
+            Seg::Arc { a, b, c, ccw } => {
+                let r = ((a.x - c.x) * (a.x - c.x) + (a.y - c.y) * (a.y - c.y)).sqrt();
+                let a0 = dmath::atan2(a.y - c.y, a.x - c.x);
+                let a1 = dmath::atan2(b.y - c.y, b.x - c.x);
+                let tau = std::f64::consts::TAU;
+                let mut sw = a1 - a0;
+                if ccw {
+                    while sw <= 0.0 {
+                        sw += tau;
+                    }
+                } else {
+                    while sw >= 0.0 {
+                        sw -= tau;
+                    }
+                }
+                let n = ((sw.abs() / tau * 32.0).ceil() as usize).max(1);
+                for k in 0..n {
+                    let (sn, cs) = dmath::sin_cos(a0 + sw * k as f64 / n as f64);
+                    pts.push((c.x + r * cs, c.y + r * sn));
+                }
+            }
+        }
+    }
+    let mut inside = false;
+    let n = pts.len();
+    for i in 0..n {
+        let (x0, y0) = pts[i];
+        let (x1, y1) = pts[(i + 1) % n];
+        if (y0 > q.y) != (y1 > q.y) && q.x < x0 + (q.y - y0) * (x1 - x0) / (y1 - y0) {
+            inside = !inside;
+        }
+    }
+    inside
+}
+
+/// The order of a pocket's passes (innermost first as given): each step the innermost ready
+/// pass (no uncut pass starts inside it) linkable at depth from where the last ended (nearest
+/// among equals), else the first ready pass. (ring, loop, reached at depth).
+fn pass_order(
+    passes: &[Vec<forge_cam_geom::offset::OLoop>],
+    link_ok: &dyn Fn(forge_cam_geom::region::P2, forge_cam_geom::region::P2) -> bool,
+) -> Vec<(usize, usize, bool)> {
+    let all: Vec<(usize, usize)> = passes
+        .iter()
+        .enumerate()
+        .flat_map(|(i, ls)| (0..ls.len()).map(move |j| (i, j)))
+        .collect();
+    let start = |(i, j): (usize, usize)| passes[i][j].segs[0].start();
+    // inner[k]: the passes of smaller ring index starting inside pass k
+    let inner: Vec<Vec<usize>> = all
+        .iter()
+        .map(|&(i, j)| {
+            all.iter()
+                .enumerate()
+                .filter(|&(_, &(i2, _))| i2 < i)
+                .filter(|&(_, &o)| inside_loop_approx(&passes[i][j].segs, start(o)))
+                .map(|(k, _)| k)
+                .collect()
+        })
+        .collect();
+    let mut done = vec![false; all.len()];
+    let mut order = Vec::with_capacity(all.len());
+    let mut at: Option<forge_cam_geom::region::P2> = None;
+    while order.len() < all.len() {
+        let ready = |k: usize| !done[k] && inner[k].iter().all(|&m| done[m]);
+        let mut pick: Option<(usize, bool)> = None;
+        if let Some(p) = at {
+            let mut best: Option<(usize, usize, f64)> = None;
+            for (k, &o) in all.iter().enumerate() {
+                if !ready(k) {
+                    continue;
+                }
+                let s = start(o);
+                let d = (s.x - p.x) * (s.x - p.x) + (s.y - p.y) * (s.y - p.y);
+                let better = match best {
+                    None => true,
+                    Some((_, bi, bd)) => o.0 < bi || (o.0 == bi && d < bd),
+                };
+                if better && (s == p || link_ok(p, s)) {
+                    best = Some((k, o.0, d));
+                }
+            }
+            pick = best.map(|(k, _, _)| (k, true));
+        }
+        let (k, linked) = pick.unwrap_or_else(|| ((0..all.len()).find(|&k| ready(k)).unwrap_or(0), false));
+        done[k] = true;
+        order.push((all[k].0, all[k].1, linked));
+        at = Some(start(all[k]));
+    }
+    order
 }
 
 /// Facing: zig-zag passes across the stock's top region from `top` down to `z`, the tool

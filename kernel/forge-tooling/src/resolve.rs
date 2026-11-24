@@ -184,6 +184,10 @@ pub struct Resolved {
     pub max_feed: Val,
     /// The derived numbers at the resolved values (hex, hm, power, torque, ...).
     pub feeds: feeds::Feeds,
+    /// The feed holds a chip (the user's `chip`, the tool's or the material's), so engagement
+    /// feed may move it along the path to hold that chip; false when the user programmed `fz`
+    /// or `feed` (used as given, never moved).
+    pub held_chip: bool,
     /// Material removal rate, cm³/min.
     pub mrr: f64,
     /// Spindle power and torque available at the resolved rpm, when the curve covers it.
@@ -621,6 +625,7 @@ pub fn milling(
         min_feed,
         max_feed,
         feeds: derived,
+        held_chip: ask.feed.is_none() && ask.fz.is_none(),
         mrr,
         power_avail,
         torque_avail,
