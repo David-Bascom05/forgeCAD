@@ -10,9 +10,106 @@ s = 4.76
 re = 0.4
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=57"
 taken = "2026-11-24"
 note = "Tungaloy turning insert CNMG120404-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9205"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 High carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Low carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -43,6 +140,134 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=57"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9205"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-CNMG120408-TM"
@@ -52,9 +277,106 @@ s = 4.76
 re = 0.8
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=57"
 taken = "2026-11-24"
 note = "Tungaloy turning insert CNMG120408-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9205"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 High carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Low carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -85,6 +407,134 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=57"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9205"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-DNMG150404-TM"
@@ -94,9 +544,106 @@ s = 4.76
 re = 0.4
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69"
 taken = "2026-11-24"
 note = "Tungaloy turning insert DNMG150404-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9205"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 High carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Low carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -127,6 +674,134 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9205"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-DNMG150408-TM"
@@ -136,9 +811,106 @@ s = 4.76
 re = 0.8
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69"
 taken = "2026-11-24"
 note = "Tungaloy turning insert DNMG150408-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9205"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 High carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Low carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -169,6 +941,134 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9205"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-DNMG150604-TM"
@@ -178,9 +1078,106 @@ s = 6.35
 re = 0.4
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69"
 taken = "2026-11-24"
 note = "Tungaloy turning insert DNMG150604-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9205"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 High carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Low carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -211,6 +1208,134 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9205"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-DNMG150608-PM"
@@ -220,6 +1345,7 @@ s = 6.35
 re = 0.8
 chipbreaker = "PM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=69"
 taken = "2026-11-24"
 note = "Tungaloy turning insert DNMG150608-PM (General Catalogue 2023-2024, B Insert)"
@@ -262,9 +1388,82 @@ s = 4.76
 re = 0.4
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=90"
 taken = "2026-11-24"
 note = "Tungaloy turning insert TNMG160404-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -295,6 +1494,102 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=90"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-TNMG160408-TM"
@@ -304,9 +1599,106 @@ s = 4.76
 re = 0.8
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=90"
 taken = "2026-11-24"
 note = "Tungaloy turning insert TNMG160408-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9205"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 High carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Low carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -337,6 +1729,134 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=90"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9205"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-VNMG160404-TM"
@@ -346,9 +1866,106 @@ s = 4.76
 re = 0.4
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=99"
 taken = "2026-11-24"
 note = "Tungaloy turning insert VNMG160404-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9205"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 High carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Low carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -379,6 +1996,134 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=99"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9205"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-VNMG160408-PM"
@@ -388,6 +2133,7 @@ s = 4.76
 re = 0.8
 chipbreaker = "PM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=99"
 taken = "2026-11-24"
 note = "Tungaloy turning insert VNMG160408-PM (General Catalogue 2023-2024, B Insert)"
@@ -430,9 +2176,106 @@ s = 4.76
 re = 0.4
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=105"
 taken = "2026-11-24"
 note = "Tungaloy turning insert WNMG080404-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9205"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 High carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Low carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -463,6 +2306,134 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=105"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9205"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-WNMG080408-TM"
@@ -472,9 +2443,106 @@ s = 4.76
 re = 0.8
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=105"
 taken = "2026-11-24"
 note = "Tungaloy turning insert WNMG080408-TM (General Catalogue 2023-2024, B Insert)"
+[[insert.preset]]
+name = "P TM T9205"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 High carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Low carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9205 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 180.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 High carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Low carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9215 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 150.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 High carbon steels, Alloy steels"
+group = "P"
+vc = 100.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Low carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9225 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 120.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 High carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Low carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
+[[insert.preset]]
+name = "P TM T9235 Medium carbon steels, Alloy steels"
+group = "P"
+vc = 50.0
+fz = 0.2
+ap = 1.0
 [[insert.cite]]
 path = "code"
 status = "published"
@@ -505,6 +2573,134 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=105"
 taken = "2026-11-24"
 value = "TM"
+[[insert.cite]]
+path = "preset.P TM T9205"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 150 - 350; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9205 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9205; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 180 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9205"
+[[insert.cite]]
+path = "preset.P TM T9215"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9215 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9215; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 150 - 400; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9215"
+[[insert.cite]]
+path = "preset.P TM T9225"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 100 - 250; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9225 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9225; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 120 - 300; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9225"
+[[insert.cite]]
+path = "preset.P TM T9235"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "of the maker's materials for this group and grade, the first printed; fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 High carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; High carbon steels, Alloy steels; Cutting speed: Vc (m/min) High carbon steels, Alloy steels: 50 - 150; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): SNCM439, etc. 41CrNiMo2, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Low carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Low carbon steels, Alloy steels; Cutting speed: Vc (m/min) Low carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S10C SCM415, SS400, SCr420H, etc. C10, 18CrMo4, E275A, 20Cr4, etc.; matched to negative-type TM records whose grade columns carry T9235"
+[[insert.cite]]
+path = "preset.P TM T9235 Medium carbon steels, Alloy steels"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=4"
+taken = "2026-11-24"
+value = "T9235; Medium carbon steels, Alloy steels; Cutting speed: Vc (m/min) Medium carbon steels, Alloy steels: 50 - 200; Feed f (mm/rev) 0.2 - 0.5; Depth of cut ap (mm) 1 - 5"
+basis = "vc is the low end of the printed range; f is the low end of the printed range; ap is the low end of the printed range"
+note = "fz holds the feed per revolution, mm/rev; a printed optimum, recommended or nominal value is kept as the start value; General Catalogue 2023-2024 B004 \"Chipbreaker Guide - Basic chipbreaker: negative type - P Steel\", STANDARD CUTTING CONDITIONS, operation \"Medium cutting\"; ISO column printed P; material examples (footnote): S45C, SCM440, etc. C45, 42CrMo4, etc.; matched to negative-type TM records whose grade columns carry T9235"
 
 [[insert]]
 id = "tungaloy-CCMT09T304-TM"
@@ -514,6 +2710,7 @@ s = 3.97
 re = 0.4
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=116"
 taken = "2026-11-24"
 note = "Tungaloy turning insert CCMT09T304-TM (General Catalogue 2023-2024, B Insert)"
@@ -556,6 +2753,7 @@ s = 3.97
 re = 0.8
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=116"
 taken = "2026-11-24"
 note = "Tungaloy turning insert CCMT09T308-TM (General Catalogue 2023-2024, B Insert)"
@@ -598,6 +2796,7 @@ s = 3.97
 re = 0.4
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=126"
 taken = "2026-11-24"
 note = "Tungaloy turning insert DCMT11T304-TM (General Catalogue 2023-2024, B Insert)"
@@ -640,6 +2839,7 @@ s = 3.97
 re = 0.8
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=126"
 taken = "2026-11-24"
 note = "Tungaloy turning insert DCMT11T308-TM (General Catalogue 2023-2024, B Insert)"
@@ -682,6 +2882,7 @@ s = 4.76
 re = 0.4
 chipbreaker = "TM"
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_B_Insert.pdf#page=154"
 taken = "2026-11-24"
 note = "Tungaloy turning insert VBMT160404-TM (General Catalogue 2023-2024, B Insert)"
@@ -728,6 +2929,7 @@ h = 20
 b = 20
 insert = "CN**/GNGA1204..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=18"
 taken = "2026-11-24"
 note = "Tungaloy PCLNR/L lever-lock external holder (E version)"
@@ -792,6 +2994,7 @@ h = 20
 b = 20
 insert = "CN**/GNGA1204..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=18"
 taken = "2026-11-24"
 note = "Tungaloy PCLNR/L lever-lock external holder (E version)"
@@ -856,6 +3059,7 @@ h = 25
 b = 25
 insert = "CN**/GNGA1204..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=18"
 taken = "2026-11-24"
 note = "Tungaloy PCLNR/L lever-lock external holder (E version)"
@@ -920,6 +3124,7 @@ h = 25
 b = 25
 insert = "CN**/GNGA1204..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=18"
 taken = "2026-11-24"
 note = "Tungaloy PCLNR/L lever-lock external holder (E version)"
@@ -984,6 +3189,7 @@ h = 20
 b = 20
 insert = "CN**/GNGA1204..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=19"
 taken = "2026-11-24"
 note = "Tungaloy PCLNR/L-CHP coolant holder"
@@ -1048,6 +3254,7 @@ h = 20
 b = 20
 insert = "CN**/GNGA1204..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=19"
 taken = "2026-11-24"
 note = "Tungaloy PCLNR/L-CHP coolant holder"
@@ -1112,6 +3319,7 @@ h = 25
 b = 25
 insert = "DN**/FNGA1504..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=35"
 taken = "2026-11-24"
 note = "Tungaloy DDJNR/L double-clamp external holder"
@@ -1176,6 +3384,7 @@ h = 25
 b = 25
 insert = "DN**/FNGA1504..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=35"
 taken = "2026-11-24"
 note = "Tungaloy DDJNR/L double-clamp external holder"
@@ -1240,6 +3449,7 @@ h = 25
 b = 25
 insert = "DN**/FNGA1506..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=36"
 taken = "2026-11-24"
 note = "Tungaloy PDJNR/L lever-lock external holder (E version)"
@@ -1304,6 +3514,7 @@ h = 25
 b = 25
 insert = "DN**/FNGA1506..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_C_ExternalToolholder.pdf#page=36"
 taken = "2026-11-24"
 note = "Tungaloy PDJNR/L lever-lock external holder (E version)"
@@ -1368,6 +3579,7 @@ dmm = 16
 min_bore = 18
 insert = "CC**09T3..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=14"
 taken = "2026-11-24"
 note = "Tungaloy A-SCLCR/L boring bar"
@@ -1432,6 +3644,7 @@ dmm = 16
 min_bore = 18
 insert = "CC**09T3..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=14"
 taken = "2026-11-24"
 note = "Tungaloy A-SCLCR/L boring bar"
@@ -1496,6 +3709,7 @@ dmm = 20
 min_bore = 22
 insert = "CC**09T3..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=14"
 taken = "2026-11-24"
 note = "Tungaloy A-SCLCR/L boring bar"
@@ -1560,6 +3774,7 @@ dmm = 20
 min_bore = 22
 insert = "CC**09T3..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=14"
 taken = "2026-11-24"
 note = "Tungaloy A-SCLCR/L boring bar"
@@ -1624,6 +3839,7 @@ dmm = 25
 min_bore = 27
 insert = "CC**09T3..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=14"
 taken = "2026-11-24"
 note = "Tungaloy A-SCLCR/L boring bar"
@@ -1688,6 +3904,7 @@ dmm = 25
 min_bore = 27
 insert = "CC**09T3..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=14"
 taken = "2026-11-24"
 note = "Tungaloy A-SCLCR/L boring bar"
@@ -1752,6 +3969,7 @@ dmm = 32
 min_bore = 40
 insert = "CN**/GNGA1204..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=27"
 taken = "2026-11-24"
 note = "Tungaloy S-PCLNR/L boring bar"
@@ -1816,6 +4034,7 @@ dmm = 32
 min_bore = 40
 insert = "CN**/GNGA1204..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=27"
 taken = "2026-11-24"
 note = "Tungaloy S-PCLNR/L boring bar"
@@ -1880,6 +4099,7 @@ dmm = 16
 min_bore = 20
 insert = "DC**0702..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=56"
 taken = "2026-11-24"
 note = "Tungaloy A-SDUCR/L boring bar"
@@ -1944,6 +4164,7 @@ dmm = 16
 min_bore = 20
 insert = "DC**0702..."
 maker = "Tungaloy"
+real = true
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=56"
 taken = "2026-11-24"
 note = "Tungaloy A-SDUCR/L boring bar"
@@ -1995,3 +4216,294 @@ status = "published"
 source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_D_InternalToolholder.pdf#page=56"
 taken = "2026-11-24"
 value = "DC**0702..."
+
+[[blade]]
+id = "tungaloy-CGP32-3D"
+code = "CGP32-3D"
+h = 32
+t_blade = 2.4
+l1 = 150
+cdx = 50
+max_bar = 100
+seat = "3"
+insert = "SGM3-020, DGM3-020"
+hand = "N"
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+note = "TungCut CGP external deep grooving and parting blade CGP32-3D (General Catalogue 2023-2024, F Parting-Grooving); clamps in tool blocks CTBU20-32, CTBU25-32, CTBU32-32; self-clamping (elastic upper jaw); wrench CRW33 (optional), clamping screw -"
+[[blade.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "CGP32-3D"
+[[blade.cite]]
+path = "h"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "H 32"
+[[blade.cite]]
+path = "t_blade"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "B 2.4"
+[[blade.cite]]
+path = "l1"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "LF 150"
+[[blade.cite]]
+path = "max_bar"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "CUTDIA 100"
+[[blade.cite]]
+path = "seat"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "Seat size 3"
+[[blade.cite]]
+path = "insert"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "Reference pages: Inserts F236 - F245 (seat size 3); 'When depth is deeper than (insert length - 1.5mm), 1 corner type is recommended.'"
+[[blade.cite]]
+path = "cdx"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "CUTDIA 100"
+basis = "no reach is printed: half the printed max cut-off diameter CUTDIA"
+[[blade.cite]]
+path = "hand"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=229"
+taken = "2026-11-24"
+value = "Fig. 2"
+basis = "the catalogue figure shows a double-ended neutral blade; no R/L is printed"
+
+[[groove_insert]]
+id = "tungaloy-SGM3-020"
+code = "SGM3-020"
+width = 3
+re = 0.2
+head = 20
+seat = "3"
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+note = "TungCut SGM external deep grooving and parting insert, 1 corner, SGM3-020 (neutral); grades AH7025, AH725, AH8005, GH130, AH6235, KS05F; no preset: the maker prints vc but its feed only as a bar chart (F236)"
+[[groove_insert.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "SGM3-020"
+[[groove_insert.cite]]
+path = "width"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "CW±0.05 3"
+[[groove_insert.cite]]
+path = "re"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "RE 0.2"
+[[groove_insert.cite]]
+path = "head"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "INSL 20"
+[[groove_insert.cite]]
+path = "seat"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=240"
+taken = "2026-11-24"
+value = "Seat size 3"
+
+[[groove_insert]]
+id = "tungaloy-DGM3-020"
+code = "DGM3-020"
+width = 3
+re = 0.2
+head = 20
+seat = "3"
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+note = "TungCut DGM external grooving and parting insert, 2 corners, DGM3-020 (neutral); grades T9225, AH7025, AH725, AH8005, AH905, GH130, AH6235, NS9530, KS05F; no preset: the maker prints vc but its feed only as a bar chart (F236)"
+[[groove_insert.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "DGM3-020"
+[[groove_insert.cite]]
+path = "width"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "CW±0.05 3"
+[[groove_insert.cite]]
+path = "re"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "RE 0.2"
+[[groove_insert.cite]]
+path = "head"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "INSL 20"
+[[groove_insert.cite]]
+path = "seat"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=239"
+taken = "2026-11-24"
+value = "Seat size 3"
+
+[[tool_block]]
+id = "tungaloy-CTBU20-32"
+code = "CTBU20-32"
+h = 20
+b = 19
+l1 = 100
+blade_h = 32
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+note = "CTBU Tool block for CGP blade; HFASSY 20, HBH 13, OAH 50, OAW 38 mm (the block's other printed dimensions)"
+[[tool_block.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "CTBU20-32"
+[[tool_block.cite]]
+path = "h"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "H 20 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+[[tool_block.cite]]
+path = "b"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "B 19 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+[[tool_block.cite]]
+path = "l1"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "OAL 100 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU20-32 20 19 100 20 13 50 38 CGP32...)"
+[[tool_block.cite]]
+path = "blade_h"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "Blade (Optional) CGP32..."
+basis = "the block takes CGP32 blades, whose height H is 32 (F229)"
+
+[[tool_block]]
+id = "tungaloy-CTBU25-32"
+code = "CTBU25-32"
+h = 25
+b = 23
+l1 = 110
+blade_h = 32
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+note = "CTBU Tool block for CGP blade; HFASSY 25, HBH 8, OAH 50, OAW 42 mm (the block's other printed dimensions)"
+[[tool_block.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "CTBU25-32"
+[[tool_block.cite]]
+path = "h"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "H 25 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+[[tool_block.cite]]
+path = "b"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "B 23 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+[[tool_block.cite]]
+path = "l1"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "OAL 110 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU25-32 25 23 110 25 8 50 42 CGP32...)"
+[[tool_block.cite]]
+path = "blade_h"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "Blade (Optional) CGP32..."
+basis = "the block takes CGP32 blades, whose height H is 32 (F229)"
+
+[[tool_block]]
+id = "tungaloy-CTBU32-32"
+code = "CTBU32-32"
+h = 32
+b = 29
+l1 = 110
+blade_h = 32
+maker = "Tungaloy"
+real = true
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+note = "CTBU Tool block for CGP blade; HFASSY 32, HBH 5, OAH 54, OAW 48 mm (the block's other printed dimensions)"
+[[tool_block.cite]]
+path = "code"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "CTBU32-32"
+[[tool_block.cite]]
+path = "h"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "H 32 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+[[tool_block.cite]]
+path = "b"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "B 29 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+[[tool_block.cite]]
+path = "l1"
+status = "published"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "OAL 110 (Designation H B OAL HFASSY HBH OAH OAW Blade (Optional): CTBU32-32 32 29 110 32 5 54 48 CGP32...)"
+[[tool_block.cite]]
+path = "blade_h"
+status = "estimate"
+source = "https://tungaloy.com/wpdata/wp-content/uploads/GC_2023-2024_G_F_Parting-Grooving.pdf#page=230"
+taken = "2026-11-24"
+value = "Blade (Optional) CGP32..."
+basis = "the block takes CGP32 blades, whose height H is 32 (F229)"

@@ -26,12 +26,15 @@
 use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod export;
 pub mod holes;
+pub mod life;
 pub mod sim;
+pub mod toollog;
+pub mod toolstore;
 
 use forge_agent::json::Json;
 use forge_cam::ops::{self, CheckOut, Heights, OpPath, PMove, Phase, Stock, ToolUse};
 use forge_cam_geom::check::Face;
-use forge_cam_geom::region::{Loop, Region, Seg, p2};
+use forge_cam_geom::region::{Loop, P2, Region, Seg, p2};
 use forge_post::{CycleKind, Rec};
 use forge_tooling::{Kind, Library, feeds};
 use std::collections::BTreeMap;
@@ -129,6 +132,8 @@ struct PartIn {
     holes: Vec<holes::HoleInfo>,
     bbox: ([f64; 3], [f64; 3]),
     group: String,
+    /// The work material (forge-material name or alias), when `part(.., material:)` names it.
+    material: Option<String>,
 }
 
 struct SetupIn {
@@ -1036,6 +1041,7 @@ impl Cam {
                 .collect(),
             bbox: ([lo[0], -hi[1], h - hi[2]], [hi[0], -lo[1], h - lo[2]]),
             group: p.group.clone(),
+            material: p.material.clone(),
         };
         self.parts.push(turned);
         Ok(self.parts.len() - 1)
@@ -1739,6 +1745,10 @@ impl Cam {
                     holes,
                     bbox: (lo, hi),
                     group: get_str(a, "group", Some("N"))?,
+                    material: match a.get("material") {
+                        Some(V::Str(m)) => Some(m.clone()),
+                        _ => None,
+                    },
                 });
                 Ok(V::Part(self.parts.len() - 1))
             }
@@ -2215,6 +2225,7 @@ impl Cam {
             holes: vec![],
             bbox: (b.min, b.max),
             group: "N".into(),
+            material: None,
         });
         self.jaws.push(sj);
         Ok(V::Jaws(self.jaws.len() - 1, self.parts.len() - 1))
@@ -3348,7 +3359,7 @@ impl Cam {
             f_min: 0.0,
             cap: feeds::THIN_CAP,
             cell,
-            // samples of one diameter, fixed by length (fto-adaptive.md D)
+            // samples of one diameter, fixed by length
             sample: t.tool.dc,
         };
         let mut map = HeightMap::of_stock(&s.ip, cell);
@@ -3676,7 +3687,33 @@ impl Cam {
                             // to its own op: skipped, said, and G4 lists what it leaves
                             let total = pockets.len();
                             let mut skipped: Vec<[f64; 4]> = vec![];
+                            // a hole that ends above `to:` (a drilled hole's floor or point) is
+                            // left to its own op: the section just above the bottom shows
+                            // material where it was (when that section can be made)
+                            let below = forge_cam::section::section(&part.faces, bottom + 1e-3, 1e-5).ok();
+                            let mut shallow: Vec<[f64; 4]> = vec![];
                             for rg in pockets {
+                                // (where no section can be made there, a drill point crossing
+                                // that height say, the part's hole features decide)
+                                let ends = match &below {
+                                    Some(sb) => !reaches(sb, &rg),
+                                    None => hole_ends_above(&part.holes, &rg, bottom),
+                                };
+                                if ends {
+                                    shallow.push(region_box(&rg));
+                                    continue;
+                                }
+                                // a hole or slot the tool only just fits (no room 1e-3 beyond its
+                                // radius: a drilled hole or a slot of the tool's size) is left as
+                                // one it does not fit: its own op cuts it (a plunge or a slot),
+                                // and its walls at no gap are the costliest to certify
+                                if matches!(
+                                    forge_cam_geom::offset::offset(&rg, 0.5 * d + leave + 1e-3),
+                                    Ok((l, _)) if l.is_empty()
+                                ) {
+                                    skipped.push(region_box(&rg));
+                                    continue;
+                                }
                                 let p = ops::pocket(
                                     &rg,
                                     ops::Cut {
@@ -3695,24 +3732,7 @@ impl Cam {
                                 match p {
                                     Ok(p) => paths.push(p),
                                     Err(ops::OpError::ToolTooBig { .. }) => {
-                                        let mut b = [
-                                            f64::INFINITY,
-                                            f64::INFINITY,
-                                            f64::NEG_INFINITY,
-                                            f64::NEG_INFINITY,
-                                        ];
-                                        for l in &rg.loops {
-                                            for sg in &l.segs {
-                                                let q = sg.start();
-                                                b = [
-                                                    b[0].min(q.x),
-                                                    b[1].min(q.y),
-                                                    b[2].max(q.x),
-                                                    b[3].max(q.y),
-                                                ];
-                                            }
-                                        }
-                                        skipped.push(b);
+                                        skipped.push(region_box(&rg));
                                         continue;
                                     }
                                     Err(e) => return Err(format!("{e:?}")),
@@ -3726,6 +3746,19 @@ impl Cam {
                                     voids.push((Some(o), bottom));
                                 }
                             }
+                            let boxes = |v: &[[f64; 4]]| {
+                                v.iter()
+                                    .map(|b| format!("x {:.2}..{:.2} y {:.2}..{:.2}", b[0], b[2], b[1], b[3]))
+                                    .collect::<Vec<_>>()
+                                    .join("; ")
+                            };
+                            if !shallow.is_empty() {
+                                self.warnings.push(format!(
+                                    "{name}: {} of {total} holes in the section end above z {bottom} and are left to their own op (G4 lists them): {}",
+                                    shallow.len(),
+                                    boxes(&shallow)
+                                ));
+                            }
                             if paths.is_empty() {
                                 return Err(format!(
                                     "pocket: the {d} mm tool fits none of the section's {total} holes between z {top} and {bottom}"
@@ -3733,13 +3766,9 @@ impl Cam {
                             }
                             if !skipped.is_empty() {
                                 self.warnings.push(format!(
-                                    "{name}: {} of {total} holes in the section are too small for the {d} mm tool and are left uncut (G4 lists them): {}",
+                                    "{name}: {} of {total} holes in the section are too small for the {d} mm tool (or fit it within 0.001) and are left uncut (G4 lists them): {}",
                                     skipped.len(),
-                                    skipped
-                                        .iter()
-                                        .map(|b| format!("x {:.2}..{:.2} y {:.2}..{:.2}", b[0], b[2], b[1], b[3]))
-                                        .collect::<Vec<_>>()
-                                        .join("; ")
+                                    boxes(&skipped)
                                 ));
                             }
                             Ok(paths)
@@ -4100,6 +4129,50 @@ impl Cam {
             paths.push(p);
         }
         let ti = add(self, drill, base_t + 1)?;
+        // a blind hole with a flat floor (no drill point modelled: a counterbored hole's, say):
+        // the drill's point stops on the floor, its shoulder the point's length above it; the
+        // floor's outer ring is left (said, and G4 lists it)
+        let (dc, ang) = (self.tools[ti].tool.dc, self.tools[ti].tool.angle);
+        let tip_len = if self.tools[ti].tool.kind == Kind::Drill && ang > 0.0 && ang < 180.0 {
+            0.5 * dc / tan_rad((0.5 * ang).to_radians())
+        } else {
+            0.0
+        };
+        // a through hole: the drill's shoulder 1 mm past the part's bottom, less where the
+        // support under the stock (no workholding declared) would meet its point; the point
+        // keeps 0.1 above it, and at least 0.05 of break-through is needed
+        let depth = if through && self.setups[su].fixture.is_none() {
+            let bottom = self.parts[pi].bbox.0[2];
+            let avail = bottom - self.setups[su].stock.min[2];
+            let room = avail - tip_len - 0.1;
+            if room < 0.05 {
+                let need = tip_len + 0.15;
+                out.fix = Some(format!(
+                    "give the stock at least {need:.2} mm below the part (box(.., below: {need:.2})), or declare workholding that leaves the hole over a gap"
+                ));
+                return Err(format!(
+                    "`{hn}` goes through: the {dc} mm drill's point ({tip_len:.2}) and its break-through need {need:.2} mm of stock under the part, which has {avail:.2} on the support"
+                ));
+            }
+            depth - 1.0 + room.min(1.0)
+        } else {
+            depth
+        };
+        let flat = !through && hole.point.is_none() && tip_len > 0.0;
+        let depth = if flat {
+            if depth - tip_len <= 0.0 {
+                return Err(format!(
+                    "`{hn}` has a flat floor {depth} deep, shallower than the {dc} mm drill's point ({tip_len:.2}): an end mill cuts it (pocket(SETUP, PART.{hn}, ..))"
+                ));
+            }
+            self.warnings.push(format!(
+                "{}: `{hn}` has a flat floor: the drill stops with its point on it, {tip_len:.2} short at the wall; the floor's ring is left to an end mill (G4 lists it)",
+                out.name
+            ));
+            depth - tip_len
+        } else {
+            depth
+        };
         let t = &self.tools[ti];
         let peck = depth > 3.0 * t.tool.dc;
         let fe = self.feeds_for(su, t, t.tool.dc, t.tool.dc);
@@ -4151,6 +4224,154 @@ impl Cam {
             }
         ));
         out.tool = Some(ti);
+        // the counterbore, after the drill: a counterbore tool of its diameter plunged to its
+        // depth, else the largest end mill under its diameter pocketing its circle (a helical
+        // entry, which the drilled hole leaves in air)
+        if let Some((cd, cdep)) = hole.counterbore {
+            let circle = |p: &[f64; 3], r: f64| {
+                let st = p2(p[0] + r, p[1]);
+                Region {
+                    loops: vec![Loop {
+                        segs: vec![Seg::Arc {
+                            a: st,
+                            b: st,
+                            c: p2(p[0], p[1]),
+                            ccw: true,
+                        }],
+                    }],
+                }
+            };
+            let cbt = self
+                .lib
+                .tools
+                .iter()
+                .find(|t| t.kind == Kind::Counterbore && (t.dc - cd).abs() < 1e-9 && t.lcf >= cdep)
+                .cloned();
+            let em = self
+                .lib
+                .tools
+                .iter()
+                .filter(|t| t.kind == Kind::Flat && t.dc < cd - 1e-3 && t.dc >= 0.3 * cd && t.lcf >= cdep)
+                .max_by(|a, b| a.dc.total_cmp(&b.dc))
+                .cloned();
+            if let Some(cb) = cbt {
+                let ti = add(self, cb, base_t + 3)?;
+                let t = &self.tools[ti];
+                let f = self
+                    .feeds_for(su, t, t.tool.dc, 1.0)
+                    .map(|x| 0.3 * x.vf)
+                    .unwrap_or(100.0);
+                paths.push(ops::holes(
+                    &hole.places,
+                    CycleKind::Drill,
+                    ops::Cut {
+                        tool: t,
+                        tidx: ti,
+                        h,
+                        feed: (f, f),
+                        ramp_feed: None,
+                        lead_feed: None,
+                    },
+                    cdep,
+                    0.0,
+                ));
+                for p in &hole.places {
+                    voids.push((Some(circle(p, 0.5 * cd)), p[2] - cdep));
+                }
+                plan.push(format!("counterbore {} to {cdep}", self.tools[ti].tool.id));
+            } else if let Some(em) = em {
+                let ti = add(self, em, base_t + 3)?;
+                let t = &self.tools[ti];
+                let dc = t.tool.dc;
+                let (stepover, step) = (0.4 * dc, (0.5 * dc).min(cdep));
+                let (vf, vp) = match self.feeds_for(su, t, stepover, step) {
+                    Some(fe) => (fe.vf, 0.3 * fe.vf),
+                    None => (300.0, 100.0),
+                };
+                for p in &hole.places {
+                    let rg = circle(p, 0.5 * cd);
+                    let op = ops::pocket(
+                        &rg,
+                        ops::Cut {
+                            tool: t,
+                            tidx: ti,
+                            h,
+                            feed: (vf, vp),
+                            ramp_feed: None,
+                            lead_feed: None,
+                        },
+                        ops::Span {
+                            top: p[2],
+                            bottom: p[2] - cdep,
+                            step,
+                        },
+                        stepover,
+                        0.0,
+                        Some(3.0),
+                    )
+                    .map_err(|e| format!("the counterbore of `{hn}`: {e:?}"))?;
+                    paths.push(op);
+                    if let Some(o) = opening(&rg, 0.5 * dc) {
+                        voids.push((Some(o), p[2] - cdep));
+                    }
+                }
+                plan.push(format!(
+                    "counterbore by {} (pocketed, helical entry) to {cdep}",
+                    self.tools[ti].tool.id
+                ));
+            } else {
+                out.fix = Some(format!(
+                    "add a counterbore of {cd} mm, or an end mill under {cd} mm with {cdep} mm of flute"
+                ));
+                return Err(format!(
+                    "NeedTool: no counterbore of {cd} mm nor end mill to pocket it for `{hn}`"
+                ));
+            }
+        }
+        // the countersink, after the drill: a countersink, chamfer or spot tool of its angle,
+        // plunged until its cone is the countersink's diameter at the mouth
+        if let Some((csd, ang)) = hole.countersink {
+            let ct = self
+                .lib
+                .tools
+                .iter()
+                .filter(|t| {
+                    matches!(t.kind, Kind::Countersink | Kind::Chamfer | Kind::Spot)
+                        && (t.angle - ang).abs() < 1e-6
+                        && t.dc >= csd
+                        && t.tip_d < hole.d
+                })
+                .min_by(|a, b| a.dc.total_cmp(&b.dc))
+                .cloned();
+            let Some(ct) = ct else {
+                out.fix = Some(format!("add a {ang} deg countersink of at least {csd} mm"));
+                return Err(format!(
+                    "NeedTool: no {ang} deg countersink of at least {csd} mm for `{hn}`"
+                ));
+            };
+            let ti = add(self, ct, base_t + 4)?;
+            let t = &self.tools[ti];
+            let depth = 0.5 * (csd - t.tool.tip_d) / tan_rad((0.5 * ang).to_radians());
+            let f = self
+                .feeds_for(su, t, t.tool.dc, 1.0)
+                .map(|x| 0.3 * x.vf)
+                .unwrap_or(100.0);
+            paths.push(ops::holes(
+                &hole.places,
+                CycleKind::Drill,
+                ops::Cut {
+                    tool: t,
+                    tidx: ti,
+                    h,
+                    feed: (f, f),
+                    ramp_feed: None,
+                    lead_feed: None,
+                },
+                depth,
+                0.0,
+            ));
+            plan.push(format!("countersink {} to {:.2}", self.tools[ti].tool.id, depth));
+        }
         if let Some(tp) = tap {
             let ti = add(self, tp, base_t + 2)?;
             let t = &self.tools[ti];
@@ -4453,6 +4674,108 @@ fn support_face(st: &Stock) -> Face {
 /// strictly inside a loop's first piece is on no other loop, and whether that loop lies inside
 /// another is decided by that point alone (exact ray casting). This is the hole less the section
 /// there, without a boolean of the section against its own loops (all ties: slow).
+/// tan by forge-math's sin and cos (the workspace's trigonometry).
+fn tan_rad(x: f64) -> f64 {
+    let (s, c) = forge_math::dmath::sin_cos(x);
+    s / c
+}
+
+/// The length of (x, y).
+fn len2(x: f64, y: f64) -> f64 {
+    (x * x + y * y).sqrt()
+}
+
+/// A region's box: its segments' ends and each arc's extreme points that lie on it (in f64).
+fn region_box(rg: &Region) -> [f64; 4] {
+    let mut b = [f64::INFINITY, f64::INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY];
+    let mut add = |x: f64, y: f64| b = [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)];
+    for l in &rg.loops {
+        for sg in &l.segs {
+            let q = sg.start();
+            add(q.x, q.y);
+            if let Seg::Arc { a, b: e, c, ccw } = *sg {
+                let r = len2(a.x - c.x, a.y - c.y);
+                let ang = |p: P2| forge_math::dmath::atan2(p.y - c.y, p.x - c.x);
+                // the sweep from a to e in the arc's sense, a full turn when they meet
+                let (t0, t1) = (ang(a), ang(e));
+                let tau = std::f64::consts::TAU;
+                let mut sweep = if ccw { t1 - t0 } else { t0 - t1 };
+                sweep = sweep.rem_euclid(tau);
+                if a == e {
+                    sweep = tau;
+                }
+                for k in 0..4 {
+                    let t = k as f64 * 0.5 * std::f64::consts::PI;
+                    let d = if ccw { t - t0 } else { t0 - t };
+                    if d.rem_euclid(tau) <= sweep {
+                        let (sn, cs) = forge_math::dmath::sin_cos(t);
+                        add(c.x + r * cs, c.y + r * sn);
+                    }
+                }
+            }
+        }
+    }
+    b
+}
+
+/// Whether the pocket `rg` (a hole of a higher section, its outer loop counter-clockwise) is
+/// still open in the section `below`: a point just inside rg's outer loop (1e-3 to the left of
+/// its first segment) lies in no material of `below` (inside an even number of its loops). A
+/// planning choice, not a proof: the certifier checks whatever is cut.
+fn reaches(below: &Region, rg: &Region) -> bool {
+    use forge_cam_geom::region;
+    let Some(sg) = rg.loops.first().and_then(|l| l.segs.first()) else {
+        return true;
+    };
+    let eps = 1e-3;
+    let q = match *sg {
+        Seg::Line { a, b } => {
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            let n = len2(dx, dy);
+            if n == 0.0 {
+                return true;
+            }
+            (0.5 * (a.x + b.x) - eps * dy / n, 0.5 * (a.y + b.y) + eps * dx / n)
+        }
+        Seg::Arc { a, c, ccw, .. } => {
+            let (dx, dy) = (c.x - a.x, c.y - a.y);
+            let n = len2(dx, dy);
+            if n == 0.0 {
+                return true;
+            }
+            // left of travel: towards the centre on a counter-clockwise arc
+            let k = if ccw { eps / n } else { -eps / n };
+            (a.x + k * dx, a.y + k * dy)
+        }
+    };
+    let mut cx = forge_cam_geom::real::Ctx::new();
+    let Ok(ex) = region::validate(&mut cx, below) else {
+        return true;
+    };
+    let p = forge_cam_geom::arr::pt(&mut cx, q.0, q.1);
+    let inside = (0..below.loops.len())
+        .filter(|&l| region::inside_loop(&mut cx, &ex, l, p))
+        .count();
+    inside % 2 == 0
+}
+
+/// Whether the pocket `rg` is a blind hole feature drilled down whose wall ends above z
+/// `bottom`: its box is the hole's circle (centre and diameter within 1e-3).
+fn hole_ends_above(holes: &[holes::HoleInfo], rg: &Region, bottom: f64) -> bool {
+    let b = region_box(rg);
+    let (cx, cy, w) = (0.5 * (b[0] + b[2]), 0.5 * (b[1] + b[3]), b[2] - b[0]);
+    holes.iter().any(|h| {
+        let Some(depth) = h.depth else {
+            return false;
+        };
+        h.dir[2] < -0.999
+            && (w - h.d).abs() <= 1e-3
+            && h.places.iter().any(|p| {
+                (p[0] - cx).abs() <= 1e-3 && (p[1] - cy).abs() <= 1e-3 && p[2] - depth > bottom + 1e-3
+            })
+    })
+}
+
 fn pockets_of(sec: &Region) -> Result<Vec<Region>, String> {
     use forge_cam_geom::region;
     let mut cx = forge_cam_geom::real::Ctx::new();
@@ -5031,6 +5354,45 @@ impl Cam {
         };
         let mut deepest = f64::INFINITY;
         let mut cut_z: Option<f64> = None;
+        // the highest cut at or after each move: a level at depth d is complete (every pass
+        // above d cut) only if no later cut is above d. A path that goes back up to cut (a
+        // contour's finishing loops after its roughing loop has reached the bottom) gets no
+        // stage there: the stock stays as staged before, which holds more material, never less
+        let mut from = vec![posted.start; posted.moves.len()];
+        {
+            let mut at = posted.start;
+            for (i, m) in posted.moves.iter().enumerate() {
+                from[i] = at;
+                at = match *m {
+                    PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
+                    PMove::Cycle { holes, clear, .. } => [holes[0], holes[1], clear],
+                    #[allow(unreachable_patterns)]
+                    _ => at,
+                };
+            }
+        }
+        let mut later_top = vec![f64::NEG_INFINITY; posted.moves.len() + 1];
+        for (i, m) in posted.moves.iter().enumerate().rev() {
+            let a = from[i];
+            // the cutting moves (a pass along a level, a ramp, a helix), at their higher end; a
+            // plunge or link goes down a column its level's passes clear around it
+            let z = match *m {
+                PMove::Line {
+                    to,
+                    phase: Phase::Cut,
+                    ..
+                } => {
+                    if to[0] == a[0] && to[1] == a[1] {
+                        f64::NEG_INFINITY
+                    } else {
+                        to[2].max(a[2])
+                    }
+                }
+                PMove::Arc { to, .. } => to[2].max(a[2]),
+                _ => f64::NEG_INFINITY,
+            };
+            later_top[i] = later_top[i + 1].max(z);
+        }
         for (i, m) in posted.moves.iter().enumerate() {
             match *m {
                 // a level's depth: the lowest point it cut (the feed back up is not one)
@@ -5047,6 +5409,7 @@ impl Cam {
                     if let Some(z) = cut_z.take()
                         && stock_needed
                         && z < deepest
+                        && later_top[i] <= z
                         && !self.ops[oi].voids.is_empty()
                     {
                         deepest = z;

@@ -442,7 +442,8 @@ theorem run_ext_avoid (E ME : ETab S α) (T MT X MX : TTab S α) :
 /-- forge-cam-lang: `Cam::call`'s arms (statement built-ins). -/
 def camStmt : List Name :=
   ["part", "machine", "tool", "setup", "facing", "contour", "pocket", "clear", "drill", "engrave",
-    "slot", "thread_mill", "edge_break", "bore", "soft_jaw", "program"]
+    "slot", "thread_mill", "edge_break", "bore", "soft_jaw", "parallel", "waterline", "zlevel",
+    "pencil", "scallop", "rest", "program"]
 
 /-- forge-cam-lang: `Cam::eval`'s built-ins (nested in an expression). -/
 def camExpr : List Name := ["box", "vise", "cylinder", "tube", "solid"]

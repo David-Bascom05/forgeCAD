@@ -21,8 +21,8 @@ pub mod parity;
 pub mod plat;
 pub mod render;
 pub mod scene;
-pub mod thumb;
 pub mod shell;
+pub mod thumb;
 pub mod viewcube;
 pub mod viewer;
 
@@ -41,6 +41,7 @@ pub mod live;
 pub mod load;
 pub mod measure;
 pub mod snaps;
+pub mod studio;
 pub mod speech;
 pub mod tess;
 pub mod thermo_view;

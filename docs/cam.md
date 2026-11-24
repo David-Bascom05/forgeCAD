@@ -68,7 +68,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `thread_mill(SETUP, PART.HOLE, tool:, length:, passes:, spring:, hand:, starts:, lead:)` | a hole's recorded thread (`thread:`, or `screw:` with `fit: "tap"`), the model not carrying it: declares a cosmetic thread Δ per place (the ring from the bore to the major diameter over `length`, default the depth less two pitches), listed in the op's `removals`, and is certified against P ∖ Δ (never a blanket tolerance). Down the bore, in to the radius, up a helix of the pitch (G3: right hand), out. `passes: n` radial passes splitting the depth from the bore to the major evenly (default 1), `spring: n` the last again, `hand: "left"` climbs down from the top (G3), `starts: n` a helix of n pitches per turn once per start, each a pitch higher, `lead: "arc"` in and out on a half circle tangent to the helix (default `"line"`) |
 | `bore(SETUP, PART.HOLE, tool:, pitch:, ramp:, finish_leave:, spring:, leave:, leave_axial:)` | helical bore of a round hole along −z: the tool's centre on the hole's radius less its own, down a helix of `pitch:` per turn (default a 3° ramp; or `ramp:` degrees, at most 30), G3 (climb), a full circle at the bottom, back to the axis, up. `finish_leave:` leaves that much for a second helix at the final radius; `spring: n` repeats it. The tool must be at least half the hole across (no core left), else refused with the fix (`pocket(..)` the hole). Certified against the part |
 | `edge_break(SETUP, tool:, size:, tip_offset:, at:)` | chamfer/deburr of the part's top edges with a chamfer mill or spot drill of 30° to 150°: a chamfer `size` wide at half the tool's angle from the wall (45° for a 90° tool), its tip `tip_offset:` below the chamfer's bottom (default 0.2) so the flank, not the tip, cuts. The removal is declared (Δ, in `removals`) and the op certified against P ∖ Δ. In this phase: the part's top, over vertical walls; sharp corners between lines only |
-| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`) |
+| `drill(SETUP, PART.HOLE, plan: "auto")` | the plan from the hole feature: spot, drill (peck past 3 D), then its counterbore (a counterbore tool of its diameter, else the largest end mill under it pocketing the circle) or countersink (a countersink, chamfer or spot tool of its angle, plunged until the cone is its diameter at the mouth), tap for a thread; `plan: "drill"` leaves the thread (to `thread_mill`). A blind hole with a flat floor is drilled with the drill's point on the floor; the ring that leaves is said |
 | `zlevel(SETUP, tool:, leave:, from:, to:, down:, stepover:, area:, grid:)` | 3-axis roughing, offset clearing (not adaptive): at each level from `from` (the stock's top) down to `to`, `down` apart (and at the part's own top), the tool centres the drop-cutter leaves free on a CL grid `grid` apart, cleared by passes `stepover` apart (at most the tool's radius) from that region's boundary; `area: (x0, y0, x1, y1)` bounds the tool centres. Its flat bottom's sweep is recorded in the in-process stock |
 | `parallel(SETUP, tool:, stepover:, angle:, step:, leave:, area:, floor:)` | 3-axis finishing: zig-zag rows `stepover` apart at `angle` degrees, each dropped onto the part (samples at most `step` apart, split until each move is proven) |
 | `waterline(SETUP, tool:, from:, to:, down:, area:, grid:)` | constant-z contours where the tool's reach crosses each level (marching squares on a CL grid, each crossing by certified bisection) |
@@ -190,7 +190,7 @@ roughing, parallel, waterline, pencil and rest on a filleted core, every move ce
 
 2.5D on parts whose faces are planes, and cylinders, cones and tori about z (others are refused by kind, typed):
 facing, clearing, contours, hole pockets and hole plans, with linking by retract. Not yet:
-adaptive clearing (patents first), 3+2, turning, 5-axis; chamfer mills,
+adaptive clearing, 3+2, turning, 5-axis; chamfer mills,
 threads modelled as helicoidal faces (`thread(hole:)`): the lowering refuses them, so a modelled thread is milled as a declared Δ only when the model records it instead.
 
 ## In the app: the Manufacture workspace
@@ -215,3 +215,15 @@ document's run, the reply above.
 
 Code: interface/forge-render/src/shell/cam/ and src/gui_cam.rs; notes and screenshots in
 research/cam/ui/.
+
+## Tool life (prediction and tracking)
+
+`Cam::tool_life` predicts each loaded tool's life use over the job: Taylor's
+v T^n f^a ap^b = C from cited rows (`kernel/forge-tooling/data/life.toml`), summed per
+fixed-length sample of the posted path (each sample's own speed, chip and depth; Miner's
+rule). The part must name its material (`part("p.fg", group: "S", material: "Ti-6Al-4V")`);
+a tool × material with no cited row is "not estimated". A program that would use more life
+than the loaded tool has left gets a warning with a change point or a sister tool, never an
+error. Physical tools are tracked in `cam/tool-instances.toml` (`forgecad tool log ...`), and
+logged worn tools calibrate the shop's own C (and n), shown beside the cited values.
+Details, sources and the honest validation: research/cam/toollife/model.md, validation.md.

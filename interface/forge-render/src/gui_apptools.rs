@@ -195,9 +195,19 @@ impl Gui {
         }
     }
 
-    pub(crate) fn app_tool(&mut self, name: &str, a: &Json) -> Reply {
+    pub fn app_tool(&mut self, name: &str, a: &Json) -> Reply {
         let is_asm = self.shell.is_asm();
         match name {
+            "environment" => {
+                let ask = s(a, "name").to_string();
+                if ask.is_empty() {
+                    return Reply::ok(env_json(&self.shell).to_string());
+                }
+                match self.env_named(&ask) {
+                    Ok(_) => Reply::ok(env_json(&self.shell).to_string()),
+                    Err(e) => Reply::err(e),
+                }
+            }
             "tree" => self.app_tree(s(a, "filter"), b(a, "relationships").unwrap_or(false)),
             "harness" => match self.shell.fg.as_ref().and_then(|p| p.asm.as_ref()) {
                 Some(asm) if !asm.harnesses.is_empty() => Reply::ok(
@@ -841,4 +851,27 @@ impl Gui {
             let _ = r.send(reply.clone());
         }
     }
+}
+
+/// The environment in and each one's availability, as the `environment` tool replies.
+pub(crate) fn env_json(s: &crate::shell::Shell) -> Json {
+    use crate::shell::env::EnvId;
+    let all = EnvId::ALL
+        .into_iter()
+        .map(|e| {
+            let mut f = vec![("key", Json::from(e.key())), ("name", Json::from(e.name()))];
+            match e.available(s) {
+                Ok(()) => f.push(("available", true.into())),
+                Err(why) => {
+                    f.push(("available", false.into()));
+                    f.push(("why", why.into()));
+                }
+            }
+            Json::obj(f)
+        })
+        .collect();
+    Json::obj(vec![
+        ("active", s.env.map_or(Json::Null, |e| e.key().into())),
+        ("environments", Json::Arr(all)),
+    ])
 }

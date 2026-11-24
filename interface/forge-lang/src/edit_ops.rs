@@ -4,7 +4,7 @@
 //! - `Rename {from, to}`: a top-level name and every use of it renamed (bindings, reads, the
 //!   owners of its params); members, labels, keyword-argument names and types are not names
 //!   and stay. For a name that hides a built-in.
-use crate::edit::{bound, mentions};
+use crate::edit::{bound, mentions_in};
 use crate::error::Error;
 use crate::syntax::{self, Arg, Expr, ExprKind, Span, Stmt, StmtKind, TokKind};
 use std::collections::BTreeSet;
@@ -41,7 +41,10 @@ pub fn precheck_set_arg(prog: &[Stmt], id: &str, text: &str) -> R<()> {
         full: Span::default(),
     };
     let later = bound(&prog[k..]);
-    if let Some(n) = mentions(&probe).iter().find(|n| later.contains(*n)) {
+    if let Some(n) = mentions_in(&probe, calls_closed(prog))
+        .iter()
+        .find(|n| later.contains(*n))
+    {
         return Err(Error::StillRead {
             name: n.clone(),
             reader: id.into(),
@@ -159,10 +162,12 @@ fn ident(s: &str) -> bool {
 
 /// Whether a document's calls name built-ins only, never a binding: a machining document (its
 /// first statement the bare name `machining`; forge-cam-lang and forge-turn-lang look a call's
-/// head up among their built-ins alone), where `drill = drill(..)` binds a name a call also
-/// spells. A call's head there is not a use of the name.
+/// head up among their built-ins alone), a robot document (`robot`, robot.rs likewise) or a
+/// bending document (`bending`, forge-bend-lang), where
+/// `drill = drill(..)` binds a name a call also spells. A call's head there is not a use of the
+/// name.
 pub fn calls_closed(prog: &[Stmt]) -> bool {
-    matches!(prog.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "machining")
+    matches!(prog.first().map(|s| &s.kind), Some(StmtKind::Expr(Expr { kind: ExprKind::Name(n), .. })) if n == "machining" || n == "robot" || n == "bending")
 }
 
 pub fn precheck_rename(prog: &[Stmt], from: &str, to: &str) -> R<()> {
@@ -444,8 +449,9 @@ pub fn apply_suppress(src: &str, prog: &[Stmt], id: &str) -> R<String> {
     let mut out: BTreeSet<usize> = (j..=k).collect();
     let mut names = bound(&prog[j..=k]);
     names.insert(id.to_string());
+    let closed = calls_closed(prog);
     for m in k + 1..prog.len() {
-        if mentions(&prog[m]).iter().any(|n| names.contains(n)) {
+        if mentions_in(&prog[m], closed).iter().any(|n| names.contains(n)) {
             out.insert(m);
             names.extend(bound(&prog[m..=m]));
         }

@@ -1105,7 +1105,9 @@ dependencies = [
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
+ "forge-library",
  "forge-machine",
+ "forge-material",
  "forge-math",
  "forge-model",
  "forge-post",
@@ -1285,6 +1287,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-num",
  "forge-par",
 ]
 
@@ -1311,6 +1314,10 @@ dependencies = [
  "forge-sketch",
  "forge-topo",
 ]
+
+[[package]]
+name = "forge-num"
+version = "0.1.0"
 
 [[package]]
 name = "forge-ops"
@@ -1379,6 +1386,7 @@ dependencies = [
  "keyring-core",
  "png",
  "rfd",
+ "sha2",
  "ureq",
  "wasm-bindgen",
  "wasm-bindgen-futures",

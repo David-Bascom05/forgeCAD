@@ -108,7 +108,9 @@ dependencies = [
  "forge-cam-geom",
  "forge-dirs",
  "forge-lang",
+ "forge-library",
  "forge-machine",
+ "forge-material",
  "forge-math",
  "forge-model",
  "forge-post",
@@ -397,6 +399,7 @@ name = "forge-math"
 version = "0.1.0"
 dependencies = [
  "forge-alloc",
+ "forge-num",
  "forge-par",
 ]
 
@@ -440,6 +443,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-num"
+version = "0.1.0"
+
+[[package]]
 name = "forge-ops"
 version = "0.1.0"
 dependencies = [
@@ -472,6 +479,7 @@ name = "forge-probe-builder"
 version = "0.1.0"
 dependencies = [
  "forge-library",
+ "forge-machine",
  "forge-probe",
 ]
 

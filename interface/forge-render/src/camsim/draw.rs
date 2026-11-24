@@ -14,24 +14,36 @@ use forge_math::dmath;
 pub mod look {
     use crate::viewcube::rgb;
     pub const RAPID: [f32; 3] = rgb(0xE8B13A);
-    pub const CUT: [f32; 3] = rgb(0x3D8BEA);
-    pub const ARC: [f32; 3] = rgb(0x35C6D8);
+    // blue means selected and nothing else (docs/ux/STANDARD.md §3): the selected op's path is
+    // SELECTED; every other op's cutting moves are a teal, its arcs a lighter one
+    pub const CUT: [f32; 3] = rgb(0x2A8C80);
+    pub const ARC: [f32; 3] = rgb(0x46B0A2);
+    pub const SELECTED: [f32; 3] = rgb(0x3D8BEA);
     pub const PLUNGE: [f32; 3] = rgb(0xD0508C);
-    pub const LINK: [f32; 3] = rgb(0x4DB88A);
-    pub const STOCK: [f32; 3] = rgb(0xB9C0C8);
-    pub const UNDER: [f32; 3] = rgb(0x3B6FE0);
+    pub const LINK: [f32; 3] = rgb(0x8A9099);
+    /// The share of a metal's F0 a baked diffuse light shows it at (the overlay has no specular)
+    /// (0.5: machined aluminium reads as a mid-light metal, not a white box)
+    const DIFFUSE: f32 = 0.5;
+    /// Machined aluminium: RENDER-STUDIO's "Aluminium, machined" (F0 [0.916, 0.923, 0.924],
+    /// physicallybased.info) at DIFFUSE, until the sim draws with the studio's appearances
+    pub const STOCK: [f32; 3] = [0.916 * DIFFUSE, 0.923 * DIFFUSE, 0.924 * DIFFUSE];
+    /// Material left over the part, in the comparison (violet: blue is the selection's)
+    pub const UNDER: [f32; 3] = rgb(0x8E6BD8);
     pub const IN_TOL: [f32; 3] = rgb(0x3FAE5A);
     pub const GOUGE: [f32; 3] = rgb(0xE0453A);
-    pub const CUTTER: [f32; 3] = rgb(0xD9A441);
-    pub const SHANK: [f32; 3] = rgb(0x9097A0);
-    pub const HOLDER: [f32; 3] = rgb(0x5D646E);
-    pub const FIXTURE: [f32; 3] = rgb(0x6C7A89);
+    /// Solid carbide: RENDER-STUDIO's "Carbide" (a marked stand-in: tungsten's F0
+    /// [0.537, 0.536, 0.519]) at DIFFUSE; the fluted length a shade darker than the shank
+    pub const SHANK: [f32; 3] = [0.537 * DIFFUSE, 0.536 * DIFFUSE, 0.519 * DIFFUSE];
+    pub const CUTTER: [f32; 3] = [SHANK[0] * 0.72, SHANK[1] * 0.72, SHANK[2] * 0.72];
+    /// Machined steel: RENDER-STUDIO's "Steel, machined" (F0 [0.53, 0.513, 0.494]) at DIFFUSE
+    pub const HOLDER: [f32; 3] = [0.53 * DIFFUSE, 0.513 * DIFFUSE, 0.494 * DIFFUSE];
+    pub const FIXTURE: [f32; 3] = HOLDER;
     pub const PART: [f32; 3] = rgb(0x8FA6BF);
     pub const LEFTOVER: [f32; 3] = rgb(0xF08A24);
     pub const FAIL: [f32; 3] = rgb(0xF03A3A);
     pub const NO_VALUE: [f32; 3] = rgb(0x6B7078);
     /// A measured value's bands: too little, right, too much.
-    pub const LOW: [f32; 3] = rgb(0x4C8FE0);
+    pub const LOW: [f32; 3] = rgb(0x8E6BD8);
     pub const GOOD: [f32; 3] = rgb(0x46B55A);
     pub const HIGH: [f32; 3] = rgb(0xE5A23A);
     pub const OVER: [f32; 3] = rgb(0xE0453A);
@@ -129,6 +141,8 @@ pub struct PathShow<'a> {
     pub picked: Option<usize>,
     /// Colour cutting pieces by a measured value instead of by kind (`Values`).
     pub values: Option<&'a Values>,
+    /// The selected op: its feed moves drawn in the selection's blue.
+    pub selected: Option<usize>,
 }
 
 /// A measured value per piece of the timeline (chip load, engagement, ..) and how it is
@@ -176,6 +190,7 @@ pub fn toolpath(tl: &Timeline, eye: &Eye, show: &PathShow, out: &mut Vec<WorldVe
                 Some((v, sc)) => vals.colour(v, sc),
                 None => look::NO_VALUE,
             },
+            None if show.selected == Some(g.op as usize) && g.kind != Kind::Rapid => look::SELECTED,
             None => colour_of(g),
         };
         let alpha = if ahead { 0.28 } else { 0.95 };

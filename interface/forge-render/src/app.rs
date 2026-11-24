@@ -178,6 +178,8 @@ fn present_mode(asked: Option<&str>, has: &[wgpu::PresentMode]) -> wgpu::Present
 
 pub struct App {
     file: Option<String>,
+    /// The environment to open it in (`--env`).
+    env: Option<String>,
     size: (f64, f64),
     proxy: EventLoopProxy<()>,
     live: Option<Live>,
@@ -440,6 +442,7 @@ impl ApplicationHandler for App {
         if let Some(f) = self.file.take() {
             gui.open(&f);
         }
+        gui.env_asked = self.env.take();
         let egui = egui_winit::State::new(
             gui.ctx.clone(),
             egui::ViewportId::ROOT,
@@ -642,8 +645,10 @@ impl ApplicationHandler for App {
 }
 
 /// Runs the app, on this file if there is one.
+#[allow(clippy::too_many_arguments)]
 pub fn run(
     file: Option<String>,
+    env: Option<String>,
     size: (f64, f64),
     times: bool,
     present: Option<String>,
@@ -654,6 +659,7 @@ pub fn run(
     let proxy = on_loop.create_proxy();
     let mut app = App {
         file,
+        env,
         size,
         proxy,
         live: None,

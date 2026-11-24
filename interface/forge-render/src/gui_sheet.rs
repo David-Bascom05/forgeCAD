@@ -8,6 +8,11 @@ use crate::shell::{FLAT_TAB, SHEET_TAB};
 impl Gui {
     /// A Sheet Metal or Flat Pattern tab command.
     pub fn sheet_cmd(&mut self, c: SheetCmd) {
+        // the Flat Pattern and Bend Simulation are environments (shell/env)
+        if c == SheetCmd::BendSim {
+            self.env_enter(crate::shell::env::EnvId::BendSim);
+            return;
+        }
         let Some(fg) = &self.shell.fg else {
             self.shell.status = "Sheet metal: open or make a Forge part first".into();
             return;
@@ -26,9 +31,11 @@ impl Gui {
                     self.shell.tab = 0;
                 }
                 if c == SheetCmd::FlatPattern {
+                    self.shell.env = Some(crate::shell::env::EnvId::FlatPattern);
                     self.shell.tab = FLAT_TAB;
                 }
                 if c == SheetCmd::Folded {
+                    self.shell.env = None;
                     self.shell.tab = SHEET_TAB;
                 }
                 if let Some(d) = &self.shell.sheet.dlg

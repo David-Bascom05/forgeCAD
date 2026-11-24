@@ -372,3 +372,76 @@ fn a_split_program_posts_a_file_per_setup() {
     assert!(nc.lines().count() > 50);
     shot(&mut h, "cam-nc-split");
 }
+
+/// A lathe document: no milling simulation beside it (it would refuse every turning built-in);
+/// the section view docked at the view's bottom right, clear of a floating window; and the
+/// floating windows one at a time.
+#[test]
+fn a_turning_document_docks_its_section_and_windows_take_turns() {
+    let ex = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/../../examples/machined"));
+    let dir = std::env::temp_dir().join(format!("fg-cam-ui-{}-turn", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for f in ["shaft.fg", "shaft_turn.fg"] {
+        std::fs::copy(ex.join(f), dir.join(f)).unwrap();
+    }
+    let mut h = match Headless::new((1500.0, 1000.0), 1.0) {
+        Ok(h) => h,
+        Err(e) => {
+            eprintln!("skipped: {e}");
+            return;
+        }
+    };
+    h.step();
+    h.gui.open(dir.join("shaft_turn.fg").to_str().unwrap());
+    let t = std::time::Instant::now();
+    while t.elapsed().as_secs() < 120 && !h.until(generated) {}
+    assert!(generated(&h.gui), "never generated: {}", h.gui.shell.status);
+    for _ in 0..6 {
+        h.step();
+    }
+    assert!(h.gui.shell.camsim.is_none(), "no milling simulation of a lathe document");
+    assert!(h.click("tool:NC Programs"));
+    h.step();
+    h.step();
+    shot(&mut h, "cam-turn-programs");
+    // the two windows' extents, from every place each puts in it
+    let span = |h: &Headless, pre: &str| {
+        h.gui.shell.places.iter().filter(|p| p.0.starts_with(pre)).map(|p| p.1).reduce(|a, b| a.union(b))
+    };
+    let sec = span(&h, "cam:turn").expect("the section view");
+    let progs = span(&h, "cam:programs").expect("NC Programs");
+    assert!(!sec.intersects(progs), "section {sec:?} under NC Programs {progs:?}");
+    assert!(h.click("tool:Tool Library"));
+    h.step();
+    let w = h.gui.shell.cam.as_ref().unwrap();
+    assert!(w.tools_open && !w.programs_open, "one floating window at a time");
+}
+
+/// The op dialog's keys: Esc cancels (the text unchanged), Enter is OK (the edit written).
+#[test]
+fn the_op_dialog_answers_enter_and_escape() {
+    use forge_render::shell::cam::schema::{Tab, spec, tabs};
+    let Some((mut h, _)) = open("keys") else { return };
+    let before = text(&h);
+    h.gui.shell.cam.as_mut().unwrap().auto = false;
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    h.step();
+    assert!(h.placed("cam:op:ok").is_some());
+    h.key(egui::Key::Escape);
+    h.step();
+    assert!(h.gui.shell.cam.as_ref().unwrap().op_dlg.is_none(), "Esc closes it");
+    assert_eq!(text(&h), before);
+    h.gui.shell.cam.as_mut().unwrap().command(forge_render::shell::cam::Cmd::Edit("prof".into()));
+    h.step();
+    let k = tabs(spec("contour").unwrap()).iter().position(|t| *t == Tab::Passes).unwrap();
+    assert!(h.click(&format!("cam:op:tab:{k}")));
+    h.step();
+    assert!(h.click("cam:op:arg:leave"));
+    h.text("0.3");
+    h.step();
+    h.key(egui::Key::Enter);
+    h.step();
+    h.step();
+    assert!(text(&h).contains("leave: 0.3"), "Enter is OK: {}", text(&h));
+    assert!(h.gui.shell.cam.as_ref().unwrap().op_dlg.is_none());
+}
