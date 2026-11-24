@@ -66,7 +66,7 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     doc = "/project/examples/machined/flange_cam.fg";
   } else {
     const dir = t.tmpdir("cam");
-    for (const f of ["flange.fg", "flange_cam.fg"]) {
+    for (const f of ["flange.fg", "flange_cam.fg", "shaft.fg", "shaft_turn.fg"]) {
       fs.copyFileSync(path.join(t.repo, "examples/machined", f), path.join(dir, f));
     }
     served = await t.serve(dir, app);
@@ -150,6 +150,17 @@ const generated = (s) => s.cam && s.cam.generated && !s.cam.generating;
     st = await t.until(p, generated, "generated again");
     assert.equal(st.cam.ops.find((o) => o.name === "prof").status, "built");
     console.log("ok - generated again: prof certified with its new stock to leave");
+
+    // turning: a lathe document opens on Manufacture too, every op certified (G5 in full: placed)
+    await p.evaluate((d) => window.forgecad.fc.app_open(d), doc.replace("flange_cam.fg", "shaft_turn.fg"));
+    st = await t.until(p, (s) => generated(s) && s.cam.path.endsWith("shaft_turn.fg"), "the turning document generated");
+    assert.equal(st.cam.certification, "full", JSON.stringify(st.cam));
+    assert.deepEqual(
+      st.cam.ops.map((o) => [o.name, o.status]),
+      [["face", "built"], ["rough", "built"], ["fin", "built"], ["thr", "built"], ["cut", "built"]],
+    );
+    await shot(p, "cam-20-turning.png");
+    console.log("ok - a turning document: every op certified, as natively");
     t.check(p);
   } finally {
     await b.close();

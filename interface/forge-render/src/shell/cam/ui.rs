@@ -286,7 +286,9 @@ impl Shell {
                             (_, "unposted") => b,
                             _ => a,
                         });
+                    let lathe = w.stmt(&su).is_some_and(|s| s.func == "lathe_setup");
                     let label = match w.run.as_ref().and_then(|r| r.setup(&su)) {
+                        Some(_) if lathe => format!("{su}  ·  lathe"),
                         Some(s) => format!("{su}  ·  {}", wcs_word(s.offset)),
                         None => su.clone(),
                     };
@@ -2055,10 +2057,14 @@ pub fn status_line(w: &CamWs) -> String {
         .run
         .as_ref()
         .map_or(0.0, |r| r.ops.iter().map(|o| o.time_s).sum());
+    let machining = if time > 0.0 {
+        format!(" · {} machining", self::time(time))
+    } else {
+        String::new()
+    };
     format!(
-        "{} · {built}/{n} ops certified · {} machining{}",
+        "{} · {built}/{n} ops certified{machining}{}",
         w.path.rsplit('/').next().unwrap_or(""),
-        self::time(time),
         if w.dirty() { " · unsaved" } else { "" }
     )
 }
