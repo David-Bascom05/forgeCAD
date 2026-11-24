@@ -360,6 +360,10 @@ impl Host {
         {
             v.nav.take_pick();
         }
+        // input held back for its own frame (a click apart from typing): drawn next
+        if self.input.waiting() {
+            self.window.request_redraw();
+        }
         self.frames += 1;
         FRAMES.with(|f| f.set(self.frames));
         if self.frames == 1 {
