@@ -2139,13 +2139,7 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     for &(si, flip) in kept {
         let s = &specs[si];
         if s.extend && !flip && !s.remove.is_empty() {
-            if s.remove.contains(&a.face(s.from).loops[0]) {
-                new_outer.push(si);
-            }
-            crate::classify::drop_query_loops(a, s.from, &s.remove);
-            for &l in &s.remove {
-                a.remove_loop(s.from, l);
-            }
+            drop_replaced(a, s, si, &mut new_outer);
         }
     }
     let mut b_vertex: Vec<Option<VertexId>> = vec![None; b.vertex_count()];
@@ -2300,6 +2294,23 @@ impl Made<'_> {
 /// The name vertex `v` takes: from the flush list (sorted by vertex), else `n`.
 fn renamed(flush: &[(VKey, Name)], v: VKey, n: Name) -> Name {
     flush.binary_search_by_key(&v, |f| f.0).map_or(n, |k| flush[k].1)
+}
+
+/// Face `f`'s outer loop.
+fn outer_loop(a: &Body, f: FaceId) -> forge_topo::LoopId {
+    a.face(f).loops[0]
+}
+
+/// Face `s.from`, split locally, gives up the loops `s.remove` (noting `si` in `new_outer` where
+/// its outer loop goes).
+fn drop_replaced(a: &mut Body, s: &Spec, si: usize, new_outer: &mut Vec<usize>) {
+    if s.remove.contains(&outer_loop(a, s.from)) {
+        new_outer.push(si);
+    }
+    crate::classify::drop_query_loops(a, s.from, &s.remove);
+    for &l in &s.remove {
+        a.remove_loop(s.from, l);
+    }
 }
 
 /// `tol` grown to what `grown` asks of vertex `k`.
