@@ -109,7 +109,7 @@ pub struct State {
     verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
     legs: HashMap<(u64, usize), (f64, f64, f64)>,
     /// The shoulder's contact range through the motion, by (bend, die, overbend).
-    contacts: HashMap<(usize, usize, u64), (f64, f64, f64, bool)>,
+    contacts: HashMap<(usize, usize, u64), Contact>,
     /// The model's regions, made once.
     regions: crate::sim::Regions,
     /// Taken steps simulated in full, by (done, bend, setup).
@@ -136,7 +136,7 @@ struct Caches {
     verdicts: std::rc::Rc<std::cell::RefCell<crate::sim::Memo>>,
     legs: HashMap<(u64, usize), (f64, f64, f64)>,
     fulls: HashMap<(u64, usize, Setup), Step>,
-    contacts: HashMap<(usize, usize, u64), (f64, f64, f64, bool)>,
+    contacts: HashMap<(usize, usize, u64), Contact>,
 }
 
 /// A bend's search under way: the next setup to try, and what the tried ones said.
@@ -406,6 +406,9 @@ impl<'a> Planner<'a> {
         self.job.plan(self.m, self.tl, self.opts)
     }
 }
+
+/// The shoulder's contact range: least, farthest, where the least is, certified.
+type Contact = (f64, f64, f64, bool);
 
 fn mask(done: &[bool]) -> u64 {
     done.iter()

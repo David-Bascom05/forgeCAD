@@ -145,9 +145,12 @@ fn pairs(m: &Model, tl: &Tooling, prog: &Program) -> Option<(Vec<Station>, Vec<u
     Some((ps, of))
 }
 
+/// A layout: the stations, and where the part reaches along the bed at each.
+type Layout = (Vec<Station>, Vec<(f64, f64)>);
+
 /// A station layout for a program: None when a stack's length is not known or the stations
 /// will not fit the bed. `tight` packs the stacks a margin apart whatever the part's reach.
-fn layout(m: &Model, tl: &Tooling, prog: &Program, tight: bool) -> Option<(Vec<Station>, Vec<(f64, f64)>)> {
+fn layout(m: &Model, tl: &Tooling, prog: &Program, tight: bool) -> Option<Layout> {
     let (ps, of) = pairs(m, tl, prog)?;
     let steps = &prog.plan.steps;
     let dones = done_before(m, &prog.plan.sequence);

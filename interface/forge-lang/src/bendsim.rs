@@ -338,9 +338,12 @@ pub struct Planning {
     prep: Prep,
     job: Option<fb::PlanJob>,
     /// The plan found, its handling checked one step at a time: (plan, next step, checks).
-    handling: Option<(fb::Plan, usize, Vec<(usize, fb::Check)>)>,
+    handling: Option<Handling>,
     made: Option<Made>,
 }
+
+/// A found plan whose handling is being checked: the plan, the next step, the checks so far.
+type Handling = (fb::Plan, usize, Vec<(usize, fb::Check)>);
 
 /// `simulate`, begun: the part built, the tooling and the model made, nothing planned yet.
 pub fn begin(src: &str, dir: Option<PathBuf>, root: Option<PathBuf>, ask: &Ask) -> Result<Planning, Answer> {
