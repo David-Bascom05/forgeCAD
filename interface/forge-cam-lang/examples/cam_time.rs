@@ -30,6 +30,11 @@ fn main() {
             ));
         }
         println!("{a}: {dt:.3} s  ok {}  cells {cells}", cam.ok);
+        if std::env::var("CAM_TIME_ERRORS").is_ok() {
+            for e in &cam.errors {
+                println!("  error: {e}");
+            }
+        }
         if std::env::var("CAM_TIME_OPS").is_ok() {
             for o in ops {
                 println!("{o}");

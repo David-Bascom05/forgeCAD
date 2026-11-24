@@ -609,13 +609,18 @@ impl Cam {
             zs.sort_by(|a, b| a.partial_cmp(b).unwrap());
             // exact: a band ends at the jaws' top exactly, so none straddles it
             zs.dedup();
-            for w in zs.windows(2) {
+            // each band is decided on its own (its material, the part's section, the offset and
+            // the difference): on all cores (forge_math::par), the results kept in band order
+            let bands: Vec<(Vec<Leftover>, bool)> = forge_math::par::map(zs.len().saturating_sub(1), |bi| {
+                let w = &zs[bi..bi + 2];
+                let mut ok = true;
+                let mut found_lo: Vec<Leftover> = Vec::new();
                 let zm = 0.5 * (w[0] + w[1]);
                 let Ok(Some(mat)) = s.ip.material(zm) else {
                     if s.ip.material(zm).is_err() {
-                        all_ok = false;
+                        ok = false;
                     }
-                    continue;
+                    return (found_lo, ok);
                 };
                 // the part's section for this band, and how far it may be grown. Its own, by
                 // δ + ε; or, where it has none (outside the part's heights) or none can be taken
@@ -666,8 +671,7 @@ impl Cam {
                         Err(e) => Err(e),
                     },
                     None if failed => {
-                        all_ok = false;
-                        continue;
+                        return (found_lo, false);
                     }
                     // no part at or near this height: all the material is left over
                     None => Ok(mat
@@ -744,7 +748,7 @@ impl Cam {
                         }
                         for (boxes, why, r, below) in out {
                             if !boxes.is_empty() {
-                                self.leftover.push(Leftover {
+                                found_lo.push(Leftover {
                                     setup: si,
                                     z0: w[0],
                                     z1: w[1],
@@ -757,8 +761,13 @@ impl Cam {
                         }
                     }
                     Ok(_) => {}
-                    Err(_) => all_ok = false,
+                    Err(_) => ok = false,
                 }
+                (found_lo, ok)
+                        });
+            for (found_lo, ok) in bands {
+                self.leftover.extend(found_lo);
+                all_ok &= ok;
             }
         }
         self.leftover_done = all_ok;
