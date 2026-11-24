@@ -57,6 +57,10 @@ pub struct Setup {
     /// it: G5 is checked in full when both are given, by spans only when the place is not.
     pub machine: Option<Lathe>,
     pub place: Option<Place>,
+    /// Other workholding as it turns (a tailstock's centre and quill, a steady rest's jaws): each
+    /// a named envelope of revolution, its half-profile in (ρ, z) in the part's frame. Checked as
+    /// the chuck is (G2: every body keeps the fixture clearance from it, on every move).
+    pub fixtures: Vec<(String, Region)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -184,10 +188,21 @@ pub const APPROACH: f64 = 1.0;
 /// A pass's retract, at 45° away from the cut.
 pub const RETRACT: f64 = 0.5;
 
-fn css(t: &TurnTool) -> Spindle {
+/// The G50 top speed when none is asked: the machine's turning spindle's ceiling, or, with no
+/// machine, a generic 3000 rpm.
+pub const DEFAULT_MAX_RPM: f64 = 3000.0;
+
+fn top_rpm(s: &Setup) -> f64 {
+    s.machine
+        .as_ref()
+        .and_then(|m| m.rpm)
+        .map_or(DEFAULT_MAX_RPM, |r| r[1])
+}
+
+fn css(s: &Setup, t: &TurnTool) -> Spindle {
     Spindle::Css {
         vc: t.vc,
-        max_rpm: 3000.0,
+        max_rpm: top_rpm(s),
     }
 }
 
@@ -197,6 +212,12 @@ pub fn face(s: &Setup, tool: &TurnTool, t: u32, z_face: f64, ap: f64) -> Result<
     if tool.kind != Kind::Turn {
         return Err(OpError::Tool(format!(
             "facing needs a turning tool, not `{}`",
+            tool.id
+        )));
+    }
+    if tool.left {
+        return Err(OpError::Tool(format!(
+            "`{}` is a left-hand tool: it feeds +z (finish_up), not toward the chuck",
             tool.id
         )));
     }
@@ -227,7 +248,7 @@ pub fn face(s: &Setup, tool: &TurnTool, t: u32, z_face: f64, ap: f64) -> Result<
         name: format!("face to z = {z_face}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave: 0.0,
         start,
@@ -324,6 +345,12 @@ pub fn rough(
             tool.id
         )));
     }
+    if tool.left {
+        return Err(OpError::Tool(format!(
+            "`{}` is a left-hand tool: it feeds +z (finish_up), not toward the chuck",
+            tool.id
+        )));
+    }
     let re = tool.re;
     let c = grown(s, re + leave)?;
     let z_start = z_top + APPROACH + re;
@@ -380,7 +407,100 @@ pub fn rough(
         name: format!("rough OD, leave {leave}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
+        f: tool.f,
+        leave,
+        start,
+        steps,
+        removal: None,
+    })
+}
+
+/// Roughing up with a left-hand tool: axial passes feeding +z from z_lo (in room already cut, a
+/// neck or groove), at every ap from the bar and at every cylinder of the grown part, each up to
+/// the part grown by the nose radius and leave, or to z_hi, retracting at 45° away from it. For
+/// the stock under a flank that faces the chuck, before `finish_up`. A pass whose start lies
+/// inside the grown part is left out.
+pub fn rough_up(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    leave: f64,
+    ap: f64,
+    z_lo: f64,
+    z_hi: f64,
+) -> Result<OpPath, OpError> {
+    if !(leave >= 0.0) {
+        return Err(OpError::Geometry(format!(
+            "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
+        )));
+    }
+    if !(tool.kind == Kind::Turn && tool.left) {
+        return Err(OpError::Tool(format!(
+            "roughing up needs a left-hand turning tool, not `{}`",
+            tool.id
+        )));
+    }
+    if !(z_hi > z_lo) {
+        return Err(OpError::Geometry(format!(
+            "from z = {z_lo} up to z = {z_hi}: the end must lie above the start"
+        )));
+    }
+    let re = tool.re;
+    let c = grown(s, re + leave)?;
+    let x_out = s.bar_r + APPROACH + re;
+    let start = [x_out, z_lo];
+    let mut steps = vec![Step::Rapid(start)];
+    let mut xs: Vec<f64> = Vec::new();
+    let mut k = 1;
+    loop {
+        let x = s.bar_r - ap * k as f64 + re;
+        if x - re <= 0.0 {
+            break;
+        }
+        xs.push(x);
+        k += 1;
+    }
+    for sg in &c.segs {
+        if let Seg::Line { a, b } = *sg
+            && a.x == b.x
+            && a.x - re > 0.0
+            && a.x - re < s.bar_r - 1e-6
+        {
+            xs.push(a.x + 1e-7 * (1.0 + a.x.abs()));
+        }
+    }
+    xs.sort_by(|a, b| b.total_cmp(a));
+    xs.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    for x in xs {
+        let mut zs = Vec::new();
+        for sg in &c.segs {
+            meet_vertical(sg, x, &mut zs);
+        }
+        let above: Vec<f64> = zs.iter().copied().filter(|z| *z > z_lo).collect();
+        // an odd count of crossings above: the start is inside the grown part
+        if above.len() % 2 == 1 {
+            continue;
+        }
+        let z_end = above.iter().copied().fold(f64::INFINITY, f64::min).min(z_hi);
+        if z_end <= z_lo {
+            continue;
+        }
+        // in and back down at feed: the room below (a neck or a groove) is tight against the
+        // band being roughed, with no space for a rapid's clearance
+        steps.push(Step::Feed([x, z_lo]));
+        steps.push(Step::Feed([x, z_end]));
+        steps.push(Step::Feed([x + RETRACT, z_end - RETRACT]));
+        steps.push(Step::Feed([x + RETRACT, z_lo]));
+    }
+    // out of the room at feed too: the column stock (the normal path's superset) cannot hold a
+    // room under an overhang, so a rapid there would be refused against stock that is gone
+    steps.push(Step::Feed(start));
+    Ok(OpPath {
+        name: format!("rough up z {z_lo}..{z_hi}, leave {leave}"),
+        tool: tool.clone(),
+        t,
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -410,6 +530,12 @@ pub fn bore_rough(
     if tool.kind != Kind::Bore {
         return Err(OpError::Tool(format!(
             "boring needs a boring bar, not `{}`",
+            tool.id
+        )));
+    }
+    if tool.left {
+        return Err(OpError::Tool(format!(
+            "`{}` is a left-hand bar: it feeds +z, not toward the chuck",
             tool.id
         )));
     }
@@ -464,7 +590,7 @@ pub fn bore_rough(
         name: format!("rough bore, leave {leave}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -533,6 +659,12 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
     if !matches!(tool.kind, Kind::Turn | Kind::Bore) {
         return Err(OpError::Tool(format!(
             "finishing needs a turning tool or a boring bar, not `{}`",
+            tool.id
+        )));
+    }
+    if tool.left {
+        return Err(OpError::Tool(format!(
+            "`{}` is a left-hand tool: it feeds +z (finish_up), not toward the chuck",
             tool.id
         )));
     }
@@ -633,7 +765,131 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
         name: format!("finish {}, leave {leave}", if inside { "bore" } else { "OD" }),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
+        f: tool.f,
+        leave,
+        start,
+        steps,
+        removal: None,
+    })
+}
+
+fn flip(s: &Seg) -> Seg {
+    let f = |p: forge_cam_geom::region::P2| forge_cam_geom::region::p2(p.x, -p.y);
+    match *s {
+        Seg::Line { a, b } => Seg::Line { a: f(a), b: f(b) },
+        Seg::Arc { a, b, c, ccw } => Seg::Arc {
+            a: f(a),
+            b: f(b),
+            c: f(c),
+            ccw: !ccw,
+        },
+    }
+}
+
+/// The part of a piece from its start while it stays below z = z0 (clip_above mirrored).
+fn clip_below(s: &Seg, z0: f64) -> Option<(Seg, bool)> {
+    clip_above(&flip(s), -z0).map(|(p, e)| (flip(&p), e))
+}
+
+/// Finishing up the profile with a left-hand tool: the nose centre along the boundary of
+/// H ⊕ B_{r_ε + leave} counter-clockwise (up, +z, on the outside), from where it crosses
+/// z = z_lo farthest from the axis to z = z_hi. For the flanks a right-hand tool cannot follow:
+/// those facing the chuck (a collar's back chamfer, a ball's underside), reached from a groove
+/// or a neck cut first.
+pub fn finish_up(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    leave: f64,
+    z_lo: f64,
+    z_hi: f64,
+) -> Result<OpPath, OpError> {
+    if !(leave >= 0.0) {
+        return Err(OpError::Geometry(format!(
+            "a leave of {leave}: below the part (G1 holds the cutter from P ⊕ B_leave, leave ≥ 0)"
+        )));
+    }
+    if !(tool.kind == Kind::Turn && tool.left) {
+        return Err(OpError::Tool(format!(
+            "finishing up the profile needs a left-hand turning tool, not `{}`",
+            tool.id
+        )));
+    }
+    if !(z_hi > z_lo) {
+        return Err(OpError::Geometry(format!(
+            "from z = {z_lo} up to z = {z_hi}: the end must lie above the start"
+        )));
+    }
+    let re = tool.re;
+    let c = grown(s, re + leave)?;
+    let n = c.segs.len();
+    // the crossing of z = z_lo going up, farthest from the axis: the piece from there on
+    let mut best: Option<(usize, Seg)> = None;
+    for (i, sg) in c.segs.iter().enumerate() {
+        if !(sg.start().y < z_lo && sg.end().y >= z_lo) {
+            continue;
+        }
+        if let Some((back, true)) = clip_above(&sg.reversed(), z_lo) {
+            let tail = back.reversed();
+            if best.as_ref().is_none_or(|(_, b)| tail.start().x > b.start().x) {
+                best = Some((i, tail));
+            }
+        }
+    }
+    let (i0, tail) = best.ok_or(OpError::Geometry(format!(
+        "the finish path finds no start on the profile at z = {z_lo}"
+    )))?;
+    let mut segs = Vec::new();
+    let mut piece = tail;
+    let mut k = 0;
+    loop {
+        match clip_below(&piece, z_hi) {
+            None => break,
+            Some((p, ended)) => {
+                segs.push(p);
+                if ended {
+                    break;
+                }
+            }
+        }
+        k += 1;
+        if k >= n {
+            break;
+        }
+        piece = c.segs[(i0 + k) % n];
+    }
+    let p0 = tail.start();
+    let x_out = s.bar_r + APPROACH + re;
+    let start = [x_out, p0.y];
+    let mut steps = vec![Step::Rapid(start), Step::Feed([p0.x, p0.y])];
+    for sg in &segs {
+        let a = sg.start();
+        match *sg {
+            Seg::Line { b, .. } => {
+                if a != b {
+                    steps.push(Step::Feed([b.x, b.y]));
+                }
+            }
+            Seg::Arc { b, c, ccw, .. } => {
+                if a != b {
+                    steps.push(Step::Arc {
+                        to: [b.x, b.y],
+                        c: [c.x, c.y],
+                        ccw,
+                    });
+                }
+            }
+        }
+    }
+    let last = steps.last().unwrap().to();
+    steps.push(Step::Feed([last[0] + RETRACT, last[1] - RETRACT]));
+    steps.push(Step::Rapid([x_out, last[1] - RETRACT]));
+    Ok(OpPath {
+        name: format!("finish up z {z_lo}..{z_hi}, leave {leave}"),
+        tool: tool.clone(),
+        t,
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -683,7 +939,7 @@ pub fn groove(s: &Setup, tool: &TurnTool, t: u32, z0: f64, z1: f64, rho: f64) ->
         name: format!("groove z {z0}..{z1} to radius {rho}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave: 0.0,
         start,
@@ -721,7 +977,7 @@ pub fn part_off(s: &Setup, tool: &TurnTool, t: u32, z_back: f64) -> Result<OpPat
         t,
         spindle: Spindle::Css {
             vc: tool.vc,
-            max_rpm: 2000.0,
+            max_rpm: top_rpm(s).min(2000.0),
         },
         f: tool.f,
         leave: 0.0,
@@ -785,6 +1041,136 @@ pub fn thread(
     };
     Ok(OpPath {
         name: format!("thread M{d} x {p}"),
+        tool: tool.clone(),
+        t,
+        spindle: Spindle::Rpm((1000.0 * tool.vc / (std::f64::consts::PI * d)).floor()),
+        f: p,
+        leave: 0.0,
+        start,
+        steps,
+        removal: Some(band),
+    })
+}
+
+/// An internal groove between z0 and z1 out to radius rho, in a bore of radius r_in on the way in
+/// (the smallest radius between the bar's front and the groove): the blade enters along the
+/// axis at r_in less the approach, then plunges +ρ no wider apart than 0.8 of the blade, the
+/// first and last at the walls, each out of its own groove at feed.
+pub fn id_groove(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    z0: f64,
+    z1: f64,
+    rho: f64,
+    r_in: f64,
+) -> Result<OpPath, OpError> {
+    if tool.kind != Kind::IdGroove {
+        return Err(OpError::Tool(format!(
+            "internal grooving needs an ID grooving bar, not `{}`",
+            tool.id
+        )));
+    }
+    let (w, rc) = (tool.width, tool.re);
+    if z1 - z0 < w {
+        return Err(OpError::Geometry(format!(
+            "the groove ({}) is narrower than the blade ({w})",
+            z1 - z0
+        )));
+    }
+    if !(rho > r_in) {
+        return Err(OpError::Geometry(format!(
+            "an internal groove to radius {rho} in a bore of radius {r_in}: it must lie outside the bore"
+        )));
+    }
+    let x_in = r_in - APPROACH - rc;
+    let z_entry = s.bar_front + APPROACH + rc;
+    let (zr0, zr1) = (z0 + rc, z1 - (w - rc));
+    let n = ((zr1 - zr0) / (0.8 * w)).ceil() as usize;
+    let mut zs: Vec<f64> = (0..=n)
+        .map(|i| {
+            if n == 0 {
+                zr0
+            } else {
+                zr0 + (zr1 - zr0) * i as f64 / n as f64
+            }
+        })
+        .collect();
+    zs.dedup();
+    let start = [x_in, z_entry];
+    let mut steps = vec![Step::Rapid(start)];
+    for z in zs {
+        steps.push(Step::Rapid([x_in, z]));
+        steps.push(Step::Feed([rho - rc, z]));
+        steps.push(Step::Feed([x_in, z]));
+    }
+    steps.push(Step::Rapid(start));
+    Ok(OpPath {
+        name: format!("ID groove z {z0}..{z1} to radius {rho}"),
+        tool: tool.clone(),
+        t,
+        spindle: css(s, tool),
+        f: tool.f,
+        leave: 0.0,
+        start,
+        steps,
+        removal: None,
+    })
+}
+
+/// An internal ISO metric thread (60°): nominal (major) diameter d, pitch p, from z_start (ahead
+/// of the part) to z_end, in `passes` radial infeeds of equal chip area out from the minor radius
+/// r1 = d/2 − 5H/8 (H = p·√3/2) to d/2. The part as modelled shows the minor diameter: the thread
+/// is a declared removal Δ, the band [r1, d/2] over the thread's length and the insert's half
+/// width past its end, and G1 holds the tool from P ∖ Δ (as for the external thread).
+pub fn id_thread(
+    s: &Setup,
+    tool: &TurnTool,
+    t: u32,
+    d: f64,
+    p: f64,
+    z_start: f64,
+    z_end: f64,
+    passes: usize,
+) -> Result<OpPath, OpError> {
+    if tool.kind != Kind::IdThread {
+        return Err(OpError::Tool(format!(
+            "internal threading needs an ID thread insert, not `{}`",
+            tool.id
+        )));
+    }
+    if !(p >= tool.pitch[0] && p <= tool.pitch[1]) {
+        return Err(OpError::Tool(format!(
+            "pitch {p} is outside the insert's range {:?}",
+            tool.pitch
+        )));
+    }
+    let h = 0.625 * p * 0.75f64.sqrt();
+    let rt = tool.re;
+    let rmaj = 0.5 * d;
+    let r1 = rmaj - h;
+    let x_in = r1 - APPROACH - rt;
+    let n = passes.max(1);
+    let start = [x_in, z_start];
+    let mut steps = vec![Step::Rapid(start)];
+    for k in 1..=n {
+        let depth = h * (k as f64 / n as f64).sqrt();
+        let x = r1 + depth - rt;
+        steps.push(Step::Rapid([x, z_start]));
+        steps.push(Step::Thread {
+            to: [x, z_end],
+            pitch: p,
+        });
+        // the pull-out at the thread's end cuts: a feed
+        steps.push(Step::Feed([x_in, z_end]));
+        steps.push(Step::Rapid([x_in, z_start]));
+    }
+    let half = (h + 0.2) * tan(30f64.to_radians()) + rt;
+    let band = Region {
+        loops: vec![rect(r1, z_end - half, rmaj, s.part.bbox[3] + 1.0)],
+    };
+    Ok(OpPath {
+        name: format!("ID thread M{d} x {p}"),
         tool: tool.clone(),
         t,
         spindle: Spindle::Rpm((1000.0 * tool.vc / (std::f64::consts::PI * d)).floor()),
@@ -862,6 +1248,10 @@ pub struct Report {
     /// Stock removals left out because their boolean would not round to a valid region (the
     /// stock model is then larger than it could be: sound, and the G4 leftover may list more).
     pub stock_skipped: usize,
+    /// "exact" (booleans: the oracle, and G4) or "columns" (the normal path: stair.rs).
+    pub stock_model: String,
+    /// Whether the G4 leftover was computed (the exact model only).
+    pub leftover_done: bool,
     /// "full" (every joint position checked), "except G5" (a machine but no placement: the
     /// spans only), or "no machine".
     pub g5: String,
@@ -961,7 +1351,7 @@ fn region_union(a: &Region, b: &Region) -> Result<Region, String> {
 /// hull lies inside the outline (it is convex). r' is r less the margin `less`, and less a
 /// relative 1e-6 (far more than the f64 rounding of the sums), so the points are strictly
 /// inside.
-fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: bool, out: &mut Vec<[f64; 2]>) {
+fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: Option<bool>, out: &mut Vec<[f64; 2]>) {
     let k = &b.core;
     let n = k.len();
     let rr = (b.r - less).max(0.0) * (1.0 - 1e-6);
@@ -970,6 +1360,9 @@ fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: bool, out: &mut Vec<[
         k.iter().map(|v| v[1]).sum::<f64>() / n as f64,
     ];
     let xmin = k.iter().map(|v| v[0]).fold(f64::INFINITY, f64::min);
+    let xmax = k.iter().map(|v| v[0]).fold(f64::NEG_INFINITY, f64::max);
+    // the cutting side: an inside tool cuts at its greatest x, an outside one at its least
+    let side = if dense == Some(true) { xmax } else { xmin };
     for i in 0..n {
         // the vertex, pulled a relative 1e-9 toward the centroid (inside under rounding)
         let v = [
@@ -987,11 +1380,11 @@ fn outline_points(b: &Body, p: [f64; 2], less: f64, dense: bool, out: &mut Vec<[
             while t2 < t1 {
                 t2 += std::f64::consts::TAU;
             }
-            // for a finishing cut (leave 0), the cutting corners (the core's least x, and the
-            // reference vertex: a boring nose) densely
+            // for a finishing cut (leave 0), the cutting corners (the core's vertices on the
+            // cutting side, and the reference vertex: a nose) densely
             // enough that the polygon falls short of the disc by under SAMPLE_GAP, so the stock
             // model leaves no sliver on the finished surface; elsewhere three directions
-            let m = if dense && (k[i][0] == xmin || k[i] == [0.0, 0.0]) {
+            let m = if dense.is_some() && (k[i][0] == side || k[i] == [0.0, 0.0]) {
                 let step = 2.0 * dmath::acos_clamped(1.0 - SAMPLE_GAP / rr.max(SAMPLE_GAP));
                 (((t2 - t1) / step).ceil() as usize).clamp(2, 64)
             } else {
@@ -1042,7 +1435,7 @@ fn hull2(mut p: Vec<[f64; 2]>) -> Vec<[f64; 2]> {
 /// it stands for lies within `sag` of the chord (0 for a straight move): the hull of the outline
 /// points shrunk by sag at both ends. The hull of two translates of a convex set K' is K' ⊕
 /// [a, b]; each chord point lies within sag of a path point, and K' = K ⊕ B_{r − sag}.
-fn swept_inner(b: &Body, a: [f64; 2], e: [f64; 2], sag: f64, dense: bool) -> Vec<[f64; 2]> {
+fn swept_inner(b: &Body, a: [f64; 2], e: [f64; 2], sag: f64, dense: Option<bool>) -> Vec<[f64; 2]> {
     let mut pts = Vec::new();
     outline_points(b, a, sag, dense, &mut pts);
     outline_points(b, e, sag, dense, &mut pts);
@@ -1189,6 +1582,51 @@ fn move_box(mv: &Move) -> ([f64; 2], [f64; 2]) {
 /// Certifies the ops in order on the setup (see the module doc). `posted`: each op's moves as
 /// the posted program states them, read back (post.rs); None certifies the ops' own paths.
 pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Result<Report, String> {
+    certify_with(s, ops, posted, true)
+}
+
+/// `certify` for the normal path: the in-process stock as columns (stair.rs: a superset by
+/// construction, so G3 against it is sound, with no booleans), and no G4 leftover (the exact
+/// stock and the leftover are `certify`'s, on demand and as the test oracle).
+pub fn certify_fast(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Result<Report, String> {
+    certify_with(s, ops, posted, false)
+}
+
+/// The stock as certify keeps it.
+enum StockModel {
+    Exact(Region),
+    Columns(crate::stair::Stair),
+}
+
+impl StockModel {
+    fn region(&self) -> Region {
+        match self {
+            StockModel::Exact(r) => r.clone(),
+            StockModel::Columns(c) => c.region(),
+        }
+    }
+
+    fn remove(&mut self, obs: &mut Obstacle, q: &[[f64; 2]], rep: &mut Report) {
+        match self {
+            StockModel::Exact(r) => remove(r, obs, q, rep),
+            StockModel::Columns(c) => {
+                if c.clear_poly(q) {
+                    match Obstacle::of_stair("stock", c) {
+                        Ok(o) => *obs = o,
+                        Err(_) => rep.stock_skipped += 1,
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn certify_with(
+    s: &Setup,
+    ops: &[OpPath],
+    posted: Option<&[Vec<PMove>]>,
+    exact: bool,
+) -> Result<Report, String> {
     s.check().map_err(|e| format!("{e:?}"))?;
     let mut rep = Report {
         least: f64::INFINITY,
@@ -1196,7 +1634,22 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
     };
     let mut part = Obstacle::of("part", &s.part.region, s.part.mu).map_err(|e| format!("{e:?}"))?;
     let mut chuck = Obstacle::of("chuck", &s.chuck_region(), 0.0).map_err(|e| format!("{e:?}"))?;
-    let mut stock_region = s.bar();
+    let mut fixtures = s
+        .fixtures
+        .iter()
+        .map(|(n, r)| Obstacle::of(n, r, 0.0).map(|o| (n.clone(), o)))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("{e:?}"))?;
+    let mut stock_model = if exact {
+        StockModel::Exact(s.bar())
+    } else {
+        StockModel::Columns(crate::stair::Stair::bar(
+            s.bar_r,
+            s.bar_front,
+            s.chuck.z_face - s.chuck.grip,
+        ))
+    };
+    rep.stock_model = if exact { "exact" } else { "columns" }.into();
     for (oi, op) in ops.iter().enumerate() {
         let moves = match posted {
             Some(p) => p[oi].clone(),
@@ -1217,18 +1670,23 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                     at: op.start,
                 })
             };
-            if op.t == 0 || op.t > m.stations {
-                refuse(format!("station {} on a turret of {}", op.t, m.stations));
+            // a value the definition leaves unknown is not checked (listed in rep.g5)
+            if let Some(n) = m.stations
+                && (op.t == 0 || op.t > n)
+            {
+                refuse(format!("station {} on a turret of {n}", op.t));
             }
-            match op.spindle {
-                Spindle::Css { max_rpm, .. } if max_rpm > m.rpm[1] => refuse(format!(
-                    "a top speed of {max_rpm} rpm over the spindle's {}",
-                    m.rpm[1]
-                )),
-                Spindle::Rpm(r) if r < m.rpm[0] || r > m.rpm[1] => {
-                    refuse(format!("{r} rpm outside the spindle's {:?}", m.rpm))
+            if let Some(rpm) = m.rpm {
+                match op.spindle {
+                    Spindle::Css { max_rpm, .. } if max_rpm > rpm[1] => refuse(format!(
+                        "a top speed of {max_rpm} rpm over the spindle's {}",
+                        rpm[1]
+                    )),
+                    Spindle::Rpm(r) if r < rpm[0] || r > rpm[1] => {
+                        refuse(format!("{r} rpm outside the spindle's {rpm:?}"))
+                    }
+                    _ => {}
                 }
-                _ => {}
             }
             if let Some(p) = &s.place {
                 offsets = p.tools.iter().find(|(t, _)| *t == op.t).map(|x| x.1);
@@ -1237,7 +1695,8 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                 }
             }
         }
-        let mut stock = Obstacle::of("stock", &stock_region, 0.0).map_err(|e| format!("stock: {e:?}"))?;
+        let mut stock =
+            Obstacle::of("stock", &stock_model.region(), 0.0).map_err(|e| format!("stock: {e:?}"))?;
         let mut target = match &op.removal {
             Some(d) => {
                 rep.removals.push((oi, d.clone()));
@@ -1273,7 +1732,9 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                         tlo[1].add(Ival::pt(z0)).add(Ival::pt(off[1])).lo,
                         thi[1].add(Ival::pt(z0)).add(Ival::pt(off[1])).hi,
                     ];
-                    if jx[0] < m.x[0] || jx[1] > m.x[1] || jz[0] < m.z[0] || jz[1] > m.z[1] {
+                    let out =
+                        |j: [f64; 2], r: Option<[f64; 2]>| r.is_some_and(|r| j[0] < r[0] || j[1] > r[1]);
+                    if out(jx, m.x) || out(jz, m.z) {
                         rep.refusals.push(Refusal {
                             op: oi,
                             step: si,
@@ -1327,6 +1788,9 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                 }
                 // G2
                 run(b, mv, &mut chuck, s.fixture_clearance, "chuck", &mut rep);
+                for (n, f) in fixtures.iter_mut() {
+                    run(b, mv, f, s.fixture_clearance, n, &mut rep);
+                }
                 // G3 on a rapid: every body off the stock
                 if *rapid {
                     run(b, mv, &mut stock, s.rapid_clearance, "stock", &mut rep);
@@ -1340,7 +1804,12 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
             // piece by piece against the stock as the pieces before left it. Then the cut's
             // removal (none for a thread pass: the teeth stay, so the stock of revolution keeps
             // them).
-            let clears = op.tool.kind != Kind::Thread;
+            let clears = !matches!(op.tool.kind, Kind::Thread | Kind::IdThread);
+            // a finishing cut's corners sampled densely, on the side it cuts (Some(inside))
+            let dense = (op.leave == 0.0).then_some(matches!(
+                op.tool.kind,
+                Kind::Bore | Kind::IdGroove | Kind::IdThread
+            ));
             let cutters: Vec<&Body> = op
                 .tool
                 .bodies
@@ -1362,8 +1831,8 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                         Move::Arc { .. } => pieces(mv),
                     } {
                         for b in &cutters {
-                            let q = swept_inner(b, pa, pb, sag, op.leave == 0.0);
-                            remove(&mut stock_region, &mut stock, &q, &mut rep);
+                            let q = swept_inner(b, pa, pb, sag, dense);
+                            stock_model.remove(&mut stock, &q, &mut rep);
                         }
                     }
                 }
@@ -1375,15 +1844,16 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
                 }
                 if clears {
                     for b in &cutters {
-                        let q = swept_inner(b, pa, pb, sag, op.leave == 0.0);
-                        remove(&mut stock_region, &mut stock, &q, &mut rep);
+                        let q = swept_inner(b, pa, pb, sag, dense);
+                        stock_model.remove(&mut stock, &q, &mut rep);
                     }
                 }
             }
         }
         if let (Some(m), None) = (&s.machine, offsets)
             && span[0] <= span[1]
-            && (span[1] - span[0] > m.x[1] - m.x[0] || span[3] - span[2] > m.z[1] - m.z[0])
+            && (m.x.is_some_and(|x| span[1] - span[0] > x[1] - x[0])
+                || m.z.is_some_and(|z| span[3] - span[2] > z[1] - z[0]))
         {
             rep.refusals.push(Refusal {
                 op: oi,
@@ -1404,10 +1874,38 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
         }
     }
     rep.g5 = match (&s.machine, &s.place) {
-        (Some(_), Some(_)) => "full".into(),
-        (Some(_), None) => "except G5 (no placement: the spans only)".into(),
+        (Some(m), place) => {
+            // the definition's unknown values: their checks were not made
+            let unknown: Vec<&str> = [
+                (m.x.is_none(), "X travel"),
+                (m.z.is_none(), "Z travel"),
+                (m.rpm.is_none(), "spindle speed range"),
+                (m.stations.is_none(), "turret stations"),
+            ]
+            .iter()
+            .filter(|(u, _)| *u)
+            .map(|(_, w)| *w)
+            .collect();
+            match (place, unknown.is_empty()) {
+                (Some(_), true) => "full".into(),
+                (None, true) => "except G5 (no placement: the spans only)".into(),
+                (p, false) => format!(
+                    "except G5 ({}not checked, unknown in the machine's definition: {})",
+                    if p.is_none() {
+                        "no placement: the spans only; "
+                    } else {
+                        ""
+                    },
+                    unknown.join(", ")
+                ),
+            }
+        }
         (None, _) => "no machine".into(),
     };
+    let StockModel::Exact(stock_region) = stock_model else {
+        return Ok(rep);
+    };
+    rep.leftover_done = true;
     // G4: the final stock less the part grown by tol (and less the declared removals)
     let (grown, _) = offset(&s.part.region, -s.tol).map_err(|e| format!("{e:?}"))?;
     let mut keep = boolean::region_of(&grown);
@@ -1425,29 +1923,84 @@ pub fn certify(s: &Setup, ops: &[OpPath], posted: Option<&[Vec<PMove>]>) -> Resu
         )],
     };
     let left = region_diff(&region_diff(&stock_region, &keep)?, &behind)?;
-    // the smallest nose radius of a finishing op (leave 0): a region inside the part grown by it
-    // (plus tol) is a corner no finishing nose reaches, decided exactly
-    let re_fin = ops
+    // the corner radii of the finishing ops (leave 0: turning and boring noses, grooving blades),
+    // decided exactly per region
+    let mut radii: Vec<f64> = ops
         .iter()
-        .filter(|o| matches!(o.tool.kind, Kind::Turn | Kind::Bore) && o.leave == 0.0)
+        .filter(|o| {
+            matches!(
+                o.tool.kind,
+                Kind::Turn | Kind::Bore | Kind::Groove | Kind::IdGroove
+            ) && o.leave == 0.0
+        })
         .map(|o| o.tool.re)
-        .fold(f64::INFINITY, f64::min);
-    let re_fin = if re_fin.is_finite() { re_fin } else { 0.0 };
-    let near = if re_fin > 0.0 {
-        offset(&s.part.region, -(re_fin + s.tol))
-            .ok()
-            .map(|(l, _)| boolean::region_of(&l))
-    } else {
-        None
+        .filter(|r| *r > 0.0)
+        .collect();
+    radii.sort_by(|a, b| a.total_cmp(b));
+    radii.dedup();
+    // what a finishing corner of radius r leaves: a disc's centres lie in the free region F_r =
+    // box ∖ (P ⊕ B_r) (the box the bar and the tool's approach lie in, at ρ ≥ 0: the centre line is
+    // as far as a nose goes), so a region R with R ∩ F_r = ∅ and every piece of its boundary at
+    // least r − 2 tol from F_r is a corner no disc of radius r reaches (an inside corner), to
+    // within 2 tol; one nearer (a band left by a leave) is "uncut". The distance is the checker's
+    // certified bound, a point swept along each piece (no offset of an offset: shrinking a grown
+    // region collapses its corner arcs, the offset's slow case).
+    let point = Body {
+        name: "leftover".into(),
+        cutter: false,
+        core: vec![[0.0, 0.0]],
+        r: 0.0,
+        depth: [0.0, 0.0],
+        relief: 0.0,
+        on_axis: true,
+        cyl: None,
     };
+    let mut near: Vec<(f64, Region, Obstacle)> = radii
+        .iter()
+        .filter(|&&r| r > 2.0 * s.tol)
+        .filter_map(|&r| {
+            let bx = Region {
+                loops: vec![rect(
+                    0.0,
+                    s.chuck.z_face - s.chuck.grip - 2.0 - r,
+                    s.bar_r + r + 1.0,
+                    s.bar_front.max(s.part.bbox[3]) + r + 1.0,
+                )],
+            };
+            let (g, _) = offset(&s.part.region, -r).ok()?;
+            let free = region_diff(&bx, &boolean::region_of(&g)).ok()?;
+            let obs = Obstacle::of_full("free", &free, s.part.mu).ok()?;
+            Some((r, free, obs))
+        })
+        .collect();
     for l in left.loops {
         let rg = Region { loops: vec![l] };
-        let reason = match &near {
-            Some(n) if region_diff(&rg, n).is_ok_and(|d| d.loops.is_empty()) => {
-                format!("nose radius {re_fin}: an inside corner the finishing nose cannot reach")
+        let mut reason = "uncut".to_string();
+        for (r, free, obs) in near.iter_mut() {
+            let held = boolean::boolean(&rg, free, Op::Inter).is_ok_and(|l| l.is_empty())
+                && rg.loops.iter().flat_map(|l| &l.segs).all(|sg| {
+                    let mv = match *sg {
+                        Seg::Line { a, b } => Move::Line {
+                            a: [a.x, a.y],
+                            b: [b.x, b.y],
+                        },
+                        Seg::Arc { a, b, c, ccw } => Move::Arc {
+                            a: [a.x, a.y],
+                            b: [b.x, b.y],
+                            c: [c.x, c.y],
+                            ccw,
+                        },
+                    };
+                    matches!(
+                        check::clearance(&point, &mv, obs, *r - 2.0 * s.tol),
+                        Verdict::Clear { .. }
+                    )
+                });
+            if held {
+                reason = format!("nose radius {r}: an inside corner the finishing nose cannot reach");
+                break;
             }
-            _ => "uncut".to_string(),
-        };
+        }
         rep.leftover.push(rg);
         rep.leftover_reasons.push(reason);
     }
