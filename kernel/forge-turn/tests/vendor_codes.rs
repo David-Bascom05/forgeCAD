@@ -50,10 +50,11 @@ fn maker_inserts_and_holders_agree_with_their_codes() {
                 ));
             }
         }
-        if let Some(l) = i.l {
-            if !close(l, d.l, 0.15) && !conflict("l") {
-                bad.push(format!("{} ({}): l stated {l} vs code {}", i.id, i.code, d.l));
-            }
+        if let Some(l) = i.l
+            && !close(l, d.l, 0.15)
+            && !conflict("l")
+        {
+            bad.push(format!("{} ({}): l stated {l} vs code {}", i.id, i.code, d.l));
         }
     }
     for h in &lib.turn_holders {
