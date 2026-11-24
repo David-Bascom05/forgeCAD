@@ -24,10 +24,11 @@ pub mod gui_apptools;
 mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
-#[path = "gui_env.rs"]
+#[path = "gui_bendsim.rs"]
 mod gui_bendsim;
 #[path = "gui_docs.rs"]
 pub mod gui_docs;
+#[path = "gui_env.rs"]
 mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
@@ -1484,11 +1485,17 @@ impl Gui {
                     selected: true,
                     second: false,
                 }));
+                // the bend simulation's bodies are not the design's: none of its marks
+                if self.bend.showing() {
+                    m.clear();
+                }
                 m
             };
             // the build's flags on the faces of what they're of; Compare's colours over them
             let flagged;
-            let colours: &[crate::render::FaceColour] = if self.vers.colours.is_empty() {
+            let colours: &[crate::render::FaceColour] = if self.bend.showing() {
+                &[]
+            } else if self.vers.colours.is_empty() {
                 flagged = self.fg_marks_was.1.clone();
                 &flagged
             } else {

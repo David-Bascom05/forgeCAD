@@ -13,6 +13,7 @@ per_doc!(
     [
         view: Option<View>,
         vers: gui_versions::VersState,
+        bend: super::gui_bendsim::BendView,
         back_image_was: Option<String>,
         view_file: Option<String>,
         fg: Option<crate::fg::Session>,

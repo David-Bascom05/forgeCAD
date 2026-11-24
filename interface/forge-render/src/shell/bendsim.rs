@@ -52,6 +52,8 @@ pub struct BendSimUi {
     pub path: String,
     /// The library as last read (built in, the part's folder's, the user's).
     pub catalog: Option<Result<Catalog, String>>,
+    /// The planner found no feasible order: the part's own order is shown, as given.
+    pub as_given: bool,
 }
 
 fn dir_of(path: &str) -> Option<std::path::PathBuf> {
@@ -77,7 +79,25 @@ impl BendSimUi {
             sequence: choice.sequence.as_ref().map(|s| s.join(",")),
             ..Ask::default()
         };
-        let sim = simulate(source, dir.clone(), None, &ask).map_err(|a| a.text);
+        let mut sim = simulate(source, dir.clone(), None, &ask).map_err(|a| a.text);
+        // no feasible order: the bends in the part's own order, simulated as given, so what
+        // blocks them is seen in the view
+        let mut as_given = false;
+        if let Ok(s) = &sim
+            && !s.plan.feasible
+            && s.plan.steps.is_empty()
+            && choice.sequence.is_none()
+            && !s.names.is_empty()
+        {
+            let again = Ask {
+                sequence: Some(s.names.join(",")),
+                ..ask.clone()
+            };
+            if let Ok(s2) = simulate(source, dir.clone(), None, &again) {
+                sim = Ok(s2);
+                as_given = true;
+            }
+        }
         let material = sim.as_ref().ok().and_then(|s| {
             s.answer
                 .json
@@ -96,6 +116,7 @@ impl BendSimUi {
             source: source.into(),
             path: path.into(),
             catalog: None,
+            as_given,
         };
         if let Some(p) = b.choice.press.clone() {
             b.table_height = b.catalog().and_then(|c| c.press(&p)).and_then(|r| r.table_height);
@@ -227,10 +248,10 @@ impl BendSimUi {
 
 fn status_mark(s: Option<Status>) -> (&'static str, egui::Color32) {
     match s {
-        Some(Status::Published) => ("●", look::PASS),
-        Some(Status::Estimate) => ("◐", look::WARN),
-        Some(Status::Conflict) => ("⚠", look::WARN),
-        Some(Status::Unknown) | None => ("○", look::MUTED),
+        Some(Status::Published) => ("P", look::PASS),
+        Some(Status::Estimate) => ("E", look::WARN),
+        Some(Status::Conflict) => ("C", look::WARN),
+        Some(Status::Unknown) | None => ("U", look::MUTED),
     }
 }
 
@@ -315,7 +336,7 @@ pub fn setup_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
                 let ok = r.press.is_ok();
                 let resp = ui.add_enabled(
                     ok,
-                    egui::SelectableLabel::new(choice.press.as_deref() == Some(&r.id), txt),
+                    egui::Button::selectable(choice.press.as_deref() == Some(&r.id), txt),
                 );
                 if resp.clicked() {
                     redo = Some((
@@ -329,7 +350,7 @@ pub fn setup_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
             }
         });
     if let Some(p) = choice.press.as_deref().and_then(|p| cat.press(p)) {
-        egui::CollapsingHeader::new("Specs (● published ◐ estimate ○ unknown)")
+        egui::CollapsingHeader::new("Specs (P published, E estimate, C conflict, U unknown)")
             .id_salt("bendsim-specs")
             .show(ui, |ui| {
                 let pv = &p.prov;
@@ -461,7 +482,9 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     let mut moved = None;
     ui.horizontal(|ui| {
         ui.strong("Sequence");
-        ui.label(if st.choice.sequence.is_some() {
+        ui.label(if st.as_given {
+            "(no feasible order: the part's own, as given)"
+        } else if st.choice.sequence.is_some() {
             "(edited)"
         } else {
             "(planned)"
@@ -469,10 +492,10 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     });
     for (i, n) in names.iter().enumerate() {
         ui.horizontal(|ui| {
-            if ui.small_button("▲").clicked() && i > 0 {
+            if ui.small_button("up").clicked() && i > 0 {
                 moved = Some((i, i - 1));
             }
-            if ui.small_button("▼").clicked() && i + 1 < names.len() {
+            if ui.small_button("dn").clicked() && i + 1 < names.len() {
                 moved = Some((i, i + 1));
             }
             let c = if passes[i] { look::PASS } else { look::FAIL };
@@ -609,16 +632,16 @@ pub fn results_ui(ui: &mut egui::Ui, st: &BendSimUi) {
 pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     let n = st.steps();
     ui.horizontal(|ui| {
-        if ui.button("⏮").clicked() {
+        if ui.button("|<").clicked() {
             st.go(0);
         }
-        if ui.button("◀").clicked() {
+        if ui.button("<").clicked() {
             st.go(st.step.saturating_sub(1));
         }
-        if ui.button(if st.playing { "⏸" } else { "▶" }).clicked() {
+        if ui.button(if st.playing { "Pause" } else { "Play" }).clicked() {
             st.play();
         }
-        if ui.button("▶|").clicked() && n > 0 {
+        if ui.button(">").clicked() && n > 0 {
             st.go((st.step + 1).min(n - 1));
         }
         let (stage, _) = stage_at(st.t);
@@ -628,7 +651,7 @@ pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
             st.step + 1,
             n,
             stage.word(),
-            pose.map_or(String::new(), |p| format!(" · φ {:.1}°", p.phi.to_degrees()))
+            pose.map_or(String::new(), |p| format!(" · phi {:.1}°", p.phi.to_degrees()))
         ));
     });
     let w = ui.available_width().max(100.0);
@@ -729,17 +752,17 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
         for c in s.failures() {
             lines.push((
                 format!(
-                    "✖ {}{}{}",
+                    "x {}{}{}",
                     c.rule.word(),
                     c.tool.as_deref().map_or(String::new(), |t| format!(" · {t}")),
                     c.phi
-                        .map_or(String::new(), |f| format!(" at φ {:.1}°", f.to_degrees()))
+                        .map_or(String::new(), |f| format!(" at phi {:.1}°", f.to_degrees()))
                 ),
                 look::FAIL,
             ));
         }
     }
-    let mut y = rect.top() + 10.0;
+    let mut y = rect.top() + 44.0;
     for (l, c) in lines {
         p.text(
             egui::pos2(rect.left() + 12.0, y),

@@ -82,25 +82,35 @@ pub fn tint(b: &Body, material: Option<&str>) -> [f32; 4] {
     }
     match b.look {
         Look::Tool => [0.66, 0.67, 0.69, 1.0],
-        Look::Frame => [0.80, 0.81, 0.82, 0.0],
-        Look::Gauge => [0.18, 0.18, 0.19, 0.6],
-        Look::Floor => [0.42, 0.42, 0.41, 0.0],
+        // a maker's livery is not in the data: a neutral machine grey
+        Look::Frame => [0.46, 0.48, 0.50, 0.15],
+        Look::Gauge => [0.16, 0.16, 0.17, 0.6],
+        Look::Floor => [0.30, 0.30, 0.29, 0.0],
         Look::Witness => [0.95, 0.10, 0.08, 0.0],
         Look::Sheet => {
+            // the part in the panel's part blue, set apart from the steel tools; half metal
+            // when its material is a metal
             let m = material.unwrap_or("").to_ascii_lowercase();
-            if m.contains("alumin") || m.starts_with("50") || m.starts_with("60") {
-                [0.91, 0.92, 0.93, 1.0]
-            } else if m.contains("stainless") || m.starts_with("30") {
-                [0.75, 0.75, 0.73, 1.0]
-            } else if m.contains("copper") {
-                [0.95, 0.64, 0.54, 1.0]
-            } else if m.contains("brass") {
-                [0.91, 0.78, 0.42, 1.0]
+            let metal = if m.is_empty()
+                || m.contains("steel")
+                || m.contains("alumin")
+                || m.contains("copper")
+                || m.contains("brass")
+            {
+                0.7
             } else {
-                // mild steel
-                [0.56, 0.57, 0.58, 1.0]
-            }
+                0.0
+            };
+            // the panel's part blue (shell/bendsim.rs look::PART), linear
+            [0.07, 0.33, 0.81, metal * 0.5]
         }
+    }
+}
+
+impl BendView {
+    /// The view holds the simulation's bodies, not the design.
+    pub fn showing(&self) -> bool {
+        self.taken.is_some()
     }
 }
 
@@ -109,12 +119,7 @@ impl Gui {
     /// design's view back once it is not.
     pub(super) fn bendsim_frame(&mut self) {
         let on = self.shell.env == Some(EnvId::BendSim)
-            && self
-                .shell
-                .sheet
-                .bend_sim
-                .as_ref()
-                .is_some_and(|b| b.sim.is_ok());
+            && self.shell.sheet.bend_sim.as_ref().is_some_and(|b| b.sim.is_ok());
         if !on {
             self.bendsim_put_back();
             return;
@@ -196,7 +201,9 @@ impl Gui {
             // the working station and the part, not the whole floor
             let near: Vec<&Body> = bodies
                 .iter()
-                .filter(|x| x.look == Look::Sheet || x.name.starts_with("punch:") || x.name.starts_with("die:"))
+                .filter(|x| {
+                    x.look == Look::Sheet || x.name.starts_with("punch:") || x.name.starts_with("die:")
+                })
                 .collect();
             let (mut lo, mut hi) = ([f32::MAX; 3], [f32::MIN; 3]);
             for x in near {
@@ -210,7 +217,13 @@ impl Gui {
             if lo[0] <= hi[0] {
                 let center = [0, 1, 2].map(|k| 0.5 * (lo[k] + hi[k]));
                 let radius = 0.5 * (0..3).map(|k| (hi[k] - lo[k]).powi(2)).sum::<f32>().sqrt();
-                v.nav.fit_sphere(center, radius * 1.6);
+                // from the operator's side (-x), a little to the left and above, as one
+                // stands at a press brake
+                let mut cam = crate::camera::Camera::fit(center, radius);
+                cam.yaw = 252f32.to_radians();
+                cam.pitch = 14f32.to_radians();
+                cam.fit_to(radius * 1.5, v.nav.size.0.max(1), v.nav.size.1.max(1));
+                v.nav.jump_to(cam);
             }
             self.bend.framed = true;
         }

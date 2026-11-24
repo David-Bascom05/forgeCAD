@@ -157,7 +157,7 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
         egui::pos2(view.left() + 12.0, view.bottom() - 74.0),
         egui::pos2(view.right() - 12.0, view.bottom() - 8.0),
     );
-    egui::Area::new(egui::Id::new("env-bendsim-timeline"))
+    egui::Area::new(egui::Id::unique("env-bendsim-timeline"))
         .fixed_pos(band.min)
         .order(egui::Order::Foreground)
         .show(ui.ctx(), |ui| {
