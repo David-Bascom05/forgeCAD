@@ -29,7 +29,7 @@ LICENSE_URL=https://raw.githubusercontent.com/AutodeskAILab/Fusion360GalleryData
 # name  path  bytes  sha256 (computed 2026-11-24 from the bucket objects, Last-Modified 2021-12-02/03)
 SETS=(
   "segmentation-step segmentation/s2.0.1/s2.0.1_extended_step.zip 506333119 9bebcf0722951bef166c2160cda6e2d3225692b90a90d7dc9cf34dd80fc5a39e"
-  "reconstruction reconstruction/r1.0.1/r1.0.1.zip 2103449157 RECON_SHA256"
+  "reconstruction reconstruction/r1.0.1/r1.0.1.zip 2103449157 485601de3d23e25a5d63a75588ca780fa7881d7a0bea1ab6c24dbcefa57ad5c9"
 )
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
