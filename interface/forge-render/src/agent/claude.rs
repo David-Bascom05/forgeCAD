@@ -360,6 +360,9 @@ impl ClaudeCode {
         a
     }
 
+    // the error is the transcript's event saying why (sent once, at most once a turn): its size
+    // is the event's, not worth a box
+    #[allow(clippy::result_large_err)]
     fn spawn(&mut self) -> Result<(), Event> {
         let dir = self.cfg.cwd.clone();
         if let Err(e) = forge_dirs::fs::create_dir_all(&dir) {
