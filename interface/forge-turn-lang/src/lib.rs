@@ -473,11 +473,7 @@ impl TurnCam {
                 let q = post::quantize(&job, number, name, &d).map_err(|e| format!("{e:?}"))?;
                 let (text, motions) = post::round_trip(&q, &d)?;
                 let posted = post::posted_moves(&motions, &job, &d);
-                let rep = if self.exact {
-                    ops::certify(s, &job, Some(&posted))?
-                } else {
-                    ops::certify_fast(s, &job, Some(&posted))?
-                };
+                let rep = certify_memo(s, &job, &posted, self.exact)?;
                 Ok((text, rep))
             });
         match r {
@@ -745,6 +741,30 @@ impl TurnCam {
 }
 
 /// Runs a turning document (its file's directory finds the part): the normal path.
+/// The programs' certifications made by earlier runs in this process (forge-cam-lang's memo.rs).
+static CERTIFIED: forge_cam_lang::memo::Memo<Result<ops::Report, String>> = forge_cam_lang::memo::Memo::new();
+
+/// `ops::certify` (exact) or `ops::certify_fast`, taken from an earlier run when every argument is
+/// the same (each number the same number: the full Debug text, memo.rs): the certification is a
+/// function of the setup, the ops' paths and the posted moves alone (no clock, file or other
+/// state; an env switch only prints). A rerun, or an edit that leaves a program's paths as they
+/// were, no longer certifies it again: nine tenths of a lathe document's run.
+fn certify_memo(
+    s: &ops::Setup,
+    job: &[ops::OpPath],
+    posted: &[Vec<ops::PMove>],
+    exact: bool,
+) -> Result<ops::Report, String> {
+    let key = format!("turn-certify/1 {:?}", (s, job, posted, exact));
+    CERTIFIED.get_or(key, || {
+        if exact {
+            ops::certify(s, job, Some(posted))
+        } else {
+            ops::certify_fast(s, job, Some(posted))
+        }
+    })
+}
+
 pub fn run(src: &str, dir: &Path) -> TurnCam {
     run_with(src, dir, false, forge_tooling::Library::builtin())
 }
@@ -837,4 +857,123 @@ fn run_with(src: &str, dir: &Path, exact: bool, lib: forge_tooling::Library) -> 
             .push("no lathe_program(..): nothing is posted or certified".into());
     }
     cam
+}
+
+#[cfg(test)]
+mod certify_memo_tests {
+    use super::{ops, post};
+    /// Every input of a lathe program's certification is in its memo key: an op's arguments, the
+    /// chuck, the machine's placing and the part each certify it anew, and that run is the fresh
+    /// one (every memo bypassed); the same text, and a comment, take it from the memo.
+    #[test]
+    fn each_input_class_certifies_anew() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        // scratch under the workspace's target (wasm32-wasip1 has no temp_dir or pid)
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/turn_certify_memo_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("shaft.fg")).unwrap();
+        forge_dirs::fs::write(dir.join("shaft.fg"), &part).unwrap();
+        let doc = forge_dirs::fs::read_to_string(src_dir.join("shaft_turn.fg")).unwrap();
+        let reply = |tc: &super::TurnCam| {
+            let mut t = tc.json().to_string();
+            for p in &tc.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let run = |d: &str| {
+            let before = super::CERTIFIED.computed();
+            let tc = super::run(d, &dir);
+            assert!(
+                tc.programs.iter().any(|p| p.text.is_some()),
+                "nothing posted: {}",
+                reply(&tc)
+            );
+            (super::CERTIFIED.computed() - before, reply(&tc))
+        };
+        let fresh = |d: &str| {
+            forge_cam_lang::memo::bypass(true);
+            let tc = super::run(d, &dir);
+            forge_cam_lang::memo::bypass(false);
+            reply(&tc)
+        };
+        let (n, first) = run(&doc);
+        assert_eq!(n, 1);
+        assert_eq!(run(&doc), (0, first.clone()), "the same text certified again");
+        assert_eq!(first, fresh(&doc), "the memo's run is not the fresh one");
+        let c = run(&doc.replace("# shaft.fg on", "# the shaft on"));
+        assert_eq!(c, (0, first.clone()), "a comment certified again");
+        for (what, d) in [
+            ("an op's argument", doc.replace("leave: 0.3", "leave: 0.25")),
+            ("the chuck", doc.replace("grip: 30", "grip: 28")),
+            ("the machine's placing", doc.replace("at: 100", "at: 110")),
+        ] {
+            assert_ne!(d, doc, "{what}: no edit");
+            let (n, got) = run(&d);
+            assert_eq!(n, 1, "{what}: not certified anew");
+            assert_eq!(got, fresh(&d), "{what}: not the fresh run");
+        }
+        // what the moves do not carry: the job's own fields (the leave G1 holds, the tools'
+        // bodies) are in the key too. The program's inputs as `program` makes them, its job's
+        // leave changed alone: certified anew, and the certification it would make
+        let tc = super::run(&doc, &dir);
+        let job: Vec<ops::OpPath> = tc
+            .paths
+            .iter()
+            .filter(|p| p.1 == 0)
+            .map(|p| p.2.clone())
+            .collect();
+        let d = post::Dialect::get("fanuc-lathe").unwrap();
+        let q = post::quantize(&job, 1, "prog", &d).unwrap();
+        let (_, motions) = post::round_trip(&q, &d).unwrap();
+        let posted = post::posted_moves(&motions, &job, &d);
+        let s = &tc.setups[0].1;
+        let mut other = job.clone();
+        other[1].leave += 0.05;
+        let before = super::CERTIFIED.computed();
+        let got = super::certify_memo(s, &other, &posted, false);
+        assert_eq!(
+            super::CERTIFIED.computed() - before,
+            1,
+            "a job's leave alone: not certified anew"
+        );
+        assert_eq!(
+            format!("{got:?}"),
+            format!("{:?}", ops::certify_fast(s, &other, Some(&posted)))
+        );
+        // and which certification: the exact one is its own
+        let before = super::CERTIFIED.computed();
+        let got = super::certify_memo(s, &job, &posted, true);
+        assert_eq!(
+            super::CERTIFIED.computed() - before,
+            1,
+            "exact: taken from the fast one"
+        );
+        assert_eq!(
+            format!("{got:?}"),
+            format!("{:?}", ops::certify(s, &job, Some(&posted)))
+        );
+        // and the posted moves: one move's flags changed alone
+        let mut moved = posted.clone();
+        moved[0][0].1 = !moved[0][0].1;
+        let before = super::CERTIFIED.computed();
+        let got = super::certify_memo(s, &job, &moved, false);
+        assert_eq!(
+            super::CERTIFIED.computed() - before,
+            1,
+            "a posted move alone: not certified anew"
+        );
+        assert_eq!(
+            format!("{got:?}"),
+            format!("{:?}", ops::certify_fast(s, &job, Some(&moved)))
+        );
+        let edited = part.replacen("shared ds = 30", "shared ds = 29", 1);
+        assert_ne!(edited, part);
+        forge_dirs::fs::write(dir.join("shaft.fg"), &edited).unwrap();
+        let (n, got) = run(&doc);
+        assert_eq!(n, 1, "part: not certified anew");
+        assert_eq!(got, fresh(&doc), "part: not the fresh run");
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
+    }
 }

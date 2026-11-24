@@ -27,7 +27,7 @@ use forge_lang::syntax::{self, Arg, Expr, ExprKind, StmtKind};
 pub mod export;
 pub mod holes;
 pub mod life;
-mod memo;
+pub mod memo;
 pub mod probing;
 pub mod sim;
 pub mod toollog;
