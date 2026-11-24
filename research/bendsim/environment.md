@@ -147,3 +147,63 @@ cite as `status = "published"`, `source = "user"`). I send the schema once it is
 Open: (a) base for the UI work: ui/environments and cam/sim are not on main yet; I build on main
 and merge both branches into mine (no force-push), or wait, as the coordinator decides.
 (b) livery colours: unknown unless the maker publishes them; grey until then.
+
+## 8. The bending program editor (David: "with proper tools to reorder and things. sim + manufacturing editor")
+
+The environment is a press-brake **program editor**, not a viewer. Its source of truth is a
+companion text document, like CAM's `machining` document and URDF's robot document; the UI only
+writes edit ops to it, with undo/redo; every edit re-simulates (certified sim per step) and the 3D
+view and timeline follow.
+
+```
+bending
+# load_tray.fg on a TruBend 5130
+part   = part("load_tray.fg", sheet: "tray")
+press  = press("trumpf-trubend-5130", crowning: auto)
+s1     = station(punch: "trumpf/OW200-S", die: "trumpf/EV_W16-84deg", y: -400,
+                 punch_segments: (200, 100, 50), die_segments: (250, 100), horns: (left))
+s2     = station(punch: "trumpf/OW222-K", die: "trumpf/EV_W16-84deg", y: 600, length: 300)
+b1     = bend("right_lip", at: s1, flip: false, rotate: false,
+              gauge: (x: 42.5, r: 0, z: (-100, 100), edge: "right_lip.side"), angle: 90deg)
+b2     = bend("left_lip", at: s1, rotate: true)
+b3     = bend(("right", "left"), at: s2)          # two bends in one stroke (merged step)
+sheet  = setup_sheet(pictures: true)
+```
+
+- **Statements** (a closed namespace, as `machining`'s): `part`, `press`, `station`, `bend`,
+  `setup_sheet`, `program`. Steps run in statement order: reordering = moving `bend` lines.
+- **Edit ops**: the existing ones (MoveFeature, AddFeature, DeleteFeature, SetArg, Rename,
+  Undo/Redo) on the document's statements; split/merge = replacing one `bend` with two / two with
+  one (ReplaceFeature). No new op kinds.
+- **Per step**: the bend(s), station, orientation (flip, rotate end for end, shift along the
+  station), backgauge (X, R, Z1/Z2, which fingers, which gauge edge), the angle target and
+  overbend, crowning, manual overrides; an override a check refuses stays, shown failing.
+- **Planner**: suggestions are offered beside each step and as whole ranked programs (fewest
+  flips, then fewest tool changes / stations, then search order); applying one is an explicit
+  edit, never silent.
+- **Tooling layout editor**: stations dragged along the bed, segment stacks built from the tool's
+  published lengths (split to the needed length, horns), checked against the bed length, housing
+  gap and tonnage per station (kN/m x stack length vs the tools' and the press's limits).
+- **Results** per step: every check, collisions and limit violations listed with click-to-locate
+  (jump the timeline to the witness's phi, frame it).
+- **Handling** between steps checked for collision: the part's envelope swept through the flip /
+  rotation the operator makes (lifted clear of the die, turned about its own centre), against the
+  press bodies; reported as its own rule (`handling`), a warning where the motion is the
+  operator's choice.
+- **Outputs**: a setup sheet (tool layout, step list with a picture per step, as HTML/PNG); a
+  press-brake program only in a format whose specification is openly published — none of the
+  controls' formats (Trumpf TASC/TruBend, Amada AMNC, Bystronic ByVision, Delem DA) is openly
+  documented as far as I know (to be checked, cited): until one is, `program(..)` answers the
+  typed error `ProgramFormatUnavailable` with what was looked for.
+- **Language proofs**: the `bending` header and the `bend` built-in family (closed namespace)
+  get rows in research/forge-lang/lean/COVERAGE.md in the same change (LANG-PROOFS proves them),
+  as `machining`/`cam` have: header row + builtins row + args GAP row.
+
+Crate: `interface/forge-bend-lang` (as forge-cam-lang): parse the document with forge-lang's
+parser, evaluate the closed namespace into (Model, Tooling with stations, the steps as
+`Setup`s and overrides), run forge-brake's `simulate` on the given sequence, answer
+`forgecad.bending/1`. forge-cli routes a `bending` document to it (`fg.rs`), MCP the same.
+
+Order of work (coordinator, 2026-11-24): (1) collision-checked handling; (2) ranked automatic
+sequence search; then the `bending` document + editor UI on it; (3) RENDER-STUDIO appearances;
+(4) presses and tools as a Kind in MACHINE-BUILDER's forge-library builder.
