@@ -77,17 +77,19 @@ static FINISHED: memo::Memo<Finished> = memo::Memo::new();
 fn certify_memo(
     p: &OpPath,
     tool: &ops::ToolUse,
-    part: &[Face],
-    stages: &[(usize, Vec<Face>)],
-    fixture: &[Face],
+    (part, part_key): (&[Face], &str),
+    (stages, stages_key): (&[(usize, Vec<Face>)], &str),
+    (fixture, fixture_key): (&[Face], &str),
     fclear: f64,
     tol: f64,
     clearance: f64,
     column: bool,
 ) -> ops::CheckSummary {
+    // the faces by what they are made from (each `*_key` names its faces exactly: see the
+    // caller), the rest by their full text
     let key = format!(
-        "certify_with/1 {:?}",
-        (p, tool, part, stages, fixture, fclear, tol, clearance, column)
+        "certify_with/2 {:?} {part_key} {stages_key} {fixture_key}",
+        (p, tool, fclear, tol, clearance, column)
     );
     CERTIFIED.get_or(key, || {
         ops::certify_with(p, tool, part, stages, fixture, fclear, tol, clearance, column)
@@ -172,6 +174,9 @@ struct PartIn {
     turn_of: Option<usize>,
     file: String,
     faces: Vec<Face>,
+    /// `faces`' full text, made once (the certification memo's key for them): `faces` is not
+    /// changed after the part is read.
+    faces_text: std::sync::OnceLock<String>,
     holes: Vec<holes::HoleInfo>,
     bbox: ([f64; 3], [f64; 3]),
     /// ISO 513 group: `group:`, else the stock material's record, else its family; "" when
@@ -1309,6 +1314,11 @@ pub struct Cam {
 }
 
 impl PartIn {
+    /// `faces`' full text, made at the first call.
+    fn faces_key(&self) -> &str {
+        self.faces_text.get_or_init(|| format!("part {:?}", self.faces))
+    }
+
     /// Its lowest plus its highest z: turning over about x maps z to h − z.
     fn h(&self) -> f64 {
         self.bbox.0[2] + self.bbox.1[2]
@@ -1614,6 +1624,7 @@ impl Cam {
             turn_of: Some(i),
             file: p.file.clone(),
             faces,
+            faces_text: std::sync::OnceLock::new(),
             // the holes in the turned frame, (x, y, z) -> (x, -y, h - z), their direction
             // turned too: one drilled from below is now drilled from above, and one from
             // above is refused here as before (a hole is drilled from the side it opens on)
@@ -2667,6 +2678,7 @@ impl Cam {
                     turn_of: None,
                     file,
                     faces,
+                    faces_text: std::sync::OnceLock::new(),
                     holes,
                     bbox: (lo, hi),
                     stock: material.as_deref().map(|m| stock_of(m, &group, dir)),
@@ -3181,6 +3193,7 @@ impl Cam {
             turn_of: None,
             file: format!("{name} (soft jaws, {})", bl.name),
             faces: sj.part.clone(),
+            faces_text: std::sync::OnceLock::new(),
             holes: vec![],
             bbox: (b.min, b.max),
             stock: jaw_material
@@ -8013,7 +8026,14 @@ impl Cam {
             .stock_before
             .clone()
             .unwrap_or_else(|| forge_cam::stock::InProcess::new(s.stock.min, s.stock.max));
+        // what each stage's faces are made from, in order (the memo key's: `faces_of` is a
+        // function of the in-process stock and, on its error, the setup's stock alone)
+        let stage_ips = std::cell::RefCell::new(String::new());
         let faces_of = |ip: &forge_cam::stock::InProcess| {
+            {
+                use std::fmt::Write;
+                let _ = write!(stage_ips.borrow_mut(), "{ip:?};");
+            }
             // a clock only when asked: std's panics in a browser page
             let t0 = std::env::var("FORGE_CAM_DEBUG")
                 .is_ok()
@@ -8252,12 +8272,27 @@ impl Cam {
                 | "ramping"
                 | "flat"
         );
+        // the key's stand-ins for the faces (each formatted once, not per op): the part's
+        // faces' text (made once per part), or the op's own target's; the stages' in-process
+        // stocks (and the setup's stock, `faces_of`'s fallback) with their move indices; the
+        // fixture (its faces are `Fixture::faces` of it) or the stock (its support face)
+        let target_key: std::borrow::Cow<str> = match &self.ops[oi].target {
+            Some(t) => format!("own {t:?}").into(),
+            None => part.faces_key().into(),
+        };
+        let stages_key = format!(
+            "{stock_needed} {:?} {:?} {}",
+            stages.iter().map(|x| x.0).collect::<Vec<_>>(),
+            s.stock,
+            stage_ips.borrow()
+        );
+        let fixture_key = format!("{:?} {:?}", s.fixture, s.stock);
         let mut sum = certify_memo(
             posted,
             &tool,
-            target,
-            &stages,
-            &ffaces,
+            (target, &target_key),
+            (&stages, &stages_key),
+            (&ffaces, &fixture_key),
             fclear,
             s.tol,
             s.clearance,
@@ -9538,7 +9573,21 @@ mod certify_memo_tests {
             0.01,
             2.0,
         );
-        let run = |a: &Args| certify_memo(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7, false);
+        let run = |a: &Args| {
+            // the faces' stand-ins: here their own full text, which names them exactly
+            let (k2, k3, k4) = (format!("{:?}", a.2), format!("{:?}", a.3), format!("{:?}", a.4));
+            certify_memo(
+                &a.0,
+                &a.1,
+                (&a.2, &k2),
+                (&a.3, &k3),
+                (&a.4, &k4),
+                a.5,
+                a.6,
+                a.7,
+                false,
+            )
+        };
         let fresh = |a: &Args| ops::certify_with(&a.0, &a.1, &a.2, &a.3, &a.4, a.5, a.6, a.7, false);
         let same = |x: &ops::CheckSummary, y: &ops::CheckSummary| format!("{x:?}") == format!("{y:?}");
         let n0 = CERTIFIED.computed();
@@ -9595,6 +9644,91 @@ mod certify_memo_tests {
         let before = CERTIFIED.computed();
         assert!(same(&run(&base), &s0));
         assert_eq!(CERTIFIED.computed(), before, "the same arguments certified again");
+    }
+}
+
+#[cfg(test)]
+mod memo_edit_tests {
+    /// Runs through the memos are the runs made fresh, byte for byte, after edits of each kind
+    /// on a document every memo serves (2D ops with engagement feeds, holes, two setups): the
+    /// part's dimensions (every face, so every certification key's stand-in for the part and
+    /// the stocks), an op's numbers, a tool, the stock; each edit run after the original, so the
+    /// memos hold the original's entries.
+    #[test]
+    fn edited_runs_through_the_memos_are_the_fresh_runs() {
+        let src_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/memo_edit_test");
+        forge_dirs::fs::create_dir_all(&dir).unwrap();
+        let part = forge_dirs::fs::read_to_string(src_dir.join("well_island.fg")).unwrap();
+        let doc = forge_dirs::fs::read_to_string(src_dir.join("well_island_cam.fg")).unwrap();
+        let reply = |d: &str| {
+            let cam = super::run(d, &dir);
+            let mut t = cam.json().to_string();
+            for p in &cam.programs {
+                t.push_str(&format!("\n{:?}", p.text));
+            }
+            t
+        };
+        let both = |d: &str, p: &str| {
+            forge_dirs::fs::write(dir.join("well_island.fg"), p).unwrap();
+            let memo = reply(d);
+            super::memo::bypass(true);
+            let fresh = reply(d);
+            super::memo::bypass(false);
+            (memo, fresh)
+        };
+        let (m, f) = both(&doc, &part);
+        assert_eq!(m, f, "the original");
+        // the part: its length (every face and path changes); and the well's floor raised
+        // under a pocket that still cuts to its old depth (the same paths and stock, only the
+        // part's faces differ: the certification must find the gouge, not take the old verdict)
+        let p2 = part.replacen("shared L = 60", "shared L = 62", 1);
+        let p3 = part.replacen("shared depth = 6", "shared depth = 5", 1);
+        assert!(p2 != part && p3 != part);
+        let mut edits = vec![(doc.clone(), p2), (doc.clone(), p3)];
+        for (a, b) in [("stepover: ", "stepover: 1.3"), ("margin: (", "margin: (4, ")] {
+            if let Some(k) = doc.find(a) {
+                let end = doc[k..].find([',', ')']).map(|e| k + e).unwrap_or(doc.len());
+                let mut d = doc.clone();
+                d.replace_range(k..end, if a == "stepover: " { b } else { "margin: (4" });
+                edits.push((d, part.clone()));
+            }
+        }
+        assert!(edits.len() >= 2, "no op edit found in the document");
+        for (k, (d, p)) in edits.iter().enumerate() {
+            // the original first, so the memos hold its entries
+            let _ = both(&doc, &part);
+            let (m, f) = both(d, p);
+            assert_eq!(m, f, "edit {k}: the run through the memos is not the fresh run");
+        }
+        // the part alone changed under paths that stay the same: a facing over a stock given
+        // outright, the boss raised into it. Only the part's faces (the certification key's
+        // stand-in for them) tell the two runs apart; the edited one must be refused
+        let skim = "machining\nf = part(\"well_island.fg\", material: \"6061-T6\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-10\", t: 1, stickout: 32, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(min: (-3, -3, 0), max: (63, 43, 13)), origin: \"top-corner\", tol: 0.01)\nskim = facing(op1, tool: t1, to: 12.5, step: 1)\nprog = program(op1, post: \"fanuc\", number: 3001)\n";
+        let raised = part.replacen(
+            "boss = extrude(bs.c, depth)",
+            "boss = extrude(bs.c, depth + 0.8)",
+            1,
+        );
+        assert_ne!(raised, part);
+        let (m0, f0) = both(skim, &part);
+        assert_eq!(m0, f0);
+        assert!(
+            m0.starts_with("{\"ok\":true"),
+            "the facing clears the part: {}",
+            &m0[..200]
+        );
+        let (m1, f1) = both(skim, &raised);
+        assert_eq!(
+            m1, f1,
+            "the raised boss: the run through the memos is not the fresh run"
+        );
+        assert!(
+            m1.starts_with("{\"ok\":false"),
+            "the raised boss is gouged: {}",
+            &m1[..200]
+        );
+        let _ = forge_dirs::fs::remove_dir_all(&dir);
     }
 }
 
