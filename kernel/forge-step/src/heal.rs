@@ -230,7 +230,16 @@ impl Proto {
         }
         let (i, t) = self.find_on_loop(&l, &s, dir, at)?;
         let e = l[i].0;
-        if self.edges[e].start == self.edges[e].end {
+        let v0 = self.edges[e].start;
+        // a seam of the face across this rim may already end at its vertex (a circle between a
+        // cone and a cylinder whose seams lie at other angles): then the rim is split, not moved
+        let used = |p: &Proto| {
+            p.edges
+                .iter()
+                .enumerate()
+                .any(|(k, x)| k != e && (x.start == v0 || x.end == v0))
+        };
+        if self.edges[e].start == self.edges[e].end && !used(self) {
             // a closed edge has its one vertex moved here
             let range = self.edges[e].range;
             let p = self.edges[e].curve.eval(t);

@@ -80,3 +80,112 @@ fn a_tolerant_edge_still_checks_once_moved() {
         assert!(p.is_empty(), "moved by {d:?}: {p:?}");
     }
 }
+
+/// A file's solid of revolution as hand-written STEP: a disk, a cylinder r 5 from z 0 to 10, a
+/// cone widening to r 7 at z 15 and a disk on top, each rim a whole circle with one vertex and no
+/// seam edges (as SolidWorks writes turned parts). `a`: the angles of the three rims' vertices,
+/// bottom to top. A seam starts at the first rim's vertex and runs to the other rim, so the
+/// cylinder's seam lies at `a[0]` and the cone's at `a[2]`, both ending on the middle rim.
+fn turned(a: [f64; 3]) -> String {
+    let p = |r: f64, t: f64| (r * t.cos(), r * t.sin());
+    let (p0, p1, p2) = (p(5.0, a[0]), p(5.0, a[1]), p(7.0, a[2]));
+    let semi = (2.0_f64 / 5.0).atan();
+    format!(
+        "ISO-10303-21;
+HEADER;
+FILE_DESCRIPTION((''),'2;1');
+FILE_NAME('turned','',(''),(''),'','','');
+FILE_SCHEMA(('AUTOMOTIVE_DESIGN'));
+ENDSEC;
+DATA;
+#1=DIRECTION('',(0.,0.,1.));
+#2=DIRECTION('',(1.,0.,0.));
+#10=CARTESIAN_POINT('',(0.,0.,0.));
+#11=CARTESIAN_POINT('',(0.,0.,10.));
+#12=CARTESIAN_POINT('',(0.,0.,15.));
+#20=AXIS2_PLACEMENT_3D('',#10,#1,#2);
+#21=AXIS2_PLACEMENT_3D('',#11,#1,#2);
+#22=AXIS2_PLACEMENT_3D('',#12,#1,#2);
+#23=AXIS2_PLACEMENT_3D('',#10,#1,#2);
+#24=AXIS2_PLACEMENT_3D('',#11,#1,#2);
+#30=CIRCLE('',#20,5.);
+#31=CIRCLE('',#21,5.);
+#32=CIRCLE('',#22,7.);
+#40=CARTESIAN_POINT('',({:?},{:?},0.));
+#41=CARTESIAN_POINT('',({:?},{:?},10.));
+#42=CARTESIAN_POINT('',({:?},{:?},15.));
+#43=VERTEX_POINT('',#40);
+#44=VERTEX_POINT('',#41);
+#45=VERTEX_POINT('',#42);
+#50=EDGE_CURVE('',#43,#43,#30,.T.);
+#51=EDGE_CURVE('',#44,#44,#31,.T.);
+#52=EDGE_CURVE('',#45,#45,#32,.T.);
+#60=PLANE('',#20);
+#61=CYLINDRICAL_SURFACE('',#23,5.);
+#62=CONICAL_SURFACE('',#24,5.,{semi});
+#63=PLANE('',#22);
+#70=ORIENTED_EDGE('',*,*,#50,.T.);
+#71=ORIENTED_EDGE('',*,*,#51,.F.);
+#72=ORIENTED_EDGE('',*,*,#51,.T.);
+#73=ORIENTED_EDGE('',*,*,#52,.F.);
+#74=ORIENTED_EDGE('',*,*,#50,.F.);
+#75=ORIENTED_EDGE('',*,*,#52,.T.);
+#80=EDGE_LOOP('',(#70));
+#81=EDGE_LOOP('',(#71));
+#82=EDGE_LOOP('',(#72));
+#83=EDGE_LOOP('',(#73));
+#84=EDGE_LOOP('',(#74));
+#85=EDGE_LOOP('',(#75));
+#90=FACE_OUTER_BOUND('',#80,.T.);
+#91=FACE_BOUND('',#81,.T.);
+#92=FACE_OUTER_BOUND('',#82,.T.);
+#93=FACE_BOUND('',#83,.T.);
+#94=FACE_OUTER_BOUND('',#84,.T.);
+#95=FACE_OUTER_BOUND('',#85,.T.);
+#100=ADVANCED_FACE('',(#90,#91),#61,.T.);
+#101=ADVANCED_FACE('',(#93,#92),#62,.T.);
+#102=ADVANCED_FACE('',(#94),#60,.F.);
+#103=ADVANCED_FACE('',(#95),#63,.T.);
+#110=CLOSED_SHELL('',(#100,#101,#102,#103));
+#111=MANIFOLD_SOLID_BREP('turned',#110);
+#120=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));
+#121=(NAMED_UNIT(*)PLANE_ANGLE_UNIT()SI_UNIT($,.RADIAN.));
+#122=(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT());
+#123=UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(1.E-06),#120,'','');
+#124=(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((#123))GLOBAL_UNIT_ASSIGNED_CONTEXT((#120,#121,#122))REPRESENTATION_CONTEXT('',''));
+#125=ADVANCED_BREP_SHAPE_REPRESENTATION('',(#111),#124);
+ENDSEC;
+END-ISO-10303-21;
+",
+        p0.0, p0.1, p1.0, p1.1, p2.0, p2.1
+    )
+}
+
+/// A whole circle between two faces of revolution whose seams lie at other angles: the first
+/// face's seam ended at the circle's vertex, and the second face's then moved that vertex round
+/// to its own seam, leaving the first face's loop broken (LoopBroken and Euler on 24 solids of
+/// 08-1949 and others; the smallest a 9-face turned pin). The circle is split there instead.
+#[test]
+fn a_rim_between_two_seams_at_other_angles_is_split_not_moved() {
+    use forge_math::dmath::FRAC_PI_2;
+    for a in [
+        [0.0, 0.0, FRAC_PI_2],
+        [0.0, 1.0, 2.0],
+        [1.0, 0.0, -2.5],
+        [0.3, 0.3, 0.3],
+        [0.0, FRAC_PI_2, 0.0],
+    ] {
+        let text = turned(a);
+        let imp = import(text.as_bytes(), &Limits::default()).unwrap();
+        assert!(imp.refusals.is_empty(), "{:?}", imp.refusals);
+        let b = &imp.solids[0].body;
+        let p = check(b);
+        assert!(p.is_empty(), "{a:?}: {p:?}");
+        // pi r^2 h, and the frustum's pi h (R^2 + R r + r^2) / 3
+        let pi = forge_math::dmath::PI;
+        let want = pi * 25.0 * 10.0 + pi * 5.0 * (49.0 + 35.0 + 25.0) / 3.0;
+        let m = forge_topo::mass::mass(b).unwrap();
+        assert!((m.volume - want).abs() < 1e-6 * want, "{} vs {want}", m.volume);
+        assert!(b.unverified.is_none(), "{:?}", b.unverified);
+    }
+}
