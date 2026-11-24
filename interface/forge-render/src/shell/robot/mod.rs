@@ -275,4 +275,24 @@ mod tests {
             doc.to_string_lossy()
         );
     }
+
+    #[test]
+    fn it_is_an_environment_of_the_framework() {
+        use crate::shell::env::{EnvId, ROBOT_TAB};
+        // nothing open: off, with the reason
+        let mut s = Shell::default();
+        assert!(EnvId::Robot.available(&s).is_err());
+        // a robot document's panel: in, on its tab; Finish leaves it kept for coming back
+        let mut s = arm();
+        s.robot.as_mut().unwrap().open = false;
+        assert!(s.enter_env(EnvId::Robot).is_ok());
+        assert_eq!(s.env, Some(EnvId::Robot));
+        assert_eq!(s.tab, ROBOT_TAB);
+        assert!(s.robot_on() && s.robot_properties_width().is_some());
+        assert!(s.robot_status().is_some_and(|l| l.starts_with("Robot · ")));
+        s.exit_env();
+        assert_eq!(s.env, None);
+        assert!(s.robot.as_ref().is_some_and(|p| !p.open));
+        assert!(!s.robot_on() && s.robot_properties_width().is_none());
+    }
 }
