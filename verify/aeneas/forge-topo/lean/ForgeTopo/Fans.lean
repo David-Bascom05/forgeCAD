@@ -852,4 +852,33 @@ theorem outer_spec (cf : alloc.vec.Vec Usize) (cl : alloc.vec.Vec (Usize × Usiz
 
 end before
 
+section beforeS
+variable {T : Type} (FI : topo_fans.FanTopo T) (t : T) {b : Body} {corners : Nat → Nat → List (Nat × Nat)}
+
+theorem before_none_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (closes : topo_fans.Closes) :
+    BefSpec FI t (b := b) closes false (b.before none) := by
+  intro c hc
+  unfold topo_fans.before
+  simp only [Bool.false_eq_true, ite_false]
+  exact prev_of_spec FI t R H W c hc
+
+theorem before_some_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (closes : topo_fans.Closes)
+    (L : List (Nat × List (Nat × Nat))) (hR : CRep closes.cf closes.cl closes.cs L) :
+    BefSpec FI t (b := b) closes true (b.before (some L)) := by
+  intro c hc
+  obtain ⟨hcn, -, -, hl, -, -⟩ := use_facts H W hc
+  unfold topo_fans.before
+  simp only [ite_true]
+  step with face_of_spec FI t R c hcn hl as ⟨f, hf⟩
+  step with outer_spec closes.cf closes.cl closes.cs L hR c f (alloc.vec.Vec.len closes.cf) (by simp) as ⟨into, found, hr⟩
+  unfold Body.before
+  simp only
+  rw [← hf]
+  rcases hr with ⟨hft, hq⟩ | ⟨hff, hq⟩
+  · rw [hq, hft]; simp
+  · rw [hq, hff]; simp only [Bool.false_eq_true, ite_false]
+    exact prev_of_spec FI t R H W c hc
+
+end beforeS
+
 end forge_topo
