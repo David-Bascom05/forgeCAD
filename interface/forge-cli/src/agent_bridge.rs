@@ -73,6 +73,8 @@ struct Session {
     last_read: Option<Instant>,
     mode: Option<String>,
     file: Option<String>,
+    /// When the process started (a session no page ever read is ended after `IDLE` too).
+    started: Option<Instant>,
     /// Bumped at each start: a reader of an ended session's stream stops.
     run: u64,
     stops: u64,
@@ -105,12 +107,19 @@ fn fields(body: &[u8], allowed: &[&str]) -> Result<Json, Answer> {
 }
 
 /// A message's pictures, checked: each a type the models read and base64 data, nothing else.
+/// The most pictures a message takes, and the most each may be (decoded), as the models take.
+const MAX_PICTURES: usize = 20;
+const MAX_PICTURE_BYTES: usize = 5 << 20;
+
 fn pictures(j: Option<&Json>) -> Result<Vec<(&'static str, String)>, String> {
     const MEDIA: [&str; 4] = ["image/png", "image/jpeg", "image/gif", "image/webp"];
     let Some(j) = j else { return Ok(vec![]) };
     let Json::Arr(all) = j else {
         return Err("pictures: a list".into());
     };
+    if all.len() > MAX_PICTURES {
+        return Err(format!("pictures: at most {MAX_PICTURES} with a message"));
+    }
     all.iter()
         .map(|p| {
             let Json::Obj(kv) = p else {
@@ -124,12 +133,20 @@ fn pictures(j: Option<&Json>) -> Result<Vec<(&'static str, String)>, String> {
                 return Err(format!("pictures: {media:?} isn't PNG, JPEG, GIF or WebP"));
             };
             let data = s(p, "data").unwrap_or("");
-            if data.is_empty()
-                || !data
+            // base64 whole: groups of 4, its alphabet, `=` only as the last one or two
+            let body = data.trim_end_matches('=');
+            let fine = !data.is_empty()
+                && data.len().is_multiple_of(4)
+                && data.len() - body.len() <= 2
+                && body
                     .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b"+/=".contains(&b))
-            {
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'+' || b == b'/');
+            if !fine {
                 return Err("pictures: data must be base64".into());
+            }
+            // what it decodes to
+            if data.len() / 4 * 3 - (data.len() - body.len()) > MAX_PICTURE_BYTES {
+                return Err("pictures: each up to 5 MB".into());
             }
             Ok((*media, data.to_string()))
         })
@@ -306,6 +323,7 @@ impl Agent {
         let errs = child.stderr.take().expect("piped");
         st.stdin = child.stdin.take();
         st.child = Some(child);
+        st.started = Some(Instant::now());
         st.run += 1;
         st.busy = false;
         st.asked.clear();
@@ -643,7 +661,12 @@ impl Agent {
     /// Ends a session no page has read for `IDLE`. Called now and then.
     pub fn reap(&self) {
         let mut st = self.lock();
-        let idle = st.readers == 0 && st.last_read.is_some_and(|t| t.elapsed() > IDLE);
+        // no page reading it for a while, or none ever since it started
+        let idle = st.readers == 0
+            && match st.last_read {
+                Some(t) => t.elapsed() > IDLE,
+                None => st.started.is_some_and(|t| t.elapsed() > IDLE),
+            };
         if idle && let Some(mut c) = st.child.take() {
             let _ = c.kill();
             st.stdin = None;
@@ -743,4 +766,37 @@ fn system_prompt(root: &Path) -> String {
          short sentences unless asked for more: what you changed, and any new error or warning.",
         root.display()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_messages_pictures_are_twenty_at_most_each_5_mb_and_base64_whole() {
+        let one = |data: &str| Json::obj(vec![("media", "image/png".into()), ("data", data.into())]);
+        let list = |v: Vec<Json>| pictures(Some(&Json::Arr(v)));
+        assert!(list(vec![one("iVBORw0K"); 20]).is_ok());
+        assert!(
+            list(vec![one("iVBORw0K"); 21])
+                .unwrap_err()
+                .contains("at most 20")
+        );
+        for bad in [
+            "iVBORw0",
+            "iVB=Rw0K",
+            "iVBORw==K",
+            "iVBORw0K=",
+            "iV=====",
+            "iVBO\nRw0K",
+            "====",
+        ] {
+            assert!(list(vec![one(bad)]).is_err(), "{bad}");
+        }
+        assert!(list(vec![one("iVBORw==")]).is_ok(), "padding at the end");
+        let five = "A".repeat((5 << 20) / 3 * 4);
+        assert!(list(vec![one(&five)]).is_ok());
+        let more = "A".repeat(((5 << 20) / 3 + 1) * 4);
+        assert!(list(vec![one(&more)]).unwrap_err().contains("5 MB"));
+    }
 }
