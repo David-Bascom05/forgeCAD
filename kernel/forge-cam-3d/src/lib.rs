@@ -10,6 +10,7 @@
 //! stays an Aeneas target.
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
 
+pub mod contain;
 pub mod drape;
 pub mod drop;
 pub mod link;
@@ -17,4 +18,5 @@ pub mod path;
 pub mod pattern;
 pub mod scallop;
 pub mod steep;
+pub mod strategy;
 pub mod waterline;
