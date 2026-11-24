@@ -193,9 +193,27 @@ pub fn on_span(cx: &mut Ctx, pc: &Piece, x: Pt) -> bool {
 
 /// A point within this many f64 of an interval box: the cheap reject.
 fn boxes_apart(cx: &Ctx, a: &Piece, b: &Piece) -> bool {
-    let ba = piece_box(cx, a);
-    let bb = piece_box(cx, b);
-    ba.0 > bb.2 || bb.0 > ba.2 || ba.1 > bb.3 || bb.1 > ba.3
+    let apart = |ba: (f64, f64, f64, f64), bb: (f64, f64, f64, f64)| {
+        ba.0 > bb.2 || bb.0 > ba.2 || ba.1 > bb.3 || bb.1 > ba.3
+    };
+    // the coarse boxes first (an arc's whole circle: no interval work), then the tight ones
+    apart(coarse_box(cx, a), coarse_box(cx, b)) || apart(piece_box(cx, a), piece_box(cx, b))
+}
+
+/// A box holding the piece, cheaply: a line's ends', an arc's whole circle's.
+pub fn coarse_box(cx: &Ctx, pc: &Piece) -> (f64, f64, f64, f64) {
+    match pc.curve {
+        Curve::Line { .. } => piece_box(cx, pc),
+        Curve::Circle { c, rad, .. } => {
+            let (x, y, r) = (cx.iv(c.x), cx.iv(c.y), cx.iv(rad));
+            (
+                (x.lo - r.hi).next_down(),
+                (y.lo - r.hi).next_down(),
+                (x.hi + r.hi).next_up(),
+                (y.hi + r.hi).next_up(),
+            )
+        }
+    }
 }
 
 /// An f64 box (xmin, ymin, xmax, ymax) holding the piece.

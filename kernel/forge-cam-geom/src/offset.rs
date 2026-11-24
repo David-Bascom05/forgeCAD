@@ -490,14 +490,16 @@ fn elem_far(cx: &mut Ctx, e: &Elem, q: Pt, r: R, r2: R, centre: Option<Pt>) -> b
     // q's distance from an end that is `centre`: exactly r
     let at_r = |x: Pt| centre == Some(x);
     // the cheap reject: the box of the element grown by r misses q
-    let (x0, y0, x1, y1) = arr::piece_box(cx, &e.piece);
     let (qx, qy, rv) = (cx.iv(q.x), cx.iv(q.y), cx.iv(r));
-    // strictly more than r away along an axis: (lower box edge − r) above q, and so on
-    if qx.hi < Ival::pt(x0).sub(rv).lo
-        || qx.lo > Ival::pt(x1).add(rv).hi
-        || qy.hi < Ival::pt(y0).sub(rv).lo
-        || qy.lo > Ival::pt(y1).add(rv).hi
-    {
+    // strictly more than r away along an axis: (lower box edge − r) above q, and so on; the
+    // coarse box first (no interval work for an arc), then the tight one
+    let far = |(x0, y0, x1, y1): (f64, f64, f64, f64)| {
+        qx.hi < Ival::pt(x0).sub(rv).lo
+            || qx.lo > Ival::pt(x1).add(rv).hi
+            || qy.hi < Ival::pt(y0).sub(rv).lo
+            || qy.lo > Ival::pt(y1).add(rv).hi
+    };
+    if far(arr::coarse_box(cx, &e.piece)) || far(arr::piece_box(cx, &e.piece)) {
         return true;
     }
     match e.piece.curve {
