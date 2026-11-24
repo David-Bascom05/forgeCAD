@@ -120,6 +120,9 @@ pub struct MachineUi {
     /// Models the user attached to this machine (their own files, kept in their library:
     /// forge_machine_builder::models), and each one's check against its body's envelope.
     pub models: Vec<Model>,
+    /// Where `models` were read from when they are forgecad's own (models::shipped_dir: none
+    /// attached in the user's library); the first change copies them there.
+    pub models_shipped: Option<PathBuf>,
     pub model_checks: Vec<Result<Outside, String>>,
     /// The note the next attach carries: where the file came from and the user's right to use it
     /// (required: forge_machine_builder::model_files::require_from).
@@ -190,6 +193,7 @@ impl MachineUi {
             brake: None,
             tooling_seen: String::new(),
             models: Vec::new(),
+            models_shipped: None,
             model_checks: Vec::new(),
             // the last source the user gave, to start from
             model_from: crate::plat::kv_get(MODEL_SOURCE).unwrap_or_default(),
@@ -220,8 +224,14 @@ impl MachineUi {
         self.report = None;
         self.pick = 0;
         self.fit += 1;
-        self.models = self
-            .models_dir()
+        // the user's own models, else forgecad's for a built-in machine
+        let user = self.models_dir();
+        let drawn = self
+            .def
+            .as_ref()
+            .and_then(|d| models::drawn_dir(self.user.as_deref(), &d.name));
+        self.models_shipped = drawn.clone().filter(|d| Some(d) != user.as_ref());
+        self.models = drawn
             .map(|d| models::load_in(&d))
             .transpose()
             .unwrap_or_else(|e| {
@@ -238,10 +248,15 @@ impl MachineUi {
         Some(models::dir_in(self.user.as_ref()?, &self.def.as_ref()?.name))
     }
 
+    /// The folder the models' files are read from: forgecad's own, or the user's library.
+    pub fn models_read_dir(&self) -> Option<PathBuf> {
+        self.models_shipped.clone().or_else(|| self.models_dir())
+    }
+
     /// A model's triangles in its file's coordinates.
     pub fn model_tris(&self, m: &Model) -> Result<std::sync::Arc<crate::machine_mesh::Tris>, String> {
         let d = self
-            .models_dir()
+            .models_read_dir()
             .ok_or("no folder for your library on this system")?;
         crate::machine_model::file_tris(&d.join(&m.file))
     }
@@ -274,7 +289,23 @@ impl MachineUi {
     }
 
     /// After the models changed: written to the user's library, checked, redrawn.
+    /// forgecad's own models, about to be changed: the user's from now on, files and all.
+    fn own_models(&mut self) {
+        let (Some(from), Some(dir)) = (self.models_shipped.clone(), self.models_dir()) else {
+            return;
+        };
+        let _ = forge_dirs::fs::create_dir_all(&dir);
+        for m in &self.models {
+            if let Err(e) = forge_dirs::fs::copy(from.join(&m.file), dir.join(&m.file)) {
+                self.message = format!("{}: {e}", m.file);
+                return;
+            }
+        }
+        self.models_shipped = None;
+    }
+
     pub fn models_changed(&mut self) {
+        self.own_models();
         match self.models_dir() {
             Some(dir) => {
                 if let Err(e) = models::save_in(&dir, &self.models) {
@@ -292,6 +323,7 @@ impl MachineUi {
     /// Attaches the file at `path` to `body` (None: the whole machine), placed on its envelope
     /// (or on the machine's bounds), with inch or metre units when its size says so.
     pub fn attach_model(&mut self, body: Option<String>, path: &str) -> Result<String, String> {
+        self.own_models();
         let def = self.def.as_ref().ok_or("no machine")?;
         let dir = self
             .models_dir()
@@ -313,6 +345,7 @@ impl MachineUi {
 
     /// Opens the split of model `i`: its parts read, each with a guessed body.
     pub fn open_split(&mut self, i: usize) -> Result<(), String> {
+        self.own_models();
         let m = self.models.get(i).ok_or("no such model")?.clone();
         let def = self.def.as_ref().ok_or("no machine")?;
         let dir = self

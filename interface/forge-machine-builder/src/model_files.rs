@@ -10,7 +10,7 @@
 //!   the same placement, so a whole-machine download moves with the axes.
 use crate::models::{self, Format, Model, Outside};
 use forge_machine::def::MachineDef;
-use forge_machine::kin::V3;
+use forge_machine::kin::{self, V3};
 use std::path::{Path, PathBuf};
 
 /// Triangles sharing corners by index, in the file's own coordinates and units.
@@ -80,6 +80,49 @@ impl Piece {
         let mut out: Vec<Piece> = groups.into_values().collect();
         out.sort_by_key(|p| std::cmp::Reverse(p.tri.len()));
         out
+    }
+
+    /// Fewer triangles for display: corners within one `cell` (mm, in the file's units) of a grid
+    /// merged at their mean, triangles that close up dropped, and a triangle met twice kept once.
+    pub fn decimated(&self, cell: f64) -> Piece {
+        use std::collections::HashMap;
+        let mut at: HashMap<[i64; 3], u32> = HashMap::new();
+        let mut sum: Vec<([f64; 3], f64)> = Vec::new();
+        let map: Vec<u32> = self
+            .pos
+            .iter()
+            .map(|p| {
+                let k = p.map(|x| (x / cell).floor() as i64);
+                let i = *at.entry(k).or_insert_with(|| {
+                    sum.push(([0.0; 3], 0.0));
+                    (sum.len() - 1) as u32
+                });
+                let s = &mut sum[i as usize];
+                for (d, x) in s.0.iter_mut().zip(p) {
+                    *d += x;
+                }
+                s.1 += 1.0;
+                i
+            })
+            .collect();
+        let mut seen = std::collections::HashSet::new();
+        let mut tri = Vec::new();
+        for t in &self.tri {
+            let n = t.map(|v| map[v as usize]);
+            if n[0] == n[1] || n[1] == n[2] || n[0] == n[2] {
+                continue;
+            }
+            let mut k = n;
+            k.sort_unstable();
+            if seen.insert(k) {
+                tri.push(n);
+            }
+        }
+        Piece {
+            pos: sum.iter().map(|(s, n)| s.map(|x| x / n)).collect(),
+            tri,
+            name: self.name.clone(),
+        }
     }
 
     /// A binary STL of it.
@@ -413,6 +456,75 @@ pub fn split_read(
     Ok(made)
 }
 
+/// A machine's models made forgecad's own, for its built-in library (`models::shipped_dir`):
+/// each model given a body, from `from_dir`, decimated to `cell` mm (`Piece::decimated`, in mm
+/// whatever the file's units) and written to `to_dir` as `<body>.stl` with the same placement and
+/// `source` as its note, beside a `models.toml`; a body named in `coarse` (display only: an
+/// enclosure) at three times `cell`. Models on the whole machine are left out (a
+/// shipped machine moves with its axes). Returns each written file with its size in bytes.
+pub fn ship(
+    from_dir: &Path,
+    ms: &[Model],
+    to_dir: &Path,
+    cell: f64,
+    coarse: &[String],
+    source: &str,
+) -> Result<Vec<(String, u64)>, String> {
+    forge_dirs::fs::create_dir_all(to_dir).map_err(|e| format!("{}: {e}", to_dir.display()))?;
+    let mut out = Vec::new();
+    let mut shipped: Vec<Model> = Vec::new();
+    let mut bodies: Vec<&str> = ms.iter().filter_map(|m| m.body.as_deref()).collect();
+    bodies.sort_unstable();
+    bodies.dedup();
+    for b in bodies {
+        let mine: Vec<&Model> = ms.iter().filter(|m| m.body.as_deref() == Some(b)).collect();
+        // one file a body: the models given it, each placed as it was, joined in the first's frame
+        let first = mine[0];
+        let inv = first.rigid();
+        let mut all = Vec::new();
+        for m in &mine {
+            let p = Piece::join(&read_file(&from_dir.join(&m.file))?);
+            let (r, ri) = (m.rigid(), inv);
+            all.push(Piece {
+                pos: p
+                    .pos
+                    .iter()
+                    .map(|&x| {
+                        let w = kin::add(kin::mul(&r.r, kin::scale(x, m.scale)), r.p);
+                        // back into the first model's file frame (its scale is applied on read)
+                        let l = kin::mul(&kin::transpose(&ri.r), kin::sub(w, ri.p));
+                        kin::scale(l, 1.0 / first.scale)
+                    })
+                    .collect(),
+                tri: p.tri,
+                name: String::new(),
+            });
+        }
+        let c = if coarse.iter().any(|x| x == b) {
+            3.0 * cell
+        } else {
+            cell
+        };
+        let piece = Piece::join(&all).decimated(c / first.scale);
+        let name = format!("{}.stl", models::safe(b));
+        let bytes = piece.to_stl(&format!("{b}: {source}"));
+        forge_dirs::fs::write(to_dir.join(&name), &bytes)
+            .map_err(|e| format!("{}: {e}", to_dir.display()))?;
+        out.push((name.clone(), bytes.len() as u64));
+        shipped.push(Model {
+            body: Some(b.to_string()),
+            file: name,
+            from: source.to_string(),
+            ..first.clone()
+        });
+    }
+    if shipped.is_empty() {
+        return Err("no model is given a body: split the machine's model first".into());
+    }
+    models::save_in(to_dir, &shipped)?;
+    Ok(out)
+}
+
 /// The models folder of `machine` under the user's machines folder.
 pub fn dir_for(user_machines: &Path, machine: &str) -> PathBuf {
     models::dir_in(user_machines, machine)
@@ -507,6 +619,67 @@ mod tests {
             .bounds()
             .unwrap();
         assert_eq!(tb.1[0], 22.0);
+        let _ = forge_dirs::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn decimation_merges_corners_within_a_cell_and_keeps_the_shape() {
+        // a box cut in a fine grid of triangles along its top: merged back, its bounds kept
+        let mut fine = box_piece([0.0; 3], [100.0, 50.0, 20.0]);
+        let k = fine.pos.len() as u32;
+        for i in 0..100 {
+            for j in 0..50 {
+                let (x, y) = (i as f64, j as f64);
+                fine.pos
+                    .extend([[x, y, 20.0], [x + 1.0, y, 20.0], [x + 1.0, y + 1.0, 20.0]]);
+                let n = k + 3 * (i * 50 + j) as u32;
+                fine.tri.push([n, n + 1, n + 2]);
+            }
+        }
+        let d = fine.decimated(5.0);
+        assert!(d.tri.len() < fine.tri.len() / 4, "{}", d.tri.len());
+        let (lo, hi) = d.bounds().unwrap();
+        for a in 0..3 {
+            assert!(lo[a] < 5.0 && hi[a] > [100.0, 50.0, 20.0][a] - 5.0);
+        }
+        // no triangle closed up, none twice
+        assert!(d.tri.iter().all(|t| t[0] != t[1] && t[1] != t[2] && t[0] != t[2]));
+        // a cell smaller than any edge changes nothing but sharing
+        assert_eq!(box_piece([0.0; 3], [10.0; 3]).decimated(0.5).tri.len(), 12);
+    }
+
+    #[test]
+    fn ship_writes_a_mesh_a_body_and_its_index() {
+        let tmp = forge_dirs::temp_dir().join(format!("forge-model-ship-{}", forge_dirs::process_id()));
+        let _ = forge_dirs::fs::remove_dir_all(&tmp);
+        let (from, to) = (tmp.join("user"), tmp.join("shipped/maker/vmc"));
+        forge_dirs::fs::create_dir_all(&from).unwrap();
+        forge_dirs::fs::write(from.join("a.stl"), box_piece([0.0; 3], [10.0; 3]).to_stl("a")).unwrap();
+        forge_dirs::fs::write(from.join("b.stl"), box_piece([0.0; 3], [2.0; 3]).to_stl("b")).unwrap();
+        let mut a = Model::new(Some("table".into()), "a.stl".into());
+        a.rotate = [90.0, 0.0, 0.0];
+        a.offset = [5.0, 0.0, 0.0];
+        let mut b = Model::new(Some("table".into()), "b.stl".into());
+        b.offset = [100.0, 0.0, 0.0];
+        let whole = Model::new(None, "w.stl".into());
+        let files = ship(&from, &[a.clone(), b, whole], &to, 1.0, &[], "the maker's model").unwrap();
+        assert_eq!(
+            files.iter().map(|f| f.0.as_str()).collect::<Vec<_>>(),
+            ["table.stl"]
+        );
+        let ms = models::load_in(&to).unwrap();
+        assert_eq!(ms.len(), 1);
+        assert_eq!(
+            (ms[0].rotate, ms[0].offset, ms[0].from.as_str()),
+            (a.rotate, a.offset, "the maker's model")
+        );
+        // both models in one file, each still where it was placed
+        let p = Piece::join(&read_file(&to.join("table.stl")).unwrap());
+        let placed = models::bounds(p.pos.iter().map(|x| ms[0].place(*x))).unwrap();
+        assert!(
+            (placed.1[0] - 102.0).abs() < 1e-6 && (placed.0[0] - 5.0).abs() < 1e-6,
+            "{placed:?}"
+        );
         let _ = forge_dirs::fs::remove_dir_all(&tmp);
     }
 }

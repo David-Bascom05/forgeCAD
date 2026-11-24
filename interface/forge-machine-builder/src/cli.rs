@@ -41,6 +41,7 @@ forgecad machine check FILE.toml|NAME [--json] [--no-parts]\n       \
 forgecad machine model attach MACHINE FILE --from TEXT [--body BODY] [--scale S] [--rotate X,Y,Z] [--offset X,Y,Z]\n       \
 forgecad machine model list|check MACHINE [--json]\n       \
 forgecad machine model remove MACHINE FILE\n       \
+forgecad machine model ship MACHINE DIR --source TEXT [--cell MM]   (its split models decimated into DIR, for forgecad's own library; display-only bodies 3x coarser)\n       \
 forgecad machine model split MACHINE FILE BODY|-..   (one per part, largest first; - drops it)\n       \
 forgecad machine model split MACHINE FILE PART=BODY..   (by name: the first PART in a part's name gives it BODY; - or no rule drops it)";
 
@@ -580,6 +581,49 @@ pub fn model(env: &Env, argv: &[String]) -> Out {
                 code: u8::from(bad),
                 out,
                 err: String::new(),
+            }
+        }
+        "ship" => {
+            // the user's split models made forgecad's own: decimated meshes and their index in
+            // DIR, for the built-in library (models::shipped_dir)
+            let Some(to) = argv.get(2) else { return usage() };
+            let mut cell = 2.0;
+            let mut source = String::new();
+            let mut k = 3;
+            while k < argv.len() {
+                match (argv[k].as_str(), argv.get(k + 1)) {
+                    ("--cell", Some(v)) => match v.parse::<f64>() {
+                        Ok(c) if c > 0.0 => cell = c,
+                        _ => return fail(1, format!("--cell {v}: a size in mm")),
+                    },
+                    ("--source", Some(v)) => source = v.clone(),
+                    _ => return usage(),
+                }
+                k += 2;
+            }
+            if source.trim().is_empty() {
+                return fail(1, "--source TEXT: where the models came from, one line".into());
+            }
+            let coarse: Vec<String> = def
+                .bodies
+                .iter()
+                .filter(|b| !b.check)
+                .map(|b| b.name.clone())
+                .collect();
+            match mf::ship(&dir, &ms, Path::new(to), cell, &coarse, &source) {
+                Ok(files) => Out {
+                    code: 0,
+                    out: files
+                        .iter()
+                        .map(|(f, n)| format!("{f}: {:.2} MB\n", *n as f64 / 1e6))
+                        .chain(std::iter::once(format!(
+                            "{:.2} MB in {to}\n",
+                            files.iter().map(|x| x.1).sum::<u64>() as f64 / 1e6
+                        )))
+                        .collect(),
+                    err: String::new(),
+                },
+                Err(e) => fail(1, e),
             }
         }
         "remove" => {

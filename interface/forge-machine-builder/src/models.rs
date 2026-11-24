@@ -231,6 +231,46 @@ pub fn dir(machine: &str) -> Option<PathBuf> {
     Some(dir_in(&crate::catalog::user_dir()?, machine))
 }
 
+/// Where forgecad's own models of its built-in machines are kept, first found first:
+/// `FORGECAD_MACHINE_MODELS`, `share/forgecad/machine-models` beside the installed binary
+/// (tools/install.sh), and the source tree's `kernel/forge-machine/data/models` (a build from a
+/// clone). Each holds `<maker>/<machine>/models.toml` and the meshes beside it; they are not
+/// built into the binary (a few MB a machine).
+pub fn shipped_roots() -> Vec<PathBuf> {
+    let mut out = Vec::new();
+    if let Some(d) = std::env::var_os("FORGECAD_MACHINE_MODELS") {
+        out.push(PathBuf::from(d));
+    }
+    if let Some(bin) = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(Path::to_path_buf))
+    {
+        out.push(bin.join("../share/forgecad/machine-models"));
+    }
+    out.push(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../kernel/forge-machine/data/models"));
+    out
+}
+
+/// A built-in machine's own models folder, where forgecad ships one.
+pub fn shipped_dir(machine: &str) -> Option<PathBuf> {
+    let name = safe(machine);
+    shipped_roots().into_iter().find_map(|r| {
+        forge_dirs::fs::read_dir(&r).ok()?.find_map(|e| {
+            let d = e.ok()?.path().join(&name);
+            forge_dirs::fs::is_file(d.join(INDEX)).then_some(d)
+        })
+    })
+}
+
+/// The folder a machine's models are drawn from: the user's, where they have attached any, else
+/// forgecad's own (`shipped_dir`).
+pub fn drawn_dir(user_machines: Option<&Path>, machine: &str) -> Option<PathBuf> {
+    user_machines
+        .map(|u| dir_in(u, machine))
+        .filter(|d| forge_dirs::fs::is_file(d.join(INDEX)) && load_in(d).is_ok_and(|m| !m.is_empty()))
+        .or_else(|| shipped_dir(machine))
+}
+
 /// A machine's models folder under a user machines folder (`<config>/forgecad/cam/machines`).
 pub fn dir_in(user_machines: &Path, machine: &str) -> PathBuf {
     user_machines.join("models").join(safe(machine))
