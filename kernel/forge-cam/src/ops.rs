@@ -2216,10 +2216,16 @@ pub fn facing(st: &Stock, c: Cut, sp: Span) -> OpPath {
             let y = y0 + (y1 - y0) * i as f64 / n as f64;
             let (xa, xb) = if i % 2 == 0 { (x0, x1) } else { (x1, x0) };
             if i > 0 {
-                mv.push(PMove::Line {
+                // the turn between passes: a half circle through the air beyond the stock (the
+                // tool's edge further out than at the pass's end, at least 1 mm clear), not two
+                // right-angle corners, each a stop
+                let yp = y0 + (y1 - y0) * (i - 1) as f64 / n as f64;
+                mv.push(PMove::Arc {
                     to: [xa, y, zl],
+                    c: [xa, 0.5 * (yp + y)],
+                    // out past x1 (counter-clockwise from below) or past x0 (clockwise)
+                    cw: xa == x0,
                     f: feed.0,
-                    phase: Phase::Cut,
                 });
             }
             mv.push(PMove::Line {

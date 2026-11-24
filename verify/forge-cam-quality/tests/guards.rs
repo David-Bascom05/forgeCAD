@@ -139,10 +139,9 @@ fn chip_load_and_equal_work() {
     );
 }
 
-/// A ratchet on micro-moves: in every adaptive op, at most a quarter of the cutting moves (cut
-/// lines and arcs) are shorter than 1 mm. (They were 5,348 blocks with a 2.2 mm mean on
-/// deep_boss once; now 7-24 % of cutting moves are under 1 mm, at pass ends and transitions;
-/// the most on the shallow RPTU levels.)
+/// A ratchet on micro-moves: in every adaptive op, at most 12 % of the cutting moves (cut at one
+/// level, or arcs) under 1 mm on the deep parts, at most a quarter on the RPTU parts (4 mm levels:
+/// their passes are short; 21-24 % as of 2026-11-24, the deep parts at most 11.4 %).
 #[test]
 fn adaptive_cutting_moves_not_micro() {
     use forge_cam::ops::{PMove, Phase};
@@ -190,11 +189,14 @@ fn adaptive_cutting_moves_not_micro() {
                     at = to;
                 }
             }
-            if n > 0 && short * 4 > n {
+            let rptu = f.parent().is_some_and(|d| d.ends_with("rptu"));
+            let limit = if rptu { 0.25 } else { 0.12 };
+            if n > 0 && short as f64 > limit * n as f64 {
                 bad.push(format!(
-                    "{}/{}: {short} of {n} cutting moves under 1 mm",
+                    "{}/{}: {short} of {n} cutting moves under 1 mm (limit {:.0} %)",
                     f.display(),
-                    op.name
+                    op.name,
+                    100.0 * limit
                 ));
             }
         }

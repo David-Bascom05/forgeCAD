@@ -9727,7 +9727,18 @@ impl Cam {
                             )
                         }
                     }
-                    "holder_collision" if c.other.starts_with("stock") => "SetArg tool: a tool whose flutes reach the depth (lcf above the stock top), or clear the stock above first".into(),
+                    "holder_collision" if c.other.starts_with("stock") => {
+                        // the shank meets stock beside the cut (the holder cannot: the stock's
+                        // top is under it here): the flutes do not reach over what is left
+                        let t = op.tool.and_then(|t| self.tools.get(t));
+                        match t {
+                            Some(t) if s.stock.max[2] < c.at[2].min(s.stock.min[2]) + t.stickout => format!(
+                                "the shank, above the tool's {:.1} mm of flutes, meets stock left beside the cut (on a wall taller than the flutes, what the roughing left there). SetArg tool: a tool with longer flutes; or clear that stock first (rough with less leave on the walls, or a rest roughing pass); or SetArg area: keep this op off the walls taller than the flutes",
+                                t.tool.lcf
+                            ),
+                            _ => "SetArg tool: a tool whose flutes reach the depth (lcf above the stock top), or clear the stock above first".into(),
+                        }
+                    }
                     "holder_collision" => "SetArg stickout: a longer stick-out, or a smaller holder".into(),
                     "rapid_clear" => "SetArg clear: a higher clearance height".into(),
                     _ => "SetArg leave: leave stock, or choose a smaller tool".into(),

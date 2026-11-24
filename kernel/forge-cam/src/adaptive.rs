@@ -200,6 +200,19 @@ struct Field {
     /// The box (xmin, ymin, xmax, ymax) of every sweep since the start cache last looked: the
     /// only cells changed (or restored, by a crumb taken back) since then.
     dirty: [f64; 4],
+    /// The highest map cell of each block of BLOCK × BLOCK cells (built on the first
+    /// `max_in`), a block stale once a sweep's box meets it, refreshed when asked.
+    blocks: std::cell::RefCell<Option<Blocks>>,
+}
+
+/// The cells per side of a `max_in` block.
+const BLOCK: usize = 8;
+
+/// Block maxima of the map (see `Field::blocks`).
+struct Blocks {
+    bnx: usize,
+    max: Vec<f64>,
+    stale: Vec<bool>,
 }
 
 /// No box.
@@ -215,7 +228,66 @@ impl Field {
             self.dirty[3].max(a[1]).max(b[1]),
         ];
         let prof = self.prof;
-        self.map.sweep(a, b, &prof)
+        let removed = self.map.sweep(a, b, &prof);
+        // the blocks the swept box meets (the tool's radius, a cell more each side): stale
+        if let Some(bl) = self.blocks.get_mut().as_mut() {
+            let m = &self.map;
+            let ci = |v: f64, o: f64| ((v - o) / m.h).floor() as i64;
+            let w = self.r + m.h;
+            let (i0, j0) = (
+                (ci(a[0].min(b[0]) - w, m.x0) - 1).max(0),
+                (ci(a[1].min(b[1]) - w, m.y0) - 1).max(0),
+            );
+            let (i1, j1) = (ci(a[0].max(b[0]) + w, m.x0) + 1, ci(a[1].max(b[1]) + w, m.y0) + 1);
+            if i1 >= 0 && j1 >= 0 {
+                let (i1, j1) = ((i1 as usize).min(m.nx - 1), (j1 as usize).min(m.ny - 1));
+                for bj in j0 as usize / BLOCK..=j1 / BLOCK {
+                    for bi in i0 as usize / BLOCK..=i1 / BLOCK {
+                        bl.stale[bj * bl.bnx + bi] = true;
+                    }
+                }
+            }
+        }
+        removed
+    }
+
+    /// At least the highest map cell of those with index i0..=i1, j0..=j1 (clamped to the grid):
+    /// the highest of the blocks that meet them (−∞ if none).
+    fn max_in(&self, i0: i64, j0: i64, i1: i64, j1: i64) -> f64 {
+        let m = &self.map;
+        let (i0, j0) = (i0.max(0) as usize, j0.max(0) as usize);
+        if i1 < 0 || j1 < 0 || i0 >= m.nx || j0 >= m.ny {
+            return f64::NEG_INFINITY;
+        }
+        let (i1, j1) = ((i1 as usize).min(m.nx - 1), (j1 as usize).min(m.ny - 1));
+        let mut bl = self.blocks.borrow_mut();
+        let b = bl.get_or_insert_with(|| {
+            let bnx = m.nx.div_ceil(BLOCK);
+            let n = bnx * m.ny.div_ceil(BLOCK);
+            Blocks {
+                bnx,
+                max: vec![f64::NEG_INFINITY; n],
+                stale: vec![true; n],
+            }
+        });
+        let mut t = f64::NEG_INFINITY;
+        for bj in j0 / BLOCK..=j1 / BLOCK {
+            for bi in i0 / BLOCK..=i1 / BLOCK {
+                let k = bj * b.bnx + bi;
+                if b.stale[k] {
+                    let mut mx = f64::NEG_INFINITY;
+                    for j in bj * BLOCK..((bj + 1) * BLOCK).min(m.ny) {
+                        for i in bi * BLOCK..((bi + 1) * BLOCK).min(m.nx) {
+                            mx = mx.max(m.z[j * m.nx + i]);
+                        }
+                    }
+                    b.max[k] = mx;
+                    b.stale[k] = false;
+                }
+                t = t.max(b.max[k]);
+            }
+        }
+        t
     }
 
     fn ok(&self, x: f64, y: f64) -> bool {
@@ -252,6 +324,20 @@ impl Field {
         let h = self.map.h;
         let rr = self.r + h;
         let n = (rr / h).ceil() as i64;
+        // every sample's cell lies in the box of cells from x − n h to x + n h (one cell more each
+        // side for rounding): none above the level there, no material (`material` needs one)
+        let m = &self.map;
+        let ci = |v: f64, o: f64| ((v - o) / h).floor() as i64;
+        let (rx, ry) = (n as f64 * h, n as f64 * h);
+        if self.max_in(
+            ci(x - rx, m.x0) - 1,
+            ci(y - ry, m.y0) - 1,
+            ci(x + rx, m.x0) + 1,
+            ci(y + ry, m.y0) + 1,
+        ) <= z + self.eps
+        {
+            return false;
+        }
         for j in -n..=n {
             for i in -n..=n {
                 let (dx, dy) = (i as f64 * h, j as f64 * h);
@@ -440,6 +526,7 @@ pub fn adaptive(
         r: 0.5 * tool.tool.dc,
         eps: 1e-3,
         dirty: NO_BOX,
+        blocks: std::cell::RefCell::new(None),
     };
     let cap = prm.phi_max.clamp(5.0, 180.0).to_radians();
     let mut sweep_dir: [f64; 2];
@@ -1121,6 +1208,7 @@ pub fn adaptive(
             // its link, the sliver left to the cleanup rings below, and counted as a stall
             if crumbs_now && keep <= CRUMB_STEPS {
                 f.map.z = undo_map;
+                *f.blocks.get_mut() = None;
                 mv.truncate(undo.0);
                 hist = undo.1;
                 retraces_log.truncate(undo.2);
