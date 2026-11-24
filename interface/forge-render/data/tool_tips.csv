@@ -267,7 +267,7 @@ bendsim,Finish Bend Simulation,Leave the bend simulation for the design,
 render,Perspective,Draw the view in perspective (off: parallel),
 render,Fit All,Fit everything in the view,
 render,Render Image,"Render the view to a PNG file at the Output size and samples, denoised if Denoise is on (it queues; Cancel stops it)",
-render,Turntable,"Render the Output's number of frames turning about the model, to FILE_0000.png and on",
+render,Render Turntable,"Path-traced still frames turning about the model (the Output's number, at its samples), as FILE_0000.png and on; for a video of the view, Record Turntable",
 render,Cancel,Stop the render under way and drop the queued ones,
 render,Floor,"A floor under the model in the studio appearance, catching its shadow and its light",
 render,Denoise,"Smooth the picture's noise, keeping edges (the studio's own filter); off: the raw samples",
@@ -305,3 +305,8 @@ cam,Section View,"The lathe setup in section: the part's half-profile, the bar, 
 cam,NC Programs,"Every NC program: the setups it posts, its dialect and number, what it made; a new program over chosen setups; write them all",
 cam,Quality,"Every op's toolpath quality: feed time and air cutting, plunges, engagement, slotting, chip load against the feed per tooth, material removal and spindle power; each setup's totals",
 tools,Machine Builder,"Machines as real parts: axes, kinematics and limits, and the tool and workholding libraries",
+capture,Photo,"Save the view as a PNG at the photo size (Capture Settings), without the view's overlays",photo
+capture,Record,"Record the environment's simulation frame by frame in its own time, as MP4 (or PNG frames)",record
+capture,Record Turntable,"A video of the view as you see it, the camera once round the model, as MP4 (or PNG frames); for path-traced frames, Render Turntable",record
+capture,Stop Recording,"Stop the recording under way (Esc too); no video is kept, PNG frames so far are",record
+capture,Capture Settings,"Photo and video size, frames a second, the turntable's length, MP4 or PNG frames, the folder",

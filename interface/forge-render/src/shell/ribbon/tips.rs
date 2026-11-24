@@ -278,8 +278,13 @@ mod tests {
                     .collect()
             };
             assert!(!names.is_empty(), "tab {tab}");
+            // the Capture group is on every tab: its tips are written once, as "capture"
+            let capture: Vec<&str> = super::super::super::capture::group(&s)
+                .map(|g| g.big.iter().chain(&g.small).map(|t| t.name).collect())
+                .unwrap_or_default();
             for n in names {
-                if !table().iter().any(|r| r.0 == scope && r.1 == n) {
+                let s0 = if capture.contains(&n) { "capture" } else { scope };
+                if !table().iter().any(|r| r.0 == s0 && r.1 == n) {
                     missing.push(format!("{scope},{n}"));
                 }
             }

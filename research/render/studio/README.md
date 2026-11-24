@@ -16,3 +16,5 @@ Design: ../studio.md.
 Every picture is denoised (the studio's own variance-guided a-trous filter) unless it says not.
 | 06-render-studio-environment.png | the Render Studio environment in the app (native, headless, llvmpipe), 1400x860: tray_asm.fg in bead-blasted aluminium and black oxide under the bundled HDRI, 255 samples denoised in the live view | `STUDIO_SHOTS=DIR cargo test --release --test studio_env shots` |
 | 07-render-studio-environment-1024x700.png | the same at 1024x700 | the same |
+
+08-web-render-studio.png: the Render Studio environment in the browser (WebGPU, SwiftShader), the flange at 135 samples, denoised.

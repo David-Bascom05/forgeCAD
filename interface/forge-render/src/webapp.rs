@@ -33,6 +33,9 @@ extern "C" {
     /// The page's: File > Open (the project's files, or one from the computer).
     #[wasm_bindgen(js_namespace = window, js_name = forge_pick)]
     fn page_pick();
+    /// The page's: a file handed to the person as a download (a photo, a recording).
+    #[wasm_bindgen(js_namespace = window, js_name = forge_download)]
+    fn page_download(name: &str, bytes: Uint8Array);
     /// The page's: File > Save As, a name asked for.
     #[wasm_bindgen(js_namespace = window, js_name = forge_save_as)]
     fn page_save_as(name: &str);
@@ -78,6 +81,8 @@ enum Ask {
     Cam(String),
     /// A Machine Builder command (`Gui::machine_command`).
     Machine(String),
+    /// `Gui::capture_command`'s words: a photo or a recording, as Capture's settings say.
+    Capture(String),
 }
 
 thread_local! {
@@ -505,6 +510,11 @@ impl Host {
                 Ask::Machine(c) => {
                     let _ = self.gui.machine_command(&c);
                 }
+                Ask::Capture(c) => {
+                    if let Err(e) = self.gui.capture_command(&c) {
+                        self.gui.shell.status = e;
+                    }
+                }
                 Ask::Rebuild => {
                     if let Some(s) = &mut self.gui.fg {
                         s.rebuild();
@@ -844,6 +854,22 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("build_ms", doc.map_or(Json::Null, |s| num(s.build_ms))),
         ("built", built.unwrap_or(Json::Null)),
         ("camsim", g.camsim_state().unwrap_or(Json::Null)),
+        // a photo or recording under way, and what the last one said
+        (
+            "capture",
+            Json::obj(vec![
+                ("busy", g.capture_busy().into()),
+                ("stage", g.capture_stage().into()),
+                (
+                    "frame",
+                    g.shell
+                        .capture
+                        .recording
+                        .map_or(Json::Null, |(k, n)| Json::Arr(vec![num(k as f64), num(n as f64)])),
+                ),
+                ("last", g.shell.capture.last.clone().into()),
+            ]),
+        ),
         ("cam", cam_json(g)),
         ("robot", robot_json(g)),
         // a pick of the view in flight (the host draws on until it is answered)
@@ -1229,6 +1255,13 @@ pub fn app_machine(cmd: String) {
     ask(Ask::Machine(cmd));
 }
 
+/// A photo or a recording of the view (`Gui::capture_command`: `photo`, `record 320x200 fps=10
+/// seconds=1 frames`); it is handed over as a download, `capture` in the state says when.
+#[wasm_bindgen]
+pub fn app_capture(words: String) {
+    ask(Ask::Capture(words));
+}
+
 /// The app's state as JSON: see `state_json`.
 #[wasm_bindgen]
 pub fn app_state() -> String {
@@ -1335,4 +1368,9 @@ pub fn bench_load(dir: &str) -> js_sys::Array {
             name.ends_with(".fg").then(|| JsValue::from_str(&p))
         })
         .collect()
+}
+
+/// A file the browser offers the person to save (a photo, a recording), named `name`.
+pub(crate) fn download(name: &str, bytes: &[u8]) {
+    page_download(name, Uint8Array::from(bytes));
 }

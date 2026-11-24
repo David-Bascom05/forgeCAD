@@ -482,7 +482,10 @@ fn groups(s: &Shell) -> Vec<Group> {
                     go("Fit All", "fit", Action::FitAll, false),
                 ],
             ),
-        ],
+        ]
+        .into_iter()
+        .chain(super::capture::group(s))
+        .collect(),
         _ => vec![
             g(
                 "Parameters",

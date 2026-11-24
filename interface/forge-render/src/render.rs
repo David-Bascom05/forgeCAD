@@ -2643,6 +2643,48 @@ impl Renderer {
     }
 
     /// Culls, draws into `target` and submits, the numbers overlay on top if given.
+    /// The view cube alone, over transparent black, into `target` (this renderer's format and
+    /// size): what the Render Studio lays over its traced picture. The globals are the last
+    /// frame's, so call it after `frame` for the same camera.
+    pub fn cube_only(&mut self, target: &wgpu::TextureView, camera: &Camera, overlay: &Overlay) {
+        let cube_verts = self.write_cube(camera, overlay);
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("cube only"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.colour,
+                    depth_slice: None,
+                    resolve_target: Some(target),
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Discard,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.depth,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Discard,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            if cube_verts > 0 {
+                pass.set_bind_group(0, &self.binds, &[]);
+                pass.set_bind_group(1, &self.sun.read, &[]);
+                pass.set_bind_group(2, &self.back_image.binds, &[]);
+                pass.set_pipeline(&self.cube);
+                pass.set_vertex_buffer(0, self.cube_verts.slice(..));
+                pass.draw(0..cube_verts, 0..1);
+            }
+        }
+        self.queue.submit([encoder.finish()]);
+    }
+
     pub fn frame(
         &mut self,
         target: &wgpu::TextureView,

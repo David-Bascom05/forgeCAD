@@ -237,6 +237,13 @@ jobs:
           node web/tests/select.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/export.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/chrome.cjs "$GITHUB_WORKSPACE/target/web"
+      # Photo and Record: a PNG, and an MP4 by WebCodecs into the app's muxer, ffprobe'd
+      - name: record
+        if: matrix.test == 'e2e' && !matrix.threaded
+        working-directory: interface/forge-render
+        run: |
+          sudo apt-get install -y -q ffmpeg >/dev/null || true
+          node web/tests/record.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)
         if: matrix.test != 'e2e'
         working-directory: interface/forge-render

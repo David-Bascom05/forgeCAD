@@ -27,6 +27,7 @@ mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
 mod empty;
+pub mod capture;
 pub mod env;
 pub mod fg;
 pub mod fgasm;
@@ -191,6 +192,8 @@ pub enum Action {
     EnterEnv(env::EnvId),
     ExitEnv,
     Env(env::EnvId, u16),
+    /// Photo, Record and their settings (`capture.rs`), on every environment's ribbon.
+    Capture(capture::Capture),
     /// The Manufacture workspace's command.
     Cam(cam::Ask),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
@@ -354,6 +357,8 @@ pub struct Shell {
     pub cube_region: Option<[i8; 3]>,
     /// The part's picture, drawn by the renderer this same frame.
     pub view_tex: Option<egui::TextureId>,
+    /// Laid over `view_tex` when an environment draws the view itself: its view cube.
+    pub view_over_tex: Option<egui::TextureId>,
     /// The view cube's words, in the view's device pixels: real type over its picture.
     pub cube_labels: Vec<crate::viewcube::Label>,
     pub cube_place: Option<crate::viewcube::Place>,
@@ -396,6 +401,8 @@ pub struct Shell {
     pub env: Option<env::EnvId>,
     /// The Render Studio's choices (`studio_env.rs`): appearances, light, camera, output.
     pub studio: studio_env::StudioUi,
+    /// Photo and Record's settings and progress (`capture.rs`).
+    pub capture: capture::CaptureUi,
     /// This frame, the environment draws the view itself: the view's own chrome (its toolbar,
     /// the cube's words, the navigation bar) stands down.
     pub view_owned: bool,
@@ -440,6 +447,7 @@ pub struct Shell {
 
 impl Default for Shell {
     fn default() -> Shell {
+        capture::install();
         Shell {
             theme: theme::DARK,
             tab: 0,
@@ -453,6 +461,7 @@ impl Default for Shell {
             cube_menu_fresh: false,
             cube_region: None,
             view_tex: None,
+            view_over_tex: None,
             cube_labels: Vec::new(),
             cube_place: None,
             camera: None,
@@ -476,6 +485,7 @@ impl Default for Shell {
             sheet: sheet::SheetUi::new(),
             env: None,
             studio: Default::default(),
+            capture: Default::default(),
             view_owned: false,
             style_set: None,
             inspect: Default::default(),
@@ -788,6 +798,10 @@ impl Shell {
         if let Some(tex) = self.view_tex {
             let whole = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
             p.image(tex, self.view_rect, whole, Color32::WHITE);
+            // what an environment lays over a picture of its own (the Render Studio's view cube)
+            if let Some(over) = self.view_over_tex {
+                p.image(over, self.view_rect, whole, Color32::WHITE);
+            }
         }
         self.view_owned = false;
         self.env_draw(ui);
@@ -839,6 +853,7 @@ impl Shell {
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
         self.mode_bar(&ctx);
+        capture::panels(self, &ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
         self.settings_window(&ctx);

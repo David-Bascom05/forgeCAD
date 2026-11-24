@@ -36,6 +36,8 @@ pub mod gui_docs;
 mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
+#[path = "gui_record.rs"]
+pub mod gui_record;
 #[path = "gui_fgmarks.rs"]
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
@@ -176,6 +178,10 @@ fn window_chosen(v: &mut View, ids: &crate::render::ViewIds, ask: &WindowAsk) ->
 }
 
 pub struct Gui {
+    /// A photo of the view on its way back from the GPU (`gui_record.rs`).
+    photo: Option<gui_record::PhotoJob>,
+    /// A recording under way (`gui_record.rs`).
+    recording: Option<gui_record::RecordJob>,
     /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
     studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
@@ -343,6 +349,8 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            photo: None,
+            recording: None,
             studio: None,
             vers: Default::default(),
             bend: Default::default(),
@@ -911,7 +919,7 @@ impl Gui {
                 self.fg_save();
                 return None;
             }
-            KeyCmd::Rename | KeyCmd::Delete | KeyCmd::Markup => return None,
+            KeyCmd::Rename | KeyCmd::Delete | KeyCmd::Markup | KeyCmd::Photo | KeyCmd::Record => return None,
             KeyCmd::FitSelected => K::KeyF,
             KeyCmd::Section => K::KeyS,
             KeyCmd::Explode => K::KeyE,
@@ -1004,6 +1012,10 @@ impl Gui {
                 }
                 Action::Env(id, c) => {
                     self.shell.env_command(id, c);
+                    continue;
+                }
+                Action::Capture(c) => {
+                    crate::shell::capture::command_of(&mut self.shell, c);
                     continue;
                 }
                 a => a,
@@ -1635,6 +1647,7 @@ impl Gui {
             times.view_drawn = true;
         }
         let studio_busy = self.studio_frame();
+        self.capture_tick();
         times.view = now_ms() - t1;
 
         let t2 = now_ms();
@@ -1704,6 +1717,7 @@ impl Gui {
             .unwrap_or(std::time::Duration::MAX);
         let again_in = if animating
             || studio_busy
+            || self.capture_busy()
             || self.mark_held.is_some()
             || self.view.as_ref().is_some_and(|v| v.dirty)
         {

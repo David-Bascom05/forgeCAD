@@ -132,7 +132,7 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
             "Render",
             vec![
                 tool("Render Image", "file", RENDER_IMAGE, false),
-                tool("Turntable", "rotate", TURNTABLE, false),
+                tool("Render Turntable", "rotate", TURNTABLE, false),
             ],
             vec![Tool {
                 name: "Cancel",
@@ -358,6 +358,26 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
     s.studio = st;
     s.places.push(("env:render:browser".into(), r));
     true
+}
+
+/// The status bar's line: the live picture's samples, then what a render would make.
+pub(super) fn status(s: &Shell) -> String {
+    let st = &s.studio;
+    let live = if st.samples == 0 {
+        "preparing".to_string()
+    } else {
+        format!(
+            "{} samples{}",
+            st.samples,
+            if st.denoise { " · denoised" } else { "" }
+        )
+    };
+    let queue = if st.queue.is_empty() {
+        String::new()
+    } else {
+        format!(" · {}", st.queue)
+    };
+    format!("{live} · {} × {} output{queue}", st.size.0, st.size.1)
 }
 
 /// The sample count over the view's lower left corner.

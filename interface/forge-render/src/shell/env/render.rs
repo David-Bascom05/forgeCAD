@@ -43,6 +43,10 @@ impl Environment for RenderStudio {
         content::browser(s, ui, r)
     }
 
+    fn status(&self, s: &Shell) -> Option<String> {
+        Some(content::status(s))
+    }
+
     fn draw(&self, s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
         content::draw(s, ui, view)
     }
