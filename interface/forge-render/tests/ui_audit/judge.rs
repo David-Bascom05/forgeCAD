@@ -35,18 +35,22 @@ pub fn new_texts_in<'a>(s: &'a Snap, before: &Snap, region: &[Rect]) -> Vec<&'a 
     let floor = region
         .iter()
         .filter_map(|r| {
+            // the topmost fill covering most of it (a panel beneath may cover it too)
             s.fills
                 .iter()
-                .find(|(_, f)| {
-                    f.intersect(*r).area() > 0.8 * r.area().min(f.area()) && f.area() > 0.5 * r.area()
-                })
+                .filter(|(_, f)| f.intersect(*r).area() > 0.8 * r.area())
                 .map(|x| x.0)
+                .max()
         })
         .min()
         .unwrap_or(0);
     texts_in(s, region)
         .into_iter()
-        .filter(|t| t.idx > floor)
+        // the popup's own: clipped to it (a panel beneath clips its text to the panel), or
+        // painted after its background
+        .filter(|t| {
+            region.iter().any(|r| r.expand(4.0).contains_rect(t.clip)) || (floor > 0 && t.idx > floor)
+        })
         .filter(|t| {
             !before
                 .texts
@@ -76,6 +80,19 @@ pub fn popup(s: &Snap, before: &Snap, region: &[Rect], screen: Rect) -> Vec<Find
         }
     }
     let texts = new_texts_in(s, before, region);
+    if std::env::var_os("UI_AUDIT_DEBUG").is_some() {
+        eprintln!(
+            "region {region:?} fills {:?}",
+            s.fills
+                .iter()
+                .filter(|f| region.iter().any(|r| f.1.intersects(*r)))
+                .take(8)
+                .collect::<Vec<_>>()
+        );
+        for t in &texts {
+            eprintln!("  {:?} rect {:?} clip {:?} idx {}", t.s, t.rect, t.clip, t.idx);
+        }
+    }
     for t in &texts {
         let visible = t.rect.intersect(t.clip);
         let partly = visible.is_positive() && !t.clip.expand(1.0).contains_rect(t.rect);
