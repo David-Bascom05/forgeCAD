@@ -431,6 +431,20 @@ list on main: this branch's new strings add none).
   inside one unless the first part alone doesn't fit. `status_narrow.rs` checks the order and
   the cut; `fg_gaps.rs`'s two checks of the old "volume N mm³" read the new words.
 
+## 27. A small window crashed the app: two clamps whose bounds crossed (ui/bughunt-3)
+
+- AGENT-TAB's report (main 0de84ac1): in a 480 px wide window, a feature selected (an extrude)
+  panicked in `shell/fgdim.rs`: the dimension field's `at.x.clamp(view.left() + 4 + word_w,
+  view.right() - FIELD_W - 60)` had min 376.2 > max 328.0 (`f32::clamp` panics on that). Its
+  y clamp had the same shape for a view under 64 px tall.
+- Swept every clamp with bounds from the window: `shell/harness_look.rs`'s properties list,
+  `clamp(80, max_h - 150)` with `max_h` the view's height less 120, panicked under 350 px:
+  a harness wire's Properties in a 1280×480 window crashed the app (min 80 > max -16).
+- Both now take the lower bound when they cross (the field at the view's left, the field running
+  on past the right; the list at least 80 px tall).
+- Tests: `tests/fgdim_narrow.rs` (480×860, extrude1 selected) and `tests/harness_short.rs`
+  (1280×480, a loom wire's Properties); each panicked before.
+
 ## Open (reported, not fixed here)
 
 
