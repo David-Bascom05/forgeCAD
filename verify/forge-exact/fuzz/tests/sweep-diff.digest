@@ -133,6 +133,10 @@ kernel/forge-machine/parts/generic-vmc3/table.fg#1 agree
 kernel/forge-machine/parts/generic-vmc3/table.fg#3 agree
 kernel/forge-machine/parts/generic-vmc3/table.fg#5 agree
 kernel/forge-machine/parts/generic-vmc3/table.fg#7 agree
+kernel/forge-workholding/parts/standin-chuck-200/body.fg#3 agree
+kernel/forge-workholding/parts/standin-vise-150/base.fg#1 agree
+kernel/forge-workholding/parts/standin-vise-150/base.fg#3 agree
+kernel/forge-workholding/parts/standin-vise-150/jaw.fg#1 agree
 loft/00000 agree
 loft/00001 agree
 loft/00002 agree
