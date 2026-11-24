@@ -17,6 +17,11 @@ use std::sync::Mutex;
 
 const MAX_BYTES: usize = 64 << 20;
 
+std::thread_local! {
+    /// Calls made anew on this thread, per memo (by its address: the memos are statics).
+    static COMPUTED: std::cell::RefCell<HashMap<usize, u64>> = std::cell::RefCell::new(HashMap::new());
+}
+
 struct Entry<V> {
     key: String,
     value: V,
@@ -31,8 +36,6 @@ struct Inner<V> {
     map: Option<HashMap<u64, Vec<Entry<V>>>>,
     bytes: usize,
     clock: u64,
-    /// How many calls were computed (missed), for the tests.
-    computed: u64,
 }
 
 impl<V: Clone> Memo<V> {
@@ -42,7 +45,6 @@ impl<V: Clone> Memo<V> {
                 map: None,
                 bytes: 0,
                 clock: 0,
-                computed: 0,
             }),
         }
     }
@@ -50,9 +52,7 @@ impl<V: Clone> Memo<V> {
     /// The value for `key`: the one made before for the same key, else `make()`, kept.
     pub fn get_or(&self, key: String, make: impl FnOnce() -> V) -> V {
         if key.contains("NaN") {
-            if let Ok(mut g) = self.inner.lock() {
-                g.computed += 1;
-            }
+            self.count();
             return make();
         }
         let h = {
@@ -72,8 +72,8 @@ impl<V: Clone> Memo<V> {
                 v.used = now;
                 return v.value.clone();
             }
-            g.computed += 1;
         }
+        self.count();
         // made outside the lock: other threads' lookups go on meanwhile
         let value = make();
         if let Ok(mut g) = self.inner.lock() {
@@ -113,10 +113,18 @@ impl<V: Clone> Memo<V> {
         value
     }
 
-    /// How many calls were made anew (not taken from the memo): for the tests.
+    /// A call made anew: counted on the calling thread (`computed`).
+    fn count(&self) {
+        let me = self as *const Memo<V> as usize;
+        COMPUTED.with(|c| *c.borrow_mut().entry(me).or_insert(0) += 1);
+    }
+
+    /// How many calls this thread made anew (not taken from the memo): for the tests, which
+    /// run in parallel, each counting only its own calls.
     #[cfg_attr(not(test), allow(dead_code))]
     pub fn computed(&self) -> u64 {
-        self.inner.lock().map(|g| g.computed).unwrap_or(0)
+        let me = self as *const Memo<V> as usize;
+        COMPUTED.with(|c| c.borrow().get(&me).copied().unwrap_or(0))
     }
 }
 
