@@ -442,7 +442,7 @@ impl Host {
                     self.gui.shell.status = match crate::fg::mesh_file(&s.src, s.path.as_deref(), &name, f) {
                         Ok((bytes, said)) => {
                             page_download(&name, Uint8Array::from(&bytes[..]));
-                            said
+                            said.replacen("Exported", "Downloaded", 1)
                         }
                         Err(e) => format!("Not exported: {e}"),
                     };
@@ -832,7 +832,7 @@ fn state_json(g: &Gui, canvas: Json) -> String {
             "selected",
             num(g.view.as_ref().map_or(0, |v| v.nav.selected.len()) as f64),
         ),
-        ("status", g.shell.status.clone().into()),
+        ("status", crate::shell::shown(&g.shell.status).into_owned().into()),
         // the environment in (shell/env), its tab, the tabs shown
         ("env", g.shell.env.map_or(Json::Null, |e| e.key().into())),
         ("tab", num(g.shell.tab as f64)),
