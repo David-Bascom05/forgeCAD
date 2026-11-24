@@ -996,7 +996,11 @@ impl Shell {
             ("maximize", "maximize", "Maximize", Action::Maximize),
             ("close", "close", "Close", Action::Close),
         ];
-        let wins = if cfg!(target_arch = "wasm32") { &[][..] } else { &wins[..] };
+        let wins = if cfg!(target_arch = "wasm32") {
+            &[][..]
+        } else {
+            &wins[..]
+        };
         for (k, &(name, icon, tip, action)) in wins.iter().enumerate() {
             let r = Rect::from_min_size(pos2(w - 110.0 + k as f32 * 36.0, 3.0), vec2(34.0, 30.0));
             if self.icon_button(ui, name, r, icon, tip, Color32::WHITE).clicked() {
@@ -1192,6 +1196,7 @@ impl Shell {
         let x = self.voice_status(ui, 6.0, st);
         // an environment owns the status bar too
         let env_line = self.env_status();
+        let status = shown(&self.status);
         let said = p.text(
             pos2(x + 4.0, st.center().y),
             Align2::LEFT_CENTER,
@@ -1200,7 +1205,7 @@ impl Shell {
             } else if self.status.is_empty() && self.unshown {
                 "This part built but some of it can't be drawn: fix or delete what the tree marks"
             } else {
-                &self.status
+                &status
             },
             sans(12.0),
             Color32::WHITE,
@@ -1575,10 +1580,12 @@ impl Shell {
             // page to the browser's downloads
             {
                 use forge_lang::meshfile::Format;
+                // ("..." where a file dialog follows: in a page the file downloads at once)
+                let page = cfg!(target_arch = "wasm32");
                 for (label, f) in [
-                    ("Export STL...", Format::Stl),
-                    ("Export 3MF...", Format::ThreeMf),
-                    ("Export OBJ...", Format::Obj),
+                    (if page { "Export STL" } else { "Export STL..." }, Format::Stl),
+                    (if page { "Export 3MF" } else { "Export 3MF..." }, Format::ThreeMf),
+                    (if page { "Export OBJ" } else { "Export OBJ..." }, Format::Obj),
                 ] {
                     items.push((label, model_open.then_some(Action::ExportMesh(f))));
                 }
@@ -1828,6 +1835,17 @@ enum MenuResult {
 }
 
 /// A flat menu at a point; closes on Esc or a press outside it.
+/// What the status bar shows of `s`: in a page, the project's files by their path in the
+/// project ("weldments/gate_frame-cutlist.csv"): where the page keeps them (`/project`) is its own
+/// business.
+pub fn shown(s: &str) -> std::borrow::Cow<'_, str> {
+    if cfg!(target_arch = "wasm32") && s.contains("/project/") {
+        s.replace("/project/", "").into()
+    } else {
+        s.into()
+    }
+}
+
 fn menu_at(
     ctx: &egui::Context,
     id: &str,

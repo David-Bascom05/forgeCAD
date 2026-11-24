@@ -237,6 +237,7 @@ jobs:
           node web/tests/select.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/export.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/chrome.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/wall.cjs "$GITHUB_WORKSPACE/target/web"
       # Photo and Record: a PNG, and an MP4 by WebCodecs into the app's muxer, ffprobe'd
       - name: record
         if: matrix.test == 'e2e' && !matrix.threaded
