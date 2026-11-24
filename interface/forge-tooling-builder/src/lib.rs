@@ -7,6 +7,7 @@
 //! writer writes the table canonically (`id` first, then the keys in order, then the nested
 //! tables), so `write(parse(write(r))) == write(r)` and `parse(write(r)) == r`.
 pub mod cli;
+pub mod dynamic;
 pub mod write;
 
 use forge_library::{Catalog, Kind, Level};

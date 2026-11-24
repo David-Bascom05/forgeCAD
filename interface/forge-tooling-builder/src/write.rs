@@ -99,3 +99,10 @@ pub fn file(kind: &str, header: &str, recs: &[Rec]) -> Result<String, String> {
     }
     Ok(s)
 }
+
+/// One record's table as a file of `kind` (no header).
+pub fn table_file(kind: &str, t: &Table) -> Result<String, String> {
+    let mut s = String::new();
+    table(&mut s, kind, t)?;
+    Ok(s)
+}

@@ -203,6 +203,17 @@ fn new<K: Kind<Record = Rec>>(env: &Env, argv: &[String]) -> Out {
 
 /// The table `build::derive` makes (it returns the typed record; the table is made the same way
 /// here so it can be written): the record's text through a one-record library.
+/// `derived_table`, for the UI's derive.
+pub fn derived_table_pub(
+    lib: &forge_tooling::Library,
+    kind: &str,
+    from: &str,
+    id: &str,
+    over: &[(String, Val)],
+) -> Result<forge_tooling::toml::Table, String> {
+    derived_table(lib, kind, from, id, over)
+}
+
 fn derived_table(
     lib: &forge_tooling::Library,
     kind: &str,
