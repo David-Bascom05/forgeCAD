@@ -912,3 +912,58 @@ fn drop_decide_agrees_with_the_full_drop() {
     println!("decided: {free} free, {blocked} blocked");
     assert!(free > 20 && blocked > 20);
 }
+
+/// Mutation for `drop_decide`'s early stop: far from the CL the answer must be decided, and
+/// rightly (0.5 above the full drop: free; 0.5 under it: blocked). A stop that fires on the
+/// wrong side (`lo > stop` turned round) leaves these undecided or wrong, and fails here.
+#[test]
+fn drop_decide_decides_far_from_the_cl() {
+    let mut rng = Rng(0xdec1_de00_0000_0004);
+    let mut n = 0;
+    for (name, c) in cutters() {
+        let (col, _) = column(&c);
+        for kind in 0..7 {
+            for _ in 0..3 {
+                let f = face(&mut rng, kind);
+                let (x, y) = (rng.r(-3.0, 3.0), rng.r(-3.0, 3.0));
+                let full = drop(&col, std::slice::from_ref(&f), &[0], x, y, 1e-4, 60_000);
+                if !(full.hi.is_finite() && full.hi - full.lo <= 1e-3) {
+                    continue;
+                }
+                let one = std::slice::from_ref(&f);
+                let above = drop_decide(
+                    &col,
+                    one,
+                    &[0],
+                    x,
+                    y,
+                    full.hi + 0.5,
+                    f64::NEG_INFINITY,
+                    1e-4,
+                    60_000,
+                );
+                assert!(
+                    above.hi <= full.hi + 0.5,
+                    "{name} kind {kind}: 0.5 over the CL not decided free: {above:?} vs {full:?}"
+                );
+                let below = drop_decide(
+                    &col,
+                    one,
+                    &[0],
+                    x,
+                    y,
+                    full.lo - 0.5,
+                    f64::NEG_INFINITY,
+                    1e-4,
+                    60_000,
+                );
+                assert!(
+                    below.lo > full.lo - 0.5,
+                    "{name} kind {kind}: 0.5 under the CL not decided blocked: {below:?} vs {full:?}"
+                );
+                n += 1;
+            }
+        }
+    }
+    assert!(n > 40, "{n}");
+}
