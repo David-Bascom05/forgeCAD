@@ -25,8 +25,12 @@ id_type!(ShellId);
 pub struct Vertex {
     pub point: Point3,
     pub name: Name,
-    /// The radius of the ball every curve and surface through the vertex meets: LINEAR, or
-    /// more where a boolean could not settle the vertex within LINEAR of all of them.
+    /// The radius of the ball every curve ending at the vertex meets: LINEAR, or more where a
+    /// boolean could not settle the vertex within LINEAR of all of them. Each face through the
+    /// vertex then lies within this and the tolerance of the face's edges at the vertex
+    /// (`Edge::tol`): the bound `check::vertices_off_planes` asks of planes in debug builds. Not
+    /// within this alone: a vertex settled on an edge whose curve is itself near the edge's
+    /// tolerance off its face can sit up to both off it (research/booleans/drift.md §5).
     pub tol: f64,
 }
 

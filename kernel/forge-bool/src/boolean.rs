@@ -2313,9 +2313,10 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
 /// so the result records how far each edge is from each face it bounds (without it, `check`
 /// finds the edge off the face, EdgeOffFace: a wrong Ok; research/booleans/drift.md). The pieces
 /// over the imprinted stretch carry the grown tolerance; an edge of A kept whole is returned with
-/// it. Likewise an end vertex of the edge where the imprint reaches it: its ball meets every
-/// surface through it (`Vertex::tol`), that face's now too. Cold: only booleans with faces on one
-/// surface, or an edge lying on the other body's face, imprint.
+/// it. Likewise an end vertex of the edge where the imprint reaches it, to its distance from that
+/// surface: no curve of its own ends there to vouch for it (more than `Vertex::tol` promises, which
+/// is cheap here and keeps the vertex as near every face it bounds as its record says). Cold: only
+/// booleans with faces on one surface, or an edge lying on the other body's face, imprint.
 #[cold]
 #[inline(never)]
 fn imprint_tols(

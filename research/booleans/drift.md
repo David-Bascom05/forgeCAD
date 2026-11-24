@@ -179,7 +179,11 @@ here it found 0. Release builds don't have it, so it costs nothing there.
 For the strict bound, `settle` would measure the settled point against each face's surface as
 well as each curve, wherever a curve misses it by more than rounding. That is a compare per new
 vertex on the hot path, and a few plane distances on the rare ones. Or `Vertex::tol`'s doc could
-say the composed bound. **For David.**
+say the composed bound.
+
+**Ruling (coordinator, provisional; David may reopen it):** the composed bound. A hot-path check
+in `settle` breaks the no-speed-loss rule. `Vertex::tol`'s doc now says so, and
+`check::vertices_off_planes` asserts it in debug builds.
 
 ## 6. A different wrong Ok: an open shell
 
@@ -248,7 +252,7 @@ answer is to record the distance (§4), or to refuse.
 ## 8. Open
 
 - The open shell of §6.
-- The strict vertex bound (§5): David's call.
+- The strict vertex bound (§5): ruled composed for now; David may reopen it.
 - The n-ary boolean (`nary.rs`) imprints by the same `imprint` but builds its own result. Its
   pieces don't yet take `imprint_tols`' growth: the gate's nary1 lines are diagnostic, and no
   search here ran it.

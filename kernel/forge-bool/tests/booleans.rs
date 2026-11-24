@@ -797,7 +797,11 @@ fn a_hundred_tilted_booleans_on_one_plate() {
 fn top_slab(i: usize, q: [f64; 6]) -> (Body, Op) {
     const L: f64 = 1e-5;
     let id = 100 + i as u64;
-    let op = if i.is_multiple_of(2) { Op::Subtract } else { Op::Union };
+    let op = if i.is_multiple_of(2) {
+        Op::Subtract
+    } else {
+        Op::Union
+    };
     let (x0, y0) = (50.0 + 40.0 * q[0], 50.0 + 40.0 * q[1]);
     let (w, h) = (5.0 + 20.0 * (q[2] + 1.0), 5.0 + 20.0 * (q[3] + 1.0));
     let z = 10.0 + 2.0 * L * q[4];
