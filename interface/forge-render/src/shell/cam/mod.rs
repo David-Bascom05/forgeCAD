@@ -21,8 +21,8 @@ pub fn narrow(screen_w: f32) -> bool {
     screen_w > 0.0 && screen_w < 1280.0
 }
 pub mod run;
-pub mod schema;
 pub mod toollib;
+pub mod schema;
 pub mod turnview;
 mod ui;
 pub use ui::{CYCLE_TIP, certified_words, check_lines, cycle_words, text_panel_h};
@@ -1266,9 +1266,7 @@ impl CamWs {
         let file = dir.join("tools.toml");
         let mut text = forge_dirs::fs::read_to_string(&file).unwrap_or_default();
         if text.is_empty() {
-            text.push_str(
-                "# The project's own tools (the Manufacture workspace's tool library writes here).\n",
-            );
+            text.push_str("# The project's own tools (the Manufacture workspace's tool library writes here).\n");
         }
         text.push('\n');
         text.push_str(toml);
@@ -1358,9 +1356,7 @@ fn call_args(inner: &str) -> Vec<(Option<String>, String)> {
         }
         // `key: value` when the text before the first colon is a name
         match piece.split_once(':') {
-            Some((k, v))
-                if k.trim().chars().all(|c| c.is_alphanumeric() || c == '_') && !k.trim().is_empty() =>
-            {
+            Some((k, v)) if k.trim().chars().all(|c| c.is_alphanumeric() || c == '_') && !k.trim().is_empty() => {
                 out.push((Some(k.trim().to_string()), v.trim().to_string()))
             }
             _ => out.push((None, piece.to_string())),
@@ -1389,9 +1385,7 @@ pub fn setup_args(s: &Stmt) -> Vec<(String, String)> {
         let Some(k) = &x.key else { continue };
         if k == "stock" {
             let t = x.text.trim();
-            let Some((head, inner)) = t.split_once('(') else {
-                continue;
-            };
+            let Some((head, inner)) = t.split_once('(') else { continue };
             let inner = inner.strip_suffix(')').unwrap_or(inner);
             let kws = call_args(inner);
             let kind = match head.trim() {
@@ -1448,12 +1442,7 @@ mod tests {
                 lathe: false,
             };
             let kw = CamWs::setup_kw(&d);
-            assert_eq!(
-                kw.iter().find(|k| k.0 == "stock").unwrap().1,
-                stock,
-                "{:?}",
-                d.args
-            );
+            assert_eq!(kw.iter().find(|k| k.0 == "stock").unwrap().1, stock, "{:?}", d.args);
         }
     }
 

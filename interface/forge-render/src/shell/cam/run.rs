@@ -624,12 +624,7 @@ impl Run {
 
     /// A setup's cycle time (as `cycle`).
     pub fn setup_cycle(&self, setup: &str) -> Option<(f64, f64)> {
-        self.cycle(
-            self.ops
-                .iter()
-                .filter(|o| o.setup == setup)
-                .map(|o| o.name.as_str()),
-        )
+        self.cycle(self.ops.iter().filter(|o| o.setup == setup).map(|o| o.name.as_str()))
     }
 
     /// An op's quality, if measured.
@@ -849,16 +844,9 @@ mod tests {
         assert_ne!(t, text);
         let r = run(&t, &dir);
         assert_eq!(r.certification, "refused");
-        assert!(
-            r.json.contains("flat-10") && r.json.contains("stickout"),
-            "{}",
-            &r.json[..r.json.len().min(400)]
-        );
+        assert!(r.json.contains("flat-10") && r.json.contains("stickout"), "{}", &r.json[..r.json.len().min(400)]);
         // an op refused by its check: facing below the part's top (18) cuts into the part
-        let t = text.replace(
-            "skim = facing(op1, tool: t1, to: 18",
-            "skim = facing(op1, tool: t1, to: 15",
-        );
+        let t = text.replace("skim = facing(op1, tool: t1, to: 18", "skim = facing(op1, tool: t1, to: 15");
         assert_ne!(t, text);
         let r = run(&t, &dir);
         let bad: Vec<&OpRes> = r.ops.iter().filter(|o| o.status == "refused").collect();
@@ -870,4 +858,6 @@ mod tests {
         assert!(bad.iter().any(|o| o.refusal.is_some()));
         assert_eq!(r.certification, "refused");
     }
+
 }
+

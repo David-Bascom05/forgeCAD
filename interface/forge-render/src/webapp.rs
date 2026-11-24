@@ -956,28 +956,17 @@ fn cam_words(g: &mut Gui, words: &str) -> Result<(), String> {
         // the tool library: narrowed, a tool shown, a new one derived from it or made
         "tools-find" => w.tools_find.text = rest.into(),
         "tools-kind" => {
-            w.tools_find.kind = crate::shell::cam::toollib::KIND_CHIPS
-                .iter()
-                .position(|c| c.0.eq_ignore_ascii_case(rest))
+            w.tools_find.kind = crate::shell::cam::toollib::KIND_CHIPS.iter().position(|c| c.0.eq_ignore_ascii_case(rest))
         }
         "tools-pick" => {
             w.tools_form = None;
             w.tools_sel = Some(rest.into());
         }
         "tools-derive" => {
-            let x = w
-                .tools_sel
-                .as_ref()
-                .and_then(|id| w.lib.tools.iter().find(|x| &x.id == id))
-                .ok_or("no tool shown")?;
+            let x = w.tools_sel.as_ref().and_then(|id| w.lib.tools.iter().find(|x| &x.id == id)).ok_or("no tool shown")?;
             w.tools_form = Some(crate::shell::cam::toollib::ToolForm::derived(&w.lib, x));
         }
-        "tools-new" => {
-            w.tools_form = Some(crate::shell::cam::toollib::ToolForm::blank(
-                &w.lib,
-                forge_tooling::Kind::Flat,
-            ))
-        }
+        "tools-new" => w.tools_form = Some(crate::shell::cam::toollib::ToolForm::blank(&w.lib, forge_tooling::Kind::Flat)),
         "earlier" => w.command(Cmd::Move(rest.into(), true)),
         "suppress" => w.command(Cmd::Suppress(rest.into())),
         "ok" => {
