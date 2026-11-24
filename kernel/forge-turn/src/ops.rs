@@ -188,10 +188,18 @@ pub const APPROACH: f64 = 1.0;
 /// A pass's retract, at 45° away from the cut.
 pub const RETRACT: f64 = 0.5;
 
-fn css(t: &TurnTool) -> Spindle {
+/// The G50 top speed when none is asked: the machine's turning spindle's ceiling, or, with no
+/// machine, a generic 3000 rpm.
+pub const DEFAULT_MAX_RPM: f64 = 3000.0;
+
+fn top_rpm(s: &Setup) -> f64 {
+    s.machine.as_ref().map_or(DEFAULT_MAX_RPM, |m| m.rpm[1])
+}
+
+fn css(s: &Setup, t: &TurnTool) -> Spindle {
     Spindle::Css {
         vc: t.vc,
-        max_rpm: 3000.0,
+        max_rpm: top_rpm(s),
     }
 }
 
@@ -237,7 +245,7 @@ pub fn face(s: &Setup, tool: &TurnTool, t: u32, z_face: f64, ap: f64) -> Result<
         name: format!("face to z = {z_face}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave: 0.0,
         start,
@@ -396,7 +404,7 @@ pub fn rough(
         name: format!("rough OD, leave {leave}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -489,7 +497,7 @@ pub fn rough_up(
         name: format!("rough up z {z_lo}..{z_hi}, leave {leave}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -579,7 +587,7 @@ pub fn bore_rough(
         name: format!("rough bore, leave {leave}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -754,7 +762,7 @@ pub fn finish(s: &Setup, tool: &TurnTool, t: u32, leave: f64, z_lo: f64) -> Resu
         name: format!("finish {}, leave {leave}", if inside { "bore" } else { "OD" }),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -878,7 +886,7 @@ pub fn finish_up(
         name: format!("finish up z {z_lo}..{z_hi}, leave {leave}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave,
         start,
@@ -928,7 +936,7 @@ pub fn groove(s: &Setup, tool: &TurnTool, t: u32, z0: f64, z1: f64, rho: f64) ->
         name: format!("groove z {z0}..{z1} to radius {rho}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave: 0.0,
         start,
@@ -966,7 +974,7 @@ pub fn part_off(s: &Setup, tool: &TurnTool, t: u32, z_back: f64) -> Result<OpPat
         t,
         spindle: Spindle::Css {
             vc: tool.vc,
-            max_rpm: 2000.0,
+            max_rpm: top_rpm(s).min(2000.0),
         },
         f: tool.f,
         leave: 0.0,
@@ -1098,7 +1106,7 @@ pub fn id_groove(
         name: format!("ID groove z {z0}..{z1} to radius {rho}"),
         tool: tool.clone(),
         t,
-        spindle: css(tool),
+        spindle: css(s, tool),
         f: tool.f,
         leave: 0.0,
         start,
