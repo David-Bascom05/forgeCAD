@@ -2442,6 +2442,10 @@ fn run_shared(src: &str, dir: &Path, lib: std::sync::Arc<Library>) -> Cam {
     cam
 }
 
+/// z-level's default floor over a bare support: one posting step above it (0.0001 in, the
+/// coarsest common post's step: a metric post's 0.001 mm rounds it up, an inch post's is it).
+const ZLEVEL_SUPPORT_STEP: f64 = 0.00254;
+
 fn line_of(src: &str, at: usize) -> usize {
     src[..at.min(src.len())].bytes().filter(|b| *b == b'\n').count() + 1
 }
@@ -5855,7 +5859,17 @@ impl Cam {
                 }
                 "zlevel" => {
                     let top = get_num(a, "from", Some(s.stock.max[2]))?;
-                    let bottom = get_num(a, "to", Some(part.bbox.0[2]))?;
+                    // with no workholding declared, the stock rests on a bare support the tool
+                    // may not touch: the default floor stays one posting step above it (0.0001
+                    // in, at least a step of every metric and inch post, so it cannot round down
+                    // onto it; the program's dialect is declared after its ops). With a fixture,
+                    // the checker decides against its own geometry: the part's bottom.
+                    let floor_default = if s.fixture.is_some() {
+                        part.bbox.0[2]
+                    } else {
+                        part.bbox.0[2].max(s.stock.min[2] + ZLEVEL_SUPPORT_STEP)
+                    };
+                    let bottom = get_num(a, "to", Some(floor_default))?;
                     let (p, vs) = surf::zlevel_voids(
                         &sf,
                         c,
