@@ -443,7 +443,7 @@ pub fn num_edit(ui: &mut Ui, x: &mut f64, unit: &str) -> bool {
         egui::DragValue::new(x)
             .speed(0.1)
             .custom_formatter(move |v, _| value_text(v, &u))
-            .custom_parser(|t| leading_number(t)),
+            .custom_parser(leading_number),
     )
     .changed()
 }
