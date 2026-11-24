@@ -54,16 +54,6 @@ fn tap(h: &mut Headless, name: &str) {
     assert!(h.click(name), "{name}");
 }
 
-/// Steps until `done` (a state a click or a job leads to), at most a minute.
-fn step_until(h: &mut Headless, what: &str, done: impl Fn(&Gui) -> bool) {
-    let t0 = std::time::Instant::now();
-    while !done(&h.gui) {
-        assert!(t0.elapsed().as_secs() < 60, "never: {what}");
-        h.step();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-}
-
 fn shot(h: &mut Headless, name: &str) {
     for _ in 0..12 {
         h.step();
