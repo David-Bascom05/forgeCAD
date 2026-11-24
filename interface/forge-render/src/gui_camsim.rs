@@ -175,14 +175,9 @@ impl Gui {
         }
         // the view not under the panel (right) and the timeline (bottom), as fractions
         let vr = self.shell.view_rect;
-        let panel = if st.folded {
-            36.0
-        } else {
-            crate::gui_camsim_panel::PANEL_W
-        } + 16.0;
-        let bar = crate::gui_camsim_panel::TIMELINE_H + 16.0;
-        let fx = (panel / vr.width().max(1.0)).clamp(0.0, 0.6);
-        let fy = (bar / vr.height().max(1.0)).clamp(0.0, 0.6);
+        let free = self.shell.camsim_free(vr);
+        let fx = ((vr.right() - free.right()) / vr.width().max(1.0)).clamp(0.0, 0.6);
+        let fy = ((vr.bottom() - free.bottom()) / vr.height().max(1.0)).clamp(0.0, 0.6);
         if lo[0].is_finite()
             && let Some(v) = &mut self.view
         {
