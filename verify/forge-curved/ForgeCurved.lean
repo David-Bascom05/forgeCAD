@@ -64,3 +64,5 @@ import ForgeCurved.VertexScreen
 import ForgeCurved.AngleOrder
 import ForgeCurved.G14
 import ForgeCurved.PifNear
+import ForgeCurved.PlaceMerge
+import ForgeCurved.BlendNode

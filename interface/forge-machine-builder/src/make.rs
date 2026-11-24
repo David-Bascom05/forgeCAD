@@ -87,19 +87,7 @@ pub fn builtin_part(path: &str) -> Option<&'static str> {
 /// A machine name the builder will write: it names the file, so `[A-Za-z0-9_.-]`, not starting
 /// with a dot, 1..=64 characters.
 pub fn check_name(name: &str) -> Result<(), String> {
-    let ok = !name.is_empty()
-        && name.len() <= 64
-        && !name.starts_with('.')
-        && name
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || "_.-".contains(c));
-    if ok {
-        Ok(())
-    } else {
-        Err(format!(
-            "`{name}`: a machine name is 1 to 64 of A-Z a-z 0-9 _ . - and does not start with a dot"
-        ))
-    }
+    forge_library::check_id(name)
 }
 
 /// What to do with values copied from the source.
@@ -208,53 +196,13 @@ pub fn from_template(t: Template, name: &str, today: &str) -> Result<Made, Strin
     )
 }
 
-/// Where a machine of `level` is saved: `<dir>/<name>.toml`.
+/// Where a machine is saved: `<dir>/<name>.toml`.
 pub fn file_for(dir: &Path, name: &str) -> PathBuf {
-    dir.join(format!("{name}.toml"))
+    forge_library::file_for(dir, name)
 }
 
-/// Writes a made machine (its file and parts) into a level's folder. Refuses to overwrite a
-/// different machine's file or to save a name that is already at this level in another file.
+/// Writes a made machine (its file and parts) into a level's folder (forge_library::save: reads
+/// back before writing; refuses another machine's file and a name already at this level).
 pub fn save(made: &Made, dir: &Path, level: Level, overwrite: bool) -> Result<PathBuf, String> {
-    if level == Level::Builtin {
-        return Err("the built-in machines are part of forgecad; save to the user or project level".into());
-    }
-    let file = file_for(dir, &made.def.name);
-    if forge_dirs::fs::exists(&file) && !overwrite {
-        return Err(format!("{} exists (overwrite it explicitly)", file.display()));
-    }
-    let (others, _) = crate::catalog::read_level(dir);
-    for (f, src) in others {
-        if Path::new(&f) == file {
-            continue;
-        }
-        if let Ok(ms) = MachineDef::parse_all(&src)
-            && ms.iter().any(|m| m.name == made.def.name)
-        {
-            return Err(format!("machine `{}` is already in {f}", made.def.name));
-        }
-    }
-    let text = crate::write::file(
-        &format!(
-            "{} — written by forgecad's machine builder (docs/cam-machine.md).",
-            made.def.name
-        ),
-        std::slice::from_ref(&made.def),
-    )?;
-    // read back before writing: what is saved must load as what was made
-    let back = MachineDef::parse_all(&text).map_err(|e| format!("the written text does not load: {e}"))?;
-    if back.len() != 1 || back[0] != made.def {
-        return Err("the written text loads as a different machine (a writer bug)".into());
-    }
-    forge_dirs::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    for (rel, t) in &made.parts {
-        let p = dir.join(rel);
-        if let Some(parent) = p.parent() {
-            forge_dirs::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-        }
-        forge_dirs::fs::write(&p, t).map_err(|e| format!("{}: {e}", p.display()))?;
-    }
-    forge_dirs::fs::write(&file, text).map_err(|e| format!("{}: {e}", file.display()))?;
-    crate::catalog::bump();
-    Ok(file)
+    forge_library::save::<crate::catalog::Machine>(&made.def, &made.parts, dir, level, overwrite)
 }

@@ -1,0 +1,3 @@
+# well_island.fg exported to STEP and imported back, for CAM's part(): the import resolves next to the part
+# file (forge-cam-lang tests/sections.rs)
+body = import(file: "well_island.step")

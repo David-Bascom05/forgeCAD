@@ -2834,6 +2834,12 @@ status = "unknown"
 basis = "no head dimensions published; the VMC head stand-in (errs large)"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-10"
 kind = "lathe"
@@ -3036,6 +3042,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-20"
 kind = "lathe"
@@ -3238,6 +3250,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-30"
 kind = "lathe"
@@ -3440,6 +3458,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-10y"
 kind = "mill-turn"
@@ -3740,6 +3764,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-20y"
 kind = "mill-turn"
@@ -4040,6 +4070,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-30y"
 kind = "mill-turn"
@@ -4340,6 +4376,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-ds-30y"
 kind = "mill-turn"
@@ -4767,6 +4809,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-vf-1"
 kind = "vmc3"
@@ -7945,6 +7993,12 @@ status = "unknown"
 basis = "no head dimensions published; the VMC head stand-in (errs large)"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-umc-750ss"
 kind = "table-table"
@@ -8322,6 +8376,12 @@ status = "unknown"
 basis = "no head dimensions published; the VMC head stand-in (errs large)"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-umc-1000"
 kind = "table-table"
@@ -8692,6 +8752,12 @@ status = "unknown"
 basis = "no head dimensions published; the VMC head stand-in (errs large)"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-15"
 kind = "lathe"
@@ -8894,6 +8960,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-25"
 kind = "lathe"
@@ -9096,6 +9168,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-35"
 kind = "lathe"
@@ -9298,6 +9376,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-st-40"
 kind = "lathe"
@@ -9500,6 +9584,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-tl-1"
 kind = "lathe"
@@ -9701,6 +9791,12 @@ status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
 
 # ---------------------------------------------------------------------------------------------
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+
 [[machine]]
 name = "haas-tl-2"
 kind = "lathe"
@@ -9900,3 +9996,9 @@ basis = "chuck length 110 mm and a 5 mm radial margin for jaws are unpublished s
 path = "body.turret"
 status = "unknown"
 basis = "turret disc size unpublished: r 190 mm x 120 mm, its rim 60 mm behind the reference tool point (the tool's own body is the setup's). Errs large"
+
+[[machine.cite]]
+path = "zones"
+status = "unknown"
+basis = "the maker does not publish where the machine's own bodies can meet within its travel (stored-stroke or crash zones); the bodies here are envelopes, and a contact between them in travel is reported as possible, not checked"
+

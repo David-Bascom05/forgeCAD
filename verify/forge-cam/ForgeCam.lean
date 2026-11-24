@@ -6,6 +6,7 @@ import ForgeCam.Machine
 import ForgeCam.Post
 import ForgeCam.Fixture
 import ForgeCam.Pocket
+import ForgeCam.PocketDrop
 import ForgeCam.Dist2
 import ForgeCam.Vise
 import ForgeCam.DistArc
@@ -16,5 +17,5 @@ import ForgeCam.Concave
 import ForgeCam.PathEnds
 import ForgeCam.Heights
 import ForgeCam.Turn
-import ForgeCam.Drop
+import ForgeCam.Halfspace
 import ForgeCam.Quad

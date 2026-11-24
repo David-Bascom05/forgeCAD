@@ -128,6 +128,196 @@ pub fn prim_tris(p: &Prim, out: &mut Tris) {
     out.patch(t0, v0);
 }
 
+/// A turned outline revolved about +z: (z, radius) points in order (an end on the axis closes
+/// it), `ROUND` segments around; edges at every ring.
+pub fn revolve(outline: &[[f64; 2]]) -> Tris {
+    let mut t = Tris::default();
+    let ring = |z: f64, r: f64, k: usize| {
+        let th = 2.0 * std::f64::consts::PI * (k % ROUND) as f64 / ROUND as f64;
+        let (sn, cs) = forge_math::dmath::sin_cos(th);
+        ([r * cs, r * sn, z], [cs, sn])
+    };
+    for w in outline.windows(2) {
+        let ([z0, r0], [z1, r1]) = (w[0], w[1]);
+        let (dz, dr) = (z1 - z0, r1 - r0);
+        let len = (dz * dz + dr * dr).sqrt();
+        if len == 0.0 {
+            continue;
+        }
+        // the outward normal of the generator in (radial, z): (dz, -dr) / len, facing out
+        let (nr, nz) = (dz / len, -dr / len);
+        for k in 0..ROUND {
+            let (p0, c0) = ring(z0, r0, k);
+            let (p1, c1) = ring(z0, r0, k + 1);
+            let (q1, _) = ring(z1, r1, k + 1);
+            let (q0, _) = ring(z1, r1, k);
+            let n0 = [c0[0] * nr, c0[1] * nr, nz];
+            let n1 = [c1[0] * nr, c1[1] * nr, nz];
+            let b = t.pos.len() as u32;
+            t.pos.extend_from_slice(&[p0, p1, q1, q0]);
+            t.nrm.extend_from_slice(&[n0, n1, n1, n0]);
+            t.tri.push([b, b + 1, b + 2]);
+            t.tri.push([b, b + 2, b + 3]);
+        }
+        if r1 > 0.0 {
+            t.edges.push((0..=ROUND).map(|k| ring(z1, r1, k).0).collect());
+        }
+    }
+    let (nt, nv) = (t.tri.len(), t.pos.len());
+    t.patches.push((0, nt as u32, 0, nv as u32));
+    t
+}
+
+/// An oriented box: corner `o`, unit edge directions `axes`, edge lengths `size`.
+pub fn obox_tris(o: [f64; 3], axes: [[f64; 3]; 3], size: [f64; 3], out: &mut Tris) {
+    let (t0, v0) = (out.tri.len(), out.pos.len());
+    let c = |i: usize| {
+        let mut p = o;
+        for k in 0..3 {
+            if i >> k & 1 == 1 {
+                p = kin::add(p, kin::scale(axes[k], size[k]));
+            }
+        }
+        p
+    };
+    // the box's own frame may be left-handed: wind each face by its outward normal
+    let mut face = |idx: [usize; 4], n: [f64; 3]| {
+        let p = idx.map(c);
+        let w = kin::cross(kin::sub(p[1], p[0]), kin::sub(p[2], p[0]));
+        let p = if kin::dot(w, n) >= 0.0 {
+            p
+        } else {
+            [p[0], p[3], p[2], p[1]]
+        };
+        out.quad(p, n);
+    };
+    let neg = |v: [f64; 3]| kin::scale(v, -1.0);
+    face([0, 2, 3, 1], neg(axes[2]));
+    face([4, 5, 7, 6], axes[2]);
+    face([0, 1, 5, 4], neg(axes[1]));
+    face([2, 6, 7, 3], axes[1]);
+    face([0, 4, 6, 2], neg(axes[0]));
+    face([1, 3, 7, 5], axes[0]);
+    for (i, j) in [
+        (0, 1),
+        (2, 3),
+        (4, 5),
+        (6, 7),
+        (0, 2),
+        (1, 3),
+        (4, 6),
+        (5, 7),
+        (0, 4),
+        (1, 5),
+        (2, 6),
+        (3, 7),
+    ] {
+        out.edges.push(vec![c(i), c(j)]);
+    }
+    out.patch(t0, v0);
+}
+
+/// A closed section (x, z) drawn along y over `len`, centred: a press-brake tool or a press's
+/// beam. The section may be concave; its caps are ear-clipped.
+pub fn prism(outline: &[[f64; 2]], len: f64) -> Tris {
+    let mut t = Tris::default();
+    let mut pts: Vec<[f64; 2]> = Vec::with_capacity(outline.len());
+    for p in outline {
+        if pts
+            .last()
+            .is_none_or(|q: &[f64; 2]| (q[0] - p[0]).abs() + (q[1] - p[1]).abs() > 1e-9)
+        {
+            pts.push(*p);
+        }
+    }
+    while pts.len() > 1 && {
+        let (a, b) = (pts[0], pts[pts.len() - 1]);
+        (a[0] - b[0]).abs() + (a[1] - b[1]).abs() <= 1e-9
+    } {
+        pts.pop();
+    }
+    if pts.len() < 3 || len <= 0.0 {
+        return t;
+    }
+    // counter-clockwise in (x, z)
+    let area: f64 = (0..pts.len())
+        .map(|i| {
+            let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+            a[0] * b[1] - b[0] * a[1]
+        })
+        .sum();
+    if area < 0.0 {
+        pts.reverse();
+    }
+    let (y0, y1) = (-len / 2.0, len / 2.0);
+    let at = |p: [f64; 2], y: f64| [p[0], y, p[1]];
+    let n = pts.len();
+    for i in 0..n {
+        let (a, b) = (pts[i], pts[(i + 1) % n]);
+        let (dx, dz) = (b[0] - a[0], b[1] - a[1]);
+        let l = (dx * dx + dz * dz).sqrt();
+        t.quad(
+            [at(a, y1), at(b, y1), at(b, y0), at(a, y0)],
+            [dz / l, 0.0, -dx / l],
+        );
+    }
+    // the caps: ear clipping of the counter-clockwise polygon
+    let cross =
+        |o: [f64; 2], a: [f64; 2], b: [f64; 2]| (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+    let mut idx: Vec<usize> = (0..n).collect();
+    let mut ears: Vec<[usize; 3]> = Vec::new();
+    let mut guard = 0;
+    while idx.len() > 3 && guard < 4 * n * n {
+        guard += 1;
+        let m = idx.len();
+        let mut cut = None;
+        for k in 0..m {
+            let (ia, ib, ic) = (idx[(k + m - 1) % m], idx[k], idx[(k + 1) % m]);
+            let (a, b, c) = (pts[ia], pts[ib], pts[ic]);
+            if cross(a, b, c) <= 1e-12 {
+                continue;
+            }
+            let inside = idx.iter().any(|&j| {
+                j != ia
+                    && j != ib
+                    && j != ic
+                    && cross(a, b, pts[j]) >= 0.0
+                    && cross(b, c, pts[j]) >= 0.0
+                    && cross(c, a, pts[j]) >= 0.0
+            });
+            if !inside {
+                cut = Some(k);
+                ears.push([ia, ib, ic]);
+                break;
+            }
+        }
+        match cut {
+            Some(k) => {
+                idx.remove(k);
+            }
+            None => break,
+        }
+    }
+    if idx.len() == 3 {
+        ears.push([idx[0], idx[1], idx[2]]);
+    }
+    for (y, ny, flip) in [(y0, -1.0, false), (y1, 1.0, true)] {
+        let b = t.pos.len() as u32;
+        t.pos.extend(pts.iter().map(|p| at(*p, y)));
+        t.nrm.extend(std::iter::repeat_n([0.0, ny, 0.0], n));
+        for e in &ears {
+            let [i, j, k] = e.map(|v| b + v as u32);
+            t.tri.push(if flip { [i, k, j] } else { [i, j, k] });
+        }
+        let mut ring: Vec<[f64; 3]> = pts.iter().map(|p| at(*p, y)).collect();
+        ring.push(at(pts[0], y));
+        t.edges.push(ring);
+    }
+    let (nt, nv) = (t.tri.len(), t.pos.len());
+    t.patches.push((0, nt as u32, 0, nv as u32));
+    t
+}
+
 /// A body's primitives.
 pub fn prims_tris(prims: &[Prim]) -> Tris {
     let mut t = Tris::default();
@@ -323,6 +513,26 @@ mod tests {
     }
 
     #[test]
+    fn a_revolved_outline_faces_out() {
+        let t = revolve(&[
+            [0.0, 0.0],
+            [0.0, 5.0],
+            [20.0, 5.0],
+            [20.0, 3.0],
+            [50.0, 3.0],
+            [50.0, 0.0],
+        ]);
+        assert!(!t.tri.is_empty());
+        for tri in &t.tri {
+            let [a, b, c] = tri.map(|i| t.pos[i as usize]);
+            let n = kin::cross(kin::sub(b, a), kin::sub(c, a));
+            if kin::norm(n) > 1e-12 {
+                assert!(kin::dot(n, t.nrm[tri[0] as usize]) > 0.0, "{tri:?}");
+            }
+        }
+    }
+
+    #[test]
     fn built_in_bodies_come_from_their_parts_posed_and_lit() {
         let def = forge_machine::library::builtin_named("generic-vmc3").unwrap();
         let mut q: Vec<f64> = def.joints.iter().map(|j| j.home).collect();
@@ -348,5 +558,39 @@ mod tests {
         assert_eq!(moved.len(), out.len());
         let changed = out.iter().zip(&moved).filter(|(a, b)| a.at != b.at).count();
         assert_eq!(changed, t.tri.len() * 3);
+    }
+}
+
+#[cfg(test)]
+mod prism_tests {
+    use super::prism;
+
+    /// An L (concave): two side faces per edge row, caps covering its area on both ends.
+    #[test]
+    fn a_concave_section_is_closed() {
+        let l = [
+            [0.0, 0.0],
+            [20.0, 0.0],
+            [20.0, 5.0],
+            [5.0, 5.0],
+            [5.0, 30.0],
+            [0.0, 30.0],
+        ];
+        let t = prism(&l, 100.0);
+        let cap_area: f64 = t
+            .tri
+            .iter()
+            .filter(|tr| tr.iter().all(|&i| t.pos[i as usize][1] > 0.0))
+            .map(|tr| {
+                let [a, b, c] = tr.map(|i| t.pos[i as usize]);
+                0.5 * ((b[0] - a[0]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[0] - a[0])).abs()
+            })
+            .sum();
+        assert!((cap_area - (20.0 * 5.0 + 5.0 * 25.0)).abs() < 1e-9, "{cap_area}");
+        // clockwise input draws the same
+        let mut r = l.to_vec();
+        r.reverse();
+        assert_eq!(prism(&r, 100.0).tri.len(), t.tri.len());
+        assert_eq!(t.tri.len(), 6 * 2 + 2 * 4);
     }
 }

@@ -184,6 +184,21 @@ fn pair_travel(def: &MachineDef, ai: usize, bi: usize) -> (Vec<usize>, Travel) {
     if a.ignore.contains(&b.name) || b.ignore.contains(&a.name) {
         return (js, Travel::Skipped("ignored by construction".into()));
     }
+    // a joint whose travel is UNKNOWN: the pair is not checked through it
+    if let Some(&j) = js.iter().find(|&&j| def.joints[j].range.is_none()) {
+        return (
+            js,
+            Travel::Skipped(format!(
+                "joint {} travel UNKNOWN: not checked",
+                def.joints[j].name
+            )),
+        );
+    }
+    let rg = |j: usize| {
+        def.joints[j]
+            .range
+            .expect("checked above: every moving joint has its travel")
+    };
     let mut d2 = def.clone();
     d2.bodies = vec![a.clone(), b.clone()];
     let home: Vec<f64> = def.joints.iter().map(|j| j.home).collect();
@@ -194,8 +209,8 @@ fn pair_travel(def: &MachineDef, ai: usize, bi: usize) -> (Vec<usize>, Travel) {
         // one line per joint through its range, the others at home
         for &j in &js {
             let (mut q0, mut q1) = (home.clone(), home.clone());
-            q0[j] = def.joints[j].range[0];
-            q1[j] = def.joints[j].range[1];
+            q0[j] = rg(j)[0];
+            q1[j] = rg(j)[1];
             segs.push(line(q0, q1));
         }
     } else {
@@ -211,12 +226,12 @@ fn pair_travel(def: &MachineDef, ai: usize, bi: usize) -> (Vec<usize>, Travel) {
                 let mut base = home.clone();
                 if js.len() > 1 {
                     for (bit, &o) in others.iter().enumerate() {
-                        base[o] = def.joints[o].range[(c >> bit) & 1];
+                        base[o] = rg(o)[(c >> bit) & 1];
                     }
                 }
                 let (mut q0, mut q1) = (base.clone(), base);
-                q0[j] = def.joints[j].range[0];
-                q1[j] = def.joints[j].range[1];
+                q0[j] = rg(j)[0];
+                q1[j] = rg(j)[1];
                 segs.push(line(q0, q1));
             }
         }
@@ -234,6 +249,10 @@ fn pair_travel(def: &MachineDef, ai: usize, bi: usize) -> (Vec<usize>, Travel) {
             t_stop: 0.0,
             joints: Vec::new(),
             accel_missing: false,
+            t_la: 0.0,
+            seg_la: Vec::new(),
+            t_scurve: 0.0,
+            seg_scurve: Vec::new(),
         };
         let rep = collide::check(&s, &tl, &[]);
         for c in &rep.contacts {
@@ -268,8 +287,8 @@ fn pair_travel(def: &MachineDef, ai: usize, bi: usize) -> (Vec<usize>, Travel) {
         return (js, Travel::Proven);
     }
     // several: try to prove the whole box of their travel
-    let lo: Vec<f64> = js.iter().map(|&j| def.joints[j].range[0]).collect();
-    let hi: Vec<f64> = js.iter().map(|&j| def.joints[j].range[1]).collect();
+    let lo: Vec<f64> = js.iter().map(|&j| rg(j)[0]).collect();
+    let hi: Vec<f64> = js.iter().map(|&j| rg(j)[1]).collect();
     let mut budget = BOX_BUDGET;
     if prove_box(&s, &js, &home, &lo, &hi, &lo, &hi, &mut budget) {
         (js, Travel::Proven)
@@ -315,6 +334,10 @@ fn prove_box(
         t_stop: 0.0,
         joints: Vec::new(),
         accel_missing: false,
+        t_la: 0.0,
+        seg_la: Vec::new(),
+        t_scurve: 0.0,
+        seg_scurve: Vec::new(),
     };
     let rep = collide::check(s, &tl, &[]);
     if rep.pairs_checked == 1 && rep.spans == 1 && rep.contacts.is_empty() {

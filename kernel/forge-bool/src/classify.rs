@@ -18,8 +18,12 @@ pub enum Where {
 pub struct FaceInfo {
     /// Each boundary use with its edge's box.
     edges: Vec<(forge_topo::CoedgeId, Box3)>,
-    /// The largest sag bound among the face's edges: an edge farther than
-    /// this can never decide a point, so it is skipped without solving.
+    /// At least the largest sag bound among the face's edges and the largest tolerance among its
+    /// loops' vertices (the body's bound, `Body::vertex_tol`, when built or extended; raised by
+    /// `grow_query_reach`): an edge farther than this can never decide a point, so it is skipped
+    /// without solving. Any reach at least that answers alike (CacheOK, G9): an edge within it of
+    /// the point is a candidate either way, so the nearest is the same when one is that near; when
+    /// none is, the nearest found lies past every vertex's ball and edge's sag, and decides nothing.
     reach: f64,
     /// The loops drawn in parameter space, only when a query needs them
     /// (planar faces are decided exactly without them).
@@ -261,8 +265,29 @@ pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId])
     }
 }
 
+/// Vertex `v`'s tolerance grew in place to `tol`: each face round it whose kept index reaches less
+/// reaches that far (CacheOK, G9: a kept reach takes in its loops' vertices' balls).
+pub fn grow_query_reach(body: &mut Body, v: forge_topo::VertexId, tol: f64) {
+    let faces: Vec<FaceId> = body
+        .edges
+        .iter()
+        .filter(|e| e.alive && (e.start == v || e.end == v))
+        .flat_map(|e| e.coedges.iter().map(|&c| body.coedge_face(c)))
+        .collect();
+    for f in faces {
+        let face = &mut body.faces[f.index()];
+        let Some(q) = face.query.get_mut() else { continue };
+        match std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) {
+            Some(info) => info.reach = info.reach.max(tol),
+            // shared with a copy of the body: built afresh when next asked
+            None => face.query.clear(),
+        }
+    }
+}
+
 /// Face `f` gained the loop `lp` in place: its kept index (if any) takes the loop's edges.
 pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
+    let vtol = body.vertex_tol();
     let entries: Vec<_> = body.lp(lp).coedges().map(|c| (c, edge_entry(body, c))).collect();
     let plane = match &body.face(f).surface {
         Surface::Plane(pl) => Some(*pl),
@@ -282,6 +307,8 @@ pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
         info.edges.push((c, b));
         info.reach = info.reach.max(sag);
     }
+    // (the new loop's vertices may be tolerant ones)
+    info.reach = info.reach.max(vtol);
     if info.bands.is_none()
         && info.edges.len() >= 16
         && let Some(pl) = plane
@@ -411,7 +438,8 @@ fn info(body: &Body, f: FaceId) -> &FaceInfo {
     let face = body.face(f);
     let q = face.query.get_or_init(|| {
         let mut edges = Vec::new();
-        let mut reach = tol::LINEAR;
+        // (the body's bound of its vertices' tolerances, at least this face's loops')
+        let mut reach = tol::LINEAR.max(body.vertex_tol());
         for &l in &face.loops {
             for c in body.lp(l).coedges() {
                 let (e, b) = edge_entry(body, c);
@@ -437,6 +465,13 @@ fn info(body: &Body, f: FaceId) -> &FaceInfo {
 
 impl<'a> Index<'a> {
     pub fn new(body: &'a Body) -> Self {
+        // (the body's vertex tolerance bounds every vertex's: point_in_face looks that far, G9)
+        debug_assert!(
+            body.vertices
+                .iter()
+                .all(|v| v.tol <= body.vertex_tol().max(forge_math::tol::LINEAR)),
+            "a vertex's tol raised past Body::vertex_tol (raise it with grow_vertex_tol)"
+        );
         let ix = Index {
             body,
             bbox: Box3::EMPTY,
@@ -473,7 +508,24 @@ impl<'a> Index<'a> {
     }
 
     fn info(&self, f: FaceId) -> &FaceInfo {
-        info(self.body, f)
+        let i = info(self.body, f);
+        // (a kept index reaches past every one of its loops' vertices' balls: CacheOK, G9)
+        #[cfg(debug_assertions)]
+        {
+            let b = self.body;
+            for &l in &b.face(f).loops {
+                for c in b.lp(l).coedges() {
+                    let v = b.coedge_start(c);
+                    debug_assert!(
+                        b.vertex(v).tol <= i.reach,
+                        "face {f:?}'s index reaches {} short of vertex {v:?}'s tol {}",
+                        i.reach,
+                        b.vertex(v).tol
+                    );
+                }
+            }
+        }
+        i
     }
 
     fn drawn(&self, f: FaceId) -> &Drawn {
@@ -536,12 +588,14 @@ impl<'a> Index<'a> {
         {
             return w;
         }
-        // nearest boundary point, exactly
+        // nearest boundary point, exactly, within the face's reach (its edges' sag and its loops'
+        // vertex tolerances: any reach at least that answers alike, CacheOK G9)
+        let reach = info.reach;
         let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
         let mut near: Vec<u32> = Vec::new();
         // each candidate in turn (the band rows round p, or every use), the nearest kept
         let mut try_one = |&(c, ref b): &(forge_topo::CoedgeId, Box3)| {
-            if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
+            if c == GONE || box_distance(b, p) > reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
                 return;
             }
             let e = body.edge(body.coedge(c).edge);
@@ -553,7 +607,7 @@ impl<'a> Index<'a> {
         };
         match &info.bands {
             Some(bands) => {
-                bands.near(p, info.reach, &mut near);
+                bands.near(p, reach, &mut near);
                 for &i in &near {
                     try_one(&info.edges[i as usize]);
                 }
@@ -688,9 +742,10 @@ impl<'a> Index<'a> {
             .is_none()
         {
             // the nearest boundary point, as point_in_face_past finds it
+            let reach = info.reach;
             let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
             for &(c, ref b) in &info.edges {
-                if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
+                if c == GONE || box_distance(b, p) > reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
                     continue;
                 }
                 let e = body.edge(body.coedge(c).edge);
@@ -1655,5 +1710,218 @@ mod simple_vs_polygon {
             }
         }
         assert!(decided > 1000);
+    }
+}
+
+/// classify's degenerate rays (coverage-2026-11-23 group 4: none of these branches ran in the
+/// corpus): a ray parallel to an edge, along it, through a vertex, tangent to a circle, and a
+/// face where all three planar rays pass through vertices (the uv-polygon fallback). Each answer
+/// is checked against the exact even-odd answer of a point far from the boundary.
+#[cfg(test)]
+mod degenerate_rays {
+    use super::*;
+    use forge_geom::{Circle, Line};
+    use forge_math::rng::Rng;
+    use forge_math::{Frame, dmath};
+    use forge_ops::{Profile, ProfileLoop, Segment, extrude};
+
+    fn line(a: Point3, b: Point3) -> (Curve, Interval) {
+        let d = b - a;
+        let l = d.length();
+        (
+            Curve::Line(Line {
+                origin: a,
+                dir: d.normalize().unwrap(),
+            }),
+            Interval::new(0.0, l),
+        )
+    }
+
+    #[test]
+    fn crossings_of_one_curve() {
+        let (n, p, d) = (
+            Vec3::new(0.0, 0.0, 1.0),
+            Point3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+        );
+        let ask = |c: (Curve, Interval)| plane_ray_crossings(n, p, d, &c.0, c.1);
+        // parallel to the ray, off it: never crossed (den == 0)
+        assert_eq!(
+            ask(line(Point3::new(1.0, 2.0, 0.0), Point3::new(5.0, 2.0, 0.0))),
+            Some(0)
+        );
+        // along the ray: undecided
+        assert_eq!(
+            ask(line(Point3::new(1.0, 0.0, 0.0), Point3::new(5.0, 0.0, 0.0))),
+            None
+        );
+        // through an end: undecided
+        assert_eq!(
+            ask(line(Point3::new(3.0, 0.0, 0.0), Point3::new(3.0, 4.0, 0.0))),
+            None
+        );
+        // across: once; behind the ray's start: never
+        assert_eq!(
+            ask(line(Point3::new(3.0, -1.0, 0.0), Point3::new(3.0, 4.0, 0.0))),
+            Some(1)
+        );
+        assert_eq!(
+            ask(line(Point3::new(-3.0, -1.0, 0.0), Point3::new(-3.0, 4.0, 0.0))),
+            Some(0)
+        );
+        // a circle the ray is tangent to: touches, no crossing (even)
+        let circle = |c: Point3, r: f64| {
+            (
+                Curve::Circle(Circle {
+                    frame: Frame::WORLD.with_origin(c),
+                    radius: r,
+                }),
+                Interval::new(0.0, dmath::TAU),
+            )
+        };
+        assert!(ask(circle(Point3::new(5.0, 2.0, 0.0), 2.0)).is_none_or(|k| k % 2 == 0));
+        // a circle round p: once; a circle ahead: twice
+        assert_eq!(
+            ask(circle(Point3::new(0.5, 0.3, 0.0), 2.0)).map(|k| k % 2),
+            Some(1)
+        );
+        assert_eq!(ask(circle(Point3::new(5.0, 0.5, 0.0), 2.0)), Some(2));
+    }
+
+    /// A star polygon round p (or beside it) with a vertex on each of the three planar rays from
+    /// p, so every ray parity is undecided and point_in_face falls back to the uv polygon.
+    #[test]
+    fn all_planar_rays_through_vertices() {
+        let mut rng = Rng::new(11);
+        let mut checked = 0;
+        for k in 0..60 {
+            let p = Point2::new(rng.range(-5.0, 5.0), rng.range(-5.0, 5.0));
+            let outside = k % 2 == 1;
+            // ray k: direction RAY_ANGLES[k] in the face's frame (WORLD for the top face, checked below)
+            let ray = |a: f64, r: f64| {
+                let (sn, cs) = dmath::sin_cos(a);
+                Point2::new(p.x + r * cs, p.y + r * sn)
+            };
+            let mut pts: Vec<(f64, Point2)> = RAY_ANGLES
+                .iter()
+                .map(|&a| (a, ray(a, rng.range(2.0, 6.0))))
+                .collect();
+            // more vertices between, for a star polygon round p
+            for i in 0..5 {
+                let a = 0.3 + i as f64 * 1.2 + rng.range(0.0, 0.5);
+                pts.push((a, ray(a, rng.range(2.0, 6.0))));
+            }
+            if outside {
+                // the polygon moved off p along ray 0 keeps a vertex on ray 0 only; shift it so
+                // p is 1.0 clear outside
+                let (sn, cs) = dmath::sin_cos(RAY_ANGLES[0]);
+                let shift = Point2::new(15.0 * cs, 15.0 * sn);
+                for (_, q) in &mut pts {
+                    *q = Point2::new(q.x + shift.x, q.y + shift.y);
+                }
+            }
+            pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let n = pts.len();
+            let segs = (0..n)
+                .map(|i| {
+                    (
+                        Segment::Line {
+                            a: pts[i].1,
+                            b: pts[(i + 1) % n].1,
+                        },
+                        i as u64,
+                    )
+                })
+                .collect();
+            let Ok(body) = extrude(
+                &Profile {
+                    plane: Frame::WORLD,
+                    loops: vec![ProfileLoop::new(segs)],
+                },
+                3.0,
+                1,
+            ) else {
+                continue;
+            };
+            let top = body
+                .face_ids()
+                .find(|&f| match &body.face(f).surface {
+                    Surface::Plane(pl) => pl.frame.origin.z == 3.0 && pl.frame.z().get().z > 0.5,
+                    _ => false,
+                })
+                .expect("the top face");
+            let Surface::Plane(pl) = &body.face(top).surface else {
+                unreachable!()
+            };
+            // the rays are drawn in WORLD's x, y: the top face must share them for the test to mean anything
+            if (pl.frame.x().get() - Vec3::new(1.0, 0.0, 0.0)).length() > 1e-15 {
+                continue;
+            }
+            let q = Point3::new(p.x, p.y, 3.0);
+            // the exact even-odd answer, p being far (>= 1) from every edge in this family's
+            // inside cases and 1+ clear in the outside ones: by winding round the sorted star
+            let want = if outside { Where::Outside } else { Where::Inside };
+            let ix = Index::new(&body);
+            assert_eq!(ix.point_in_face(top, q), want, "case {k} p {p:?}");
+            if !outside {
+                // and every planar ray is in fact undecided there
+                let info = info(&body, top);
+                for a in RAY_ANGLES {
+                    assert_eq!(
+                        planar_parity(&body, pl, q, &info.edges, None, a),
+                        None,
+                        "case {k} angle {a}"
+                    );
+                }
+            }
+            checked += 1;
+        }
+        assert!(checked >= 40, "{checked}");
+    }
+}
+
+#[cfg(test)]
+mod vertex_ball {
+    use super::*;
+    use forge_math::Frame;
+    use forge_ops::{Profile, extrude};
+
+    /// A box's top corner tolerant (1e-4, ten times LINEAR): a point on the top's plane 4.9e-5 off
+    /// the corner, diagonally outside the face, is within the corner's ball, so on the boundary.
+    /// The index looked only as far as its edges' sag (LINEAR here) and never reached the corner:
+    /// Outside; and a kept index whose reach was wider said On (G9).
+    #[test]
+    fn a_point_in_a_tolerant_corners_ball_is_on_the_boundary() {
+        let mut b = extrude(
+            &Profile {
+                plane: Frame::WORLD,
+                loops: vec![Profile::rectangle(Point2::ORIGIN, 10.0, 20.0, 0)],
+            },
+            5.0,
+            1,
+        )
+        .unwrap();
+        let corner = b
+            .vertex_ids()
+            .find(|&v| b.vertex(v).point.distance(Point3::new(0.0, 0.0, 5.0)) < 1e-9)
+            .expect("corner");
+        b.grow_vertex_tol(corner, 1e-4);
+        let top = b
+            .face_ids()
+            .find(|&f| {
+                matches!(&b.face(f).surface, Surface::Plane(pl)
+                    if (pl.frame.origin.z - 5.0).abs() < 1e-9 && pl.frame.z().get().z.abs() > 0.99)
+            })
+            .expect("top");
+        let ix = Index::new(&b);
+        assert_eq!(
+            ix.point_in_face(top, Point3::new(-3.5e-5, -3.5e-5, 5.0)),
+            Where::On
+        );
+        // past the ball: off the face
+        assert_eq!(
+            ix.point_in_face(top, Point3::new(-1e-4, -1e-4, 5.0)),
+            Where::Outside
+        );
     }
 }

@@ -107,6 +107,8 @@ fn finishing_ops_certify_on_the_dome() {
         tidx: 0,
         h: H,
         feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let area = [10.0, 10.0, 50.0, 50.0];
     let mut paths = vec![("parallel", surf::parallel(&sf, c, area, 2.0, 30.0, 1.0).unwrap())];
@@ -114,14 +116,8 @@ fn finishing_ops_certify_on_the_dome() {
         "waterline",
         surf::waterline(&sf, c, area, &[2.0, 6.0], 1.0).unwrap(),
     ));
-    paths.push(("scallop", surf::scallop(&sf, c, area, 2.5, 1.0).unwrap()));
-    paths.push(("pencil", surf::pencil(&sf, c, area, 0.5, 0.02).unwrap()));
-    let bull = tool("bull-10-r1", 2);
-    let sfb = Surfacer::new(&faces, &bull.shape.bodies[0], 0.0, TOL, 0.0).unwrap();
-    paths.push((
-        "rest",
-        surf::rest(&sf, &sfb, c, area, 2.0, 1.0, 1.0, 0.05).unwrap(),
-    ));
+    // scallop, pencil and rest are forge-cam-3d's now (its tests certify them on the dome and
+    // the mould core)
     for (name, p) in &paths {
         let s = certified(p, &ball, &faces);
         assert!(s.clear, "{name}: {:?}", s.checks);
@@ -154,6 +150,8 @@ fn zlevel_roughing_certifies_and_the_map_holds_the_stock() {
         tidx: 0,
         h: H,
         feed: (1500.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let p = surf::zlevel(&sf, c, [-5.0, -5.0, 65.0, 65.0], 12.0, 0.5, 4.0, 4.0, 2.0).unwrap();
     let s = certified(&p, &flat, &faces);
@@ -233,6 +231,8 @@ fn surfacing_paths_are_the_same_bits_everywhere() {
         tidx: 0,
         h: H,
         feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let area = [10.0, 10.0, 50.0, 50.0];
     let flat = tool("flat-10", 2);
@@ -242,6 +242,8 @@ fn surfacing_paths_are_the_same_bits_everywhere() {
         tidx: 0,
         h: H,
         feed: (1500.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let paths = [
         surf::parallel(&sf, c, area, 3.0, 30.0, 1.0).unwrap(),
@@ -286,6 +288,8 @@ fn zlevel_on_a_curved_part_reaches_the_contour() {
         tidx: 0,
         h: H,
         feed: (1500.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let (_, voids) =
         surf::zlevel_voids(&sf, c, [-15.0, -15.0, 75.0, 75.0], 12.0, 0.5, 4.0, 4.0, 2.0).unwrap();

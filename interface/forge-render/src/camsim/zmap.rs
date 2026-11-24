@@ -46,9 +46,15 @@ impl Cutter {
 
     /// From the tool's revolved profile: its cutting bodies' lowest point at each radius.
     pub fn of(shape: &Shape) -> Option<Cutter> {
+        Cutter::of_part(shape, Part::Cutter)
+    }
+
+    /// The lowest height above the tip, at each radius, of the tool's bodies of one kind (its
+    /// shank and holder: `Part::NonCutting`).
+    pub fn of_part(shape: &Shape, part: Part) -> Option<Cutter> {
         let mut pts: Vec<([f64; 2], [f64; 2])> = vec![];
         let mut r = 0.0f64;
-        for b in shape.bodies.iter().filter(|b| b.part == Part::Cutter) {
+        for b in shape.bodies.iter().filter(|b| b.part == part) {
             for s in &b.chain {
                 match *s {
                     PSeg::Line { a, b } => pts.push((a, b)),
@@ -140,6 +146,8 @@ pub struct ZMap {
     /// Each column's material, bottom and top; empty where hi ≤ lo.
     pub lo: Vec<f32>,
     pub hi: Vec<f32>,
+    /// No column's top is above this (cutting only lowers them).
+    pub top: f32,
 }
 
 impl ZMap {
@@ -164,6 +172,7 @@ impl ZMap {
             ny,
             lo: vec![min[2] as f32; nx * ny],
             hi: vec![max[2] as f32; nx * ny],
+            top: max[2] as f32,
         }
     }
 
@@ -208,6 +217,43 @@ impl ZMap {
 
     /// The tool stamped with its tip at p; whether anything changed.
     pub fn stamp(&mut self, p: [f64; 3], tool: &Cutter) -> bool {
+        self.stamp_with(p, tool, &mut |g, k, z| g.lower(k, z))
+    }
+
+    /// Sweeps the tool along `seg` from fraction u0 to u1; whether anything changed.
+    pub fn cut(&mut self, seg: &Seg, u0: f64, u1: f64, tool: &Cutter) -> bool {
+        self.cut_with(seg, u0, u1, tool, &mut |g, k, z| g.lower(k, z))
+    }
+
+    /// How deep an envelope swept along `seg` would go into the material there is (the most
+    /// any column's top stands above it), and where; None if it stays clear. Nothing is cut.
+    pub fn depth(&mut self, seg: &Seg, env: &Cutter) -> Option<(f32, [f64; 3])> {
+        // nothing stands higher than the tallest column: an envelope above it meets nothing
+        let low = seg.a[2].min(seg.b[2]) as f32 + env.h.iter().copied().fold(f32::INFINITY, f32::min);
+        if low >= self.top {
+            return None;
+        }
+        let mut worst: Option<(f32, usize, f32)> = None;
+        self.cut_with(seg, 0.0, 1.0, env, &mut |g, k, z| {
+            let d = g.hi[k].min(g.hi[k].max(g.lo[k])) - z.max(g.lo[k]);
+            if g.hi[k] > g.lo[k] && d > 1e-4 && worst.is_none_or(|w| d > w.0) {
+                worst = Some((d, k, z));
+            }
+            false
+        });
+        worst.map(|(d, k, z)| {
+            let c = self.centre(k % self.nx, k / self.nx);
+            (d, [c[0], c[1], z as f64])
+        })
+    }
+
+    /// The tool stamped with its tip at p; whether anything changed.
+    fn stamp_with(
+        &mut self,
+        p: [f64; 3],
+        tool: &Cutter,
+        act: &mut dyn FnMut(&mut ZMap, usize, f32) -> bool,
+    ) -> bool {
         let r = tool.r;
         let (i0, j0, i1, j1) = self.range(p[0] - r, p[1] - r, p[0] + r, p[1] + r);
         let mut any = false;
@@ -216,7 +262,7 @@ impl ZMap {
                 let c = self.centre(i, j);
                 let d = ((c[0] - p[0]).powi(2) + (c[1] - p[1]).powi(2)).sqrt();
                 if let Some(h) = tool.at(d) {
-                    any |= self.lower(j * self.nx + i, p[2] as f32 + h);
+                    any |= act(self, j * self.nx + i, p[2] as f32 + h);
                 }
             }
         }
@@ -224,7 +270,14 @@ impl ZMap {
     }
 
     /// Sweeps the tool along `seg` from fraction u0 to u1; whether anything changed.
-    pub fn cut(&mut self, seg: &Seg, u0: f64, u1: f64, tool: &Cutter) -> bool {
+    fn cut_with(
+        &mut self,
+        seg: &Seg,
+        u0: f64,
+        u1: f64,
+        tool: &Cutter,
+        act: &mut dyn FnMut(&mut ZMap, usize, f32) -> bool,
+    ) -> bool {
         if u1 <= u0 {
             return false;
         }
@@ -233,13 +286,13 @@ impl ZMap {
         if !flat {
             if seg.arc.is_none() && (a[0] - b[0]).abs() < 1e-12 && (a[1] - b[1]).abs() < 1e-12 {
                 // straight down or up: its lowest place
-                return self.stamp(if a[2] < b[2] { a } else { b }, tool);
+                return self.stamp_with(if a[2] < b[2] { a } else { b }, tool, act);
             }
             let len = seg.len * (u1 - u0);
             let n = ((len / (0.5 * self.cell)).ceil() as usize).clamp(1, 100_000);
             let mut any = false;
             for k in 0..=n {
-                any |= self.stamp(seg.at(u0 + (u1 - u0) * k as f64 / n as f64), tool);
+                any |= self.stamp_with(seg.at(u0 + (u1 - u0) * k as f64 / n as f64), tool, act);
             }
             return any;
         }
@@ -266,13 +319,15 @@ impl ZMap {
                         };
                         let d = ((c[0] - a[0] - t * dx).powi(2) + (c[1] - a[1] - t * dy).powi(2)).sqrt();
                         if let Some(h) = tool.at(d) {
-                            any |= self.lower(j * self.nx + i, z + h);
+                            any |= act(self, j * self.nx + i, z + h);
                         }
                     }
                 }
                 any
             }
             Some(ar) => {
+                // the circle of the start's radius: a posted arc's end radius differs from it by
+                // the control's rounding only (`ArcOf::dr`, microns), below the grid's cell
                 let (s0, s1) = (ar.a0 + ar.sweep * u0, ar.a0 + ar.sweep * u1);
                 let (lo_a, sw) = if s1 >= s0 { (s0, s1 - s0) } else { (s1, s0 - s1) };
                 let rr = ar.r + r;
@@ -300,7 +355,7 @@ impl ZMap {
                             e(lo_a).min(e(lo_a + sw))
                         };
                         if let Some(h) = tool.at(d) {
-                            any |= self.lower(j * self.nx + i, z + h);
+                            any |= act(self, j * self.nx + i, z + h);
                         }
                     }
                 }
@@ -335,6 +390,7 @@ impl ZMap {
                 }
             }
         }
+        out.top = out.hi.iter().copied().fold(f32::NEG_INFINITY, f32::max);
         out
     }
 

@@ -1,0 +1,13 @@
+machining
+# Bílek et al. 2025 (Materials 18:1669, CC BY 4.0): the 60 x 46 x 12 R4 pocket with forge-cam's
+# offset pocket at their conventional (Cavity Mill) cutting data: a 6 mm end mill, ae 1.8 mm,
+# ap 3 mm (theirs 1.5-3.5), run at their vf 1000 mm/min with --feeds well=1000,1000 (their
+# plunge/ramp feed is not stated). Their measured time for Cavity Mill: 5 min 27 s (327 s).
+shared tol = 0.01
+
+f    = part("bilek.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-6", t: 1, stickout: 30, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (0, 0, 0)), origin: "top-corner", tol: tol)
+well = pocket(op1, tool: t1, from: 40, to: 28, stepover: 1.8, step: 3, ramp: 3)
+prog = program(op1, post: "fanuc", number: 7001)

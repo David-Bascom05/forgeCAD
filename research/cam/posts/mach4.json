@@ -1,0 +1,208 @@
+{
+ "dialect": "mach4",
+ "control": "Mach4 Mill (Newfangled Solutions)",
+ "sources": [
+  {
+   "id": "S1",
+   "url": "https://www.machsupport.com/wp-content/uploads/2014/05/Mill%20GCode%20Programming.pdf",
+   "title": "Mach4 CNC Controller Mill Programming Guide (Newfangled Solutions / Artsoft USA)",
+   "edition": "Version 1.1, Build 3775 (c) 2014",
+   "taken": "2026-11-23"
+  },
+  {
+   "id": "S2",
+   "url": "https://www.machsupport.com/wp-content/uploads/2014/05/Mach4%20Mill%20GCode%20Manual.pdf",
+   "title": "Mach4 CNC Controller Mill Programming Guide",
+   "edition": "Version 1.0 (c) 2014 (older; consulted only)",
+   "taken": "2026-11-23"
+  }
+ ],
+ "items": {
+  "program_open": {
+   "value": "No required start code described. Manual recommends a safe-start block first. A % after the final M30 is recommended to guarantee the last EOB (anything after program end is not read).",
+   "source": "S1",
+   "where": "Ch.1 Format p9-10",
+   "note": ""
+  },
+  "program_close": {
+   "value": "M30 = end and rewind (defaults G54/G17/G90 etc. reset); M02 = end without rewind. Follow the end block with an EOB, e.g. a trailing %.",
+   "source": "S1",
+   "where": "Ch.1 Format p9-10; Ch.5 M02 p82, M30 p84",
+   "note": ""
+  },
+  "comment": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN: the programming guide does not describe comment syntax (memory says parentheses and ';' work, unverified)."
+  },
+  "line_numbers": {
+   "value": "N = sequence number, used for organisation and go-to; optional. No maximum stated.",
+   "source": "S1",
+   "where": "Ch.1 Glossary p8",
+   "note": ""
+  },
+  "block_end": {
+   "value": "EOB = carriage return; required at end of every block including the last.",
+   "source": "S1",
+   "where": "Ch.1 Glossary p7; Format p9",
+   "note": ""
+  },
+  "safe_start": {
+   "value": "Recommended safe-start block: G00 G90 G17 G54 G40 G49 G80 (repeat it at every tool change). Units G21 mm / G20 inch (programming units only), G94 feed per minute. Several G codes per block allowed; last one of a modal group wins; one M code per block.",
+   "source": "S1",
+   "where": "Ch.1 Format p9-10; G20/G21 p35; G94 p54",
+   "note": ""
+  },
+  "tool_change": {
+   "value": "T<n> M6 (T on same block or earlier); with a preload-arm setting, T on the M6 line is the next tool.",
+   "source": "S1",
+   "where": "Ch.5 M06 p83",
+   "note": ""
+  },
+  "tool_change_behaviour": {
+   "value": "M06 starts a tool change; whether T on the M6 line means 'tool to use' or 'next tool' is a control parameter. The guide mentions a tool change macro (G53 moves 'in a tool change macro'); the manual/ATC pause behaviour itself is not described in this guide.",
+   "source": "S1",
+   "where": "Ch.5 M06 p83; G53 p45",
+   "note": "Manual-pause behaviour UNKNOWN from this source."
+  },
+  "tool_length_comp": {
+   "value": "G43 H<n> (positive), G44 negative, G49 cancel; motion only if axes in the block. Examples use G43 H1 Z.5 after T1 M6.",
+   "source": "S1",
+   "where": "G43/G44, G49 p42; Ch.3 examples p58",
+   "note": ""
+  },
+  "spindle": {
+   "value": "S rpm (G97) with M03 CW / M04 CCW / M05 stop; M03 without S uses last speed.",
+   "source": "S1",
+   "where": "Ch.5 p83; G97 p54",
+   "note": ""
+  },
+  "work_offset": {
+   "value": "G54..G59 plus G54.1 P1..P248 (248 extra). Legacy G59 P7.. = G54.1 P1.. still accepted.",
+   "source": "S1",
+   "where": "G54-G59, G54.1 p45",
+   "note": ""
+  },
+  "arc_format": {
+   "value": "G02/G03 with I J K or R (R>0 sweep <180, R<0 >180). Arc-centre mode G90.1 absolute / G91.1 incremental, also set in configuration, independent of G90/G91.",
+   "source": "S1",
+   "where": "G02/G03 p15-16; G90.1/G91.1 p52",
+   "note": "Emit G91.1 explicitly."
+  },
+  "rapid_linear": {
+   "value": "G00 rapid, G01 feed.",
+   "source": "S1",
+   "where": "p14",
+   "note": ""
+  },
+  "feed": {
+   "value": "F units/min in G94 (inch or mm per G20/G21); G95 per rev.",
+   "source": "S1",
+   "where": "G94/G95 p54",
+   "note": ""
+  },
+  "decimal_point": {
+   "value": "Decimal point not required: X1 = X1.0 in Mach (recommended to write it anyway). Leading zeros optional.",
+   "source": "S1",
+   "where": "Ch.1 Format p10",
+   "note": ""
+  },
+  "max_digits": {
+   "value": null,
+   "source": null,
+   "where": null,
+   "note": "UNKNOWN"
+  },
+  "retract_home": {
+   "value": "G28 via intermediate point (G0 G91 G28 Z0 goes straight up); manual calls G53 Z0 (non-modal machine coordinates) the safer way home; G30 2nd-4th reference.",
+   "source": "S1",
+   "where": "G28 p36; G53 p45; G30 p37",
+   "note": ""
+  },
+  "coolant": {
+   "value": "M07 mist, M08 flood, M09 all off. No through-spindle code listed.",
+   "source": "S1",
+   "where": "Ch.5 p83-84",
+   "note": ""
+  },
+  "dwell": {
+   "value": "G04 P (or X) = milliseconds when written without a decimal point, seconds with a decimal point (G4 P5000 = G4 P5. = 5 s); U without point = ms. A # variable in P implies a decimal point (seconds). Must be the only G code in its block.",
+   "source": "S1",
+   "where": "G04 p17; Glossary p7-8",
+   "note": ""
+  },
+  "drill_G81": {
+   "value": "G81 X Y Z R L F",
+   "source": "S1",
+   "where": "Ch.3 G81 p59",
+   "note": ""
+  },
+  "dwell_drill_G82": {
+   "value": "G82 X Y Z R P L F (P dwell)",
+   "source": "S1",
+   "where": "Ch.3 G82 p60",
+   "note": ""
+  },
+  "peck_G83": {
+   "value": "G83 X Y Z Q R L F; Q peck (positive); full retract to R each peck, retract clearance parameter 5115 (default 0.25 mm metric).",
+   "source": "S1",
+   "where": "Ch.3 G83 p61",
+   "note": ""
+  },
+  "chipbreak_G73": {
+   "value": "G73 X Y Z Q R L F; Q peck; retract amount parameter 5114 (default 0.6 mm metric).",
+   "source": "S1",
+   "where": "Ch.3 G73 p63",
+   "note": ""
+  },
+  "rigid_tap_G84": {
+   "value": "G84 X Y Z R L F = floating tap, spindle must run forward first; F is feed per minute = rpm x pitch in G94, or simply the pitch in G95 (needs spindle feedback). Rigid tap: G84.2 (RH) / G84.3 (LH) X Y Z R P L F J (J = retract spindle speed, P dwell ms). Overrides and feed hold disabled during the cycle.",
+   "source": "S1",
+   "where": "Ch.3 G84 p65; G84.2/G84.3 p67",
+   "note": ""
+  },
+  "bore_G85": {
+   "value": "G85 X Y Z R L F (feed in, feed out; boring/reaming).",
+   "source": "S1",
+   "where": "Ch.3 G85 p70",
+   "note": ""
+  },
+  "return_level": {
+   "value": "G98 initial point return; G99 R point return.",
+   "source": "S1",
+   "where": "G98/G99 p55; Ch.3 p56",
+   "note": ""
+  },
+  "cycle_cancel": {
+   "value": "G80, recommended alone on its own line.",
+   "source": "S1",
+   "where": "Ch.3 G80 p58",
+   "note": ""
+  },
+  "peck_depth_word": {
+   "value": "Q (always positive)",
+   "source": "S1",
+   "where": "Ch.3 p57",
+   "note": ""
+  },
+  "cycle_dwell_units": {
+   "value": "Canned-cycle P is in milliseconds per the cycle word list (and G84.2 P 'in milliseconds'); but the G82 example writes P.2 (decimal -> seconds by the G04 rule).",
+   "source": "S1",
+   "where": "Ch.3 p57; G82 p60; G84.2 p67",
+   "note": "Write P with a decimal point in seconds or integer ms; mixed signals in the manual."
+  },
+  "native_language": {
+   "value": "G-code (Fanuc-like, 'closer to the industry standard') is the language; custom macro B style # variables / G65; Lua for M-code macros is outside this guide. No mode switch.",
+   "source": "S1",
+   "where": "Ch.1 Introduction p6; Ch.6 p89",
+   "note": ""
+  }
+ },
+ "notes": "Mach4 is closer to Fanuc than Mach3: G54.1 P1-248, dwell ms-without-point, G84.2/G84.3 rigid tap. Comment syntax not in the open programming guide.",
+ "unknown": [
+  "comment",
+  "max_digits"
+ ],
+ "filled": "28/30"
+}

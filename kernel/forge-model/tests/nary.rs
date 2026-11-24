@@ -175,3 +175,48 @@ fn pocket_mouth_a_hair_above_the_top() {
     );
     assert_eq!(count(&nary), count(&seq));
 }
+
+/// fuzz_keep seed 210 through feature 29: a rod cut into the side of a large kept rod, 1.6e-3 from
+/// that face's own edge. On the cylinder the rod's section is a hole beside a strip 1.6e-3 wide
+/// (2.1e-5 of a turn on a cylinder 75 across), and the point that finds its host was put a
+/// thousandth of the hole's width off its side: past the strip, outside every outline
+/// (Internal(HoleOutside)).
+#[test]
+fn a_hole_beside_a_hair_strip_on_a_cylinder_finds_its_host() {
+    let mut part = suite::fuzz_keep(210, 80);
+    part.features.truncate(30);
+    let seq = part.regenerate().expect("sequential regen");
+    assert!(
+        forge_topo::check(&seq).is_empty(),
+        "{:?}",
+        forge_topo::check(&seq)
+    );
+    let nary = part.regenerate_nary(1).expect("n-ary regen");
+    assert!(forge_topo::check(&nary).is_empty());
+}
+
+/// fuzz_keep seed 166's features 0, 2, 5 and 14: a pocket whose floor lies 2.3e-3 over the block's
+/// bottom, a boss, and a block kept whose side crosses the pocket. On that side the pocket's section
+/// is a hole 2.3e-3 over the region below the part, and the point that finds its host was put a
+/// thousandth of its 17 long floor off it (1.7e-2): in the region below. The section of the part
+/// went without its hole, the floor's new edge had one face, and the pinch check refused
+/// ZeroThickness where the result is a plain corner. (The probe's step is now held under half the
+/// way to the outer cycles' pieces near it, 587d0859, which also fixed zerothick-groove.fg.)
+#[test]
+fn a_hole_a_hair_over_a_boundary_finds_its_host() {
+    let part = suite::fuzz_keep(166, 80);
+    let part = forge_model::Part {
+        features: [0, 2, 5, 14].iter().map(|&i| part.features[i].clone()).collect(),
+    };
+    let seq = part.regenerate().expect("sequential regen");
+    assert!(
+        forge_topo::check(&seq).is_empty(),
+        "{:?}",
+        forge_topo::check(&seq)
+    );
+    let nary = part.regenerate_nary(1).expect("n-ary regen");
+    assert!(forge_topo::check(&nary).is_empty());
+    let mass = |b| forge_topo::mass::mass(b).expect("mass properties");
+    let (a, b) = (mass(&seq), mass(&nary));
+    assert!((a.volume - b.volume).abs() <= a.err[0] + b.err[0] + 1e-12 * a.volume);
+}

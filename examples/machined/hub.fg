@@ -1,0 +1,54 @@
+# A threaded hub for turning, CAM-TURN's shop test part. Frame: z along the axis, Z0 on the front
+# face (the part lies in z <= 0), sketched as its half-profile (x = radius, y = z).
+#  outside, front to back: M36 x 1.5 thread (1.5 x 45 lead chamfer) to z = -20; a 3 wide relief
+#    groove to R16.9; a Dia 42 shoulder with an R2 fillet up to a Dia 50 step at -38; a taper to
+#    Dia 58 at -48; a Dia 62 flange (R1 on its front edge) with a 4 wide O-ring groove to R28.5;
+#    a 2 x 45 back chamfer facing the chuck; a Dia 50 neck from -62 to -70; a Dia 62 collar to the
+#    back face at -80.
+#  inside: a 1 x 45 entry chamfer; M30 x 1.5 (the minor diameter shown) to -22; a 3 wide relief
+#    groove to R15.5; a Dia 28 bore to -40; the Dia 26 drilled hole through.
+#  The two relief grooves overlap at z -22..-23: a 1.4 mm wall.
+shared ri = 14.188       # M30 x 1.5 minor radius: (30 - 5H/4) / 2, H = 1.5 sqrt(3) / 2
+shared ro = 18           # M36 x 1.5 major radius
+shared l = 80
+
+sketch prof(on: xz) {
+  path o(start: (15.188, 0)) {
+    line(to: (16.5, 0))
+    line(to: (ro, -1.5))
+    line(to: (ro, -20))
+    line(to: (16.9, -20))
+    line(to: (16.9, -23))
+    line(to: (21, -23))
+    line(to: (21, -36))
+    tarc(to: (23, -38))
+    line(to: (25, -38))
+    line(to: (29, -48))
+    line(to: (30, -48))
+    tarc(to: (31, -49))
+    line(to: (31, -52))
+    line(to: (28.5, -52))
+    line(to: (28.5, -56))
+    line(to: (31, -56))
+    line(to: (31, -60))
+    line(to: (29, -62))
+    line(to: (25, -62))
+    line(to: (25, -70))
+    line(to: (31, -70))
+    line(to: (31, -l))
+    line(to: (13, -l))
+    line(to: (13, -40))
+    line(to: (14, -40))
+    line(to: (14, -25))
+    line(to: (15.5, -25))
+    line(to: (15.5, -22))
+    line(to: (ri, -22))
+    line(to: (ri, -1))
+    close()
+  }
+  zax = line((0, -l), (0, 0), construction: true)
+}
+body = revolve(prof.o, axis: prof.zax)
+
+expect valid
+expect bodies = 1

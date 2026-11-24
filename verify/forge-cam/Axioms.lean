@@ -4,6 +4,8 @@ import ForgeCam
 #print axioms ForgeCam.sd_hyp_eq_sdRZ
 #print axioms ForgeCam.clear_of_frontier
 #print axioms ForgeCam.clearFace_sound
+#print axioms ForgeCam.clearFace_subset
+#print axioms ForgeCam.wall_hull_mem
 #print axioms ForgeCam.hyp_preconnected
 #print axioms ForgeCam.certified_clear
 #print axioms ForgeCam.sd_le_sd_add_dist
@@ -28,6 +30,8 @@ import ForgeCam
 #print axioms ForgeCam.jaw_seat
 #print axioms ForgeCam.jaw_seat_interior
 #print axioms ForgeCam.Pocket.passes_cover
+#print axioms ForgeCam.Pocket.passes_cover_from
+#print axioms ForgeCam.Pocket.drop_cover
 #print axioms ForgeCam.Dist2.ptSegSq_le
 #print axioms ForgeCam.Dist2.ptSegSq_attained
 #print axioms ForgeCam.Dist2.min4_le_of_disjoint
@@ -130,6 +134,7 @@ import ForgeCam
 #print axioms ForgeCam.Turn.smear_hull
 #print axioms ForgeCam.Turn.eroded_gap
 #print axioms ForgeCam.Turn.rect_in_convex
+#print axioms ForgeCam.sd_ge_of_halfspace
 #print axioms ForgeCam.Quad.quad_mul
 #print axioms ForgeCam.Quad.quad_div
 #print axioms ForgeCam.Quad.quad_sign_rat

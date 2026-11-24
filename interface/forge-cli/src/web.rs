@@ -396,7 +396,7 @@ fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
             rename(c, &q.body)
         }
         (m, f) if f.starts_with("/files/") => {
-            let rel = match unescape(&f["/files/".len()..]).and_then(|p| clean(&p)) {
+            let rel = match unescape(&f["/files/".len()..]).and_then(|p| clean_project(&p)) {
                 Ok(p) => p,
                 Err(e) => return error(400, &e),
             };
@@ -458,6 +458,62 @@ pub fn clean(p: &str) -> Result<PathBuf, String> {
     Ok(out)
 }
 
+/// A file of the served project: as `clean`, and the project's own git repository too (the
+/// page's Versions keep its history there): `.git/...` at the root (not its hooks, which git
+/// would run) and the root's `.gitignore`. No other dot path.
+pub fn clean_project(p: &str) -> Result<PathBuf, String> {
+    let refused = || Err(format!("{p}: not a project path"));
+    if p == ".gitignore" {
+        return Ok(PathBuf::from(p));
+    }
+    let Some(rest) = p.strip_prefix(".git/") else {
+        return clean(p);
+    };
+    let rest = clean(rest)?;
+    if rest.starts_with("hooks") {
+        return refused();
+    }
+    Ok(Path::new(".git").join(rest))
+}
+
+/// What a page may write as the repository's `.git/config`: what forge-git writes, keys git
+/// only reads as settings. Refused: anything git would run (`core.fsmonitor`, `core.hooksPath`,
+/// `core.sshCommand`, `alias.*`, filters, helpers, ...), which a written config could otherwise
+/// make the machine's own `git` run.
+fn safe_git_config(body: &[u8]) -> Result<(), String> {
+    const KEYS: [&str; 10] = [
+        "core.repositoryformatversion",
+        "core.filemode",
+        "core.bare",
+        "core.logallrefupdates",
+        "core.ignorecase",
+        "core.precomposeunicode",
+        "core.symlinks",
+        "extensions.objectformat",
+        "user.name",
+        "user.email",
+    ];
+    let text = std::str::from_utf8(body).map_err(|_| "not text".to_string())?;
+    let mut section = String::new();
+    for line in text.lines().map(str::trim) {
+        if line.is_empty() || line.starts_with('#') || line.starts_with(';') {
+            continue;
+        }
+        if let Some(s) = line.strip_prefix('[') {
+            let s = s.strip_suffix(']').ok_or("a section header")?;
+            // a subsection (`[remote "x"]`) is never one of the keys allowed
+            section = s.trim().to_ascii_lowercase();
+            continue;
+        }
+        let key = line.split('=').next().unwrap_or("").trim().to_ascii_lowercase();
+        let full = format!("{section}.{key}");
+        if !KEYS.contains(&full.as_str()) {
+            return Err(format!(".git/config: {full} is not a setting this server writes"));
+        }
+    }
+    Ok(())
+}
+
 /// The file's place on disk, refused if it (or the folder it would be made in) leads out of the
 /// root through a link.
 fn place(c: &Config, rel: &Path) -> Result<PathBuf, Response> {
@@ -492,7 +548,9 @@ fn walk(c: &Config) -> Vec<(String, Vec<u8>)> {
         let Ok(rd) = std::fs::read_dir(&d) else { continue };
         for e in rd.flatten() {
             let name = e.file_name().to_string_lossy().into_owned();
-            if name.starts_with('.') {
+            // the project's own repository (its history), as `clean_project` allows
+            let git = d == c.root && (name == ".gitignore" || (name == ".git" && git_small(&e.path())));
+            if name.starts_with('.') && !git || (name == "hooks" && d == c.root.join(".git")) {
                 continue;
             }
             let Ok(ft) = e.file_type() else { continue };
@@ -513,6 +571,32 @@ fn walk(c: &Config) -> Vec<(String, Vec<u8>)> {
     }
     files.sort();
     files
+}
+
+/// The most a repository may hold to go to the page: a big one (a checkout of a project's own
+/// repository) stays on the machine, its history not shown in the page.
+const GIT_CAP: u64 = 64 << 20;
+
+fn git_small(dir: &Path) -> bool {
+    let mut total = 0u64;
+    let mut dirs = vec![dir.to_path_buf()];
+    while let Some(d) = dirs.pop() {
+        let Ok(rd) = std::fs::read_dir(&d) else {
+            return false;
+        };
+        for e in rd.flatten() {
+            let Ok(m) = e.metadata() else { continue };
+            if m.is_dir() {
+                dirs.push(e.path());
+            } else {
+                total += m.len();
+                if total > GIT_CAP {
+                    return false;
+                }
+            }
+        }
+    }
+    true
 }
 
 /// The most a bundle holds: past it the page reads the files one by one.
@@ -642,6 +726,11 @@ fn write(c: &Config, rel: &Path, q: &Request) -> Response {
     if let Err(r) = precondition(q, &current(&p)) {
         return r;
     }
+    if rel == Path::new(".git/config")
+        && let Err(e) = safe_git_config(&q.body)
+    {
+        return error(403, &e);
+    }
     match put(&p, &q.body) {
         Ok(()) => json(200, Json::obj(vec![("etag", etag(&q.body).into())])),
         Err(e) => error(500, &e.to_string()),
@@ -682,7 +771,7 @@ fn rename(c: &Config, body: &[u8]) -> Response {
         j.get(k)
             .and_then(Json::str)
             .ok_or(format!("{k}?"))
-            .and_then(clean)
+            .and_then(clean_project)
     };
     let (from, to) = match (get("from"), get("to")) {
         (Ok(a), Ok(b)) => (a, b),
@@ -778,6 +867,100 @@ mod tests {
     }
 
     #[test]
+    fn the_projects_own_repository_and_no_other_dot_path() {
+        for ok in [
+            ".git/config",
+            ".git/objects/ab/cdef",
+            ".git/refs/heads/main",
+            ".gitignore",
+        ] {
+            assert!(clean_project(ok).is_ok(), "{ok}");
+        }
+        for bad in [
+            ".git/hooks/pre-commit",
+            ".git/../x",
+            ".git/a/.b",
+            ".git/",
+            ".git",
+            "a/.git/config",
+            ".github/workflows/x",
+            ".hidden",
+            "a/.gitignore",
+        ] {
+            assert!(clean_project(bad).is_err(), "{bad}");
+        }
+        // forge-git's own configs are taken, anything git would run is not
+        for ok in [
+            "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n",
+            "[core]\n\trepositoryformatversion = 1\n[extensions]\n\tobjectformat = sha256\n",
+            "[user]\n\tname = A\n\temail = a@example.com\n",
+        ] {
+            assert!(safe_git_config(ok.as_bytes()).is_ok(), "{ok}");
+        }
+        for bad in [
+            "[core]\n\tfsmonitor = touch /tmp/pwned\n",
+            "[core]\n\thooksPath = /tmp\n",
+            "[core]\n\tsshCommand = x\n",
+            "[alias]\n\tst = !sh\n",
+            "[filter \"x\"]\n\tclean = sh\n",
+            "[include]\n\tpath = /etc/x\n",
+        ] {
+            assert!(safe_git_config(bad.as_bytes()).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn history_is_written_under_the_projects_git_only() {
+        let (at, root) = started(None, true);
+        let (s, _, b) = call(
+            at,
+            "PUT",
+            "/api/files/.git/objects/ab/cdef",
+            &[("If-None-Match", "*")],
+            b"object",
+        );
+        assert_eq!(s, 200, "{}", String::from_utf8_lossy(&b));
+        assert_eq!(
+            std::fs::read(root.join(".git/objects/ab/cdef")).unwrap(),
+            b"object"
+        );
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.gitignore",
+            &[("If-None-Match", "*")],
+            b"*.tmp\n",
+        );
+        assert_eq!(s, 200);
+        // a config that would make the machine's git run something is refused
+        let (_, head, _) = call(at, "GET", "/api/files/.git/config", &[], b"");
+        let v = header(&head, "etag").unwrap();
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.git/config",
+            &[("If-Match", &v)],
+            b"[core]\n\tfsmonitor = touch planted\n",
+        );
+        assert_eq!(s, 403);
+        assert!(
+            !std::fs::read_to_string(root.join(".git/config"))
+                .unwrap()
+                .contains("fsmonitor")
+        );
+        let (s, _, _) = call(
+            at,
+            "PUT",
+            "/api/files/.git/hooks/post-commit",
+            &[("If-None-Match", "*")],
+            b"#!/bin/sh\n",
+        );
+        assert_eq!(s, 400);
+        assert!(!root.join(".git/hooks/post-commit").exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn hosts_are_loopback_names_only_when_they_are() {
         for ok in ["localhost:8080", "127.0.0.1:1", "[::1]:80", "LOCALHOST"] {
             assert!(is_loopback_name(ok), "{ok}");
@@ -840,7 +1023,10 @@ mod tests {
         std::fs::write(d.join("part.fg"), "shared t = 2\n").unwrap();
         std::fs::write(d.join("sub/b.fg"), "shared u = 3\n").unwrap();
         std::fs::create_dir_all(d.join(".git")).unwrap();
-        std::fs::write(d.join(".git/config"), "secret").unwrap();
+        std::fs::write(d.join(".git/config"), "[core]\n\tbare = false\n").unwrap();
+        std::fs::create_dir_all(d.join(".git/hooks")).unwrap();
+        std::fs::write(d.join(".git/hooks/pre-commit"), "#!/bin/sh\n").unwrap();
+        std::fs::write(d.join(".hidden"), "secret").unwrap();
         let root = std::fs::canonicalize(&d).unwrap();
         let l = TcpListener::bind("127.0.0.1:0").unwrap();
         let at = l.local_addr().unwrap();
@@ -869,7 +1055,12 @@ mod tests {
             listed.contains("\"part.fg\"") && listed.contains("\"sub/b.fg\""),
             "{listed}"
         );
-        assert!(!listed.contains(".git"), "dot files are not served: {listed}");
+        // the project's own repository goes to the page (its history), its hooks never
+        assert!(listed.contains("\".git/config\""), "{listed}");
+        assert!(
+            !listed.contains("hooks") && !listed.contains(".hidden"),
+            "{listed}"
+        );
         // read: the bytes and the version `edit --base` takes
         let (s, head, b) = call(at, "GET", "/api/files/part.fg", &[], b"");
         assert_eq!((s, b.as_slice()), (200, &b"shared t = 2\n"[..]));
@@ -952,7 +1143,11 @@ mod tests {
         for p in [
             "/api/files/..%2Fsecret",
             "/api/files/%2E%2E/x",
-            "/api/files/.git/config",
+            "/api/files/.git/hooks/pre-commit",
+            "/api/files/.git/..%2F.hidden",
+            "/api/files/.hidden",
+            "/api/files/sub/.git/config",
+            "/api/files/.github/x",
             "/api/files/sub%5C..%5C..%5Cx",
         ] {
             let (s, _, b) = call(at, "GET", p, &[], b"");
@@ -1049,10 +1244,11 @@ mod tests {
             .iter()
             .map(|p| String::from_utf8(p[0].clone()).unwrap())
             .collect();
-        assert_eq!(names, ["part.fg", "sub/b.fg"], "no dot files");
-        assert_eq!(got[0][2], b"shared t = 2\n");
+        // the repository's files (not its hooks), no other dot file
+        assert_eq!(names, [".git/config", "part.fg", "sub/b.fg"]);
+        assert_eq!(got[1][2], b"shared t = 2\n");
         assert_eq!(
-            String::from_utf8(got[0][1].clone()).unwrap(),
+            String::from_utf8(got[1][1].clone()).unwrap(),
             etag(b"shared t = 2\n")
         );
         let _ = std::fs::remove_dir_all(&root);

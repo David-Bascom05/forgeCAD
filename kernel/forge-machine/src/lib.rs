@@ -15,6 +15,7 @@ pub mod def;
 pub mod gcode;
 pub mod kin;
 pub mod library;
+pub mod lookahead;
 pub mod removal;
 pub mod setup;
 pub mod sim;

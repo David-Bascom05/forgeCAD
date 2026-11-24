@@ -126,6 +126,8 @@ fn main() {
         tidx: 0,
         h,
         feed: (1500.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let t0 = std::time::Instant::now();
     let rough = surf::zlevel(&sfr, c, [-5.0, -5.0, 65.0, 65.0], 12.0, 0.5, 2.0, 4.0, 1.0).unwrap();
@@ -158,6 +160,8 @@ fn main() {
         tidx: 0,
         h,
         feed: (1000.0, 300.0),
+        ramp_feed: None,
+        lead_feed: None,
     };
     let t0 = std::time::Instant::now();
     let p = surf::parallel(&sf, c, area, step, 0.0, 1.0).unwrap();
@@ -166,22 +170,5 @@ fn main() {
     let zs: Vec<f64> = (1..=9).map(|k| k as f64).collect();
     let w = surf::waterline(&sf, c, area, &zs, 0.5).unwrap();
     report("waterline", &w, t0.elapsed(), &ball, &faces, stock.clone(), tol);
-    let t0 = std::time::Instant::now();
-    match surf::pencil(&sf, c, area, 0.25, 0.02) {
-        Ok(pc) => report("pencil", &pc, t0.elapsed(), &ball, &faces, stock.clone(), tol),
-        Err(e) => println!("pencil: {e:?}"),
-    }
-    let t0 = std::time::Instant::now();
-    match surf::scallop(&sf, c, area, step, 0.5) {
-        Ok(r) => report("scallop", &r, t0.elapsed(), &ball, &faces, stock.clone(), tol),
-        Err(e) => println!("scallop: {e:?}"),
-    }
-    // rest: ball 6 after the bull 10 r1
-    let bull = tool(&lib, "bull-10-r1", 3);
-    let sfb = Surfacer::new(&faces, &bull.shape.bodies[0], 0.0, tol, 0.0).unwrap();
-    let t0 = std::time::Instant::now();
-    match surf::rest(&sf, &sfb, c, area, step, 0.5, 0.5, 0.05) {
-        Ok(r) => report("rest", &r, t0.elapsed(), &ball, &faces, stock.clone(), tol),
-        Err(e) => println!("rest: {e:?}"),
-    }
+    // pencil, scallop and rest: forge-cam-3d (examples/mould_time.rs, tests/dome.rs)
 }

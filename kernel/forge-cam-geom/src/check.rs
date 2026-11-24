@@ -118,7 +118,7 @@ fn mul3<T: Num>(a: [T; 3], k: T) -> [T; 3] {
 }
 
 /// (c(t), s(t)): the rational unit circle.
-fn circ<T: Num>(t: T) -> (T, T) {
+pub(crate) fn circ<T: Num>(t: T) -> (T, T) {
     let t2 = t.sqr();
     let den = T::c(1.0).add(t2);
     let c = T::c(1.0).sub(t2).div(den);
@@ -465,7 +465,8 @@ pub enum Move {
     /// The checker takes the arc swept over every height between z0 and z1, a superset of the
     /// helix; `at` encloses heights by that range (its z is linear in s, which is the
     /// machine's height only at the ends: only enclosures over all of [0, 1] are taken). The
-    /// general branch and bound does not take it (undecided).
+    /// general branch and bound takes the arc at each instant at every height of the range
+    /// (`Move::enclose`).
     Helix {
         c: V3,
         x: V3,
@@ -481,6 +482,24 @@ pub enum Move {
 impl Move {
     pub fn at(&self, s: Ival) -> [Ival; 3] {
         self.at_n(s)
+    }
+
+    /// An enclosure of the move's positions over the instants s: `at`, except that a helix's
+    /// height is its whole range (its z is linear in s only at the ends).
+    pub fn enclose(&self, s: Ival) -> [Ival; 3] {
+        let mut g = self.at(s);
+        if let Some(z) = self.helix_heights() {
+            g[2] = z;
+        }
+        g
+    }
+
+    /// A helix's range of heights, None for any other move.
+    fn helix_heights(&self) -> Option<Ival> {
+        match *self {
+            Move::Helix { z0, z1, .. } => Some(Ival::new(z0.min(z1), z0.max(z1))),
+            _ => None,
+        }
     }
 
     pub fn at_n<T: Num>(&self, s: T) -> [T; 3] {
@@ -573,7 +592,7 @@ fn cell_eval(
     smear: bool,
 ) -> (Ival, [f64; 3]) {
     if let Some(pl) = pl
-        && !matches!(pl, Planar::Vertical { .. })
+        && !matches!(pl, Planar::Vertical { .. } | Planar::Helix { .. })
     {
         let sd = cell_eval_planar(body, f, &pl, c, pg);
         let sm = if smear && !(c.p.width() == 0.0 && c.q.width() == 0.0) {
@@ -587,7 +606,10 @@ fn cell_eval(
     // at the centre
     let (pc, qc, sc) = (Ival::pt(c.p.mid()), Ival::pt(c.q.mid()), Ival::pt(c.s.mid()));
     let yc = f.surf.eval(pc, qc);
-    let gc = mv.at(sc);
+    // a helix: its arc at the instant, at every height of its range (a superset of the helix,
+    // whose height at an instant is somewhere in that range); the height is a constant of the
+    // cell, so the mean-value form below holds for each height and so over all of them
+    let gc = mv.enclose(sc);
     let rc = [yc[0].sub(gc[0]), yc[1].sub(gc[1]), yc[2].sub(gc[2])];
     let r2c = rc[0].sqr().add(rc[1].sqr());
     if c.p.width() == 0.0 && c.q.width() == 0.0 && c.s.width() == 0.0 {
@@ -595,7 +617,13 @@ fn cell_eval(
     }
     // over the box, with derivatives
     let y: [D; 3] = f.surf.eval_n(D::var(c.p, 0), D::var(c.q, 1));
-    let g: [D; 3] = mv.at_n(D::var(c.s, 2));
+    let mut g: [D; 3] = mv.at_n(D::var(c.s, 2));
+    if let Some(z) = mv.helix_heights() {
+        g[2] = D {
+            v: z,
+            g: [Ival::pt(0.0); 3],
+        };
+    }
     let rel = [y[0].sub(g[0]), y[1].sub(g[1]), y[2].sub(g[2])];
     let r2 = rel[0].sqr().add(rel[1].sqr());
     let r2b = mean_value(&r2, r2c, x);
@@ -701,12 +729,30 @@ impl Move {
                 // ccw in xy iff the frame is right-handed (x × y = +z) and t increases
                 let up = x[0] * y[1] - x[1] * y[0] > 0.0;
                 let ccw = up == (t1 > t0);
-                let _ = r;
+                let (a, b) = ([e0[0].mid(), e0[1].mid()], [e1[0].mid(), e1[1].mid()]);
+                // the closed forms take arcs proven strictly under a half turn in their sense
+                // (cross(a − c, b − c) of the sign, in intervals: DistArc.lean); a vanishing arc
+                // (a near-tangent corner's, ~1e-17 rad) is not provably so: no planar form, the
+                // branch and bound takes it
+                let (ua, ub) = (
+                    [
+                        Ival::pt(a[0]).sub(Ival::pt(c[0])),
+                        Ival::pt(a[1]).sub(Ival::pt(c[1])),
+                    ],
+                    [
+                        Ival::pt(b[0]).sub(Ival::pt(c[0])),
+                        Ival::pt(b[1]).sub(Ival::pt(c[1])),
+                    ],
+                );
+                let cr = ua[0].mul(ub[1]).sub(ua[1].mul(ub[0]));
+                if !(if ccw { cr.lo > 0.0 } else { cr.hi < 0.0 }) {
+                    return None;
+                }
                 Some(Planar::Arc {
                     c: [c[0], c[1]],
                     r,
-                    a: [e0[0].mid(), e0[1].mid()],
-                    b: [e1[0].mid(), e1[1].mid()],
+                    a,
+                    b,
                     ccw,
                     z: c[2],
                 })
@@ -1043,6 +1089,20 @@ pub fn certify_shared(
     budget: usize,
     shared: &mut Option<(Ival, f64)>,
 ) -> (Verdict, usize) {
+    // a line move of a capsule-shaped body (a ball end mill's cutter) against a sphere, a
+    // cylinder that is not a prism, or a plane that is not a prism on a move that is not
+    // planar: closed form (contact.rs), which proves Clear or passes on. Those pairs are 3D
+    // finishing's; the 2.5D ops' pairs (prisms, planar moves on planes) keep their paths
+    let fast = match f.surf {
+        Surf::Sphere { .. } => true,
+        Surf::Cyl { .. } => f.prism.is_none(),
+        Surf::Plane { .. } => f.prism.is_none() && mv.planar().is_none(),
+        Surf::Torus { .. } | Surf::Cone { .. } => f.prism.is_none(),
+    };
+    // (an early Clear leaves `shared` as it was: the next body's call recomputes what it needs)
+    if fast && let Some(v) = crate::contact::clear(body, f, mv, limit) {
+        return (v, 0);
+    }
     // a planar move against a face that is a prism along z: closed form (slab.rs)
     if let (Some(pl), Some(pr)) = (mv.planar(), f.prism.as_ref()) {
         let (v, n) = crate::slab::certify_shared(body, f, pr, &pl, limit, res, budget, shared, mv.path_gap());
@@ -1064,6 +1124,28 @@ pub fn certify_shared(
         }
         return (v, n);
     }
+    // a vertical wall that is not a prism (its trim not its box: an L-shaped side wall) against
+    // a planar move: the wall over its box holds it, so the closed form's Clear there is the
+    // face's (a superset's clearance). Anything else proves nothing about the face: the face
+    // goes on as if this were not tried, its cells counted
+    if f.prism.is_none()
+        && let Some(pl) = mv.planar()
+        && let Some(hull) = crate::slab::Prism::hull_wall(f)
+    {
+        let (v, n) =
+            crate::slab::certify_shared(body, f, &hull, &pl, limit, res, budget, &mut None, mv.path_gap());
+        if let Verdict::Clear { .. } = v {
+            return (v, n);
+        }
+        let (v, m) = certify_rest(body, f, mv, limit, res, budget);
+        return (v, n + m);
+    }
+    certify_rest(body, f, mv, limit, res, budget)
+}
+
+/// `certify_shared` past the prism forms: ramps against prisms, the symmetric closed forms, then
+/// the branch and bound.
+fn certify_rest(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
     // a ramp (a line that moves in z and in xy) against a prism face: the closed form for its xy
     // segment swept over every height it passes (a superset of the move). Only `Clear` proves
     // anything about the move itself (certified_clear, the tip's heights in that range); any
@@ -1099,16 +1181,8 @@ pub fn certify_shared(
 
 /// The branch and bound itself (any face, any move).
 pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget: usize) -> (Verdict, usize) {
-    // a helical piece is checked in closed form against prism faces only
-    if matches!(mv, Move::Helix { .. }) {
-        return (
-            Verdict::Undecided {
-                lower: f64::NEG_INFINITY,
-                cells: 0,
-            },
-            0,
-        );
-    }
+    // a helical piece is taken as its arc swept over every height it passes (cell_eval): a
+    // Clear holds for the helix; a Hit holds too, its bound taken over all those heights
     let lim_clear = limit + f.mu;
     let lim_hit = limit - f.mu;
     let pg = mv.path_gap();
@@ -1179,7 +1253,11 @@ pub fn certify_bb(body: &Body, f: &Face, mv: &Move, limit: f64, res: f64, budget
                     pg,
                 );
                 let img = f.surf.eval(c.p, c.q);
-                let mvd = if line_or_arc { 0.0 } else { diam(&mv.at(c.s)) };
+                let mvd = if line_or_arc {
+                    0.0
+                } else {
+                    diam(&mv.enclose(c.s))
+                };
                 let lip = Ival::pt(w.lo).sub(Ival::pt(diam(&img))).sub(Ival::pt(mvd)).lo;
                 if lip > sd.lo {
                     sd = Ival { lo: lip, hi: sd.hi };
