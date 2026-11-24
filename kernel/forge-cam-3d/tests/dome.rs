@@ -3,6 +3,7 @@
 //! sphere and plane faces: every move must be proven clear (G1 with the tolerance, holder too).
 use forge_cam::ops::{self, Heights, ToolUse};
 use forge_cam_3d::drop::Analytic;
+use forge_cam_3d::link;
 use forge_cam_3d::path::{self, Emit};
 use forge_cam_3d::scallop::{Contact, step_for, waterline_step};
 use forge_cam_3d::waterline::{self, Params};
@@ -79,7 +80,7 @@ fn dome_waterline_is_certified() {
     let mut loops = Vec::new();
     // two levels of the steep band keep the test quick; FORGE_CAM3D_FULL=1 runs the band 1..10
     let full = std::env::var("FORGE_CAM3D_FULL").is_ok();
-    let (top, bottom, step) = if full { (10.0, 1.0, dz) } else { (8.0, 6.0, 2.0) };
+    let (top, bottom, step) = if full { (10.0, 1.0, dz) } else { (8.0, 5.0, 1.5) };
     for z in waterline::levels(top, bottom, step) {
         loops.extend(
             waterline::level(
@@ -104,7 +105,27 @@ fn dome_waterline_is_certified() {
         rpm: 12000.0,
         coolant: forge_post::Coolant::Flood,
     };
-    let p = path::loops(&loops, e);
+    // closed passes linked by the 3D rule (stay down / lift / retract), all certified below
+    let passes: Vec<Vec<[f64; 3]>> = loops
+        .iter()
+        .map(|l| {
+            let mut v: Vec<[f64; 3]> = l.pts.iter().map(|q| [q[0], q[1], l.z]).collect();
+            v.push(v[0]);
+            v
+        })
+        .collect();
+    let passes = link::order(vec![passes], [0.0, 0.0, 40.0], false);
+    let (p, count) = link::path(
+        &dc,
+        &passes,
+        link::Rules {
+            max_stay: 2.0 * dz,
+            lift: 0.5,
+        },
+        e,
+    );
+    eprintln!("links {count:?}");
+    assert_eq!(count.stay + count.lift + count.retract + 1, passes.len());
     let t0 = std::time::Instant::now();
     let sum = ops::certify(&p, &ball6(), &dome_faces(), &[], 0.01, 1.0);
     eprintln!(
