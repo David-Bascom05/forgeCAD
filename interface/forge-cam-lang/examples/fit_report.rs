@@ -122,6 +122,32 @@ fn run(op: &str, dir: &std::path::Path) -> Run {
         );
     }
     let path = o.paths[0].clone();
+    if std::env::var("DIAG").is_ok() {
+        // the path's time at feed by phase (length / feed), and its links as the op counts them
+        let mut by = std::collections::BTreeMap::new();
+        let mut at = path.start;
+        for m in &path.moves {
+            let (to, f, ph) = match *m {
+                forge_cam::ops::PMove::Line { to, f, phase } => (to, f, format!("{phase:?}")),
+                forge_cam::ops::PMove::Arc { to, f, .. } => (to, f, "Arc".into()),
+                forge_cam::ops::PMove::Rapid { to } => (to, 0.0, "Rapid".into()),
+                _ => continue,
+            };
+            let l = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2) + (to[2] - at[2]).powi(2)).sqrt();
+            let e = by.entry(ph).or_insert((0usize, 0.0f64, 0.0f64));
+            e.0 += 1;
+            e.1 += l;
+            e.2 += if f > 0.0 { l / f * 60.0 } else { 0.0 };
+            at = to;
+        }
+        let links = o
+            .plan
+            .iter()
+            .find(|l| l.starts_with("links:"))
+            .cloned()
+            .unwrap_or_default();
+        eprintln!("  PHASES (moves, mm, s at feed): {by:?}  {links}");
+    }
     let fin = o.finish.clone();
     let mut len = 0.0;
     let mut n = 0usize;
@@ -162,9 +188,38 @@ fn run(op: &str, dir: &std::path::Path) -> Run {
             (t, fast) = tally(&mr.tl.seg_scurve);
             if std::env::var("DIAG").is_ok() {
                 let mut by = std::collections::BTreeMap::new();
+                // the highest the tool goes (its links' height)
+                let ztop = mr
+                    .tl
+                    .segments
+                    .iter()
+                    .filter(|g| g.tool == Some(2) && g.q0.len() >= 3)
+                    .map(|g| g.q0[2].max(g.q1[2]))
+                    .fold(f64::NEG_INFINITY, f64::max);
                 for (g, ts) in mr.tl.segments.iter().zip(&mr.tl.seg_scurve) {
                     if g.tool == Some(2) {
-                        let e = by.entry(format!("{:?}", g.kind)).or_insert((0usize, 0.0, 0.0));
+                        // a feed straight down or up (a plunge, or a lift): a link's, not a cut's
+                        let vert = matches!(g.kind, SegKind::Feed)
+                            && g.q0.len() >= 3
+                            && (g.q1[0] - g.q0[0]).abs() < 1e-6
+                            && (g.q1[1] - g.q0[1]).abs() < 1e-6
+                            && (g.q1[2] - g.q0[2]).abs() > 1e-9;
+                        let across = matches!(g.kind, SegKind::Feed)
+                            && g.q0.len() >= 3
+                            && g.q0[2] >= ztop - 1e-6
+                            && g.q1[2] >= ztop - 1e-6;
+                        let k = if across {
+                            "Across".to_string()
+                        } else if vert {
+                            if g.q1[2] < g.q0[2] {
+                                "Plunge".to_string()
+                            } else {
+                                "Lift".to_string()
+                            }
+                        } else {
+                            format!("{:?}", g.kind)
+                        };
+                        let e = by.entry(k).or_insert((0usize, 0.0, 0.0));
                         e.0 += 1;
                         e.1 += g.t_min;
                         e.2 += ts;
