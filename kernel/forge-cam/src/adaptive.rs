@@ -73,7 +73,10 @@ pub struct Adaptive {
 /// A link at depth back along what was cut is taken only within k times the straight distance
 /// plus d tool radii (fto-adaptive.md §10 (3): a fixed geometric cap, no time compared): one-way
 /// passes (k, d) = CAP_ONE_WAY, two-way CAP_TWO_WAY (whose passes end near the next start, so a
-/// longer retrace still saves the climb).
+/// longer retrace still saves the climb). Provenance: picked once, by trying (3, 4), (6, 10),
+/// (10, 20), (20, 40), (40, 80), (100, 200) on verify/forge-cam-quality's deep_boss_{n,p}_*,
+/// boss_adaptive and rptu3_* parts (2026-11-24); a pure length test, never computed from rates
+/// or times, never varied per link (fto-adaptive.md §10 note).
 pub const CAP_ONE_WAY: (f64, f64) = (10.0, 20.0);
 /// How many starts, in order, are tried for reach at depth before a retract (P1).
 pub const REACH_N: usize = 30;
@@ -92,6 +95,8 @@ pub struct AdaptiveOut {
     /// The links at depth that retrace a pass (fto-adaptive.md §10 (A)): `path.moves[first..end]`
     /// each; their arcs are links, not cuts (a posted arc carries no phase).
     pub retraces: Vec<(usize, usize)>,
+    /// What the user should know about the path made (e.g. a link kind left out, and why).
+    pub notes: Vec<String>,
 }
 
 /// A ring at the end of a level, or a run of one: `k` = 0 the wall pass (one offset of all the
@@ -392,6 +397,18 @@ pub fn adaptive(
     let mut last_sign = 1.0f64;
     let mut rings_log: Vec<RingRun> = Vec::new();
     let mut retraces_log: Vec<(usize, usize)> = Vec::new();
+    // a retrace runs tangent to the walls the pass left: where those may be final part walls
+    // (no stock left on them and no wall pass after), it could mark a finished surface, so no
+    // retraces there (fto-adaptive.md §10, TOOLPATH-RESEARCH 2026-11-24)
+    let retrace_ok = prm.leave > 0.0 || prm.wall_pass;
+    let mut notes: Vec<String> = Vec::new();
+    if !retrace_ok {
+        notes.push(
+            "adaptive: leave = 0 and no wall pass: links do not retrace passes (a retrace could \
+             rub a finished wall); they retract instead"
+                .into(),
+        );
+    }
     // the way back over the last pass, for a link by retract (one-way passes)
     let mut back: Vec<[f64; 2]> = Vec::new();
     let mut mv: Vec<PMove> = Vec::new();
@@ -492,7 +509,7 @@ pub fn adaptive(
                 // reach: the first, by a retract
                 // (one-way passes only: two-way passes keep their zigzag order, which already
                 // ends each pass near the next start; P1 there costs more reversals than it saves)
-                if let Some(c) = at.filter(|c| c[2] == z && !prm.two_way) {
+                if let Some(c) = at.filter(|c| retrace_ok && c[2] == z && !prm.two_way) {
                     order.sort_by(|u, v| u.1.total_cmp(&v.1));
                     let (k, dd) = if prm.two_way { CAP_TWO_WAY } else { CAP_ONE_WAY };
                     if let Some(q) = order.iter().take(REACH_N).find(|(q, ..)| {
@@ -673,7 +690,7 @@ pub fn adaptive(
             }
             let cur = at.unwrap_or([p[0], p[1], h.clear]);
             let target = [p[0], p[1], z];
-            let retrace = if cur[2] == z && !f.link_clear([cur[0], cur[1]], p, z) {
+            let retrace = if retrace_ok && cur[2] == z && !f.link_clear([cur[0], cur[1]], p, z) {
                 retrace_link(
                     cur,
                     p,
@@ -1137,6 +1154,7 @@ pub fn adaptive(
         voids,
         rings: rings_log,
         retraces: retraces_log,
+        notes,
     })
 }
 
@@ -1677,10 +1695,12 @@ mod tests {
             (90.0, false, true),
             (30.0, false, true),
         ] {
+            // stock left on the walls (0.05): with no wall pass and none left, links would not
+            // retrace, and the retraces are what this test must see
             let prm = Adaptive {
                 phi_max: 60.0,
                 step: 0.0,
-                leave: 0.0,
+                leave: 0.05,
                 wall_pass: wall,
                 sweep,
                 two_way,
