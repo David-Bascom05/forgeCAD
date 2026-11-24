@@ -238,6 +238,171 @@ impl Dy {
 }
 
 /// The f64 nearest a dyadic (ties to even, by choosing between the two directed roundings).
+/// An exact rational n / d, d > 0 (`Ctx::exact_sign`).
+#[derive(Clone, Debug)]
+struct Q {
+    n: Dy,
+    d: Dy,
+}
+
+impl Q {
+    fn zero() -> Q {
+        Q::dy(Dy::zero())
+    }
+    fn one() -> Q {
+        Q::dy(Dy::from_f64(1.0))
+    }
+    fn dy(n: Dy) -> Q {
+        Q {
+            n,
+            d: Dy::from_f64(1.0),
+        }
+    }
+    fn is_zero(&self) -> bool {
+        self.n.is_zero()
+    }
+    fn sign(&self) -> Ordering {
+        if self.n.is_zero() {
+            Ordering::Equal
+        } else if self.n.neg {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        }
+    }
+    fn neg(&self) -> Q {
+        Q {
+            n: self.n.neg(),
+            d: self.d.clone(),
+        }
+    }
+    fn add(&self, o: &Q) -> Q {
+        if self.d == o.d {
+            return Q {
+                n: self.n.add(&o.n),
+                d: self.d.clone(),
+            };
+        }
+        Q {
+            n: self.n.mul(&o.d).add(&o.n.mul(&self.d)),
+            d: self.d.mul(&o.d),
+        }
+    }
+    fn mul(&self, o: &Q) -> Q {
+        Q {
+            n: self.n.mul(&o.n),
+            d: self.d.mul(&o.d),
+        }
+    }
+    /// None for a zero divisor.
+    fn div(&self, o: &Q) -> Option<Q> {
+        if o.n.is_zero() {
+            return None;
+        }
+        // keep the denominator positive
+        let (n, d) = (self.n.mul(&o.d), self.d.mul(&o.n));
+        Some(if d.neg {
+            Q {
+                n: n.neg(),
+                d: d.neg(),
+            }
+        } else {
+            Q { n, d }
+        })
+    }
+    fn bits(&self) -> u64 {
+        self.n.mag.bits().max(self.d.mag.bits())
+    }
+}
+
+/// a + b√c, c the one radicand of `Ctx::exact_sign` (b is 0 until its root is met).
+#[derive(Clone, Debug)]
+struct Quad {
+    a: Q,
+    b: Q,
+}
+
+impl Quad {
+    fn rat(a: Q) -> Quad {
+        Quad { a, b: Q::zero() }
+    }
+    fn neg(&self) -> Quad {
+        Quad {
+            a: self.a.neg(),
+            b: self.b.neg(),
+        }
+    }
+    fn add(&self, o: &Quad) -> Quad {
+        Quad {
+            a: self.a.add(&o.a),
+            b: if self.b.is_zero() {
+                o.b.clone()
+            } else if o.b.is_zero() {
+                self.b.clone()
+            } else {
+                self.b.add(&o.b)
+            },
+        }
+    }
+    /// (a1 + b1√c)(a2 + b2√c) = a1 a2 + b1 b2 c + (a1 b2 + a2 b1)√c.
+    fn mul(&self, o: &Quad, c: Option<&Q>) -> Quad {
+        match c {
+            Some(c) if !(self.b.is_zero() && o.b.is_zero()) => Quad {
+                a: self.a.mul(&o.a).add(&self.b.mul(&o.b).mul(c)),
+                b: self.a.mul(&o.b).add(&o.a.mul(&self.b)),
+            },
+            _ => Quad::rat(self.a.mul(&o.a)),
+        }
+    }
+    /// x / y = x (a2 − b2√c) / (a2² − b2² c); None where that norm is 0 (y is 0, or √c is
+    /// rational and y a multiple of a2 − b2√c's conjugate).
+    fn div(&self, o: &Quad, c: Option<&Q>) -> Option<Quad> {
+        if o.b.is_zero() {
+            return Some(Quad {
+                a: self.a.div(&o.a)?,
+                b: if self.b.is_zero() {
+                    Q::zero()
+                } else {
+                    self.b.div(&o.a)?
+                },
+            });
+        }
+        let c = c?;
+        let norm = o.a.mul(&o.a).add(&o.b.mul(&o.b).mul(c).neg());
+        let conj = Quad {
+            a: o.a.clone(),
+            b: o.b.neg(),
+        };
+        let num = self.mul(&conj, Some(c));
+        Some(Quad {
+            a: num.a.div(&norm)?,
+            b: num.b.div(&norm)?,
+        })
+    }
+    /// The exact sign of a + b√c (√c ≥ 0).
+    fn sign(&self, c: Option<&Q>) -> Ordering {
+        let (sa, sb) = (self.a.sign(), self.b.sign());
+        let sc = c.map_or(Ordering::Equal, |c| c.sign());
+        if sb == Ordering::Equal || sc == Ordering::Equal {
+            return sa;
+        }
+        if sa == Ordering::Equal || sa == sb {
+            return sb;
+        }
+        // opposite signs: the term with the larger square wins
+        let c = c.expect("a root was met");
+        let t = self.a.mul(&self.a).add(&self.b.mul(&self.b).mul(c).neg());
+        match t.sign() {
+            Ordering::Greater => sa,
+            Ordering::Less => sb,
+            Ordering::Equal => Ordering::Equal,
+        }
+    }
+    fn bits(&self) -> u64 {
+        self.a.bits().max(self.b.bits())
+    }
+}
+
 fn nearest(d: &Dy) -> f64 {
     let (lo, hi) = (d.to_f64(false), d.to_f64(true));
     if lo == hi {
@@ -823,6 +988,11 @@ impl Ctx {
 
     /// The exact sign of `a`.
     pub fn sign(&mut self, a: R) -> Ordering {
+        self.sign_with(a, true)
+    }
+
+    /// `sign`, with or without the exact field route (`exact_sign`; the tests compare the two).
+    fn sign_with(&mut self, a: R, exact: bool) -> Ordering {
         let s = self.nodes[a as usize].iv.sign();
         if s > 0 {
             return Ordering::Greater;
@@ -882,9 +1052,63 @@ impl Ctx {
                     return Ordering::Equal;
                 }
             }
+            // past the first precision, an expression with at most one distinct square root is
+            // decided exactly in its field Q(√c) (`exact_sign`), which gives the same sign the
+            // doubling below would reach: most of these are zeros, which the doubling proves only
+            // at the separation bound (thousands of bits, each precision evaluated in turn)
+            if exact
+                && p == 128
+                && k <= 1
+                && let Some(o) = self.exact_sign(&order, (2 * need).max(4096) as u64)
+            {
+                return o;
+            }
             p *= 2;
             assert!(p < (1u64 << 26), "precision out of reach");
         }
+    }
+
+    /// The exact sign of the last node of `order` (a closure, increasing), when its closure has
+    /// at most one distinct square root: every value is then a + b√c with a, b, c rational and
+    /// √c that one root's value (c ≥ 0: its operand, rational, the only radical below it), and
+    /// +, −, ×, ÷ stay in that field exactly. The sign of a + b√c: of a where b or c is 0, of b
+    /// where a is 0, their common sign where they agree, else of a's or b's term, whichever has
+    /// the larger square (a² against b²c, exactly). None (the caller goes on as before) where a
+    /// number grows past `cap` bits, a divisor's norm is 0, or the radicand is negative: never a
+    /// wrong sign, only no answer.
+    fn exact_sign(&self, order: &[u32], cap: u64) -> Option<Ordering> {
+        let mut val: Vec<Quad> = Vec::with_capacity(order.len());
+        let at = |x: &u32| order.binary_search(x).expect("an operand is in the closure");
+        // the radicand c, once its root is met
+        let mut c: Option<Q> = None;
+        for &i in order {
+            let v = match &self.nodes[i as usize].op {
+                Op::Lit(d) => Quad::rat(Q::dy(d.clone())),
+                Op::Add(x, y) => val[at(x)].add(&val[at(y)]),
+                Op::Sub(x, y) => val[at(x)].add(&val[at(y)].neg()),
+                Op::Neg(x) => val[at(x)].neg(),
+                Op::Mul(x, y) => val[at(x)].mul(&val[at(y)], c.as_ref()),
+                Op::Div(x, y) => val[at(x)].div(&val[at(y)], c.as_ref())?,
+                Op::Sqrt(x) => {
+                    let r = &val[at(x)];
+                    // the one radical: its operand has no root in it, so it is rational
+                    if !r.b.is_zero() || c.is_some() || r.a.sign() == Ordering::Less {
+                        return None;
+                    }
+                    c = Some(r.a.clone());
+                    Quad {
+                        a: Q::zero(),
+                        b: Q::one(),
+                    }
+                }
+            };
+            if v.bits() > cap {
+                return None;
+            }
+            val.push(v);
+        }
+        let v = val.pop()?;
+        Some(v.sign(c.as_ref()))
     }
 
     /// sign(a - b), without keeping the difference.
@@ -960,6 +1184,106 @@ mod tests {
         }
         let s = Dy::from_f64(0.1).add(&Dy::from_f64(0.2));
         assert!(s.to_f64(false) <= 0.30000000000000004 && s.to_f64(true) >= 0.30000000000000004);
+    }
+
+    struct Rng(u64);
+    impl Rng {
+        fn u(&mut self, n: u64) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (self.0 >> 33) % n
+        }
+    }
+
+    /// The field route (`exact_sign`, at most one distinct root) gives the sign the doubling gives,
+    /// on random expressions over small literals and one root, and on zeros built so the filter
+    /// cannot see them: (x + y)(x − y) − (x² − y²), (x / y)·y − x, x·√c·√c − x·c, and the norm
+    /// (a + b√c)(a − b√c) − (a² − b²c).
+    #[test]
+    fn the_field_route_agrees_with_the_doubling() {
+        let mut g = Rng(3);
+        let (mut zeros, mut nonzeros, mut routed) = (0, 0, 0);
+        for case in 0..400 {
+            let mut c = Ctx::new();
+            let lit = |c: &mut Ctx, g: &mut Rng| {
+                let v = (g.u(2001) as f64 - 1000.0) / 64.0 + if g.u(2) == 0 { 0.1 } else { 0.0 };
+                c.lit(v)
+            };
+            // the radicand and its root (a square's root folds to a literal: then no radical)
+            let cv = {
+                let v = (g.u(50) + 1) as f64 / 8.0;
+                c.lit(v)
+            };
+            let rad = c.sqrt(cv);
+            let mut pool: Vec<R> = (0..4).map(|_| lit(&mut c, &mut g)).collect();
+            if case % 2 == 0 {
+                pool.push(rad);
+            }
+            for _ in 0..8 {
+                let (x, y) = (
+                    pool[g.u(pool.len() as u64) as usize],
+                    pool[g.u(pool.len() as u64) as usize],
+                );
+                let v = match g.u(4) {
+                    0 => c.add(x, y),
+                    1 => c.sub(x, y),
+                    2 => c.mul(x, y),
+                    _ => {
+                        if c.sign_with(y, false) == Ordering::Equal {
+                            continue;
+                        }
+                        c.div(x, y)
+                    }
+                };
+                pool.push(v);
+            }
+            let (x, y) = (pool[pool.len() - 1], pool[pool.len() - 2]);
+            // the zeros
+            let xpy = c.add(x, y);
+            let xmy = c.sub(x, y);
+            let pr = c.mul(xpy, xmy);
+            let (x2, y2) = (c.sqr(x), c.sqr(y));
+            let d2 = c.sub(x2, y2);
+            let z1 = c.sub(pr, d2);
+            let mut tests = vec![x, y, xpy, z1];
+            if c.sign_with(y, false) != Ordering::Equal {
+                let q = c.div(x, y);
+                let qy = c.mul(q, y);
+                tests.push(c.sub(qy, x));
+            }
+            let xr = c.mul(x, rad);
+            let xrr = c.mul(xr, rad);
+            let xc = c.mul(x, cv);
+            tests.push(c.sub(xrr, xc));
+            let br = c.mul(y, rad);
+            let (p1, p2) = (c.add(x, br), c.sub(x, br));
+            let nm = c.mul(p1, p2);
+            let yc = c.mul(y2, cv);
+            let n2 = c.sub(x2, yc);
+            tests.push(c.sub(nm, n2));
+            for t in tests {
+                let want = c.sign_with(t, false);
+                let order = c.closure(t);
+                if c.radicals(&order) <= 1
+                    && let Some(got) = c.exact_sign(&order, 1 << 20)
+                {
+                    routed += 1;
+                    assert_eq!(got, want, "case {case}");
+                }
+                assert_eq!(c.sign(t), want, "case {case}");
+                if want == Ordering::Equal {
+                    zeros += 1;
+                } else {
+                    nonzeros += 1;
+                }
+            }
+        }
+        assert!(
+            zeros > 800 && nonzeros > 800 && routed > 2000,
+            "{zeros} {nonzeros} {routed}"
+        );
     }
 
     #[test]
