@@ -463,8 +463,20 @@ built-in nests in an expression: `eval` has no call, so its table is empty). -/
 def bendStmt : List Name :=
   ["part", "press", "tooling", "station", "bend", "setup_sheet", "program"]
 
+/-- forge-lang's robot document (`robot.rs`): `x = f(..)`'s arms (`source`, `link`, `joint`,
+`frame`), falling through to the value built-ins. -/
+def robotAssign : List Name := ["source", "link", "joint", "frame"]
+
+/-- The robot document's `f(..)` statements (`statement`'s arms). -/
+def robotStmt : List Name :=
+  ["root", "cut", "freeze", "merge", "drop", "visual", "collision", "collisions", "actuation",
+    "inertial", "joint", "transmission"]
+
+/-- The robot document's value built-ins (`Reader::value`): nested, or an assignment's. -/
+def robotValue : List Name := ["pose", "box", "cylinder", "capsule", "sphere", "mesh"]
+
 /-- The document headers that are names, not keywords (`drawing` and `harness` are keywords). -/
-def headers : List Name := ["machining", "assembly", "bending"]
+def headers : List Name := ["machining", "assembly", "robot", "bending"]
 
 /-- A table of a family: each of its names with what it does. -/
 def tab {β : Type} (names : List Name) (impl : Name → β) : List (Name × β) :=
@@ -500,6 +512,20 @@ theorem bending_conservative (is : Name → S → List α → S × Except Err α
   have := run_ext_accepted P [] ME _ MT [] [] sts s ρ s' ρ' rs h ha
   simpa using this
 
+/-- The robot built-ins, likewise: its three tables (an assignment's arms then the value
+built-ins; the statements'; a nested call's, the value built-ins), extended by a later round's
+arms. The names `hull` and `none` (`RESERVED`), read before any binding, may not be bound
+(`ReservedName`), so the part namespace's argument covers them (COVERAGE.md, robot-constants). -/
+theorem robot_conservative (iv : Name → S → List α → Except Err α)
+    (ia ix : Name → S → List α → S × Except Err α) (ME : ETab S α) (MT MX : TTab S α)
+    (sts : List St) (s s' : S) (ρ ρ' : Env α) (rs : List (Except Err Unit))
+    (h : run P (tab robotValue iv) (tab robotAssign ia ++ tab robotValue (fun n s vs => (s, iv n s vs)))
+      (tab robotStmt ix) s ρ sts = (s', ρ', rs)) (ha : Accepted rs) :
+    run P (tab robotValue iv ++ ME)
+      ((tab robotAssign ia ++ tab robotValue (fun n s vs => (s, iv n s vs))) ++ MT)
+      (tab robotStmt ix ++ MX) s ρ sts = (s', ρ', rs) :=
+  run_ext_accepted P _ ME _ MT _ MX sts s ρ s' ρ' rs h ha
+
 /-- forge-lang's drawing document (`drawing/doc.rs`): `x = f(..)` and a nested `f(..)` both call
 from `FUNCTIONS`, nothing else is callable, and a read is a binding's (closed). -/
 def drawingFns : List Name :=
@@ -515,10 +541,11 @@ theorem drawing_conservative (ie : Name → S → List α → Except Err α)
   have := run_ext_accepted P _ ME _ MT [] [] sts s ρ s' ρ' rs h ha
   simpa using this
 
-/-- No built-in of the machining families, and no header word, is a keyword: each lexes as an
-identifier, so the grammar and the proven parser are unchanged by them. -/
+/-- No built-in of the machining and robot families, and no header word, is a keyword: each
+lexes as an identifier, so the grammar and the proven parser are unchanged by them. -/
 theorem families_not_keywords :
-    ∀ n ∈ camStmt ++ camExpr ++ turnStmt ++ turnExpr ++ bendStmt ++ headers, codes n ∉ LL1.Impl.keywords := by
+    ∀ n ∈ camStmt ++ camExpr ++ turnStmt ++ turnExpr ++ robotAssign ++ robotStmt ++ robotValue ++
+      ["hull", "none"] ++ bendStmt ++ headers, codes n ∉ LL1.Impl.keywords := by
   decide
 
 end Families
