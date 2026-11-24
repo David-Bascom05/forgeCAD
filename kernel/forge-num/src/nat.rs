@@ -258,61 +258,74 @@ impl Nat {
     }
 
     pub fn cmp(&self, o: &Nat) -> Ordering {
-        let (a, b) = (self.limbs.len(), o.limbs.len());
-        if a != b {
-            return a.cmp(&b);
+        let (a, b) = (self.limbs.as_slice(), o.limbs.as_slice());
+        if a.len() != b.len() {
+            return a.len().cmp(&b.len());
         }
-        let mut i = a;
+        let mut i = a.len();
         while i > 0 {
             i -= 1;
-            if self.limbs[i] != o.limbs[i] {
-                return self.limbs[i].cmp(&o.limbs[i]);
+            if a[i] != b[i] {
+                return a[i].cmp(&b[i]);
             }
         }
         Ordering::Equal
     }
 
     pub fn add(&self, o: &Nat) -> Nat {
-        let n = self.limbs.len().max(o.limbs.len());
-        let mut v = Limbs::with_capacity(n + 1);
-        let mut carry = 0u64;
-        let mut i = 0;
-        while i < n {
-            let a = if i < self.limbs.len() {
-                self.limbs[i] as u64
-            } else {
-                0
-            };
-            let b = if i < o.limbs.len() { o.limbs[i] as u64 } else { 0 };
-            let s = a + b + carry;
-            v.push(s as u32);
-            carry = s >> 32;
-            i += 1;
+        // the longer operand first
+        let (a, b) = if self.limbs.len() >= o.limbs.len() {
+            (self.limbs.as_slice(), o.limbs.as_slice())
+        } else {
+            (o.limbs.as_slice(), self.limbs.as_slice())
+        };
+        let (n, m) = (a.len(), b.len());
+        let mut v = Limbs::zeroed(n + 1);
+        {
+            let out = v.as_mut_slice();
+            let mut carry = 0u64;
+            let mut i = 0;
+            while i < m {
+                let t = a[i] as u64 + b[i] as u64 + carry;
+                out[i] = t as u32;
+                carry = t >> 32;
+                i += 1;
+            }
+            while i < n {
+                let t = a[i] as u64 + carry;
+                out[i] = t as u32;
+                carry = t >> 32;
+                i += 1;
+            }
+            out[n] = carry as u32;
         }
-        if carry > 0 {
-            v.push(carry as u32);
-        }
+        trim(&mut v);
         Nat { limbs: v }
     }
 
     /// self - o, for self >= o.
     pub fn sub(&self, o: &Nat) -> Nat {
         debug_assert!(self.cmp(o) != Ordering::Less);
-        let mut v = Limbs::with_capacity(self.limbs.len());
-        let mut borrow = 0i64;
-        let mut i = 0;
-        while i < self.limbs.len() {
-            let a = self.limbs[i] as i64;
-            let b = if i < o.limbs.len() { o.limbs[i] as i64 } else { 0 };
-            let mut d = a - b - borrow;
-            if d < 0 {
-                d += 1i64 << 32;
-                borrow = 1;
-            } else {
-                borrow = 0;
+        let (a, b) = (self.limbs.as_slice(), o.limbs.as_slice());
+        let (n, m) = (a.len(), b.len());
+        let mut v = Limbs::zeroed(n);
+        {
+            let out = v.as_mut_slice();
+            // t wraps: its top bit is the borrow, its low half the limb
+            let mut borrow = 0u64;
+            let mut i = 0;
+            while i < m {
+                let t = (a[i] as u64).wrapping_sub(b[i] as u64).wrapping_sub(borrow);
+                out[i] = t as u32;
+                borrow = t >> 63;
+                i += 1;
             }
-            v.push(d as u32);
-            i += 1;
+            while i < n {
+                let t = (a[i] as u64).wrapping_sub(borrow);
+                out[i] = t as u32;
+                borrow = t >> 63;
+                i += 1;
+            }
         }
         trim(&mut v);
         Nat { limbs: v }
@@ -398,10 +411,11 @@ impl Nat {
     /// floor(self / 2^k).
     /// The number of trailing zero bits (0 for zero).
     pub fn trailing_zeros(&self) -> u64 {
+        let a = self.limbs.as_slice();
         let mut i = 0;
-        while i < self.limbs.len() {
-            if self.limbs[i] != 0 {
-                return 32 * i as u64 + self.limbs[i].trailing_zeros() as u64;
+        while i < a.len() {
+            if a[i] != 0 {
+                return 32 * i as u64 + a[i].trailing_zeros() as u64;
             }
             i += 1;
         }
@@ -417,16 +431,21 @@ impl Nat {
         }
         let b = (k % 32) as u32;
         let n = self.limbs.len();
-        let mut i = w;
-        while i < n {
-            let lo = self.limbs[i] >> b;
-            let hi = if b > 0 && i + 1 < n {
-                self.limbs[i + 1] << (32 - b)
+        {
+            let a = self.limbs.as_mut_slice();
+            let mut i = w;
+            if b == 0 {
+                while i < n {
+                    a[i - w] = a[i];
+                    i += 1;
+                }
             } else {
-                0
-            };
-            self.limbs[i - w] = lo | hi;
-            i += 1;
+                while i + 1 < n {
+                    a[i - w] = (a[i] >> b) | (a[i + 1] << (32 - b));
+                    i += 1;
+                }
+                a[n - 1 - w] = a[n - 1] >> b;
+            }
         }
         self.limbs.truncate(n - w);
         trim(&mut self.limbs);
@@ -434,21 +453,25 @@ impl Nat {
 
     pub fn shr(&self, k: u64) -> Nat {
         let w = (k / 32) as usize;
-        if w >= self.limbs.len() {
+        let a = self.limbs.as_slice();
+        let n = a.len();
+        if w >= n {
             return Nat::zero();
         }
         let b = (k % 32) as u32;
-        let mut v = Limbs::with_capacity(self.limbs.len() - w);
-        let mut i = w;
-        while i < self.limbs.len() {
-            let lo = self.limbs[i] >> b;
-            let hi = if b > 0 && i + 1 < self.limbs.len() {
-                self.limbs[i + 1] << (32 - b)
+        let mut v = Limbs::zeroed(n - w);
+        {
+            let out = v.as_mut_slice();
+            if b == 0 {
+                out.copy_from_slice(&a[w..]);
             } else {
-                0
-            };
-            v.push(lo | hi);
-            i += 1;
+                let mut i = w;
+                while i + 1 < n {
+                    out[i - w] = (a[i] >> b) | (a[i + 1] << (32 - b));
+                    i += 1;
+                }
+                out[n - 1 - w] = a[n - 1] >> b;
+            }
         }
         trim(&mut v);
         Nat { limbs: v }
