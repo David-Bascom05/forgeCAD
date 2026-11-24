@@ -1316,4 +1316,129 @@ theorem guard_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF)
 
 end guard
 
+/-! ## One vertex: `n_fans` -/
+
+section nfans
+variable {T : Type} (FI : topo_fans.FanTopo T) (t : T) {b : Body} {corners : Nat → Nat → List (Nat × Nat)}
+
+theorem befUse_none (H : Sound b) (W : b.WF) : BefUse (b := b) (b.before none) :=
+  fun _ hc => use_prev H W hc
+
+theorem befUse_some (H : Sound b) (W : b.WF) (hC : CornersOK b corners) (v : Nat) (fs : List Nat) :
+    BefUse (b := b) (b.before (some (tableOf corners v fs))) := by
+  intro c hc
+  unfold Body.before
+  simp only
+  split
+  · rename_i x hx
+    have hm := List.mem_of_find?_eq_some hx
+    rw [List.mem_flatMap] at hm
+    obtain ⟨p, hp, hxp⟩ := hm
+    have hpL := (List.mem_filter.1 hp).1
+    unfold tableOf at hpL
+    obtain ⟨f, -, rfl⟩ := List.mem_map.1 hpL
+    exact ((hC f v).2 x hxp).2.2
+  · exact use_prev H W hc
+
+theorem fuel_gt (frm : List Nat) : (allUses b).length < b.fuel frm := by
+  unfold Body.fuel; rw [allUses_length]; omega
+
+theorem frmOf_head (items : Slice Usize) (lo hi : Nat) (h1 : lo < hi) (h2 : hi ≤ items.val.length) :
+    (frmOf items lo hi).headD 0 = (items.val[lo]!).val := by
+  unfold frmOf
+  rw [List.drop_eq_getElem_cons (by omega), show hi - lo = (hi - lo - 1) + 1 by omega, List.take_succ_cons]
+  simp [getElem!_pos items.val lo (by omega)]
+
+theorem frmOf_len (items : Slice Usize) (lo hi : Nat) (h1 : lo ≤ hi) (h2 : hi ≤ items.val.length) :
+    (frmOf items lo hi).length = hi - lo := by
+  simp [frmOf]; omega
+
+theorem n_fans_spec (R : FanReads FI t b corners) (H : Sound b) (W : b.WF) (hC : CornersOK b corners)
+    (items : Slice Usize) (lo hi : Usize) (hlo : lo.val ≤ hi.val) (hhi : hi.val ≤ items.val.length)
+    (hfrm : ∀ x ∈ frmOf items lo.val hi.val, Use b x) (seen : alloc.vec.Vec Usize) :
+    topo_fans.n_fans FI t items lo hi seen ⦃ r => r.1.val = (b.fans corners (frmOf items lo.val hi.val)).length ⦄ := by
+  set frm := frmOf items lo.val hi.val with hfrmdef
+  have hF := fuel_gt (b := b) frm
+  have h0 : SeenOK b [] := ⟨by simp, by simp⟩
+  unfold topo_fans.n_fans
+  step with count_spec FI t R H W ⟨alloc.vec.Vec.new Usize, alloc.vec.Vec.new (Usize × Usize), alloc.vec.Vec.new Usize⟩
+    false (b.before none) (before_none_spec FI t R H W _) (befUse_none H W) (b.fuel frm) hF items lo hi hlo hhi hfrm seen
+    as ⟨cnt, sl, seen1, hcnt, hsl, hseen1⟩
+  rw [← hfrmdef] at hcnt hseen1
+  have hfs : b.fansBy frm none = b.fansGo (b.before none) (b.fuel frm) frm [] := rfl
+  unfold Body.fans
+  simp only
+  rw [hfs]
+  split
+  · rename_i hlt
+    have hlt' : cnt.val < 2 := by scalar_tac
+    simp only [WP.spec_ok]
+    rw [if_pos (by omega)]; exact hcnt
+  · rename_i hlt
+    have hge : 2 ≤ cnt.val := by scalar_tac
+    rw [if_neg (by omega)]
+    have hlen := fansGo_length_le (b := b) (b.before none) (b.fuel frm) frm []
+    have hfl := frmOf_len items lo.val hi.val hlo hhi
+    rw [← hfrmdef] at hfl
+    have hlohi : lo.val < hi.val := by omega
+    have hix : lo.val < items.length := by have : items.length = items.val.length := rfl; omega
+    step with Slice.index_usize_spec items lo hix as ⟨c0, hc0⟩
+    have hhead := frmOf_head items lo.val hi.val hlohi hhi
+    rw [← hfrmdef] at hhead
+    have hc0u : Use b c0.val := by
+      apply hfrm
+      have : c0.val = frm.headD 0 := by rw [hhead, hc0, getElem!_pos]
+      have hne : frm ≠ [] := by intro h; rw [h] at hfl; simp at hfl; omega
+      obtain ⟨x, xs, hx⟩ := List.exists_cons_of_ne_nil hne
+      rw [this, hx]; simp
+    obtain ⟨hcn, hen, -, -, -, -⟩ := use_facts H W hc0u
+    step with start_spec FI t R c0 hcn hen as ⟨vtx, hvtx⟩
+    have hvtx' : vtx.val = b.start (frm.headD 0) := by rw [hvtx, hhead, hc0, getElem!_pos]
+    step as ⟨cs0, hcs0⟩
+    have hSok : SeenOK b (seenOf seen1 sl.val) := by
+      rw [hseen1]; exact fansSeen_ok H W (befUse_none H W) _ frm [] hfrm h0
+    step with table_spec FI t R H W hC seen1 sl vtx hsl hSok cs0 (by rw [hcs0]; rfl)
+      as ⟨cf, cl, cs, any, hrep, hany⟩
+    have hfaces : facesOf b (seenOf seen1 sl.val) =
+        ((b.fansGo (b.before none) (b.fuel frm) frm []).flatten.map b.face).eraseDups := by
+      rw [hseen1, fansSeen_flatten]; simp [facesOf]
+    rw [hfaces, hvtx'] at hrep hany
+    set L := tableOf corners (b.start (frm.headD 0)) ((b.fansGo (b.before none) (b.fuel frm) frm []).flatten.map b.face).eraseDups with hL
+    have hLeq : ((((b.fansGo (b.before none) (b.fuel frm) frm []).flatten.map b.face).eraseDups).map
+        fun f => (f, corners f (b.start (frm.headD 0)))) = L := rfl
+    rw [hLeq]
+    split
+    · rename_i hanyT
+      rw [hany] at hanyT
+      have hnall : L.all (·.2.isEmpty) = false := by simpa using hanyT
+      rw [if_neg (by simp [hnall])]
+      have rnc := R.base.nc
+      have rne := R.base.ne
+      step with rnc as ⟨nc', hnc'⟩
+      step with rne as ⟨ne, hne⟩
+      have hBS := before_some_spec FI t R H W ⟨cf, cl, cs⟩ L hrep
+      step with guard_spec FI t R H W ⟨cf, cl, cs⟩ (b.before (some L)) hBS items lo hi hlo hhi hfrm vtx nc' ne hnc' hne
+        as ⟨okg, hokg⟩
+      rw [closesOk_eq, ← hvtx']
+      split
+      · rename_i hok
+        rw [hokg] at hok
+        rw [if_pos hok]
+        step with count_spec FI t R H W ⟨cf, cl, cs⟩ true (b.before (some L)) hBS (befUse_some H W hC _ _)
+          (b.fuel frm) hF items lo hi hlo hhi hfrm seen1 as ⟨cnt2, sl2, seen2, hcnt2, hsl2, hseen2⟩
+        rw [← hfrmdef] at hcnt2
+        exact hcnt2
+      · rename_i hok
+        have hok' : okg = false := by simpa using hok
+        rw [hokg] at hok'
+        rw [if_neg (by rw [hok']; simp)]
+        simp only [WP.spec_ok]; exact hcnt
+    · rename_i hanyF
+      rw [hany] at hanyF
+      have hall : L.all (·.2.isEmpty) = true := by simpa using hanyF
+      rw [if_pos hall]
+      simp only [WP.spec_ok]; exact hcnt
+
+end nfans
+
 end forge_topo
