@@ -325,3 +325,24 @@ impl Cam {
         })
     }
 }
+
+impl Cam {
+    /// The rapid rates (mm/min) of setup `si`'s machine along X, Y and Z, from its forge-machine
+    /// record (each linear axis's `rapid`): None when the machine is not one forge-machine defines
+    /// or a rate is not published, and the simulation plays rapids at its own speed.
+    pub fn sim_rapids(&self, si: usize) -> Option<[f64; 3]> {
+        let s = self.setups.get(si)?;
+        let def = forge_machine::library::builtin()
+            .into_iter()
+            .find(|d| d.name == s.machine)?;
+        let mut out = [0.0; 3];
+        for (k, l) in ["X", "Y", "Z"].iter().enumerate() {
+            let j = def
+                .joints
+                .iter()
+                .find(|j| j.letter == *l && j.ty == forge_machine::def::JointType::Linear)?;
+            out[k] = j.rapid.filter(|r| *r > 0.0)?;
+        }
+        Some(out)
+    }
+}
