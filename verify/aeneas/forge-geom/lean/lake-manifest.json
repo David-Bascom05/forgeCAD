@@ -3,6 +3,15 @@
  "packages":
  [{"type": "path",
    "scope": "",
+   "name": "forgenum",
+   "manifestFile": "lake-manifest.json",
+   "inherited": true,
+   "dir": "../../forge-math/lean/../../forge-num/lean",
+   "copy": false,
+   "configFile": "lakefile.toml"},
+
+  {"type": "path",
+   "scope": "",
    "name": "splinefp",
    "manifestFile": "lake-manifest.json",
    "inherited": false,

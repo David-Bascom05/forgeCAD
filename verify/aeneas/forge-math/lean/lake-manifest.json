@@ -3,6 +3,15 @@
  "packages":
  [{"type": "path",
    "scope": "",
+   "name": "forgenum",
+   "manifestFile": "lake-manifest.json",
+   "inherited": false,
+   "dir": "../../forge-num/lean",
+   "copy": false,
+   "configFile": "lakefile.toml"},
+
+  {"type": "path",
+   "scope": "",
    "name": "floatverification",
    "manifestFile": "lake-manifest.json",
    "inherited": false,
