@@ -338,7 +338,10 @@ pub fn adaptive(
                     if !near {
                         continue;
                     }
-                    let d = (p[0] - here[0]).powi(2) + (p[1] - here[1]).powi(2);
+                    // across the sweep from one side to the other (fto-adaptive.md §9 (2)): the
+                    // lowest band of r/2 across the sweep first, the nearest within it
+                    let across = (sweep_dir[0] * p[1] - sweep_dir[1] * p[0]) / (0.5 * f.r);
+                    let d = across.floor() * 1e9 + (p[0] - here[0]).powi(2) + (p[1] - here[1]).powi(2);
                     if best.is_none_or(|(_, bd)| d < bd) {
                         best = Some((p, d));
                     }
@@ -584,10 +587,13 @@ pub fn adaptive(
                                 side += u[0] * dd[1] - u[1] * dd[0];
                             }
                         }
+                        // gently (10°): the strip a pass cuts follows the edge the last one
+                        // left, so a steep approach would set every strip's slope
+                        let gentle = 10f64.to_radians();
                         if side > 1e-9 {
-                            hi_d
+                            gentle.clamp(lo_d, hi_d)
                         } else if side < -1e-9 {
-                            lo_d
+                            (-gentle).clamp(lo_d, hi_d)
                         } else {
                             0.0f64.clamp(lo_d, hi_d)
                         }
@@ -1075,6 +1081,125 @@ mod tests {
                     b: c[(i + 1) % 4],
                 })
                 .collect(),
+        }
+    }
+
+    /// The winding number of a path's xy projection (every move, links and rapids too, closed
+    /// by the chord from its end to its start) about q.
+    fn winding(path: &OpPath, q: [f64; 2]) -> i64 {
+        let mut pts: Vec<[f64; 2]> = vec![[path.start[0], path.start[1]]];
+        let mut at = path.start;
+        for mv in &path.moves {
+            match *mv {
+                PMove::Rapid { to } | PMove::Line { to, .. } => {
+                    pts.push([to[0], to[1]]);
+                    at = to;
+                }
+                PMove::Arc { to, c, cw, .. } => {
+                    // the arc by points (its sweep under a half turn each way of the chord's side)
+                    let r = ((at[0] - c[0]).powi(2) + (at[1] - c[1]).powi(2)).sqrt();
+                    let a0 = dmath::atan2(at[1] - c[1], at[0] - c[0]);
+                    let a1 = dmath::atan2(to[1] - c[1], to[0] - c[0]);
+                    let mut sw = a1 - a0;
+                    let tau = std::f64::consts::TAU;
+                    if cw {
+                        while sw >= 0.0 {
+                            sw -= tau;
+                        }
+                    } else {
+                        while sw <= 0.0 {
+                            sw += tau;
+                        }
+                    }
+                    for k in 1..=16 {
+                        let (sn, cs) = dmath::sin_cos(a0 + sw * k as f64 / 16.0);
+                        pts.push([c[0] + r * cs, c[1] + r * sn]);
+                    }
+                    at = to;
+                }
+                PMove::Cycle { .. } => {}
+            }
+        }
+        pts.push(pts[0]);
+        let mut total = 0.0;
+        for w in pts.windows(2) {
+            let a = dmath::atan2(w[0][1] - q[1], w[0][0] - q[0]);
+            let b = dmath::atan2(w[1][1] - q[1], w[1][0] - q[0]);
+            let mut d = b - a;
+            while d > std::f64::consts::PI {
+                d -= std::f64::consts::TAU;
+            }
+            while d < -std::f64::consts::PI {
+                d += std::f64::consts::TAU;
+            }
+            total += d;
+        }
+        (total / std::f64::consts::TAU).round() as i64
+    }
+
+    /// fto-adaptive.md §9 condition (2): the whole path, passes and links and rapids, closed by
+    /// its end–start chord, winds 0 times round the island, and at most once round any point of
+    /// a grid (a pass and its way back enclose a strip of cleared air once; a spiral winds n
+    /// times round its core).
+    #[test]
+    fn path_winds_round_nothing() {
+        let t = tool("flat-6");
+        // the stock 40 x 30 with a 10 x 8 island (a boss) in the middle
+        let rg = Region {
+            loops: vec![
+                rect(-7.0, -7.0, 47.0, 37.0),
+                rect(15.0, 11.0, 25.0, 19.0).reversed(),
+            ],
+        };
+        let ip = InProcess::new([0.0, 0.0, -5.0], [40.0, 30.0, 0.0]);
+        for (sweep, wall) in [(0.0, false), (90.0, false), (0.0, true)] {
+            let prm = Adaptive {
+                phi_max: 60.0,
+                step: 0.0,
+                leave: 0.0,
+                wall_pass: wall,
+                sweep,
+            };
+            let out = adaptive(
+                &rg,
+                Cut {
+                    tool: &t,
+                    tidx: 0,
+                    h: Heights {
+                        clear: 20.0,
+                        retract: 3.0,
+                    },
+                    feed: (1000.0, 300.0),
+                },
+                Span {
+                    top: 0.0,
+                    bottom: -3.0,
+                    step: 3.0,
+                },
+                &ip,
+                &prm,
+            )
+            .unwrap();
+            assert_eq!(
+                winding(&out.path, [20.0, 15.0]),
+                0,
+                "sweep {sweep}, wall {wall}: round the island"
+            );
+            let mut y = -6.0;
+            while y <= 36.0 {
+                let mut x = -6.0;
+                while x <= 46.0 {
+                    // a pass and the link or rapid back enclose the strip of cleared air between
+                    // them once; a spiral of n loops winds n times round its core
+                    let w = winding(&out.path, [x + 0.013, y + 0.017]);
+                    assert!(
+                        w.abs() <= 1,
+                        "sweep {sweep}, wall {wall}: {w} times round ({x}, {y})"
+                    );
+                    x += 2.0;
+                }
+                y += 2.0;
+            }
         }
     }
 
