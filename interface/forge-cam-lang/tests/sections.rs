@@ -93,3 +93,14 @@ fn a_section_pocket_leaves_the_holes_that_end_above_its_bottom() {
         cam.warnings
     );
 }
+
+#[test]
+fn a_part_that_imports_a_step_file_finds_it_next_to_itself() {
+    // well_island_step.fg imports well_island.step by a relative path: it resolves in the
+    // part's directory, not the process's (the RPTU parts' "Missing")
+    let src = "machining\nf = part(\"well_island_step.fg\", group: \"N\")\nm = machine(\"generic-vmc3\")\nt1 = tool(\"flat-6\", t: 1, stickout: 30, holder: \"bt40-er32\")\nop1 = setup(f, machine: m, stock: box(margin: (3, 3, 1), below: 2), origin: \"top-corner\", tol: 0.01, at: (-20, -20, -250))\nprof = contour(op1, tool: t1, side: \"outside\", from: 12, to: 7, step: 3)\np = program(op1, post: \"fanuc\", number: 1)\n";
+    let cam = run(src);
+    assert!(cam.errors.is_empty(), "{:?}", cam.errors);
+    let o = cam.ops.iter().find(|o| o.name == "prof").unwrap();
+    assert_eq!(o.status, "built", "{:?}", o.refusal);
+}
