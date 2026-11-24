@@ -11,6 +11,7 @@ pub mod asmpart;
 pub mod asmtools;
 mod banner;
 pub mod bendsim;
+pub mod cam;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -36,6 +37,8 @@ pub mod harness_look;
 pub mod harness_ui;
 pub mod icons;
 pub mod inspect;
+pub mod machine;
+mod machine_parts;
 pub mod markup;
 pub mod materials;
 mod measure_ui;
@@ -77,6 +80,8 @@ pub const ASM_TAB: usize = 8;
 pub const HARNESS_TAB: usize = 9;
 /// A part's Weldments tab: structural members, their ends and plates, the cut list.
 pub const WELD_TAB: usize = 10;
+/// A machining document's Manufacture tab: setups, operations, posts (`cam/`).
+pub const CAM_TAB: usize = 11;
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
@@ -171,8 +176,12 @@ pub enum Action {
     DialogCancel,
     /// A Forge file's ribbon command.
     Fg(FgCmd),
+    /// The Manufacture workspace's command.
+    Cam(cam::Ask),
     /// The Manage tab's Versions group: the Versions tab, opened at what was asked.
     Versions(versions::VersionsCmd),
+    /// The Machine Builder workspace (shell/machine.rs), opened or closed.
+    MachineBuilder,
     /// Measure, Section, iProperties and the centre of gravity.
     Inspect(inspect::InspectCmd),
     /// A sheet metal command, from the Sheet Metal or Flat Pattern tab.
@@ -375,12 +384,20 @@ pub struct Shell {
     pub new_drawing: Option<drawing::NewDrawing>,
     /// A DWG file is open: AutoCAD's layout instead of the model's (`dwgdoc.rs`).
     pub dwgdoc: Option<dwgdoc::DwgDoc>,
+    /// A machining document is open: the Manufacture workspace over its part (`cam/`).
+    pub cam: Option<cam::CamWs>,
+    /// A machining document's toolpath and stock simulation (`gui_camsim_panel.rs`).
+    pub camsim: Option<Box<crate::gui_camsim_panel::CamSimUi>>,
+    /// The simulation being made off the window's thread, and the workspace focus it last took.
+    pub camsim_job: crate::gui_camsim_panel::SimJob,
     /// What's set in Settings, and its window.
     pub settings: settings::Settings,
     pub prefs: settings::Window,
     /// The left panel's Agent tab (`agent.rs`).
     pub agent: agent::AgentTab,
     pub versions: versions::Versions,
+    /// The Machine Builder workspace, while it is open.
+    pub machine: Option<machine::MachineUi>,
     /// The open documents' tabs, and which is in the window.
     pub doc_tabs: Vec<docs::DocTab>,
     pub active_doc: usize,
@@ -436,10 +453,14 @@ impl Default for Shell {
             drawing: None,
             new_drawing: None,
             dwgdoc: None,
+            cam: None,
+            camsim: None,
+            camsim_job: Default::default(),
             settings: Default::default(),
             prefs: Default::default(),
             agent: Default::default(),
             versions: Default::default(),
+            machine: None,
             doc_tabs: Vec::new(),
             active_doc: 0,
             close_ask: None,
@@ -741,12 +762,14 @@ impl Shell {
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
         self.window_ui(&ctx);
+        self.camsim_ui(&ctx);
         // a dialog holds its numbers while it's up; a sketch has its own
         if self.fg.as_ref().is_some_and(|p| p.tool.is_none()) && self.sketch.is_none() {
             self.fg_dim_ui(&ctx);
         }
         self.thermo_probes(&ctx);
         self.thermo_ui(&ctx);
+        self.cam_ui(&ctx);
         self.harness_ui(&ctx);
         self.fg_dialog(&ctx);
         self.fg_sketches_ui(&ctx);
@@ -758,6 +781,7 @@ impl Shell {
         self.fg_issues_window(&ctx);
         self.cutlist_window(&ctx);
         self.sheet_ui(&ctx);
+        self.machine_ui(&ctx);
         self.build_banner(ui);
         self.view_toolbar(&ctx);
         self.sketch_ui(&ctx);
@@ -971,6 +995,7 @@ impl Shell {
                 ASM_TAB => &"Assemble",
                 HARNESS_TAB => &"Harness",
                 WELD_TAB => &"Weldments",
+                CAM_TAB => &"Manufacture",
                 k => &TABS[k],
             };
             let on = k == self.tab;
@@ -1013,7 +1038,9 @@ impl Shell {
     /// alone with Inspect, View and Manage.
     pub fn tab_order(&self) -> Vec<usize> {
         let fg = self.fg.is_some() && !self.is_asm();
-        if fg && self.sheet.flat_env {
+        if self.cam.is_some() {
+            vec![CAM_TAB, 2, 3, 4]
+        } else if fg && self.sheet.flat_env {
             vec![FLAT_TAB, 2, 3, 4]
         } else if fg && self.sheet.env {
             vec![SHEET_TAB, 0, 1, ASM_TAB, 2, 3, 4]
@@ -1043,6 +1070,8 @@ impl Shell {
             self.agent_ui(ui, tree);
         } else if self.agent.tab == agent::SideTab::Versions {
             self.versions_ui(ui, tree);
+        } else if self.cam.is_some() {
+            self.cam_side(ui, tree);
         } else if self.is_asm() && self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
             self.asm_tree(ui, tree);
         } else if self.fg.is_some() {

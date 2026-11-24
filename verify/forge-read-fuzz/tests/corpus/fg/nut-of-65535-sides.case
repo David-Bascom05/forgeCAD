@@ -1,0 +1,6 @@
+# a hexagon nut of 65535 sides: the profile's node search, crossing check and segment names were
+# each quadratic, 78 s. A grid, a sweep and one lookup: well under a second.
+from: interface/forge-lang/stdparts/gen/nut.fg
+replace: shared n6 = count(6)
+with: shared n6 = count(65535.)
+max-ms: 5000

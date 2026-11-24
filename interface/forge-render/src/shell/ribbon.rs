@@ -285,6 +285,24 @@ fn groups(s: &Shell) -> Vec<Group> {
     {
         return gs;
     }
+    if s.tab == super::CAM_TAB {
+        return super::cam::groups(s)
+            .into_iter()
+            .map(|(name, big, small)| {
+                let tool = |(name, icon, action, on)| Tool {
+                    name,
+                    icon,
+                    action,
+                    on,
+                };
+                g(
+                    name,
+                    big.into_iter().map(tool).collect(),
+                    small.into_iter().map(tool).collect(),
+                )
+            })
+            .collect();
+    }
     if s.tab == super::THERMO_TAB {
         return super::thermo_ui::groups(s)
             .into_iter()
@@ -559,6 +577,16 @@ fn groups(s: &Shell) -> Vec<Group> {
                         on: false,
                     },
                 ],
+            ),
+            g(
+                "Machines",
+                vec![go(
+                    "Machine Builder",
+                    "gear",
+                    Action::MachineBuilder,
+                    s.machine.is_some(),
+                )],
+                vec![],
             ),
             g(
                 "Options",

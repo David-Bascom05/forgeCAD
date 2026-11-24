@@ -1,0 +1,134 @@
+{
+ "vendor": "Mazak",
+ "model": "QUICK TURN 250",
+ "family": "QUICK TURN",
+ "source": [
+  "https://www.mazak.com/us-en/detail/usa/turning/us-qt25eky-all0/",
+  "https://www.mazak.com/us-en/products/quick-turn/"
+ ],
+ "source_secondary": [],
+ "taken": "2026-11-23",
+ "kind": "lathe",
+ "architecture": null,
+ "control": {
+  "standard": null,
+  "options": []
+ },
+ "travel_mm": {
+  "X": 228.6,
+  "Y": null,
+  "Z": 533.4
+ },
+ "rotary": {
+  "A": null,
+  "B": null,
+  "C": null
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": null,
+ "rotary_table_dia_mm": null,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": 609.6,
+ "max_turning_dia_mm": 355.6,
+ "max_turning_length_mm": 482.6,
+ "chuck_size_in": 10,
+ "bar_capacity_mm": 76.2,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 4000,
+  "rpm_min": null,
+  "taper_or_interface": null,
+  "power_kw": {
+   "cont": null,
+   "30min": 26,
+   "peak/other": null
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": null
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": 12,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": null,
+  "Y": null,
+  "Z": null,
+  "A_or_B_rpm": null,
+  "C_rpm": null
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": null,
+  "options": [],
+  "tool_to_tool_s": null,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": null,
+  "max_tool_dia_empty_adjacent_mm": null,
+  "max_tool_len_mm": null,
+  "max_tool_kg": null
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "architecture",
+  "control.standard",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "rapid_m_min.X",
+  "rapid_m_min.Z",
+  "spindle.curve_points",
+  "spindle.power_kw.cont",
+  "spindle.power_kw.peak/other",
+  "spindle.rpm_min",
+  "spindle.torque_nm.cont",
+  "spindle.torque_nm.max",
+  "spindle_nose_type",
+  "tailstock",
+  "turret_index_s",
+  "weight_kg"
+ ],
+ "options": [
+  "1000U bed: max machining length 39 in (990.6 mm), Z travel 42 in (1066.8 mm)"
+ ],
+ "notes": "US page, 500U bed as standard. Page also prints a 'Y-axis 20.25 in' (500U) / '40.75 in' (1000U) row for this 2-axis model, likely a mislabelled row (perhaps tailstock/W travel); not used. No rapids, torque, spindle nose, tailstock, dims or weight on the page. Mazak UK lists only a China-built 'QUICK TURN 250 L' instead of the plain 250.",
+ "orig": {
+  "swing": "Φ24 in",
+  "max_dia": "Φ14 in",
+  "max_len": "19 in (500U)",
+  "bar": "Φ3 in",
+  "X": "9 in",
+  "Z": "21 in (500U)",
+  "power": "26 kW (35 HP) 30 min"
+ }
+}

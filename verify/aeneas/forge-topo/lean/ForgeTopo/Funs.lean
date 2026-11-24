@@ -734,6 +734,249 @@ def topo_edges.loops
   let nl ← EdgeTopoInst.topoTopoInst.n_loops t
   topo_edges.loops_loop1 EdgeTopoInst topoSinkInst t out1 nl 0#usize
 
+/-- [forge_topo::topo_euler::shell_euler]: loop body 3:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 44:16-60:17
+    Visibility: public -/
+@[rust_loop_body]
+def topo_euler.shell_euler_loop0_loop0_loop0_loop0.body
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (stamp : Std.U32) (first : Std.Usize) (len : Std.Usize)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (e : Std.I64) (v : Std.I64) (k : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.I64 × Std.I64 × Std.Usize) ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec
+    Std.U32) × Std.I64 × Std.I64))
+  := do
+  if k < len
+  then
+    let i ← first + k
+    let ed ← topo_shellShellTopoInst.topoTopoInst.coedge_edge t i
+    let i1 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        edge_at ed
+    let (edge_at1, e1) ←
+      if i1 != stamp
+      then
+        do
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+            Std.U32) edge_at ed
+        let e2 ← e + 1#i64
+        let edge_at2 := index_mut_back stamp
+        ok (edge_at2, e2)
+      else ok (edge_at, e)
+    let (a, b) ← topo_shellShellTopoInst.topoTopoInst.edge_ends t ed
+    let i2 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        vert_at a
+    let (vert_at1, v1) ←
+      if i2 != stamp
+      then
+        do
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+            Std.U32) vert_at a
+        let v2 ← v + 1#i64
+        let vert_at2 := index_mut_back stamp
+        ok (vert_at2, v2)
+      else ok (vert_at, v)
+    let i3 ←
+      alloc.vec.Vec.index (core.slice.index.SliceIndexUsizeSlice Std.U32)
+        vert_at1 b
+    let (vert_at2, v2) ←
+      if i3 != stamp
+      then
+        do
+        let (_, index_mut_back) ←
+          alloc.vec.Vec.index_mut (core.slice.index.SliceIndexUsizeSlice
+            Std.U32) vert_at1 b
+        let v3 ← v1 + 1#i64
+        let vert_at3 := index_mut_back stamp
+        ok (vert_at3, v3)
+      else ok (vert_at1, v1)
+    let k1 ← k + 1#usize
+    ok (cont (edge_at1, vert_at2, e1, v2, k1))
+  else ok (done (edge_at, vert_at, e, v))
+
+/-- [forge_topo::topo_euler::shell_euler]: loop 3:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 44:16-60:17
+    Visibility: public -/
+@[rust_loop]
+def topo_euler.shell_euler_loop0_loop0_loop0_loop0
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (stamp : Std.U32) (e : Std.I64) (v : Std.I64) (first : Std.Usize)
+  (len : Std.Usize) (k : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.I64 ×
+    Std.I64)
+  := do
+  loop
+    (fun (edge_at1, vert_at1, e1, v1, k1) =>
+      topo_euler.shell_euler_loop0_loop0_loop0_loop0.body
+      topo_shellShellTopoInst t stamp first len edge_at1 vert_at1 e1 v1 k1)
+    (edge_at, vert_at, e, v, k)
+
+/-- [forge_topo::topo_euler::shell_euler]: loop body 2:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 38:12-62:13
+    Visibility: public -/
+@[rust_loop_body]
+def topo_euler.shell_euler_loop0_loop0_loop0.body
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (stamp : Std.U32) (face : Std.Usize) (nl : Std.Usize)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (l : Std.I64) (e : Std.I64) (v : Std.I64) (j : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.I64 × Std.I64 × Std.I64 × Std.Usize) ((alloc.vec.Vec Std.U32) ×
+    (alloc.vec.Vec Std.U32) × Std.I64 × Std.I64 × Std.I64))
+  := do
+  if j < nl
+  then
+    let lp ← topo_shellShellTopoInst.topoTopoInst.face_loop t face j
+    let l1 ← l + 1#i64
+    let first ← topo_shellShellTopoInst.topoTopoInst.loop_first t lp
+    let len ← topo_shellShellTopoInst.topoTopoInst.loop_len t lp
+    let (edge_at1, vert_at1, e1, v1) ←
+      topo_euler.shell_euler_loop0_loop0_loop0_loop0 topo_shellShellTopoInst t
+        edge_at vert_at stamp e v first len 0#usize
+    let j1 ← j + 1#usize
+    ok (cont (edge_at1, vert_at1, l1, e1, v1, j1))
+  else ok (done (edge_at, vert_at, l, e, v))
+
+/-- [forge_topo::topo_euler::shell_euler]: loop 2:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 38:12-62:13
+    Visibility: public -/
+@[rust_loop]
+def topo_euler.shell_euler_loop0_loop0_loop0
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (stamp : Std.U32) (l : Std.I64) (e : Std.I64) (v : Std.I64)
+  (face : Std.Usize) (nl : Std.Usize) (j : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.I64 ×
+    Std.I64 × Std.I64)
+  := do
+  loop
+    (fun (edge_at1, vert_at1, l1, e1, v1, j1) =>
+      topo_euler.shell_euler_loop0_loop0_loop0.body topo_shellShellTopoInst t
+      stamp face nl edge_at1 vert_at1 l1 e1 v1 j1)
+    (edge_at, vert_at, l, e, v, j)
+
+/-- [forge_topo::topo_euler::shell_euler]: loop body 1:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 33:8-64:9
+    Visibility: public -/
+@[rust_loop_body]
+def topo_euler.shell_euler_loop0_loop0.body
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (n_faces : Std.Usize) (s : Std.Usize) (stamp : Std.U32) (nf : Std.Usize)
+  (edge_at : alloc.vec.Vec Std.U32) (vert_at : alloc.vec.Vec Std.U32)
+  (f : Std.I64) (l : Std.I64) (e : Std.I64) (v : Std.I64) (i : Std.Usize) :
+  Result (ControlFlow ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) ×
+    Std.I64 × Std.I64 × Std.I64 × Std.I64 × Std.Usize) ((alloc.vec.Vec
+    Std.U32) × (alloc.vec.Vec Std.U32) × Std.I64 × Std.I64 × Std.I64 ×
+    Std.I64))
+  := do
+  if i < nf
+  then
+    let face ← topo_shellShellTopoInst.shell_face t s i
+    let f1 ← f + 1#i64
+    let nl ←
+      if face < n_faces
+      then topo_shellShellTopoInst.topoTopoInst.face_n_loops t face
+      else ok 0#usize
+    let (edge_at1, vert_at1, l1, e1, v1) ←
+      topo_euler.shell_euler_loop0_loop0_loop0 topo_shellShellTopoInst t
+        edge_at vert_at stamp l e v face nl 0#usize
+    let i1 ← i + 1#usize
+    ok (cont (edge_at1, vert_at1, f1, l1, e1, v1, i1))
+  else ok (done (edge_at, vert_at, f, l, e, v))
+
+/-- [forge_topo::topo_euler::shell_euler]: loop 1:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 33:8-64:9
+    Visibility: public -/
+@[rust_loop]
+def topo_euler.shell_euler_loop0_loop0
+  {T : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T) (t : T)
+  (n_faces : Std.Usize) (edge_at : alloc.vec.Vec Std.U32)
+  (vert_at : alloc.vec.Vec Std.U32) (s : Std.Usize) (stamp : Std.U32)
+  (f : Std.I64) (l : Std.I64) (e : Std.I64) (v : Std.I64) (nf : Std.Usize)
+  (i : Std.Usize) :
+  Result ((alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32) × Std.I64 ×
+    Std.I64 × Std.I64 × Std.I64)
+  := do
+  loop
+    (fun (edge_at1, vert_at1, f1, l1, e1, v1, i1) =>
+      topo_euler.shell_euler_loop0_loop0.body topo_shellShellTopoInst t n_faces
+      s stamp nf edge_at1 vert_at1 f1 l1 e1 v1 i1)
+    (edge_at, vert_at, f, l, e, v, i)
+
+/-- [forge_topo::topo_euler::shell_euler]: loop body 0:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 25:4-70:5
+    Visibility: public -/
+@[rust_loop_body]
+def topo_euler.shell_euler_loop0.body
+  {T : Type _} {S : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T)
+  (EulerSinkInst : topo_euler.EulerSink S) (t : T) (ns : Std.Usize)
+  (n_faces : Std.Usize) (out : S) (edge_at : alloc.vec.Vec Std.U32)
+  (vert_at : alloc.vec.Vec Std.U32) (s : Std.Usize) :
+  Result (ControlFlow (S × (alloc.vec.Vec Std.U32) × (alloc.vec.Vec Std.U32)
+    × Std.Usize) S)
+  := do
+  if s < ns
+  then
+    let stamp ← lift (UScalar.cast .U32 s)
+    let nf ← topo_shellShellTopoInst.shell_n_faces t s
+    let (edge_at1, vert_at1, f, l, e, v) ←
+      topo_euler.shell_euler_loop0_loop0 topo_shellShellTopoInst t n_faces
+        edge_at vert_at s stamp 0#i64 0#i64 0#i64 0#i64 nf 0#usize
+    let i ← v - e
+    let i1 ← 2#i64 * f
+    let i2 ← i + i1
+    let value ← i2 - l
+    let i3 ← value % 2#i64
+    let out1 ←
+      if i3 != 0#i64
+      then EulerSinkInst.shell_euler out s value
+      else
+        if value > 2#i64
+        then EulerSinkInst.shell_euler out s value
+        else ok out
+    let s1 ← s + 1#usize
+    ok (cont (out1, edge_at1, vert_at1, s1))
+  else ok (done out)
+
+/-- [forge_topo::topo_euler::shell_euler]: loop 0:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 25:4-70:5
+    Visibility: public -/
+@[rust_loop]
+def topo_euler.shell_euler_loop0
+  {T : Type _} {S : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T)
+  (EulerSinkInst : topo_euler.EulerSink S) (t : T) (out : S) (ns : Std.Usize)
+  (n_faces : Std.Usize) (edge_at : alloc.vec.Vec Std.U32)
+  (vert_at : alloc.vec.Vec Std.U32) (s : Std.Usize) :
+  Result S
+  := do
+  loop
+    (fun (out1, edge_at1, vert_at1, s1) => topo_euler.shell_euler_loop0.body
+      topo_shellShellTopoInst EulerSinkInst t ns n_faces out1 edge_at1 vert_at1
+      s1)
+    (out, edge_at, vert_at, s)
+
+/-- [forge_topo::topo_euler::shell_euler]:
+    Source: 'kernel/forge-topo/src/topo_euler.rs', lines 19:0-71:1
+    Visibility: public -/
+def topo_euler.shell_euler
+  {T : Type _} {S : Type _} (topo_shellShellTopoInst : topo_shell.ShellTopo T)
+  (EulerSinkInst : topo_euler.EulerSink S) (t : T) (out : S) :
+  Result S
+  := do
+  let ns ← topo_shellShellTopoInst.n_shells t
+  let n_faces ← topo_shellShellTopoInst.topoTopoInst.n_faces t
+  let i ← topo_shellShellTopoInst.topoTopoInst.n_edges t
+  let edge_at ← alloc.vec.from_elem core.clone.CloneU32 core.num.U32.MAX i
+  let i1 ← topo_shellShellTopoInst.topoTopoInst.n_vertices t
+  let vert_at ← alloc.vec.from_elem core.clone.CloneU32 core.num.U32.MAX i1
+  topo_euler.shell_euler_loop0 topo_shellShellTopoInst EulerSinkInst t out ns
+    n_faces edge_at vert_at 0#usize
+
 /-- [forge_topo::topo_shell::coedge_face]:
     Source: 'kernel/forge-topo/src/topo_shell.rs', lines 19:0-21:1 -/
 def topo_shell.coedge_face

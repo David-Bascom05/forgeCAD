@@ -1,0 +1,13 @@
+# tormach-1100mx column: its face at the published centreline distance; size unpublished
+# frame: the machine's base frame at the home pose (forgecad Haas approximation).
+shared x0 = -199
+shared y0 = 419.5
+shared z0 = -359
+shared lx = 398
+shared ly = 248
+shared lz = 1516
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (lx, ly))
+}
+block = extrude(plan, lz)

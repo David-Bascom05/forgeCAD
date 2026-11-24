@@ -1,0 +1,141 @@
+{
+ "vendor": "Matsuura",
+ "model": "MX-330",
+ "family": "MX series 5-axis VMC",
+ "source": [
+  "https://www.matsuurausa.com/model/mx-330/",
+  "https://www.matsuurausa.com/wp-content/uploads/MX-330-GD0-Panel.pdf"
+ ],
+ "source_secondary": [
+  "https://www.matsuura.de/produkte/detail/matsuura-mx-330",
+  "https://www.matsuura.de/fileadmin/user_upload/dokumente/MX-330.pdf"
+ ],
+ "taken": "2026-11-23",
+ "kind": "table-table",
+ "architecture": "Vertical 40-taper spindle; trunnion table-table 5-axis: tilt axis A (+10 to -125 deg) carries a 360-deg C rotary table. Published as A/C; by ISO convention A turns about X (trunnion orientation not explicitly stated). Linear-axis carriers not stated on fetched pages.",
+ "control": {
+  "standard": "Matsuura G-Tech 31i (FANUC based; DE: G-Tech 31iB)",
+  "options": []
+ },
+ "travel_mm": {
+  "X": 435,
+  "Y": 465,
+  "Z": 560
+ },
+ "rotary": {
+  "A": {
+   "range_deg": [
+    -125,
+    10
+   ],
+   "rapid_rpm": 20,
+   "indexing_or_full": "full simultaneous 5-axis"
+  },
+  "B": null,
+  "C": {
+   "range_deg": [
+    0,
+    360
+   ],
+   "rapid_rpm": 40,
+   "indexing_or_full": "full"
+  }
+ },
+ "spindle_nose_to_table_mm": null,
+ "spindle_center_to_column_mm": null,
+ "spindle_center_to_pallet_top_mm": null,
+ "table_mm": null,
+ "table_load_kg": 80,
+ "rotary_table_dia_mm": 250,
+ "pallet": {
+  "count": null,
+  "size_mm": null,
+  "change_s": null,
+  "load_kg": null
+ },
+ "swing_over_bed_mm": null,
+ "max_turning_dia_mm": null,
+ "max_turning_length_mm": null,
+ "chuck_size_in": null,
+ "bar_capacity_mm": null,
+ "spindle_nose_type": null,
+ "spindle": {
+  "rpm_max": 15000,
+  "rpm_min": 50,
+  "taper_or_interface": "BT40 (DE also SK40/HSK63)",
+  "power_kw": {
+   "cont": 5.5,
+   "30min": null,
+   "peak/other": "7.5 (DE sheet '5,5 / 7,5 kW', rating durations not stated)"
+  },
+  "torque_nm": {
+   "cont": null,
+   "max": 65.1
+  },
+  "curve_points": null
+ },
+ "sub_spindle": null,
+ "live_tool": {
+  "rpm_max": null,
+  "power_kw": null
+ },
+ "milling_head": null,
+ "turret_stations": null,
+ "turret_index_s": null,
+ "tailstock": null,
+ "rapid_m_min": {
+  "X": 40,
+  "Y": 40,
+  "Z": 40,
+  "A_or_B_rpm": 20,
+  "C_rpm": 40
+ },
+ "max_cutting_feed_m_min": null,
+ "accel_g_or_m_s2": null,
+ "changer": {
+  "pockets": 30,
+  "options": [
+   "60",
+   "90"
+  ],
+  "tool_to_tool_s": 1.1,
+  "chip_to_chip_s": null,
+  "max_tool_dia_mm": 80,
+  "max_tool_dia_empty_adjacent_mm": 150,
+  "max_tool_len_mm": 300,
+  "max_tool_kg": 10
+ },
+ "coolant": {
+  "through_spindle": null,
+  "notes": ""
+ },
+ "overall_mm": {
+  "W": null,
+  "D": null,
+  "H": null
+ },
+ "weight_kg": null,
+ "table_height_from_floor_mm": null,
+ "unknown": [
+  "accel_g_or_m_s2",
+  "changer.chip_to_chip_s",
+  "coolant.through_spindle",
+  "max_cutting_feed_m_min",
+  "overall_mm.D",
+  "overall_mm.H",
+  "overall_mm.W",
+  "spindle.curve_points",
+  "spindle.power_kw.30min",
+  "spindle.torque_nm.cont",
+  "spindle_nose_to_table_mm",
+  "table_height_from_floor_mm",
+  "weight_kg"
+ ],
+ "options": [
+  "15,000 PowerUp BT40 spindle",
+  "20,000 rpm BT40",
+  "60/90 tools",
+  "MX-330 PC10 (10-pallet) variant"
+ ],
+ "notes": "Fields from Matsuura USA page + panel PDF (standalone MX-330): working surface dia 250, max work dia 330 x H320 (dia 420 x H320 bullet shape, conditional), 80 kg, A/C rapid 20/40 rpm, 30 tools std. Spindle power/torque (5.5/7.5 kW, 65.1 N·m at 1,100 rpm), tool limits (dia 80 / 150 adjacent empty, len 300, 10 kg) and tool change 1.1 s come from Matsuura Europe's sheet, which describes the 10-pallet configuration (dia 130 working surface, A/C rapid 17/33 rpm, max work dia 420 x H300) — treat as indicative for the standalone. Max cutting feed: DE lists 'Vorschübe / Eilgänge 40/40 m/min' (feed/rapid), not recorded as cutting feed."
+}

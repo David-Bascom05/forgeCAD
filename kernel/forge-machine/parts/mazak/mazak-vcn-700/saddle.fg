@@ -1,0 +1,14 @@
+# mazak-vcn-700 saddle: the Y saddle under the table (estimate).
+# A stand-in built from published overall dimensions and estimates (not the maker's CAD).
+# frame: the machine's base frame at the home pose.
+shared x0 = -600
+shared y0 = -350
+shared z0 = -250
+shared L = 1200
+shared W = 700
+shared H = 150
+
+sketch plan(on: offset(xy, z0)) {
+  outline = rect(corner: (x0, y0), size: (L, W))
+}
+body = extrude(plan, H)

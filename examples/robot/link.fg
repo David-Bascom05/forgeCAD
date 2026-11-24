@@ -1,0 +1,19 @@
+# An arm link: a bar with a pivot `a` under its start, `b` on top of its end (the next link
+# stacks there), and `tip` on its end face, facing along it.
+shared ln = 120
+shared w = 24
+shared t = 10
+properties(part_number: "ARM-LINK", description: "arm link", material: "6061-T6")
+
+sketch plan(on: xy) {
+  outline = rect(corner: (-w / 2, -w / 2), size: (ln + w, w))
+  p0 = pt(0, 0)
+  p2 = pt(ln + w / 2, 0)
+}
+bar = extrude(plan, t)
+sketch top(on: bar.end) {
+  p1 = pt(ln, 0)
+}
+a = anchor(plane(at: plan.p0, normal: plan.plane.normal, x: plan.outline[0].dir))
+b = anchor(plane(at: top.p1, normal: plan.plane.normal, x: plan.outline[0].dir))
+tip = anchor(plane(at: plan.p2, normal: plan.outline[0].dir, x: plan.plane.normal))
