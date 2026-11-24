@@ -657,13 +657,16 @@ fn side_lower(col: &Column, f: &Face, mv: &Move, c: &Cell) -> f64 {
 }
 
 /// A binary max-heap of (bound, face index, cell).
+/// The search's cells by bound, largest first: (bound, face, cell, the parameter to split it
+/// on), the split as `cell_upper` gave it with the bound (so a popped cell needs no second
+/// evaluation to be split).
 struct Heap {
-    v: Vec<(f64, usize, Cell)>,
+    v: Vec<(f64, usize, Cell, usize)>,
 }
 
 impl Heap {
-    fn push(&mut self, k: f64, fi: usize, c: Cell) {
-        self.v.push((k, fi, c));
+    fn push(&mut self, k: f64, fi: usize, c: Cell, kk: usize) {
+        self.v.push((k, fi, c, kk));
         let mut i = self.v.len() - 1;
         while i > 0 {
             let p = (i - 1) / 2;
@@ -674,7 +677,7 @@ impl Heap {
             i = p;
         }
     }
-    fn pop(&mut self) -> Option<(f64, usize, Cell)> {
+    fn pop(&mut self) -> Option<(f64, usize, Cell, usize)> {
         if self.v.is_empty() {
             return None;
         }
@@ -906,10 +909,10 @@ fn search(
             s: Ival::pt(0.0),
         };
         cells += 1;
-        if let Some((u, _)) = cell_upper(col, f, &mv, &c) {
+        if let Some((u, kk)) = cell_upper(col, f, &mv, &c) {
             let u = Ival::pt(u).add(Ival::pt(f.mu)).hi;
             let u = if u < cap[k] { u } else { cap[k] };
-            heap.push(u, k, c);
+            heap.push(u, k, c, kk);
         }
         k += 1;
     }
@@ -923,7 +926,7 @@ fn search(
         if hi - lo <= res || cells >= budget || hi <= floor || lo > stop {
             break;
         }
-        let Some((u, ki, c)) = heap.pop() else {
+        let Some((u, ki, c, kk)) = heap.pop() else {
             break;
         };
         let f = &faces[cand[ki]];
@@ -936,17 +939,14 @@ fn search(
         }
         if c.p.width() == 0.0 && c.q.width() == 0.0 {
             // a point cell cannot be split: its bound stands
-            heap.push(u, ki, c);
+            heap.push(u, ki, c, kk);
             hi = heap.top();
             if hi < done {
                 hi = done;
             }
             break;
         }
-        let kk = match cell_upper(col, f, &mv, &c) {
-            Some((_, kk)) => kk,
-            None => continue,
-        };
+        // the split `cell_upper` gave with this cell's bound (the same function of the same cell)
         let (a, b) = split(&c, kk);
         for h in [a, b] {
             cells += 1;
@@ -959,11 +959,11 @@ fn search(
             if w > lo {
                 lo = w;
             }
-            if let Some((u2, _)) = cell_upper(col, f, &mv, &h) {
+            if let Some((u2, k2)) = cell_upper(col, f, &mv, &h) {
                 let u2 = Ival::pt(u2).add(Ival::pt(f.mu)).hi;
                 let u2 = if u2 < cap[ki] { u2 } else { cap[ki] };
                 if u2 > lo && u2 > floor {
-                    heap.push(u2, ki, h);
+                    heap.push(u2, ki, h, k2);
                 }
             }
         }
@@ -1809,10 +1809,36 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
     }
     // proven: u ≤ -limit - mu
     let need = Ival::pt(-limit).sub(Ival::pt(f.mu)).lo;
+    // under the move: every point of the column is at least b(0) above the tip, the lowest tip
+    // over the move is at least tip, so no face point is more than z.hi − tip − b(0) inside it
+    // (the vertical way out)
+    {
+        let tip = mv.at(Ival::new(0.0, 1.0))[2].lo;
+        let depth = Ival::pt(f.bbox[2].hi)
+            .sub(Ival::pt(tip))
+            .sub(Ival::pt(col.segs[0].a()[1]))
+            .hi;
+        if depth <= need {
+            let v = Ival::pt(depth).add(Ival::pt(f.mu)).neg().lo;
+            return (
+                Gap::Clear {
+                    lower: if v < 0.0 { v } else { 0.0 },
+                },
+                0,
+            );
+        }
+    }
     // a vertical wall: every point of it is at least D across from the move's xy path (slab.rs's
     // 2D distance, its arc's stored ends lowered by twice their gap), so no point of it is more
-    // than R − D inside the column (the radial way out)
-    if let Some(crate::slab::Prism::Wall { sec, gap, .. }) = &f.prism
+    // than R − D inside the column (the radial way out). A vertical plane whose trim is not its
+    // box (no prism of its own) is held by the wall over its box (`Prism::hull_wall`, Prism.lean
+    // `clearFace_subset`): a bound for that wall is one for the face.
+    let wall = match &f.prism {
+        Some(p @ crate::slab::Prism::Wall { .. }) => Some(p.clone()),
+        Some(_) => None,
+        None => crate::slab::Prism::hull_wall(f),
+    };
+    if let Some(crate::slab::Prism::Wall { sec, gap, z1, .. }) = &wall
         && let Some(path) = xy_path(mv)
     {
         let d = crate::slab::dist(&path, sec).lo;
@@ -1821,7 +1847,7 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
         let mut depth = Ival::pt(col.r).sub(Ival::pt(d)).hi;
         // and the vertical way: no point of the wall is above its top z1, nor nearer than D, so
         // none is more than z1 − b(D) − tip above the profile (the tip's lowest over the move)
-        if let (Some(bz), Some(crate::slab::Prism::Wall { z1, .. })) = (col.b(Ival::pt(d)), &f.prism) {
+        if let Some(bz) = col.b(Ival::pt(d)) {
             let tip = mv.at(Ival::new(0.0, 1.0))[2].lo;
             let v = Ival::pt(*z1).sub(Ival::pt(bz.lo)).sub(Ival::pt(tip)).hi;
             if v < depth {
@@ -1836,6 +1862,49 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
                 },
                 1,
             );
+        }
+    }
+    // a level flat the move passes beside: its start proven outside the flat's region (in the
+    // face's own trim test) and the whole xy path at least D from the region's boundary (slab.rs's
+    // 2D distance, arcs' ends lowered by twice their gap), so the path never enters the region
+    // and no point of the face is nearer the axis than D: none is more than R − D inside the
+    // column (the radial way out)
+    if let (Some(crate::slab::Prism::Flat { region, gaps, .. }), Surf::Plane { o, u, v }, Some(path)) =
+        (&f.prism, f.surf, xy_path(mv))
+        && gaps.iter().all(|g| *g >= 0.0)
+    {
+        let a = mv.at(Ival::pt(0.0));
+        let outside = match plane_param(o, u, v, a[0].mid(), a[1].mid()) {
+            Some((p, q)) => f.holds(Ival::pt(p), Ival::pt(q)) == -1,
+            None => false,
+        };
+        if outside {
+            let mut d = f64::INFINITY;
+            for (k, ts) in region.iter().enumerate() {
+                let sec = match *ts {
+                    crate::check::TSeg::Line { a, b } => crate::slab::Sec::Seg { a, b },
+                    crate::check::TSeg::Arc { a, b, c, r, ccw } => crate::slab::Sec::Arc { c, r, a, b, ccw },
+                };
+                let dk = Ival::pt(crate::slab::dist(&path, &sec).lo)
+                    .sub(Ival::pt(gaps[k]).scale(2.0))
+                    .lo;
+                if dk < d {
+                    d = dk;
+                }
+            }
+            // (the start's test is of a point within rounding of it: D keeps both on one side)
+            if d > 1e-9 {
+                let depth = Ival::pt(col.r).sub(Ival::pt(d)).hi;
+                if depth <= need {
+                    let v = Ival::pt(depth).add(Ival::pt(f.mu)).neg().lo;
+                    return (
+                        Gap::Clear {
+                            lower: if v < 0.0 { v } else { 0.0 },
+                        },
+                        1,
+                    );
+                }
+            }
         }
     }
     let convex = col.convex();
@@ -1979,13 +2048,13 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
             s: rest[i],
         };
         cells += 1;
-        if let Some((u, _)) = cell_upper_side(col, f, mv, &c, true) {
-            heap.push(u, 0, c);
+        if let Some((u, kk)) = cell_upper_side(col, f, mv, &c, true) {
+            heap.push(u, 0, c, kk);
         }
         i += 1;
     }
     let mut unknown = false;
-    while let Some((u, _, c)) = heap.pop() {
+    while let Some((u, _, c, kk)) = heap.pop() {
         if u <= need {
             if u > worst {
                 worst = u;
@@ -2019,23 +2088,20 @@ pub fn gap_move(col: &Column, f: &Face, mv: &Move, limit: f64, res: f64, budget:
             unknown = true;
             continue;
         }
-        let k = match cell_upper_side(col, f, mv, &c, true) {
-            Some((_, k)) => k,
-            None => continue,
-        };
-        let (a, b) = split(&c, k);
+        // the split `cell_upper_side` gave with this cell's bound
+        let (a, b) = split(&c, kk);
         for h in [a, b] {
             cells += 1;
             if f.holds(h.p, h.q) == -1 {
                 continue;
             }
-            if let Some((u2, _)) = cell_upper_side(col, f, mv, &h, true) {
+            if let Some((u2, k2)) = cell_upper_side(col, f, mv, &h, true) {
                 if u2 <= need {
                     if u2 > worst {
                         worst = u2;
                     }
                 } else {
-                    heap.push(u2, 0, h);
+                    heap.push(u2, 0, h, k2);
                 }
             }
         }

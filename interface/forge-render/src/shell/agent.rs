@@ -889,7 +889,7 @@ impl Shell {
                 egui::UiBuilder::new().max_rect(area.shrink2(vec2(PAD, 12.0))),
                 |ui| {
                     ui.label(
-                        egui::RichText::new("The agent runs in the desktop app")
+                        egui::RichText::new("The agent runs in the ForgeCAD desktop app")
                             .font(medium(13.0))
                             .color(t.ink),
                     );
@@ -899,10 +899,17 @@ impl Shell {
                             "Claude Code and Codex are programs on your computer, and talking to the \
                          agent uses its speech engine: a browser page can start neither, and it \
                          doesn't reach an OpenAI-compatible endpoint yet. Open this project in the \
-                         desktop app to work with the agent.",
+                         ForgeCAD desktop app to use the agent.",
                         )
                         .font(sans(12.0))
                         .color(t.ink2),
+                    );
+                    ui.add_space(4.0);
+                    // (no download link: the desktop app installs from source)
+                    ui.label(
+                        egui::RichText::new("Install it with tools/install.sh (see the README).")
+                            .font(sans(11.0))
+                            .color(t.ink2),
                     );
                 },
             );

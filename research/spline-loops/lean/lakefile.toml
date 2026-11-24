@@ -1,7 +1,7 @@
 name = "splineloops"
 version = "0.1.0"
 keywords = ["math"]
-defaultTargets = ["SplineLoops"]
+defaultTargets = ["SplineLoops", "SplineSpec", "splineoracle"]
 
 [leanOptions]
 pp.unicode.fun = true # pretty-prints `fun a ↦ b`
@@ -16,3 +16,12 @@ rev = "v4.36.0-rc2"
 
 [[lean_lib]]
 name = "SplineLoops"
+
+# The specification of .fg's splines (research/spline-spec): core-only definitions, the
+# Mathlib theorems about them, and the oracle the Rust is checked against.
+[[lean_lib]]
+name = "SplineSpec"
+
+[[lean_exe]]
+name = "splineoracle"
+root = "SplineSpec.Oracle"

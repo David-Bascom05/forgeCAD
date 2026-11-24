@@ -6,15 +6,6 @@ namespace forge_sheet_core
 
 open ForgeSheetCore.UF
 
-/-- An index below a `usize` bound steps by one (the release build's `+= 1` is a wrapping add). -/
-theorem usize_inc (j n : Usize) (h : j.val < n.val) : (j.wrapping_add 1#usize).val = j.val + 1 := by
-  rw [Usize.wrapping_add_val_eq]; apply Nat.mod_eq_of_lt
-  have hb := n.hBounds
-  have h1 : (1#usize : Usize).val = 1 := by simp
-  rw [h1, UScalar.size]
-  have := n.hBounds
-  omega
-
 /-- A parent vector as the model's list. -/
 def vals (v : alloc.vec.Vec Std.U32) : List Nat := v.val.map (·.val)
 
@@ -160,7 +151,7 @@ theorem new_loop_spec (n : Usize) (hn : n.val ≤ U32.max + 1) (v : alloc.vec.Ve
       have hwl : w.val.length = j.val := by rw [← vals_length, hw]; simp
       step as ⟨w1, hw1⟩
       step as ⟨j1, hj1⟩
-      have hj1v : j1.val = j.val + 1 := by rw [hj1]; exact usize_inc j n hjl
+      have hj1v : j1.val = j.val + 1 := by omega
       refine ⟨?_, by omega, by omega⟩
       rw [hj1v]; simp only [vals] at hw ⊢
       rw [hw1, List.map_append, hw, List.range_succ]; simp [hcv]

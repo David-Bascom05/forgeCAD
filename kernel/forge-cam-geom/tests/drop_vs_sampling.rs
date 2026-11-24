@@ -2,7 +2,7 @@
 //! against the branch and bound alone (the closed forms' reference); the vertical gap of a move
 //! against sampling; the column's containment of each standard cutter; the grown profile.
 use forge_cam_geom::check::{Face, Move, Surf};
-use forge_cam_geom::drop::{Column, Gap, drop, drop_general, gap_move};
+use forge_cam_geom::drop::{Column, Gap, drop, drop_decide, drop_general, gap_move};
 use forge_cam_geom::ival::Ival;
 use forge_cam_geom::tool::{Cutter, assemble};
 
@@ -571,4 +571,399 @@ fn a_move_by_a_dome_cylinders_end_is_cleared_only_where_it_is() {
     }
     println!("moves: {clear} clear, {over} over");
     assert!(clear > 60 && over > 10);
+}
+
+/// `sampled_gap` over the face's trimmed part only (points its trim test proves inside).
+fn sampled_gap_in(col: &Column, f: &Face, x: f64, y: f64, z: f64, n: usize) -> f64 {
+    let mut m = f64::INFINITY;
+    for i in 0..=n {
+        for j in 0..=n {
+            let p = f.p.lo + (f.p.hi - f.p.lo) * i as f64 / n as f64;
+            let q = f.q.lo + (f.q.hi - f.q.lo) * j as f64 / n as f64;
+            if f.holds(Ival::pt(p), Ival::pt(q)) != 1 {
+                continue;
+            }
+            let pt = f.surf.eval(Ival::pt(p), Ival::pt(q));
+            let (px, py, pz) = (pt[0].mid(), pt[1].mid(), pt[2].mid());
+            let rho = ((px - x).powi(2) + (py - y).powi(2)).sqrt();
+            if rho > col.r {
+                continue;
+            }
+            m = m.min(col.solid.sd_rz(Ival::pt(rho), Ival::pt(pz - z)).mid());
+        }
+    }
+    m
+}
+
+/// gap_move's quick routes: a level flat passed beside (its region's distance), a vertical
+/// plane with an L-shaped trim (the wall over its box), and a face under the move (its height):
+/// every Clear holds at every sampled face point and instant, and the quick routes do decide
+/// most moves (one cell or none).
+#[test]
+fn quick_routes_clear_only_what_sampling_holds() {
+    use forge_cam_geom::check::{TSeg, Trim};
+    let mut rng = Rng(0x7a11_f1a7_0bad_cafe);
+    let (mut clear, mut quick) = (0, 0);
+    for (name, c) in cutters() {
+        let (col, _) = column(&c);
+        for k in 0..30 {
+            let rr = rng.r(3.0, 10.0);
+            let (cx, cy, zf) = (rng.r(-2.0, 2.0), rng.r(-2.0, 2.0), rng.r(-2.0, 2.0));
+            // a disk flat (four ccw quarter arcs), or an L-shaped vertical wall in x-z
+            let f = if k % 2 == 0 {
+                let q = [[cx + rr, cy], [cx, cy + rr], [cx - rr, cy], [cx, cy - rr]];
+                let segs = (0..4)
+                    .map(|i| TSeg::Arc {
+                        a: [q[i][0] - cx + rr, q[i][1] - cy + rr],
+                        b: [q[(i + 1) % 4][0] - cx + rr, q[(i + 1) % 4][1] - cy + rr],
+                        c: [rr, rr],
+                        r: rr,
+                        ccw: true,
+                    })
+                    .collect();
+                Face::new(
+                    Surf::Plane {
+                        o: [cx - rr, cy - rr, zf],
+                        u: [1.0, 0.0, 0.0],
+                        v: [0.0, 1.0, 0.0],
+                    },
+                    Ival::new(0.0, 2.0 * rr),
+                    Ival::new(0.0, 2.0 * rr),
+                    Some(Trim { segs }),
+                    1e-9,
+                    0,
+                )
+            } else {
+                let (w, h) = (2.0 * rr, rr);
+                let l = [
+                    [0.0, 0.0],
+                    [w, 0.0],
+                    [w, 0.5 * h],
+                    [0.5 * w, 0.5 * h],
+                    [0.5 * w, h],
+                    [0.0, h],
+                ];
+                let segs = (0..6)
+                    .map(|i| TSeg::Line {
+                        a: l[i],
+                        b: l[(i + 1) % 6],
+                    })
+                    .collect();
+                Face::new(
+                    Surf::Plane {
+                        o: [cx - rr, cy, zf - 0.5 * h],
+                        u: [1.0, 0.0, 0.0],
+                        v: [0.0, 0.0, 1.0],
+                    },
+                    Ival::new(0.0, w),
+                    Ival::new(0.0, h),
+                    Some(Trim { segs }),
+                    1e-9,
+                    0,
+                )
+            };
+            assert!(
+                k % 2 == 0 || f.prism.is_none(),
+                "the L-shaped wall has no prism of its own"
+            );
+            // moves beside or over it, at heights about its own
+            // a direction by the rational map (no platform trig)
+            let t = rng.r(-3.0, 3.0);
+            let (dc, ds) = ((1.0 - t * t) / (1.0 + t * t), 2.0 * t / (1.0 + t * t));
+            // (some from well inside its region: a flat passed over, not beside)
+            let d = if rng.f() < 0.3 {
+                rng.r(0.0, 0.3 * rr)
+            } else {
+                rr + rng.r(-1.0, 1.5) * col.r
+            };
+            let (sx, sy) = (cx + d * dc, cy + d * ds);
+            let e = [sx + rng.r(-3.0, 3.0), sy + rng.r(-3.0, 3.0)];
+            let (za, zb) = (zf + rng.r(-2.0, 3.0), zf + rng.r(-2.0, 3.0));
+            let mv = Move::Line {
+                a: [sx, sy, za],
+                b: [e[0], e[1], zb],
+            };
+            let (g, cells) = gap_move(&col, &f, &mv, -0.005, 1e-4, 4_000);
+            if let Gap::Clear { lower } = g {
+                clear += 1;
+                if cells <= 1 {
+                    quick += 1;
+                }
+                for s in 0..=10 {
+                    let t = s as f64 / 10.0;
+                    let (x, y) = (sx + t * (e[0] - sx), sy + t * (e[1] - sy));
+                    let z = za + t * (zb - za);
+                    let v = sampled_gap_in(&col, &f, x, y, z, 40);
+                    assert!(v >= lower - 1e-9, "{name} {k}: v {v} < {lower} at {t} on {mv:?}");
+                }
+            }
+        }
+    }
+    println!("moves: {clear} clear, {quick} by a quick route");
+    assert!(clear > 40 && quick > 20);
+}
+
+/// Mutation for the dome cylinder's exact route (`cyl_chord`): a move at the cylinder's CL near
+/// its top, lowered 0.05 into it (a real violation at its ends, the contact's normal within 60°
+/// of up), and a chord across the top with its ends on the CL (a violation in its middle), are
+/// never cleared at −0.005.
+#[test]
+fn a_move_pushed_into_a_dome_cylinder_is_not_cleared() {
+    let mut rng = Rng(0xbad0_c11d_0000_0001);
+    let mut n = 0;
+    for (name, c) in cutters() {
+        let (col, _) = column(&c);
+        for _ in 0..30 {
+            let a = unit([1.0, rng.r(-1.0, 1.0), 0.0]);
+            let up = [0.0, 0.0, 1.0];
+            let yy = crs(a, up);
+            let o = [rng.r(-2.0, 2.0), rng.r(-2.0, 2.0), rng.r(-3.0, 0.0)];
+            let r = rng.r(2.0, 8.0);
+            // the upper half (x up: a quarter turn either way)
+            let f = Face::new(
+                Surf::Cyl {
+                    o,
+                    x: up,
+                    y: yy,
+                    ax: a,
+                    r,
+                },
+                Ival::new(-1.0, 1.0),
+                Ival::new(-8.0, 8.0),
+                None,
+                1e-9,
+                0,
+            );
+            let lat = |p: [f64; 2]| {
+                ((p[0] - o[0]) * a[1] - (p[1] - o[1]) * a[0]) / (a[0] * a[0] + a[1] * a[1]).sqrt()
+            };
+            let n2 = [a[1], -a[0]];
+            let at = |d: f64, t: f64| [o[0] + d * n2[0] + t * a[0], o[1] + d * n2[1] + t * a[1]];
+            let (pa, pb) = (
+                at(rng.r(-0.4, 0.4) * r, rng.r(-3.0, 3.0)),
+                at(rng.r(-0.4, 0.4) * r, rng.r(-3.0, 3.0)),
+            );
+            let za = o[2] + phi_sampled(&col, r, lat(pa), 2000) - 0.05;
+            let zb = o[2] + phi_sampled(&col, r, lat(pb), 2000) - 0.05;
+            let mv = Move::Line {
+                a: [pa[0], pa[1], za],
+                b: [pb[0], pb[1], zb],
+            };
+            let (g, _) = gap_move(&col, &f, &mv, -0.005, 1e-4, 20_000);
+            assert!(
+                !matches!(g, Gap::Clear { .. }),
+                "{name}: a move 0.05 into the cylinder cleared: {mv:?}"
+            );
+            // and a chord across the top, its ends on the CL, its middle sagging into it (the
+            // worst point inside the move: d*'s place decides it)
+            // (rising: from low on one side to just past the top, so λ > 0 and the worst point
+            // lies inside, toward the low end)
+            let dq = col.r + r;
+            let (qa, qb) = (at(-0.9 * dq, rng.r(-3.0, 3.0)), at(0.1 * dq, rng.r(-3.0, 3.0)));
+            let mv = Move::Line {
+                a: [qa[0], qa[1], o[2] + phi_sampled(&col, r, lat(qa), 2000)],
+                b: [qb[0], qb[1], o[2] + phi_sampled(&col, r, lat(qb), 2000)],
+            };
+            let (g, _) = gap_move(&col, &f, &mv, -0.005, 1e-4, 20_000);
+            assert!(
+                !matches!(g, Gap::Clear { .. }),
+                "{name}: a chord across the top cleared: {mv:?}"
+            );
+            n += 1;
+        }
+    }
+    assert!(n >= 100);
+}
+
+/// Mutation for the quick routes: a move over a disk flat's inside and under it, or through an
+/// L-shaped wall's lower part, is never cleared.
+#[test]
+fn a_move_into_a_flat_or_an_l_wall_is_not_cleared() {
+    use forge_cam_geom::check::{TSeg, Trim};
+    let mut rng = Rng(0xbad0_f1a7_0000_0002);
+    for (name, c) in cutters() {
+        let (col, _) = column(&c);
+        for _ in 0..20 {
+            let rr = rng.r(6.0, 10.0);
+            let zf = rng.r(-1.0, 1.0);
+            let q = [[2.0 * rr, rr], [rr, 2.0 * rr], [0.0, rr], [rr, 0.0]];
+            let segs = (0..4)
+                .map(|i| TSeg::Arc {
+                    a: q[i],
+                    b: q[(i + 1) % 4],
+                    c: [rr, rr],
+                    r: rr,
+                    ccw: true,
+                })
+                .collect();
+            let disk = Face::new(
+                Surf::Plane {
+                    o: [-rr, -rr, zf],
+                    u: [1.0, 0.0, 0.0],
+                    v: [0.0, 1.0, 0.0],
+                },
+                Ival::new(0.0, 2.0 * rr),
+                Ival::new(0.0, 2.0 * rr),
+                Some(Trim { segs }),
+                1e-9,
+                0,
+            );
+            // from near the centre, the tip 0.1 under the flat
+            let s = [rng.r(-1.0, 1.0), rng.r(-1.0, 1.0)];
+            let e = [s[0] + rng.r(-2.0, 2.0), s[1] + rng.r(-2.0, 2.0)];
+            let z = zf - 0.1;
+            let mv = Move::Line {
+                a: [s[0], s[1], z],
+                b: [e[0], e[1], z],
+            };
+            let (g, _) = gap_move(&col, &disk, &mv, -0.005, 1e-4, 20_000);
+            assert!(
+                !matches!(g, Gap::Clear { .. }),
+                "{name}: a move under the flat cleared: {mv:?}"
+            );
+            // an L-shaped wall in x-z (its lower half full width), the move across it low down
+            let (w, h) = (2.0 * rr, rr);
+            let l = [
+                [0.0, 0.0],
+                [w, 0.0],
+                [w, 0.5 * h],
+                [0.5 * w, 0.5 * h],
+                [0.5 * w, h],
+                [0.0, h],
+            ];
+            let lsegs = (0..6)
+                .map(|i| TSeg::Line {
+                    a: l[i],
+                    b: l[(i + 1) % 6],
+                })
+                .collect();
+            let wall = Face::new(
+                Surf::Plane {
+                    o: [-rr, 0.0, zf - 0.5 * h],
+                    u: [1.0, 0.0, 0.0],
+                    v: [0.0, 0.0, 1.0],
+                },
+                Ival::new(0.0, w),
+                Ival::new(0.0, h),
+                Some(Trim { segs: lsegs }),
+                1e-9,
+                0,
+            );
+            let x = rng.r(-0.8, 0.8) * rr;
+            let zl = zf - 0.5 * h + rng.r(0.1, 0.3) * h;
+            let mv = Move::Line {
+                a: [x, -3.0, zl],
+                b: [x, 3.0, zl],
+            };
+            let (g, _) = gap_move(&col, &wall, &mv, -0.005, 1e-4, 20_000);
+            assert!(
+                !matches!(g, Gap::Clear { .. }),
+                "{name}: a move through the wall cleared: {mv:?}"
+            );
+        }
+    }
+}
+
+/// `drop_decide` (the push-cutter's probe) against the full drop: a decided answer is the full
+/// drop's (decided free: the full lower bound is not above z; decided blocked: the full upper
+/// bound is above z), over random faces, places and heights about the CL.
+#[test]
+fn drop_decide_agrees_with_the_full_drop() {
+    let mut rng = Rng(0xdec1_de00_0000_0003);
+    let (mut free, mut blocked) = (0, 0);
+    for (name, c) in cutters() {
+        let (col, _) = column(&c);
+        for kind in 0..7 {
+            for _ in 0..4 {
+                let f = face(&mut rng, kind);
+                let (x, y) = (rng.r(-4.0, 4.0), rng.r(-4.0, 4.0));
+                let full = drop(&col, std::slice::from_ref(&f), &[0], x, y, 1e-4, 60_000);
+                if !full.hi.is_finite() {
+                    continue;
+                }
+                let z = full.hi + rng.r(-0.2, 0.2);
+                let d = drop_decide(
+                    &col,
+                    std::slice::from_ref(&f),
+                    &[0],
+                    x,
+                    y,
+                    z,
+                    f64::NEG_INFINITY,
+                    1e-4,
+                    60_000,
+                );
+                if d.hi <= z {
+                    free += 1;
+                    assert!(
+                        full.lo <= z,
+                        "{name} kind {kind}: decided free, the drop says {full:?} > {z}"
+                    );
+                } else if d.lo > z {
+                    blocked += 1;
+                    assert!(
+                        full.hi > z,
+                        "{name} kind {kind}: decided blocked, the drop says {full:?} ≤ {z}"
+                    );
+                }
+            }
+        }
+    }
+    println!("decided: {free} free, {blocked} blocked");
+    assert!(free > 20 && blocked > 20);
+}
+
+/// Mutation for `drop_decide`'s early stop: far from the CL the answer must be decided, and
+/// rightly (0.5 above the full drop: free; 0.5 under it: blocked). A stop that fires on the
+/// wrong side (`lo > stop` turned round) leaves these undecided or wrong, and fails here.
+#[test]
+fn drop_decide_decides_far_from_the_cl() {
+    let mut rng = Rng(0xdec1_de00_0000_0004);
+    let mut n = 0;
+    for (name, c) in cutters() {
+        let (col, _) = column(&c);
+        for kind in 0..7 {
+            for _ in 0..3 {
+                let f = face(&mut rng, kind);
+                let (x, y) = (rng.r(-3.0, 3.0), rng.r(-3.0, 3.0));
+                let full = drop(&col, std::slice::from_ref(&f), &[0], x, y, 1e-4, 60_000);
+                if !(full.hi.is_finite() && full.hi - full.lo <= 1e-3) {
+                    continue;
+                }
+                let one = std::slice::from_ref(&f);
+                let above = drop_decide(
+                    &col,
+                    one,
+                    &[0],
+                    x,
+                    y,
+                    full.hi + 0.5,
+                    f64::NEG_INFINITY,
+                    1e-4,
+                    60_000,
+                );
+                assert!(
+                    above.hi <= full.hi + 0.5,
+                    "{name} kind {kind}: 0.5 over the CL not decided free: {above:?} vs {full:?}"
+                );
+                let below = drop_decide(
+                    &col,
+                    one,
+                    &[0],
+                    x,
+                    y,
+                    full.lo - 0.5,
+                    f64::NEG_INFINITY,
+                    1e-4,
+                    60_000,
+                );
+                assert!(
+                    below.lo > full.lo - 0.5,
+                    "{name} kind {kind}: 0.5 under the CL not decided blocked: {below:?} vs {full:?}"
+                );
+                n += 1;
+            }
+        }
+    }
+    assert!(n > 40, "{n}");
 }

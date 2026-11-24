@@ -1,0 +1,83 @@
+# Licence records for the RPTU 10-part benchmark models (tools/ci/model-licences.py).
+# Dataset: Schmitz, Mertes, Schillinger, Wagner (RPTU Kaiserslautern-Landau), 2025,
+# https://doi.org/10.5281/zenodo.17035762, CC BY 4.0; see NOTICE and SHA256SUMS.
+
+[[file]]
+name = "1.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"
+
+[[file]]
+name = "2.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"
+
+[[file]]
+name = "3.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"
+
+[[file]]
+name = "4.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"
+
+[[file]]
+name = "5.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"
+
+[[file]]
+name = "6.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"
+
+[[file]]
+name = "7.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"
+
+[[file]]
+name = "8.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"
+
+[[file]]
+name = "9.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"
+
+[[file]]
+name = "10.step"
+maker = "RPTU Kaiserslautern-Landau (Schmitz, Mertes, Schillinger, Wagner)"
+url = "https://zenodo.org/records/17035762"
+read = "2026-11-24"
+terms = "CC BY 4.0, Section 2(a)(1): \"the Licensor hereby grants You a worldwide, royalty-free, non-sublicensable, non-exclusive, irrevocable license to exercise the Licensed Rights in the Licensed Material to: a. reproduce and Share the Licensed Material, in whole or in part\" (full text in LICENSE beside these files; attribution in NOTICE)"
+redistribution = "allowed"

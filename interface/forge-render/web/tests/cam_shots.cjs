@@ -5,6 +5,7 @@ const path = require("node:path"), http = require("node:http"), fs = require("no
 const t = require("./lib.cjs");
 const root = process.argv[2];
 const TURN = "/project/examples/machined/shaft_turn.fg";
+const MOULD = "/project/examples/machined/mold_core_cam.fg";
 const SHOTS = [
   ["cam-32-quality.png", ["quality"], (s) => s.cam.dialogs.includes("quality")],
   ["cam-33-op-quality.png", ["select top"], (s) => s.cam.selected === "top"],
@@ -21,6 +22,9 @@ const SHOTS = [
   ["cam-5-drill-geometry.png", ["select bolts", "edit bolts", "tab 0"], (s) => s.cam.dialogs.includes("op")],
   ["cam-6-post.png", ["select prog", "post"], (s) => s.cam.dialogs.includes("post")],
   ["cam-7-tools.png", ["tools"], (s) => s.cam.dialogs.includes("tools")],
+  // the tool library's pass: narrowed to ball mills, one shown (its cross-section); a tool derived
+  ["cam-47-tools-ball.png", ["tools", "tools-kind ball", "tools-pick ball-6"], (s) => s.cam.dialogs.includes("tools")],
+  ["cam-48-tools-derive.png", ["tools", "tools-pick flat-10", "tools-derive"], (s) => s.cam.dialogs.includes("tools")],
   ["cam-8-setup.png", ["new-setup"], (s) => s.cam.dialogs.includes("setup")],
   ["cam-9-setup-stock.png", ["new-setup", "tab 1"], (s) => s.cam.dialogs.includes("setup")],
   ["cam-10-checks.png", ["select op1", "checks"], (s) => s.cam.dialogs.includes("checks")],
@@ -28,10 +32,18 @@ const SHOTS = [
   ["cam-11-new-pocket.png", ["select bore", "new-op pocket", "tab 1"], (s) => s.cam.dialogs.includes("op")],
   ["cam-35-nc-programs-web.png", ["programs"], (s) => s.cam.dialogs.includes("programs"), TURN],
   ["cam-1-opened.png", [], (s) => true],
+  // a mould's 3D ops listed (zlevel, parallel, waterline, pencil, rest), the parallel's sheet
+  ["cam-49-mould-3d.png", ["select fin", "edit fin"], (s) => s.cam.dialogs.includes("op") && s.cam.ops?.length >= 5, MOULD],
+  // opt-in roughing: a small 2D button; its Passes tab (engagement, one/two way, direction)
+  ["cam-45-adaptive.png", ["select top", "new-op adaptive", "tab 2"], (s) => s.cam.dialogs.includes("op")],
+  // and made ahead of Clear (which then only tidies): its own toolpath, two-way passes at 50°
+  ["cam-46-adaptive-path.png", ["select skim", "new-op adaptive", "set to 12", "set passes \"two_way\"", "set engagement 50", "ok", "earlier adaptive2", "earlier adaptive2", "earlier adaptive2", "earlier adaptive2", "select adaptive2"],
+    (s) => s.cam.selected === "adaptive2" && !s.cam.generating && s.cam.ops?.every((o) => o.status === "built")],
   // a small screen (UX-LEAD's 1024 × 700): the windows fit the view, nothing runs under a panel
   ["cam-40-small-op.png", ["select prof"], (s) => s.cam.selected === "prof", undefined, "1024x700"],
   ["cam-41-small-tools.png", ["tools"], (s) => s.cam.dialogs.includes("tools"), undefined, "1024x700"],
   ["cam-42-small-programs.png", ["programs"], (s) => s.cam.dialogs.includes("programs"), undefined, "1024x700"],
+  ["cam-44-small-sheet.png", ["select prof", "edit prof"], (s) => s.cam.dialogs.includes("op"), undefined, "1024x700"],
 ];
 const only = process.argv[3];
 const s = http.createServer((q, r) => { const u = decodeURIComponent(new URL(q.url, "http://x").pathname); const f = path.join(root, u === "/" ? "index.html" : u);

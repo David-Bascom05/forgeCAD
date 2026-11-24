@@ -13,7 +13,7 @@ mod py;
 pub mod state;
 /// 3MF packages as one triangle mesh: a mesh for reference, not a B-rep.
 pub mod threemf;
-mod zip;
+pub mod zip;
 
 /// Why a body did not translate whole.
 #[derive(Clone, Debug, PartialEq)]

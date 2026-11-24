@@ -228,6 +228,157 @@ list on main: this branch's new strings add none).
   after; page 12 -> 2151). Load cost: rack open, single-threaded build, longest task 1438 ms
   without it, 1444 ms with it (noise: that task is the build itself; threaded 197 ms).
 
+## 16. File's menu never opened in the page; its exports were missing; Export CSV failed (ui/bughunt-3)
+
+- Symptoms (page): clicking File showed nothing. On the desktop File > Export STL / 3MF / OBJ
+  exist; the page left them out. Weldments > Cut List > Export CSV said "Couldn't write
+  /project/weldments/gate_frame-cutlist.csv: operation not supported on this platform".
+- Root causes: `menu_at` (shell/mod.rs) shut a menu on any press outside it, including in the
+  frame it opened. When the press and its release land in one frame, the press on File counts
+  as outside the new menu, so the menu shuts at once. In the page that happens on every quick
+  click (frames lag the mouse there); natively, on a touchpad tap. The exports were left out of
+  the page's menu because the page's host had nothing to do with `Action::ExportMesh` (it fell
+  into `_ => {}`). The cut list was written with `std::fs::write`, and a page has no std files.
+- Fixes: a menu ignores an outside press in the frame it first shows (the agent switcher
+  already left out the button that opens it). In the page, File > Export STL / 3MF / OBJ builds
+  the mesh and hands it to the browser's downloads (`window.forge_download`). Natively
+  `fg::export_mesh` is the same as before: `mesh_file` is its bytes, then written. The cut list
+  is written through `forge_dirs::fs`, which is std's natively and the project's in a page,
+  kept where the project is. The browser build's clippy config now also denies std's file
+  calls (`std::fs::write`, `read`, `File::open`, ...). That found these two, the only ones in
+  forge-render. build.rs allows them: it runs on the build machine.
+- Tests: `tests/tap_menu.rs` (native: a press and release in one frame on File, then the menu
+  is open; a click outside still shuts it; fails before) and `web/tests/export.cjs` (the page:
+  File > Export STL downloads `gate_frame.stl`, a valid binary STL; Export CSV writes
+  `weldments/gate_frame-cutlist.csv` on the serving machine; fails before: no download).
+
+## 17. Esc closed no dialog over the view; Place hung on a fifo beside the assembly (ui/bughunt-3)
+
+- Symptoms, desktop and page alike: Esc left Place Component, Place Joint, Constrain, Free
+  Move/Rotate, Pattern, Mirror and Place from Content Center up, so each stayed open under the
+  next one opened. Separately, Assemble > Place hung the app for good when a folder beside the
+  assembly's held a fifo named `*.fg`. A link there to /dev/zero filled the memory instead.
+- Root causes: `escape_one_level` (shell/mod.rs) runs first in the frame and always takes Esc
+  for its own levels, and none of those levels was one of these dialogs. A dialog that looked for
+  Esc itself (fgdialog.rs, the occurrence editor) never saw it either. Place reads every `.fg`
+  in the folder and in the folders beside it to mark the assemblies, using `read_to_string`.
+- Fixes: three new Esc levels after a feature dialog's. Content Center closes. The occurrence
+  editor closes. The assembly tool's dialog gets its own × (`escape_to` names it, and
+  `dialog_head` answers as if its × was clicked, so each tool cleans up as it does on ×). Place
+  reads with `forge_lang::deps::read_plain`, as the loaders read: plain files only, no links
+  followed, capped.
+- Tests (tests/asm_tools.rs): `escape_closes_the_dialog_up` (five tools and Content Center; fails
+  before: "Place: Esc left its dialog up") and
+  `place_lists_beside_files_without_reading_a_fifo_or_a_device` (a fifo and a /dev/zero link
+  beside the assembly; fails before: the list never comes).
+- Found because other tests leave such fixtures in the temp folder (`fg-read-kinds-*`). The
+  Place dialog of an assembly whose parent folder is the temp folder hung on them.
+
+## 18. Inspect > Wall froze the page for minutes; natively 4.5 minutes for a welded frame (ui/bughunt-3)
+
+- Symptom: Inspect > Wall on `examples/weldments/gate_frame.fg` measures the whole part as soon
+  as it opens. Natively that took 269 s (`forgecad measure F wall` too). In the single-threaded
+  page the job runs on the page's thread, so the tab hung for longer than 5 minutes.
+- Root cause: `forge_agent::measure::wall` tried every triangle against every other one
+  (165,669 triangles: 2.7e10 pairs).
+- Fix: a box tree over the triangles. Each ray tries only the triangles whose boxes it passes
+  through, no further than the thinnest wall found so far. A long sliver goes in as several
+  pieces, so one long box doesn't lie across every ray near it. The tests and the order of the
+  outer loop are unchanged, so the answer is the same to the bit: only triangles that could not
+  be nearer are left out, and the point depends only on the ray and the distance. 269 s ->
+  about 3.5 s.
+- Tests: `forge-wall`'s `the_tree_finds_the_wall_every_pair_does_bit_for_bit`, with
+  `forge_agent::measure::wall` itself as the reference (a plate with holes, a tube; whole and
+  stepped 7 rays at a time). Also every example compared old vs new with
+  `forgecad measure F wall exact`: identical (on one tree; across train 5's merge two parts'
+  geometry changed, and on the merged tree both algorithms agree there too).
+- It lives in its own crate, `interface/forge-wall`, used by the CLI and the app only.
+  forge-agent is as on main. Inside forge-agent it moved how forge-lang's binaries are compiled
+  (forge-lang links forge-agent; its codegen units shifted): a few hundred instructions on some
+  of the speed gate's lines, within the band but over main. Out of it, the gate's binaries are
+  built from main's sources.
+- Then (coordinator): in the single-threaded page Wall no longer measures on open. The panel
+  shows "Measure thinnest wall", and the search (`forge_wall::WallSearch`, `wall`
+  stepped, the same rays in the same order) then runs 25 ms per frame. The page keeps drawing,
+  the panel shows "Working it out... N%", and Cancel stops it. On the desktop and in the
+  threaded page it still measures on open, on a worker, which now reports how far it is and
+  stops when the panel is closed or cancelled (`WallCtl`). A stopped search's answer never
+  lands (`STOPPED`, and a new measurement id).
+  Tests: `tests/wall_panel.rs` (desktop: measured on open, 6 mm; Cancel holds it and nothing
+  lands; Measure thinnest wall measures again) and `web/tests/wall.cjs` (single-threaded: the
+  gate frame waits for the button, runs between frames while the page keeps drawing, and
+  Cancel stops it; the plate reads 6 mm. Threaded: measured on open).
+  Shots: `shots/page-wall-held.png`, `shots/page-wall-busy.png`.
+
+## 19. The page drew window controls that did nothing (ui/bughunt-3)
+
+- The desktop's Minimize / Maximize / Close sat at the page's title bar's right end, and the
+  page's edges showed resize cursors; a page has no window of its own, so none of them did
+  anything (the page's host drops those actions). Not drawn in the page now (shell/mod.rs
+  `title_bar`, `resize_edges`). Test: `web/tests/chrome.cjs` (no icon pixels there; fails before).
+
+## 20. Deep links: `?open=../x` killed the page; a linked drawing never drew its part (ui/bughunt-3)
+
+- `?open=../../../etc/passwd` (any path with `..`): app.js's `cleanPath` threw at the top level,
+  before `start_app`, so the page stayed dead (`window.forgecad` never set, a page error). The
+  app now starts with nothing open (its empty state: New part, Open…), and its status says
+  "Couldn't open ../x: it isn't in this project." (`app_say`; UX-LEAD's wording). File > Save As
+  with such a name threw the same way and said nothing. Now it says "Couldn't save as ../x: it
+  isn't in this project."
+- `?open=machined/flange_dwg.fg`: the page opens the linked file before the project's other
+  files (they follow its first frame), then asks for a rebuild once they have come. That rebuild
+  covered the part document and machining documents, not a drawing, so the sheet stayed empty
+  with "flange.fg: no such file". A file that was missing when the drawing was made is watched by
+  nothing, so the same happened on the desktop when the part was saved after its drawing was
+  opened. `Gui::rebuild_open` makes every open document again from its files, the drawing
+  included (`DrawingEnv::rebuild`). The page's rebuild is that.
+- Tests: `tests/late_part.rs` (native: the drawing opened before its part, the part written,
+  `rebuild_open`: no "no such file"; fails before) and `web/tests/deeplink.cjs` (both links in the
+  page; fails before: the page error).
+- Not changed: `?env=bogus` is ignored without a word; a missing file says its path twice
+  ("nope/missing.fg: nope/missing.fg: no such file").
+
+## 21. The page's status said "Agent connection: operation not supported…"; a STEP picked said nothing (ui/bughunt-3)
+
+- At start the app published its agent's terminal connection (`start_agent_bridge`, from
+  `load_settings`). A page has no terminal to connect (the agent runs in the desktop app), so it
+  failed, and "Agent connection: operation not supported on this platform" stood in the status
+  bar until something said otherwise. A linked DWG said nothing over it. Not started in a page now.
+- File > Open > From this computer with a STEP model (or a font): the file was added to the
+  project, the dialog closed, and nothing on screen changed. It has nothing to open itself (a
+  part reads it), so now the status says "Added to the project: NAME". A DWG opens, as before.
+- Test: `web/tests/import.cjs` (a STEP added and said; a DWG opened; a DWG linked to in a new
+  page, with no agent failure in the status; fails before on both).
+- Swept fine in the page: Markup (draw, text with typing, Esc, Done); DWG open (layers,
+  properties, its command line).
+
+
+## 23. Placing a dimension in a drawing file hung the app (ui/bughunt-3)
+
+- File > New Drawing, Annotate > Dimension, two edges of a view, then the place: the app froze
+  for good, on the desktop and in the page. `DrawingEnv::doc()` (shell/drawing.rs) read a drawing
+  block's doc but, for a drawing file (no block), called itself, without end (gdb: doc ← doc ←
+  … ← fresh ← add ← click). Every annotation that reads the doc (dimension, note, the item under
+  the pointer) went through it. It reads the file's own text now (`doc::read(&self.src)`).
+- Test: `tests/drawing_dimension.rs` (the clicks in a headless window on a thread with a
+  watchdog; the dimension `d1 = dim(top, …)` is in the file). Before: the watchdog fired at 240 s.
+
+## 24. A linked machining document generated refused first: "0/5 ops certified" (ui/bughunt-3)
+
+- `?open=machined/flange_cam.fg`: the page opened the linked file before the project's other
+  files had come (on purpose, for a fast first frame), so its first generation had no
+  `flange.fg`: every op an error, certification refused, "flange_cam.fg · 0/5 ops certified",
+  and Export NC refused, for the seconds until the files came and §20's rebuild ran. Found while
+  checking for the coordinator whether flange_cam's `at:` got lost (it didn't: my sweep project
+  was a copy from before 8cae054a placed every example).
+- The page now starts the app with nothing open, says "Loading project…", and opens the linked
+  file (and `?env=`) once every file is in. `Mirror.loadOne` (the early single-file read) is
+  gone.
+- Test: `web/tests/deeplink.cjs`, a machining case with the project's files held back 4 s
+  (Playwright route on /api/bundle): says "Loading project…", and no generation is seen that
+  is not certified in full. Before: "flange_cam.fg · 0/5 ops certified" on the way.
+  `lib.cjs`'s `page()` takes an optional `prepare(p)` run before the page loads.
+
 ## Open (reported, not fixed here)
 
 

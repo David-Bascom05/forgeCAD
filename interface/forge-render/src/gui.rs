@@ -36,6 +36,8 @@ pub mod gui_docs;
 mod gui_env;
 #[path = "gui_explode.rs"]
 mod gui_explode;
+#[path = "gui_record.rs"]
+pub mod gui_record;
 #[path = "gui_fgmarks.rs"]
 mod gui_fgmarks;
 #[path = "gui_inspect.rs"]
@@ -46,6 +48,8 @@ pub mod gui_machine;
 pub mod gui_markup;
 #[path = "gui_overlay.rs"]
 mod gui_overlay;
+#[path = "gui_robot.rs"]
+pub mod gui_robot;
 #[path = "gui_sheet.rs"]
 mod gui_sheet;
 #[path = "gui_speech.rs"]
@@ -174,6 +178,10 @@ fn window_chosen(v: &mut View, ids: &crate::render::ViewIds, ask: &WindowAsk) ->
 }
 
 pub struct Gui {
+    /// A photo of the view on its way back from the GPU (`gui_record.rs`).
+    photo: Option<gui_record::PhotoJob>,
+    /// A recording under way (`gui_record.rs`).
+    recording: Option<gui_record::RecordJob>,
     /// The Render Studio's tracer and queue while its environment is open (`gui_studio.rs`).
     studio: Option<gui_studio::StudioHost>,
     pub vers: gui_versions::VersState,
@@ -341,6 +349,8 @@ impl Gui {
         let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
+            photo: None,
+            recording: None,
             studio: None,
             vers: Default::default(),
             bend: Default::default(),
@@ -471,6 +481,12 @@ impl Gui {
                 }
             }
             return true;
+        }
+        // a robot document: its source with the Robot panel
+        if path.ends_with(".fg")
+            && forge_dirs::fs::read_to_string(path).is_ok_and(|s| forge_lang::robot::is_robot(&s))
+        {
+            return self.open_robot(path);
         }
         // a machining document opens in the Manufacture workspace, over its part
         if path.ends_with(".fg")
@@ -903,7 +919,7 @@ impl Gui {
                 self.fg_save();
                 return None;
             }
-            KeyCmd::Rename | KeyCmd::Delete | KeyCmd::Markup => return None,
+            KeyCmd::Rename | KeyCmd::Delete | KeyCmd::Markup | KeyCmd::Photo | KeyCmd::Record => return None,
             KeyCmd::FitSelected => K::KeyF,
             KeyCmd::Section => K::KeyS,
             KeyCmd::Explode => K::KeyE,
@@ -996,6 +1012,10 @@ impl Gui {
                 }
                 Action::Env(id, c) => {
                     self.shell.env_command(id, c);
+                    continue;
+                }
+                Action::Capture(c) => {
+                    crate::shell::capture::command_of(&mut self.shell, c);
                     continue;
                 }
                 a => a,
@@ -1388,6 +1408,9 @@ impl Gui {
         if self.explode_tick() {
             animating = true;
         }
+        if self.robot_tick() {
+            animating = true;
+        }
         self.body_eye();
         times.ui = now_ms() - t0;
 
@@ -1540,6 +1563,10 @@ impl Gui {
                     world.extend(local);
                 }
             }
+            // what the bend simulation sees through, outlined
+            if self.bend.showing() {
+                world.extend(self.bend.outline_tris(&v.nav.camera, v.size));
+            }
             let solid = match self.shell.camsim.as_deref_mut() {
                 Some(st) if self.shell.tab == crate::shell::CAM_TAB => {
                     gui_camsim::geometry(st, &v.nav.camera, v.size, &mut world)
@@ -1624,6 +1651,7 @@ impl Gui {
             times.view_drawn = true;
         }
         let studio_busy = self.studio_frame();
+        self.capture_tick();
         times.view = now_ms() - t1;
 
         let t2 = now_ms();
@@ -1693,6 +1721,7 @@ impl Gui {
             .unwrap_or(std::time::Duration::MAX);
         let again_in = if animating
             || studio_busy
+            || self.capture_busy()
             || self.mark_held.is_some()
             || self.view.as_ref().is_some_and(|v| v.dirty)
         {
@@ -1702,6 +1731,9 @@ impl Gui {
         } else {
             Some(delay)
         };
+        // the sketches of the forge-lang runs this frame made on this thread (a tool's quick run,
+        // and in a page with one thread every build): freed between frames, none in use then
+        crate::plat::release_sketches();
         FrameOut {
             platform: output.platform_output,
             host,
@@ -2460,6 +2492,7 @@ impl Gui {
                 self.fg_asm = Some((a.occ.clone(), a.placed.clone()));
                 self.fg_asm_boxes = a.boxes.clone();
                 self.explode.stale();
+                Self::robot_solved(&mut self.shell.robot);
                 asm_moved = true;
                 // which part is placed where changed: the view made again, the camera kept
                 if let Some(all) = &a.restage {

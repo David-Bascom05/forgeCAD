@@ -204,6 +204,15 @@ impl HeightMap {
     /// Sweeps the tool's body with its tip along a → b (height linear): cells whose centre is
     /// within r of the segment are lowered to the body. The volume removed (mm³).
     pub fn sweep(&mut self, a: [f64; 3], b: [f64; 3], p: &Profile) -> f64 {
+        self.sweep_in(a, b, p, None)
+    }
+
+    /// `sweep`, passing over the runs of a row that lie in a tile of `tiles` whose highest cell
+    /// is at or below both the move's lowest tip and the bottom: `sweep` leaves every such cell
+    /// as it is (its first test). The cells are visited in the same order: the same map and the
+    /// same volume, to the bit. `tiles` must be `Tiles::of` this map, changed by `sweep_in`
+    /// alone since (it keeps each tile's maximum at or above its cells).
+    pub fn sweep_in(&mut self, a: [f64; 3], b: [f64; 3], p: &Profile, mut tiles: Option<&mut Tiles>) -> f64 {
         let r = p.r();
         let cell = |v: f64, o: f64| ((v - o) / self.h - 0.5).floor();
         let i0 = cell(a[0].min(b[0]) - r, self.x0).max(0.0) as usize;
@@ -214,37 +223,80 @@ impl HeightMap {
         let ll = dx * dx + dy * dy;
         let zmin = a[2].min(b[2]);
         let mut removed = 0.0;
+        let floor = zmin.max(self.bottom);
+        // the column runs of each tile row holding a tile the move may lower (all of [i0, i1)
+        // without tiles), found once per tile row
+        let mut runs: Vec<(usize, usize)> = Vec::new();
+        let mut runs_row = usize::MAX;
         for j in j0..j1 {
             let y = self.y0 + (j as f64 + 0.5) * self.h;
-            for i in i0..i1 {
-                let k = j * self.nx + i;
-                let old = self.z[k];
-                if old <= zmin || old <= self.bottom {
-                    continue;
-                }
-                let x = self.x0 + (i as f64 + 0.5) * self.h;
-                let t = if ll > 0.0 {
-                    (((x - a[0]) * dx + (y - a[1]) * dy) / ll).clamp(0.0, 1.0)
-                } else {
-                    0.0
-                };
-                let (px, py) = (a[0] + t * dx, a[1] + t * dy);
-                let d = ((x - px) * (x - px) + (y - py) * (y - py)).sqrt();
-                if d > r {
-                    continue;
-                }
-                let mut zc = a[2] + t * (b[2] - a[2]) + p.at(d);
-                for e in [a, b] {
-                    let de = ((x - e[0]) * (x - e[0]) + (y - e[1]) * (y - e[1])).sqrt();
-                    if de <= r {
-                        zc = zc.min(e[2] + p.at(de));
+            if runs_row != j / TILE {
+                runs_row = j / TILE;
+                runs.clear();
+                match tiles.as_deref() {
+                    None => runs.push((i0, i1)),
+                    Some(t) => {
+                        let mut i = i0;
+                        while i < i1 {
+                            let ti = i / TILE;
+                            let end = ((ti + 1) * TILE).min(i1);
+                            // a tile at or below the tip's lowest and the bottom: every cell of
+                            // it is left as it is (the test below), its run passed over
+                            if t.max[runs_row * t.ntx + ti] > floor {
+                                match runs.last_mut() {
+                                    Some(r) if r.1 == i => r.1 = end,
+                                    _ => runs.push((i, end)),
+                                }
+                            }
+                            i = end;
+                        }
                     }
                 }
-                let new = zc.max(self.bottom);
-                if new < old {
-                    removed += old - new;
-                    self.z[k] = new;
+            }
+            for &(r0, r1) in &runs {
+                for i in r0..r1 {
+                    let k = j * self.nx + i;
+                    let old = self.z[k];
+                    if old <= zmin || old <= self.bottom {
+                        continue;
+                    }
+                    let x = self.x0 + (i as f64 + 0.5) * self.h;
+                    let t = if ll > 0.0 {
+                        (((x - a[0]) * dx + (y - a[1]) * dy) / ll).clamp(0.0, 1.0)
+                    } else {
+                        0.0
+                    };
+                    let (px, py) = (a[0] + t * dx, a[1] + t * dy);
+                    let d = ((x - px) * (x - px) + (y - py) * (y - py)).sqrt();
+                    if d > r {
+                        continue;
+                    }
+                    let mut zc = a[2] + t * (b[2] - a[2]) + p.at(d);
+                    for e in [a, b] {
+                        let de = ((x - e[0]) * (x - e[0]) + (y - e[1]) * (y - e[1])).sqrt();
+                        if de <= r {
+                            zc = zc.min(e[2] + p.at(de));
+                        }
+                    }
+                    let new = zc.max(self.bottom);
+                    if new < old {
+                        removed += old - new;
+                        self.z[k] = new;
+                        if let Some(t) = tiles.as_deref_mut() {
+                            let q = (j / TILE) * t.ntx + i / TILE;
+                            if !t.dirty[q] {
+                                t.dirty[q] = true;
+                                t.touched.push(q);
+                            }
+                        }
+                    }
                 }
+            }
+        }
+        if let Some(t) = tiles {
+            for q in std::mem::take(&mut t.touched) {
+                t.dirty[q] = false;
+                t.max[q] = tile_max(self, q % t.ntx, q / t.ntx);
             }
         }
         removed * self.h * self.h
@@ -255,13 +307,57 @@ impl HeightMap {
     /// r + h/2, a little outside the tool, so the cells' error errs toward more engagement.
     /// None: the edge meets nothing.
     pub fn engage(&self, c: [f64; 3], u: [f64; 2], r: f64, eps: f64) -> Option<Engage> {
+        self.engage_in(c, u, r, eps, None)
+    }
+
+    /// `engage`, first asking `tiles` (`Tiles::of` this map, kept by `sweep_in`): where every
+    /// tile the edge can read is at or below c[2] + eps, no point of it stands above the tip by
+    /// more than eps (each read is a cell of one of those tiles, or −∞ off the map), so the
+    /// answer is None without reading the edge. Otherwise the edge is read as `engage` does.
+    pub fn engage_in(
+        &self,
+        c: [f64; 3],
+        u: [f64; 2],
+        r: f64,
+        eps: f64,
+        tiles: Option<&Tiles>,
+    ) -> Option<Engage> {
+        if let Some(t) = tiles {
+            let rr = r + 0.5 * self.h;
+            let thr = c[2] + eps;
+            // the cells `top` can read for points within rr of c: their indices, a cell wider
+            let i0 = ((c[0] - rr - self.x0) / self.h).floor() - 1.0;
+            let i1 = ((c[0] + rr - self.x0) / self.h).floor() + 1.0;
+            let j0 = ((c[1] - rr - self.y0) / self.h).floor() - 1.0;
+            let j1 = ((c[1] + rr - self.y0) / self.h).floor() + 1.0;
+            if i0.is_finite() && i1.is_finite() && j0.is_finite() && j1.is_finite() {
+                let clamp = |v: f64, n: usize| v.max(0.0).min(n.saturating_sub(1) as f64) as usize;
+                let (a0, a1) = (clamp(i0, self.nx) / TILE, clamp(i1, self.nx) / TILE);
+                let (b0, b1) = (clamp(j0, self.ny) / TILE, clamp(j1, self.ny) / TILE);
+                let mut low = true;
+                'tiles: for tj in b0..=b1 {
+                    for ti in a0..=a1 {
+                        // at or below (a NaN is neither: the edge is read)
+                        let below = matches!(
+                            t.max[tj * t.ntx + ti].partial_cmp(&thr),
+                            Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal)
+                        );
+                        if !below {
+                            low = false;
+                            break 'tiles;
+                        }
+                    }
+                }
+                if low {
+                    return None;
+                }
+            }
+        }
         let rr = r + 0.5 * self.h;
-        let n = 181;
+        let n = EDGE_N;
         let step = std::f64::consts::PI / (n - 1) as f64;
         let mut e: Option<Engage> = None;
-        for k in 0..n {
-            let th = -std::f64::consts::FRAC_PI_2 + k as f64 * step;
-            let (s, co) = dmath::sin_cos(th);
+        for (k, &(th, s, co)) in edge().iter().enumerate() {
             let dx = u[0] * co - u[1] * s;
             let dy = u[0] * s + u[1] * co;
             let t = self.top(c[0] + rr * dx, c[1] + rr * dy);
@@ -292,6 +388,69 @@ impl HeightMap {
     pub fn chip_factor(&self, c: [f64; 3], u: [f64; 2], r: f64, eps: f64) -> Option<f64> {
         self.engage(c, u, r, eps).map(|e| e.cos_max)
     }
+}
+
+/// The side of a tile of `Tiles`, in cells.
+const TILE: usize = 8;
+
+/// The highest cell of each TILE × TILE tile of a height map (+∞ where a cell is NaN), for
+/// `HeightMap::sweep_in` to pass over tiles a move cannot lower.
+#[derive(Clone, Debug)]
+pub struct Tiles {
+    ntx: usize,
+    max: Vec<f64>,
+    dirty: Vec<bool>,
+    touched: Vec<usize>,
+}
+
+impl Tiles {
+    pub fn of(m: &HeightMap) -> Tiles {
+        let (ntx, nty) = (m.nx.div_ceil(TILE), m.ny.div_ceil(TILE));
+        let mut max = vec![f64::NEG_INFINITY; ntx * nty];
+        for tj in 0..nty {
+            for ti in 0..ntx {
+                max[tj * ntx + ti] = tile_max(m, ti, tj);
+            }
+        }
+        Tiles {
+            ntx,
+            dirty: vec![false; max.len()],
+            max,
+            touched: Vec::new(),
+        }
+    }
+}
+
+fn tile_max(m: &HeightMap, ti: usize, tj: usize) -> f64 {
+    let mut hi = f64::NEG_INFINITY;
+    for j in tj * TILE..((tj + 1) * TILE).min(m.ny) {
+        for &z in &m.z[j * m.nx + ti * TILE..j * m.nx + ((ti + 1) * TILE).min(m.nx)] {
+            if z.is_nan() {
+                return f64::INFINITY;
+            }
+            hi = hi.max(z);
+        }
+    }
+    hi
+}
+
+/// Points round the front half of the edge, 1° apart (`HeightMap::engage`).
+const EDGE_N: usize = 181;
+
+/// θ and its sine and cosine at each of `engage`'s edge points, computed once: the same
+/// expressions `engage` evaluated at every call, so the same numbers.
+fn edge() -> &'static [(f64, f64, f64); EDGE_N] {
+    static EDGE: std::sync::OnceLock<[(f64, f64, f64); EDGE_N]> = std::sync::OnceLock::new();
+    EDGE.get_or_init(|| {
+        let step = std::f64::consts::PI / (EDGE_N - 1) as f64;
+        let mut t = [(0.0, 0.0, 0.0); EDGE_N];
+        for (k, x) in t.iter_mut().enumerate() {
+            let th = -std::f64::consts::FRAC_PI_2 + k as f64 * step;
+            let (s, co) = dmath::sin_cos(th);
+            *x = (th, s, co);
+        }
+        t
+    })
 }
 
 /// What the side edge meets at one place (HeightMap::engage).
@@ -424,6 +583,7 @@ fn scheduled(at: [f64; 3], m: &PMove) -> bool {
 pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> Vec<Sample> {
     let r = prof.r();
     let l = s.cell.max((0.25 * r).min(0.5));
+    let mut tiles = Tiles::of(map);
     let mut out = Vec::new();
     let mut at = path.start;
     let mut arc = 0.0;
@@ -455,23 +615,28 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
                 let dxy = ((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1])).sqrt();
                 if sched && dxy > 0.0 {
                     let u = [(b[0] - a[0]) / dxy, (b[1] - a[1]) / dxy];
-                    if let Some(e) = map.engage(b, u, r, EPS_Z) {
-                        worst = Some(match worst {
-                            Some(w) if w.cos_max > e.cos_max => Engage {
-                                ap: w.ap.max(e.ap),
-                                ae: w.ae.max(e.ae),
-                                ..w
-                            },
-                            Some(w) => Engage {
-                                ap: w.ap.max(e.ap),
-                                ae: w.ae.max(e.ae),
-                                ..e
-                            },
-                            None => e,
-                        });
+                    // the piece's own cut is what lies ahead of its start (read before it is
+                    // swept); its end reads what lies ahead of it: both count, so a sample never
+                    // takes the air feed for a piece that cuts (a short move into material)
+                    for c in [a, b] {
+                        if let Some(e) = map.engage_in(c, u, r, EPS_Z, Some(&tiles)) {
+                            worst = Some(match worst {
+                                Some(w) if w.cos_max > e.cos_max => Engage {
+                                    ap: w.ap.max(e.ap),
+                                    ae: w.ae.max(e.ae),
+                                    ..w
+                                },
+                                Some(w) => Engage {
+                                    ap: w.ap.max(e.ap),
+                                    ae: w.ae.max(e.ae),
+                                    ..e
+                                },
+                                None => e,
+                            });
+                        }
                     }
                 }
-                map.sweep(a, b, prof);
+                map.sweep_in(a, b, prof, Some(&mut tiles));
                 a = b;
             }
             if sched {
@@ -492,7 +657,9 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
 /// The path with each scheduled move's feed set per fixed-length sample from the engagement
 /// it meets in `map` (left as the path cut it): fz / max cos θ over the sample and the start of
 /// the next (the chip never above fz), at most cap · fz, the feed within [f_min, f_max]. A move
-/// is split at its sample boundaries, each sample its own move (never joined). Straight plunges, moves up and rapids keep their feeds. The caller keeps f_max
+/// is split at its sample boundaries, each sample its own move (never joined). Straight plunges, moves up and rapids keep their feeds,
+/// and a sample that meets no material keeps its move's own feed where that is the higher (a
+/// link through cleared air set to run fast). The caller keeps f_max
 /// under the machine's limit (G5 checks the posted F soundly, so the limit itself may fail).
 /// The feed (mm/min) `schedule` gives each sample: the chip rule per sample (fz over the
 /// sample's max cos θ, at most `cap` fz), no faster than the next sample, within the machine's
@@ -534,14 +701,71 @@ pub fn schedule(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -
             out.push(*mv);
             continue;
         }
+        // the move's own feed, where it was set above the chip rule's (a link through cleared
+        // air: nothing to cut, so no chip to hold)
+        let own = match *mv {
+            PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
+            _ => 0.0,
+        };
         for i in start..k {
-            let (end, f) = (samples[i].end, feed[i]);
+            let (end, mut f) = (samples[i].end, feed[i]);
+            // (any contact at all keeps the chip rule: a link that grazes stock outside the
+            // region it was tested against must not touch it at the link feed)
+            if samples[i].engage.is_none() && own > f {
+                f = own.min(s.f_max.max(s.f_min));
+            }
             out.push(match *mv {
                 PMove::Line { phase, .. } => PMove::Line { to: end, f, phase },
                 PMove::Arc { c, cw, .. } => PMove::Arc { to: end, c, cw, f },
                 other => other,
             });
         }
+    }
+    OpPath {
+        tool: path.tool,
+        start: path.start,
+        moves: out,
+        rpm: path.rpm,
+        coolant: path.coolant,
+    }
+}
+
+/// As `schedule`, but each move keeps its own geometry whole and takes ONE feed: the lowest its
+/// samples call for (so the chip stays within fz over all of it). A move that meets no material
+/// in any sample keeps its own feed where that is higher. For paths built of long arcs and lines
+/// (adaptive): no block is split, and F changes only between moves, so the control is not asked
+/// to slow for an F change inside a curve.
+pub fn schedule_per_move(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &Sched) -> OpPath {
+    let samples = schedule_samples(path, map, prof, s);
+    let feed = sample_feeds(&samples, s);
+    let n = samples.len();
+    let mut out = Vec::with_capacity(path.moves.len());
+    let mut k = 0;
+    for (mi, mv) in path.moves.iter().enumerate() {
+        let start = k;
+        while k < n && samples[k].mv == mi {
+            k += 1;
+        }
+        if start == k {
+            out.push(*mv);
+            continue;
+        }
+        let own = match *mv {
+            PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
+            _ => 0.0,
+        };
+        let air = samples[start..k].iter().all(|sm| sm.engage.is_none());
+        let lo = feed[start..k].iter().copied().fold(f64::INFINITY, f64::min);
+        let f = if air && own > lo {
+            own.min(s.f_max.max(s.f_min))
+        } else {
+            lo
+        };
+        out.push(match *mv {
+            PMove::Line { to, phase, .. } => PMove::Line { to, f, phase },
+            PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f },
+            other => other,
+        });
     }
     OpPath {
         tool: path.tool,
@@ -652,5 +876,91 @@ mod tests {
         // every sample its own move, whatever the feeds (all at the cap in air): never joined
         let out = schedule(&p, &mut HeightMap::of_stock(&air, 0.05), &prof, &sched(2.0));
         assert_eq!(out.moves.len(), b.len());
+    }
+
+    /// `sweep_in` with tiles is `sweep`, to the bit (map and volume), move after move: flat,
+    /// bull and ball ends, level, ramped and plunging moves, over a stock cut unevenly. Fails if
+    /// a tile's maximum is ever below one of its cells (e.g. `tile_max` taking the least).
+    #[test]
+    fn tiles_change_nothing() {
+        let mut seed = 11u64;
+        let mut rnd = || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            ((seed >> 11) as f64) / ((1u64 << 53) as f64)
+        };
+        let profs = [
+            Profile::Bull { r: 5.0, re: 0.0 },
+            Profile::Bull { r: 3.0, re: 1.0 },
+            Profile::Ball { r: 2.0 },
+            Profile::Bull { r: 12.0, re: 0.0 },
+        ];
+        let mut a = HeightMap::new([0.0, 0.0, 0.0], [37.3, 29.1, 10.0], 0.1);
+        let mut b = HeightMap::new([0.0, 0.0, 0.0], [37.3, 29.1, 10.0], 0.1);
+        let mut tiles = Tiles::of(&b);
+        let mut skipped = 0usize;
+        let mut nones = 0usize;
+        for k in 0..400 {
+            let p = &profs[k % profs.len()];
+            let z0 = 10.5 - 11.0 * rnd();
+            let z1 = if k % 3 == 0 { z0 } else { 10.5 - 11.0 * rnd() };
+            let s = [rnd() * 45.0 - 4.0, rnd() * 37.0 - 4.0, z0];
+            let e = if k % 7 == 0 {
+                [s[0], s[1], z1]
+            } else {
+                [s[0] + rnd() * 12.0 - 6.0, s[1] + rnd() * 12.0 - 6.0, z1]
+            };
+            skipped += tiles
+                .max
+                .iter()
+                .filter(|m| **m <= s[2].min(e[2]).max(b.bottom))
+                .count();
+            let ra = a.sweep(s, e, p);
+            let rb = b.sweep_in(s, e, p, Some(&mut tiles));
+            assert_eq!(ra.to_bits(), rb.to_bits(), "move {k}: {ra} vs {rb}");
+            assert!(
+                a.z.iter().zip(&b.z).all(|(x, y)| x.to_bits() == y.to_bits()),
+                "move {k}: the maps differ"
+            );
+            // the edge read through the tiles is the edge read cell by cell, at the move's end
+            // and at random places and heights, inside the map and over its edges
+            for q in 0..6 {
+                let c = if q == 0 {
+                    e
+                } else {
+                    [rnd() * 49.0 - 6.0, rnd() * 41.0 - 6.0, 11.0 - 12.0 * rnd()]
+                };
+                let th = rnd() * std::f64::consts::TAU;
+                let (sn, cs) = dmath::sin_cos(th);
+                let r = p.r();
+                let want = b.engage(c, [cs, sn], r, 1e-3);
+                let got = b.engage_in(c, [cs, sn], r, 1e-3, Some(&tiles));
+                if want.is_none() {
+                    nones += 1;
+                }
+                assert_eq!(format!("{want:?}"), format!("{got:?}"), "move {k}, place {q}");
+            }
+        }
+        assert!(nones > 50, "too few places with nothing engaged: {nones}");
+        assert!(
+            skipped > 0,
+            "no tile was ever passed over: the test shows nothing"
+        );
+    }
+
+    /// The edge table is what `engage` computed at each call: θ_k = −π/2 + k·π/180 and its
+    /// sine and cosine (dmath), bit for bit.
+    #[test]
+    fn the_edge_table_is_the_edge() {
+        let step = std::f64::consts::PI / 180.0;
+        for (k, &(th, s, co)) in edge().iter().enumerate() {
+            let t = -std::f64::consts::FRAC_PI_2 + k as f64 * step;
+            let (ws, wc) = dmath::sin_cos(t);
+            assert_eq!(
+                (th.to_bits(), s.to_bits(), co.to_bits()),
+                (t.to_bits(), ws.to_bits(), wc.to_bits())
+            );
+        }
     }
 }
