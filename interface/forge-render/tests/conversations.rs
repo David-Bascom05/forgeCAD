@@ -298,13 +298,31 @@ printf '{"type":"turn.completed","usage":{}}\n'
         .clone();
     let before = std::fs::read_to_string(root.join(".agent-run/arguments.txt")).unwrap();
     let mut reopened = view(&root, &storage, &program);
+    // the Agent tab, reopened, comes back with the project's last conversation (+ starts anew)
+    reopened.step();
+    assert!(
+        reopened
+            .gui
+            .shell
+            .agent
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::User { text, .. } if text == "Second optical discussion")),
+        "the last conversation is back"
+    );
     send(&mut reopened, "/resume");
     reopened.step();
     reopened.step();
     assert!(reopened.gui.shell.agent.resume_open);
     assert_eq!(reopened.gui.shell.agent.saved_chats.len(), 2);
     assert!(
-        reopened.gui.shell.agent.entries.is_empty(),
+        !reopened
+            .gui
+            .shell
+            .agent
+            .entries
+            .iter()
+            .any(|e| matches!(e, Entry::User { text, .. } if text.contains("/resume"))),
         "slash command isn't sent to the model"
     );
     assert!(reopened.click(&format!("agent:resume:{id}")));

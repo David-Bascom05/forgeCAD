@@ -52,6 +52,31 @@ pub enum Event {
         text: String,
         fix: Option<String>,
     },
+    /// The agent asks before a tool runs: `id` answers it (`Backend::answer`). `summary` is the
+    /// tool's row ("Edit plate.fg"), `input` the whole of what it would do; `always`, when the
+    /// backend offers it, what "Always" would allow ("Accept edits for this chat").
+    Permission {
+        id: String,
+        tool: String,
+        /// The tool call it's about: its row says it waits.
+        tool_use: String,
+        summary: String,
+        input: String,
+        always: Option<String>,
+        /// The tool's input as sent (JSON): the host reads an edit's file to show it whole.
+        raw: String,
+    },
+    /// The backend's permission mode is now this (`Mode::flag`), however it changed.
+    Mode(String),
+    /// The slash commands the backend takes in a message (Claude Code's `init` says them).
+    Commands(Vec<String>),
+    /// What a turn took: seconds, tokens in and out, and what the API would charge for them.
+    Usage {
+        secs: f64,
+        tokens_in: u64,
+        tokens_out: u64,
+        cost: f64,
+    },
     /// A Forge file in the folder changed or appeared while the agent ran; what it held before.
     FileChanged {
         path: String,
@@ -110,6 +135,94 @@ pub enum Entry {
         text: String,
         error: bool,
     },
+    /// A tool waiting on the person, and then what they said.
+    Permission {
+        id: String,
+        tool: String,
+        tool_use: String,
+        summary: String,
+        input: String,
+        always: Option<String>,
+        state: Asked,
+    },
+}
+
+/// A permission's answer, or none yet.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Asked {
+    Waiting,
+    Allowed,
+    /// Allowed, and what `always` names from now on.
+    Always,
+    Denied,
+    /// The turn ended (stopped, failed) before an answer.
+    Dropped,
+}
+
+/// How a permission is answered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Answer {
+    Allow,
+    Always,
+    Deny,
+}
+
+/// What may run without asking, as Claude Code's `--permission-mode` names it.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Mode {
+    /// Ask before edits and commands the person's settings don't already allow.
+    #[default]
+    Ask,
+    /// Edit files without asking; ask before the rest.
+    AcceptEdits,
+    /// Look and plan, change nothing.
+    Plan,
+}
+
+impl Mode {
+    pub const ALL: [Mode; 3] = [Mode::Ask, Mode::AcceptEdits, Mode::Plan];
+    pub fn flag(self) -> &'static str {
+        match self {
+            Mode::Ask => "default",
+            Mode::AcceptEdits => "acceptEdits",
+            Mode::Plan => "plan",
+        }
+    }
+    pub fn from_flag(s: &str) -> Option<Mode> {
+        Mode::ALL.into_iter().find(|m| m.flag() == s)
+    }
+    pub fn word(self) -> &'static str {
+        match self {
+            Mode::Ask => "Ask first",
+            Mode::AcceptEdits => "Accept edits",
+            Mode::Plan => "Plan only",
+        }
+    }
+    pub fn tip(self) -> &'static str {
+        match self {
+            Mode::Ask => "The agent asks before it edits a file or runs a command (Shift+Tab to change)",
+            Mode::AcceptEdits => {
+                "The agent edits files without asking; it still asks before commands (Shift+Tab to change)"
+            }
+            Mode::Plan => "The agent reads and plans but changes nothing (Shift+Tab to change)",
+        }
+    }
+    /// What it means, for the menu.
+    pub fn means(self) -> &'static str {
+        match self {
+            Mode::Ask => "Asks before it edits a file or runs a command",
+            Mode::AcceptEdits => "Edits files without asking; asks before commands",
+            Mode::Plan => "Reads and plans; changes nothing",
+        }
+    }
+
+    pub fn next(self) -> Mode {
+        match self {
+            Mode::Ask => Mode::AcceptEdits,
+            Mode::AcceptEdits => Mode::Plan,
+            Mode::Plan => Mode::Ask,
+        }
+    }
 }
 
 /// What the tab asks of the host.
@@ -131,6 +244,12 @@ pub enum AgentAct {
     Undo(usize, usize),
     Redo(usize, usize),
     Settings(SettingsAct),
+    /// A permission answered.
+    Answer(String, Answer),
+    /// The permission mode changed in the tab.
+    Mode(Mode),
+    /// Back to the person's own settings' mode (its flag): `AgentTab::own_mode`.
+    OwnMode(String),
     /// The answer to "Trust this folder for the agent?".
     Trust {
         dir: String,
@@ -177,6 +296,147 @@ pub struct AgentTab {
     thumbs: std::collections::HashMap<usize, egui::TextureHandle>,
     /// Talking instead of typing (`voice.rs`).
     pub voice: super::voice::Voice,
+    /// What may run without asking, this chat, as the backend last said or the person chose.
+    pub mode: Mode,
+    /// The person chose `mode` here (else it's their own settings' default).
+    pub mode_chosen: bool,
+    /// The mode chip's menu is open.
+    pub mode_menu: bool,
+    /// The backend's own slash commands (Claude Code's: compact, context, skills...).
+    pub commands: Vec<String>,
+    /// The last turn's time, tokens in and out, and API-equivalent cost, said under it.
+    pub usage: Option<(f64, u64, u64, f64)>,
+    /// When the running turn began (the frame clock's seconds), for its time so far.
+    pub turn_started: Option<f64>,
+    /// ↑ in the box: which earlier message it holds now, counted back from the last.
+    pub recall: Option<usize>,
+    /// Scroll the chat to its end next frame ("Jump to latest").
+    pub jump: bool,
+    /// The waiting question's buttons are in sight (or none waits): Enter may answer it.
+    pub card_visible: bool,
+    /// A mode the backend said that the tab has no name for (`bypassPermissions`, `auto`): shown
+    /// as it is, instead of `mode`.
+    pub mode_other: Option<String>,
+    /// The mode the person's own settings gave the chat at its start, when the tab has no name
+    /// for it (a bypass, `auto`): the mode menu offers it back after another is chosen.
+    pub own_mode: Option<String>,
+    /// A selection the person took off the next message (its chip's ×): not suggested again
+    /// until something else is selected.
+    pub dismissed: Option<String>,
+    /// The `@` list under the cursor's word, while one is open.
+    pub mention: Option<Mention>,
+    /// The box as it was when Esc closed the `@` list: it stays closed until the text changes.
+    pub mention_off: Option<String>,
+    /// The id of the chip the pointer is on (in the box or a sent message): the view lights what
+    /// it names. Set each frame.
+    pub hover_ref: Option<String>,
+}
+
+/// One thing `@` can name: what goes in the message, and what it is.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Candidate {
+    pub name: String,
+    pub what: String,
+    /// More, on the row's hover: what a param drives.
+    pub tip: String,
+}
+
+/// The `@` list: the word typed after `@`, what matches it, and the one Enter takes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Mention {
+    /// `@` (a name) or `/` (a command).
+    pub sigil: char,
+    pub word: String,
+    pub items: Vec<Candidate>,
+    pub at: usize,
+    /// Everything it can name, gathered once when the list opened.
+    pub all: Vec<Candidate>,
+}
+
+/// The `/word` the box is, when it's a command being typed: the word, without its `/`.
+pub fn slash_word(input: &str) -> Option<&str> {
+    let w = input.strip_prefix('/')?;
+    w.chars()
+        .all(|c| c.is_alphanumeric() || "-_:".contains(c))
+        .then_some(w)
+}
+
+/// The app's own commands, before the backend's: (name, what it does).
+pub const COMMANDS: [(&str, &str); 7] = [
+    ("new", "Start a new conversation"),
+    ("clear", "Start a new conversation (as /new)"),
+    ("resume", "Pick a saved conversation"),
+    ("mode", "What may run without asking: ask, edits or plan"),
+    ("model", "Choose the agent and its model"),
+    ("undo", "Take back the last turn's changes"),
+    ("help", "What these commands do"),
+];
+
+/// What a backend command does, where it's known.
+fn backend_says(name: &str) -> String {
+    match name {
+        "compact" => "Summarise the conversation so far, to free context".into(),
+        "context" => "What's using the context".into(),
+        "usage" => "Your Claude plan's usage".into(),
+        "init" => "Write a CLAUDE.md for this project".into(),
+        "effort" => "How hard the model thinks".into(),
+        "review" | "code-review" => "Review the changes".into(),
+        "security-review" => "Review the changes for security".into(),
+        n if n.contains(':') => "Skill (Claude Code)".into(),
+        _ => "Claude Code".into(),
+    }
+}
+
+/// Everything `/` can run: the app's, then the backend's (less those the app does itself).
+pub fn command_candidates(backend: &[String]) -> Vec<Candidate> {
+    let mut all: Vec<Candidate> = COMMANDS
+        .iter()
+        .map(|(n, w)| Candidate {
+            name: n.to_string(),
+            what: w.to_string(),
+            tip: String::new(),
+        })
+        .collect();
+    for n in backend {
+        if n.starts_with("__") || COMMANDS.iter().any(|c| c.0 == n) {
+            continue;
+        }
+        all.push(Candidate {
+            name: n.clone(),
+            what: backend_says(n),
+            tip: String::new(),
+        });
+    }
+    all
+}
+
+/// At most this many in the `@` list.
+pub const MENTION_ROWS: usize = 8;
+
+/// The `@word` the box ends with, if it does: the word, without its `@`.
+pub fn mention_word(input: &str) -> Option<&str> {
+    let start = input.rfind(|c: char| c.is_whitespace()).map_or(0, |k| k + 1);
+    let word = input[start..].strip_prefix('@')?;
+    word.chars()
+        .all(|c| c.is_alphanumeric() || "._/-:".contains(c))
+        .then_some(word)
+}
+
+/// What matches `word`, best first: names starting with it, then names holding it, each in the
+/// order given (the part's order, then params, then files); case aside.
+pub fn matches(all: &[Candidate], word: &str) -> Vec<Candidate> {
+    let w = word.to_lowercase();
+    let lower: Vec<String> = all.iter().map(|c| c.name.to_lowercase()).collect();
+    let starts = all.iter().zip(&lower).filter(|(_, n)| n.starts_with(&w));
+    let holds = all
+        .iter()
+        .zip(&lower)
+        .filter(|(_, n)| !n.starts_with(&w) && n.contains(&w));
+    starts
+        .chain(holds)
+        .map(|(c, _)| c.clone())
+        .take(MENTION_ROWS)
+        .collect()
 }
 
 pub const INPUT_ID: &str = "agent-input";
@@ -234,10 +494,14 @@ impl AgentTab {
                 self.reply_boundary = true;
                 self.running = false;
                 for e in &mut self.entries {
-                    if let Entry::Tool { state, .. } = e
-                        && *state == ToolState::Running
-                    {
-                        *state = ToolState::Failed;
+                    match e {
+                        Entry::Tool { state, .. } if *state == ToolState::Running => {
+                            *state = ToolState::Failed
+                        }
+                        Entry::Permission { state, .. } if *state == Asked::Waiting => {
+                            *state = Asked::Dropped
+                        }
+                        _ => {}
                     }
                 }
                 if stopped {
@@ -254,7 +518,104 @@ impl AgentTab {
                 self.running = false;
                 self.problem = Some(Problem { text, fix });
             }
+            Event::Permission {
+                id,
+                tool,
+                tool_use,
+                summary,
+                input,
+                always,
+                ..
+            } => self.entries.push(Entry::Permission {
+                id,
+                tool,
+                tool_use,
+                summary,
+                input,
+                always,
+                state: Asked::Waiting,
+            }),
+            Event::Commands(c) => self.commands = c,
+            Event::Usage {
+                secs,
+                tokens_in,
+                tokens_out,
+                cost,
+            } => self.usage = Some((secs, tokens_in, tokens_out, cost)),
+            Event::Mode(m) => match Mode::from_flag(&m) {
+                Some(m) => {
+                    self.mode = m;
+                    self.mode_other = None;
+                }
+                None => {
+                    if !self.mode_chosen {
+                        self.own_mode = Some(m.clone());
+                    }
+                    self.mode_other = Some(m)
+                }
+            },
             Event::FileChanged { .. } => {}
+        }
+    }
+
+    /// The oldest permission still waiting on the person: its id.
+    pub fn waiting(&self) -> Option<&str> {
+        self.entries.iter().find_map(|e| match e {
+            Entry::Permission {
+                id,
+                state: Asked::Waiting,
+                ..
+            } => Some(id.as_str()),
+            _ => None,
+        })
+    }
+
+    /// A permission answered: the card says so and the host tells the backend.
+    pub fn answer(&mut self, want: &str, a: Answer) {
+        for e in &mut self.entries {
+            if let Entry::Permission { id, state, .. } = e
+                && id == want
+                && *state == Asked::Waiting
+            {
+                *state = match a {
+                    Answer::Allow => Asked::Allowed,
+                    Answer::Always => Asked::Always,
+                    Answer::Deny => Asked::Denied,
+                };
+                self.out.push(AgentAct::Answer(want.to_string(), a));
+                return;
+            }
+        }
+    }
+
+    /// The permission mode, set here: the host passes it on.
+    pub fn set_mode(&mut self, m: Mode) {
+        if self.mode != m || self.mode_other.is_some() {
+            self.mode = m;
+            self.mode_other = None;
+            self.mode_chosen = true;
+            self.out.push(AgentAct::Mode(m));
+        }
+    }
+
+    /// Back to the person's own settings' mode (`own_mode`), chosen in the mode menu.
+    pub fn set_own_mode(&mut self) {
+        if let Some(m) = self.own_mode.clone()
+            && self.mode_other.as_ref() != Some(&m)
+        {
+            self.mode_other = Some(m.clone());
+            self.mode_chosen = false;
+            self.out.push(AgentAct::OwnMode(m));
+        }
+    }
+
+    /// The person's own settings' mode, in words: the chip's and the menu's.
+    pub fn mode_word(flag: &str) -> &str {
+        match flag {
+            "bypassPermissions" => "Permissions bypassed",
+            "dontAsk" => "Don't ask",
+            "auto" => "Auto",
+            o => o,
         }
     }
 
@@ -268,7 +629,60 @@ impl AgentTab {
     /// The input as a message: sent now or queued behind the active turn.
     pub fn send(&mut self) {
         let text = self.input.trim().to_string();
+        // the mode, any time: `/mode` opens its menu, `/mode plan` sets it
+        if let Some(arg) = text
+            .strip_prefix("/mode")
+            .filter(|r| r.is_empty() || r.starts_with(' '))
+        {
+            self.input.clear();
+            match arg.trim() {
+                "" => self.mode_menu = true,
+                "ask" | "default" => self.set_mode(Mode::Ask),
+                "edits" | "accept" | "acceptEdits" => self.set_mode(Mode::AcceptEdits),
+                "plan" => self.set_mode(Mode::Plan),
+                other => self.entries.push(Entry::Note {
+                    text: format!("/mode {other}: ask, edits or plan"),
+                    error: true,
+                }),
+            }
+            return;
+        }
         if !self.running {
+            if text == "/clear" {
+                self.input.clear();
+                self.new_chat();
+                return;
+            }
+            if text == "/model" {
+                self.input.clear();
+                self.switcher = true;
+                return;
+            }
+            if text == "/undo" {
+                self.input.clear();
+                self.undo_last();
+                return;
+            }
+            if text == "/help" {
+                self.input.clear();
+                let mut said: Vec<String> = COMMANDS.iter().map(|(n, w)| format!("/{n}: {w}")).collect();
+                if !self.commands.is_empty() {
+                    said.push(format!(
+                        "And Claude Code's own: {}",
+                        self.commands
+                            .iter()
+                            .filter(|c| !c.starts_with("__"))
+                            .map(|c| format!("/{c}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ));
+                }
+                self.entries.push(Entry::Note {
+                    text: said.join("\n"),
+                    error: false,
+                });
+                return;
+            }
             if text == "/resume" {
                 self.input.clear();
                 self.out.push(AgentAct::ListConversations);
@@ -294,6 +708,10 @@ impl AgentTab {
         {
             return;
         }
+        // what's selected goes with it unless its chip was taken off
+        if let Some(s) = self.suggested().map(str::to_string) {
+            self.refs.push(s);
+        }
         let refs = std::mem::take(&mut self.refs);
         self.entries.push(Entry::User {
             text: text.clone(),
@@ -302,6 +720,8 @@ impl AgentTab {
         });
         self.input.clear();
         self.problem = None;
+        self.usage = None;
+        self.recall = None;
         self.running = true;
         self.markup.shown = None;
         self.markup.sending = markup;
@@ -343,7 +763,67 @@ impl AgentTab {
         self.running = false;
         self.problem = None;
         self.open.clear();
+        self.mode = Mode::Ask;
+        self.mode_chosen = false;
+        self.mode_other = None;
+        self.own_mode = None;
         self.out.push(AgentAct::NewChat);
+    }
+
+    /// The selection, offered for the next message: not already attached, not taken off.
+    pub fn suggested(&self) -> Option<&str> {
+        let s = self.selection.as_deref()?;
+        (!self.refs.iter().any(|r| r == s) && self.dismissed.as_deref() != Some(s)).then_some(s)
+    }
+
+    /// The last turn's changes taken back, each file's card's Undo; said when there's none.
+    pub fn undo_last(&mut self) {
+        let last = self
+            .entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Diff {
+                    turn, undone: false, ..
+                } => Some(*turn),
+                _ => None,
+            })
+            .max();
+        let Some(turn) = last else {
+            self.entries.push(Entry::Note {
+                text: "Nothing to undo: no change of the agent's is in place".into(),
+                error: false,
+            });
+            return;
+        };
+        let files: Vec<usize> = self
+            .entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Diff {
+                    turn: t,
+                    index,
+                    undone: false,
+                    ..
+                } if *t == turn => Some(*index),
+                _ => None,
+            })
+            .collect();
+        for index in files {
+            self.out.push(AgentAct::Undo(turn, index));
+        }
+    }
+
+    /// The `@` list's pick, in place of the `@word` typed.
+    pub fn take_mention(&mut self) -> bool {
+        let Some(m) = self.mention.take() else {
+            return false;
+        };
+        let Some(c) = m.items.get(m.at) else { return false };
+        let cut = self.input.len() - m.word.len();
+        self.input.truncate(cut);
+        self.input.push_str(&c.name);
+        self.input.push(' ');
+        true
     }
 
     pub fn attach(&mut self, id: &str) {
@@ -359,9 +839,27 @@ impl AgentTab {
             self.voice.out.push(super::voice::VoiceAct::Cancel);
             return true;
         }
+        // the mode's menu closes first
+        if std::mem::take(&mut self.mode_menu) {
+            ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+            return true;
+        }
+        // an open `@` list closes first
+        if self.mention.as_ref().is_some_and(|m| !m.items.is_empty()) {
+            self.mention = None;
+            ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+            self.mention_off = Some(self.input.clone());
+            return true;
+        }
         let focused = ctx.memory(|m| m.has_focus(egui::Id::unique(INPUT_ID)));
         if self.tab != SideTab::Agent || !(self.running || focused) {
             return false;
+        }
+        // a question waiting: Esc says no to it, and the turn goes on
+        if let Some(id) = self.waiting().map(str::to_string) {
+            ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
+            self.answer(&id, Answer::Deny);
+            return true;
         }
         ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Escape));
         if self.running {
@@ -380,6 +878,87 @@ pub fn prompt(text: &str, refs: &[String]) -> String {
     }
     let ids: Vec<String> = refs.iter().map(|r| format!("`{r}`")).collect();
     format!("{text}\n\n(Selected in the app: {})", ids.join(", "))
+}
+
+/// A tool row's verb in each tense: what it did, what it would do, what it's doing.
+const VERBS: [(&str, &str, &str); 27] = [
+    ("Applied", "Apply", "Applying"),
+    ("Asked", "Ask", "Asking"),
+    ("Built", "Build", "Building"),
+    ("Compared", "Compare", "Comparing"),
+    ("Created", "Create", "Creating"),
+    ("Edited", "Edit", "Editing"),
+    ("Isolated", "Isolate", "Isolating"),
+    ("Kept", "Keep", "Keeping"),
+    ("Listed", "List", "Listing"),
+    ("Looked", "Look", "Looking"),
+    ("Made", "Make", "Making"),
+    ("Measured", "Measure", "Measuring"),
+    ("Moved", "Move", "Moving"),
+    ("Put", "Put", "Putting"),
+    ("Queried", "Query", "Querying"),
+    ("Ran", "Run", "Running"),
+    ("Read", "Read", "Reading"),
+    ("Regenerated", "Regenerate", "Regenerating"),
+    ("Released", "Release", "Releasing"),
+    ("Restored", "Restore", "Restoring"),
+    ("Searched", "Search", "Searching"),
+    ("Selected", "Select", "Selecting"),
+    ("Showed", "Show", "Showing"),
+    ("Took", "Take", "Taking"),
+    ("Turned", "Turn", "Turning"),
+    ("Updated", "Update", "Updating"),
+    ("Wrote", "Write", "Writing"),
+];
+
+/// The summary with its first word (a past or present verb) in another tense: 0 past, 1
+/// present, 2 progressive; as it is when the word isn't a verb the table has.
+fn tense(summary: &str, form: usize) -> String {
+    let (first, rest) = summary.split_once(' ').unwrap_or((summary, ""));
+    let Some(v) = VERBS.iter().find(|v| v.0 == first || v.1 == first) else {
+        return summary.to_string();
+    };
+    let word = [v.0, v.1, v.2][form];
+    if rest.is_empty() {
+        word.to_string()
+    } else {
+        format!("{word} {rest}")
+    }
+}
+
+/// A tool row's words as a question asks them: "Edited plate.fg" (what it did) → "Edit plate.fg"
+/// (what it would do).
+pub fn present(summary: &str) -> String {
+    tense(summary, 1)
+}
+
+/// What a running tool is doing: "Querying plate.fg: holes".
+pub fn progressive(summary: &str) -> String {
+    tense(summary, 2)
+}
+
+/// What a declined tool didn't do: "Not edited plate.fg".
+pub fn not_done(summary: &str) -> String {
+    let past = tense(summary, 0);
+    // the participle where it isn't the past
+    let past = match past.split_once(' ') {
+        Some((v, rest)) => {
+            let p = match v {
+                "Ran" => "Run",
+                "Took" => "Taken",
+                "Showed" => "Shown",
+                "Wrote" => "Written",
+                v => v,
+            };
+            format!("{p}: {rest}")
+        }
+        None => past,
+    };
+    let mut c = past.chars();
+    match c.next() {
+        Some(f) => format!("Not {}{}", f.to_lowercase(), c.as_str()),
+        None => "Not run".into(),
+    }
 }
 
 /// "Agent: " and the request's first line, as its undo step reads.
@@ -629,16 +1208,13 @@ pub fn tool_summary(name: &str, input: &Json) -> (String, String) {
 fn rich(text: &str, width: f32, ink: Color32, code_ink: Color32) -> LayoutJob {
     let mut job = LayoutJob::default();
     job.wrap.max_width = width;
-    let plain = TextFormat {
-        font_id: sans(13.0),
-        color: ink,
+    let fmt = |font: FontId, color: Color32| TextFormat {
+        font_id: font,
+        color,
         ..Default::default()
     };
-    let code = TextFormat {
-        font_id: mono(12.0),
-        color: code_ink,
-        ..Default::default()
-    };
+    let plain = fmt(sans(13.0), ink);
+    let code = fmt(mono(12.0), code_ink);
     let mut fence = false;
     for (k, line) in text.split('\n').enumerate() {
         if k > 0 {
@@ -652,14 +1228,86 @@ fn rich(text: &str, width: f32, ink: Color32, code_ink: Color32) -> LayoutJob {
             job.append(line, 0.0, code.clone());
             continue;
         }
-        let line = line.replace("**", "");
-        for (n, part) in line.split('`').enumerate() {
-            if !part.is_empty() {
-                job.append(part, 0.0, if n % 2 == 1 { code.clone() } else { plain.clone() });
-            }
+        for (part, f) in md_line(line, ink, code_ink) {
+            job.append(&part, 0.0, f);
         }
     }
     job
+}
+
+/// One line of Markdown as runs of text and their look: a heading in bold, a bullet as •, a
+/// quote dimmed, a table's row in mono (its columns line up), `code`, **bold**.
+fn md_line(line: &str, ink: Color32, code_ink: Color32) -> Vec<(String, TextFormat)> {
+    let fmt = |font: FontId, color: Color32| TextFormat {
+        font_id: font,
+        color,
+        ..Default::default()
+    };
+    let t = line.trim_start();
+    let indent = &line[..line.len() - t.len()];
+    // a table's row, or its rule: as it is, in mono
+    if t.starts_with('|') {
+        // its rule (|---|:--|) faint: the rows are what's read
+        let rule = t.chars().all(|c| "|-: ".contains(c));
+        return vec![(
+            line.to_string(),
+            fmt(mono(12.0), if rule { ink.gamma_multiply(0.35) } else { ink }),
+        )];
+    }
+    if let Some(h) = ["### ", "## ", "# "].iter().find_map(|p| t.strip_prefix(p)) {
+        return inline(h, fmt(semi(14.0), ink), code_ink);
+    }
+    if let Some(q) = t.strip_prefix("> ").or_else(|| (t == ">").then_some("")) {
+        return inline(q, fmt(sans(13.0), ink.gamma_multiply(0.7)), code_ink);
+    }
+    if t == "---" || t == "***" {
+        return vec![("────────".into(), fmt(sans(13.0), ink.gamma_multiply(0.4)))];
+    }
+    let mut out = vec![];
+    let body = match t.strip_prefix("- ").or_else(|| t.strip_prefix("* ")) {
+        Some(b) => {
+            out.push((format!("{indent}• "), fmt(sans(13.0), ink)));
+            b
+        }
+        None => {
+            out.push((indent.to_string(), fmt(sans(13.0), ink)));
+            t
+        }
+    };
+    out.extend(inline(body, fmt(sans(13.0), ink), code_ink));
+    out
+}
+
+/// A line's `code` and **bold** runs, the rest in `base`.
+fn inline(text: &str, base: TextFormat, code_ink: Color32) -> Vec<(String, TextFormat)> {
+    let mut out = vec![];
+    for (n, part) in text.split('`').enumerate() {
+        if part.is_empty() {
+            continue;
+        }
+        if n % 2 == 1 {
+            out.push((
+                part.to_string(),
+                TextFormat {
+                    font_id: mono(12.0),
+                    color: code_ink,
+                    ..Default::default()
+                },
+            ));
+            continue;
+        }
+        for (m, run) in part.split("**").enumerate() {
+            if run.is_empty() {
+                continue;
+            }
+            let mut f = base.clone();
+            if m % 2 == 1 {
+                f.font_id = semi(f.font_id.size);
+            }
+            out.push((run.to_string(), f));
+        }
+    }
+    out
 }
 
 /// A reply cut into prose and fenced code blocks, in order: `(is code, text)`.
@@ -772,7 +1420,12 @@ impl Shell {
                 ink,
             );
             // a running agent shows on its tab from the Model tab
-            if tab == SideTab::Agent && !on && self.agent.running {
+            // a running agent shows on its tab from the Model tab; one waiting on you, louder
+            if tab == SideTab::Agent && !on && self.agent.waiting().is_some() {
+                p.circle_filled(pos2(r.right() - 6.0, r.top() + 7.0), 4.5, t.warn);
+                resp.clone()
+                    .on_hover_text("The agent is waiting for your permission");
+            } else if tab == SideTab::Agent && !on && self.agent.running {
                 p.circle_filled(pos2(r.right() - 6.0, r.top() + 7.0), 3.0, t.focus);
             }
             self.note(format!("side:tab:{word}"), r);
@@ -881,38 +1534,22 @@ impl Shell {
 
     /// The Agent tab: the backend's switcher, what it's working on, the chat, the input.
     pub(super) fn agent_ui(&mut self, ui: &mut Ui, area: Rect) {
+        // the chip the pointer is on, found again each frame
+        self.agent.hover_ref = None;
         let t = self.theme;
-        // in a page no agent can run (Claude Code and Codex are programs on the computer, speech
-        // its engine; an endpoint isn't reached from the page yet): said plainly, no Send to fail
-        if cfg!(target_arch = "wasm32") {
+        // in a page the agent is the person's own Claude Code, on their machine behind
+        // `forgecad web --agent` (agent/bridge.rs); with no bridge, how to start one
+        #[cfg(target_arch = "wasm32")]
+        let bridged = crate::agent::bridge::ready();
+        #[cfg(not(target_arch = "wasm32"))]
+        let bridged = true;
+        if !bridged {
+            let mut places = std::mem::take(&mut self.places);
             ui.scope_builder(
                 egui::UiBuilder::new().max_rect(area.shrink2(vec2(PAD, 12.0))),
-                |ui| {
-                    ui.label(
-                        egui::RichText::new("The agent runs in the ForgeCAD desktop app")
-                            .font(medium(13.0))
-                            .color(t.ink),
-                    );
-                    ui.add_space(6.0);
-                    ui.label(
-                        egui::RichText::new(
-                            "Claude Code and Codex are programs on your computer, and talking to the \
-                         agent uses its speech engine: a browser page can start neither, and it \
-                         doesn't reach an OpenAI-compatible endpoint yet. Open this project in the \
-                         ForgeCAD desktop app to use the agent.",
-                        )
-                        .font(sans(12.0))
-                        .color(t.ink2),
-                    );
-                    ui.add_space(4.0);
-                    // (no download link: the desktop app installs from source)
-                    ui.label(
-                        egui::RichText::new("Install it with tools/install.sh (see the README).")
-                            .font(sans(11.0))
-                            .color(t.ink2),
-                    );
-                },
+                |ui| no_bridge(ui, &t, &mut places),
             );
+            self.places = places;
             return;
         }
         self.agent.selection = self.agent_selection();
@@ -971,6 +1608,60 @@ impl Shell {
         if response.clicked() && !self.agent.running {
             self.agent.out.push(AgentAct::ListConversations);
         }
+
+        // what may run without asking (Claude Code's permission mode); click or Shift+Tab to change
+        if self.agent.settings.kind == agent_settings::Kind::ClaudeCode {
+            let m = self.agent.mode;
+            let other = self.agent.mode_other.clone();
+            // a mode from the person's own settings the tab doesn't set, in words
+            let full = other.as_deref().map_or(m.word(), AgentTab::mode_word);
+            // narrow: a bypass still says so, in a word
+            let room = chats.left() - 6.0 - (br.right() + 4.0);
+            let mut word = full;
+            let mut g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(11.0), t.ink));
+            if g.size().x + 14.0 > room && other.as_deref() == Some("bypassPermissions") {
+                word = "Bypassed";
+                g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), sans(11.0), t.ink));
+            }
+            let mw = g.size().x + 14.0;
+            let mr = Rect::from_min_size(pos2(chats.left() - 6.0 - mw, bar.top() + 6.0), vec2(mw, 18.0));
+            // only where it doesn't cover the backend's name
+            if mr.left() > br.right() + 4.0 {
+                let tip = match other.as_deref() {
+                    Some("bypassPermissions") => "Your Claude settings bypass permissions: the agent runs every tool without asking. Click to choose another mode for this chat".to_string(),
+                    Some(o) => format!("Your Claude Code settings' mode, {o} (click to choose another)"),
+                    None => m.tip().to_string(),
+                };
+                let resp = ui
+                    .interact(mr, ui.scope_id().with("agent-mode"), Sense::click())
+                    .on_hover_text(tip);
+                resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, full));
+                let (fill, ink) = match m {
+                    _ if other.is_some() => (t.warn.gamma_multiply(0.25), t.ink),
+                    Mode::Ask => (t.field, t.ink2),
+                    Mode::AcceptEdits => (t.success.gamma_multiply(0.25), t.ink),
+                    Mode::Plan => (t.focus.gamma_multiply(0.25), t.ink),
+                };
+                p.rect_filled(mr, 9.0, if resp.hovered() { t.hover } else { fill });
+                p.galley(pos2(mr.left() + 7.0, mr.center().y - g.size().y * 0.5), g, ink);
+                self.note("agent:mode", mr);
+                // a click opens the three, each said: a misclick can't switch it unseen
+                if resp.clicked() {
+                    self.agent.mode_menu = !self.agent.mode_menu;
+                }
+                if self.agent.mode_menu {
+                    self.mode_menu(ui.ctx(), mr);
+                }
+            }
+        }
+        // a question waiting, on screen, and nothing with the keys: Enter allows it
+        if let Some(id) = self.agent.waiting().map(str::to_string)
+            && self.agent.card_visible
+            && ui.memory(|m| m.focused().is_none())
+            && ui.input_mut(|i| i.consume_key(Modifiers::NONE, Key::Enter))
+        {
+            self.agent.answer(&id, Answer::Allow);
+        }
         self.agent_resume_picker(ui.ctx());
 
         // what it's working on
@@ -996,7 +1687,11 @@ impl Shell {
         p.hline(0.0..=w, top - 0.5, Stroke::new(1.0, t.line));
 
         // Measure wrapped rows at the editor's width, including pasted paragraphs.
-        let chips = if self.agent.refs.is_empty() { 0.0 } else { 26.0 };
+        let chips = if self.agent.refs.is_empty() && self.agent.suggested().is_none() {
+            0.0
+        } else {
+            26.0
+        };
         let text_width = (w - 2.0 * (PAD - 2.0) - 8.0).max(24.0);
         let row_height = ui.fonts_mut(|f| f.row_height(&sans(13.0))) + ui.spacing().extra_text_line_spacing;
         let available = (area.bottom() - top).max(0.0);
@@ -1009,6 +1704,12 @@ impl Shell {
         let chat = Rect::from_min_max(pos2(area.left(), top), pos2(area.right(), input.top()));
         self.agent_chat(ui, chat);
         self.agent_input(ui, input);
+        // the running turn's start, for its time so far
+        if !self.agent.running {
+            self.agent.turn_started = None;
+        } else if self.agent.turn_started.is_none() {
+            self.agent.turn_started = Some(ui.input(|i| i.time));
+        }
         if self.agent.running {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(120));
@@ -1190,6 +1891,7 @@ impl Shell {
         let mut acts: Vec<AgentAct> = Vec::new();
         let mut toggles: Vec<String> = Vec::new();
         let mut places: Vec<(String, Rect)> = Vec::new();
+        let mut hovered: Option<String> = None;
         let code_ink = if t.dark {
             Color32::from_rgb(0xC9, 0xD7, 0xF0)
         } else {
@@ -1206,8 +1908,24 @@ impl Shell {
                 self.agent.thumbs.insert(k, tex);
             }
         }
+        let jump = std::mem::take(&mut self.agent.jump);
+        // a waiting question's change in words, when it's one param's value
+        let headlines: std::collections::HashMap<&str, String> = self
+            .agent
+            .entries
+            .iter()
+            .filter_map(|e| match e {
+                Entry::Permission {
+                    id,
+                    input,
+                    state: Asked::Waiting,
+                    ..
+                } => Some((id.as_str(), self.param_headline(input)?)),
+                _ => None,
+            })
+            .collect();
         let a = &self.agent;
-        egui::ScrollArea::vertical()
+        let shown = egui::ScrollArea::vertical()
             .id_salt("agent-chat")
             .auto_shrink([false, false])
             .stick_to_bottom(true)
@@ -1215,6 +1933,15 @@ impl Shell {
                 ui.spacing_mut().item_spacing.y = 0.0;
                 ui.add_space(8.0);
                 let mut tools_seen = 0;
+                // each tool call's question, if it was asked one
+                let asked_of: std::collections::HashMap<&str, Asked> = a
+                    .entries
+                    .iter()
+                    .filter_map(|e| match e {
+                        Entry::Permission { tool_use, state, .. } => Some((tool_use.as_str(), *state)),
+                        _ => None,
+                    })
+                    .collect();
                 if let Some(pr) = &a.problem {
                     problem_card(ui, &t, pr, w, &mut places);
                 }
@@ -1280,18 +2007,25 @@ impl Shell {
                             if !refs.is_empty() {
                                 let mut x = card.left() + 8.0;
                                 for id in refs {
-                                    x += chip(
+                                    let cr = chip(
                                         ui,
                                         &t,
                                         pos2(x, card.bottom() - 25.0),
                                         id,
                                         card.right() - 8.0 - x,
-                                    )
-                                    .width()
-                                        + 4.0;
+                                        false,
+                                    );
+                                    // the pointer on it lights what it names in the view
+                                    if ui.rect_contains_pointer(cr) {
+                                        hovered = Some(id.clone());
+                                    }
+                                    x += cr.width() + 4.0;
                                 }
                             }
                             places.push((format!("agent:user:{k}"), card));
+                            // `put` (the selectable text) left the cursor under the text, above
+                            // the chips: back under the card
+                            ui.advance_cursor_after_rect(r);
                             ui.add_space(6.0);
                         }
                         Entry::Agent { text } => {
@@ -1362,20 +2096,32 @@ impl Shell {
                             if resp.clicked() {
                                 toggles.push(id.clone());
                             }
-                            let ink = t.ink2;
-                            super::fg::disclosure(ui.painter(), pos2(PAD + 4.0, r.center().y), open, ink);
-                            let dot = match state {
-                                ToolState::Running => t.focus.gamma_multiply(0.5 + 0.5 * pulse(ui)),
-                                ToolState::Done => ADD_INK,
-                                ToolState::Failed => t.error,
+                            // what the row says: while a question about it waits, that it waits (not
+                            // that it happened); declined, that it didn't; running, that it is
+                            let asked = asked_of.get(id.as_str()).copied();
+                            let (said, ink, dot) = match (asked, state) {
+                                (Some(Asked::Waiting), _) => {
+                                    (format!("{} · waiting for you", present(summary)), t.warn, t.warn)
+                                }
+                                (Some(Asked::Denied), _) => {
+                                    (not_done(summary), t.ink2, t.ink2.gamma_multiply(0.6))
+                                }
+                                (_, ToolState::Running) => (
+                                    progressive(summary),
+                                    t.ink2,
+                                    t.focus.gamma_multiply(0.5 + 0.5 * pulse(ui)),
+                                ),
+                                (_, ToolState::Done) => (summary.clone(), t.ink2, ADD_INK),
+                                (_, ToolState::Failed) => (summary.clone(), t.ink2, t.error),
                             };
+                            super::fg::disclosure(ui.painter(), pos2(PAD + 4.0, r.center().y), open, ink);
                             ui.painter()
                                 .circle_filled(pos2(w - PAD - 4.0, r.center().y), 3.0, dot);
                             let clip = Rect::from_min_max(
                                 pos2(PAD + 14.0, r.top()),
                                 pos2(w - PAD - 12.0, r.bottom()),
                             );
-                            let g = ui.fonts_mut(|f| f.layout_no_wrap(summary.clone(), sans(12.0), ink));
+                            let g = ui.fonts_mut(|f| f.layout_no_wrap(said, sans(12.0), ink));
                             ui.painter().with_clip_rect(clip).galley(
                                 pos2(clip.left(), r.center().y - g.size().y * 0.5),
                                 g,
@@ -1385,23 +2131,21 @@ impl Shell {
                             places.push((format!("agent:tool:{id}"), r));
                             places.push((format!("agent:tool#{tools_seen}"), r));
                             if open {
+                                let mut more = None;
                                 let mut body = input.trim_end().to_string();
                                 if !output.trim().is_empty() {
                                     if !body.is_empty() {
                                         body.push_str("\n---\n");
                                     }
-                                    let out: Vec<&str> = output.trim_end().lines().take(40).collect();
+                                    // the first 40 lines, or all of them once asked
+                                    let all = a.open.contains(&format!("all:{id}"));
+                                    let n = output.lines().count();
+                                    let out: Vec<&str> =
+                                        output.trim_end().lines().take(if all { n } else { 40 }).collect();
                                     body.push_str(&out.join("\n"));
-                                    if output.lines().count() > 40 {
-                                        body.push_str(&format!(
-                                            "\n… {} more lines",
-                                            output.lines().count() - 40
-                                        ));
-                                    }
+                                    more = (n > 40).then_some((n, all));
                                 }
-                                let g = ui.fonts_mut(|f| {
-                                    f.layout_job(plain_job(&body, mono(11.0), t.ink2, inner - 12.0))
-                                });
+                                let g = ui.fonts_mut(|f| f.layout_job(diff_job(&body, &t, inner - 12.0)));
                                 let (r, _) =
                                     ui.allocate_exact_size(vec2(w, g.size().y + 12.0), Sense::hover());
                                 let card = Rect::from_min_max(
@@ -1410,6 +2154,23 @@ impl Shell {
                                 );
                                 ui.painter().rect_filled(card, 4.0, t.field);
                                 selectable(ui, pos2(card.left() + 6.0, card.top() + 4.0), g);
+                                ui.advance_cursor_after_rect(r);
+                                if let Some((n, all)) = more {
+                                    let word = if all {
+                                        "Show the first 40 lines".to_string()
+                                    } else {
+                                        format!("Show all {n} lines")
+                                    };
+                                    let (rr, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::click());
+                                    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &word));
+                                    let ink = if resp.hovered() { t.ink } else { t.focus };
+                                    ui.painter()
+                                        .text(pos2(PAD + 6.0, rr.center().y), Align2::LEFT_CENTER, word, sans(11.0), ink);
+                                    places.push((format!("agent:tool-all:{id}"), rr));
+                                    if resp.clicked() {
+                                        toggles.push(format!("all:{id}"));
+                                    }
+                                }
                             }
                         }
                         Entry::Diff {
@@ -1596,6 +2357,31 @@ impl Shell {
                             }
                             ui.add_space(4.0);
                         }
+                        Entry::Permission {
+                            id,
+                            summary,
+                            input,
+                            always,
+                            state,
+                            ..
+                        } => {
+                            let first = a.waiting() == Some(id.as_str());
+                            permission_card(
+                                ui,
+                                &t,
+                                Card {
+                                    id,
+                                    summary,
+                                    input,
+                                    always: always.as_deref(),
+                                    state: *state,
+                                    first,
+                                    headline: headlines.get(id.as_str()).cloned(),
+                                },
+                                w,
+                                &mut places,
+                            );
+                        }
                         Entry::Note { text, error } => {
                             let ink = if *error { t.error } else { t.ink2 };
                             let g = ui.fonts_mut(|f| f.layout_job(plain_job(text, sans(12.0), ink, inner)));
@@ -1609,25 +2395,119 @@ impl Shell {
                     trust_card(ui, &t, dir, w, &mut places);
                 }
                 if a.running && a.trust_ask.is_none() {
-                    let dots = ".".repeat(1 + (ui.input(|i| i.time) * 3.0) as usize % 3);
-                    let (r, _) = ui.allocate_exact_size(vec2(w, 22.0), Sense::hover());
+                    let now = ui.input(|i| i.time);
+                    // its time so far and its tools, as a terminal's spinner says them
+                    let secs = a.turn_started.map_or(0.0, |t0| now - t0);
+                    let tools = a
+                        .entries
+                        .iter()
+                        .rev()
+                        .take_while(|e| !matches!(e, Entry::User { .. }))
+                        .filter(|e| matches!(e, Entry::Tool { .. }))
+                        .count();
+                    let mut said = format!("Working · {}", duration(secs));
+                    if tools > 0 {
+                        said.push_str(&format!(" · {tools} tool{}", if tools == 1 { "" } else { "s" }));
+                    }
+                    if a.queued > 0 {
+                        said.push_str(&format!(" · {} queued", a.queued));
+                    }
+                    // §7's loading state: a spinner and what it's doing
+                    let r = ui
+                        .scope_builder(
+                            egui::UiBuilder::new()
+                                .max_rect(Rect::from_min_size(pos2(PAD, ui.cursor().top() + 4.0), vec2(w - PAD, 18.0))),
+                            |ui| super::ux::loading(ui, &t, &said),
+                        )
+                        .response
+                        .rect;
+                    ui.advance_cursor_after_rect(r.expand2(vec2(0.0, 4.0)));
+                    places.push(("agent:working".into(), r));
+                } else if let Some((secs, tin, tout, cost)) = a.usage
+                    && !a.entries.is_empty()
+                {
+                    // what the last turn took, faint; what the API would charge, on hover
+                    let said = format!("{} · {} tokens in · {} out", duration(secs), thousands(tin), thousands(tout));
+                    let (r, resp) = ui.allocate_exact_size(vec2(w, 18.0), Sense::hover());
+                    resp.on_hover_text(format!(
+                        "What the API would charge for this turn: ${cost:.2}. A Claude plan isn't charged per turn; /usage says where you are in its limits."
+                    ));
                     ui.painter().text(
                         pos2(PAD, r.center().y),
                         Align2::LEFT_CENTER,
-                        if a.queued == 0 {
-                            format!("Working{dots}")
-                        } else {
-                            format!("Working{dots} · {} queued", a.queued)
-                        },
-                        sans(12.0),
-                        t.ink2,
+                        said,
+                        sans(11.0),
+                        t.ink2.gamma_multiply(0.8),
                     );
+                    places.push(("agent:usage".into(), r));
                 }
                 ui.add_space(10.0);
+                // "Jump to latest": to the end, where it sticks again
+                if jump {
+                    ui.scroll_to_cursor_animation(
+                        Some(egui::Align::BOTTOM),
+                        egui::style::ScrollAnimation::none(),
+                    );
+                }
             });
+        if hovered.is_some() {
+            self.agent.hover_ref = hovered;
+        }
         for id in toggles {
             if !self.agent.open.remove(&id) {
                 self.agent.open.insert(id);
+            }
+        }
+        // where the reader is: at the end, or scrolled up (a chip takes them back), and whether a
+        // waiting question's buttons are in sight (Enter answers only one that is)
+        let view = shown.inner_rect;
+        let at_end = shown.state.clamped_offset().y + view.height() >= shown.content_size.y - 8.0;
+        let waiting = self.agent.waiting().map(str::to_string);
+        self.agent.card_visible = waiting.as_ref().is_none_or(|id| {
+            let name = format!("agent:perm:{id}:allow");
+            places
+                .iter()
+                .find(|p| p.0 == name)
+                .is_some_and(|p| view.contains_rect(p.1))
+        });
+        if !at_end || !self.agent.card_visible {
+            let word = if self.agent.card_visible {
+                "Jump to latest"
+            } else {
+                "Permission needed"
+            };
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(word.to_string(), medium(12.0), t.ink));
+            // the text, then a down chevron (the app's font has no arrows)
+            let size = g.size() + vec2(36.0, 8.0);
+            let jr = Rect::from_min_size(
+                pos2(view.center().x - size.x * 0.5, view.bottom() - size.y - 8.0),
+                size,
+            );
+            let resp = ui.interact(jr, ui.scope_id().with("agent-jump"), Sense::click());
+            resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, word));
+            let fill = if self.agent.card_visible { t.raised } else { t.warn };
+            let ink = if self.agent.card_visible {
+                t.ink
+            } else {
+                super::theme::ON_FOCUS
+            };
+            ui.painter().rect_filled(
+                jr,
+                12.0,
+                if resp.hovered() {
+                    fill.gamma_multiply(0.9)
+                } else {
+                    fill
+                },
+            );
+            ui.painter()
+                .rect_stroke(jr, 12.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+            ui.painter().galley(jr.min + vec2(10.0, 4.0), g, ink);
+            down_chevron(ui.painter(), pos2(jr.right() - 14.0, jr.center().y), ink);
+            places.push(("agent:jump".into(), jr));
+            if resp.clicked() {
+                self.agent.jump = true;
+                ui.ctx().request_repaint();
             }
         }
         if let Some(fix) = places.iter().find(|p| p.0 == "agent:copy-fix").map(|p| p.1)
@@ -1638,6 +2518,33 @@ impl Shell {
         {
             ui.ctx().copy_text(cmd);
             self.status = "Copied the command".into();
+        }
+        let mut answers = Vec::new();
+        for e in &self.agent.entries {
+            if let Entry::Permission {
+                id,
+                state: Asked::Waiting,
+                ..
+            } = e
+            {
+                for (word, ans) in [
+                    ("allow", Answer::Allow),
+                    ("always", Answer::Always),
+                    ("deny", Answer::Deny),
+                ] {
+                    let name = format!("agent:perm:{id}:{word}");
+                    if let Some(r) = places.iter().find(|p| p.0 == name).map(|p| p.1)
+                        && ui
+                            .interact(r, ui.scope_id().with(&name), Sense::click())
+                            .clicked()
+                    {
+                        answers.push((id.clone(), ans));
+                    }
+                }
+            }
+        }
+        for (id, ans) in answers {
+            self.agent.answer(&id, ans);
         }
         if let Some(dir) = self.agent.trust_ask.clone() {
             for (name, yes) in [("agent:trust:yes", true), ("agent:trust:no", false)] {
@@ -1665,6 +2572,222 @@ impl Shell {
         }
     }
 
+    /// The mode chip's menu, under it: each mode, what it means, the one in force ticked.
+    fn mode_menu(&mut self, ctx: &egui::Context, under: Rect) {
+        let t = self.theme;
+        let mut picked = None;
+        let mut own_picked = false;
+        // the person's own settings' mode, to go back to (not in a page: it may not turn a
+        // bypass back on)
+        let own = if cfg!(target_arch = "wasm32") {
+            None
+        } else {
+            self.agent
+                .own_mode
+                .clone()
+                .map(|f| (format!("Your settings: {}", AgentTab::mode_word(&f)), f))
+        };
+        const OWN_MEANS: &str = "As your Claude Code settings say";
+        // as wide as its longest line
+        let w = Mode::ALL
+            .iter()
+            .map(|m| m.means().to_string())
+            .chain(own.iter().flat_map(|(w, _)| [w.clone(), OWN_MEANS.to_string()]))
+            .map(|line| ctx.fonts_mut(|f| f.layout_no_wrap(line, sans(11.0), t.ink).size().x))
+            .fold(0.0, f32::max)
+            + 28.0;
+        let at = pos2((under.right() - w).max(4.0), under.bottom() + 4.0);
+        let area = egui::Area::new(egui::Id::unique("agent-mode-menu"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(at)
+            .show(ctx, |ui| {
+                let row = 40.0;
+                let rows = 3 + own.is_some() as usize;
+                let r = Rect::from_min_size(at, vec2(w, row * rows as f32 + 8.0));
+                let (_, resp) = ui.allocate_exact_size(r.size(), Sense::hover());
+                let p = ui.painter();
+                p.rect_filled(r, 6.0, t.raised);
+                p.rect_stroke(r, 6.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+                for (k, m) in Mode::ALL.into_iter().enumerate() {
+                    let rr = Rect::from_min_size(
+                        pos2(r.left() + 4.0, r.top() + 4.0 + k as f32 * row),
+                        vec2(w - 8.0, row),
+                    );
+                    let hit = ui.interact(rr, ui.scope_id().with(("agent-mode-row", k)), Sense::click());
+                    hit.widget_info(|| {
+                        egui::WidgetInfo::selected(
+                            egui::Role::RadioButton,
+                            true,
+                            self.agent.mode == m,
+                            m.word(),
+                        )
+                    });
+                    let on = self.agent.mode == m && self.agent.mode_other.is_none();
+                    if on {
+                        p.rect_filled(rr, 4.0, t.on);
+                    } else if hit.hovered() {
+                        p.rect_filled(rr, 4.0, t.hover);
+                    }
+                    let ink = if on { t.on_ink } else { t.ink };
+                    p.text(
+                        pos2(rr.left() + 10.0, rr.top() + 12.0),
+                        Align2::LEFT_CENTER,
+                        m.word(),
+                        medium(12.0),
+                        ink,
+                    );
+                    p.text(
+                        pos2(rr.left() + 10.0, rr.top() + 28.0),
+                        Align2::LEFT_CENTER,
+                        m.means(),
+                        sans(11.0),
+                        if on { ink } else { t.ink2 },
+                    );
+                    self.places.push((format!("agent:mode:{}", m.flag()), rr));
+                    if hit.clicked() {
+                        picked = Some(m);
+                    }
+                }
+                if let Some((word, flag)) = &own {
+                    let rr = Rect::from_min_size(
+                        pos2(r.left() + 4.0, r.top() + 4.0 + 3.0 * row),
+                        vec2(w - 8.0, row),
+                    );
+                    let on = self.agent.mode_other.as_ref() == Some(flag);
+                    let hit = ui.interact(rr, ui.scope_id().with("agent-mode-own"), Sense::click());
+                    hit.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, on, word));
+                    if on {
+                        p.rect_filled(rr, 4.0, t.on);
+                    } else if hit.hovered() {
+                        p.rect_filled(rr, 4.0, t.hover);
+                    }
+                    let ink = if on { t.on_ink } else { t.ink };
+                    p.line_segment(
+                        [
+                            pos2(rr.left() + 6.0, rr.top() - 0.5),
+                            pos2(rr.right() - 6.0, rr.top() - 0.5),
+                        ],
+                        Stroke::new(1.0, t.line),
+                    );
+                    p.text(
+                        pos2(rr.left() + 10.0, rr.top() + 12.0),
+                        Align2::LEFT_CENTER,
+                        word,
+                        medium(12.0),
+                        ink,
+                    );
+                    p.text(
+                        pos2(rr.left() + 10.0, rr.top() + 28.0),
+                        Align2::LEFT_CENTER,
+                        OWN_MEANS,
+                        sans(11.0),
+                        if on { ink } else { t.ink2 },
+                    );
+                    self.places.push(("agent:mode:own".into(), rr));
+                    own_picked = hit.clicked();
+                }
+                resp
+            });
+        if own_picked {
+            self.agent.set_own_mode();
+            self.agent.mode_menu = false;
+        } else if let Some(m) = picked {
+            self.agent.set_mode(m);
+            self.agent.mode_menu = false;
+        } else if area.inner.clicked_elsewhere()
+            && !ctx.input(|i| i.pointer.interact_pos().is_some_and(|q| under.contains(q)))
+        {
+            self.agent.mode_menu = false;
+        }
+    }
+
+    /// A param in words, and the unit its value is written in: "extrude1 depth" and " mm" for the
+    /// key of the dimension it drives; the key itself, and its value's unit, otherwise.
+    fn param_words(&self, key: &str) -> (String, &'static str) {
+        use forge_lang::values::Dim;
+        let unit = |d: Dim| match d {
+            Dim::Length => match self.units {
+                "in" => " in",
+                "cm" => " cm",
+                "m" => " m",
+                "ft" => " ft",
+                _ => " mm",
+            },
+            Dim::Angle => "°",
+            _ => "",
+        };
+        let Some(fg) = &self.fg else {
+            return (key.to_string(), "");
+        };
+        for f in &fg.feats {
+            for d in &f.dims {
+                if let super::fg::From::Driving(k) = &d.from
+                    && k.to_string() == key
+                {
+                    return (format!("{} {}", f.id, d.what), unit(d.dim));
+                }
+            }
+        }
+        let u = fg
+            .params
+            .iter()
+            .find(|p| p.key.to_string() == key)
+            .and_then(|p| p.value)
+            .map_or("", |(_, d)| unit(d));
+        (key.to_string(), u)
+    }
+
+    /// An edit of one param's value, in words: "extrude1 depth from 12 to 14 mm".
+    fn param_headline(&self, input: &str) -> Option<String> {
+        let (key, old, new) = param_change(input)?;
+        let (words, unit) = self.param_words(&key);
+        // in words: the app's font has no arrows
+        Some(format!("{words} from {old} to {new}{unit}"))
+    }
+
+    /// Everything `@` can name now: the open part's features and params, then the project's
+    /// Forge files by their path in it.
+    fn mention_candidates(&self) -> Vec<Candidate> {
+        let mut all = Vec::new();
+        if let Some(fg) = &self.fg {
+            all.extend(fg.feats.iter().map(|f| Candidate {
+                name: f.id.clone(),
+                what: f.kind.clone(),
+                tip: String::new(),
+            }));
+            all.extend(fg.params.iter().map(|p| {
+                let key = p.key.to_string();
+                let (words, unit) = self.param_words(&key);
+                // the dimension it drives, its value with its unit: "depth = 12 mm"
+                let what = words.rsplit_once(' ').map_or("param", |w| w.1);
+                Candidate {
+                    name: key,
+                    what: format!("{what} = {}{unit}", one_line(&p.text, 20)),
+                    tip: if p.used_by.is_empty() {
+                        String::new()
+                    } else {
+                        format!("Drives {}", p.used_by.join(", "))
+                    },
+                }
+            }));
+        }
+        if let Some(root) = &self.agent.project {
+            let root = std::path::Path::new(root);
+            all.extend(
+                crate::agent::project::files(root)
+                    .into_iter()
+                    .filter(|p| p.extension().is_some_and(|e| e == "fg"))
+                    .filter_map(|p| p.strip_prefix(root).ok().map(|r| r.display().to_string()))
+                    .map(|name| Candidate {
+                        name,
+                        what: "file".into(),
+                        tip: String::new(),
+                    }),
+            );
+        }
+        all
+    }
+
     fn agent_input(&mut self, ui: &mut Ui, area: Rect) {
         let t = self.theme;
         let p = ui.painter().clone();
@@ -1685,12 +2808,16 @@ impl Shell {
             StrokeKind::Inside,
         );
         let mut y = box_r.top() + 4.0;
-        // what's attached, each with its ×
-        if !self.agent.refs.is_empty() {
+        // what's attached, each with its ×; then the selection, offered (outlined) until its ×
+        let offered = self.agent.suggested().map(str::to_string);
+        if !self.agent.refs.is_empty() || offered.is_some() {
             let mut x = box_r.left() + 6.0;
             let mut drop = None;
             for (k, r) in self.agent.refs.iter().enumerate() {
-                let cr = chip(ui, &t, pos2(x, y), r, box_r.right() - 6.0 - x);
+                let cr = chip(ui, &t, pos2(x, y), r, box_r.right() - 6.0 - x, true);
+                if ui.rect_contains_pointer(cr) {
+                    self.agent.hover_ref = Some(r.clone());
+                }
                 let xr = Rect::from_min_size(pos2(cr.right() - 16.0, cr.top()), vec2(16.0, cr.height()));
                 if ui
                     .interact(xr, ui.scope_id().with(("agent-unref", k)), Sense::click())
@@ -1704,7 +2831,225 @@ impl Shell {
             if let Some(k) = drop {
                 self.agent.refs.remove(k);
             }
+            if let Some(s) = &offered {
+                let room = box_r.right() - 6.0 - x;
+                let cr = offered_chip(ui, &t, pos2(x, y), s, room);
+                let xr = Rect::from_min_size(pos2(cr.right() - 16.0, cr.top()), vec2(16.0, cr.height()));
+                let resp = ui
+                    .interact(cr, ui.scope_id().with("agent-offered"), Sense::hover())
+                    .on_hover_text(format!(
+                        "{} · goes with your message; × to leave it out",
+                        describe(s)
+                    ));
+                if resp.hovered() {
+                    self.agent.hover_ref = Some(s.clone());
+                }
+                resp.widget_info(|| {
+                    egui::WidgetInfo::labeled(egui::Role::Button, true, format!("Selected: {s}"))
+                });
+                if ui
+                    .interact(xr, ui.scope_id().with("agent-offered-x"), Sense::click())
+                    .clicked()
+                {
+                    self.agent.dismissed = Some(s.clone());
+                }
+                self.places.push(("agent:offered".into(), cr));
+                self.places.push(("agent:offered:x".into(), xr));
+            }
             y += 26.0;
+        }
+        // the `/` list (a command, the box's first word) or the `@` list (what the word after
+        // `@` can name), kept while it's typed
+        let word = slash_word(&self.agent.input)
+            .map(|w| ('/', w.to_string()))
+            .or_else(|| mention_word(&self.agent.input).map(|w| ('@', w.to_string())));
+        match word {
+            Some((sigil, w))
+                if focused && self.agent.mention_off.as_deref() != Some(self.agent.input.as_str()) =>
+            {
+                // gathered once as the list opens (a listing of the project's files), then filtered
+                let (all, at) = match self.agent.mention.take() {
+                    Some(m) if m.sigil == sigil && m.word == w => (m.all, m.at),
+                    Some(m) if m.sigil == sigil => (m.all, 0),
+                    _ if sigil == '/' => (command_candidates(&self.agent.commands), 0),
+                    _ => (self.mention_candidates(), 0),
+                };
+                let items = matches(&all, &w);
+                let at = at.min(items.len().saturating_sub(1));
+                // kept with nothing to show too, so the next key doesn't gather it all again
+                self.agent.mention = Some(Mention {
+                    sigil,
+                    word: w,
+                    items,
+                    at,
+                    all,
+                });
+            }
+            _ => self.agent.mention = None,
+        }
+        if self.agent.mention_off.as_deref() != Some(self.agent.input.as_str()) {
+            self.agent.mention_off = None;
+        }
+        let listing = self.agent.mention.as_ref().is_some_and(|m| !m.items.is_empty());
+        let mut took = false;
+        // a command picked with Enter runs; with Tab it's only written out (for its argument)
+        let mut run = false;
+        if focused
+            && let Some(m) = &mut self.agent.mention
+            && !m.items.is_empty()
+        {
+            let n = m.items.len();
+            let command = m.sigil == '/';
+            ui.input_mut(|i| {
+                if i.consume_key(Modifiers::NONE, Key::ArrowDown) {
+                    m.at = (m.at + 1) % n;
+                }
+                if i.consume_key(Modifiers::NONE, Key::ArrowUp) {
+                    m.at = (m.at + n - 1) % n;
+                }
+                let enter = i.consume_key(Modifiers::NONE, Key::Enter);
+                run = enter && command;
+                took = enter || i.consume_key(Modifiers::NONE, Key::Tab);
+            });
+        }
+        // ↑ and ↓ in an empty box (or one holding a message they brought back): the messages
+        // sent before, as in a terminal; anything typed and they're the cursor's again
+        if focused && !listing {
+            let sent: Vec<&str> = self
+                .agent
+                .entries
+                .iter()
+                .filter_map(|e| match e {
+                    Entry::User { text, .. } if !text.is_empty() => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect();
+            let holding = match self.agent.recall {
+                None => self.agent.input.is_empty(),
+                Some(k) => sent.len() > k && sent[sent.len() - 1 - k] == self.agent.input,
+            };
+            if holding && !sent.is_empty() {
+                let (up, down) = ui.input_mut(|i| {
+                    (
+                        i.consume_key(Modifiers::NONE, Key::ArrowUp),
+                        i.consume_key(Modifiers::NONE, Key::ArrowDown),
+                    )
+                });
+                let next = match (up, down, self.agent.recall) {
+                    (true, _, None) => Some(Some(0)),
+                    (true, _, Some(k)) => Some(Some((k + 1).min(sent.len() - 1))),
+                    (_, true, Some(0)) => Some(None),
+                    (_, true, Some(k)) => Some(Some(k - 1)),
+                    _ => None,
+                };
+                if let Some(next) = next {
+                    self.agent.recall = next;
+                    self.agent.input = next.map_or(String::new(), |k| sent[sent.len() - 1 - k].to_string());
+                    if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), id) {
+                        let end = egui::text::CCursor::new(self.agent.input.chars().count());
+                        st.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
+                        st.store(ui.ctx(), id);
+                    }
+                }
+            } else {
+                self.agent.recall = None;
+            }
+        }
+        if took {
+            self.agent.take_mention();
+            if run {
+                self.agent.input = self.agent.input.trim_end().to_string();
+                self.agent.send();
+            }
+            // the text changed under the editor: its cursor to the end
+            if let Some(mut st) = egui::TextEdit::load_state(ui.ctx(), id) {
+                let end = egui::text::CCursor::new(self.agent.input.chars().count());
+                st.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
+                st.store(ui.ctx(), id);
+            }
+        }
+        let shown = self
+            .agent
+            .mention
+            .as_ref()
+            .filter(|m| !m.items.is_empty())
+            .map(|m| (m.items.clone(), m.at));
+        if let Some((items, at_row)) = shown {
+            let m = Mention {
+                items,
+                at: at_row,
+                sigil: self.agent.mention.as_ref().map_or('@', |m| m.sigil),
+                ..Default::default()
+            };
+            let row = 22.0;
+            let h = m.items.len() as f32 * row + 8.0;
+            let at = pos2(box_r.left(), box_r.top() - h - 4.0);
+            let mut picked = None;
+            egui::Area::new(egui::Id::unique("agent-mention"))
+                .order(egui::Order::Foreground)
+                .fixed_pos(at)
+                .show(ui.ctx(), |ui| {
+                    let r = Rect::from_min_size(at, vec2(box_r.width(), h));
+                    let p = ui.painter();
+                    p.rect_filled(r, 6.0, t.raised);
+                    p.rect_stroke(r, 6.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+                    for (k, c) in m.items.iter().enumerate() {
+                        let rr = Rect::from_min_size(
+                            pos2(r.left() + 4.0, r.top() + 4.0 + k as f32 * row),
+                            vec2(r.width() - 8.0, row),
+                        );
+                        let resp =
+                            ui.interact(rr, ui.scope_id().with(("agent-mention-row", k)), Sense::click());
+                        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &c.name));
+                        // the whole of what it is (the row may cut it), or what a param drives
+                        let resp = resp.on_hover_text(if c.tip.is_empty() { &c.what } else { &c.tip });
+                        if k == m.at || resp.hovered() {
+                            p.rect_filled(rr, 4.0, if k == m.at { t.on } else { t.hover });
+                        }
+                        // the name first, whole; what it is in what's left, cut to one line
+                        let ink = if k == m.at { t.on_ink } else { t.ink };
+                        let name = ui.fonts_mut(|f| {
+                            f.layout_no_wrap(format!("{}{}", m.sigil, c.name), mono(12.0), ink)
+                        });
+                        let room = (rr.width() - name.size().x - 28.0).max(0.0);
+                        let mut job = plain_job(&c.what, sans(11.0), t.ink2, room);
+                        job.wrap.max_rows = 1;
+                        job.wrap.break_anywhere = true;
+                        job.wrap.overflow_character = Some('…');
+                        let what = ui.fonts_mut(|f| f.layout_job(job));
+                        p.with_clip_rect(rr).galley(
+                            pos2(rr.left() + 8.0, rr.center().y - name.size().y * 0.5),
+                            name,
+                            ink,
+                        );
+                        if room > 24.0 {
+                            p.galley(
+                                pos2(
+                                    rr.right() - 8.0 - what.size().x,
+                                    rr.center().y - what.size().y * 0.5,
+                                ),
+                                what,
+                                t.ink2,
+                            );
+                        }
+                        if resp.clicked() {
+                            picked = Some(k);
+                        }
+                        self.places.push((format!("agent:mention:{}", c.name), rr));
+                    }
+                });
+            if let Some(k) = picked {
+                let command = self.agent.mention.as_ref().is_some_and(|m| m.sigil == '/');
+                if let Some(m) = &mut self.agent.mention {
+                    m.at = k;
+                }
+                self.agent.take_mention();
+                // a command clicked runs, as with Enter
+                if command {
+                    self.agent.input = self.agent.input.trim_end().to_string();
+                    self.agent.send();
+                }
+            }
         }
         let send = focused && ui.input(|i| i.events.iter().any(|event| {
             matches!(event, egui::Event::Key { key: Key::Enter, pressed: true, modifiers, .. } if !modifiers.shift)
@@ -1740,6 +3085,14 @@ impl Shell {
                         .hint_text(hint)
                         .layouter(&mut layouter)
                         .return_key(egui::KeyboardShortcut::new(Modifiers::SHIFT, Key::Enter))
+                        // while the `@` list shows, Tab picks from it and Esc closes it: neither
+                        // takes the keys away from the box
+                        .event_filter(egui::EventFilter {
+                            tab: listing,
+                            escape: listing,
+                            horizontal_arrows: true,
+                            vertical_arrows: true,
+                        })
                         .desired_width(ui.available_width())
                         .desired_rows(1),
                 )
@@ -1762,7 +3115,28 @@ impl Shell {
             resp.request_focus();
         }
         if send {
-            self.agent.send();
+            match self.agent.waiting().map(str::to_string) {
+                // an empty box: Enter answers the agent's question, as in a terminal
+                // only a card on screen: one scrolled out of sight isn't answered unseen
+                Some(id) if self.agent.input.trim().is_empty() && self.agent.card_visible => {
+                    self.agent.answer(&id, Answer::Allow)
+                }
+                Some(_) if self.agent.input.trim().is_empty() => self.agent.jump = true,
+                _ => self.agent.send(),
+            }
+        }
+        // Shift+Tab in the box: the permission mode, as in a terminal
+        if focused
+            && self.agent.settings.kind == agent_settings::Kind::ClaudeCode
+            && ui.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Tab))
+        {
+            let m = if self.agent.mode_other.is_some() {
+                Mode::Ask
+            } else {
+                self.agent.mode.next()
+            };
+            self.agent.set_mode(m);
+            resp.request_focus();
         }
 
         // the row under the text: attach the selection, send or stop
@@ -1846,7 +3220,7 @@ impl Shell {
             Align2::CENTER_CENTER,
             word,
             medium(12.0),
-            if can { Color32::WHITE } else { t.ink2 },
+            if can { super::theme::ON_FOCUS } else { t.ink2 },
         );
         self.note("agent:send", sr);
         let mut mic_right = sr.left();
@@ -1885,13 +3259,68 @@ fn pulse(ui: &Ui) -> f32 {
 }
 
 /// An attached id: `@id` in a pill, room permitting; its rect.
-fn chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32) -> Rect {
+/// An attached id; `removable`: with its × (in the box, not in a sent message).
+fn chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32, removable: bool) -> Rect {
     let g = ui.fonts_mut(|f| f.layout_no_wrap(format!("@{id}"), mono(11.0), t.ink));
-    let w = (g.size().x + 26.0).min(room.max(40.0));
+    let w = (g.size().x + if removable { 26.0 } else { 14.0 }).min(room.max(40.0));
     let r = Rect::from_min_size(at, vec2(w, 20.0));
     let p = ui.painter().with_clip_rect(r);
     p.rect_filled(r, 10.0, t.on.gamma_multiply(0.6));
     p.galley(pos2(r.left() + 7.0, r.center().y - g.size().y * 0.5), g, t.ink);
+    if removable {
+        p.text(
+            pos2(r.right() - 9.0, r.center().y),
+            Align2::CENTER_CENTER,
+            "×",
+            sans(12.0),
+            t.ink2,
+        );
+    }
+    r
+}
+
+/// An id in words, for a chip's hover: "End face of extrude1" for `extrude1.end`; the id as it
+/// is otherwise.
+pub fn describe(id: &str) -> String {
+    let Some((feat, role)) = id.rsplit_once('.') else {
+        return id.to_string();
+    };
+    let what = match role {
+        "end" => "End face",
+        "start" => "Start face",
+        "side" | "sides" => "Side faces",
+        "bore" => "Bore",
+        "faces" => "Faces",
+        "axis" => "Axis",
+        _ => return id.to_string(),
+    };
+    format!("{what} of {feat}")
+}
+
+/// `describe` mid-sentence: "end face of extrude1"; an id it has no words for, as it is.
+pub fn describe_lower(id: &str) -> String {
+    let d = describe(id);
+    if d == id {
+        return d;
+    }
+    let mut c = d.chars();
+    c.next()
+        .map_or(d.clone(), |f| format!("{}{}", f.to_lowercase(), c.as_str()))
+}
+
+/// The selection offered for the next message: outlined, not filled, until it's sent.
+fn offered_chip(ui: &mut Ui, t: &Theme, at: egui::Pos2, id: &str, room: f32) -> Rect {
+    let g = ui.fonts_mut(|f| f.layout_no_wrap(format!("@{id}"), mono(11.0), t.ink2));
+    let w = (g.size().x + 26.0).min(room.max(40.0));
+    let r = Rect::from_min_size(at, vec2(w, 20.0));
+    let p = ui.painter().with_clip_rect(r.expand(1.0));
+    p.rect_stroke(
+        r,
+        10.0,
+        Stroke::new(1.0, t.focus.gamma_multiply(0.7)),
+        StrokeKind::Inside,
+    );
+    p.galley(pos2(r.left() + 7.0, r.center().y - g.size().y * 0.5), g, t.ink2);
     p.text(
         pos2(r.right() - 9.0, r.center().y),
         Align2::CENTER_CENTER,
@@ -1935,7 +3364,7 @@ fn trust_card(ui: &mut Ui, t: &Theme, dir: &str, w: f32, places: &mut Vec<(Strin
         Align2::CENTER_CENTER,
         "Trust",
         medium(12.0),
-        Color32::WHITE,
+        super::theme::ON_FOCUS,
     );
     p.rect_filled(no, 4.0, t.field);
     p.rect_stroke(no, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
@@ -1943,6 +3372,347 @@ fn trust_card(ui: &mut Ui, t: &Theme, dir: &str, w: f32, places: &mut Vec<(Strin
     places.push(("agent:trust".into(), card));
     places.push(("agent:trust:yes".into(), yes));
     places.push(("agent:trust:no".into(), no));
+}
+
+/// A permission's card, as drawn.
+struct Card<'a> {
+    id: &'a str,
+    summary: &'a str,
+    input: &'a str,
+    always: Option<&'a str>,
+    state: Asked,
+    /// The one Enter and Esc answer.
+    first: bool,
+    /// What the change is, in words, when it's one param's value: "extrude1 depth from 12 to 14 mm".
+    headline: Option<String>,
+}
+
+/// A small down chevron centred at `c`.
+fn down_chevron(p: &egui::Painter, c: egui::Pos2, ink: Color32) {
+    let s = Stroke::new(1.6, ink);
+    p.line_segment([c + vec2(-4.0, -2.0), c + vec2(0.0, 2.0)], s);
+    p.line_segment([c + vec2(0.0, 2.0), c + vec2(4.0, -2.0)], s);
+}
+
+/// A time as a person reads it: "8 s", "2 min 5 s".
+pub fn duration(secs: f64) -> String {
+    let s = secs.max(0.0).round() as u64;
+    if s < 60 {
+        format!("{s} s")
+    } else {
+        format!("{} min {} s", s / 60, s % 60)
+    }
+}
+
+/// A count, short: "340", "21.3k", "1.2M".
+pub fn thousands(n: u64) -> String {
+    match n {
+        0..1000 => n.to_string(),
+        1000..1_000_000 => format!("{:.1}k", n as f64 / 1000.0),
+        _ => format!("{:.1}M", n as f64 / 1e6),
+    }
+}
+
+/// The diff's colours in this theme: added ink and fill, removed ink and fill.
+fn diff_inks(t: &Theme) -> (Color32, Color32, Color32, Color32) {
+    if t.dark {
+        (ADD_INK, ADD_BG, DEL_INK, DEL_BG)
+    } else {
+        (
+            Color32::from_rgb(0x1A, 0x6B, 0x35),
+            Color32::from_rgb(0xDC, 0xF2, 0xE2),
+            Color32::from_rgb(0xA8, 0x24, 0x24),
+            Color32::from_rgb(0xFA, 0xE0, 0xE0),
+        )
+    }
+}
+
+/// A tool's input as a terminal shows a diff: its `- ` lines red on a red tint, its `+ ` lines
+/// green on a green tint, the rest as it is.
+fn diff_job(text: &str, t: &Theme, width: f32) -> LayoutJob {
+    let (add_ink, add_bg, del_ink, del_bg) = diff_inks(t);
+    let mut job = LayoutJob::default();
+    job.wrap.max_width = width;
+    let lines: Vec<&str> = text.split('\n').collect();
+    for (k, line) in lines.iter().enumerate() {
+        let (color, background) = if line.starts_with("- ") {
+            (del_ink, del_bg)
+        } else if line.starts_with("+ ") {
+            (add_ink, add_bg)
+        } else {
+            (t.ink2, Color32::TRANSPARENT)
+        };
+        let nl = if k + 1 < lines.len() { "\n" } else { "" };
+        job.append(
+            &format!("{line}{nl}"),
+            0.0,
+            TextFormat {
+                font_id: mono(11.0),
+                color,
+                background,
+                ..Default::default()
+            },
+        );
+    }
+    job
+}
+
+/// An edit's lines as a card shows them: `- ` taken out, `+ ` put in, `  ` around them, `…` for
+/// the unchanged runs left out.
+pub fn diff_text(lines: &[Line]) -> String {
+    lines
+        .iter()
+        .map(|l| match l {
+            Line::Same(s) => format!("  {s}"),
+            Line::Add(s) => format!("+ {s}"),
+            Line::Del(s) => format!("- {s}"),
+            Line::Skip(_) => "  …".to_string(),
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// What an edit tool would make of a file's text: Edit's replacement (every one with
+/// `replace_all`), MultiEdit's in turn, Write's whole. None when it isn't one of those or its
+/// text isn't in the file (Claude Code would refuse it too).
+pub fn edited(tool: &str, input: &forge_agent::json::Json, now: &str) -> Option<String> {
+    use forge_agent::json::Json;
+    let one = |text: &str, e: &Json| -> Option<String> {
+        let old = e.get("old_string").and_then(Json::str)?;
+        let new = e.get("new_string").and_then(Json::str)?;
+        if old.is_empty() || !text.contains(old) {
+            return None;
+        }
+        Some(if e.get("replace_all") == Some(&Json::Bool(true)) {
+            text.replace(old, new)
+        } else {
+            text.replacen(old, new, 1)
+        })
+    };
+    match tool {
+        "Edit" => one(now, input),
+        "MultiEdit" => match input.get("edits") {
+            Some(Json::Arr(es)) => es.iter().try_fold(now.to_string(), |t, e| one(&t, e)),
+            _ => None,
+        },
+        "Write" => input.get("content").and_then(Json::str).map(str::to_string),
+        _ => None,
+    }
+}
+
+/// What starts the page's agent: the command, to copy.
+pub const BRIDGE_COMMAND: &str = "forgecad web . --agent";
+
+/// The Agent tab in a page with no bridge (§7's empty state): what the agent is here, the command
+/// that starts it (mono, with Copy), and the desktop app as the other way.
+fn no_bridge(ui: &mut Ui, t: &Theme, places: &mut Vec<(String, Rect)>) {
+    use super::theme;
+    ui.vertical_centered(|ui| {
+        ui.add_space(theme::S3);
+        ui.label(
+            egui::RichText::new("Use your own Claude Code here")
+                .font(theme::title())
+                .color(t.ink),
+        );
+        ui.label(
+            egui::RichText::new(
+                "In the browser, the agent is Claude Code on your computer, with your own plan and \
+                 settings. Run this in the project folder there, then open the link it prints.",
+            )
+            .font(theme::small())
+            .color(t.ink2),
+        );
+        ui.add_space(theme::S2);
+        let cmd = ui.label(egui::RichText::new(BRIDGE_COMMAND).font(mono(12.0)).color(t.ink));
+        places.push(("agent:bridge:command".into(), cmd.rect));
+        ui.add_space(theme::S1);
+        let copy = ui.button("Copy command");
+        places.push(("agent:bridge:copy".into(), copy.rect));
+        if copy.clicked() {
+            ui.ctx().copy_text(BRIDGE_COMMAND.into());
+        }
+        ui.add_space(theme::S2);
+        ui.label(
+            egui::RichText::new("Or open the project in the ForgeCAD desktop app.")
+                .font(theme::small())
+                .color(t.ink2),
+        );
+    });
+}
+
+/// One param's change in an edit's -/+ lines (`param KEY = OLD` → `param KEY = NEW`): the key,
+/// what it was and what it becomes.
+pub fn param_change(input: &str) -> Option<(String, String, String)> {
+    let mut old = None;
+    let mut new = None;
+    for l in input.lines() {
+        let (sign, rest) = if let Some(r) = l.strip_prefix("- ") {
+            ('-', r)
+        } else if let Some(r) = l.strip_prefix("+ ") {
+            ('+', r)
+        } else {
+            continue;
+        };
+        let (key, value) = rest.trim().strip_prefix("param ")?.split_once('=')?;
+        let slot = if sign == '-' { &mut old } else { &mut new };
+        if slot.is_some() {
+            return None;
+        }
+        *slot = Some((key.trim().to_string(), value.trim().to_string()));
+    }
+    let ((k0, a), (k1, b)) = (old?, new?);
+    (k0 == k1 && a != b).then_some((k0, a, b))
+}
+
+/// Lines of a tool's input shown on its card; the rest is one "… more" line.
+const CARD_LINES: usize = 14;
+
+/// The agent asking before a tool runs: what it would do, and the answers, full width (the panel
+/// is narrow). Answered, it folds to one line saying what was said.
+fn permission_card(ui: &mut Ui, t: &Theme, c: Card, w: f32, places: &mut Vec<(String, Rect)>) {
+    let inner = w - 2.0 * PAD - 16.0;
+    if c.state != Asked::Waiting {
+        let (word, ink) = match c.state {
+            Asked::Allowed => ("Allowed", t.success),
+            Asked::Always => ("Allowed from now on", t.success),
+            Asked::Denied => ("Declined", t.error),
+            _ => ("Not answered", t.ink2),
+        };
+        let g = ui.fonts_mut(|f| {
+            f.layout_job(plain_job(
+                &format!("{word}: {}", c.summary),
+                sans(12.0),
+                t.ink2,
+                inner,
+            ))
+        });
+        let (r, _) = ui.allocate_exact_size(vec2(w, g.size().y + 8.0), Sense::hover());
+        ui.painter().circle_filled(
+            pos2(PAD + 4.0, r.top() + 4.0 + g.size().y.min(16.0) * 0.5),
+            3.0,
+            ink,
+        );
+        selectable(ui, pos2(PAD + 12.0, r.top() + 4.0), g);
+        // `put` leaves the cursor under the text: back under the row
+        ui.advance_cursor_after_rect(r);
+        places.push((format!("agent:perm:{}", c.id), r));
+        return;
+    }
+    let head = ui.fonts_mut(|f| f.layout_job(plain_job("Permission needed", medium(11.0), t.warn, inner)));
+    let what = ui.fonts_mut(|f| f.layout_job(plain_job(c.summary, medium(13.0), t.ink, inner)));
+    let lines: Vec<&str> = c.input.trim_end().lines().collect();
+    let mut body = lines
+        .iter()
+        .take(CARD_LINES)
+        .copied()
+        .collect::<Vec<_>>()
+        .join("\n");
+    if lines.len() > CARD_LINES {
+        body.push_str(&format!("\n… {} more lines", lines.len() - CARD_LINES));
+    }
+    let code = (!body.trim().is_empty() && body.trim() != c.summary.trim())
+        .then(|| ui.fonts_mut(|f| f.layout_job(diff_job(&body, t, inner - 12.0))));
+    let code_h = code.as_ref().map_or(0.0, |g| g.size().y + 14.0);
+    let headline = c
+        .headline
+        .as_ref()
+        .map(|h| ui.fonts_mut(|f| f.layout_job(plain_job(h, medium(12.0), t.ink, inner))));
+    let head_h = headline.as_ref().map_or(0.0, |g| g.size().y + 6.0);
+    const BTN: f32 = 26.0;
+    let buttons = if c.always.is_some() { 3.0 } else { 2.0 };
+    let h = 10.0 + head.size().y + 2.0 + what.size().y + 8.0 + head_h + code_h + buttons * (BTN + 6.0) + 4.0;
+    ui.add_space(4.0);
+    let (r, _) = ui.allocate_exact_size(vec2(w, h), Sense::hover());
+    let card = Rect::from_min_max(pos2(PAD, r.top()), pos2(w - PAD, r.bottom()));
+    let p = ui.painter().clone();
+    p.rect_filled(card, 6.0, t.raised);
+    p.rect_stroke(card, 6.0, Stroke::new(1.5, t.warn), StrokeKind::Inside);
+    let x = card.left() + 8.0;
+    let mut y = card.top() + 10.0;
+    p.galley(pos2(x, y), head.clone(), t.warn);
+    y += head.size().y + 2.0;
+    selectable(ui, pos2(x, y), what.clone());
+    y += what.size().y + 8.0;
+    if let Some(g) = headline {
+        let gh = g.size().y;
+        selectable(ui, pos2(x, y), g);
+        y += gh + 6.0;
+    }
+    if let Some(g) = code {
+        let box_r = Rect::from_min_max(pos2(x, y), pos2(card.right() - 8.0, y + g.size().y + 8.0));
+        p.rect_filled(box_r, 4.0, t.field);
+        selectable(ui, pos2(x + 6.0, y + 4.0), g);
+        y = box_r.bottom() + 6.0;
+    }
+    let mut button = |name: &str, label: String, key: &str, primary: bool, tip: String| {
+        let b = Rect::from_min_max(pos2(x, y), pos2(card.right() - 8.0, y + BTN));
+        let resp = ui.interact(
+            b,
+            ui.scope_id().with(("agent-perm-hover", c.id, name)),
+            Sense::hover(),
+        );
+        resp.clone().on_hover_text(tip);
+        resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, &label));
+        if primary {
+            p.rect_filled(
+                b,
+                4.0,
+                if resp.hovered() {
+                    t.focus
+                } else {
+                    t.focus.gamma_multiply(0.85)
+                },
+            );
+        } else {
+            p.rect_filled(b, 4.0, if resp.hovered() { t.hover } else { t.field });
+            p.rect_stroke(b, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+        }
+        // dark ink on the amber: white on it is under 3:1 in either theme
+        let ink = if primary { super::theme::ON_FOCUS } else { t.ink };
+        let room = if key.is_empty() {
+            b.width() - 16.0
+        } else {
+            b.width() - 56.0
+        };
+        let g = ui.fonts_mut(|f| f.layout_no_wrap(label.clone(), medium(12.0), ink));
+        p.with_clip_rect(Rect::from_min_max(b.min, pos2(b.left() + 8.0 + room, b.bottom())))
+            .galley(pos2(b.left() + 8.0, b.center().y - g.size().y * 0.5), g, ink);
+        if !key.is_empty() && c.first {
+            p.text(
+                pos2(b.right() - 8.0, b.center().y),
+                Align2::RIGHT_CENTER,
+                key,
+                sans(11.0),
+                if primary {
+                    super::theme::ON_FOCUS.gamma_multiply(0.75)
+                } else {
+                    t.ink2
+                },
+            );
+        }
+        places.push((format!("agent:perm:{}:{name}", c.id), b));
+        y += BTN + 6.0;
+    };
+    button("allow", "Allow".into(), "Enter", true, "Run it this once".into());
+    if let Some(a) = c.always {
+        button(
+            "always",
+            format!("Always: {a}"),
+            "",
+            false,
+            format!("Run it, and {a}"),
+        );
+    }
+    button(
+        "deny",
+        "Deny".into(),
+        "Esc",
+        false,
+        "Don't run it; the agent is told and carries on".into(),
+    );
+    // `put` (the selectable text) leaves the cursor under the last text: back under the card
+    ui.advance_cursor_after_rect(r);
+    places.push((format!("agent:perm:{}", c.id), card));
 }
 
 fn problem_card(ui: &mut Ui, t: &Theme, pr: &Problem, w: f32, places: &mut Vec<(String, Rect)>) {
@@ -1996,6 +3766,28 @@ fn problem_card(ui: &mut Ui, t: &Theme, pr: &Problem, w: f32, places: &mut Vec<(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn markdown_lines_read_as_markdown() {
+        let ink = Color32::WHITE;
+        let code = Color32::RED;
+        let runs = |l: &str| md_line(l, ink, code);
+        let words = |l: &str| runs(l).iter().map(|r| r.0.clone()).collect::<String>();
+        // a bullet's mark, a heading's hashes, a quote's mark: gone; what's left is the text
+        assert_eq!(words("- one `two` **three**"), "• one two three");
+        assert_eq!(words("  * nested"), "  • nested");
+        assert_eq!(words("## Changes"), "Changes");
+        assert_eq!(words("> said"), "said");
+        // bold in the bold face, code in mono and its ink, a heading in the bold face
+        let r = runs("a **b** `c`");
+        assert_eq!(r.iter().find(|x| x.0 == "b").unwrap().1.font_id, semi(13.0));
+        let c = r.iter().find(|x| x.0 == "c").unwrap();
+        assert_eq!((c.1.font_id.clone(), c.1.color), (mono(12.0), code));
+        assert_eq!(runs("# Title")[0].1.font_id, semi(14.0));
+        // a table's row whole, in mono: its columns line up
+        let t = runs("| a | b |");
+        assert_eq!((t.len(), t[0].1.font_id.clone()), (1, mono(12.0)));
+    }
 
     #[test]
     fn a_reply_is_cut_into_prose_and_its_code_blocks() {

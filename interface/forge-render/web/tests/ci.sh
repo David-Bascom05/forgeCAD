@@ -18,6 +18,8 @@ cargo build --release --locked --bin forge-parity
 # THREADED=1: the threaded artifact too, and the tests run on it (forgecad web isolates the page)
 NO_MESHES=1 THREADS=$THREADED sh web/build.sh "$out"
 node web/tests/e2e.cjs "$out"
+# the page's agent through forgecad web --agent, a stand-in claude (research/agent-tab)
+node web/tests/agent.cjs "$out"
 node web/tests/idle.cjs "$out"
 node web/tests/cam.cjs "$out"
 node web/tests/nopanic.cjs "$out"

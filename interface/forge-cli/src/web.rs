@@ -34,6 +34,14 @@ use std::sync::{Arc, Mutex};
 const MAX_BODY: usize = 64 << 20;
 /// The most a request's head may hold.
 const MAX_HEAD: usize = 64 << 10;
+/// The most an agent call's body may hold (a message with a picture).
+const MAX_AGENT_BODY: usize = 12 << 20;
+
+/// What the page may run and reach: its own files only, no inline script, no plugins, never
+/// framed. index.html carries the same as a <meta> for static hosts.
+pub const CSP: &str = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; \
+     img-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; \
+     base-uri 'none'; frame-ancestors 'none'";
 
 pub struct Config {
     pub root: PathBuf,
@@ -42,9 +50,12 @@ pub struct Config {
     pub port: u16,
     pub token: Option<String>,
     pub writable: bool,
+    /// `--agent`: the page's agent is the person's Claude Code, run here (agent_bridge.rs).
+    pub agent: Option<Arc<crate::agent_bridge::Agent>>,
 }
 
-const USAGE: &str = "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only]";
+const USAGE: &str =
+    "forgecad web DIR [--port P] [--bind ADDR] [--token T] [--app WEBDIR] [--read-only] [--agent]";
 
 /// The command line's words after `web`.
 pub fn main(args: &[String]) -> ExitCode {
@@ -68,6 +79,7 @@ pub fn main(args: &[String]) -> ExitCode {
 fn parse(args: &[String]) -> Result<Config, String> {
     let (mut root, mut app, mut bind, mut port, mut token, mut writable) =
         (None, None, IpAddr::from([127, 0, 0, 1]), 8080u16, None, true);
+    let mut agent = false;
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut val = |name: &str| it.next().cloned().ok_or(format!("{name} takes a value"));
@@ -77,6 +89,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
             "--token" => token = Some(val("--token")?),
             "--app" => app = Some(PathBuf::from(val("--app")?)),
             "--read-only" => writable = false,
+            "--agent" => agent = true,
             s if s.starts_with("--") => return Err(format!("{s}: not an option")),
             s if root.is_none() => root = Some(PathBuf::from(s)),
             s => return Err(format!("{s}: one folder only")),
@@ -94,6 +107,23 @@ fn parse(args: &[String]) -> Result<Config, String> {
     if !bind.is_loopback() && token.is_none() {
         token = Some(random_token());
     }
+    // the agent drives this machine as the person: never served past loopback (use SSH)
+    if agent && !bind.is_loopback() {
+        return Err(
+            "--agent: loopback only (127.0.0.1 or ::1); from another machine, use an SSH tunnel".into(),
+        );
+    }
+    if agent && !writable {
+        return Err("--agent: Claude Code writes the files; drop --read-only".into());
+    }
+    let agent = agent.then(|| {
+        Arc::new(crate::agent_bridge::Agent::new(
+            root.clone(),
+            random_token(),
+            false,
+            false,
+        ))
+    });
     Ok(Config {
         root,
         app,
@@ -101,6 +131,7 @@ fn parse(args: &[String]) -> Result<Config, String> {
         port,
         token,
         writable,
+        agent,
     })
 }
 
@@ -135,10 +166,21 @@ pub fn serve(c: Config, ready: impl FnOnce(&Path, &str)) -> Result<(), String> {
     } else {
         at.ip().to_string()
     };
-    let url = match &c.token {
+    let mut url = match &c.token {
         Some(t) => format!("http://{host}:{}/?token={t}", at.port()),
         None => format!("http://{host}:{}/", at.port()),
     };
+    // the agent's token in the fragment: never sent to a server, never in a Referer
+    if let Some(a) = &c.agent {
+        url.push_str(&format!("#agent={}", a.token));
+        let a = a.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(30));
+                a.reap();
+            }
+        });
+    }
     if c.app.is_none() {
         eprintln!("forgecad web: no built app (FORGECAD_WEB, --app): only the API is served");
     }
@@ -213,6 +255,8 @@ fn reason(s: u16) -> &'static str {
         404 => "Not Found",
         405 => "Method Not Allowed",
         409 => "Conflict",
+        415 => "Unsupported Media Type",
+        503 => "Service Unavailable",
         412 => "Precondition Failed",
         413 => "Payload Too Large",
         421 => "Misdirected Request",
@@ -279,7 +323,8 @@ fn write_response(s: &mut TcpStream, r: &Response, keep: bool, head: bool) -> st
     let mut text = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nX-Content-Type-Options: nosniff\r\n\
          Cache-Control: no-cache\r\nCross-Origin-Opener-Policy: same-origin\r\n\
-         Cross-Origin-Embedder-Policy: require-corp\r\nConnection: {}\r\n",
+         Cross-Origin-Embedder-Policy: require-corp\r\nReferrer-Policy: no-referrer\r\n\
+         Content-Security-Policy: {CSP}\r\nConnection: {}\r\n",
         r.status,
         reason(r.status),
         r.kind,
@@ -304,6 +349,16 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
         let (resp, keep, head) = match read_request(&mut r) {
             Ok(None) => return Ok(()),
             Ok(Some(q)) => {
+                // the agent's events: a streamed answer, the connection's last
+                if q.method == "GET"
+                    && q.path == "/api/agent/events"
+                    && let Some(a) = &c.agent
+                {
+                    return match agent_gate(&q, a) {
+                        Err(e) => write_response(&mut out, &e, false, false),
+                        Ok(client) => stream_events(&mut out, a, &q, &client),
+                    };
+                }
                 let keep = !q
                     .header("connection")
                     .is_some_and(|v| v.eq_ignore_ascii_case("close"));
@@ -316,6 +371,66 @@ fn connection(s: TcpStream, c: &Config, lock: &Mutex<()>) -> std::io::Result<()>
             return Ok(());
         }
     }
+}
+
+/// An agent call's gate, before its route: a loopback Host, the page's own Origin (when one's
+/// sent), then the agent's token; the page's id (`X-Forge-Client`) if it passes.
+fn agent_gate(q: &Request, a: &crate::agent_bridge::Agent) -> Result<String, Response> {
+    if !q.header("host").is_some_and(is_loopback_name) {
+        return Err(error(421, "this server answers to localhost only"));
+    }
+    if let Some(o) = q.header("origin") {
+        let h = q.header("host").unwrap_or_default();
+        let o = o.split_once("://").map_or(o, |x| x.1);
+        if !o.eq_ignore_ascii_case(h) {
+            return Err(error(403, "a request from another origin"));
+        }
+    }
+    let given = q.header("authorization").and_then(|v| v.strip_prefix("Bearer "));
+    if !given.is_some_and(|g| same(g, &a.token)) {
+        return Err(error(
+            401,
+            "the agent's token is needed (Authorization: Bearer T, from the URL forgecad web printed)",
+        ));
+    }
+    if q.method == "POST"
+        && !q
+            .header("content-type")
+            .is_some_and(|t| t.starts_with("application/json"))
+    {
+        return Err(error(415, "JSON only (Content-Type: application/json)"));
+    }
+    if q.body.len() > MAX_AGENT_BODY {
+        return Err(error(413, "too large"));
+    }
+    Ok(q.header("x-forge-client")
+        .unwrap_or("")
+        .chars()
+        .take(64)
+        .collect())
+}
+
+/// The agent's lines from `?from=N`, a chunk each as they come, until the page goes.
+fn stream_events(
+    out: &mut TcpStream,
+    a: &crate::agent_bridge::Agent,
+    q: &Request,
+    client: &str,
+) -> std::io::Result<()> {
+    let from = q.query("from").and_then(|f| f.parse().ok()).unwrap_or(0);
+    let head = "HTTP/1.1 200 OK\r\nContent-Type: application/x-ndjson\r\nTransfer-Encoding: chunked\r\n\
+         X-Content-Type-Options: nosniff\r\nCache-Control: no-cache\r\nReferrer-Policy: no-referrer\r\n\
+         Cross-Origin-Resource-Policy: same-origin\r\nConnection: close\r\n\r\n";
+    out.write_all(head.as_bytes())?;
+    out.flush()?;
+    a.stream(from, client, |bytes| {
+        out.write_all(format!("{:x}\r\n", bytes.len()).as_bytes())?;
+        out.write_all(bytes)?;
+        out.write_all(b"\r\n")?;
+        out.flush()
+    });
+    let _ = out.write_all(b"0\r\n\r\n");
+    Ok(())
 }
 
 /// Equal without saying where they differ.
@@ -371,6 +486,17 @@ fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
         }
     }
     let rest = q.path.strip_prefix("/api").unwrap_or_default();
+    if let (Some(name), Some(a)) = (rest.strip_prefix("/agent/"), &c.agent) {
+        if q.method != "POST" {
+            return error(405, "POST");
+        }
+        let client = match agent_gate(q, a) {
+            Ok(c) => c,
+            Err(e) => return e,
+        };
+        let (status, j) = a.call(name, &q.body, &client);
+        return json(status, j);
+    }
     match (q.method.as_str(), rest) {
         ("GET", "/info") => json(
             200,
@@ -384,6 +510,7 @@ fn answer(q: &Request, c: &Config, lock: &Mutex<()>) -> Response {
                         .into(),
                 ),
                 ("writable", c.writable.into()),
+                ("agent", c.agent.is_some().into()),
             ]),
         ),
         ("GET", "/files") => list(c),
@@ -1037,6 +1164,7 @@ mod tests {
             port: at.port(),
             token: token.map(str::to_string),
             writable,
+            agent: None,
         });
         std::thread::spawn(move || run(l, c));
         (at, root)
