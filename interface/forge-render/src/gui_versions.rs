@@ -136,6 +136,19 @@ fn build(file: PathBuf, a: String, b: String, single: bool) -> Result<Ready, Str
 }
 
 impl Gui {
+    /// A file this app wrote that the page's storage did not keep (`app_store_failed`): the
+    /// status says so, and a file of the history (`.git`, `.gitignore`) makes Versions say the
+    /// history isn't kept, whatever it said before ("History is on" from the page's own copy).
+    #[cfg(target_arch = "wasm32")]
+    pub fn store_failed(&mut self, path: &str, why: &str) {
+        let rel = path.strip_prefix("/project/").unwrap_or(path);
+        self.shell.status = format!("Not kept: {rel}: {why}");
+        if rel == ".gitignore" || rel.starts_with(".git/") || rel.contains("/.git/") {
+            self.shell.versions.lost =
+                format!("History isn't being kept where this project is stored: {rel}: {why}");
+        }
+    }
+
     /// The document the tab shows: the one picked, else the open one.
     fn vers_doc(&self) -> Option<PathBuf> {
         self.shell

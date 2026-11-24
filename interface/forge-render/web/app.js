@@ -142,9 +142,11 @@ window.forge_fs_changed = (path, bytes) => {
   else if (home?.owns(path)) home.changed(path, bytes);
 };
 if (store) {
-  mirror = new Mirror(store, MOUNT, fc, (e) => {
+  mirror = new Mirror(store, MOUNT, fc, (e, path) => {
     problems.push(String(e));
     console.error(`forge-app: ${e}`);
+    // the app says so too: never a "saved" or "History is on" over a write that was lost
+    if (path) fc.app_store_failed(path, e.message ?? String(e));
     if (e.name === "StaleBase") alert(`${e.message}\nYour edit is kept in this tab; reload to see the other.`);
   });
 }

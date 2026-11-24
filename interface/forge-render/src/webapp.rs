@@ -54,6 +54,8 @@ enum Ask {
     Apply(forge_lang::error::Op),
     /// The next frame's pixels, for the page (`app_pixels`).
     Pixels(js_sys::Function),
+    /// A file the app wrote that the page's storage refused or lost: (project path, why).
+    StoreFailed(String, String),
     /// Words for the toolpath simulation (`app_camsim`).
     CamSim(String),
     /// A click on what the shell noted by this name (`app_click`): the tests' hand. The button
@@ -440,6 +442,7 @@ impl Host {
                     }
                 }
                 Ask::Pixels(f) => self.pixels(f),
+                Ask::StoreFailed(path, why) => self.gui.store_failed(&path, &why),
                 Ask::CamSim(c) => {
                     if let Err(e) = self.gui.camsim_command(&c) {
                         self.gui.shell.status = e;
@@ -996,6 +999,13 @@ pub fn app_cam(words: String) {
 #[wasm_bindgen]
 pub fn app_type(text: String, enter: bool) {
     ask(Ask::Type(text, enter));
+}
+
+/// The page's storage could not keep a file the app wrote (`forgecad web` refused it, the
+/// browser's store failed): said in the status, and in Versions for the history's files.
+#[wasm_bindgen]
+pub fn app_store_failed(path: String, why: String) {
+    ask(Ask::StoreFailed(path, why));
 }
 
 /// The app's next frame as `{width, height, rgba}`, through a callback (see `Host::pixels`).

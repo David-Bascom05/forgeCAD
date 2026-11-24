@@ -132,6 +132,9 @@ pub struct Versions {
     /// The open assembly's pinned parts with a newer version: instance, file, pinned, newest.
     pub pins: Vec<(String, String, u32, u32)>,
     pub note: String,
+    /// The history's files did not reach where the project is kept (the page's storage refused
+    /// one): said under the graph until the page is reloaded, whatever else is said.
+    pub lost: String,
     pub out: Vec<VersionsAct>,
 }
 
@@ -260,12 +263,11 @@ impl Shell {
         if comparing {
             self.versions_diff(ui);
         }
-        if !self.versions.note.is_empty() {
-            ui.label(
-                egui::RichText::new(&self.versions.note)
-                    .font(sans(12.0))
-                    .color(t.error),
-            );
+        for note in [&self.versions.lost, &self.versions.note] {
+            if note.is_empty() {
+                continue;
+            }
+            ui.label(egui::RichText::new(note.as_str()).font(sans(12.0)).color(t.error));
         }
     }
 
