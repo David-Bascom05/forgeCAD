@@ -43,8 +43,8 @@ cycle_cancel = "G80"
 source = "forgecad, restated from NIST RS274NGC v3 and the LinuxCNC G-code reference"
 taken = "2026-11-23"
 note = "verify with your configuration"
-# cutter radius compensation (G41/G42 D = the tool number whose tool-table diameter is the
-# offset; for wear, the table holds only the measured-minus-nominal difference). comp_corner is
+# cutter radius compensation (G41/G42 D = the tool number whose tool-table DIAMETER is the
+# offset; in wear mode that entry holds 2 x the wear, not the tool's size: the op's reply says so). comp_corner is
 # not set: the reference does not say whether an outside corner gets an arc or the lines'
 # intersection, so the post refuses compensation on LinuxCNC (UNKNOWN, not guessed)
 comp_left = "G41 D{d}"
@@ -56,21 +56,21 @@ key = "comp_left"
 source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
 taken = "2026-11-24"
 where = "LinuxCNC G-code reference, 26. G41, G42 Cutter Compensation"
-note = "G41 <D-> left of the path; D the tool number (read through a summary of the page; check the section)"
+note = "\"G41 <D-> (left of programmed path)\"; \"D - tool number\"; \"The lead in move must be at least as long as the tool radius. The lead in move can be a rapid move.\" (verified against the live page by CAM-MACHINE, 2026-11-24)"
 
 [[dialect.cite]]
 key = "comp_right"
 source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
 taken = "2026-11-24"
 where = "LinuxCNC G-code reference, 26. G41, G42 Cutter Compensation"
-note = "G42 <D-> right of the path; D the tool number (read through a summary of the page; check the section)"
+note = "\"G42 <D-> (right of programmed path)\"; \"D - tool number\" (verified against the live page by CAM-MACHINE, 2026-11-24)"
 
 [[dialect.cite]]
 key = "comp_off"
 source = "https://linuxcnc.org/docs/html/gcode/g-code.html"
 taken = "2026-11-24"
 where = "LinuxCNC G-code reference, 25. G40 Compensation Off; tool-compensation.html 4.1.2 Programming Entry Moves"
-note = "the move after G40 must be linear and longer than the tool diameter; the entry move at least the cutter radius (tool-compensation.html, verbatim)"
+note = "§25: \"If tool compensation was on the next move must be a linear move and longer than the tool diameter.\" §4.1.2: \"The minimum length is the cutter radius.\" (verified against the live pages, 2026-11-24)"
 
 [[dialect.cite]]
 key = "comp_corner"

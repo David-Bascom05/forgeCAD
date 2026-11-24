@@ -723,6 +723,7 @@ pub fn digits(q: Q, k: u32, point: Point) -> String {
 /// it turns on and off only immediately before a straight feed move (G1) that moves in X or Y
 /// (no arc, rapid, Z-only move or cycle in between: comments may be); while it is on, no tool
 /// change, cycle, dwell or machine-home move; and it is off when the program ends.
+/// Conservative: G1 only, where LinuxCNC also allows a rapid lead-in and a G0 after G40.
 fn comp_rules(p: &Program) -> Result<(), PostError> {
     let bad = |what: &str| {
         PostError::Unsupported {
@@ -1145,6 +1146,9 @@ pub fn print(p: &QProgram, d: &Dialect) -> Result<String, PostError> {
                     });
                 }
                 let dd = c.map(|(_, d)| d).unwrap_or(0);
+                // a standalone block, as LinuxCNC takes it; a Fanuc-family control (start-up
+                // type A/B) wants G41/G42 in the block of the first move: such a dialect will need a
+                // same-block template when it declares compensation
                 w.emit(&fill(&tpl, &[("d", dd.to_string())]));
                 // the next move states its G word again
                 motion = None;
