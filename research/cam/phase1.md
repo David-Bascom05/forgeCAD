@@ -76,12 +76,33 @@ notch's sharp inside corners (no end mill reaches them).
    - the trim arcs' stored-end gap (3a388e5, bfa4a72).
    Open: L5 for the checker's intervals.
 2. G4 (leftover) is checked: per z band, the final stock less the part's section grown by tol,
-   exactly (booleans); the flange has none, a facing-only program lists its regions. The
-   reasons (tool radius, reach) are not yet classified: every region says "uncut".
-3. Ops: slot, chamfer (deburr), thread milling, engraving, inside contours of pockets with
-   islands from the part; helical ramps (the B&B certifies them; generation is missing).
+   exactly (booleans); the flange has none, a facing-only program lists its regions. Reasons
+   (cam/g4-classify): "held by fixture", "below every tool tip" (band top ≤ the setup's lowest
+   posted tip), "tool radius" (no disk of the chain's smallest radius in the free section meets
+   it: exact booleans on an opening taken with a 1e-6 mm margin over the offset grid; the
+   margin argument is hyp H.grid in verify/forge-cam/RESUME.md), else "uncut". Observed, not
+   judged: a turned chain has sliver bands (e.g. [14, 14.000000000000004]) from h − z rounding.
+3. Ops: done since this note: engraving, thread milling (declared Δ), edge_break (chamfer /
+   deburr), helical ramps in pockets. cam/pocket-islands: `slot` (end mill along centrelines,
+   ramped along the first line) and pockets of the section keep their islands (the region is
+   the hole less the section; before, the island was ignored and the pocket refused as a
+   gouge). Slot certification was slow (3.5 s for two slots; now 1.4 s with ramps: gap 5).
 4. Declared removals Δ (deburr, chamfer and thread milling where the model lacks the geometry).
-5. Speed: a grid over face boxes and shared distances (−40% instructions); the 10⁵-move line at
-   2.7 s is above the 1 s target; next, an f64 filter with a proven error bound.
-6. G5 (axis limits) is not checked yet; G4 uses tol where it should use δ + ε (leave).
+5. Speed (measured 2026-11-23 on the cloud VM, 4 cores): the checker is not the bottleneck.
+   cam_gonogo 10⁵ moves 0.50 s (5.0 µs/move, one thread), cam_product (ops::certify_fixtured)
+   10⁵ moves 0.56 s: the 1 s target is met, so the f64 filter is not needed for it (it would
+   add a proof obligation for no target). End to end, 95–99% of every example's time was the
+   exact reals' escalation (Nat::isqrt/divrem/mul under offset and boolean ties, e.g. the
+   tangent line–arc joints of a slot's ends). cam/checker-speed: isqrt seeded from the isqrt of
+   its top half (same result: Newton from any upper bound ends at ⌊√n⌋), each face's arc gaps
+   worked out once, and ramps (lines moving in xy and z) get the closed form on their segment
+   swept over their heights (only its Clear is kept, certified_clear with heights in an
+   interval; else the B&B as before). flange 1.31 → 0.64 s, bracket 3.41 → 2.20 s, slot_plate
+   7.56 → 1.38 s; programs byte-identical, verdicts identical. Next: the exact offset's ties
+   (tangent joints decided structurally instead of at the BFMSS bound), Nat::mul (schoolbook).
+6. G5: the travel is checked on every posted position (`axis_limit`, placed setups; spans when
+   unplaced), and since cam/g5-runtime every posted S and F against the machine's rpm range and
+   max_feed (`machine_limit`; it was unchecked: a feed over the limit, or the S3000 fallback for a
+   group with no cutting data under a spindle's least speed, was released). Lean `G5rt_of_check`.
+   G4 grows by δ + ε (done, 4bfe2a2).
 7. The Manufacture workspace in the app (UI session): the reply above is its data contract.

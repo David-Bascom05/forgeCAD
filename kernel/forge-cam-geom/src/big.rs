@@ -318,11 +318,24 @@ impl Nat {
     }
 
     /// floor(sqrt(self)), by Newton's iteration from above.
+    ///
+    /// The iteration y = ⌊(x + ⌊n/x⌋)/2⌋ from any x ≥ ⌊√n⌋ stays ≥ ⌊√n⌋ and decreases until
+    /// x = ⌊√n⌋, where it first fails to decrease: so the result is ⌊√n⌋ whatever the start, as
+    /// long as the start is at least that. The start is (⌊√(n / 4^k)⌋ + 1) · 2^k, k a quarter of
+    /// n's bits (recursively): above √n, since ⌊√(n / 4^k)⌋ + 1 > √(n / 4^k), and within a
+    /// relative 2^(k − bits/2 + 1) of it, so one or two full-size divisions finish (from
+    /// 2^⌈bits/2⌉ it took about log₂ bits). Small values start from 2^⌈bits/2⌉ as before.
     pub fn isqrt(&self) -> Nat {
         if self.is_zero() {
             return Nat::zero();
         }
-        let mut x = Nat::from_u64(1).shl(self.bits().div_ceil(2));
+        let b = self.bits();
+        let mut x = if b > 128 {
+            let k = b / 4;
+            self.shr(2 * k).isqrt().add(&Nat::from_u64(1)).shl(k)
+        } else {
+            Nat::from_u64(1).shl(b.div_ceil(2))
+        };
         loop {
             let (q, _) = self.divrem(&x);
             let y = x.add(&q).shr(1);
@@ -422,6 +435,38 @@ mod tests {
             let (q, r) = x.divrem(&b);
             assert_eq!(q, a);
             assert_eq!(r, c);
+        }
+        // the seeded start agrees with the plain iteration from 2^⌈bits/2⌉ (the old start)
+        let plain = |x: &Nat| {
+            let mut r = n(1).shl(x.bits().div_ceil(2));
+            loop {
+                let (q, _) = x.divrem(&r);
+                let y = r.add(&q).shr(1);
+                if y.cmp(&r) != Ordering::Less {
+                    return r;
+                }
+                r = y;
+            }
+        };
+        let mut x = n(0x9e37_79b9_7f4a_7c15);
+        for i in 0..400u64 {
+            x = x.mul(&n(0x7f4a_7c15_9e37_79b9 ^ i)).add(&n(i * 7919));
+            // squares, squares less one and plus one: the edges of ⌊√⌋
+            let s = x.shr(i % 97);
+            let sq = s.mul(&s);
+            for v in [x.clone(), sq.clone(), sq.add(&n(1)), sq.sub(&n(1)).add(&n(0))] {
+                if v.is_zero() {
+                    continue;
+                }
+                assert_eq!(v.isqrt(), plain(&v), "{i}");
+            }
+            if !sq.is_zero() {
+                assert_eq!(sq.isqrt(), s);
+                assert_eq!(sq.sub(&n(1)).isqrt(), s.sub(&n(1)));
+            }
+            if x.bits() > 3000 {
+                x = x.shr(2900);
+            }
         }
         let big = n(3).shl(400).add(&n(5));
         let s = big.isqrt();
