@@ -25,6 +25,14 @@ VENDORS = {
     "lakeshore": "Lakeshore Carbide", "yg1": "YG-1", "osg": "OSG", "guhring": "Guhring",
     "techniks": "Techniks", "rego-fix": "Rego-Fix", "schunk": "Schunk", "maritool": "Maritool",
     "shars": "Shars",
+    "sumitomo": "Sumitomo Electric Hardmetal", "korloy": "Korloy", "ingersoll": "Ingersoll",
+    "tungaloy": "Tungaloy",
+}
+# Turning sources that print inches (their corner radii are rounded metric values).
+INCH_RE = {"ingersoll"}
+# Values a turning source states that are not what our field means: not mapped.
+TURN_SKIP = {
+    "ingersoll": {"l": "Ingersoll's 'l' falls as the corner radius grows (CNMG120404 .488 in, CNMG120408 .472 in): not the ISO cutting edge length"},
 }
 TOOL_TYPES = {"flat": "flat", "ball": "ball", "bull": "bull", "chamfer": "chamfer", "spot": "spot",
               "drill": "drill", "tap": "tap", "thread_mill": "thread_mill", "reamer": "reamer"}
@@ -369,6 +377,83 @@ def collet(vendor, r, out, skips):
         skips[f"kind {kind}"] += 1
 
 
+def turning(vendor, r, out, skips):
+    vals = r["values"]
+    code = (r.get("iso_code") or "").replace(" ", "")
+    if not code:
+        skips["no ISO code (inch/ANSI only)"] += 1
+        return
+    base = dict(maker=VENDORS[vendor], source=r["url"], taken=r.get("taken", TAKEN), note=r.get("name", "")[:140])
+    if r["kind"] == "insert":
+        f, cites = {"code": code}, [pub("code", r, r.get("id", code))]
+        for k in ("ic", "s", "re"):
+            v = num(vals, k)
+            if v is None:
+                skips[f"insert without {k}"] += 1
+                return
+            f[k] = v
+            cites.append(pub(k, r, stated(r, k)))
+            # an inch catalogue's corner radius is the metric one rounded to 3 decimals of an inch
+            # (.016 in for 0.4 mm, .031 in for 0.8 mm): the ISO code's RE digits disagree with it
+            if k == "re" and vendor in INCH_RE:
+                code_re = int(code[8:10]) / 10 if len(code) >= 10 and code[8:10].isdigit() else None
+                if code_re is not None and abs(code_re - v) > 1e-6:
+                    cites.append(dict(path="re", status="conflict", source=r["url"], taken=r.get("taken", TAKEN),
+                                      value=stated(r, "re"),
+                                      note=(f"the catalogue prints inches; {stated(r, 're')} = {v:g} mm, while the ISO code's "
+                                            f"corner-radius digits give {code_re:g} mm; the record holds the printed value")))
+        for k in ("l", "clearance"):
+            if k in TURN_SKIP.get(vendor, {}):
+                continue
+            v = num(vals, k)
+            if v is not None:
+                f[k] = v
+                cites.append(pub(k, r, stated(r, k)))
+        cb = (vals.get("chipbreaker") or {}).get("v")
+        if isinstance(cb, str) and cb:
+            f["chipbreaker"] = cb
+            cites.append(pub("chipbreaker", r, stated(r, "chipbreaker")))
+        rid = f"{vendor}-{r['id']}".replace(" ", "")
+        for k, why in TURN_SKIP.get(vendor, {}).items():
+            base["note"] = (base["note"] + "; " if base["note"] else "") + f"not mapped: {why}"
+        out.rec("insert", {"id": rid, **f, **base}, cites)
+        return
+    # holders and bars: a row listing both hands becomes one record per hand
+    kind = "holder" if r["kind"] == "turn_holder" else "bar"
+    need = ["l1", "f", "kr"] + (["h", "b"] if kind == "holder" else ["dmm"])
+    f = {}
+    for k in need:
+        v = num(vals, k)
+        if v is None:
+            skips[f"{kind} without {k}"] += 1
+            return
+        f[k] = v
+    hands_stated = str((vals.get("hand") or {}).get("v", ""))
+    hands = [h for h in ("R", "L", "N") if h in hands_stated.replace("/", " ").split() or hands_stated == h]
+    if not hands:
+        hands = [h for h in ("R", "L") if h in hands_stated]
+    if not hands:
+        skips[f"{kind} without hand"] += 1
+        return
+    for hand in hands:
+        hc = code
+        if "R/L" in hc:
+            hc = hc.replace("R/L", hand)
+        g = dict(f)
+        cites = [pub("code", r, r.get("id", code)), pub("hand", r, stated(r, "hand"))]
+        cites += [pub(k, r, stated(r, k)) for k in need]
+        mb = num(vals, "min_bore")
+        if mb:
+            g["min_bore"] = mb
+            cites.append(pub("min_bore", r, stated(r, "min_bore")))
+        ins = (vals.get("insert") or {}).get("v")
+        if isinstance(ins, str) and ins:
+            g["insert"] = ins
+            cites.append(pub("insert", r, stated(r, "insert")))
+        rid = f"{vendor}-{str(r['id']).replace('R/L', hand)}".replace(" ", "")
+        out.rec("turn_holder", {"id": rid, "code": hc, "kind": kind, "hand": hand, **g, **base}, cites)
+
+
 def main():
     report = {}
     for vendor in VENDORS:
@@ -376,12 +461,12 @@ def main():
         if not os.path.exists(p):
             continue
         d = json.load(open(p))
-        outs = {"tools": Out(), "holders": Out(), "collets": Out()}
+        outs = {"tools": Out(), "holders": Out(), "collets": Out(), "turning": Out()}
         skips = collections.Counter()
         counts = collections.Counter()
         seen = set()
         for r in d["records"]:
-            key = (r["kind"], r["id"])
+            key = (r["kind"], r["id"], r.get("iso_code"))
             if key in seen:
                 skips["duplicate id"] += 1
                 continue
@@ -393,6 +478,8 @@ def main():
                 holder(vendor, r, outs["holders"], skips)
             elif r["kind"] in ("collet", "collet_nut", "pull_stud"):
                 collet(vendor, r, outs["collets"], skips)
+            elif r["kind"] in ("insert", "turn_holder", "boring_bar"):
+                turning(vendor, r, outs["turning"], skips)
             else:
                 skips[f"kind {r['kind']}"] += 1
             for k, o in outs.items():

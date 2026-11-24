@@ -24,8 +24,21 @@ conflict | user). build.rs embeds every vendor file; the generic files stay firs
 | Iscar, Lyndex | nothing | 403 to automated reads |
 | Haas Tooling | nothing | haascnc.com bot challenge |
 
-So the turning inserts, holders and bars have a format (`forge_tooling::turning`, CAM-TURN's
-spec) but no maker data yet.
+Turning (`forge_tooling::turning`, CAM-TURN's spec), from makers' catalogue PDFs on their own
+domains: Sumitomo (General Catalogue 2025-26 B/C/E), Tungaloy (GC 2023-2024 B/C/D), Ingersoll
+(turning inserts / holders PDFs; inch), Korloy (Turning 25-26). 51 inserts, 60 holder and bar
+records (a row listing both hands is one record per hand). Left out: Korloy's inserts (a corner
+radius range per size, not per insert), Ingersoll's inch-only ANSI holders (no ISO code),
+Ingersoll's `l` (not the ISO edge length: it falls as the radius grows). Not reachable openly:
+Widia, Dormer Pramet, Seco, Walter (JavaScript-only pages), Hoffmann (429), MSC, RS,
+Mitsubishi (403), Travers (406), Kyocera (502/404), Iscar flip pages (TLS refused); see
+raw/blocked-*.json.
+
+`kernel/forge-turn/tests/vendor_codes.rs` decodes every record's ISO code with forge-turn and
+compares it with the stated dimensions: all agree, except Ingersoll's corner radii (printed in
+inches: .016/.031 in = 0.406/0.787 mm against the code's 0.4/0.8), which carry `conflict` cites.
+Codes forge-turn does not decode yet (trigon W inserts; left-hand holders and bars) are listed
+by the test, not failed.
 
 ## Rules applied
 

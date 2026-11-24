@@ -1,0 +1,10 @@
+{
+ "source": "KBC Tools",
+ "blocked": [
+  {
+   "url": "https://www.kbctools.com/search?q=CNMG432",
+   "why": "HTTP 404 page; site search/product listing is JavaScript-rendered, no product links in static HTML"
+  }
+ ],
+ "records": []
+}
