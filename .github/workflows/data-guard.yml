@@ -18,3 +18,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 -I tools/ci/no-fusion-gallery.py
+
+  # The makers' Autodesk-hosted tool libraries: used from a git-ignored cache, never committed
+  # (tools/fetch-tool-libraries.sh, research/cam/tooling/libraries.md).
+  vendor-tool-libraries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 -I tools/ci/no-vendor-tool-libraries.py

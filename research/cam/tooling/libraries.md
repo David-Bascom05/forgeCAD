@@ -23,7 +23,14 @@ no sign-up, login, email form or bot-challenge bypass.
     Fusion RE is 0 while the catalogue gives RE = D/2 (our ball records carry no RE). No conflict
     cites were needed. The original file and the maker's manifest (with its SHA-256, verified) are
     kept unmodified, with attribution, in research/cam/tooling/libraries/robbjack/.
-- **Not imported, terms unclear: the Autodesk-hosted "Tools for Autodesk Fusion" libraries**
+- **Autodesk-hosted "Tools for Autodesk Fusion" libraries: used, never committed** (David,
+  2026-11-24: "use and don't commit"). `tools/fetch-tool-libraries.sh` fetches the 45 Fusion JSON
+  libraries into the git-ignored `.cache/tool-libraries/`, each verified against a pinned SHA-256;
+  `tools/ci/no-vendor-tool-libraries.py` (CI: data-guard) fails if any of them, or any Fusion tool
+  library JSON outside RobbJack's directory, is tracked. Nothing derived per tool from them is
+  committed: they cross-check our PDF-cited records (a disagreement is a conflict cite in our own
+  words, citing the PDF) and feed opt-in benchmarks whose aggregate results only are committed.
+  Previously listed as:
   (45 Fusion JSON + 14 HSMWorks files: Harvey, Helical, Garr, Guhring, SGS, IMCO, Sandvik, ISCAR,
   Mitsubishi, Haas Tooling, OSG, M.A. Ford, DATRON, SwiftCARB, NexGen, Valor, Destiny, Tormach,
   ...). The files carry no licence; Autodesk's website terms (quoted from a search extract; the
