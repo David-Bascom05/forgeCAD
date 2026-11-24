@@ -8,7 +8,20 @@ include!(concat!(env!("OUT_DIR"), "/builtin.rs"));
 
 /// The built-in machines with the file each came from (`builtin/<vendor>.toml`); the files are
 /// ours and are tested to parse with unique names, so a failure here is a bug in this crate.
+/// Parsed once per process (the files are compiled in and parsing is a function of them: the
+/// same machines every time), then copied: a CAM run and its quality measure each ask, and in a
+/// browser page the parse took tens of milliseconds a run.
 pub fn builtin_files() -> Vec<(MachineDef, String)> {
+    kept().clone()
+}
+
+fn kept() -> &'static Vec<(MachineDef, String)> {
+    static KEPT: std::sync::OnceLock<Vec<(MachineDef, String)>> = std::sync::OnceLock::new();
+    KEPT.get_or_init(parse_builtin)
+}
+
+/// The built-in files parsed.
+fn parse_builtin() -> Vec<(MachineDef, String)> {
     let mut lib = Library::default();
     let files: Vec<(String, String)> = BUILTIN
         .iter()
@@ -22,12 +35,15 @@ pub fn builtin_files() -> Vec<(MachineDef, String)> {
 
 /// The built-in machines, generic ones first.
 pub fn builtin() -> Vec<MachineDef> {
-    builtin_files().into_iter().map(|(m, _)| m).collect()
+    kept().iter().map(|(m, _)| m.clone()).collect()
 }
 
 /// A built-in machine by name.
 pub fn builtin_named(name: &str) -> Option<MachineDef> {
-    builtin().into_iter().find(|m| m.name == name)
+    kept()
+        .iter()
+        .find(|(m, _)| m.name == name)
+        .map(|(m, _)| m.clone())
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -98,5 +114,36 @@ impl Library {
                 name: name.into(),
                 near: self.machines.iter().map(|(m, _)| m.name.clone()).collect(),
             })
+    }
+}
+
+#[cfg(test)]
+mod kept_tests {
+    use super::*;
+
+    /// The kept built-ins are the files parsed now, to the last bit of every number (compared
+    /// by their full Debug text), each time they are asked for; and each by name is that one.
+    #[test]
+    fn the_kept_builtins_are_the_parsed_ones() {
+        let fresh = format!("{:?}", parse_builtin());
+        for _ in 0..2 {
+            assert_eq!(format!("{:?}", builtin_files()), fresh);
+        }
+        let all = builtin();
+        assert_eq!(
+            format!("{:?}", all),
+            format!(
+                "{:?}",
+                parse_builtin().into_iter().map(|(m, _)| m).collect::<Vec<_>>()
+            )
+        );
+        for m in &all {
+            assert_eq!(format!("{:?}", builtin_named(&m.name)), format!("{:?}", Some(m)));
+        }
+        assert!(builtin_named("no such machine").is_none());
+        // a copy changed is not the kept one changed
+        let mut c = builtin_files();
+        c[0].0.name.push_str(" edited");
+        assert_eq!(format!("{:?}", builtin_files()), fresh);
     }
 }

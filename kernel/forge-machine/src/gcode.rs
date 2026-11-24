@@ -285,8 +285,10 @@ impl Control {
         let Some(toml::Val::Table(d)) = root.get("dialect") else {
             return Err("no [dialect] table".into());
         };
-        let decimals = toml::num(d, "decimals").ok_or("the dialect has no decimals")? as u32;
-        let feed_decimals = toml::num(d, "feed_decimals").ok_or("the dialect has no feed_decimals")? as u32;
+        let decimals = toml::num(d, "decimals").ok_or("the dialect has no decimals")?;
+        let decimals = forge_post::decimals_of("decimals", decimals)?;
+        let feed_decimals = toml::num(d, "feed_decimals").ok_or("the dialect has no feed_decimals")?;
+        let feed_decimals = forge_post::decimals_of("feed_decimals", feed_decimals)?;
         // a dialect may have no dwell (its units unknown: forge-post refuses one); a G4 in its
         // text is then read as Fanuc's P milliseconds
         let dwell = toml::text(d, "dwell").unwrap_or("G4 P{ms}");
@@ -342,12 +344,18 @@ impl Control {
             && !toml::tables(d, "cite").iter().any(|c| {
                 toml::text(c, "key") == Some("units_inch") && toml::text(c, "status") == Some("refused")
             }))
-        .then(|| {
-            (
-                toml::num(d, "inch_decimals").map_or(decimals + 1, |x| x as u32),
-                toml::num(d, "inch_feed_decimals").map_or(feed_decimals + 1, |x| x as u32),
-            )
-        });
+        .then(|| -> Result<(u32, u32), String> {
+            // as every decimal count, at most MAX_DECIMALS (the default one more than the mm's)
+            let k = |key: &str, mm: u32| match toml::num(d, key) {
+                Some(x) => forge_post::decimals_of(key, x),
+                None => Ok((mm + 1).min(forge_post::MAX_DECIMALS)),
+            };
+            Ok((
+                k("inch_decimals", decimals)?,
+                k("inch_feed_decimals", feed_decimals)?,
+            ))
+        })
+        .transpose()?;
         Ok(Control {
             lex,
             decimals,
