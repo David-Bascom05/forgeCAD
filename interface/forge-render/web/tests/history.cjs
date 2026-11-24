@@ -50,9 +50,10 @@ async function turnOn(b, url) {
     const s1 = await t.serve(dir, app);
     runs.push([s1.proc, dir]);
     let p = await turnOn(b, s1.url);
-    // the page has no name and email to sign with: said, not "every save is kept"
-    let st = await p.evaluate(() => window.forgecad.state());
-    assert.match(st.status, /wasn't kept: no name and email/, st.status);
+    // the page has no name and email to sign with: Versions asks for them (the status said the
+    // save wasn't kept, till a build's word took the line)
+    let st = await t.until(p, (s) => s.versions?.unsigned, "Versions asking who signs", 20000);
+    assert.doesNotMatch(st.status, /every save is kept/, st.status);
     // typed fast, each field right after the click on it (a click and typing in one frame lost
     // the typing: inputcut.rs)
     await p.mouse.click(...at.signName);
@@ -91,10 +92,10 @@ async function turnOn(b, url) {
     const s2 = await t.serve(ro, app, ["--read-only"]);
     runs.push([s2.proc, ro]);
     p = await turnOn(b, s2.url);
-    const st2 = await t.until(p, (s) => /Not kept/.test(s.status), "the refusal said", 20000);
-    assert.doesNotMatch(st2.status, /History is on/);
+    const st2 = await t.until(p, (s) => /isn't being kept/.test(s.versions?.lost ?? ""), "Versions saying it", 20000);
+    assert.doesNotMatch(st2.status, /every save is kept/);
     assert.ok(!fs.existsSync(path.join(ro, ".git")), "nothing written");
-    console.log(`ok - read only: "${st2.status}"`);
+    console.log(`ok - read only: "${st2.versions.lost}"`);
   } finally {
     await b.close();
     for (const [proc, d] of runs) {

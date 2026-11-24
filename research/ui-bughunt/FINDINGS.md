@@ -157,7 +157,50 @@ reached from the page are covered by the twiggy check above, not by the lint.
   engine, the OpenAI-compatible path returns "doesn't reach endpoints yet"). The tab now says so
   plainly, with no Send to fail and no microphone. Shots: `shots/agent-tab-page-{before,after}.png`.
 
+## 13. A selection window killed the page (ui/bughunt-2)
+
+- Symptom: any left drag across the view (a window selection) panicked: `render.rs "it's been
+  waited for": getMappedRange failed`, then `unreachable`.
+- Root cause: `Renderer::view_ids` drew the view's ids and waited with `device.poll(wait)`; a
+  page can't wait for the GPU (mapAsync answers in a later task).
+- Fix: `view_ids_start` / `view_ids_take` (woken by the pick's waker); natively `view_ids` still
+  waits; in the page the window is chosen when the ids are back (`Gui::picks`); Markup's marks go
+  without their entities there. Test: `nopanic.cjs` drags a window (old build: the panic).
+
+## 14. LAG: the page fell seconds behind the mouse (ui/bughunt-2)
+
+Measured with `tools/ui-hunt/perf.cjs` (headless Chromium, SwiftShader WebGPU, 4-core VM):
+
+| | before | after |
+|---|---|---|
+| small part: a frame read back right after a 1.3 s orbit | 12 844 ms | 503 ms |
+| rack18u/asm/rack.fg (860 occurrences): same | 27 116 ms | 951 ms |
+| rack.fg opened right after another document in the same browser | 15-28 s | 2.5-3.5 s |
+
+- Root cause: the web host drew a frame for every input event with no limit on frames in flight;
+  the desktop's presenter waits for its last present. On a slow adapter the GPU queue grew without
+  bound: the screen showed what the mouse did seconds before, and the backlog (in the browser's
+  shared GPU process) slowed the next page too.
+- Fix: `webapp.rs` paces frames to the GPU: at most `IN_FLIGHT` = 2 out
+  (`queue.on_submitted_work_done`); a frame asked for meanwhile is drawn when one is done (a
+  second without a done callback draws anyway).
+- Pacing made fewer frames, and two input bugs showed (both possible before on any long frame):
+  two clicks in one frame (a tab, then the button its panel shows) lost the second, and a move
+  after a release lost the click (egui takes a click where the pointer is at the frame's end).
+  `inputcut::frame_cut` now ends a frame at a button release, and holds a press for one frame
+  when the frame before changed the layout (it asked for another pass at once).
+- Tests: `web/tests/pace.cjs` (old: 12.8 s), `inputcut` unit test, `history.cjs` (clicks a tab
+  then its panel's button). `e2e.cjs` waits for one frame after a rebuild, not two (paced frames
+  coalesce what's asked meanwhile; its pixel check shows the new part).
+- Other numbers (after): open small 0.5 s, rack 2.5 s (threaded) / 16 s single-threaded (longest
+  main-thread task 1.4 s single, 123 ms threaded; native: 8 s on 4 threads, 26 s on 1); orbit
+  ~20 ms per input event before pacing, adapter-bound after; click to frame 5-25 ms.
+
 ## Open (reported, not fixed here)
+
+- Selection highlight: in the page a click or window selects (state().selected counts them) but
+  no tint showed in the read-back frames; natively a feature selected from the tree is tinted.
+  Not yet compared like for like.
 
 - 8. Memory kept by every forge-lang run (a reference cycle), natively too. A long session grows
   without bound: in the page, ~30 KB per edit of a 137-byte part (16 -> 63 MB over 1500

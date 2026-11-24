@@ -193,14 +193,16 @@ jobs:
           node web/tests/e2e.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/idle.cjs "$GITHUB_WORKSPACE/target/web"
       # the paths that reached std's browser panics (Versions, Agent, Check Forming) are clicked
-      # through, parts of any size are drawn shaded, and history is kept where the project is
-      - name: no panics, shaded, history
+      # through, parts of any size are drawn shaded, history is kept where the project is, and
+      # frames keep up with the mouse
+      - name: no panics, shaded, history, pace
         if: matrix.test == 'e2e'
         working-directory: interface/forge-render
         run: |
           node web/tests/nopanic.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/shade.cjs "$GITHUB_WORKSPACE/target/web"
           node web/tests/history.cjs "$GITHUB_WORKSPACE/target/web"
+          node web/tests/pace.cjs "$GITHUB_WORKSPACE/target/web"
       - name: parity (shard ${{ matrix.test }} of 3)
         if: matrix.test != 'e2e'
         working-directory: interface/forge-render

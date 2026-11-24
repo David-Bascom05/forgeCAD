@@ -7,6 +7,10 @@ use winit::keyboard::{Key, NamedKey};
 #[derive(Default)]
 pub struct Input {
     pub events: Vec<egui::Event>,
+    /// The last frame changed what's where (egui asked for another pass at once): a click waits
+    /// a frame (`inputcut`), once: a frame that held one doesn't hold the next.
+    pub settling: bool,
+    held: bool,
     pub modifiers: egui::Modifiers,
     pub pointer: egui::Pos2,
 }
@@ -23,7 +27,9 @@ impl Input {
             focused: true,
             // a click and typing never in one frame (`inputcut`): the rest waits for the next
             events: {
-                let n = crate::inputcut::frame_cut(&self.events);
+                let hold = self.settling && !self.held;
+                let n = crate::inputcut::frame_cut(&self.events, hold);
+                self.held = hold && n < self.events.len();
                 self.events.drain(..n).collect()
             },
             ..Default::default()

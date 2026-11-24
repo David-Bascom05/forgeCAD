@@ -145,6 +145,14 @@ struct Host {
     /// A test's click off the view (`app_click`): the view's pick it asks is dropped after
     /// the frame (nothing of the view was clicked; the offscreen adapter's pick may not finish).
     unpick: bool,
+    /// Frames submitted whose GPU work isn't done yet. At most `IN_FLIGHT` are: a frame asked for
+    /// past that waits for one to finish (`draw`), as the desktop's presenter waits for its last
+    /// present. Unpaced, a slow adapter fell ever further behind: after a second's orbit the
+    /// screen showed what the mouse did 13 s before (27 s on a large assembly).
+    in_flight: std::sync::Arc<Pace>,
+    /// When the last frame was submitted (`now_ms`): past a second, a frame is drawn whatever is
+    /// out (a done callback that never came must not stop the page drawing).
+    submitted: f64,
     frames: u64,
     /// A frame the app asked for later (a tooltip's delay), as `now_ms`.
     next: Option<f64>,
@@ -237,6 +245,8 @@ async fn open_host(
         gui,
         input: Input::default(),
         unpick: false,
+        in_flight: Default::default(),
+        submitted: 0.0,
         frames: 0,
         next: None,
     })
@@ -319,7 +329,14 @@ impl Host {
     }
 
     fn draw(&mut self) {
+        use std::sync::atomic::Ordering::Relaxed;
         use wgpu::CurrentSurfaceTexture as T;
+        // paced: drawn again once a frame's GPU work is done (its callback wakes the loop and asks
+        // for the frame); input meanwhile waits in `input`, taken by the frame that's drawn
+        if self.in_flight.out.load(Relaxed) >= IN_FLIGHT && now_ms() - self.submitted < 1000.0 {
+            self.in_flight.skipped.store(true, Relaxed);
+            return;
+        }
         // the canvas's pixels checked each frame: not every change of the pixel ratio comes as an
         // event (a page zoomed, a window dragged to another monitor)
         if self.surface.is_some()
@@ -364,6 +381,16 @@ impl Host {
         if self.input.waiting() {
             self.window.request_redraw();
         }
+        self.in_flight.out.fetch_add(1, Relaxed);
+        self.submitted = now_ms();
+        let pace = self.in_flight.clone();
+        self.gui.queue().on_submitted_work_done(move || {
+            pace.out.fetch_sub(1, Relaxed);
+            // a frame was asked for while this one was out: drawn now
+            if pace.skipped.swap(false, Relaxed) {
+                wake();
+            }
+        });
         self.frames += 1;
         FRAMES.with(|f| f.set(self.frames));
         if self.frames == 1 {
@@ -382,6 +409,7 @@ impl Host {
             }
         }
         self.next = None;
+        self.input.settling = out.again_in.is_some_and(|d| d.is_zero());
         match out.again_in {
             Some(d) if d.is_zero() => self.window.request_redraw(),
             Some(d) => {
@@ -723,6 +751,16 @@ fn state_json(g: &Gui, canvas: Json) -> String {
         ("seq", doc.map_or(Json::Null, |s| num(s.seq as f64))),
         ("done", doc.map_or(Json::Null, |s| num(s.done as f64))),
         ("dirty", doc.is_some_and(|s| s.dirty()).into()),
+        // the Versions panel's word: history kept or not, and why not
+        (
+            "versions",
+            Json::obj(vec![
+                ("off", g.shell.versions.off.into()),
+                ("unsigned", g.shell.versions.unsigned.into()),
+                ("note", g.shell.versions.note.clone().into()),
+                ("lost", g.shell.versions.lost.clone().into()),
+            ]),
+        ),
         // what's selected in the view: a test of a click or a selection window reads it
         (
             "selected",
@@ -944,6 +982,16 @@ pub fn start_app(path: Option<String>, offscreen: Option<String>) -> Result<(), 
         offscreen,
     });
     Ok(())
+}
+
+/// Frames the GPU may be behind by: two, so the CPU makes the next while the GPU draws one.
+const IN_FLIGHT: u32 = 2;
+
+/// The page's frames out on the GPU (`Host::in_flight`), and whether one was asked for meanwhile.
+#[derive(Default)]
+struct Pace {
+    out: std::sync::atomic::AtomicU32,
+    skipped: std::sync::atomic::AtomicBool,
 }
 
 fn ask(a: Ask) {

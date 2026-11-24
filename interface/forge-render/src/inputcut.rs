@@ -23,13 +23,25 @@ fn button(e: &egui::Event) -> bool {
 
 /// How many of `events` one frame takes: all of them, unless a mouse button and the keyboard
 /// both come in them; then up to where the second of the two kinds starts (the rest is the next
-/// frame's).
-pub fn frame_cut(events: &[egui::Event]) -> usize {
+/// frame's). `hold_buttons`: the frame before changed what's where (it asked for another pass at
+/// once), and egui finds what a click hits from the frame before's places, so a click would hit
+/// what was there, not what's there now: the frame takes what comes before the first button
+/// (a tab clicked, then the button its panel shows: the button's click was lost).
+pub fn frame_cut(events: &[egui::Event], hold_buttons: bool) -> usize {
+    if hold_buttons && let Some(i) = events.iter().position(button) {
+        return i;
+    }
     let mut keys = false;
     let mut buttons = false;
     for (i, e) in events.iter().enumerate() {
         if (keyboard(e) && buttons) || (button(e) && keys) {
             return i;
+        }
+        // a frame ends with a button let go: egui takes a click where the pointer is at the
+        // frame's end, so a move after it (to the next button) lost the click; and a second click
+        // waits for what the first changes to be laid out (a tab, then the button its panel shows)
+        if matches!(e, egui::Event::PointerButton { pressed: false, .. }) {
+            return i + 1;
         }
         keys |= keyboard(e);
         buttons |= button(e);
@@ -63,17 +75,47 @@ mod tests {
             egui::Event::PointerMoved(egui::pos2(2.0, 2.0)),
             text("c"),
         ];
-        assert_eq!(frame_cut(&typed), 4);
-        assert_eq!(frame_cut(&[press(true), press(false)]), 2);
+        assert_eq!(frame_cut(&typed, false), 4);
+        assert_eq!(frame_cut(&[press(true), press(false)], false), 2);
         // typed, then a click on another field, then typed into it: three frames
         let mut ev = vec![text("Jo"), text(" "), press(true), press(false), text("xy")];
         let mut frames = vec![];
         while !ev.is_empty() {
-            let n = frame_cut(&ev);
+            let n = frame_cut(&ev, false);
             assert!(n > 0);
             frames.push(ev.drain(..n).count());
         }
         assert_eq!(frames, [2, 2, 1]);
-        assert_eq!(frame_cut(&[]), 0);
+        // a click, then a move to the next button: the move is the next frame's
+        assert_eq!(
+            frame_cut(
+                &[
+                    press(true),
+                    press(false),
+                    egui::Event::PointerMoved(egui::pos2(3.0, 3.0))
+                ],
+                false
+            ),
+            2
+        );
+        assert_eq!(frame_cut(&[], false), 0);
+        // a frame whose layout just changed: the click waits for the next
+        let moved_then_click = [
+            egui::Event::PointerMoved(egui::pos2(5.0, 5.0)),
+            press(true),
+            press(false),
+        ];
+        assert_eq!(frame_cut(&moved_then_click, true), 1);
+        assert_eq!(frame_cut(&moved_then_click, false), 3);
+        // two clicks: one a frame
+        let two = [
+            press(true),
+            press(false),
+            egui::Event::PointerMoved(egui::pos2(9.0, 9.0)),
+            press(true),
+            press(false),
+        ];
+        assert_eq!(frame_cut(&two, false), 2);
+        assert_eq!(frame_cut(&two[2..], false), 3);
     }
 }
