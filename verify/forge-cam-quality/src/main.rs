@@ -38,6 +38,23 @@ fn main() {
                 }
                 return;
             }
+            "--moves" => {
+                // one op's planned moves i0..i1: --moves FILE OP I0 I1
+                let f = PathBuf::from(args.next().expect("--moves FILE OP I0 I1"));
+                let op = args.next().expect("OP");
+                let i0: usize = args.next().and_then(|x| x.parse().ok()).unwrap_or(0);
+                let i1: usize = args.next().and_then(|x| x.parse().ok()).unwrap_or(i0 + 20);
+                let src = std::fs::read_to_string(&f).expect("read");
+                let cam = forge_cam_lang::run(&src, f.parent().unwrap());
+                for o in cam.ops.iter().filter(|o| o.name == op) {
+                    for (pi, p) in o.paths.iter().enumerate() {
+                        for (i, m) in p.moves.iter().enumerate().skip(i0).take(i1.saturating_sub(i0)) {
+                            println!("path {pi} move {i}: {m:?}");
+                        }
+                    }
+                }
+                return;
+            }
             "--cell" => cfg.cell = args.next().and_then(|s| s.parse().ok()),
             _ => files.push(PathBuf::from(a)),
         }

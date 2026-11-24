@@ -516,7 +516,13 @@ pub fn adaptive(
                         }
                         b
                     };
-                    found = Some(eval(d));
+                    // the chosen step itself must keep the cap (∞ off the allowed centres)
+                    let e = eval(d);
+                    if e.0 > cap {
+                        len *= 0.5;
+                        continue;
+                    }
+                    found = Some(e);
                     break;
                 }
                 let Some((phi, w, q)) = found else { break };
@@ -543,11 +549,10 @@ pub fn adaptive(
             pts.extend_from_slice(&pass[..keep]);
             fit_arcs(&pts, f.r, feed.0, &mut mv);
             at = Some(if keep > 0 { pass[keep - 1] } else { target });
-            if keep == 0 || removed < 1e-3 * f.r * f.r * f.r {
-                // nothing cut from here: mark this start used by sweeping its disk (no material
-                // there by construction) and look on; guard stops a stall
-                cands.retain(|c| *c != p);
-            }
+            // each start is used once (crumbs the cap keeps a pass from reaching are left to
+            // the wall pass, not retried)
+            let _ = removed;
+            cands.retain(|c| *c != p);
         }
         // a plain offset pass along the walls (rule 5), linked by the same rule
         if prm.wall_pass

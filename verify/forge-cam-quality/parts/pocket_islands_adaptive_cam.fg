@@ -1,0 +1,11 @@
+machining
+# Benchmark (verify/forge-cam-quality): pocket_islands by adaptive clearing, one 10 mm level, 40° cap.
+shared tol = 0.01
+
+f    = part("pocket_islands.fg", group: "N")
+m    = machine("generic-vmc3")
+t1   = tool("flat-10", t: 1, stickout: 32, holder: "bt40-er32")
+op1  = setup(f, machine: m, stock: box(margin: (3, 3, 1)), origin: "top-corner", tol: tol)
+skim = facing(op1, tool: t1, to: 20, step: 1)
+well = adaptive(op1, tool: t1, region: "pockets", from: 20, to: 10, step: 10, engagement: 40)
+prog = program(op1, post: "fanuc", number: 5007)

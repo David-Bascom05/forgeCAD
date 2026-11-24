@@ -2255,56 +2255,68 @@ impl Cam {
                         Ok(vec![p])
                     }
                     "adaptive" => {
-                        // the region of `clear` (the stock's outline grown by D, the part's section
-                        // as islands), cleared by forge_cam::adaptive under one engagement cap
+                        // `region: "outside"` (default): the region of `clear` (the stock's
+                        // outline grown by D, the part's section as islands); `region:
+                        // "pockets"`: each hole and slot of the part's section (as pocket with no
+                        // hole named). Cleared by forge_cam::adaptive under one engagement cap.
                         let top = get_num(a, "from", Some(s.stock.max[2]))?;
                         let bottom = get_num(a, "to", None)?;
                         let zmid = 0.5 * (top + bottom);
                         let sec = forge_cam::section::section(&part.faces, zmid, 1e-5)
                             .map_err(|e| format!("the part's section at z = {zmid}: {e:?}"))?;
-                        let islands = outer_or_inner(&sec, true)?;
-                        let g = d;
-                        let q = [
-                            p2(s.stock.min[0] - g, s.stock.min[1] - g),
-                            p2(s.stock.max[0] + g, s.stock.min[1] - g),
-                            p2(s.stock.max[0] + g, s.stock.max[1] + g),
-                            p2(s.stock.min[0] - g, s.stock.max[1] + g),
-                        ];
-                        let mut loops = vec![Loop {
-                            segs: (0..4)
-                                .map(|i| Seg::Line {
-                                    a: q[i],
-                                    b: q[(i + 1) % 4],
-                                })
-                                .collect(),
-                        }];
-                        for l in &islands.loops {
-                            loops.push(l.reversed());
-                        }
-                        let rg = Region { loops };
+                        let regions = match get_str(a, "region", Some("outside"))?.as_str() {
+                            "outside" => {
+                                let islands = outer_or_inner(&sec, true)?;
+                                let g = d;
+                                let q = [
+                                    p2(s.stock.min[0] - g, s.stock.min[1] - g),
+                                    p2(s.stock.max[0] + g, s.stock.min[1] - g),
+                                    p2(s.stock.max[0] + g, s.stock.max[1] + g),
+                                    p2(s.stock.min[0] - g, s.stock.max[1] + g),
+                                ];
+                                let mut loops = vec![Loop {
+                                    segs: (0..4)
+                                        .map(|i| Seg::Line {
+                                            a: q[i],
+                                            b: q[(i + 1) % 4],
+                                        })
+                                        .collect(),
+                                }];
+                                for l in &islands.loops {
+                                    loops.push(l.reversed());
+                                }
+                                vec![Region { loops }]
+                            }
+                            "pockets" => pockets_of(&sec)?,
+                            o => return Err(format!("adaptive: region \"{o}\": \"outside\" or \"pockets\"")),
+                        };
                         let prm = forge_cam::adaptive::Adaptive {
                             phi_max: get_num(a, "engagement", Some(60.0))?,
                             step: get_num(a, "step_length", Some(0.0))?,
                             leave: get_num(a, "leave", Some(0.0))?,
                             wall_pass: true,
                         };
-                        let out = forge_cam::adaptive::adaptive(
-                            &rg,
-                            ops::Cut {
-                                tool: t,
-                                tidx: ti,
-                                h,
-                                feed: (vf, vp),
-                            },
-                            ops::Span { top, bottom, step },
-                            &s.ip,
-                            &prm,
-                        )
-                        .map_err(|e| format!("{e:?}"))?;
-                        for (v, z) in out.voids {
-                            voids.push((Some(v), z));
+                        let mut paths = vec![];
+                        for rg in &regions {
+                            let out = forge_cam::adaptive::adaptive(
+                                rg,
+                                ops::Cut {
+                                    tool: t,
+                                    tidx: ti,
+                                    h,
+                                    feed: (vf, vp),
+                                },
+                                ops::Span { top, bottom, step },
+                                &s.ip,
+                                &prm,
+                            )
+                            .map_err(|e| format!("{e:?}"))?;
+                            for (v, z) in out.voids {
+                                voids.push((Some(v), z));
+                            }
+                            paths.push(out.path);
                         }
-                        Ok(vec![out.path])
+                        Ok(paths)
                     }
                     "clear" => {
                         // everything between the stock's outline and the part's section, from a
