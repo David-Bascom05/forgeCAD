@@ -379,11 +379,7 @@ impl Session {
                     post: p.post.clone(),
                     text: p.text.clone(),
                     error: p.error.clone(),
-                    certified: if p.text.is_none() {
-                        "no".into()
-                    } else {
-                        cert.clone()
-                    },
+                    certified: if p.text.is_none() { "no".into() } else { cert.clone() },
                     setup: None,
                 })
                 .collect()
