@@ -204,7 +204,10 @@ impl<'a> Surfacer<'a> {
         for mv in mvs {
             for &i in &idx {
                 let f = &self.faces[i as usize];
-                if forge_cam_geom::contact::clear(&self.cutter, f, mv, limit).is_some() {
+                if matches!(
+                    forge_cam_geom::contact::clear(&self.cutter, f, mv, limit),
+                    Some(forge_cam_geom::check::Verdict::Clear { .. })
+                ) {
                     continue;
                 }
                 match drop::gap_move(&self.check, f, mv, limit, self.res, FIT_BUDGET).0 {
@@ -287,7 +290,10 @@ impl<'a> Surfacer<'a> {
             };
             for &i in &idx {
                 let f = &self.faces[i as usize];
-                if forge_cam_geom::contact::clear(&self.cutter, f, &mv, lim).is_some() {
+                if matches!(
+                    forge_cam_geom::contact::clear(&self.cutter, f, &mv, lim),
+                    Some(forge_cam_geom::check::Verdict::Clear { .. })
+                ) {
                     continue;
                 }
                 match drop::gap_move(&grown, f, &mv, limit, self.res, FIT_BUDGET).0 {
