@@ -249,7 +249,9 @@ pub struct CamWs {
     /// Where the host's run lands.
     pub job: Arc<Mutex<Option<run::Run>>>,
     /// A run's quality measured after the run was shown (the text it is for, and it).
-    pub quality_job: Arc<Mutex<Option<(String, forge_cam_quality::JobQ)>>>,
+    /// Every measure finished since last taken: a run's measure can end after a later run's
+    /// (one slot let it overwrite the later one, whose quality then never came).
+    pub quality_job: Arc<Mutex<Vec<(String, forge_cam_quality::JobQ)>>>,
     /// An adaptive op's comparison: the same setup, tool and heights as `clear` at its defaults
     /// (forge-cam-quality's alternative_clear), measured off the UI thread: (op, the run's text
     /// it is for, its bound and estimate, or None when it does not build). `alt_job` is the
@@ -345,7 +347,7 @@ impl CamWs {
             want_check: false,
             running: None,
             job: Arc::new(Mutex::new(None)),
-            quality_job: Arc::new(Mutex::new(None)),
+            quality_job: Arc::new(Mutex::new(Vec::new())),
             alt: None,
             alt_job: Arc::new(Mutex::new(None)),
             alt_asked: None,

@@ -54,16 +54,6 @@ fn tap(h: &mut Headless, name: &str) {
     assert!(h.click(name), "{name}");
 }
 
-/// Steps until `done` (a state a click or a job leads to), at most a minute.
-fn step_until(h: &mut Headless, what: &str, done: impl Fn(&Gui) -> bool) {
-    let t0 = std::time::Instant::now();
-    while !done(&h.gui) {
-        assert!(t0.elapsed().as_secs() < 60, "never: {what}");
-        h.step();
-        std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-}
-
 fn shot(h: &mut Headless, name: &str) {
     for _ in 0..12 {
         h.step();
@@ -239,8 +229,22 @@ fn nc_programs_post_export_and_go_stale() {
     h.step();
     shot(&mut h, "cam-nc-open");
     // a tab of the properties column: Quality beside it, back again
-    tap(&mut h, "cam:dock:quality");
-    step_until(&mut h, "the Quality tab", |g| g.shell.cam.as_ref().is_some_and(|w| w.quality_open && !w.programs_open));
+    // a tab's click can be taken by a frame that lays the column out again: clicked again until
+    // the tab is open (a few tries)
+    let quality = |g: &Gui| g.shell.cam.as_ref().is_some_and(|w| w.quality_open && !w.programs_open);
+    for k in 0.. {
+        tap(&mut h, "cam:dock:quality");
+        for _ in 0..20 {
+            if quality(&h.gui) {
+                break;
+            }
+            h.step();
+        }
+        if quality(&h.gui) {
+            break;
+        }
+        assert!(k < 4, "the Quality tab never opened");
+    }
     shot(&mut h, "cam-quality-tab");
     tap(&mut h, "cam:dock:programs");
     h.step();
@@ -628,6 +632,27 @@ fn a_narrow_window_tabs_the_sheet_and_the_simulation() {
     if h.gui.shell.view_rect.width() < w0 - 1.0 {
         assert_ne!(h.gui.view.as_ref().unwrap().nav.camera, before, "framed again");
     }
+}
+
+/// A run's quality is measured off the UI thread after the run is shown; an older run's measure
+/// can end after the shown one's. The shown run takes its own whichever order they land in (one
+/// slot let the older overwrite it: the run never had its quality, and a wait on it never ended).
+#[test]
+fn a_late_measure_of_an_older_text_does_not_lose_the_shown_ones() {
+    let Some((mut h, _)) = open("measure-order") else { return };
+    let w = h.gui.shell.cam.as_mut().unwrap();
+    let r = w.run.as_mut().unwrap();
+    let q = r.quality.take().expect("measured");
+    let text = r.text.clone();
+    {
+        let mut slot = w.quality_job.lock().unwrap();
+        slot.push((text, q.clone()));
+        // the older text's, ending after
+        slot.push(("an older text".into(), q));
+    }
+    h.step();
+    let r = h.gui.shell.cam.as_ref().unwrap().run.as_ref().unwrap();
+    assert!(r.quality.is_some(), "the shown run's own measure taken");
 }
 
 /// A cycle time is the lower bound and the estimate together (never the estimate alone), and the
