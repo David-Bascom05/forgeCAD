@@ -114,6 +114,9 @@ struct PartIn {
     group: String,
     /// The stock material (forge-material name): `part(.., material:)`, else the part's own.
     material: Option<String>,
+    /// The stock material's family (forge-material: aluminium, copper, steel, ...), for the
+    /// generic class of a tool with no maker data.
+    family: Option<String>,
     /// Where the material and group came from, for the reply and the fixes.
     material_note: String,
     /// The material's machining data (its record's machining.* keys), read once.
@@ -303,6 +306,7 @@ impl Cam {
             bbox: ([lo[0], -hi[1], h - hi[2]], [hi[0], -lo[1], h - lo[2]]),
             group: p.group.clone(),
             material: p.material.clone(),
+            family: p.family.clone(),
             material_note: p.material_note.clone(),
             stock: p.stock.clone(),
         };
@@ -467,12 +471,13 @@ fn feeds_speeds_json(r: &resolve::Resolved) -> Json {
     };
     let spread = match &r.spread {
         Some(sp) => {
-            let four = |a: [f64; 4]| {
+            let four = |a: feeds::Quantiles| {
                 Json::obj(vec![
-                    ("min", n(a[0])),
-                    ("p25", n(a[1])),
-                    ("median", n(a[2])),
-                    ("max", n(a[3])),
+                    ("min", n(a.min)),
+                    ("p10", n(a.p10)),
+                    ("p25", n(a.p25)),
+                    ("median", n(a.median)),
+                    ("max", n(a.max)),
                 ])
             };
             Json::obj(vec![
@@ -1139,6 +1144,7 @@ impl Cam {
                     bbox: (lo, hi),
                     stock: material.as_deref().map(|m| stock_of(m, &group, dir)),
                     group,
+                    family: material.as_deref().and_then(|m| Self::stock_family(m, dir)),
                     material,
                     material_note,
                 });
@@ -1523,6 +1529,9 @@ impl Cam {
                 .as_deref()
                 .map(|m| stock_of(m, &jaw_group, Path::new("."))),
             group: jaw_group,
+            family: jaw_material
+                .as_deref()
+                .and_then(|m| Self::stock_family(m, Path::new("."))),
             material: jaw_material,
             material_note: jaw_note,
         });
@@ -2720,6 +2729,13 @@ impl Cam {
     /// A stock material by name: (its forge-material name, its ISO 513 group, how they were
     /// found). The group is the material's `[[stock]]` record's, else its family's ISO 513
     /// class; None when the name is unknown or its family has no class.
+    /// A forge-material record's family, by its name.
+    fn stock_family(name: &str, dir: &Path) -> Option<String> {
+        forge_material::Libraries::cached(Some(dir))
+            .find(name)
+            .map(|(_, m)| m.family.clone())
+    }
+
     fn stock_material(&self, name: Option<&str>, dir: &Path) -> (Option<String>, Option<String>, String) {
         let Some(name) = name else {
             return (None, None, "the part has no material: give it one (`material` in the part, or part(.., material:)) or part(.., group:)".into());
@@ -2795,10 +2811,11 @@ impl Cam {
                 None => (None, false),
             },
         };
-        // no preset: the tool's generic class (P25 of the makers' rows for its class,
+        // no preset: the tool's generic class (P10 of the makers' rows for its class,
         // data/generic.toml); its own op/slot chip ratio is the class factor where it has one
         let gu = if preset.is_none() {
             let tc = feeds::ToolClass {
+                family: self.parts[self.setups[su].part].family.as_deref(),
                 tier: None,
                 flutes: Some(t.tool.nof.max(1)),
                 coated: feeds::ToolClass::coated(&t.tool.coating),
@@ -2821,7 +2838,7 @@ impl Cam {
         let class_val = match (generic_factor, class_rec) {
             (Some(f), Some(c)) => {
                 class_note = format!(
-                    "P25 {} chip over P25 slot chip of class {} (data/generic.toml)",
+                    "P10 {} chip over P10 slot chip of class {} (data/generic.toml)",
                     c.name,
                     gu.map_or(String::new(), |u| u.op.class())
                 );

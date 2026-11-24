@@ -813,7 +813,7 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
     );
     // a feed limit under the profile's cutting data: the resolved feed is clamped to the
     // machine and says so (forge_tooling::resolve), and the posted F passes the runtime check
-    machine("[100, 12000]", "1000");
+    machine("[100, 12000]", "200");
     let cam = forge_cam_lang::run(&src, &dir);
     assert!(
         cam.ok,
@@ -830,7 +830,7 @@ fn posted_speeds_and_feeds_are_within_the_machine() {
     assert!(!clamped.is_empty());
     for r in clamped {
         assert!(
-            r.feed.v < 1000.0 && r.feed.note.contains("at most 1000"),
+            r.feed.v < 200.0 && r.feed.note.contains("at most 200"),
             "{:?}",
             r.feed
         );
@@ -1484,4 +1484,38 @@ fn a_makers_tool_takes_its_row_for_the_stock_material() {
     assert!(brass.chip.note.contains("Brass"), "{}", brass.chip.note);
     assert!(al.chip.note.contains("Wrought"), "{}", al.chip.note);
     assert!(brass.vc.v < al.vc.v, "{} {}", brass.vc.v, al.vc.v);
+}
+
+/// A tool with no maker data resolves at the 10th percentile of its class, and the class keys
+/// on the part's material family: 6061-T6 (aluminium) takes the makers' aluminium rows; a part
+/// that names only group N could be copper, so it takes all of N (copper's speeds among them).
+/// The value carries the class's spread.
+#[test]
+fn generic_tools_take_their_class_by_material_family() {
+    use forge_tooling::resolve::Source;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples/machined");
+    let src = std::fs::read_to_string(dir.join("flange_cam.fg")).unwrap();
+    let skim = |src: &str| {
+        let cam = forge_cam_lang::run(src, &dir);
+        cam.ops
+            .iter()
+            .find(|o| o.name == "skim")
+            .unwrap()
+            .resolved
+            .clone()
+            .unwrap()
+    };
+    let al = skim(&src.replace(
+        "part(\"flange.fg\", group: \"N\")",
+        "part(\"flange.fg\", material: \"6061-T6\")",
+    ));
+    let n = skim(&src);
+    assert_eq!(al.vc.source, Source::Material);
+    let sp = al.spread.clone().unwrap();
+    assert!(sp.class.contains("aluminium"), "{}", sp.class);
+    assert_eq!(al.vc.v, sp.vc.p10);
+    assert!(al.vc.note.contains("10th percentile"), "{}", al.vc.note);
+    let spn = n.spread.clone().unwrap();
+    assert!(!spn.class.contains("aluminium") && !spn.class.contains("copper"), "{}", spn.class);
+    assert!(n.vc.v < al.vc.v, "{} {}", n.vc.v, al.vc.v);
 }

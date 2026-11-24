@@ -14,7 +14,9 @@
 //!
 //! The formulas are feeds.rs's (chip thinning, mean chip, Kienzle power, torque). Power and
 //! torque limits lower the feed only, never ap or ae (patent note: fto-adaptive.md, '607).
-use crate::feeds::{self, Beam, Cut, DrillRow, Generic, Group, Stock, Substrate, THIN_CAP, TapRow};
+use crate::feeds::{
+    self, Beam, Cut, DrillRow, Generic, Group, Quantiles, Stock, Substrate, THIN_CAP, TapRow,
+};
 use crate::{Cite, Preset};
 use std::f64::consts::PI;
 
@@ -140,7 +142,8 @@ pub struct ToolData<'a> {
     /// The tool's cutting data for the part's group, and its cite.
     pub preset: Option<(&'a Preset, Option<&'a Cite>)>,
     /// The tool's generic class (`Library::generic`) for the op's class and for a slot, where
-    /// no preset or user value sets the speed or chip (carbide only: the makers' rows are).
+    /// no preset or user value sets the speed or chip (carbide only: the makers' rows are): its
+    /// 10th percentile.
     pub generic: Option<GenericUse<'a>>,
 }
 
@@ -154,15 +157,23 @@ pub struct GenericUse<'a> {
 
 impl GenericUse<'_> {
     /// The op class's chip against the slot's, from the makers' rows of the same tool class:
-    /// P25 over P25. None where the op's record is not its own class's (a slot, or a class
+    /// P10 over P10. None where the op's record is not its own class's (a slot, or a class
     /// opened up to any op).
     pub fn class_factor(&self) -> Option<f64> {
-        let rest = |g: &Generic| (g.tier.clone(), g.flutes, g.coating.clone(), g.helix.clone());
+        let rest = |g: &Generic| {
+            (
+                g.family.clone(),
+                g.tier.clone(),
+                g.flutes,
+                g.coating.clone(),
+                g.helix.clone(),
+            )
+        };
         (self.op.op != "*"
             && self.op.op != "slot"
             && self.slot.op == "slot"
             && rest(self.op) == rest(self.slot))
-        .then(|| self.op.chip[1] / self.slot.chip[1])
+        .then(|| self.op.chip.default_value() / self.slot.chip.default_value())
     }
 }
 
@@ -172,10 +183,10 @@ pub struct Spread {
     pub class: String,
     pub n: usize,
     pub makers: Vec<String>,
-    /// m/min, [min, P25, median, max].
-    pub vc: [f64; 4],
-    /// mm at this diameter, [min, P25, median, max].
-    pub chip: [f64; 4],
+    /// m/min.
+    pub vc: Quantiles,
+    /// mm at this diameter.
+    pub chip: Quantiles,
 }
 
 /// The machine, as the resolver needs it.
@@ -400,17 +411,18 @@ pub fn milling_on(
         } else if let (Some(gu), Substrate::Carbide) = (tool.generic, tool.substrate) {
             let x = gu.op;
             Val::new(
-                x.vc[1],
+                x.vc.default_value(),
                 "m/min",
                 Source::Material,
                 format!(
-                    "lower quartile of {} maker rows ({}) for class {}; makers {:.0}–{:.0}, median {:.0} m/min (generated from verify/feeds-vs-makers)",
+                    "10th percentile of {} maker rows ({}) for class {}; makers {:.0}–{:.0}, P25 {:.0}, median {:.0} m/min (data/generic.toml)",
                     x.n,
                     x.makers.join(", "),
                     x.class(),
-                    x.vc[0],
-                    x.vc[3],
-                    x.vc[2]
+                    x.vc.min,
+                    x.vc.max,
+                    x.vc.p25,
+                    x.vc.median
                 ),
             )
         } else {
@@ -524,20 +536,21 @@ pub fn milling_on(
                 (Some(gu), Substrate::Carbide) => {
                     let x = gu.slot;
                     Val::new(
-                        g.fz_at(d) * x.chip[1],
+                        g.fz_at(d) * x.chip.default_value(),
                         "mm",
                         Source::Material,
                         format!(
-                            "lower quartile of {} maker slot-equivalent chips ({}) for class {}: {:.2}× group {}'s slot chip {:.4} mm at D {d}; makers {:.2}–{:.2}×, median {:.2}×",
+                            "10th percentile of {} maker slot-equivalent chips ({}) for class {}: {:.2}× group {}'s slot chip {:.4} mm at D {d}; makers {:.2}–{:.2}×, P25 {:.2}×, median {:.2}×",
                             x.n,
                             x.makers.join(", "),
                             x.class(),
-                            x.chip[1],
+                            x.chip.default_value(),
                             g.group,
                             g.fz_at(d),
-                            x.chip[0],
-                            x.chip[3],
-                            x.chip[2]
+                            x.chip.min,
+                            x.chip.max,
+                            x.chip.p25,
+                            x.chip.median
                         ),
                     )
                 }
@@ -2335,13 +2348,21 @@ mod tests {
         assert!((at(3.175).fz.v - h).abs() < 1e-12);
     }
 
-    /// With no preset, a carbide tool takes its class's lower quartile (speed, and the slot
+    /// With no preset, a carbide tool takes its class's 10th percentile (speed, and the slot
     /// chip relative to the group's), carries the class's spread, and its class factor is the
     /// class's own op/slot chip ratio.
     #[test]
-    fn generic_class_lower_quartile() {
-        let mk = |op: &str, vc: [f64; 4], chip: [f64; 4]| Generic {
+    fn generic_class_tenth_percentile() {
+        let q = |a: [f64; 5]| Quantiles {
+            min: a[0],
+            p10: a[1],
+            p25: a[2],
+            median: a[3],
+            max: a[4],
+        };
+        let mk = |op: &str, vc: [f64; 5], chip: [f64; 5]| Generic {
             group: "N".into(),
+            family: "*".into(),
             op: op.into(),
             tier: "*".into(),
             flutes: 3,
@@ -2349,12 +2370,20 @@ mod tests {
             helix: "*".into(),
             n: 40,
             makers: vec!["a".into(), "b".into()],
-            vc,
-            chip,
+            vc: q(vc),
+            chip: q(chip),
             cites: Vec::new(),
         };
-        let slot = mk("slot", [100.0, 150.0, 200.0, 600.0], [0.4, 0.8, 1.0, 1.3]);
-        let rough = mk("rough", [100.0, 160.0, 210.0, 640.0], [0.5, 1.0, 1.1, 1.4]);
+        let slot = mk(
+            "slot",
+            [100.0, 150.0, 170.0, 200.0, 600.0],
+            [0.4, 0.8, 0.9, 1.0, 1.3],
+        );
+        let rough = mk(
+            "rough",
+            [100.0, 160.0, 180.0, 210.0, 640.0],
+            [0.5, 1.0, 1.05, 1.1, 1.4],
+        );
         let gu = GenericUse {
             op: &rough,
             slot: &slot,
@@ -2394,11 +2423,11 @@ mod tests {
         )
         .unwrap();
         assert_eq!((r.vc.v, r.vc.source), (160.0, Source::Material));
-        assert!(r.vc.note.contains("lower quartile of 40"), "{}", r.vc.note);
+        assert!(r.vc.note.contains("10th percentile of 40"), "{}", r.vc.note);
         assert!((r.chip.v - 0.8 * g.fz_at(10.0)).abs() < 1e-12);
         let sp = r.spread.unwrap();
         assert_eq!(sp.vc, rough.vc);
-        assert!((sp.chip[3] - 1.3 * g.fz_at(10.0)).abs() < 1e-12);
+        assert!((sp.chip.max - 1.3 * g.fz_at(10.0)).abs() < 1e-12);
         // HSS: the makers' rows are carbide, so the group's HSS column, no spread
         let h = milling(
             &Ask::default(),

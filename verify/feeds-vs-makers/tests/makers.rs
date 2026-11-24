@@ -40,7 +40,7 @@ fn every_row_is_pinned() {
     );
 }
 
-/// The generic default is the lower quartile of its class: over the makers' rows ours sits
+/// The generic default is the 10th percentile of its class: over the makers' rows ours sits
 /// under the makers at the median (speed and chip), and no group's median is far over.
 #[test]
 fn generic_defaults_sit_under_the_makers() {
@@ -51,16 +51,16 @@ fn generic_defaults_sit_under_the_makers() {
     let all_rpm = med(mill.iter().map(|r| r.r_rpm()).collect());
     let all_f = med(mill.iter().filter_map(|r| r.r_f()).collect());
     for (what, m) in [("milling rpm", all_rpm), ("milling fz", all_f)] {
-        assert!((0.6..=1.0).contains(&m), "{what} median {m}");
+        assert!((0.4..=0.9).contains(&m), "{what} median {m}");
     }
     for g in ["P", "M", "K", "N", "S", "H"] {
         let sel: Vec<_> = mill.iter().filter(|r| r.group == g).collect();
         let r = med(sel.iter().map(|r| r.r_rpm()).collect());
         // H has one maker: no class, the group table (Helical's two hardness classes straddle it)
         let hi = if g == "H" { 1.5 } else { 1.0 };
-        assert!((0.5..=hi).contains(&r), "group {g} rpm median {r}");
+        assert!((0.3..=hi).contains(&r), "group {g} rpm median {r}");
         if let Some((f, ..)) = stats(sel.iter().filter_map(|r| r.r_f()).collect()) {
-            assert!((0.4..=1.1).contains(&f), "group {g} fz median {f}");
+            assert!((0.25..=1.1).contains(&f), "group {g} fz median {f}");
         }
     }
     // drills (unchanged: the drill rows are the drill model's own calibration)
@@ -69,10 +69,9 @@ fn generic_defaults_sit_under_the_makers() {
     assert!((0.6..=1.6).contains(&r), "drill rpm median {r}");
 }
 
-/// Each maker against P25-by-class built from the other makers only: the held-out speed
-/// median is at most the maker's own for every maker (Harvey's sits right at the others' P25:
-/// 1.00); the chip, within the makers' own spread
-/// (Helical prints chips ~0.4-0.75 of the others', so the others' P25 is over its median).
+/// Each maker against P10-by-class built from the other makers only: the held-out speed
+/// median is under the maker's own for every maker; the chip, within the makers' own spread
+/// (Helical prints chips ~0.4-0.75 of the others').
 /// The shares above each maker's own numbers are in REPORT.md.
 #[test]
 fn generic_held_out_by_maker() {
@@ -84,12 +83,24 @@ fn generic_held_out_by_maker() {
         let v = feeds_vs_makers::stats(sel.iter().map(|x| x.1).collect())
             .unwrap()
             .0;
-        assert!(v <= 1.01, "{m}: held-out P25 speed median {v}");
+        assert!(v <= 1.0, "{m}: held-out P10 speed median {v}");
         let c = feeds_vs_makers::stats(sel.iter().filter_map(|x| x.2).collect())
             .unwrap()
             .0;
-        assert!((0.25..=1.5).contains(&c), "{m}: held-out P25 chip median {c}");
+        assert!((0.25..=1.5).contains(&c), "{m}: held-out P10 chip median {c}");
     }
+    // the general-purpose maker (the stand-in for an unknown tool): how often our default is
+    // above its own number. Target ~5% (coordinator); measured with the family split: speed
+    // 11% (Lakeshore's cast-aluminium and high-tensile steel rows, slower than the material-
+    // specific makers' aluminium tools), chip 6%. Pinned here so it cannot grow silently.
+    let lk: Vec<_> = ho.iter().filter(|x| rows[x.0].vendor == "lakeshore").collect();
+    let share = |v: Vec<f64>| v.iter().filter(|x| **x > 1.0 + 1e-9).count() as f64 / v.len() as f64;
+    let sv = share(lk.iter().map(|x| x.1).collect());
+    let sc = share(lk.iter().filter_map(|x| x.2).collect());
+    assert!(
+        sv <= 0.12 && sc <= 0.07,
+        "lakeshore above-maker shares: speed {sv}, chip {sc}"
+    );
 }
 
 /// data/generic.toml is what the makers' rows give now (FORGE_BLESS=1, or
