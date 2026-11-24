@@ -259,8 +259,38 @@ pub fn searched_keeps(most: usize) {
     MET.with(|m| *m.borrow_mut() = Default::default());
 }
 
+/// `r` pushed out to a grid of powers of two about 2^-36 of its size: the same face boxes reach here
+/// by more than one path, a rounding apart, and each would be searched again (the answers are kept by
+/// their region's exact bits). The grid's box holds `r`, a hair larger, and it is the same box for
+/// all of them.
+fn snapped(r: Box3) -> Box3 {
+    let size = r.diagonal().max(
+        r.x.lo
+            .abs()
+            .max(r.x.hi.abs())
+            .max(r.y.lo.abs().max(r.y.hi.abs()))
+            .max(r.z.lo.abs().max(r.z.hi.abs())),
+    );
+    if !(size.is_finite() && size > 0.0) || r.is_empty() {
+        return r;
+    }
+    // the power of two just past size, times 2^-36: x / g and back are exact
+    let e = ((size.to_bits() >> 52) & 0x7ff) as i64 - 1023 + 1 - 36;
+    let g = f64::from_bits(((e + 1023).clamp(1, 2046) as u64) << 52);
+    let out = |i: forge_math::Interval| forge_math::Interval {
+        lo: (i.lo / g).floor() * g,
+        hi: (i.hi / g).ceil() * g,
+    };
+    Box3 {
+        x: out(r.x),
+        y: out(r.y),
+        z: out(r.z),
+    }
+}
+
 /// Where two surfaces with no closed form meet in `region`: by marching or tracing.
 pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
+    let region = snapped(region);
     // an apex in the region: a branch may change sheets there, and curves cannot end at one yet
     if forge_geom::sheet::apex_met(a, b, &region) {
         return SurfaceSurface::NotAnalytic;
@@ -818,9 +848,19 @@ mod tests {
             Point3::new(-206.39862274227644, -0.22540519861131517, 87.06967569277985),
             Point3::new(-142.12940588811063, 9.994697390738665, 100.51202637097762),
         ]);
-        assert!(forge_geom::intcurve::trace(&rod, &torus, region).is_none());
-        let got = past_stalls(&rod, &torus, region, |_| true);
-        assert!(past_stalls(&rod, &torus, region, |_| false).is_none());
+        // certified, the touch is a singular site the chains run into, and the trace is whole
+        #[cfg(feature = "certified_trace")]
+        {
+            let cs = forge_geom::intcurve::trace(&rod, &torus, region).expect("certified through the touch");
+            assert!(forge_geom::certify::certify(&rod, &torus, region, &cs).is_ok());
+            return;
+        }
+        #[allow(unreachable_code)]
+        let got = {
+            assert!(forge_geom::intcurve::trace(&rod, &torus, region).is_none());
+            assert!(past_stalls(&rod, &torus, region, |_| false).is_none());
+            past_stalls(&rod, &torus, region, |_| true)
+        };
         for (c, _) in got.expect("the branches off the touch") {
             let d = c.domain();
             for i in 0..=20 {

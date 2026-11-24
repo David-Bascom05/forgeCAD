@@ -284,7 +284,8 @@ impl CurveGeom for Circle {
         closest_on_arc(p, range, t, |t| self.eval(t))
     }
     fn bbox(&self, range: Interval) -> Box3 {
-        conic_box(&self.frame, range.cos() * self.radius, range.sin() * self.radius)
+        let (s, c) = range.sin_cos();
+        conic_box(&self.frame, c * self.radius, s * self.radius)
     }
     fn transformed(&self, f: &Frame) -> Self {
         Circle {
@@ -403,7 +404,8 @@ impl CurveGeom for Ellipse {
         closest_numeric(self, p, r)
     }
     fn bbox(&self, range: Interval) -> Box3 {
-        conic_box(&self.frame, range.cos() * self.major, range.sin() * self.minor)
+        let (s, c) = range.sin_cos();
+        conic_box(&self.frame, c * self.major, s * self.minor)
     }
     fn transformed(&self, f: &Frame) -> Self {
         Ellipse {
