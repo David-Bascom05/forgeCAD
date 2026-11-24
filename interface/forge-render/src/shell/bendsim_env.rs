@@ -174,15 +174,15 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
             "Play",
             vec![tool(
                 if playing { "Pause" } else { "Play" },
-                "forward",
+                if playing { "pause" } else { "play" },
                 cmd(PLAY),
                 playing,
             )],
             vec![
-                tool("First Bend", "home", cmd(FIRST), false),
-                tool("Previous Bend", "backward", cmd(BACK), false),
-                tool("Next Bend", "forward", cmd(NEXT), false),
-                tool("Last Bend", "end", cmd(LAST), false),
+                tool("First Bend", "first", cmd(FIRST), false),
+                tool("Previous Bend", "stepback", cmd(BACK), false),
+                tool("Next Bend", "stepfwd", cmd(NEXT), false),
+                tool("Last Bend", "last", cmd(LAST), false),
             ],
         ),
         group(
@@ -325,39 +325,14 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
         return false;
     };
     super::bendsim::overlay(ui, view, b);
-    // what is seen through: its outline, so the ghost reads
-    if let Some((cam, size)) = s.camera
-        && b.see_through
-        && !b.outlines.is_empty()
-    {
-        let m = cam.view(size.0.max(1), size.1.max(1)).matrix;
-        let sx = view.width() / size.0.max(1) as f32;
-        let sy = view.height() / size.1.max(1) as f32;
-        let to = |p: &[f32; 3]| -> Option<egui::Pos2> {
-            let c = |r: usize| m[r] * p[0] + m[4 + r] * p[1] + m[8 + r] * p[2] + m[12 + r];
-            let w = c(3);
-            (w > 1e-6).then(|| {
-                let (x, y) = (c(0) / w, c(1) / w);
-                egui::pos2(
-                    view.left() + (x + 1.0) * 0.5 * size.0 as f32 * sx,
-                    view.top() + (1.0 - y) * 0.5 * size.1 as f32 * sy,
-                )
-            })
-        };
-        let p = ui.painter_at(view);
-        for o in &b.outlines {
-            let pts: Vec<egui::Pos2> = o.iter().filter_map(to).collect();
-            let hull = hull(pts);
-            if hull.len() > 2 {
-                p.add(egui::Shape::closed_line(
-                    hull,
-                    egui::Stroke::new(1.5, egui::Color32::from_rgba_unmultiplied(235, 240, 250, 210)),
-                ));
-            }
-        }
-    }
+    // a narrow view: the view's settings on a row of their own, the bar taller for it
+    let bar = super::bendsim::Bar::for_width(view.width());
+    let narrow = bar == super::bendsim::Bar::Narrow;
     let band = Rect::from_min_max(
-        egui::pos2(view.left() + 12.0, view.bottom() - 74.0),
+        egui::pos2(
+            view.left() + 12.0,
+            view.bottom() - if narrow { 104.0 } else { 74.0 },
+        ),
         egui::pos2(view.right() - 12.0, view.bottom() - 8.0),
     );
     egui::Area::new(egui::Id::unique("env-bendsim-timeline"))
@@ -370,7 +345,7 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
                 .inner_margin(6.0)
                 .show(ui, |ui| {
                     ui.set_width(band.width() - 12.0);
-                    super::bendsim::timeline_ui(ui, b);
+                    super::bendsim::timeline_ui(ui, b, bar);
                 });
         });
     s.places.push(("env:bendsim:view".into(), view));
@@ -429,33 +404,4 @@ pub(super) fn command(s: &mut Shell, c: u16) {
             }
         }
     }
-}
-
-/// The convex hull of points on the screen (Andrew's monotone chain), counter-clockwise.
-fn hull(mut p: Vec<egui::Pos2>) -> Vec<egui::Pos2> {
-    p.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
-    p.dedup();
-    if p.len() < 3 {
-        return p;
-    }
-    let cross =
-        |o: egui::Pos2, a: egui::Pos2, b: egui::Pos2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-    let mut lower: Vec<egui::Pos2> = Vec::new();
-    for &q in &p {
-        while lower.len() >= 2 && cross(lower[lower.len() - 2], lower[lower.len() - 1], q) <= 0.0 {
-            lower.pop();
-        }
-        lower.push(q);
-    }
-    let mut upper: Vec<egui::Pos2> = Vec::new();
-    for &q in p.iter().rev() {
-        while upper.len() >= 2 && cross(upper[upper.len() - 2], upper[upper.len() - 1], q) <= 0.0 {
-            upper.pop();
-        }
-        upper.push(q);
-    }
-    lower.pop();
-    upper.pop();
-    lower.extend(upper);
-    lower
 }
