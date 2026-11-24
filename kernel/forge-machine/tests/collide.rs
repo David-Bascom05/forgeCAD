@@ -193,6 +193,8 @@ fn clear_is_never_contradicted_by_samples() {
             accel_missing: false,
             after_skip: Vec::new(),
             skip_unmodelled: Vec::new(),
+            t_la: 0.0,
+            seg_la: Vec::new(),
         };
         let r = collide::check(&s, &tl, std::slice::from_ref(&stock));
         let pose = forge_machine::kin::pose(&m, &q);
@@ -357,6 +359,8 @@ fn builtin_machines_have_no_self_collision_in_travel() {
                         accel_missing: false,
                         after_skip: Vec::new(),
                         skip_unmodelled: Vec::new(),
+                        t_la: 0.0,
+                        seg_la: Vec::new(),
                     };
                     let rep = collide::check(&s2, &tl, &[]);
                     if let Some(c) = rep.contacts.first() {

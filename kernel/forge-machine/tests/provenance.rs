@@ -131,6 +131,8 @@ fn a_body_with_no_envelope_is_left_out_and_reported() {
         accel_missing: false,
         after_skip: Vec::new(),
         skip_unmodelled: Vec::new(),
+        t_la: 0.0,
+        seg_la: Vec::new(),
     };
     let u = sim::unchecked(m, &tl);
     assert!(
