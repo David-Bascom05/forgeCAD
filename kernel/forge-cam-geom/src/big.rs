@@ -27,6 +27,23 @@ impl Nat {
         Nat { limbs: v }
     }
 
+    pub fn from_u128(x: u128) -> Nat {
+        let mut v = vec![x as u32, (x >> 32) as u32, (x >> 64) as u32, (x >> 96) as u32];
+        trim(&mut v);
+        Nat { limbs: v }
+    }
+
+    /// The value, when it has at most 128 bits.
+    fn to_u128(&self) -> u128 {
+        let mut v = 0u128;
+        let mut i = self.limbs.len();
+        while i > 0 {
+            i -= 1;
+            v = (v << 32) | self.limbs[i] as u128;
+        }
+        v
+    }
+
     pub fn is_zero(&self) -> bool {
         self.limbs.is_empty()
     }
@@ -368,6 +385,9 @@ impl Nat {
             return Nat::zero();
         }
         let b = self.bits();
+        if b <= 128 {
+            return Nat::from_u128(isqrt_u128(self.to_u128()));
+        }
         let mut x = if b > 128 {
             let k = b / 4;
             self.shr(2 * k).isqrt().add(&Nat::from_u64(1)).shl(k)
@@ -400,6 +420,24 @@ impl Nat {
         let s = self.shr(b - 53);
         let (m, _) = s.top53();
         (m, (b - 53) as i64)
+    }
+}
+
+/// ⌊√v⌋ in machine integers: an f64 estimate pushed above the root (its relative error is
+/// under 2^-50, so est · (1 + 2^-40) + 2 is an upper bound), then Newton's step, which from any
+/// upper bound decreases to ⌊√v⌋ and stops there (as `Nat::isqrt`).
+fn isqrt_u128(v: u128) -> u128 {
+    if v < 2 {
+        return v;
+    }
+    let est = (v as f64).sqrt() as u128;
+    let mut x = (est + (est >> 40) + 2).min(1u128 << 64);
+    loop {
+        let y = (x + v / x) / 2;
+        if y >= x {
+            return x;
+        }
+        x = y;
     }
 }
 
@@ -550,6 +588,46 @@ mod tests {
                 assert_eq!(y, x.shr(sh), "{x:?} >> {sh}");
                 sh += 1 + rnd() % 7;
             }
+        }
+    }
+
+    /// The machine-integer root (values of at most 128 bits): s² ≤ v < (s + 1)² for 0..2000,
+    /// squares and their neighbours up to the top of u128, and random values.
+    #[test]
+    fn isqrt_in_machine_integers() {
+        let check = |v: u128| {
+            let s = isqrt_u128(v);
+            let (sn, vn) = (Nat::from_u128(s), Nat::from_u128(v));
+            assert!(sn.mul(&sn).cmp(&vn) != Ordering::Greater, "{v}: {s}");
+            let s1 = sn.add(&Nat::from_u64(1));
+            assert!(s1.mul(&s1).cmp(&vn) == Ordering::Greater, "{v}: {s}");
+            assert_eq!(Nat::from_u128(v).isqrt(), sn);
+        };
+        for v in 0..2000u128 {
+            check(v);
+        }
+        let mut r = 1u128;
+        while r < (1u128 << 64) {
+            for d in [-1i128, 0, 1] {
+                let v = (r * r) as i128 + d;
+                if v >= 0 {
+                    check(v as u128);
+                }
+            }
+            r = r * 3 + 1;
+        }
+        check(u128::MAX);
+        check(u128::MAX - 1);
+        let top = (1u128 << 64) - 1;
+        check(top * top);
+        check(top * top - 1);
+        let mut seed = 0x853c49e6748fea9bu64;
+        for _ in 0..2000 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let v = ((seed as u128) << 64 | (seed.rotate_left(17) as u128)) >> (seed % 120);
+            check(v);
         }
     }
 }
