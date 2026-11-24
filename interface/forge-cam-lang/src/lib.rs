@@ -4393,6 +4393,19 @@ impl Cam {
                         PMove::Line { f, .. } | PMove::Arc { f, .. } => f,
                         _ => 0.0,
                     };
+                    // adaptive's passes are long arcs and lines: each move whole, one F, the lowest
+                    // its samples call for (a move wholly in air keeps its own feed where higher)
+                    if kind == "adaptive" {
+                        let air = samples[start..k].iter().all(|sm| sm.engage.is_none());
+                        let lo = feed[start..k].iter().map(|x| x.0).fold(f64::INFINITY, f64::min);
+                        let f = if air && own > lo { own.min(sc.f_max.max(sc.f_min)) } else { lo };
+                        moves.push(match *mv {
+                            PMove::Line { to, phase, .. } => PMove::Line { to, f, phase },
+                            PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f },
+                            other => other,
+                        });
+                        continue;
+                    }
                     // every fixed-length sample is its own move: no joins of any kind (the post
                     // does not repeat an F word equal to the one before)
                     for i in start..k {

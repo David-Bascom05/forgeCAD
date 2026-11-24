@@ -60,7 +60,7 @@ prog  = program(op1, post: "fanuc", number: 1001)
 | `soft_jaw(vise(NAME, across:), blank:, from: SETUP, grip:, fit:, tool:, relief: "corners", min_contact:)` | soft jaws cut to what `from:` left, turned over, `grip` deep: the pocket is the opening of that outline by `tool`'s radius, grown by `fit` (default 0.02), with a relief of radius r + fit at each corner if asked. Refused unless what `from:` left seats in the pocket (exactly), the seat is at least `min_contact` mm² (default a quarter of the largest section), the blank keeps 3 mm of wall and the part stands more than the fixture clearance above the jaws. The value is a part (the jaws closed, pocketed: `setup(jaws, ..)` cuts them, held by the vise) and a fixture (`setup(f, from: op1, fixture: jaws)`) |
 | `facing(SETUP, tool:, to:, step:, leave_axial:)` | zig-zag over the stock down to `to` |
 | `clear(SETUP, tool:, from:, to:, step:, stepover:, leave:, leave_axial:, ramp:)` | everything between the stock outline and the part's section, as offset passes |
-| `adaptive(SETUP, tool:, from:, to:, step:, engagement:, step_length:, leave:, sweep:, passes:)` | **opt-in, never the default**: roughing around the part (clear's region) with the radial engagement held under one cap (`engagement`, degrees, default 60) by simulating the cleared area step by step, so the full flute can cut at a steady load. Passes are one-direction peels within 75° of `sweep` (degrees from +x), or with `passes: "two_way"` a zigzag across the sweep; a pass curves no tighter than the tool's radius. Where a sweep stops with material left away from the walls, the level is swept again from the other directions; anything still left is reported as a warning. Links stay at depth where the cleared area allows (straight, back along the pass, or through the cleared area) and run at a link feed just under the machine's limit; else a low retract just over the stock. Then plain offset rings where material is left, and a wall pass. Closed pockets are not offered (use `pocket`). **It reduces and steadies tool load. On deep open levels (≥ 2 D) it was faster than clear on our jerk-limited benchmark in steel (4–43 %) and on an open slot in aluminium (17–33 %); round several islands, on shallow levels and on deep_boss in aluminium it was slower** (table below). Check cycle time on your machine. The voids it claims are only cells provably inside the tool's flat end's sweep |
+| `adaptive(SETUP, tool:, from:, to:, step:, engagement:, step_length:, leave:, sweep:, passes:)` | **opt-in, never the default**: roughing around the part (clear's region) with the radial engagement held under one cap (`engagement`, degrees, default 60) by simulating the cleared area step by step, so the full flute can cut at a steady load. Passes are one-direction peels within 75° of `sweep` (degrees from +x), or with `passes: "two_way"` a zigzag across the sweep; a pass curves no tighter than the tool's radius. Where a sweep stops with material left away from the walls, the level is swept again from the other directions; anything still left is reported as a warning. Links stay at depth where the cleared area allows (straight, back along the pass, or through the cleared area) and run at a link feed just under the machine's limit; else a low retract just over the stock. Then plain offset rings where material is left, and a wall pass. Closed pockets are not offered (use `pocket`). **It reduces and steadies tool load. On deep open levels (≥ 2 D) it was faster than clear on our jerk-limited benchmark in steel (2–44 %) and on an open slot in aluminium (27–39 %); round several islands, on shallow levels and on deep_boss in aluminium it was slower** (table below). Check cycle time on your machine. The voids it claims are only cells provably inside the tool's flat end's sweep |
 | `contour(SETUP, tool:, side:, from:, to:, step:, leave:, leave_axial:, direction:, finish:, finish_step:, spring:, lead:, lead_radius:, lead_sweep:, lead_length:, entry:, overlap:, tabs:, tab_spacing:, tab_at:, tab_width:, tab_height:, tab_shape:)` | the part's outline (`side: "outside"`) or its holes (`"inside"`) at the section |
 | `pocket(SETUP, PART.HOLE, tool:, stepover:, step:, leave:, leave_axial:, ramp:)` | a hole feature's circle, to its depth |
 | `pocket(SETUP, tool:, from:, to:, stepover:, step:, leave:, leave_axial:, ramp:)` | every hole and slot of the part's section between the heights, each less the part's section there (islands standing in it, a boss in a well, are kept: examples/machined/well_island_cam.fg) |
@@ -261,16 +261,17 @@ Spinner U5-620's logs (750/2e4, 500/5e4, 3000/1e4, 250/1e6 mm/s², mm/s³), agai
 
 | part (level) | material | adaptive one-way | adaptive two-way |
 |---|---|---|---|
-| deep_boss (open, round a boss, 14.8 mm) | steel (P) | −12.7 / −11.9 / −9.2 / −3.6 % | −16.4 / −15.0 / −13.9 / −5.2 % |
-| deep_open_slot (12 wide, 15 deep) | steel | −42.2 / −43.3 / −39.4 / −39.7 % | −38.9 / −39.0 / −36.7 / −33.5 % |
-| deep_islands (round three islands, 15 deep) | steel | +19.4 / +19.3 / +25.2 / +30.3 % | +43 / +45 / +51 / +65 % |
-| deep_boss | aluminium (N) | +6.5 / +7.5 / +13.6 / +22.4 % | +4.8 / +7.2 / +9.6 / +24.0 % |
-| deep_open_slot | aluminium | −31.2 / −33.3 / −25.8 / −27.1 % | −25.5 / −25.9 / −21.4 / −17.0 % |
-| deep_islands | aluminium | +48 / +47 / +61 / +67 % | +90 / +92 / +105 / +127 % |
+| deep_boss (open, round a boss, 14.8 mm) | steel (P) | −11.4 / −10.2 / −8.6 / −2.3 % | −14.3 / −12.5 / −12.4 / −3.0 % |
+| deep_open_slot (12 wide, 15 deep) | steel | −44.2 / −44.4 / −42.9 / −42.0 % | −43.7 / −43.1 / −42.7 / −39.0 % |
+| deep_islands (round three islands, 15 deep) | steel | +22 / +23 / +26 / +33 % | +42 / +45 / +48 / +65 % |
+| deep_boss | aluminium (N) | +5.3 / +7.5 / +10.2 / +21.5 % | +4.8 / +8.3 / +8.2 / +24.7 % |
+| deep_open_slot | aluminium | −38.2 / −38.5 / −35.9 / −34.4 % | −34.9 / −33.9 / −33.2 / −27.3 % |
+| deep_islands | aluminium | +46 / +48 / +55 / +67 % | +83 / +89 / +94 / +123 % |
 
-On shallow levels (the RPTU parts, 4 mm) clear is faster. Adaptive's programs are larger: on
-deep_boss 5,348 blocks (mean move 2.2 mm) against clear's 1,171 (5.5 mm). These are simulations,
-not machine trials; the planner has no block-rate limit, which would weigh against adaptive.
+On shallow levels (the RPTU parts, 4 mm) clear is faster. Each pass is posted as long arcs and
+lines with one feed each: on deep_boss 1,040 blocks one-way and 941 two-way (mean move 10.9 and
+13.5 mm) against clear's 1,171 (5.5 mm); on deep_open_slot 162 against 389. These are simulations, not machine trials; the planner has
+no block-rate limit.
 
 ## Probing
 
