@@ -304,6 +304,7 @@ impl Session {
                     text: p.text.clone(),
                     error: p.error.clone(),
                     certified: if p.text.is_none() { "no".into() } else { cert.clone() },
+                    setup: None,
                 })
                 .collect()
         } else {

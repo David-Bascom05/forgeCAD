@@ -34,6 +34,15 @@ pub struct ProgIn {
     pub error: Option<String>,
     /// "full", or what was not checked ("except G5 ...").
     pub certified: String,
+    /// With `split: "setup"`: the setup this part posts (its name is `PROGRAM/SETUP`).
+    pub setup: Option<String>,
+}
+
+impl ProgIn {
+    /// The program statement it comes from: its name before a split's `/SETUP`.
+    pub fn statement(&self) -> &str {
+        self.name.split('/').next().unwrap_or(&self.name)
+    }
 }
 
 /// A file to write: its path relative to the document's folder, and its text.
@@ -216,12 +225,15 @@ pub fn files(
         return Err(ExportError::NoPrograms);
     }
     let chosen: Vec<&ProgIn> = match which {
+        // a program by its name, or every part of a split one by its statement's
         Some(n) => {
-            let p = progs.iter().find(|p| p.name == n).ok_or_else(|| ExportError::NoProgram {
-                name: n.into(),
-                known: progs.iter().map(|p| p.name.clone()).collect(),
-            })?;
-            vec![p]
+            let ps: Vec<&ProgIn> = progs.iter().filter(|p| p.name == n || p.statement() == n).collect();
+            if ps.is_empty() {
+                let mut known: Vec<String> = progs.iter().map(|p| p.statement().to_string()).collect();
+                known.dedup();
+                return Err(ExportError::NoProgram { name: n.into(), known });
+            }
+            ps
         }
         None => progs.iter().collect(),
     };
@@ -241,7 +253,7 @@ pub fn files(
                 certified: p.certified.clone(),
             });
         }
-        let s = settings(src, &p.name);
+        let s = settings(src, p.statement());
         let mut head = vec![];
         if let Some(c) = &s.comment {
             head.push(c.clone());
@@ -253,11 +265,13 @@ pub fn files(
             head.push("TOOLS".into());
             head.extend(tools.iter().cloned());
         }
-        let file = format!(
-            "{}.{}",
-            s.file.clone().unwrap_or_else(|| p.name.clone()),
-            s.ext.clone().unwrap_or_else(|| ext_of(&p.post).to_string())
-        );
+        // a split program's parts: one file per setup, `{file}-{setup}`
+        let stem = s.file.clone().unwrap_or_else(|| p.statement().to_string());
+        let stem = match &p.setup {
+            Some(su) => format!("{stem}-{su}"),
+            None => stem,
+        };
+        let file = format!("{stem}.{}", s.ext.clone().unwrap_or_else(|| ext_of(&p.post).to_string()));
         let path = match &s.out {
             Some(d) if !d.is_empty() => format!("{}/{file}", d.trim_end_matches('/')),
             _ => file,
@@ -287,6 +301,7 @@ impl crate::Cam {
                 } else {
                     "except G5 (unchecked: no `at:`)".into()
                 },
+                setup: p.setup.clone(),
             })
             .collect()
     }
@@ -313,6 +328,7 @@ p2 = program(op1, post: \"grbl\", number: 6)
                 text: Some("%\nO0005\nG0 X0\n%\n".into()),
                 error: None,
                 certified: certified.into(),
+                setup: None,
             },
             ProgIn {
                 name: "p2".into(),
@@ -320,6 +336,7 @@ p2 = program(op1, post: \"grbl\", number: 6)
                 text: None,
                 error: Some("op skim refused".into()),
                 certified: "no".into(),
+                setup: None,
             },
         ]
     }
@@ -344,5 +361,23 @@ p2 = program(op1, post: \"grbl\", number: 6)
         assert!(f[0].text.contains("(NOT CERTIFIED IN FULL: except G5 unchecked: no `at:`)"), "{}", f[0].text);
         assert!(matches!(files(SRC, &progs("full"), Some("nope"), false), Err(ExportError::NoProgram { .. })));
         assert_eq!(ext_of("grbl"), "gcode");
+    }
+
+    #[test]
+    fn a_split_program_is_a_file_per_setup_named_by_its_statement() {
+        let part = |su: &str| ProgIn {
+            name: format!("prog/{su}"),
+            post: "linuxcnc".into(),
+            text: Some(format!("%\n({su})\n%\n")),
+            error: None,
+            certified: "full".into(),
+            setup: Some(su.into()),
+        };
+        let progs = vec![part("op1"), part("op2")];
+        let f = files(SRC, &progs, Some("prog"), false).expect("both parts");
+        let paths: Vec<&str> = f.iter().map(|f| f.path.as_str()).collect();
+        assert_eq!(paths, ["nc/side-1-op1.ngc", "nc/side-1-op2.ngc"]);
+        assert!(f[1].text.contains("(TOOLS)"), "the statement's settings apply to each part");
+        assert_eq!(files(SRC, &progs, Some("prog/op2"), false).unwrap().len(), 1);
     }
 }

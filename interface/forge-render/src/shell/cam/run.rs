@@ -104,6 +104,8 @@ pub struct ProgRes {
     pub certified: String,
     pub error: Option<String>,
     pub text: Option<String>,
+    /// A split program's part: the setup it posts (its name is `PROGRAM/SETUP`).
+    pub setup: Option<String>,
 }
 
 /// A left-over region (G4).
@@ -271,6 +273,7 @@ pub fn run(text: &str, dir: &Path) -> Run {
             certified: s(x, "certified"),
             error: p.error.clone(),
             text: p.text.clone(),
+            setup: p.setup.clone(),
         })
         .collect();
     let lo = j.get("leftover");
@@ -409,6 +412,7 @@ fn run_turning(text: &str, dir: &Path) -> Run {
             },
             error: p.error.clone(),
             text: p.text.clone(),
+            setup: None,
         })
         .collect();
     let setups = stmts
@@ -559,6 +563,37 @@ pub fn recheck(mut r: Run) -> Run {
 }
 
 impl Run {
+    /// Program statement `name` as run: itself, or its parts (`NAME/SETUP`, one per setup when
+    /// split) as one: lines summed, the least certified part's words, the texts one after another.
+    pub fn program(&self, name: &str) -> Option<ProgRes> {
+        let parts: Vec<&ProgRes> = self
+            .programs
+            .iter()
+            .filter(|x| x.name == name || x.name.split_once('/').is_some_and(|(n, _)| n == name))
+            .collect();
+        match parts.as_slice() {
+            [] => None,
+            [one] => Some((*one).clone()),
+            many => Some(ProgRes {
+                name: name.to_string(),
+                post: many[0].post.clone(),
+                lines: many.iter().map(|x| x.lines).sum(),
+                round_trip: many.iter().all(|x| x.round_trip),
+                certified: many
+                    .iter()
+                    .find(|x| x.certified != "full")
+                    .map_or_else(|| "full".to_string(), |x| x.certified.clone()),
+                error: many.iter().find_map(|x| x.error.clone()),
+                text: many
+                    .iter()
+                    .map(|x| x.text.clone())
+                    .collect::<Option<Vec<String>>>()
+                    .map(|t| t.join("\n")),
+                setup: None,
+            }),
+        }
+    }
+
     /// An op's quality, if measured.
     pub fn quality(&self, op: &str) -> Option<&forge_cam_quality::OpQ> {
         self.quality.as_ref()?.ops.iter().find(|q| q.name == op)

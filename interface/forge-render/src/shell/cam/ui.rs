@@ -409,7 +409,7 @@ impl Shell {
                         let st = match w
                             .run
                             .as_ref()
-                            .and_then(|r| r.programs.iter().find(|x| x.name == p))
+                            .and_then(|r| r.program(&p))
                         {
                             Some(x) if x.error.is_none() && x.text.is_some() => "built",
                             Some(_) => "refused",
@@ -803,7 +803,7 @@ fn details(
             }
         }
         super::doc::Role::Program => {
-            let Some(p) = run.and_then(|r| r.programs.iter().find(|p| p.name == id)) else {
+            let Some(p) = run.and_then(|r| r.program(id)) else {
                 note(ui, "Generate to post it.", width, t.ink2);
                 return;
             };
@@ -1855,8 +1855,7 @@ fn post_window(ctx: &egui::Context, t: &Theme, v: Rect, w: &mut CamWs, places: &
             let res = w
                 .run
                 .as_ref()
-                .and_then(|r| r.programs.iter().find(|p| p.name == id))
-                .cloned();
+                .and_then(|r| r.program(&id));
             match &res {
                 Some(p) => {
                     fact(
@@ -2353,8 +2352,18 @@ fn program_row(
     places: &mut Places,
 ) {
     use super::nc::Posted;
-    let res = w.run.as_ref().and_then(|r| r.programs.iter().find(|x| x.name == p.name)).cloned();
-    let state = posted.iter().find(|x| x.0 == p.name);
+    // the program's parts: itself, or one per setup when split (`NAME/SETUP`)
+    let mine = |n: &str| n == p.name || n.split_once('/').is_some_and(|(x, _)| x == p.name);
+    let res = w.run.as_ref().and_then(|r| r.program(&p.name));
+    let states: Vec<&super::nc::PostedRow> = posted.iter().filter(|x| mine(&x.0)).collect();
+    // the worst part's state stands for the program
+    let rank = |s: Posted| match s {
+        Posted::Refused => 0,
+        Posted::Stale => 1,
+        Posted::No => 2,
+        Posted::Current => 3,
+    };
+    let state = states.iter().min_by_key(|x| rank(x.1)).copied();
     // the name, and its file's state as a painted mark
     let (r, _) = ui.allocate_exact_size(vec2(width, 26.0), Sense::hover());
     let ink = match state.map(|s| s.1) {
@@ -2366,6 +2375,7 @@ fn program_row(
     ui.painter().circle_filled(pos2(r.left() + 19.0, r.center().y), 4.0, ink);
     ui.painter().text(pos2(r.left() + 30.0, r.center().y), Align2::LEFT_CENTER, &p.name, medium(14.0), t.ink);
     let words = match state {
+        Some((_, s, _)) if states.len() > 1 => format!("{} files: {}", states.len(), s.words()),
         Some((_, s, path)) if !path.is_empty() => format!("{path}: {}", s.words()),
         Some((_, s, _)) => s.words().to_string(),
         None => "not generated".into(),
@@ -2480,6 +2490,43 @@ fn program_row(
         prog_field(ui, t, "Ext.", 44.0, p, "ext", &ext_default, field, edits, places);
         prog_field(ui, t, "Comment", 140.0, p, "comment", "header line", field, edits, places);
     });
+    // posting: one file per setup, decimals, coolant (forge-post's options, certified as posted)
+    ui.horizontal(|ui| {
+        ui.add_space(14.0);
+        let had = p.arg_str("split").as_deref() == Some("setup");
+        let mut on = had;
+        let r = ui.checkbox(&mut on, "One file per setup");
+        places.push((format!("cam:programs:{}:split", p.name), r.rect));
+        if on != had {
+            edits.push(if on {
+                super::doc::Edit::Set { id: p.name.clone(), arg: "split".into(), text: "\"setup\"".into() }
+            } else {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: "split".into() }
+            });
+        }
+        prog_field(ui, t, "Decimals", 34.0, p, "decimals", "", field, edits, places);
+        prog_field(ui, t, "Feed dec.", 34.0, p, "feed_decimals", "", field, edits, places);
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("Coolant").font(sans(12.0)).color(t.ink2));
+        let now = p.arg_str("coolant").unwrap_or_default();
+        let mut pick = now.clone();
+        let r = egui::ComboBox::from_id_salt(format!("cam-programs-{}-coolant", p.name))
+            .width(70.0)
+            .selected_text(if pick.is_empty() { "post's" } else { pick.as_str() })
+            .show_ui(ui, |ui| {
+                for c in ["", "flood", "mist", "air", "off"] {
+                    ui.selectable_value(&mut pick, c.to_string(), if c.is_empty() { "post's" } else { c });
+                }
+            });
+        places.push((format!("cam:programs:{}:coolant", p.name), r.response.rect));
+        if pick != now {
+            edits.push(if pick.is_empty() {
+                super::doc::Edit::Unset { id: p.name.clone(), arg: "coolant".into() }
+            } else {
+                super::doc::Edit::Set { id: p.name.clone(), arg: "coolant".into(), text: format!("\"{pick}\"") }
+            });
+        }
+    });
     ui.horizontal(|ui| {
         ui.add_space(14.0);
         let had = p.arg_str("tools").as_deref() == Some("list");
@@ -2507,6 +2554,9 @@ fn program_row(
     });
     ui.add_space(6.0);
 }
+
+/// The program arguments that are numbers (written unquoted).
+const NUMBER_ARGS: &[&str] = &["decimals", "feed_decimals"];
 
 /// A program's export setting `arg` as a short field: the statement's value, written when the
 /// field is left (empty: the default, the argument taken out).
@@ -2549,7 +2599,12 @@ fn prog_field(
             edits.push(if v.is_empty() {
                 super::doc::Edit::Unset { id: p.name.clone(), arg: arg.into() }
             } else {
-                super::doc::Edit::Set { id: p.name.clone(), arg: arg.into(), text: format!("\"{v}\"") }
+                super::doc::Edit::Set {
+                    id: p.name.clone(),
+                    arg: arg.into(),
+                    // counts are numbers; names and folders are strings
+                    text: if NUMBER_ARGS.contains(&arg) { v.clone() } else { format!("\"{v}\"") },
+                }
             });
         }
     }

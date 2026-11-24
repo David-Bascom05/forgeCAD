@@ -344,3 +344,30 @@ fn a_programs_ops_are_chosen_in_the_window() {
     h.step();
     assert!(!text(&h).contains("ops:"), "{}", text(&h));
 }
+
+/// NC Programs: one file per setup (`split: "setup"`, a part per setup named `prog/op1`) and the
+/// decimals typed; Post writes `{file}-{setup}`.
+#[test]
+fn a_split_program_posts_a_file_per_setup() {
+    let Some((mut h, file)) = open("split") else { return };
+    assert!(h.click("tool:NC Programs"));
+    h.step();
+    assert!(h.click("cam:programs:prog:split"));
+    h.step();
+    assert!(h.click("cam:programs:prog:decimals"));
+    h.text("3");
+    h.step();
+    assert!(h.click("cam:programs:prog:file"));
+    h.step();
+    let t = text(&h);
+    assert!(t.contains("split: \"setup\"") && t.contains("decimals: 3"), "{t}");
+    settle(&mut h);
+    let names: Vec<String> = h.gui.shell.cam.as_ref().unwrap().run.as_ref().unwrap().programs.iter().map(|p| p.name.clone()).collect();
+    assert_eq!(names, ["prog/op1"]);
+    assert!(h.click("cam:programs:prog:post"));
+    h.step();
+    h.step();
+    let nc = std::fs::read_to_string(file.with_file_name("prog-op1.nc")).expect("posted per setup");
+    assert!(nc.lines().count() > 50);
+    shot(&mut h, "cam-nc-split");
+}

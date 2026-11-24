@@ -23,6 +23,9 @@ prog = program(op1, post: "fanuc", number: 1001,
 | `out:` | folder, relative to the document | beside the document |
 | `comment:` | a comment line in the header | none |
 | `tools: "list"` | a tool list in the header: `T1 flat-10 in bt40-er32, stick-out 32: skim, top` | none |
+| `ops:` | the ops it posts, in order (cam/parity) | every op of its setups |
+| `split: "setup"` | one file per setup, `{file}-{setup}` (cam/parity) | one file |
+| `decimals:`, `feed_decimals:`, `coolant:` | post options, posted and certified (cam/parity) | the dialect's |
 
 The code is `interface/forge-cam-lang/src/export.rs` (`files`, `settings`, `tool_list`,
 `ext_of`). Both the app and the CLI call it on the same run, so they write the same bytes. The
@@ -110,18 +113,21 @@ forgecad cam F post [PROGRAM] [-o FILE|DIR/] [--allow-uncertified]
 The native headless tests need a GPU adapter. On a machine without one, Mesa's lavapipe
 (`mesa-vulkan-drivers`) is enough; without it they print "skipped: no GPU" and pass.
 
-## Not yet: language and post asks
+## Language and post asks
 
-These items need forge-cam-lang or forge-post first. The window then gets a field each.
+Each needed forge-cam-lang or forge-post first; the window then got a field each.
 
 - **Ops selection**: done on cam/ui-parity. `program(.., ops: [skim, top])` (CAM-CORE); the window
   has an Ops checklist per program, and lists ops no program posts (those are unposted, not
   certified).
-- **One file per setup** within a program. Today you make one program per setup (New Program,
-  tick one setup).
-- **Post options**: units (G20/G21), decimals, safe-start block, coolant, line numbers (N-words).
-  These are dialect data in forge-post today. Each one changes the certified text, so each must
-  become a post argument that the round trip (G6) covers, not a rewrite after posting.
+- **One file per setup**: done on cam/ui-parity. `split: "setup"` (CAM-CORE) makes one program
+  part per setup, named `prog/op1`, `prog/op2`, with O-numbers `number`, `number + 1`, …. Each part
+  is written as `{file}-{setup}.{ext}` with the statement's settings. The window's
+  "One file per setup" checkbox writes it; the row shows the parts' worst state.
+- **Post options**: `decimals:`, `feed_decimals:` and `coolant:` (flood, mist, air, off) are in
+  the program row (cam/ui-parity). An empty field means the dialect's own default. units,
+  line_numbers and safe_start wait on CAM-MACHINE's `Dialect::with` (cam/post-options) and then
+  CAM-CORE's language side.
 
 ## Send to machine (design only)
 

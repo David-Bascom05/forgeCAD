@@ -71,6 +71,7 @@ impl CamWs {
                 text: p.text.clone(),
                 error: p.error.clone(),
                 certified: p.certified.clone(),
+                setup: p.setup.clone(),
             })
             .collect()
     }
