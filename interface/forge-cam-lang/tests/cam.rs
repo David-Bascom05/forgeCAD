@@ -1101,7 +1101,7 @@ fn axial_stock_to_leave_raises_the_floors() {
     assert!(
         cam.errors
             .iter()
-            .any(|e| e.contains("drill does not take `leave_axial:`")),
+            .any(|e| e.contains("`leave_axial` is not an argument of `drill`")),
         "{:?}",
         cam.errors
     );
@@ -1159,7 +1159,7 @@ fn a_contour_takes_its_direction_and_passes() {
     assert!(
         cam.errors
             .iter()
-            .any(|e| e.contains("clear does not take `spring:`")),
+            .any(|e| e.contains("`spring` is not an argument of `clear`")),
         "{:?}",
         cam.errors
     );

@@ -204,11 +204,193 @@ pub struct OpChecks {
 pub struct ProgramOut {
     pub name: String,
     pub setups: Vec<usize>,
+    /// The ops it posts, in order (every op of its setups, or those `ops:` names).
+    pub ops: Vec<usize>,
     pub post: String,
     pub text: Option<String>,
     pub lines: usize,
     pub error: Option<String>,
     pub round_trip: bool,
+}
+
+/// Each built-in's arguments: keywords, and `#0`, `#1`.. for positionals. `named_of` refuses any
+/// other (a typed error naming the nearest); CAM-UI's schema is checked against it, and
+/// research/forge-lang/lean/COVERAGE.md lists it (lang_coverage). A reader of a new keyword adds
+/// it here in the same change.
+pub const ARGS: &[(&str, &[&str])] = &[
+    ("part", &["#0", "group"]),
+    ("machine", &["#0"]),
+    ("tool", &["#0", "t", "stickout", "holder"]),
+    (
+        "setup",
+        &[
+            "#0",
+            "machine",
+            "stock",
+            "origin",
+            "wcs",
+            "at",
+            "tol",
+            "clearance",
+            "clear",
+            "retract",
+            "fixture",
+            "from",
+        ],
+    ),
+    ("facing", &["#0", "tool", "to", "step", "leave_axial"]),
+    (
+        "clear",
+        &[
+            "#0",
+            "tool",
+            "from",
+            "to",
+            "step",
+            "stepover",
+            "leave",
+            "leave_axial",
+            "ramp",
+        ],
+    ),
+    (
+        "contour",
+        &[
+            "#0",
+            "tool",
+            "side",
+            "from",
+            "to",
+            "step",
+            "leave",
+            "leave_axial",
+            "direction",
+            "finish",
+            "finish_step",
+            "spring",
+        ],
+    ),
+    (
+        "pocket",
+        &[
+            "#0",
+            "#1",
+            "tool",
+            "from",
+            "to",
+            "step",
+            "stepover",
+            "leave",
+            "leave_axial",
+            "ramp",
+        ],
+    ),
+    ("drill", &["#0", "#1", "plan"]),
+    ("engrave", &["#0", "#1", "tool", "depth", "step", "from"]),
+    ("slot", &["#0", "#1", "tool", "depth", "step", "from", "ramp"]),
+    ("thread_mill", &["#0", "#1", "tool", "length"]),
+    ("edge_break", &["#0", "tool", "at", "size"]),
+    (
+        "soft_jaw",
+        &[
+            "#0",
+            "blank",
+            "from",
+            "grip",
+            "fit",
+            "tool",
+            "relief",
+            "min_contact",
+        ],
+    ),
+    (
+        "program",
+        &[
+            "#0",
+            "post",
+            "number",
+            "ops",
+            "decimals",
+            "feed_decimals",
+            "coolant",
+            // read by CAM-UI's export (cam/ui-3 export.rs)
+            "file",
+            "ext",
+            "out",
+            "comment",
+            "tools",
+        ],
+    ),
+    ("box", &["margin", "below", "min", "max"]),
+    ("cylinder", &["d", "margin", "below"]),
+    ("tube", &["d", "id", "margin", "below"]),
+    ("solid", &["#0"]),
+    ("vise", &["#0", "across", "clamp", "parallel", "clearance"]),
+];
+
+/// The arguments `fname` takes (None: not a built-in with a list).
+pub fn args_of(fname: &str) -> Option<&'static [&'static str]> {
+    ARGS.iter().find(|(n, _)| *n == fname).map(|(_, a)| *a)
+}
+
+/// Every argument given is one `fname` takes, or the refusal: `UnknownArg`, with the nearest
+/// (by edit distance, within a third of the name) as the fix, else the list.
+fn check_args(fname: &str, m: &BTreeMap<String, V>) -> Result<(), String> {
+    let Some(takes) = args_of(fname) else {
+        return Ok(());
+    };
+    for k in m.keys() {
+        if takes.contains(&k.as_str()) {
+            continue;
+        }
+        if let Some(n) = k.strip_prefix('#') {
+            let most = takes.iter().filter(|t| t.starts_with('#')).count();
+            return Err(format!(
+                "UnknownArg: `{fname}` takes {most} positional argument{} (argument {} is one too many)",
+                if most == 1 { "" } else { "s" },
+                n.parse::<usize>().unwrap_or(0) + 1
+            ));
+        }
+        let named: Vec<&str> = takes.iter().copied().filter(|t| !t.starts_with('#')).collect();
+        let near = named
+            .iter()
+            .map(|t| (edit_distance(k, t), *t))
+            .min()
+            .filter(|(d, t)| *d <= k.len().max(t.len()).div_ceil(3));
+        return Err(match near {
+            Some((_, t)) => {
+                format!("UnknownArg: `{k}` is not an argument of `{fname}` (did you mean `{t}`?)")
+            }
+            None => format!(
+                "UnknownArg: `{k}` is not an argument of `{fname}` (it takes: {})",
+                named.join(", ")
+            ),
+        });
+    }
+    Ok(())
+}
+
+/// Levenshtein distance (bytes; the names are ASCII).
+fn edit_distance(a: &str, b: &str) -> usize {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let mut prev: Vec<usize> = (0..=b.len()).collect();
+    for i in 1..=a.len() {
+        let mut cur = vec![i; b.len() + 1];
+        for j in 1..=b.len() {
+            let sub = prev[j - 1] + usize::from(a[i - 1] != b[j - 1]);
+            cur[j] = sub.min(prev[j] + 1).min(cur[j - 1] + 1);
+        }
+        prev = cur;
+    }
+    prev[b.len()]
+}
+
+/// A program's own post options (`program(.., decimals:, feed_decimals:, coolant:)`).
+#[derive(Clone, Copy, Debug, Default)]
+struct PostOpts {
+    decimals: Option<u32>,
+    feed_decimals: Option<u32>,
+    coolant: Option<forge_post::Coolant>,
 }
 
 /// A leftover's boxes, why, radius and lowest tip (as `Leftover` holds them).
@@ -638,7 +820,7 @@ impl Cam {
                     return Err("a call of something that is not a built-in".into());
                 };
                 if fname == "box" {
-                    let named = self.named(args, env)?;
+                    let named = self.named_of("box", args, env)?;
                     if let Some(m) = named.get("margin").and_then(tuple3) {
                         // `below:`: stock under the part too (it rests on that much)
                         let below = match named.get("below") {
@@ -657,7 +839,7 @@ impl Cam {
                     return Err("box(margin: (x, y, z)) or box(min: (..), max: (..))".into());
                 }
                 if fname == "cylinder" || fname == "tube" {
-                    let a = self.named(args, env)?;
+                    let a = self.named_of(fname, args, env)?;
                     let len = |k: &str| -> Result<Option<f64>, String> {
                         match a.get(k) {
                             None => Ok(None),
@@ -698,14 +880,14 @@ impl Cam {
                     }));
                 }
                 if fname == "solid" {
-                    let a = self.named(args, env)?;
+                    let a = self.named_of("solid", args, env)?;
                     return match a.get("#0") {
                         Some(V::Str(f)) => Ok(V::Stock(StockSpec::Solid(f.clone()))),
                         _ => Err("solid(\"STOCK.fg\"): the stock as its own part file".into()),
                     };
                 }
                 if fname == "vise" {
-                    let a = self.named(args, env)?;
+                    let a = self.named_of("vise", args, env)?;
                     let name = match a.get("#0") {
                         Some(V::Str(s)) => s.clone(),
                         _ => {
@@ -743,6 +925,19 @@ impl Cam {
             }
             _ => return Err("an expression a machining document does not take".into()),
         })
+    }
+
+    /// A built-in's arguments by name (`#0`, `#1`.. for positionals), each one it takes
+    /// (`ARGS`), or the typed refusal naming the nearest.
+    fn named_of(
+        &self,
+        fname: &str,
+        args: &[Arg],
+        env: &BTreeMap<String, V>,
+    ) -> Result<BTreeMap<String, V>, String> {
+        let m = self.named(args, env)?;
+        check_args(fname, &m)?;
+        Ok(m)
     }
 
     fn named(&self, args: &[Arg], env: &BTreeMap<String, V>) -> Result<BTreeMap<String, V>, String> {
@@ -873,7 +1068,7 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
                             }
                         }
                     }
-                    let a = cam.named(args, &local)?;
+                    let a = cam.named_of(fname, args, &local)?;
                     // the kernel's clock: std's Instant panics in a browser
                     let t0 = std::env::var("FORGE_CAM_TIME")
                         .is_ok()
@@ -905,18 +1100,59 @@ pub fn run_with_library(src: &str, dir: &Path, lib: Library) -> Cam {
                 .push(format!("line {}: {e}", line_of(src, st.span.lo as usize)));
         }
     }
+    // each op was certified on the stock every earlier op of its setup, and every op of the
+    // setup it continues, left: so those are posted before it (an earlier program, or earlier
+    // in its own), or the program is refused
+    let mut seen: Vec<usize> = vec![];
+    for pi in 0..cam.programs.len() {
+        if !cam.programs[pi].round_trip {
+            continue;
+        }
+        let mut missing: Option<(usize, usize)> = None;
+        let mut this: Vec<usize> = vec![];
+        for &oi in &cam.programs[pi].ops {
+            let su = cam.ops[oi].setup;
+            let before = |j: usize| {
+                !cam.ops[j].paths.is_empty()
+                    && ((cam.ops[j].setup == su && j < oi) || Some(cam.ops[j].setup) == cam.setups[su].from)
+            };
+            if let Some(j) =
+                (0..cam.ops.len()).find(|&j| before(j) && !seen.contains(&j) && !this.contains(&j))
+            {
+                missing = Some((oi, j));
+                break;
+            }
+            this.push(oi);
+        }
+        if missing.is_none() {
+            seen.extend(this);
+        }
+        if let Some((oi, j)) = missing {
+            let p = &mut cam.programs[pi];
+            let e = format!(
+                "program `{}` posts `{}`, certified on the stock `{}` leaves, which no program posts before it; fix: post `{}` first (an earlier program, or in this one's `ops:`)",
+                p.name, cam.ops[oi].name, cam.ops[j].name, cam.ops[j].name
+            );
+            p.error = Some(e.clone());
+            p.text = None;
+            p.lines = 0;
+            p.round_trip = false;
+            cam.ok = false;
+            cam.errors.push(e);
+        }
+    }
     // an op no program posted has no certificate: its checks run on the posted path only
     let posted: Vec<usize> = cam
         .programs
         .iter()
         .filter(|p| p.round_trip)
-        .flat_map(|p| p.setups.clone())
+        .flat_map(|p| p.ops.clone())
         .collect();
-    for o in &mut cam.ops {
-        if o.status == "built" && !posted.contains(&o.setup) {
+    for (oi, o) in cam.ops.iter_mut().enumerate() {
+        if o.status == "built" && !posted.contains(&oi) {
             o.status = "unposted";
             o.refusal =
-                Some("not certified: no program(..) posts this setup (checks run on the posted path)".into());
+                Some("not certified: no program(..) posts this op (checks run on the posted path)".into());
         }
     }
     cam.leftover();
@@ -1375,7 +1611,70 @@ impl Cam {
                         .unwrap_or_else(|_| "fanuc".into()))
                 })?;
                 let number = get_num(a, "number", Some(1000.0))? as u32;
-                let out = self.post(name, &su, &post, number);
+                // `ops:`: some ops of its setups, not all (each must be one of theirs)
+                let sel: Option<Vec<usize>> = match a.get("ops") {
+                    None => None,
+                    Some(v) => {
+                        let vs: Vec<&V> = match v {
+                            V::Tuple(t) => t.iter().collect(),
+                            v => vec![v],
+                        };
+                        let mut ids = vec![];
+                        for v in vs {
+                            match v {
+                                V::Op(i) if su.contains(&self.ops[*i].setup) => ids.push(*i),
+                                V::Op(i) => {
+                                    return Err(format!(
+                                        "ops: `{}` is an op of setup `{}`, which this program does not post",
+                                        self.ops[*i].name, self.setups[self.ops[*i].setup].name
+                                    ));
+                                }
+                                _ => return Err("ops: an op or a list of ops of the program's setups".into()),
+                            }
+                        }
+                        Some(ids)
+                    }
+                };
+                let digits = |k: &str, most: f64| -> Result<Option<u32>, String> {
+                    match a.get(k) {
+                        None => Ok(None),
+                        Some(V::Num(x)) if x.fract() == 0.0 && *x >= 0.0 && *x <= most => Ok(Some(*x as u32)),
+                        Some(_) => Err(format!("{k}: a whole number from 0 to {most}")),
+                    }
+                };
+                let coolant = match a.get("coolant") {
+                    None => None,
+                    Some(V::Str(c)) => {
+                        let k = match c.as_str() {
+                            "flood" => forge_post::Coolant::Flood,
+                            "mist" => forge_post::Coolant::Mist,
+                            "through" => forge_post::Coolant::Through,
+                            "off" => forge_post::Coolant::Off,
+                            _ => return Err("coolant: \"flood\", \"mist\", \"through\" or \"off\"".into()),
+                        };
+                        // the machine must have it
+                        for &si in &su {
+                            let m = &self.setups[si].machine;
+                            if let Ok(mr) = self.lib.machine(m)
+                                && c != "off"
+                                && !mr.coolants.iter().any(|x| x == c)
+                            {
+                                return Err(format!(
+                                    "coolant: the machine `{m}` has no {c} coolant (it has: {})",
+                                    mr.coolants.join(", ")
+                                ));
+                            }
+                        }
+                        Some(k)
+                    }
+                    Some(_) => return Err("coolant: \"flood\", \"mist\", \"through\" or \"off\"".into()),
+                };
+                let opts = PostOpts {
+                    decimals: digits("decimals", 6.0)?,
+                    feed_decimals: digits("feed_decimals", 4.0)?,
+                    coolant,
+                };
+                let out = self.post(name, &su, sel.as_deref(), &post, number, &opts);
                 self.programs.push(out);
                 Ok(V::Num(0.0))
             }
@@ -2525,16 +2824,6 @@ impl Cam {
             deepest: f64::INFINITY,
         };
         let mut voids: Vec<(Option<Region>, f64)> = vec![];
-        for k in ["direction", "finish", "finish_step", "spring"] {
-            if a.contains_key(k) && kind != "contour" {
-                return Err(format!("{kind} does not take `{k}:` (contour does)"));
-            }
-        }
-        if a.contains_key("leave_axial") && !matches!(kind, "facing" | "clear" | "contour" | "pocket") {
-            return Err(format!(
-                "{kind} does not take `leave_axial:` (facing, clear, contour and pocket do)"
-            ));
-        }
         let paths: Result<Vec<OpPath>, String> = match kind {
             "drill" => self.plan_holes(su, a, &mut out, &mut voids),
             _ => {
@@ -3783,9 +4072,18 @@ impl Cam {
     }
 
     /// Posts the setups' ops, reads the text back, and certifies the path the text means.
-    fn post(&mut self, name: &str, setups: &[usize], post: &str, number: u32) -> ProgramOut {
+    fn post(
+        &mut self,
+        name: &str,
+        setups: &[usize],
+        sel: Option<&[usize]>,
+        post: &str,
+        number: u32,
+        opts: &PostOpts,
+    ) -> ProgramOut {
         let mut po = ProgramOut {
             setups: setups.to_vec(),
+            ops: vec![],
             name: name.into(),
             post: post.into(),
             text: None,
@@ -3793,13 +4091,21 @@ impl Cam {
             error: None,
             round_trip: false,
         };
-        let d = match forge_post::Dialect::get(post) {
+        let mut d = match forge_post::Dialect::get(post) {
             Ok(d) => d,
             Err(e) => {
                 po.error = Some(format!("{e:?}"));
                 return po;
             }
         };
+        // the program's own number formats: the text is quantised, read back and certified at
+        // them, as at the dialect's
+        if let Some(k) = opts.decimals {
+            d.decimals = k;
+        }
+        if let Some(k) = opts.feed_decimals {
+            d.feed_decimals = k;
+        }
         let mut recs = vec![];
         let mut current_tool: Option<u32> = None;
         // where the last path left the tool, in the part's frame
@@ -3807,8 +4113,13 @@ impl Cam {
         // each op's records, and which records are whose
         let mut spans: Vec<(usize, usize, usize, usize)> = vec![];
         let op_ids: Vec<usize> = (0..self.ops.len())
-            .filter(|&i| setups.contains(&self.ops[i].setup) && !self.ops[i].paths.is_empty())
+            .filter(|&i| {
+                setups.contains(&self.ops[i].setup)
+                    && !self.ops[i].paths.is_empty()
+                    && sel.is_none_or(|s| s.contains(&i))
+            })
             .collect();
+        po.ops = op_ids.clone();
         for &oi in &op_ids {
             let op = &self.ops[oi];
             let s = &self.setups[op.setup];
@@ -3859,7 +4170,7 @@ impl Cam {
                     op.feeds.map(|f| f.rpm).unwrap_or(3000.0)
                 };
                 recs.push(Rec::Spindle { rpm, cw: true });
-                recs.push(Rec::Coolant(p.coolant));
+                recs.push(Rec::Coolant(opts.coolant.unwrap_or(p.coolant)));
                 recs.push(Rec::Rapid(w(p.start)));
                 for m in &p.moves {
                     recs.push(match *m {
