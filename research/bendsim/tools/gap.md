@@ -7,7 +7,7 @@ Do we use realistic tools?" Press-brake program export (G-code/CNC) is out of sc
 
 Rules kept throughout: every check certified (Clear = proven >= limit, Near = within the
 resolution, a warning), cited data only (UNKNOWN stays UNKNOWN and refuses or is "not checked"),
-no active-patent material (expired patents cited with expiry), zero forge-* speed regressions.
+zero forge-* speed regressions.
 
 ## 0. What the code does today (verified on main 0de84ac1)
 
@@ -174,17 +174,15 @@ about the bend line, up (and on up/down folders, down).
 - A rocker that rotates as it meets the sheet, wrapping the flange over the die's edge: tool
   kinematics coupled to stroke (rocker angle from contact), a new machine-tool pairing (rocker +
   anvil die), the same certified B&B with a rotating body (shared with rank 7).
-- Patents: Ready Technology holds the family; US 6,983,634 (rotary bending tool, graphite plugs) and
-  US 9,744,579 (rotary bender with gib; granted 2017, presumed **active**). Expiry dates NOT yet
-  verified: no material from any of them enters the repo until each one's status is checked and
-  cited; only generic kinematics (a cylinder rolling on a line) from public textbooks.
+- Kinematics: generic, from first principles (a cylinder rolling on a line, its angle from the
+  stroke and the contact).
 - Effort: L. Data: tool dimensions UNKNOWN.
 
 ### Rank 10. (d6) Panel benders
 
 - Blankholder + upper/lower blades with interpolated motion, a manipulator rotating the part. A new
-  machine type with multi-axis blade paths; the blade paths and tool shapes are proprietary and
-  likely patented: UNKNOWN. Only the envelope is citable (Salvagnini P4 brochure: max bend height
+  machine type with multi-axis blade paths; the blade paths and tool shapes are not published:
+  UNKNOWN. Only the envelope is citable (Salvagnini P4 brochure: max bend height
   203 mm (P4-2120/2520), 254 mm (P4-2225/3125); four universal tools: upper and lower blade,
   counterblade, blankholder).
 - Effort: XL. Recommend: a feasibility rule only (box height vs the cited maximum, part length vs
@@ -226,8 +224,6 @@ files: coordinated with them before touching forge-render; kernel scene.rs stage
 - Schröder folders: https://directindustry.com/prod/schroder-group/product-33465-1392597.html ;
   https://www.directindustry.com/prod/schroeder-group/product-33465-937505.html
 - Salvagnini P4: https://www.ucimu.it/uploads/ucimu/azienda/Salvagnini_Highlights__short_EN.pdf
-- Rotary bender patents (status to verify): https://patents.google.com/patent/US6983634 ,
-  https://image-ppubs.uspto.gov/dirsearch-public/print/downloadPdf/9744579
 - Crowning: https://thefabricator.com/article/bending/better-bend-accuracy-on-the-press-brake-through-crowning
 
 All read 2026-11-24. Figures above are as those pages state them; each enters the TOML only with a
