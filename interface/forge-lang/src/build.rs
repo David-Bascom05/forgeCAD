@@ -844,6 +844,17 @@ impl std::hash::Hasher for NameMix {
 /// `forge_agent::select::lineage` with nothing copied, into a `Lineage`: each face's making
 /// features after feature `i` built `body`, given those before. A face keeps its origin while its
 /// name lives; a new face on a face before's surface, overlapping it, is that face's.
+/// `a == b`, planes (most faces) compared inline: the derived `Surface::eq` became an
+/// out-of-line call in `lineage` once forge-lang's code around it grew (28,643 calls on the
+/// heatsink gate part, +0.23%), and planes are nearly every comparison here.
+#[inline(always)]
+fn same_surface(a: &forge_geom::Surface, b: &forge_geom::Surface) -> bool {
+    match (a, b) {
+        (forge_geom::Surface::Plane(x), forge_geom::Surface::Plane(y)) => x == y,
+        _ => a == b,
+    }
+}
+
 fn lineage(body: Work<'_>, prev: Option<(Work<'_>, &Lineage)>, i: usize) -> Lineage {
     let mut out = Lineage::with_capacity_and_hasher(body.len(), Default::default());
     for s in body.0 {
@@ -867,7 +878,7 @@ fn lineage(body: Work<'_>, prev: Option<(Work<'_>, &Lineage)>, i: usize) -> Line
                         let p = &ps.body;
                         for (g, pf) in p.faces.iter().enumerate() {
                             if pf.alive
-                                && pf.surface == face.surface
+                                && same_surface(&pf.surface, &face.surface)
                                 && pb.face_box(p, FaceId(g as u32)).overlaps(&body.face_box(b, f))
                             {
                                 return po.get(&pf.name).cloned();
