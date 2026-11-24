@@ -81,7 +81,7 @@ fn drift(r: &Body) -> (f64, f64, f64) {
             })
             .collect();
         for (d, z) in &pl {
-            let dd = d.eval(&DyV3::from_f64(p.x, p.y, p.z)).to_f64().abs() / z.length();
+            let dd = d.eval(&DyV3::from_f64(p.x, p.y, p.z)).to_f64_near().abs() / z.length();
             pm = pm.max(dd);
             um = um.max(dd - r.vertex(v).tol);
         }
@@ -366,7 +366,8 @@ fn resnap(r: &mut Body, all: bool, cond: bool) -> usize {
             let t = if ed.start == v { ed.range.lo } else { ed.range.hi };
             vt = vt.max(ed.curve.eval(t).distance(np));
         }
-        r.vertices[v.index()].tol = vt;
+        // (raised only, as every writer must: a snapped vertex keeps at least its old tolerance)
+        r.grow_vertex_tol(v, vt);
         for &f in fs {
             let face = &mut r.faces[f.index()];
             face.bbox = Default::default();
