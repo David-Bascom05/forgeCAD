@@ -879,7 +879,7 @@ fn a_probe_move_posts_only_where_cited_and_round_trips() {
         );
         assert!(back.iter().any(|m| matches!(m, Motion::Probe(..))));
     }
-    for name in ["fanuc", "haas", "siemens"] {
+    for name in ["fanuc", "haas", "haas-hsm", "siemens"] {
         let d = Dialect::get(name).unwrap();
         let q = quantize(&probe_prog(), &d).unwrap();
         match print(&q, &d) {

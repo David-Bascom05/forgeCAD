@@ -57,10 +57,12 @@ pub fn override_moves(start: [f64; 3], moves: &[PMove], cut: f64, plunge: f64) -
                     }
                 }
                 PMove::Arc { to, c, cw, .. } => PMove::Arc { to, c, cw, f: cut },
-                PMove::Cycle { .. } | PMove::Rapid { .. } => *m,
+                PMove::Cycle { .. } | PMove::Rapid { .. } | PMove::Probe { .. } => *m,
             };
-            if let PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } = *m {
-                at = to;
+            match *m {
+                PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => at = to,
+                PMove::Probe { to, back: false, .. } => at = to,
+                _ => {}
             }
             out
         })
@@ -333,6 +335,8 @@ fn pieces(from: [f64; 3], m: &PMove, l: f64) -> Vec<[f64; 3]> {
                 .collect()
         }
         PMove::Cycle { .. } => vec![],
+        // a probe cuts nothing
+        PMove::Probe { .. } => vec![],
     }
 }
 
@@ -607,10 +611,17 @@ pub fn measure_op(
                     q.removed += m.sweep(top, [holes[0], holes[1], z], &prof);
                     continue;
                 }
+                // a probe cuts nothing: no quality measure
+                PMove::Probe { to, back, .. } => {
+                    if !back {
+                        at = to;
+                    }
+                    continue;
+                }
             };
             let to = match *mv {
                 PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
-                PMove::Cycle { .. } => unreachable!(),
+                PMove::Cycle { .. } | PMove::Probe { .. } => unreachable!(),
             };
             let dxy = ((to[0] - at[0]).powi(2) + (to[1] - at[1]).powi(2)).sqrt();
             let dz = to[2] - at[2];

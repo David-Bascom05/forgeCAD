@@ -908,6 +908,8 @@ fn cycle_time_counts_arcs() {
                         at = to;
                     }
                     forge_cam::ops::PMove::Cycle { .. } => {}
+                    // (no probing op in this document)
+                    forge_cam::ops::PMove::Probe { .. } => panic!("a probe move in a cutting op"),
                 }
             }
         }
@@ -1394,6 +1396,7 @@ fn zlevel_on_a_prism_part_clears_to_the_walls_and_the_margin() {
         holder: None,
         stickout: 32.0,
         shape,
+        probe: false,
     };
     let c = forge_cam::ops::Cut {
         tool: &tool,

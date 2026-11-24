@@ -48,6 +48,7 @@ fn main() {
         holder: None,
         stickout: 40.0,
         shape,
+        probe: false,
     };
     let c = forge_cam::ops::Cut {
         tool: &tool,

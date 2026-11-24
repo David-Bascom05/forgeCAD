@@ -382,6 +382,8 @@ fn pieces_n(from: [f64; 3], m: &PMove, n: usize) -> Vec<[f64; 3]> {
                 .collect()
         }
         PMove::Cycle { .. } => vec![],
+        // a probe cuts nothing
+        PMove::Probe { .. } => vec![],
     }
 }
 
@@ -400,6 +402,8 @@ pub(crate) fn move_len(from: [f64; 3], m: &PMove) -> f64 {
             (xy * xy + (to[2] - from[2]) * (to[2] - from[2])).sqrt()
         }
         PMove::Cycle { .. } => 0.0,
+        // a probe cuts nothing: no engagement length
+        PMove::Probe { .. } => 0.0,
     }
 }
 
@@ -427,6 +431,13 @@ pub fn schedule_samples(path: &OpPath, map: &mut HeightMap, prof: &Profile, s: &
         let to = match *mv {
             PMove::Rapid { to } | PMove::Line { to, .. } | PMove::Arc { to, .. } => to,
             PMove::Cycle { .. } => continue,
+            // a probe cuts nothing; the path goes on from its start when it backs off
+            PMove::Probe { to, back, .. } => {
+                if !back {
+                    at = to;
+                }
+                continue;
+            }
         };
         let len = move_len(at, mv);
         let sched = scheduled(at, mv);
