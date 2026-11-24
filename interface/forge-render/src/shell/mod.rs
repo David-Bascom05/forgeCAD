@@ -346,6 +346,8 @@ pub struct Shell {
     /// A link's file the page opens once the project's files are in (`?open=`): the empty view
     /// says so, with a spinner, until then.
     pub waiting: Option<String>,
+    /// The status line as last drawn: cut between its parts to fit (the tests read it).
+    pub status_shown: String,
     pub view: ViewState,
     pub out: Vec<Action>,
     /// Where the viewport is, in logical pixels, snapped to device pixels.
@@ -456,6 +458,7 @@ impl Default for Shell {
             tab: 0,
             name: String::new(),
             waiting: None,
+            status_shown: String::new(),
             status: String::new(),
             view: ViewState::default(),
             out: Vec::new(),
@@ -1215,16 +1218,39 @@ impl Shell {
         } else {
             &*status
         };
-        let mut job = egui::text::LayoutJob::simple_singleline(words.to_string(), sans(12.0), Color32::WHITE);
+        let room = (mr.left() - theme::S2 - (x + 4.0)).max(0.0);
+        let width = |t: &str| {
+            ui.fonts_mut(|f| f.layout_no_wrap(t.to_string(), sans(12.0), Color32::WHITE))
+                .size()
+                .x
+        };
+        // cut between its parts (" · "), the details last: whole parts kept, then "…"
+        let parts: Vec<&str> = words.split(" \u{b7} ").collect();
+        let mut fits = words.to_string();
+        if width(words) > room {
+            fits = String::new();
+            for k in (1..parts.len()).rev() {
+                let t = format!("{} \u{b7} \u{2026}", parts[..k].join(" \u{b7} "));
+                if width(&t) <= room {
+                    fits = t;
+                    break;
+                }
+            }
+            if fits.is_empty() {
+                fits = words.to_string();
+            }
+        }
+        let mut job = egui::text::LayoutJob::simple_singleline(fits.clone(), sans(12.0), Color32::WHITE);
         job.wrap = egui::text::TextWrapping {
-            max_width: (mr.left() - theme::S2 - (x + 4.0)).max(0.0),
+            max_width: room,
             max_rows: 1,
             break_anywhere: true,
             overflow_character: Some('\u{2026}'),
         };
         let g = ui.fonts_mut(|f| f.layout_job(job));
         let said = Rect::from_min_size(pos2(x + 4.0, st.center().y - g.size().y * 0.5), g.size());
-        let cut = g.elided;
+        let cut = g.elided || fits != words;
+        self.status_shown = if g.elided { format!("{fits} (cut)") } else { fits };
         p.galley(said.min, g, Color32::WHITE);
         if cut {
             ui.interact(said, ui.scope_id().with("status-cut"), Sense::hover())

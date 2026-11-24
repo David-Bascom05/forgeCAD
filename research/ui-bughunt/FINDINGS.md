@@ -424,6 +424,11 @@ list on main: this branch's new strings add none).
 - Test: `tests/status_narrow.rs` (480×860: the status line, noted as `status:said`, ends before
   Markup). Before (the width limit lifted): fails, the line's rect ending at 357.5 past Markup's
   150.
+- UX-LEAD's P2 on it: the short state first, so the cut takes the details, and the volume in
+  sensible units (`ux::Qty::Volume`: cm³, or in³ for an inch part): "valid · 6 faces · 57.6 cm³ ·
+  rebuilt 0, reused 2 · 0.3 ms", cut between its parts ("valid · 6 faces · …" at 480 px), never
+  inside one unless the first part alone doesn't fit. `status_narrow.rs` checks the order and
+  the cut; `fg_gaps.rs`'s two checks of the old "volume N mm³" read the new words.
 
 ## Open (reported, not fixed here)
 

@@ -58,6 +58,8 @@ pub enum Qty {
     Power,
     /// kN/m (a die's load per length)
     LoadPerLength,
+    /// mm³ (a part's volume), shown in cm³ or in³
+    Volume,
     /// a count: flutes, teeth, stations
     Count,
     /// a plain number with no unit
@@ -108,6 +110,8 @@ pub fn convert(v: f64, q: Qty, sys: System) -> (f64, &'static str) {
         (Qty::Power, Inch) => (v / 0.745_699_872, "hp"),
         (Qty::LoadPerLength, Metric) => (v, "kN/m"),
         (Qty::LoadPerLength, Inch) => (v / 8.896_443_230_521 * 0.3048, "US tonf/ft"),
+        (Qty::Volume, Metric) => (v / 1000.0, "cm³"),
+        (Qty::Volume, Inch) => (v / 16_387.064, "in³"),
         (Qty::Count | Qty::Plain, _) => (v, ""),
     }
 }
