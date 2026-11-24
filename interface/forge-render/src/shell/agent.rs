@@ -249,6 +249,11 @@ pub enum AgentAct {
     },
     /// A sent message's marks shown again: its entry, the camera they were drawn over put back.
     ShowMarkup(usize),
+    /// A queued message: dropped, or (`edit`) taken back into the box.
+    Unqueue {
+        index: usize,
+        edit: bool,
+    },
     Stop,
     NewChat,
     ListConversations,
@@ -285,6 +290,10 @@ pub struct AgentTab {
     pub refs: Vec<String>,
     pub running: bool,
     pub queued: usize,
+    /// The queued messages' words, in the order they'll go.
+    pub queue: Vec<String>,
+    /// Put the keyboard in the box next frame (a queued message taken back to edit).
+    pub focus_input: bool,
     reply_boundary: bool,
     pub problem: Option<Problem>,
     /// The open file's name, for the context line.
@@ -2673,6 +2682,12 @@ impl Shell {
                         .rect;
                     ui.advance_cursor_after_rect(r.expand2(vec2(0.0, 4.0)));
                     places.push(("agent:working".into(), r));
+                    // what's queued behind the turn: each to take back and change, or drop
+                    for (q, text) in a.queue.iter().enumerate() {
+                        if let Some(act) = queued_row(ui, &t, w, q, text, &mut places) {
+                            acts.push(act);
+                        }
+                    }
                 } else if let Some((secs, tin, tout, cost)) = a.usage
                     && !a.entries.is_empty()
                 {
@@ -3076,6 +3091,9 @@ impl Shell {
             area.max - vec2(PAD - 2.0, PAD - 2.0),
         );
         let id = egui::Id::unique(INPUT_ID);
+        if std::mem::take(&mut self.agent.focus_input) {
+            ui.memory_mut(|m| m.request_focus(id));
+        }
         let focused = ui.memory(|m| m.has_focus(id));
         p.rect_filled(box_r, 6.0, t.field);
         p.rect_stroke(
@@ -3930,6 +3948,78 @@ fn resumed_divider(ui: &mut Ui, t: &Theme, w: f32, said: &str, places: &mut Vec<
     places.push(("agent:resumed".into(), r));
     places.push(("agent:resumed:new".into(), nr));
     hit.clicked()
+}
+
+/// A message queued behind the turn: "Queued · its words", Edit, ×.
+fn queued_row(
+    ui: &mut Ui,
+    t: &Theme,
+    w: f32,
+    q: usize,
+    text: &str,
+    places: &mut Vec<(String, Rect)>,
+) -> Option<AgentAct> {
+    let (r, _) = ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
+    let row = Rect::from_min_max(pos2(PAD, r.top() + 1.0), pos2(w - PAD, r.bottom() - 1.0));
+    let p = ui.painter();
+    p.rect_stroke(row, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+    let x_r = Rect::from_min_size(
+        pos2(row.right() - 22.0, row.top() + 1.0),
+        vec2(20.0, row.height() - 2.0),
+    );
+    let edit = ui.fonts_mut(|f| f.layout_no_wrap("Edit".into(), medium(11.0), t.focus));
+    let e_r = Rect::from_min_size(
+        pos2(x_r.left() - edit.size().x - 10.0, row.top() + 1.0),
+        vec2(edit.size().x + 8.0, row.height() - 2.0),
+    );
+    let mut job = plain_job(
+        &format!("Queued · {}", one_line(text, 200)),
+        sans(11.0),
+        t.ink2,
+        e_r.left() - row.left() - 12.0,
+    );
+    job.wrap.max_rows = 1;
+    job.wrap.break_anywhere = true;
+    job.wrap.overflow_character = Some('…');
+    let g = ui.fonts_mut(|f| f.layout_job(job));
+    p.galley(
+        pos2(row.left() + 8.0, row.center().y - g.size().y * 0.5),
+        g,
+        t.ink2,
+    );
+    let e = ui
+        .interact(e_r, ui.scope_id().with(("agent-queued-edit", q)), Sense::click())
+        .on_hover_text("Take it back into the box to change it; it's sent when you send it again");
+    e.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Edit queued message"));
+    let x = ui
+        .interact(x_r, ui.scope_id().with(("agent-queued-drop", q)), Sense::click())
+        .on_hover_text("Don't send it");
+    x.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, true, "Drop queued message"));
+    let p = ui.painter();
+    for (resp, rr) in [(&e, e_r), (&x, x_r)] {
+        if resp.hovered() {
+            p.rect_filled(rr, 3.0, t.hover);
+        }
+    }
+    p.galley(
+        pos2(e_r.left() + 4.0, e_r.center().y - edit.size().y * 0.5),
+        edit,
+        t.focus,
+    );
+    p.text(x_r.center(), Align2::CENTER_CENTER, "×", sans(13.0), t.ink2);
+    places.push((format!("agent:queued:{q}"), row));
+    places.push((format!("agent:queued:{q}:edit"), e_r));
+    places.push((format!("agent:queued:{q}:drop"), x_r));
+    if e.clicked() {
+        Some(AgentAct::Unqueue { index: q, edit: true })
+    } else if x.clicked() {
+        Some(AgentAct::Unqueue {
+            index: q,
+            edit: false,
+        })
+    } else {
+        None
+    }
 }
 
 /// How far beyond the chat's visible part entries are still drawn, in points.
