@@ -59,6 +59,19 @@ The refusals are not `RefusalTrue`: the reference says the exact result is a man
   unchanged (agree 463, wrong 0); the callgrind band passes (strict total +0.0006%), bits.txt
   identical; forge-bool's `tilted_wedge_thinner_than_two_tolerances` checks validity and the
   exact volumes without the reference.
+- **B1's second half (FLAT-SITES, 2026-11-24): `line_plane_t`, the same flaw one level down.**
+  With TRANSLATE's plane_plane fix (proof/b1-plane-parallel) B1 refused Internal(SplitCrossed)
+  on A's z = 0 face. Cause: `imprint` asks `curve_surface` whether B's tilted bottom edge (z = 0,
+  (0, -2e-5) to (1.6e7, 6e-5), 5e-12 rad to A's y = 0 wall) crosses A's y = 0 edge, and forge-geom's
+  `line_plane_t` takes |n·dir| ≤ ANGULAR as parallel and decides Apart by the distance at the
+  line's origin alone (2e-5): the crossing at x = 4e6 is lost, the whole edge is imprinted Inside,
+  its y < 0 part dangles off the face at (0, -2e-5), and the face's split walk fails. Fix:
+  `line_in_range` re-decides that branch over the edge's range (`near_parallel_in`, cold): the
+  signed distance is affine along the line, so both ends within LINEAR is On, opposite signs
+  beyond LINEAR a crossing at the affine zero, one sign beyond LINEAR Apart, else the origin's
+  answer. With both fixes and B2's, all seven tilt repros agree with the reference (B1 at 1.6e7
+  and its sibling at 4e6 too); this fix alone leaves B1 refusing ZeroThickness (plane_plane's
+  Empty), so B1 needs TRANSLATE's fix with it.
 - The two cases share the shape: a slot between the walls that closes to zero thickness at the
   crossing, with the walls ~1–2 LINEAR apart at the far ends.
 
