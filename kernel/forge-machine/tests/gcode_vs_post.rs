@@ -205,7 +205,13 @@ fn as_motions(evs: &[Ev], c: &Control) -> Vec<Motion> {
                     .unwrap_or(0);
                 out.push(Motion::Tool(t));
             }
-            Ev::Select(_) | Ev::Length(_) | Ev::Wcs(_) | Ev::Clamp(_) | Ev::Stop { .. } | Ev::End => {}
+            Ev::Select(_)
+            | Ev::Length(_)
+            | Ev::Wcs(_)
+            | Ev::Clamp(_)
+            | Ev::Stop { .. }
+            | Ev::End
+            | Ev::Pallet => {}
         }
     }
     out

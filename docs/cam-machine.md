@@ -32,7 +32,7 @@ what their absence means.
 | field | | meaning |
 |---|---|---|
 | name | required | unique in its level |
-| kind | required | `vmc3` `vmc4` `table-table` `head-table` `head-head` `lathe` `mill-turn` `turn-mill` (a live-turret lathe: X Z, optional Y and C, a turret whose `live` names the milling spindle that drives it; no B head) |
+| kind | required | `vmc3` `vmc4` `table-table` `head-table` `head-head` `lathe` `mill-turn` `hmc` `turn-mill` (a live-turret lathe: X Z, optional Y and C, a turret whose `live` names the milling spindle that drives it; no B head) |
 | control | required | the forge-post dialect its control speaks (machine and control kept apart) |
 | source | required | where the numbers come from; `taken`, `note` optional |
 | clearance | required | least gap (mm) the collision check holds between bodies |
@@ -73,6 +73,15 @@ joint that positions this spindle as a C axis).
 
 `name`, `link`, `stations`, `index_s` (seconds per station), `center`, `index_axis`; optional `live`
 (the milling spindle that drives live tools).
+
+## `[[machine.pallets]]` (at most one)
+
+An automatic pallet changer (an HMC's APC): `count` (≥ 2), `change_s` (seconds per change; may be
+omitted when cited unknown). Optional: `max_kg` (per pallet), `size = [x, y]`, `max_work =
+[diameter, height]`, and `position_joints` / `position` (where M60 sends the machine first, as the
+changer's). On a machine with pallets, M60 swaps the pallet: the timeline marks it and adds its
+time, after the position move (a checked rapid). M60 elsewhere is refused. Kind `hmc` reads as
+`vmc4` (3 linear and a table rotary) and says what the machine is.
 
 ## `[[machine.toolpost]]`
 

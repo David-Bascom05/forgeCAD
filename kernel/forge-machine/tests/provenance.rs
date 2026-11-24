@@ -417,3 +417,41 @@ fn a_live_turret_lathe_is_a_turn_mill() {
     let e = MachineDef::parse_all(&no_live).unwrap_err().to_string();
     assert!(e.contains("turn-mill"), "{e}");
 }
+
+#[test]
+fn m60_swaps_the_pallet_on_a_machine_with_pallets() {
+    let src = vmc3().replacen(
+        "[[machine.mount]]",
+        "[[machine.pallets]]\ncount = 2\nchange_s = 9\nmax_kg = 400\nsize = [400, 400]\nposition_joints = [\"Z\"]\nposition = [0]\n\n[[machine.mount]]",
+        1,
+    );
+    let m = &MachineDef::parse_all(&src).unwrap()[0];
+    let p = m.pallets.as_ref().unwrap();
+    assert_eq!(
+        (p.count, p.change_s, p.size),
+        (2, Some(9.0), Some([400.0, 400.0]))
+    );
+    assert!(m.cite_paths().iter().any(|c| c == "pallets.change_s"));
+    let mut s = Setup::new(m, Control::for_dialect(m, "fanuc", 1).unwrap()).unwrap();
+    s.wcs = vec![(54, vec![0.0, 0.0, -500.0])];
+    let tl = sim::simulate("G0 X0 Y0 Z-100.\nM60\n", &s).unwrap();
+    assert!(
+        tl.marks
+            .iter()
+            .any(|mk| mk.line == 2 && mk.what == sim::Happening::PalletChange { seconds: 9.0 })
+    );
+    // the Z-up move before the swap is a timed, checked rapid
+    let z = m.joint_index("Z").unwrap();
+    assert!(tl.segments.iter().any(|sg| sg.line == 2 && sg.q1[z] == 0.0));
+    assert!(tl.t_min >= 9.0);
+    // no pallets: M60 is refused
+    let g = &forge_machine::library::builtin_named("generic-vmc3").unwrap();
+    let s2 = Setup::new(g, Control::for_dialect(g, "fanuc", 1).unwrap()).unwrap();
+    assert!(sim::simulate("M60\n", &s2).is_err());
+    // the kind hmc exists (3 linear, one table rotary)
+    assert!(
+        forge_machine::Kind::ALL
+            .iter()
+            .any(|(n, k)| *n == "hmc" && *k == forge_machine::Kind::Hmc)
+    );
+}

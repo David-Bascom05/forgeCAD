@@ -88,13 +88,15 @@ pub enum Kind {
     /// a lathe that also mills: a live or milling spindle, C on the main spindle, optional B head,
     /// optional sub-spindle.
     MillTurn,
+    /// a horizontal machining centre: 3 linear and a table rotary (B), usually with pallets.
+    Hmc,
     /// a live-turret lathe: X and Z (Y optional), C on the spindle optional, a turret whose live
     /// stations a milling spindle drives; no B head.
     TurnMill,
 }
 
 impl Kind {
-    pub const ALL: [(&'static str, Kind); 8] = [
+    pub const ALL: [(&'static str, Kind); 9] = [
         ("vmc3", Kind::Vmc3),
         ("vmc4", Kind::Vmc4),
         ("table-table", Kind::TableTable),
@@ -103,6 +105,7 @@ impl Kind {
         ("lathe", Kind::Lathe),
         ("mill-turn", Kind::MillTurn),
         ("turn-mill", Kind::TurnMill),
+        ("hmc", Kind::Hmc),
     ];
     /// A lathe of some kind: X is a diameter, tools on a turret, plane G18 at the start.
     pub fn turns(self) -> bool {
@@ -237,6 +240,20 @@ pub struct Changer {
     pub position: Vec<(String, f64)>,
 }
 
+/// An automatic pallet changer (an HMC's APC): M60 swaps the pallet in the machining position.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Pallets {
+    pub count: u32,
+    /// Seconds per change. None: cited `unknown` (0 in t_min, reported not checked).
+    pub change_s: Option<f64>,
+    /// Max load per pallet, kg; pallet size [x, y] mm; the largest work [diameter, height] mm.
+    pub max_kg: Option<f64>,
+    pub size: Option<[f64; 2]>,
+    pub max_work: Option<[f64; 2]>,
+    /// Where M60 sends the machine before the swap: (joint, value), as the changer's position.
+    pub position: Vec<(String, f64)>,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MountKind {
     Tool,
@@ -355,6 +372,7 @@ pub struct MachineDef {
     pub spindles: Vec<Spindle>,
     pub turrets: Vec<Turret>,
     pub changer: Option<Changer>,
+    pub pallets: Option<Pallets>,
     pub mounts: Vec<Mount>,
     pub bodies: Vec<Body>,
     /// The joint G43 length compensation moves (a mill's Z). None on a lathe (offsets are X/Z).
@@ -736,7 +754,7 @@ impl MachineDef {
             &m,
             "kind",
             &Kind::ALL,
-            "vmc3 | vmc4 | table-table | head-table | head-head | lathe | mill-turn | turn-mill",
+            "vmc3 | vmc4 | table-table | head-table | head-head | lathe | mill-turn | turn-mill | hmc",
         )?;
         let control = need_text(
             t,
@@ -871,6 +889,56 @@ impl MachineDef {
                 name: tn,
             });
         }
+        let pallets = match tables(t, "pallets") {
+            [] => None,
+            [p] => {
+                let rec = format!("{m} pallets");
+                let count = need_num(p, &rec, "count", "give `count`, the number of pallets")?;
+                if count < 2.0 || count.fract() != 0.0 {
+                    return Err(DefError::Bad {
+                        record: rec,
+                        field: "count",
+                        why: "must be a whole number, at least 2".into(),
+                    });
+                }
+                let pj = texts(p, "position_joints").unwrap_or_default();
+                let pv = nums(p, "position").unwrap_or_default();
+                if pj.len() != pv.len() {
+                    return Err(rec_err(
+                        &rec,
+                        "position",
+                        "give one value per joint of `position_joints`",
+                    ));
+                }
+                Some(Pallets {
+                    count: count as u32,
+                    change_s: match opt_num(
+                        p,
+                        &rec,
+                        "change_s",
+                        "give `change_s`, seconds per pallet change, or cite it unknown",
+                        "pallets.change_s",
+                        &unk,
+                    )? {
+                        Some(v) => Some(positive(&rec, "change_s", v)?),
+                        None => None,
+                    },
+                    max_kg: match num(p, "max_kg") {
+                        Some(v) => Some(positive(&rec, "max_kg", v)?),
+                        None => None,
+                    },
+                    size: vec_n::<2>(p, &rec, "size")?,
+                    max_work: vec_n::<2>(p, &rec, "max_work")?,
+                    position: pj.into_iter().zip(pv).collect(),
+                })
+            }
+            _ => {
+                return Err(DefError::Shape {
+                    machine: name,
+                    why: "more than one [[machine.pallets]]".into(),
+                });
+            }
+        };
         let changer = match tables(t, "changer") {
             [] => None,
             [c] => {
@@ -1162,6 +1230,7 @@ impl MachineDef {
         }
         let def = MachineDef {
             zones,
+            pallets,
             peck_clear: nonneg("peck_clear")?,
             chip_lift: nonneg("chip_lift")?,
             real: boolean(t, "real").unwrap_or(false),
@@ -1232,6 +1301,11 @@ impl MachineDef {
                 out.push(format!("changer.{f}"));
             }
         }
+        if self.pallets.is_some() {
+            for f in ["count", "change_s"] {
+                out.push(format!("pallets.{f}"));
+            }
+        }
         for mt in &self.mounts {
             out.push(format!("mount.{}.at", mt.name));
         }
@@ -1290,6 +1364,7 @@ impl MachineDef {
                 (Some("machine"), Some(_), None) => true,
                 (Some("changer"), Some("position"), None) => self.changer.is_some(),
                 (Some("zone"), Some(n), None) => self.zones.iter().any(|z| z.name == n),
+                (Some("pallets"), Some(_), None) => self.pallets.is_some(),
                 _ => false,
             }
         };
@@ -1529,7 +1604,7 @@ impl MachineDef {
         };
         let ok = match self.kind {
             Kind::Vmc3 => lin == 3 && rot_h + rot_t == 0 && mill >= 1 && turn == 0,
-            Kind::Vmc4 => lin == 3 && rot_h == 0 && rot_t == 1 && mill >= 1 && turn == 0,
+            Kind::Vmc4 | Kind::Hmc => lin == 3 && rot_h == 0 && rot_t == 1 && mill >= 1 && turn == 0,
             Kind::TableTable => {
                 lin == 3 && rot_h == 0 && rot_t == 2 && carried(Side::Table) && mill >= 1 && turn == 0
             }
@@ -1573,6 +1648,28 @@ impl MachineDef {
         for z in &self.zones {
             if let Some(j) = z.joints.iter().find(|j| self.joint(j).is_none()) {
                 return Err(self.shape(format!("zone `{}` names no joint `{j}`", z.name)));
+            }
+        }
+        let positions = self
+            .changer
+            .iter()
+            .flat_map(|c| c.position.iter().map(|p| ("changer", p)))
+            .chain(
+                self.pallets
+                    .iter()
+                    .flat_map(|p| p.position.iter().map(|q| ("pallets", q))),
+            );
+        for (what, (jn, v)) in positions {
+            let Some(j) = self.joint(jn) else {
+                return Err(self.shape(format!("the {what}' position names no joint `{jn}`")));
+            };
+            if let Some(r) = j.range
+                && !(r[0] <= *v && *v <= r[1])
+            {
+                return Err(self.shape(format!(
+                    "the {what}' position {jn} = {v} is outside its range [{}, {}]",
+                    r[0], r[1]
+                )));
             }
         }
         if let Some(c) = &self.changer {

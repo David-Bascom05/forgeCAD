@@ -56,6 +56,8 @@ pub struct Control {
     /// parameters, e.g. Fanuc 5115/5114) when the record gives them, else forge-post's.
     pub peck_clear: f64,
     pub chip_lift: f64,
+    /// The machine has a pallet changer: M60 swaps the pallet.
+    pub pallets: bool,
 }
 
 impl Control {
@@ -72,6 +74,7 @@ impl Control {
             plane0: 17,
             peck_clear: forge_post::PECK_CLEAR,
             chip_lift: forge_post::CHIP_LIFT,
+            pallets: false,
         }
     }
 
@@ -119,6 +122,7 @@ impl Control {
             plane0: if lathe { 18 } else { 17 },
             peck_clear: def.peck_clear.unwrap_or(forge_post::PECK_CLEAR),
             chip_lift: def.chip_lift.unwrap_or(forge_post::CHIP_LIFT),
+            pallets: def.pallets.is_some(),
         })
     }
 
@@ -229,6 +233,8 @@ pub enum Ev {
     /// A comment's text (the operator's message at a stop, a tool's name).
     Comment(String),
     End,
+    /// M60 on a machine with a pallet changer: the pallet in the machining position is swapped.
+    Pallet,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -604,6 +610,7 @@ pub fn block(raw: &str, ln: usize, c: &Control, st: &mut State, out: &mut Vec<Bl
             9 | 89 => push(out, Ev::Coolant(Coolant::Off)),
             0 | 1 => stop = Some(Ev::Stop { optional: *m == 1 }),
             2 | 30 => stop = Some(Ev::End),
+            60 if c.pallets => push(out, Ev::Pallet),
             m => return Err(ge(ln, format!("M{m} is not in the subset"))),
         }
     }

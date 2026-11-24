@@ -229,15 +229,33 @@ impl Segment {
 /// A non-motion happening on the timeline.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Happening {
-    ToolChange { t: u32, seconds: f64 },
-    Index { station: u32, seconds: f64 },
-    Dwell { seconds: f64 },
-    Spindle { rpm: i64, cw: bool, css: bool },
+    ToolChange {
+        t: u32,
+        seconds: f64,
+    },
+    Index {
+        station: u32,
+        seconds: f64,
+    },
+    Dwell {
+        seconds: f64,
+    },
+    Spindle {
+        rpm: i64,
+        cw: bool,
+        css: bool,
+    },
     SpindleStop,
     Coolant(gcode::Coolant),
-    Stop { optional: bool },
+    Stop {
+        optional: bool,
+    },
     Comment(String),
     End,
+    /// M60: the pallet changer swaps the pallet in the machining position.
+    PalletChange {
+        seconds: f64,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -726,6 +744,31 @@ pub fn simulate_blocks(blocks: &[Block], s: &Setup) -> Result<Timeline, SimError
             Ev::Clamp(c) => rpm_clamp = Some(*c),
             Ev::Coolant(c) => mark(&mut tl, t, Happening::Coolant(*c)),
             Ev::Stop { optional } => mark(&mut tl, t, Happening::Stop { optional: *optional }),
+            Ev::Pallet => {
+                let Some(p) = &def.pallets else {
+                    return Err(SimError::At {
+                        line: ln,
+                        what: "M60 on a machine with no pallet changer".into(),
+                    });
+                };
+                // the move M60 makes first (to the load position), checked like any rapid
+                if !p.position.is_empty() {
+                    let mut q1 = q.clone();
+                    for (jn, v) in &p.position {
+                        if let Some(j) = def.joint_index(jn) {
+                            q1[j] = *v;
+                        }
+                    }
+                    for seg in rapid(s, ln, &q, &q1, t, tool, spindle, &mut tl) {
+                        push_seg(&mut tl, &mut t, &mut t_est, seg);
+                    }
+                    q = q1;
+                }
+                let sec = p.change_s.unwrap_or(0.0);
+                mark(&mut tl, t, Happening::PalletChange { seconds: sec });
+                t += sec;
+                t_est += sec;
+            }
             Ev::End => mark(&mut tl, t, Happening::End),
         }
     }
@@ -1239,6 +1282,7 @@ pub fn timeline_json(tl: &Timeline) -> String {
             Happening::Stop { optional } => format!("\"stop\",\"optional\":{optional}"),
             Happening::Comment(c) => format!("\"comment\",\"text\":\"{}\"", esc(c)),
             Happening::End => "\"end\"".into(),
+            Happening::PalletChange { seconds } => format!("\"pallet\",\"seconds\":{}", num(*seconds)),
         };
         o.push_str(&format!(
             "{{\"line\":{},\"at\":{},\"what\":{what}}}",
@@ -1391,6 +1435,16 @@ pub fn unchecked(def: &MachineDef, tl: &Timeline) -> Vec<Unchecked> {
                         c.change_s.is_some(),
                         m.line,
                         "tool change time",
+                    );
+                }
+            }
+            Happening::PalletChange { .. } => {
+                if let Some(p) = &def.pallets {
+                    note(
+                        "pallets.change_s".into(),
+                        p.change_s.is_some(),
+                        m.line,
+                        "pallet change time",
                     );
                 }
             }
