@@ -36,7 +36,7 @@ struct Fixture {
 fn fixture() -> Fixture {
     let crank = forge_render::load::open("crank", false).unwrap().0;
     let rows = [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0]];
-    let built = Built::new(&[crank.clone()], &[Instance { part: 0, rows, material: 0 }]);
+    let built = Built::new(std::slice::from_ref(&crank), &[Instance { part: 0, rows, material: 0 }]);
     let b = built.bounds.unwrap();
     let centre = (b.min + b.max) * 0.5;
     let radius = (b.max - b.min).len() * 0.5;
