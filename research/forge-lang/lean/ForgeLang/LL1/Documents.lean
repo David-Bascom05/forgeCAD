@@ -3,7 +3,8 @@ import ForgeLang.LL1.Impl
 /-!
 # The machining documents are sentences of the one grammar
 
-A `machining` document (forge-cam-lang, forge-turn-lang) is read by forge-lang's own parser
+A `machining` document (forge-cam-lang, forge-turn-lang) or a `robot` document (forge-lang
+`robot.rs`) is read by forge-lang's own parser
 (`syntax::parse`); its first statement is the bare name `machining`, an expression statement
 (`stmt := expr assigntail`, `assigntail := %empty`), and an `assembly` file's optional first line is
 the same. So the machining and assembly documents add no syntax: the LL(1) theorems of `Impl`
@@ -65,6 +66,25 @@ rough = turn_rough(op1, tool: t1, leave: 0.3, step: 2, to: -56)
 thr   = turn_thread(op1, tool: t1, d: 20, pitch: 1.5, from: 3, to: -30, passes: 8)
 cut   = part_off(op1, tool: t1, at: -55)
 prog  = lathe_program(op1, post: \"fanuc-lathe\", number: 1)
+" = true := by decide +kernel
+
+/-- A robot document (forge-lang `robot.rs`'s own example): bare statement calls, units on
+angles, a source's members read by `.`, a nested pose. -/
+theorem robot_doc_accepted : accepts "robot
+shared eff = 20
+src = source(\"arm2.fg\")
+root(src.base)
+forearm = link(src.fore)
+freeze(src.grip, at: 4)
+merge(forearm, src.finger)
+drop(src.cable)
+collision(src.upper, box(size: (144, 24, 10), at: pose(at: (60, 0, 5))))
+collisions(\"hull\")
+inertial(forearm, mass: 0.42, mass_was: 0.391)
+joint(src.elbow, limit: (-90deg, 90deg), limit_was: (-135deg, 135deg), effort: eff, velocity: 1.5)
+cut(src.j3)
+tool0 = frame(on: forearm, at: pose(at: (144, 0, 5)))
+transmission(src.shoulder, actuator: \"m1\", reduction: 50)
 " = true := by decide +kernel
 
 /-- An assembly's optional header line, then a statement. -/

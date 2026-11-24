@@ -18,10 +18,10 @@ fn fadal_records_are_real_and_cited() {
         }
     }
     let m = builtin_named("fadal-vmc-4020b-ii").unwrap();
-    assert_eq!(m.joint("X").unwrap().range, [-1016.0, 0.0]); // 40 in
-    assert_eq!(m.joint("X").unwrap().rapid, 25400.0); // 1,000 IPM
+    assert_eq!(m.joint("X").unwrap().range, Some([-1016.0, 0.0])); // 40 in
+    assert_eq!(m.joint("X").unwrap().rapid, Some(25400.0)); // 1,000 IPM
     assert_eq!(m.spindles[0].nose[2], 635.0); // 5-25 in: 25 in at the top
-    assert_eq!(m.spindles[0].rpm[1], 10000.0);
+    assert_eq!(m.spindles[0].rpm.unwrap()[1], 10000.0);
     // the page's text says 900 IPM, its table 1,000: recorded
     assert!(
         m.cites
@@ -30,5 +30,5 @@ fn fadal_records_are_real_and_cited() {
     );
     let b = builtin_named("fadal-vmc-8032-50t").unwrap();
     assert_eq!(b.spindles[0].interface, "CAT50");
-    assert_eq!(b.joint("Z").unwrap().rapid, 590.0 * 25.4);
+    assert_eq!(b.joint("Z").unwrap().rapid, Some(590.0 * 25.4));
 }

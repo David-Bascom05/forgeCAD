@@ -1,0 +1,13 @@
+[package]
+name = "forge-probe"
+description = "ForgeCAD probing devices: spindle work probes and tool setters (contact and laser) as cited library records, with their bodies for the collision checks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-tooling = { path = "../forge-tooling" }
+
+[lints]
+workspace = true

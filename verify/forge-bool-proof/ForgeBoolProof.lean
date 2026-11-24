@@ -7,3 +7,4 @@ import ForgeBoolProof.FlatSites.G15
 import ForgeBoolProof.FlatSites.G13
 import ForgeBoolProof.FlatSites.TolOn
 import ForgeBoolProof.Bridge
+import ForgeBoolProof.Assembly

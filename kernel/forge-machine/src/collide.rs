@@ -72,12 +72,18 @@ pub struct Report {
     /// Spans evaluated (the work).
     pub spans: usize,
     pub contacts: Vec<Contact>,
+    /// On a machine whose crash zones are not published (`MachineDef::zones_unpublished`), each
+    /// pair of its own bodies a move does not prove clear: a possible contact, not checked
+    /// (the contact itself is in `contacts` too).
+    pub unchecked: Vec<crate::sim::Unchecked>,
 }
 
-/// The machine's bodies.
+/// The machine's bodies (a body with no envelope, cited unknown, is left out: sim::unchecked
+/// reports it).
 pub fn machine_bodies(def: &MachineDef) -> Vec<CBody> {
     def.bodies
         .iter()
+        .filter(|b| !b.prims.is_empty())
         .map(|b| CBody {
             name: b.name.clone(),
             link: def.joint_index(&b.link),
@@ -566,6 +572,17 @@ pub fn check(s: &Setup, tl: &Timeline, work: &[CBody]) -> Report {
                 rep.pairs_checked += 1;
                 let v = check_span(def, seg, a, b, 0.0, 1.0, def.clearance, MAX_DEPTH, &mut rep.spans);
                 if v != Verdict::Clear {
+                    if a.role == Role::Machine && b.role == Role::Machine && def.zones_unpublished() {
+                        let path = format!("zones ({} / {})", a.name, b.name);
+                        if !rep.unchecked.iter().any(|u| u.path == path) {
+                            rep.unchecked.push(crate::sim::Unchecked {
+                                path,
+                                why: "unknown",
+                                line: seg.line,
+                                check: "possible contact: crash zones not published for this machine",
+                            });
+                        }
+                    }
                     rep.contacts.push(Contact {
                         line: seg.line,
                         segment: si,

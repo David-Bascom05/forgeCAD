@@ -1,0 +1,17 @@
+# Benchmark: a step open on three sides (an open pocket), for clearing from outside the stock: a
+# base with a block on part of it.
+
+shared L = 80
+shared W = 50
+shared t = 10
+shared s = 30
+shared h = 10
+
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = extrude(plan, t)
+sketch bk(on: base.end) {
+  r = rect(corner: (s, 0), size: (L - s, W))
+}
+block = extrude(bk.r, h)

@@ -1,7 +1,7 @@
 machining
 # collar.fg on the generic lathe from a Ø26 bar: face, rough, finish down to the collar's edge
-# (right hand), groove the neck, then a left-hand VBMT finishes up the back chamfer, which faces
-# the chuck and no right-hand tool reaches. Placed: G5 in full.
+# (right hand), groove the neck, then a left-hand VBMT roughs and finishes up the back chamfer,
+# which faces the chuck and no right-hand tool reaches. Placed: G5 in full.
 shared bar = 26
 
 f     = part("collar.fg")
@@ -16,5 +16,6 @@ face  = turn_face(op1, tool: t1, to: 0, step: 1)
 rough = turn_rough(op1, tool: t1, leave: 0.3, step: 2, to: -41)
 fin   = turn_finish(op1, tool: t2, to: -16)
 neck  = turn_groove(op1, tool: t5, from: -30, to: -20, r: 8)
+under = turn_rough(op1, tool: t9, leave: 0.3, step: 1, from: -21, to: -16)
 back  = turn_finish(op1, tool: t9, from: -21, to: -16)
 prog  = lathe_program(op1, post: "fanuc-lathe", number: 3)

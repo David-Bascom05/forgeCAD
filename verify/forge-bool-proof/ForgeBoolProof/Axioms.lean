@@ -27,5 +27,7 @@ import ForgeBoolProof
 #print axioms ForgeBoolProof.booleanCorrectR_of_steps
 #print axioms ForgeBoolProof.bounds_of_faces
 #print axioms ForgeBoolProof.compact_correct
+#print axioms ForgeBoolProof.boundsFaces_boundary
+#print axioms ForgeBoolProof.boundsFaces_of_writes
 #print axioms ForgeBoolProof.FlatSites.TolOn.near_segment
 #print axioms ForgeBoolProof.FlatSites.TolOn.edge_within_of_ends
