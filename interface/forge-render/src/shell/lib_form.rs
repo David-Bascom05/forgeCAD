@@ -503,6 +503,11 @@ pub fn level_head(ui: &mut Ui, t: &Theme, level: &str, n: usize) {
     );
 }
 
+/// The document's length unit word ("mm", "in"), for a table's column heading.
+pub fn doc_units() -> &'static str {
+    DOC_UNITS.with(|c| c.get())
+}
+
 /// Above a library list with no records of the user's own yet: what to do next.
 pub fn empty_levels(ui: &mut Ui, t: &Theme, any_own: bool) {
     if !any_own {

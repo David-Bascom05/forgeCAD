@@ -1058,7 +1058,7 @@ impl Shell {
             egui::UiBuilder::new().max_rect(r.shrink2(vec2(10.0, 8.0))),
             |ui| {
                 if st.lib == "machine" {
-                    editor(ui, &t, &mut st, &mut places);
+                    editor(ui, &t, &mut st, &mut places, true);
                 } else if let Some(tu) = &mut st.tooling {
                     super::machine_tooling::editor(ui, &t, tu)
                 } else if let Some(w) = &mut st.workholding {
@@ -1115,17 +1115,7 @@ impl Shell {
             } else {
                 envelope_overlay(ctx, &t, &st, v);
             }
-            if st.lib == "machine" {
-                egui::Window::new("Jog")
-                    .id(egui::Id::unique("machine:jog"))
-                    .title_bar(false)
-                    .resizable(false)
-                    .collapsible(false)
-                    .fixed_pos(pos2(v.left() + 8.0, v.bottom() - 116.0))
-                    .fixed_size(vec2((v.width() - 16.0).max(200.0), 100.0))
-                    .frame(super::theme::panel_frame(&t))
-                    .show(ctx, |ui| jog(ui, &t, &mut st, &mut places));
-            }
+            // a machine's jog is the sheet's Motion section (nothing floats over the view, §1)
             self.places.extend(places);
             self.machine = Some(st);
             return;
@@ -1174,7 +1164,7 @@ impl Shell {
             .frame(super::theme::panel_frame(&t))
             .show(ctx, |ui| {
                 if st.lib == "machine" {
-                    editor(ui, &t, &mut st, &mut places)
+                    editor(ui, &t, &mut st, &mut places, false)
                 } else if let Some(tu) = &mut st.tooling {
                     super::machine_tooling::editor(ui, &t, tu)
                 } else if let Some(w) = &mut st.workholding {
@@ -1589,7 +1579,9 @@ fn library(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String,
     }
 }
 
-fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+/// The machine's sheet; `docked`: in the environment's properties panel, where the jog is its
+/// Motion section (the floating workspace has its jog bar instead).
+fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>, docked: bool) {
     let Some(d) = st.def.clone() else {
         ui.label(small(t, "No machine: pick one, or make one from a template"));
         return;
@@ -1620,16 +1612,28 @@ fn editor(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, 
             );
         }
     }
-    ui.horizontal_wrapped(|ui| {
-        for tab in Tab::ALL {
-            let r = ui.selectable_label(st.tab == tab, RichText::new(tab.name()).font(sans(12.0)));
-            places.push((format!("machine:tab:{}", tab.name()), r.rect));
-            if r.clicked() {
-                st.tab = tab;
-                st.pick = 0;
-            }
-        }
-    });
+    if docked {
+        egui::CollapsingHeader::new(RichText::new("MOTION").font(semi(10.5)).color(t.ink2))
+            .id_salt("machine:motion")
+            .default_open(true)
+            .show(ui, |ui| motion(ui, t, st, places));
+    }
+    // one line at any width: the strip scrolls sideways rather than wrapping
+    egui::ScrollArea::horizontal()
+        .id_salt("machine:tabs")
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                for tab in Tab::ALL {
+                    let r = ui.selectable_label(st.tab == tab, RichText::new(tab.name()).font(sans(12.0)));
+                    places.push((format!("machine:tab:{}", tab.name()), r.rect));
+                    if r.clicked() {
+                        st.tab = tab;
+                        st.pick = 0;
+                    }
+                }
+            });
+        });
     ui.separator();
     let own = matches!(st.origin, Some((Level::User | Level::Project, _)) | None);
     let mut d2 = d.clone();
@@ -2298,12 +2302,15 @@ fn model_rows(
         }
     });
     ui.horizontal(|ui| {
-        label_w(ui, t, "From");
+        label_w(ui, t, "Source");
         ch |= ui
             .add(
                 egui::TextEdit::singleline(&mut m.from)
-                    .hint_text("where you got it (for your own notes)")
+                    .hint_text("URL or note")
                     .desired_width(200.0),
+            )
+            .on_hover_text(
+                "Where you got the file (the maker's page, your own drawing): kept with it for your notes",
             )
             .lost_focus();
     });
@@ -2316,40 +2323,37 @@ fn model_rows(
             }
         }
     });
-    ui.horizontal(|ui| {
-        label_w(ui, t, "Turn");
-        for (k, a) in ["X ", "Y ", "Z "].iter().enumerate() {
+    // one row per axis: the angle, and a quarter turn that re-places it on the envelope
+    for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+        ui.horizontal(|ui| {
+            label_w(ui, t, &format!("Turn {a}"));
             ch |= ui
                 .add_sized(
-                    [74.0, 20.0],
+                    [80.0, 20.0],
                     egui::DragValue::new(&mut m.rotate[k])
                         .speed(1.0)
-                        .prefix(*a)
                         .suffix("°")
                         .max_decimals(2),
                 )
                 .changed();
-        }
-    });
-    ui.horizontal(|ui| {
-        label_w(ui, t, "");
-        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
             if ui
-                .add_sized([74.0, 18.0], egui::Button::new(format!("{a} +90°")).small())
-                .on_hover_text("a quarter turn, then placed on the envelope again")
+                .button("+90°")
+                .on_hover_text(format!(
+                    "a quarter turn about {a}, then placed on the envelope again"
+                ))
                 .clicked()
             {
                 m.rotate[k] = (m.rotate[k] + 90.0) % 360.0;
                 touch.replace_model = Some(i);
             }
-        }
-    });
-    ui.horizontal(|ui| {
-        label_w(ui, t, "Move");
-        for (k, a) in ["X ", "Y ", "Z "].iter().enumerate() {
-            ch |= super::lib_form::num_edit_in(ui, &mut m.offset[k], "mm", a, Some(74.0));
-        }
-    });
+        });
+    }
+    for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+        ui.horizontal(|ui| {
+            label_w(ui, t, &format!("Move {a}"));
+            ch |= super::lib_form::num_edit_in(ui, &mut m.offset[k], "mm", "", Some(110.0));
+        });
+    }
     ui.horizontal(|ui| {
         label_w(ui, t, "");
         if ui
@@ -2475,6 +2479,18 @@ fn tab_bodies(
     link_row(ui, t, "Link", "machine:b-link", &mut b.link, &links, touch);
     ui.horizontal(|ui| {
         label_w(ui, t, "Envelope");
+        // its size first (the boxes' and cylinders' bounds), then where it comes from
+        if let Some((lo, hi)) = models::prims_bounds(&b.prims) {
+            let doc = super::lib_form::doc_units();
+            let per = forge_units::lookup(doc).map_or(1.0, |(_, top, bottom)| top / bottom);
+            let d = |k: usize| forge_units::trim(((hi[k] - lo[k]) / per * 100.0).round() / 100.0);
+            ui.label(
+                RichText::new(format!("{} × {} × {} {doc}", d(0), d(1), d(2)))
+                    .font(sans(12.0))
+                    .color(t.ink),
+            )
+            .on_hover_text("the envelope's bounds (x × y × z): collisions are found on it");
+        }
         chip(ui, c, &path, touch);
     });
     ui.horizontal(|ui| {
@@ -2544,60 +2560,97 @@ fn tab_bodies(
     });
     let mut del = None;
     let mut ch = false;
-    for (i, p) in b.prims.iter_mut().enumerate() {
-        ui.horizontal(|ui| {
-            match p {
-                Prim::Box { min, max } => {
-                    ui.label(small(t, "box min"));
-                    for x in min.iter_mut() {
-                        ch |= ui.add(egui::DragValue::new(x).speed(1.0)).changed();
+    let mut add: Option<Prim> = None;
+    egui::CollapsingHeader::new(RichText::new("Envelope (advanced)").font(sans(12.0)))
+        .id_salt(("machine:envelope", *pick))
+        .default_open(false)
+        .show(ui, |ui| {
+            for (i, p) in b.prims.iter_mut().enumerate() {
+                match p {
+                    Prim::Box { min, max } => {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("Box {}", i + 1))
+                                    .font(semi(11.0))
+                                    .color(t.ink),
+                            );
+                            if super::ux::icon_button(ui, t, "delete", "Remove this box", false).clicked() {
+                                del = Some(i);
+                            }
+                        });
+                        for (w, v) in [("Min", min), ("Max", max)] {
+                            for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                                ui.horizontal(|ui| {
+                                    label_w(ui, t, &format!("{w} {a}"));
+                                    ch |= super::lib_form::num_edit_in(ui, &mut v[k], "mm", "", Some(110.0));
+                                });
+                            }
+                        }
                     }
-                    ui.label(small(t, "max"));
-                    for x in max.iter_mut() {
-                        ch |= ui.add(egui::DragValue::new(x).speed(1.0)).changed();
+                    Prim::Cyl { base, axis, r, h } => {
+                        ui.horizontal(|ui| {
+                            ui.label(
+                                RichText::new(format!("Cylinder {}", i + 1))
+                                    .font(semi(11.0))
+                                    .color(t.ink),
+                            );
+                            if super::ux::icon_button(ui, t, "delete", "Remove this cylinder", false)
+                                .clicked()
+                            {
+                                del = Some(i);
+                            }
+                        });
+                        for (k, a) in ["X", "Y", "Z"].iter().enumerate() {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, &format!("Base {a}"));
+                                ch |= super::lib_form::num_edit_in(ui, &mut base[k], "mm", "", Some(110.0));
+                            });
+                        }
+                        ui.horizontal(|ui| {
+                            label_w(ui, t, "Axis");
+                            for x in axis.iter_mut() {
+                                ch |= ui
+                                    .add_sized(
+                                        [52.0, 20.0],
+                                        egui::DragValue::new(x).speed(0.01).max_decimals(3),
+                                    )
+                                    .changed();
+                            }
+                        });
+                        for (w, v) in [("Radius", r), ("Height", h)] {
+                            ui.horizontal(|ui| {
+                                label_w(ui, t, w);
+                                ch |= super::lib_form::num_edit_in(ui, v, "mm", "", Some(110.0));
+                            });
+                        }
                     }
                 }
-                Prim::Cyl { base, axis, r, h } => {
-                    ui.label(small(t, "cyl base"));
-                    for x in base.iter_mut() {
-                        ch |= ui.add(egui::DragValue::new(x).speed(1.0)).changed();
-                    }
-                    ui.label(small(t, "axis"));
-                    for x in axis.iter_mut() {
-                        ch |= ui.add(egui::DragValue::new(x).speed(0.01)).changed();
-                    }
-                    ui.label(small(t, "r h"));
-                    ch |= ui.add(egui::DragValue::new(r).speed(1.0)).changed();
-                    ch |= ui.add(egui::DragValue::new(h).speed(1.0)).changed();
+            }
+            ui.horizontal(|ui| {
+                if ui.button("+ Add box").clicked() {
+                    add = Some(Prim::Box {
+                        min: [-50.0; 3],
+                        max: [50.0; 3],
+                    });
                 }
-            }
-            if ui.small_button("x").clicked() {
-                del = Some(i);
-            }
+                if ui.button("+ Add cylinder").clicked() {
+                    add = Some(Prim::Cyl {
+                        base: [0.0; 3],
+                        axis: [0.0, 0.0, 1.0],
+                        r: 50.0,
+                        h: 100.0,
+                    });
+                }
+            });
         });
-    }
     if let Some(i) = del {
         b.prims.remove(i);
         ch = true;
     }
-    ui.horizontal(|ui| {
-        if ui.button("+ box").clicked() {
-            b.prims.push(Prim::Box {
-                min: [-50.0; 3],
-                max: [50.0; 3],
-            });
-            ch = true;
-        }
-        if ui.button("+ cylinder").clicked() {
-            b.prims.push(Prim::Cyl {
-                base: [0.0; 3],
-                axis: [0.0, 0.0, 1.0],
-                r: 50.0,
-                h: 100.0,
-            });
-            ch = true;
-        }
-    });
+    if let Some(p) = add {
+        b.prims.push(p);
+        ch = true;
+    }
     // boxes before cylinders: the reader's order
     if ch {
         b.prims.sort_by_key(|p| matches!(p, Prim::Cyl { .. }));
@@ -2788,6 +2841,62 @@ fn jog(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egu
             ui.add_space(8.0);
         }
     });
+    if moved {
+        st.jogged();
+    }
+}
+
+/// The docked sheet's Motion section: Home and Check travel, what touches at this pose, then a
+/// row per joint (its name, a slider over its range, the value with its unit).
+fn motion(ui: &mut Ui, t: &Theme, st: &mut MachineUi, places: &mut Vec<(String, egui::Rect)>) {
+    let Some(d) = st.def.clone() else { return };
+    let mut moved = false;
+    ui.horizontal(|ui| {
+        let r = ui.button("Home");
+        places.push(("machine:home".into(), r.rect));
+        if r.clicked() {
+            st.q = d.joints.iter().map(|j| j.home).collect();
+            moved = true;
+        }
+        let r = ui.add_enabled(st.problem.is_none(), egui::Button::new("Check travel"));
+        places.push(("machine:check".into(), r.rect));
+        if r.clicked() {
+            st.run_check();
+        }
+    });
+    let (line, col) = if st.problem.is_some() {
+        ("fix the definition to jog and check".to_string(), t.error)
+    } else if st.live.is_empty() {
+        ("No contact at this pose".to_string(), t.success)
+    } else {
+        let s: Vec<String> = st
+            .live
+            .iter()
+            .map(|(a, b, hit)| format!("{a} / {b} {}", if *hit { "touch" } else { "near" }))
+            .collect();
+        (format!("Contact: {}", s.join(", ")), t.error)
+    };
+    ui.label(RichText::new(line).font(sans(11.0)).color(col));
+    let w = (ui.available_width() - 84.0 - 16.0).max(120.0);
+    for (i, j) in d.joints.iter().enumerate() {
+        if i >= st.q.len() {
+            break;
+        }
+        let (lo, hi) = (j.range[0].min(j.range[1]), j.range[0].max(j.range[1]));
+        ui.horizontal(|ui| {
+            label_w(ui, t, &j.name);
+            ui.spacing_mut().slider_width = (w - 90.0).max(60.0);
+            let u = if j.ty == JointType::Linear { " mm" } else { "°" };
+            // a copy: the slider rounds what it shows, and only a move by the user may change q
+            let mut x = st.q[i];
+            let r = ui.add(egui::Slider::new(&mut x, lo..=hi).suffix(u).max_decimals(3));
+            places.push((format!("machine:jog:{}", j.name), r.rect));
+            if r.changed() && (r.dragged() || r.has_focus() || r.clicked()) {
+                st.q[i] = x;
+                moved = true;
+            }
+        });
+    }
     if moved {
         st.jogged();
     }
