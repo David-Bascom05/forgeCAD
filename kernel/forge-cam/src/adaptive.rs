@@ -810,7 +810,13 @@ pub fn adaptive(
                 start = Some([p[0], p[1], h.clear]);
             }
             let cur = at.unwrap_or([p[0], p[1], h.clear]);
-            let target = [p[0], p[1], z];
+            // a start within half a radius of where the tool already is, at depth and parked
+            // clear: the pass starts where the tool is (no jog of a millimetre between passes)
+            let snap = cur[2] == z
+                && ((p[0] - cur[0]).powi(2) + (p[1] - cur[1]).powi(2)).sqrt() < f.r
+                && f.ok(cur[0], cur[1])
+                && !f.disk_has_material(cur[0], cur[1], z);
+            let target = if snap { cur } else { [p[0], p[1], z] };
             let retrace = if retrace_ok && cur[2] == z && !f.link_clear([cur[0], cur[1]], p, z) {
                 retrace_link(
                     cur,
@@ -824,7 +830,9 @@ pub fn adaptive(
             } else {
                 None
             };
-            if cur[2] == z && f.link_clear([cur[0], cur[1]], p, z) {
+            if snap {
+                // no link: the pass begins here
+            } else if cur[2] == z && f.link_clear([cur[0], cur[1]], p, z) {
                 let l = PMove::Line {
                     to: target,
                     f: lf,
