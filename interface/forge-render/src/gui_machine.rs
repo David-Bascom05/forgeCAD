@@ -144,6 +144,7 @@ fn machine_bounds(def: &forge_machine::def::MachineDef) -> Option<crate::frame::
         .flat_map(|p| match p {
             Prim::Box { min, max } => vec![*min, *max],
             Prim::Cyl { base, axis, r, h } => crate::shell::lib_form::cyl_pts(*base, *axis, *r, *h),
+            Prim::OBox { o, axes, size } => (0..8u8).map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from))).collect::<Vec<_>>(),
         });
     crate::frame::Bounds::of(pts.map(|p| p.map(|x| x as f32)))
 }

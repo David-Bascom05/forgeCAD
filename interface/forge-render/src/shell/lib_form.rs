@@ -402,6 +402,7 @@ pub fn machine_thumb(def: &forge_machine::def::MachineDef) -> Vec<Vec<[f64; 2]>>
         .map(|p| match p {
             Prim::Box { min, max } => rect_xz(&[*min, *max]),
             Prim::Cyl { base, axis, r, h } => rect_xz(&cyl_pts(*base, *axis, *r, *h)),
+            Prim::OBox { o, axes, size } => rect_xz(&(0..8u8).map(|i| Prim::obox_at(o, axes, size, [i & 1, (i >> 1) & 1, (i >> 2) & 1].map(f64::from))).collect::<Vec<_>>()),
         })
         .collect()
 }

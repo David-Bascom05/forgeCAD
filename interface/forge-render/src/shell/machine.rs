@@ -1835,6 +1835,7 @@ fn tab_joints(ui: &mut Ui, c: &Ctx, d: &mut MachineDef, pick: &mut usize, touch:
                 preference: 0,
                 reset: Reset::Never,
                 diameter: false,
+                reference: None,
             });
             for f in ["range", "rapid", "max_feed"] {
                 touch.unknown.push(format!("joint.{name}.{f}"));
@@ -2205,6 +2206,8 @@ fn tab_bodies(
                 }],
                 part: None,
                 ignore: Vec::new(),
+                clearance: None,
+                passes_stock: false,
             });
             touch.unknown.push(format!("body.{n}"));
             *pick = d.bodies.len() - 1;
@@ -2299,6 +2302,19 @@ fn tab_bodies(
                     ui.label(small(t, "r h"));
                     ch |= ui.add(egui::DragValue::new(r).speed(1.0)).changed();
                     ch |= ui.add(egui::DragValue::new(h).speed(1.0)).changed();
+                }
+                Prim::OBox { o, axes, size } => {
+                    // an oriented box (a fixture's angled block): its corner and sides edited;
+                    // its axes shown, set in the record (they must stay orthonormal)
+                    ui.label(small(t, "obox corner"));
+                    for x in o.iter_mut() {
+                        ch |= ui.add(egui::DragValue::new(x).speed(1.0)).changed();
+                    }
+                    ui.label(small(t, "sides"));
+                    for x in size.iter_mut() {
+                        ch |= ui.add(egui::DragValue::new(x).speed(1.0).range(0.0..=f64::MAX)).changed();
+                    }
+                    ui.label(small(t, &format!("axes {axes:?}")));
                 }
             }
             if ui.small_button("x").clicked() {
