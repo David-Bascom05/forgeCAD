@@ -3,6 +3,12 @@
 # path against a baseline (REGRESSED: more than 0.5% over it), and the hash of every regen's exact
 # result against tools/speed/bits.txt (CHANGED: expected only when geometry changes on purpose).
 # usage: tools/speed/gate.sh [baseline]    exit 1 regressed, 2 bits changed, 3 both
+#
+# The committed baseline-valgrind.txt is a REFERENCE (main's counts on one machine), not the
+# pass/fail comparison: another container's glibc or CPU can move whole-process lines by tens to
+# hundreds of Ir. A branch is judged by measuring main and the branch on the same machine
+# (`gate.sh --save` on each into a scratch copy) and comparing them with tools/speed/band.py, whose
+# band is the trains' rule. bits.txt, by contrast, must match exactly everywhere.
 #        tools/speed/gate.sh --save        rewrite the counter's baseline and bits.txt
 #
 # Two counters, each with its own baseline (their counts are not comparable with each other):
