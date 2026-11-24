@@ -41,7 +41,7 @@ impl Kind for Toy {
 }
 
 fn tmp(t: &str) -> std::path::PathBuf {
-    let d = std::env::temp_dir().join(format!("forge-library-{t}-{}", std::process::id()));
+    let d = forge_dirs::temp_dir().join(format!("forge-library-{t}-{}", forge_dirs::process_id()));
     let _ = std::fs::remove_dir_all(&d);
     std::fs::create_dir_all(&d).unwrap();
     d
