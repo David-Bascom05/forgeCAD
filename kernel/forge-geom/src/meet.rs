@@ -1190,21 +1190,35 @@ fn add_critical(eq: &Eqn, other: &Surface, events: &mut Vec<(f64, bool)>) {
         })
     };
     let mut found: Vec<(f64, bool)> = Vec::new();
-    for &u in &us[..n] {
+    // (one angle met twice, as a ± pair often lands, is asked once)
+    let us = &mut us[..n];
+    us.sort_by(f64::total_cmp);
+    for i in 0..us.len() {
+        let u = us[i];
+        if (i > 0 && u - us[i - 1] <= 1e-9) || near(events, u) {
+            continue;
+        }
         let cu = eq.count(u);
+        // inside a loop's span of u its ruling crosses it twice at least: a ruling that meets the
+        // curve nowhere is inside no loop
+        if cu == 0 {
+            continue;
+        }
         for dir in [-1.0, 1.0] {
-            let mut step = 1e-5;
+            // out from u by doubling steps to the count's first change, then bisected (a keeps
+            // u's count, b does not)
+            let (mut a, mut step) = (u, 1e-5);
             let mut far = None;
             while step <= dmath::PI {
                 if eq.count(u + dir * step) != cu {
                     far = Some(u + dir * step);
                     break;
                 }
+                a = u + dir * step;
                 step *= 2.0;
             }
             let Some(mut b) = far else { continue };
-            let mut a = u;
-            for _ in 0..60 {
+            while (b - a).abs() > 1e-12 {
                 let m = 0.5 * (a + b);
                 if eq.count(m) == cu {
                     a = m;
