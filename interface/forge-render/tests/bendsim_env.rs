@@ -221,7 +221,9 @@ fn a_flange_closing_on_a_straight_punch_shows_in_red() {
 /// nothing cut off.
 #[test]
 fn a_small_window_holds_it_all() {
-    let Ok(mut h) = Headless::new((1024.0, 700.0), 1.0) else { return };
+    let Ok(mut h) = Headless::new((1024.0, 700.0), 1.0) else {
+        return;
+    };
     h.step();
     enter(&mut h, CHANNEL, "small", "trumpf-trubend-5130", None);
     {
@@ -233,6 +235,52 @@ fn a_small_window_holds_it_all() {
     shot(&mut h, "09-small-window-1024x700");
     let view = h.gui.shell.place("env:bendsim:view").expect("the view");
     let dock = h.gui.shell.place("env:bendsim:properties").expect("the sheet");
-    assert!(view.right() <= dock.left() + 1.0, "the view stops at the docked sheet");
+    assert!(
+        view.right() <= dock.left() + 1.0,
+        "the view stops at the docked sheet"
+    );
     assert!(view.width() > 300.0, "the view keeps room: {view:?}");
+}
+
+/// The view cube in the simulation (David): its LEFT and RIGHT along the bend line, so LEFT is
+/// the view down the bend; and see-through: the first flange, between the eye and the second
+/// bend from the backgauge's side, drawn as a ghost; solid again with see-through off.
+#[test]
+fn the_cube_looks_down_the_bend_and_what_hides_it_is_seen_through() {
+    let Some(mut h) = headless() else { return };
+    enter(&mut h, CHANNEL, "cube", "trumpf-trubend-5130", None);
+    {
+        let b = h.gui.shell.sheet.bend_sim.as_mut().unwrap();
+        b.step = 1;
+        b.t = 0.7;
+    }
+    frame(&mut h, Framing::Work);
+    for _ in 0..4 {
+        h.step();
+    }
+    // the cube's LEFT, as a click on it goes: down the bend line (along the bed)
+    let v = h.gui.view.as_mut().unwrap();
+    assert_eq!(v.nav.orient, forge_render::gui::gui_bendsim::bend_orient());
+    let left = v.nav.orient.world([-1, 0, 0]);
+    assert_eq!((left[0], left[2]), (0, 0), "LEFT is along the bed: {left:?}");
+    let cam = forge_render::nav::region_view_as(v.nav.camera, left, &v.nav.orient);
+    v.nav.jump_to(cam);
+    let f = cam.axes().0;
+    assert!(f[1].abs() > 0.99, "looking along the bend line: {f:?}");
+    shot(&mut h, "10-down-the-bend-line");
+    // from the operator's side and above, the part's first flange and web stand in front of
+    // the second bend: seen through
+    let v = h.gui.view.as_mut().unwrap();
+    let mut c = v.nav.camera;
+    c.yaw = 150f32.to_radians();
+    c.pitch = 30f32.to_radians();
+    v.nav.jump_to(c);
+    shot(&mut h, "11-seen-through");
+    let n = h.gui.bend.ghosts.len();
+    assert!(n > 0, "a flange between the eye and the bend is seen through");
+    h.gui.shell.sheet.bend_sim.as_mut().unwrap().see_through = false;
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(h.gui.bend.ghosts.is_empty(), "off: everything solid");
 }

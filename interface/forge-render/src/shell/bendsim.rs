@@ -89,6 +89,13 @@ pub struct BendSimUi {
     pub frame: Option<Framing>,
     /// The panel's page shown.
     pub pane: Pane,
+    /// Follow bend: each new step framed afresh (off: the eye is the user's).
+    pub follow: bool,
+    /// See-through: what stands between the eye and the bend being made drawn as a ghost, at
+    /// `opacity`; with `see_press`, the press's frame too.
+    pub see_through: bool,
+    pub opacity: f32,
+    pub see_press: bool,
     /// The tool library shows only what fits the press and the part.
     pub fit_only: bool,
     /// The planner's ranked programs asked for (the ribbon's Suggest Order): their list opened.
@@ -195,6 +202,10 @@ impl BendSimUi {
             frame: None,
             settle: 0,
             pane: Pane::Program,
+            follow: false,
+            see_through: true,
+            opacity: 0.25,
+            see_press: false,
             fit_only: true,
             all_checks: false,
             suggest: false,
@@ -252,6 +263,10 @@ impl BendSimUi {
             frame: None,
             settle: 0,
             pane: Pane::Program,
+            follow: false,
+            see_through: true,
+            opacity: 0.25,
+            see_press: false,
             fit_only: true,
             all_checks: false,
             suggest: false,
@@ -1718,6 +1733,36 @@ pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
             ))
             .color(egui::Color32::from_gray(230)),
         );
+        // the view's own settings, at its foot: follow the bend, see through what hides it
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if st.see_through {
+                ui.add(
+                    egui::Slider::new(&mut st.opacity, 0.05..=0.8)
+                        .show_value(false)
+                        .text(egui::RichText::new("opacity").color(egui::Color32::from_gray(200))),
+                )
+                .on_hover_text("how much of what is seen through still shows");
+            }
+            ui.checkbox(
+                &mut st.see_through,
+                egui::RichText::new("See through").color(egui::Color32::from_gray(230)),
+            )
+            .on_hover_text(
+                "what stands between you and the bend being made is drawn faint; a collision stays solid red",
+            );
+            if ui
+                .checkbox(
+                    &mut st.follow,
+                    egui::RichText::new("Follow bend").color(egui::Color32::from_gray(230)),
+                )
+                .on_hover_text("frame each new bend; off, the view stays where you put it")
+                .changed()
+                && st.follow
+            {
+                st.frame = Some(Framing::Work);
+            }
+        });
     });
     let w = ui.available_width().max(100.0);
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 34.0), egui::Sense::click_and_drag());

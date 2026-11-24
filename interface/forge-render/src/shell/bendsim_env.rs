@@ -16,11 +16,12 @@ const PLAY: u16 = 102;
 const NEXT: u16 = 103;
 const AGAIN: u16 = 104;
 const OVERVIEW: u16 = 105;
-const WORK: u16 = 106;
 const MACHINE: u16 = 107;
 const SUGGEST: u16 = 108;
 const WRITE: u16 = 109;
 const LAST: u16 = 110;
+const FOLLOW: u16 = 111;
+const SEE: u16 = 112;
 
 fn tool(name: &'static str, icon: &'static str, action: Option<Action>, on: bool) -> Tool {
     Tool {
@@ -148,8 +149,11 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
         ),
         group(
             "View",
-            vec![tool("Part and Tools", "eye", cmd(WORK), false)],
             vec![tool("Press Overview", "zoom", cmd(OVERVIEW), false)],
+            vec![
+                tool("Follow Bend", "eye", cmd(FOLLOW), b.is_some_and(|b| b.follow)),
+                tool("See Through", "hide", cmd(SEE), b.is_some_and(|b| b.see_through)),
+            ],
         ),
     ]
 }
@@ -318,6 +322,13 @@ pub(super) fn command(s: &mut Shell, c: u16) {
         NEXT => b.go((b.step + 1).min(n.saturating_sub(1))),
         PLAY => b.play(),
         LAST => b.go(n.saturating_sub(1)),
+        FOLLOW => {
+            b.follow = !b.follow;
+            if b.follow {
+                b.frame = Some(super::bendsim::Framing::Work);
+            }
+        }
+        SEE => b.see_through = !b.see_through,
         MACHINE => b.pane = super::bendsim::Pane::Setup,
         SUGGEST => {
             b.pane = super::bendsim::Pane::Program;
@@ -329,7 +340,6 @@ pub(super) fn command(s: &mut Shell, c: u16) {
             }
         }
         OVERVIEW => b.frame = Some(super::bendsim::Framing::Overview),
-        WORK => b.frame = Some(super::bendsim::Framing::Work),
         AGAIN => {
             if let Some(fg) = s.fg.as_ref() {
                 let tooling = b.tooling.clone();

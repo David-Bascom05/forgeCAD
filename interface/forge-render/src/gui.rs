@@ -25,7 +25,7 @@ mod gui_asm;
 #[path = "gui_asmdrag.rs"]
 mod gui_asmdrag;
 #[path = "gui_bendsim.rs"]
-mod gui_bendsim;
+pub mod gui_bendsim;
 #[path = "gui_cam.rs"]
 mod gui_cam;
 #[path = "gui_camsim.rs"]
@@ -1544,7 +1544,11 @@ impl Gui {
                 hud: None,
                 cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
                 face_colours: colours,
-                face_ghosts: &self.vers.ghosts,
+                face_ghosts: if self.bend.showing() {
+                    &self.bend.ghosts
+                } else {
+                    &self.vers.ghosts
+                },
                 marks: &marks,
                 world: &world,
                 behind: &behind,

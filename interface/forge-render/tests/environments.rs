@@ -146,12 +146,18 @@ fn each_document_keeps_the_environment_it_was_left_in() {
     h.step();
     assert_eq!(h.gui.shell.env, None);
     // an environment that is not about the part owns the window: the part's tree goes
-    h.gui.shell.out.push(forge_render::shell::Action::EnterEnv(EnvId::MachineBuilder));
+    h.gui
+        .shell
+        .out
+        .push(forge_render::shell::Action::EnterEnv(EnvId::MachineBuilder));
     for _ in 0..3 {
         h.step();
     }
     assert_eq!(h.gui.shell.env, Some(EnvId::MachineBuilder));
-    assert!(h.gui.shell.place("env:machine-builder:browser").is_some(), "its browser, not the part's tree");
+    assert!(
+        h.gui.shell.place("env:machine-builder:browser").is_some(),
+        "its browser, not the part's tree"
+    );
     assert!(h.gui.shell.place("tool:Finish Machine Builder").is_some());
     shot(&mut h, "05-machine-builder");
     click(&mut h, "tool:Finish Machine Builder");
