@@ -482,6 +482,21 @@ theorem turn_conservative (ie : Name → S → List α → Except Err α)
   have := run_ext_accepted P _ ME _ MT [] [] sts s ρ s' ρ' rs h ha
   simpa using this
 
+/-- forge-lang's drawing document (`drawing/doc.rs`): `x = f(..)` and a nested `f(..)` both call
+from `FUNCTIONS`, nothing else is callable, and a read is a binding's (closed). -/
+def drawingFns : List Name :=
+  ["part", "assembly", "sheet", "base_view", "projected", "section", "detail", "flat_view", "dim", "angle", "radius", "diameter", "hole_note", "ordinate", "baseline", "chain", "center_mark", "center_marks", "centerlines", "centerline", "leader", "note", "balloon", "auto_balloons", "fcf", "datum", "datum_target", "surface", "weld", "edge", "parts_list", "e", "f"]
+
+/-- The drawing built-ins, extended by a later round's: every drawing accepted before means what
+it meant (one table for both a statement's call and a nested one; no bare call statements). -/
+theorem drawing_conservative (ie : Name → S → List α → Except Err α)
+    (is : Name → S → List α → S × Except Err α) (ME : ETab S α) (MT : TTab S α)
+    (sts : List St) (s s' : S) (ρ ρ' : Env α) (rs : List (Except Err Unit))
+    (h : run P (tab drawingFns ie) (tab drawingFns is) [] s ρ sts = (s', ρ', rs)) (ha : Accepted rs) :
+    run P (tab drawingFns ie ++ ME) (tab drawingFns is ++ MT) [] s ρ sts = (s', ρ', rs) := by
+  have := run_ext_accepted P _ ME _ MT [] [] sts s ρ s' ρ' rs h ha
+  simpa using this
+
 /-- No built-in of the machining families, and no header word, is a keyword: each lexes as an
 identifier, so the grammar and the proven parser are unchanged by them. -/
 theorem families_not_keywords :
