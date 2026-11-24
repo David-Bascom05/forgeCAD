@@ -4,6 +4,8 @@
 //! step's stages — the view draws it in 3D (gui_bendsim.rs); these panels choose, order, scrub
 //! and report.
 
+use super::bendsim_cards as cards;
+use super::theme::Theme;
 use forge_brake as fb;
 use forge_brake::catalog::{Catalog, Status};
 use forge_brake::scene::{STAGES, Stage, stage_at};
@@ -37,6 +39,24 @@ pub struct Choice {
     pub keep_tools: bool,
 }
 
+/// The panel's pages.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Pane {
+    /// The machine, its tools and the stations on its bed.
+    Setup,
+    /// The bends in order, each pictured, and the step's results.
+    Program,
+}
+
+/// How the view frames the press.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Framing {
+    /// The part, the punch and the die on its station, the bed's near end in view.
+    Work,
+    /// The whole press: frame, beams, bed and backgauge.
+    Overview,
+}
+
 /// What the environment holds: the simulation, the step shown, where in its motion, and play.
 pub struct BendSimUi {
     pub sim: Result<Sim, String>,
@@ -63,6 +83,18 @@ pub struct BendSimUi {
     pub doc: Option<DocState>,
     /// A place the view is asked to look at (a failure located), taken by the view.
     pub locate: Option<[f64; 3]>,
+    /// A framing asked for (the ribbon's View tools), taken by the view.
+    pub frame: Option<Framing>,
+    /// The panel's page shown.
+    pub pane: Pane,
+    /// The tool library shows only what fits the press and the part.
+    pub fit_only: bool,
+    /// The planner's ranked programs asked for (the ribbon's Suggest Order): their list opened.
+    pub suggest: bool,
+    /// The step's checks all shown, not only failures and those not checked.
+    pub all_checks: bool,
+    /// Each step's picture, for the simulation they were drawn from (its address).
+    pictures: Option<(usize, Vec<cards::Picture>)>,
 }
 
 /// The bending document as last read.
@@ -158,6 +190,12 @@ impl BendSimUi {
             painted: None,
             doc: None,
             locate: None,
+            frame: None,
+            pane: Pane::Program,
+            fit_only: true,
+            all_checks: false,
+            suggest: false,
+            pictures: None,
         };
         if let Some(p) = b.choice.press.clone() {
             b.table_height = b.catalog().and_then(|c| c.press(&p)).and_then(|r| r.table_height);
@@ -208,6 +246,12 @@ impl BendSimUi {
                 errors: run.errors,
             }),
             locate: None,
+            frame: None,
+            pane: Pane::Program,
+            fit_only: true,
+            all_checks: false,
+            suggest: false,
+            pictures: None,
         };
         if let Some(p) = b.choice.press.clone() {
             b.table_height = b.catalog().and_then(|c| c.press(&p)).and_then(|r| r.table_height);
@@ -417,6 +461,7 @@ fn status_mark(s: Option<Status>) -> (&'static str, egui::Color32) {
     match s {
         Some(Status::Published) => ("P", look::PASS),
         Some(Status::Estimate) => ("E", look::WARN),
+        Some(Status::User) => ("Y", egui::Color32::from_rgb(0xA0, 0x80, 0xE0)),
         Some(Status::Conflict) => ("C", look::WARN),
         Some(Status::Unknown) | None => ("U", look::MUTED),
     }
@@ -449,9 +494,20 @@ fn cited(ui: &mut egui::Ui, label: &str, value: String, prov: &fb::catalog::Prov
     }
 }
 
-/// The Setup panel: the machine from the library (or a stand-in), its specs with their
-/// provenance, and the tools it takes.
-pub fn setup_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
+/// A section's heading, as the other environments' panels have them.
+pub fn head(ui: &mut egui::Ui, t: &Theme, text: &str) {
+    ui.add_space(8.0);
+    ui.label(
+        egui::RichText::new(text)
+            .font(super::theme::semi(13.0))
+            .color(t.ink),
+    );
+    ui.add_space(2.0);
+}
+
+/// The Setup panel: the machine from the library (or a stand-in) by its maker's name, its specs
+/// with their provenance, and its tools as a library of cards.
+pub fn setup_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
     let mut redo: Option<(Choice, String)> = None;
     let words = st.machine_words();
     let tooling = st.tooling.clone();
@@ -462,49 +518,30 @@ pub fn setup_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
         }
         return;
     };
-    ui.strong("Machine");
+    head(ui, t, "Machine");
+    let shown_id = choice.press.clone().unwrap_or_else(|| tooling.clone());
     egui::ComboBox::from_id_salt("bendsim-press")
         .selected_text(words)
-        .width(ui.available_width() - 8.0)
+        .width(ui.available_width() - 4.0)
         .show_ui(ui, |ui| {
-            for id in fb::library::IDS {
-                if ui
-                    .selectable_label(
-                        choice.press.is_none() && tooling == id,
-                        format!("{id} (stand-in)"),
-                    )
-                    .clicked()
-                {
-                    redo = Some((
-                        Choice {
-                            press: None,
-                            ..Default::default()
-                        },
-                        id.to_string(),
-                    ));
-                }
-            }
-            ui.separator();
+            ui.label(egui::RichText::new("Press brakes").small().weak());
             for r in &cat.presses {
-                let txt = format!(
-                    "{} {}{}{}",
-                    r.prov.maker,
-                    r.model,
-                    r.press
-                        .as_ref()
-                        .ok()
-                        .and_then(|p| p.max_force)
-                        .map_or(String::new(), |f| format!(" · {:.0} kN", f)),
-                    match &r.press {
-                        Ok(p) => format!(" · {:.0} mm", p.bed_length),
-                        Err(f) => format!(" · UNKNOWN {}", f.join(", ")),
-                    }
-                );
-                let ok = r.press.is_ok();
-                let resp = ui.add_enabled(
-                    ok,
-                    egui::Button::selectable(choice.press.as_deref() == Some(&r.id), txt),
-                );
+                let txt = match &r.press {
+                    Ok(p) => format!(
+                        "{} · {} · {:.0} mm",
+                        cards::press_title(r),
+                        p.max_force
+                            .map_or("force UNKNOWN".into(), |f| format!("{:.0} kN", f)),
+                        p.bed_length
+                    ),
+                    Err(f) => format!("{} · UNKNOWN {}", cards::press_title(r), f.join(", ")),
+                };
+                let resp = ui
+                    .add_enabled(
+                        r.press.is_ok(),
+                        egui::Button::selectable(choice.press.as_deref() == Some(&r.id), txt),
+                    )
+                    .on_hover_text(&r.id);
                 if resp.clicked() {
                     redo = Some((
                         Choice {
@@ -515,11 +552,40 @@ pub fn setup_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
                     ));
                 }
             }
-        });
+            ui.separator();
+            ui.label(
+                egui::RichText::new("Stand-in tooling (not a real maker's)")
+                    .small()
+                    .weak(),
+            );
+            for id in fb::library::IDS {
+                let word = match id {
+                    "std-eu" => "Stand-in European set",
+                    "std-us" => "Stand-in American set",
+                    _ => id,
+                };
+                if ui
+                    .selectable_label(choice.press.is_none() && tooling == id, word)
+                    .on_hover_text(id)
+                    .clicked()
+                {
+                    redo = Some((Choice::default(), id.to_string()));
+                }
+            }
+        })
+        .response
+        .on_hover_text(shown_id);
     if let Some(p) = choice.press.as_deref().and_then(|p| cat.press(p)) {
-        egui::CollapsingHeader::new("Specs (P published, E estimate, C conflict, U unknown)")
+        egui::CollapsingHeader::new("Specs")
             .id_salt("bendsim-specs")
             .show(ui, |ui| {
+                ui.label(
+                    egui::RichText::new(
+                        "P published · E estimate · C conflict · U unknown · Y yours; the source on hover",
+                    )
+                    .small()
+                    .color(t.ink2),
+                );
                 let pv = &p.prov;
                 if let Ok(pr) = &p.press {
                     cited(
@@ -567,85 +633,223 @@ pub fn setup_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
                     ui.small(c.value.clone().unwrap_or_default());
                 }
             });
-        // the tools of its clamping system
-        let fits = |c: &str| p.clamp == "unknown" || c == p.clamp;
-        egui::CollapsingHeader::new("Tooling")
-            .id_salt("bendsim-tools")
-            .default_open(false)
-            .show(ui, |ui| {
-                let mut ch = choice.clone();
-                let mut changed = false;
-                for (kind, list) in [("Punches", true), ("Dies", false)] {
-                    ui.strong(kind);
-                    let rows: Vec<(String, String, Option<String>)> = if list {
-                        cat.punches
-                            .iter()
-                            .filter(|r| fits(&r.clamp))
-                            .map(|r| {
-                                (
-                                    r.id.clone(),
-                                    r.prov.name.clone(),
-                                    r.punch.as_ref().err().map(|f| f.join(", ")),
-                                )
-                            })
-                            .collect()
-                    } else {
-                        cat.dies
-                            .iter()
-                            .filter(|r| fits(&r.clamp))
-                            .map(|r| {
-                                (
-                                    r.id.clone(),
-                                    r.prov.name.clone(),
-                                    r.die.as_ref().err().map(|f| f.join(", ")),
-                                )
-                            })
-                            .collect()
-                    };
-                    let sel = if list { &mut ch.punches } else { &mut ch.dies };
-                    for (id, name, unknown) in rows {
-                        let defaults: Vec<&str> = cat.default_tools(p, list);
-                        let mut on = unknown.is_none()
-                            && match sel.as_ref() {
-                                Some(s) => s.contains(&id),
-                                None => defaults.contains(&id.as_str()),
-                            };
-                        let label = match &unknown {
-                            Some(f) => format!("{id} {name} — UNKNOWN: {f}"),
-                            None => format!("{id} {name}"),
-                        };
-                        if ui
-                            .add_enabled(unknown.is_none(), egui::Checkbox::new(&mut on, label))
-                            .changed()
-                        {
-                            let all: Vec<String> = defaults.iter().map(|x| x.to_string()).collect();
-                            let mut s = sel.clone().unwrap_or(all);
-                            if on {
-                                s.push(id.clone());
-                            } else {
-                                s.retain(|x| x != &id);
-                            }
-                            *sel = Some(s);
-                            changed = true;
-                        }
-                    }
-                }
-                if changed {
-                    redo = Some((ch, tooling.clone()));
-                }
-            });
+        layout_ui(ui, t, st);
+        let needs = st.sim.as_ref().ok().and_then(cards::needs);
+        // the open height only where it is checked: unknown clamp heights leave it open
+        let open = p
+            .press
+            .as_ref()
+            .ok()
+            .filter(|x| !x.unchecked.iter().any(|u| u == "open_height"))
+            .map(|x| x.open_height);
+        let mut fit_only = st.fit_only;
+        if let Some(c) = tool_library(ui, t, &cat, p, &choice, needs, open, &mut fit_only) {
+            redo = Some((c, tooling.clone()));
+        }
+        st.fit_only = fit_only;
     }
     if let Some((c, t)) = redo {
         st.redo(c, &t);
     }
-    layout_ui(ui, st);
 }
 
-/// The tooling layout along the bed (with a bending document): each station's place and stack
-/// lengths, dragged on the bed or typed; the bed's and the housings' extent; each station's stack
-/// load capacity against the most force a step at it takes. Every change is a SetArg on the
+/// A card's row: id, title, values, load, drawn section, geometry known, fits.
+type Row = (
+    String,
+    String,
+    String,
+    String,
+    Option<fb::scene::Mesh>,
+    bool,
+    bool,
+);
+
+/// The press's tools as cards (its clamping system's): each with its drawn cross-section, its
+/// maker's name, angle, radius, height and rated load; a click puts it in the set the planner
+/// chooses from or takes it out. Filtered, unless asked, to what fits: the clamping system, a
+/// known geometry, the part's sharpest angle and smallest radius (the rules' own sides), and
+/// punch and die together under the open height where it is checked. Returns a new choice.
+#[allow(clippy::too_many_arguments)]
+fn tool_library(
+    ui: &mut egui::Ui,
+    t: &Theme,
+    cat: &Catalog,
+    p: &fb::catalog::PressRec,
+    choice: &Choice,
+    needs: Option<(f64, f64)>,
+    open: Option<f64>,
+    fit_only: &mut bool,
+) -> Option<Choice> {
+    head(ui, t, "Tooling");
+    ui.checkbox(fit_only, "Only tools that fit this press and part")
+        .on_hover_text("clamping system, known geometry, tip angle and radius against the sharpest bend, punch and die height against the open height");
+    let fits = |c: &str| p.clamp == "unknown" || c == p.clamp;
+    let shortest_die = cat
+        .dies
+        .iter()
+        .filter(|r| fits(&r.clamp))
+        .filter_map(|r| r.die.as_ref().ok().map(|d| d.height))
+        .fold(f64::INFINITY, f64::min);
+    let mut out = None;
+    for punches in [true, false] {
+        let defaults: Vec<&str> = cat.default_tools(p, punches);
+        let sel = if punches { &choice.punches } else { &choice.dies };
+        let chosen = |id: &str| match sel {
+            Some(s) => s.iter().any(|x| x == id),
+            None => defaults.contains(&id),
+        };
+        // (id, title, values, load, mesh, usable, fits)
+        let mut rows: Vec<Row> = Vec::new();
+        if punches {
+            for r in cat.punches.iter().filter(|r| fits(&r.clamp)) {
+                let row = match &r.punch {
+                    Ok(x) => {
+                        let ok = needs
+                            .is_none_or(|(inc, rad)| x.tip_angle <= inc + 1e-9 && x.tip_radius <= rad + 1e-9)
+                            && open.is_none_or(|o| !shortest_die.is_finite() || x.height + shortest_die < o);
+                        (
+                            format!(
+                                "{:.0}° · R{:.1} · h {:.0} mm",
+                                x.tip_angle.to_degrees(),
+                                x.tip_radius,
+                                x.height
+                            ),
+                            x.max_load
+                                .map_or("load not published".into(), |l| format!("{l:.0} kN/m")),
+                            Some(cards::punch_mesh(x)),
+                            true,
+                            ok,
+                        )
+                    }
+                    Err(f) => (
+                        format!("UNKNOWN: {}", f.join(", ")),
+                        String::new(),
+                        None,
+                        false,
+                        false,
+                    ),
+                };
+                rows.push((
+                    r.id.clone(),
+                    cards::punch_title(r),
+                    row.0,
+                    row.1,
+                    row.2,
+                    row.3,
+                    row.4,
+                ));
+            }
+        } else {
+            for r in cat.dies.iter().filter(|r| fits(&r.clamp)) {
+                let row = match &r.die {
+                    Ok(x) => {
+                        let ok = needs.is_none_or(|(inc, _)| x.angle <= inc + 1e-9);
+                        (
+                            format!(
+                                "V{:.0} · {:.0}° · h {:.0} mm",
+                                x.v,
+                                x.angle.to_degrees(),
+                                x.height
+                            ),
+                            x.max_load
+                                .map_or("load not published".into(), |l| format!("{l:.0} kN/m")),
+                            Some(cards::die_mesh(x)),
+                            true,
+                            ok,
+                        )
+                    }
+                    Err(f) => (
+                        format!("UNKNOWN: {}", f.join(", ")),
+                        String::new(),
+                        None,
+                        false,
+                        false,
+                    ),
+                };
+                rows.push((
+                    r.id.clone(),
+                    cards::die_title(r),
+                    row.0,
+                    row.1,
+                    row.2,
+                    row.3,
+                    row.4,
+                ));
+            }
+        }
+        let total = rows.len();
+        let on = rows.iter().filter(|r| r.5 && chosen(&r.0)).count();
+        let shown: Vec<_> = rows
+            .into_iter()
+            .filter(|r| !*fit_only || (r.6 || chosen(&r.0)))
+            .collect();
+        let word = if punches { "Punches" } else { "Dies" };
+        let mut click: Option<(String, bool)> = None;
+        let mut cards_of = |ui: &mut egui::Ui, which: &[&Row]| {
+            // the panel's visible width: wider content would be cut off at its edge
+            let w = (ui.clip_rect().right() - ui.cursor().left() - 6.0)
+                .min(ui.available_width())
+                .max(140.0);
+            for (id, title, values, load, mesh, usable, _) in which.iter().copied() {
+                let is_on = *usable && chosen(id);
+                let r = cards::card(ui, t, id, title, values, load, mesh.as_ref(), is_on, w);
+                if *usable && r.clicked() {
+                    click = Some((id.clone(), is_on));
+                }
+            }
+        };
+        let (used, rest): (Vec<&Row>, Vec<&Row>) = shown.iter().partition(|r| r.5 && chosen(&r.0));
+        egui::CollapsingHeader::new(
+            egui::RichText::new(format!("{word} in use · {on}"))
+                .font(super::theme::semi(11.5))
+                .color(t.ink),
+        )
+        .id_salt(("bendsim-used", punches))
+        .default_open(true)
+        .show(ui, |ui| {
+            if used.is_empty() {
+                ui.label(
+                    egui::RichText::new("none: the planner has nothing to choose from")
+                        .small()
+                        .color(look::WARN),
+                );
+            }
+            cards_of(ui, &used)
+        });
+        egui::CollapsingHeader::new(format!(
+            "Add from the library · {} {} of {total}",
+            rest.len(),
+            if *fit_only { "that fit" } else { "more" }
+        ))
+        .id_salt(("bendsim-cards", punches))
+        .default_open(false)
+        .show(ui, |ui| cards_of(ui, &rest));
+        if let Some((id, was_on)) = click {
+            let all: Vec<String> = defaults.iter().map(|x| x.to_string()).collect();
+            let mut s = sel.clone().unwrap_or(all);
+            if was_on {
+                s.retain(|x| x != &id);
+            } else {
+                s.push(id);
+            }
+            let mut c = choice.clone();
+            if punches {
+                c.punches = Some(s);
+            } else {
+                c.dies = Some(s);
+            }
+            out = Some(c);
+        }
+    }
+    out
+}
+
+/// The tooling layout along the bed (with a bending document): the bed drawn to scale with its
+/// housings, each station's punch above its die as their stacks (each segment, a gap between),
+/// dragged along the bed to place it; the exact values folded away; each station's stack load
+/// capacity against the most force a step at it takes. Every change is a SetArg on the
 /// document's `station` statement.
-pub fn layout_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
+pub fn layout_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
     use forge_lang::error::Op;
     let (Some(doc), Ok(sim)) = (&st.doc, &st.sim) else {
         return;
@@ -654,56 +858,106 @@ pub fn layout_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     if tl.stations.is_empty() {
         return;
     }
+    let cat = st.catalog.as_ref().and_then(|c| c.as_ref().ok());
     let names = doc.stations.clone();
     let mut op: Option<Op> = None;
-    ui.separator();
-    ui.strong("Tooling layout");
+    head(ui, t, "Stations on the bed");
+    ui.label(
+        egui::RichText::new("drag a station along the bed; it snaps to 5 mm")
+            .small()
+            .color(t.ink2),
+    );
     let pr = &tl.press;
     let bed = pr.bed_length;
-    let (w, h) = (ui.available_width().max(120.0), 54.0);
+    let (w, h) = (ui.available_width().max(120.0), 92.0);
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, h), egui::Sense::click_and_drag());
     let p = ui.painter_at(rect);
     let x_of = |y: f64| rect.left() + ((y + 0.5 * bed) / bed) as f32 * rect.width();
     let y_of = |x: f32| f64::from((x - rect.left()) / rect.width()) * bed - 0.5 * bed;
-    p.rect_filled(rect, 2.0, egui::Color32::from_gray(40));
-    // the housing gap
+    p.rect_filled(rect, 4.0, t.field);
+    // the beam (top) and the bed (bottom), the housings at either end
+    let mid = rect.center().y;
+    let beam = egui::Rect::from_min_max(
+        rect.left_top() + egui::vec2(0.0, 4.0),
+        egui::pos2(rect.right(), rect.top() + 12.0),
+    );
+    let table = egui::Rect::from_min_max(
+        egui::pos2(rect.left(), rect.bottom() - 12.0),
+        rect.right_bottom() - egui::vec2(0.0, 4.0),
+    );
+    p.rect_filled(beam, 2.0, t.line);
+    p.rect_filled(table, 2.0, t.line);
     let g = 0.5 * pr.housing_gap;
-    p.line_segment(
-        [
-            egui::pos2(x_of(-g), rect.top()),
-            egui::pos2(x_of(-g), rect.bottom()),
-        ],
-        egui::Stroke::new(1.0, look::WARN),
-    );
-    p.line_segment(
-        [
-            egui::pos2(x_of(g), rect.top()),
-            egui::pos2(x_of(g), rect.bottom()),
-        ],
-        egui::Stroke::new(1.0, look::WARN),
-    );
+    for x in [x_of(-g), x_of(g)] {
+        p.line_segment(
+            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
+            egui::Stroke::new(1.5, look::WARN),
+        );
+    }
     let dragging = ui
         .ctx()
         .memory(|m| m.data.get_temp::<usize>(egui::Id::unique("bendsim-drag")));
+    let live = resp
+        .interact_pointer_pos()
+        .map(|q| (y_of(q.x) / 5.0).round() * 5.0);
+    let mut hover_k = None;
     for (k, s) in tl.stations.iter().enumerate() {
-        let half = 0.5 * s.punch_length.max(s.die_length);
-        let r = egui::Rect::from_min_max(
-            egui::pos2(x_of(s.y - half), rect.top() + 8.0),
-            egui::pos2(x_of(s.y + half), rect.bottom() - 8.0),
-        );
-        let c = if dragging == Some(k) {
-            look::GAUGE
-        } else {
-            look::TOOL
+        let y = match (dragging, live) {
+            (Some(d), Some(y)) if d == k => y,
+            _ => s.y,
         };
-        p.rect_filled(r, 2.0, c);
+        let active = dragging == Some(k);
+        let col = if active { look::GAUGE } else { look::TOOL };
+        let (punch, die) = (&tl.punches[s.punch], &tl.dies[s.die]);
+        // the punch stack hangs from the beam, the die stack stands on the bed
+        for (len, segs, top, bot) in [
+            (s.punch_length, &punch.segments, beam.bottom() + 2.0, mid - 3.0),
+            (s.die_length, &die.segments, mid + 3.0, table.top() - 2.0),
+        ] {
+            for (a, b) in fb::scene::stack_spans(segs, y - 0.5 * len, y + 0.5 * len) {
+                let r =
+                    egui::Rect::from_min_max(egui::pos2(x_of(a) + 0.5, top), egui::pos2(x_of(b) - 0.5, bot));
+                p.rect_filled(r, 1.0, col);
+            }
+        }
+        let whole = egui::Rect::from_min_max(
+            egui::pos2(x_of(y - 0.5 * s.punch_length.max(s.die_length)), rect.top()),
+            egui::pos2(x_of(y + 0.5 * s.punch_length.max(s.die_length)), rect.bottom()),
+        );
+        if resp.hover_pos().is_some_and(|q| whole.contains(q)) {
+            hover_k = Some(k);
+        }
         p.text(
-            r.center(),
+            egui::pos2(whole.center().x, mid),
             egui::Align2::CENTER_CENTER,
             names.get(k).cloned().unwrap_or_default(),
-            egui::FontId::proportional(11.0),
-            egui::Color32::BLACK,
+            super::theme::semi(11.0),
+            t.ink,
         );
+        if active {
+            p.text(
+                egui::pos2(whole.center().x, rect.bottom() - 2.0),
+                egui::Align2::CENTER_BOTTOM,
+                format!("{y:.0} mm"),
+                egui::FontId::proportional(10.0),
+                t.ink,
+            );
+        }
+    }
+    if let Some(k) = hover_k
+        && dragging.is_none()
+    {
+        let s = &tl.stations[k];
+        let (pi, di) = (&tl.punches[s.punch].id, &tl.dies[s.die].id);
+        resp.clone().on_hover_text(format!(
+            "{}\n{}\n{}\nat {:.0} mm · punch {:.0} mm · die {:.0} mm",
+            names.get(k).cloned().unwrap_or_default(),
+            cards::tool_title(cat, pi, true),
+            cards::tool_title(cat, di, false),
+            s.y,
+            s.punch_length,
+            s.die_length
+        ));
     }
     // drag a station along the bed: written when let go
     if resp.drag_started()
@@ -722,12 +976,13 @@ pub fn layout_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
         });
     }
     if resp.drag_stopped()
-        && let (Some(k), Some(pt)) = (dragging, resp.interact_pointer_pos())
+        && let (Some(k), Some(y)) = (dragging, live)
     {
         ui.ctx()
             .memory_mut(|m| m.data.remove::<usize>(egui::Id::unique("bendsim-drag")));
-        let y = (y_of(pt.x) / 5.0).round() * 5.0;
-        if let Some(n) = names.get(k) {
+        if let Some(n) = names.get(k)
+            && (y - tl.stations[k].y).abs() > 1e-9
+        {
             op = Some(Op::SetArg {
                 id: n.clone(),
                 arg: "y".into(),
@@ -735,31 +990,23 @@ pub fn layout_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
             });
         }
     }
-    // per station: its values, typed, and its load
+    // per station: its tools by name, its load; the exact values folded away
     for (k, s) in tl.stations.iter().enumerate() {
         let Some(n) = names.get(k) else { continue };
         let (punch, die) = (&tl.punches[s.punch], &tl.dies[s.die]);
-        ui.horizontal(|ui| {
-            ui.label(format!("{n}: {} / {}", punch.id, die.id));
-        });
-        ui.horizontal(|ui| {
-            for (arg, v0) in [
-                ("y", s.y),
-                ("punch_length", s.punch_length),
-                ("die_length", s.die_length),
-            ] {
-                let mut v = v0;
-                ui.label(arg);
-                let r = ui.add(egui::DragValue::new(&mut v).speed(1.0).suffix(" mm"));
-                if (r.lost_focus() || r.drag_stopped()) && (v - v0).abs() > 1e-9 {
-                    op = Some(Op::SetArg {
-                        id: n.clone(),
-                        arg: arg.into(),
-                        text: format!("{}", (v * 10.0).round() / 10.0),
-                    });
-                }
-            }
-        });
+        ui.label(egui::RichText::new(n).font(super::theme::semi(11.5)).color(t.ink));
+        ui.label(
+            egui::RichText::new(cards::tool_title(cat, &punch.id, true))
+                .small()
+                .color(t.ink2),
+        )
+        .on_hover_text(&punch.id);
+        ui.label(
+            egui::RichText::new(cards::tool_title(cat, &die.id, false))
+                .small()
+                .color(t.ink2),
+        )
+        .on_hover_text(&die.id);
         // the stack's capacity: the least rated load per metre of its punch and die times its
         // length, against the most force a step at it takes (with the material's strength)
         let cap = punch
@@ -777,7 +1024,7 @@ pub fn layout_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
             .fold(None, |m: Option<f64>, f| Some(m.map_or(f, |m| m.max(f))));
         let line = match (cap.is_finite(), most) {
             (true, Some(f)) => (
-                format!("load: {f:.1} kN of {cap:.1} kN the stack takes"),
+                format!("load {f:.1} kN of {cap:.1} kN the stack takes"),
                 if f <= cap { look::PASS } else { look::FAIL },
             ),
             (true, None) => (
@@ -789,7 +1036,30 @@ pub fn layout_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
                 look::MUTED,
             ),
         };
-        ui.colored_label(line.1, line.0);
+        ui.label(egui::RichText::new(line.0).small().color(line.1));
+        egui::CollapsingHeader::new(egui::RichText::new("exact values").small())
+            .id_salt(("bendsim-station-values", k))
+            .default_open(false)
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    for (arg, word, v0) in [
+                        ("y", "at", s.y),
+                        ("punch_length", "punch", s.punch_length),
+                        ("die_length", "die", s.die_length),
+                    ] {
+                        let mut v = v0;
+                        ui.label(word);
+                        let r = ui.add(egui::DragValue::new(&mut v).speed(1.0).suffix(" mm"));
+                        if (r.lost_focus() || r.drag_stopped()) && (v - v0).abs() > 1e-9 {
+                            op = Some(Op::SetArg {
+                                id: n.clone(),
+                                arg: arg.into(),
+                                text: format!("{}", (v * 10.0).round() / 10.0),
+                            });
+                        }
+                    }
+                });
+            });
     }
     if let Some(op) = op
         && let Err(e) = st.doc_op(&op)
@@ -802,7 +1072,7 @@ pub fn layout_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
 /// every edit is an op on its text (reorder: MoveFeature; orientation and station: SetArg),
 /// with the document's undo and redo; without one, the first edit writes it from the program
 /// shown. The planner's ranked programs are offered beside it, applied only by a click.
-pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
+pub fn sequence_ui(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) {
     use forge_lang::error::Op;
     let Ok(sim) = &st.sim else {
         if let Some(d) = &st.doc {
@@ -847,9 +1117,13 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     };
     let mut op: Option<Op> = None;
     let mut go = None;
-    ui.horizontal(|ui| {
-        ui.strong("Program");
-        ui.label(match (&st.doc, st.as_given) {
+    {
+        ui.label(
+            egui::RichText::new("Program")
+                .font(super::theme::semi(13.0))
+                .color(t.ink),
+        );
+        let note = match (&st.doc, st.as_given) {
             (Some(d), _) => format!(
                 "({})",
                 d.path
@@ -860,60 +1134,117 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
             (None, true) => "(no feasible order: the part's own, as given)".into(),
             (None, false) if st.choice.sequence.is_some() => "(edited, not yet written)".into(),
             _ => "(planned)".into(),
-        });
-    });
+        };
+        ui.add(egui::Label::new(egui::RichText::new(note).small().color(t.ink2)).wrap());
+    }
+    // each step's picture, drawn once for this simulation
+    let key = sim as *const Sim as usize;
+    if st.pictures.as_ref().is_none_or(|p| p.0 != key) {
+        st.pictures = Some((key, cards::step_pictures(sim)));
+    }
+    let pics = &st.pictures.as_ref().unwrap().1;
+    let mut moved: Option<(usize, usize)> = None;
+    let row_w = ui.available_width();
     for (i, n) in names.iter().enumerate() {
-        ui.horizontal(|ui| {
-            if ui.small_button("up").clicked() && i > 0 {
-                op = Some(Op::MoveFeature {
-                    id: ids[i].clone(),
-                    before: Some(ids[i - 1].clone()),
-                });
-            }
-            if ui.small_button("dn").clicked() && i + 1 < names.len() {
-                op = Some(Op::MoveFeature {
-                    id: ids[i + 1].clone(),
-                    before: Some(ids[i].clone()),
-                });
-            }
-            let c = if passes[i] { look::PASS } else { look::FAIL };
-            if ui
-                .selectable_label(
-                    st.step == i,
-                    egui::RichText::new(format!("{}. {n}", i + 1)).color(c),
-                )
-                .clicked()
-            {
+        let row = ui.horizontal(|ui| {
+            // the picture is the handle: drag it onto another row to move the bend there
+            let pic = ui
+                .dnd_drag_source(egui::Id::unique(("bendsim-row", i)), i, |ui| {
+                    let (r, _) = ui.allocate_exact_size(egui::vec2(54.0, 44.0), egui::Sense::hover());
+                    let p = ui.painter_at(r);
+                    p.rect_filled(r, 4.0, if st.step == i { t.selection } else { t.field });
+                    let items: Vec<(&fb::scene::Mesh, egui::Color32)> = pics
+                        .get(i)
+                        .map(|v| v.iter().map(|(m, c)| (m, *c)).collect())
+                        .unwrap_or_default();
+                    // scaled to the part, the tools about it
+                    cards::paint_end_on_around(&p, r, &items, 1, 0.15);
+                })
+                .response
+                .on_hover_text("drag to reorder");
+            if pic.clicked() {
                 go = Some(i);
             }
-            let mut r = rotated[i];
-            if ui.checkbox(&mut r, "end for end").changed() {
-                op = Some(Op::SetArg {
-                    id: ids[i].clone(),
-                    arg: "rotate".into(),
-                    text: if r { "true".into() } else { "false".into() },
+            ui.vertical(|ui| {
+                let c = if passes[i] { look::PASS } else { look::FAIL };
+                if ui
+                    .selectable_label(
+                        st.step == i,
+                        egui::RichText::new(format!("{}. {n}", i + 1))
+                            .font(super::theme::semi(12.0))
+                            .color(c),
+                    )
+                    .on_hover_text(&ids[i])
+                    .clicked()
+                {
+                    go = Some(i);
+                }
+                ui.horizontal(|ui| {
+                    let mut r = rotated[i];
+                    if ui.checkbox(&mut r, "end for end").changed() {
+                        op = Some(Op::SetArg {
+                            id: ids[i].clone(),
+                            arg: "rotate".into(),
+                            text: if r { "true".into() } else { "false".into() },
+                        });
+                    }
+                    if !stations.is_empty() {
+                        let shown = at[i]
+                            .and_then(|k| stations.get(k))
+                            .cloned()
+                            .unwrap_or_else(|| "planner".into());
+                        egui::ComboBox::from_id_salt(("bendsim-station", i))
+                            .selected_text(shown)
+                            .width(80.0)
+                            .show_ui(ui, |ui| {
+                                for s in &stations {
+                                    if ui.selectable_label(false, s).clicked() {
+                                        op = Some(Op::SetArg {
+                                            id: ids[i].clone(),
+                                            arg: "at".into(),
+                                            text: s.clone(),
+                                        });
+                                    }
+                                }
+                            });
+                    }
                 });
-            }
-            if !stations.is_empty() {
-                let shown = at[i]
-                    .and_then(|k| stations.get(k))
-                    .cloned()
-                    .unwrap_or_else(|| "planner".into());
-                egui::ComboBox::from_id_salt(("bendsim-station", i))
-                    .selected_text(shown)
-                    .width(70.0)
-                    .show_ui(ui, |ui| {
-                        for s in &stations {
-                            if ui.selectable_label(false, s).clicked() {
-                                op = Some(Op::SetArg {
-                                    id: ids[i].clone(),
-                                    arg: "at".into(),
-                                    text: s.clone(),
-                                });
-                            }
-                        }
-                    });
-            }
+            });
+        });
+        // a row takes a dragged one: it goes where this one is
+        let zone = ui.interact(
+            egui::Rect::from_min_size(
+                row.response.rect.min,
+                egui::vec2(row_w, row.response.rect.height()),
+            ),
+            egui::Id::unique(("bendsim-drop", i)),
+            egui::Sense::hover(),
+        );
+        if let Some(from) = zone.dnd_hover_payload::<usize>()
+            && *from != i
+        {
+            let y = if *from > i {
+                zone.rect.top()
+            } else {
+                zone.rect.bottom()
+            };
+            ui.painter()
+                .hline(zone.rect.x_range(), y, egui::Stroke::new(2.0, t.accent));
+        }
+        if let Some(from) = zone.dnd_release_payload::<usize>()
+            && *from != i
+        {
+            moved = Some((*from, i));
+        }
+    }
+    if let Some((from, to)) = moved {
+        op = Some(Op::MoveFeature {
+            id: ids[from].clone(),
+            before: if from > to {
+                Some(ids[to].clone())
+            } else {
+                ids.get(to + 1).cloned()
+            },
         });
     }
     if let Some(i) = go {
@@ -923,9 +1254,11 @@ pub fn sequence_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     // the planner's ranked programs: offered, applied only by a click
     let mut apply: Option<Vec<String>> = None;
     if !progs.is_empty() {
+        let open = std::mem::take(&mut st.suggest).then_some(true);
         egui::CollapsingHeader::new(format!("Suggested programs ({})", progs.len()))
             .id_salt("bendsim-programs")
             .default_open(false)
+            .open(open)
             .show(ui, |ui| {
                 ui.small("ranked: fewest flips and turns, then stations, then tool changes");
                 for (i, (order, k)) in progs.iter().enumerate() {
@@ -993,129 +1326,300 @@ fn doc_buttons(ui: &mut egui::Ui, st: &mut BendSimUi) {
     });
 }
 
-/// The step's results: tooling, gauge, force, springback and every check. Returns the bend's
-/// name when its "flat pattern" link is clicked.
-pub fn results_ui(ui: &mut egui::Ui, st: &mut BendSimUi) -> Option<String> {
+/// A row of the property sheet: its label, its value (with its unit), its key on hover.
+fn prop(ui: &mut egui::Ui, t: &Theme, label: &str, value: String, key: Option<&str>) {
+    let r = ui.label(egui::RichText::new(label).color(t.ink2));
+    if let Some(k) = key {
+        r.on_hover_text(k);
+    }
+    ui.add(egui::Label::new(egui::RichText::new(value).color(t.ink)).wrap());
+    ui.end_row();
+}
+
+/// The selected bend's properties, docked at the right: the bend, its tooling and station, the
+/// press's part in it, and its checks as a table (Check, Result, Measured, Limit) with human
+/// names and units; failures and checks that could not run first, the passes on asking.
+/// Returns the bend's name when its "flat pattern" link is clicked.
+pub fn bend_sheet(ui: &mut egui::Ui, t: &Theme, st: &mut BendSimUi) -> Option<String> {
     let mut flat = None;
+    let all = st.all_checks;
+    let mut toggle = false;
     let mut locate: Option<(f64, Option<[f64; 3]>)> = None;
     let sim = match &st.sim {
         Ok(s) => s,
         Err(e) => {
-            ui.colored_label(look::FAIL, e);
+            ui.add(egui::Label::new(egui::RichText::new(e).color(look::FAIL)).wrap());
             return None;
         }
     };
     let plan = &sim.plan;
-    ui.colored_label(
-        if plan.feasible { look::PASS } else { look::FAIL },
-        if plan.feasible {
-            "Feasible"
-        } else {
-            "No feasible sequence"
-        },
-    );
     let names = &sim.names;
+    let cat = st.catalog.as_ref().and_then(|c| c.as_ref().ok());
     if let Some(s) = plan.steps.get(st.step) {
-        ui.label(format!(
-            "{}: {:.1}° turn, overbend {:.1}° (springs back to {:.1}°)",
-            names[s.bend],
-            s.angle.to_degrees(),
-            s.overbend.to_degrees(),
-            s.angle.to_degrees()
-        ));
-        ui.label(format!(
-            "punch {} · die {}{}{}",
-            s.punch,
-            s.die,
-            if s.flip { " · flipped" } else { "" },
-            if s.setup.rotate { " · end for end" } else { "" }
-        ));
-        if ui.link("this bend on the flat pattern").clicked() {
+        let ok = s.pass();
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new(format!("Bend {} · {}", st.step + 1, names[s.bend]))
+                    .font(super::theme::semi(14.0))
+                    .color(t.ink),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(
+                    egui::RichText::new(if ok { "passes" } else { "fails" })
+                        .small()
+                        .color(if ok { look::PASS } else { look::FAIL }),
+                );
+            });
+        });
+        ui.label(
+            egui::RichText::new(format!("step {} of {}", st.step + 1, plan.steps.len()))
+                .small()
+                .color(t.ink2),
+        );
+        head(ui, t, "Bend");
+        let known = !sim.tooling.springback.is_empty();
+        egui::Grid::new("bendsim-sheet-bend")
+            .num_columns(2)
+            .spacing([12.0, 4.0])
+            .show(ui, |ui| {
+                prop(
+                    ui,
+                    t,
+                    "Turn",
+                    format!("{:.1}°", s.angle.to_degrees()),
+                    Some("angle"),
+                );
+                prop(
+                    ui,
+                    t,
+                    "Inside radius",
+                    format!(
+                        "{:.2} mm",
+                        sim.model.bends[s.bend].inside_radius(s.angle + s.overbend)
+                    ),
+                    None,
+                );
+                prop(
+                    ui,
+                    t,
+                    "Overbend",
+                    format!("{:.1}°", s.overbend.to_degrees()),
+                    Some("overbend"),
+                );
+                prop(
+                    ui,
+                    t,
+                    "Springback",
+                    if known {
+                        "cited for this material and tooling".into()
+                    } else {
+                        "not known: no cited springback for this material, bent to the turn".into()
+                    },
+                    None,
+                );
+                prop(
+                    ui,
+                    t,
+                    "Part",
+                    format!(
+                        "{}{}",
+                        if s.flip { "flipped" } else { "as it lies" },
+                        if s.setup.rotate { ", end for end" } else { "" }
+                    ),
+                    None,
+                );
+            });
+        if ui.link("Show this bend on the flat pattern").clicked() {
             flat = Some(names[s.bend].clone());
         }
-        if let (Some(pl), Some(dl)) = (s.punch_length, s.die_length) {
-            ui.label(format!("stacks: punch {pl:.0} mm, die {dl:.0} mm"));
-        }
-        if let Some(g) = &s.gauge {
-            ui.label(format!(
-                "backgauge X {:.1} R {:.1} · {} finger(s)",
-                g.x,
-                g.r,
-                g.fingers.len()
-            ));
-        }
-        ui.label(format!(
-            "ram travel {:.1} mm{}",
-            s.travel,
-            s.force.map_or(String::new(), |f| format!(" · force {f:.1} kN"))
-        ));
-        egui::Grid::new("bendsim-checks").striped(true).show(ui, |ui| {
-            for c in &s.checks {
-                let (col, verdict) = if c.pass {
-                    (look::PASS, "pass")
-                } else if c.unchecked.is_some() {
-                    (look::MUTED, "not checked")
-                } else if c.severity == fb::Severity::Warning {
-                    (look::WARN, "warning")
-                } else if c.undecided {
-                    (look::FAIL, "undecided")
-                } else {
-                    (look::FAIL, "fail")
-                };
-                ui.colored_label(col, c.rule.word());
-                ui.colored_label(col, verdict);
-                let ang = matches!(c.rule, fb::Rule::DieAngle | fb::Rule::PunchAngle);
-                let v = |x: f64| {
-                    if ang {
-                        format!("{:.2}°", x.to_degrees())
-                    } else {
-                        format!("{x:.2}")
-                    }
-                };
-                match &c.unchecked {
-                    Some(u) => ui.label(format!("unknown: {u}")),
-                    None => ui.label(format!(
-                        "{} {} {}",
-                        v(c.value),
-                        if c.at_most { "≤" } else { "≥" },
-                        v(c.limit)
-                    )),
-                };
-                ui.horizontal(|ui| {
-                    ui.label(c.tool.clone().unwrap_or_default());
-                    // a failure with a place: the timeline to its instant, the eye on it
-                    if !c.pass
-                        && c.unchecked.is_none()
-                        && (c.at.is_some() || c.phi.is_some())
-                        && ui.link("locate").clicked()
-                    {
-                        let phimax = s.angle + s.overbend;
-                        let t = match c.phase {
-                            Some(fb::Phase::Static) => 0.2,
-                            Some(fb::Phase::Approach) => 0.38,
-                            Some(fb::Phase::Return) => 0.84,
-                            _ => 0.4 + 0.35 * c.phi.map_or(1.0, |f| (f / phimax.max(1e-9)).clamp(0.0, 1.0)),
-                        };
-                        locate = Some((t, c.at));
-                    }
-                });
-                ui.end_row();
-            }
+        head(ui, t, "Tooling");
+        let station = sim
+            .tooling
+            .stations
+            .iter()
+            .position(|x| (x.punch, x.die) == (s.setup.punch, s.setup.die));
+        egui::Grid::new("bendsim-sheet-tools")
+            .num_columns(2)
+            .spacing([12.0, 4.0])
+            .show(ui, |ui| {
+                prop(
+                    ui,
+                    t,
+                    "Punch",
+                    cards::tool_title(cat, &s.punch, true),
+                    Some(&s.punch),
+                );
+                prop(ui, t, "Die", cards::tool_title(cat, &s.die, false), Some(&s.die));
+                if let Some(k) = station {
+                    prop(
+                        ui,
+                        t,
+                        "Station",
+                        format!("{} at {:.0} mm", k + 1, sim.tooling.stations[k].y),
+                        None,
+                    );
+                }
+                if let (Some(pl), Some(dl)) = (s.punch_length, s.die_length) {
+                    prop(
+                        ui,
+                        t,
+                        "Stacks",
+                        format!("punch {pl:.0} mm · die {dl:.0} mm"),
+                        None,
+                    );
+                }
+            });
+        head(ui, t, "Press");
+        egui::Grid::new("bendsim-sheet-press")
+            .num_columns(2)
+            .spacing([12.0, 4.0])
+            .show(ui, |ui| {
+                prop(ui, t, "Ram travel", format!("{:.1} mm", s.travel), Some("travel"));
+                prop(
+                    ui,
+                    t,
+                    "Force",
+                    s.force
+                        .map_or("not known: the material's strength is not cited".into(), |f| {
+                            format!("{f:.1} kN")
+                        }),
+                    Some("force"),
+                );
+                if let Some(g) = &s.gauge {
+                    prop(
+                        ui,
+                        t,
+                        "Backgauge",
+                        format!(
+                            "X {:.1} mm · R {:.1} mm · {} finger(s)",
+                            g.x,
+                            g.r,
+                            g.fingers.len()
+                        ),
+                        None,
+                    );
+                }
+            });
+        // the checks: what failed and what could not be checked; the passes on asking
+        let passing = s.checks.iter().filter(|c| c.pass).count();
+        let shown: Vec<&fb::Check> = s.checks.iter().filter(|c| all || !c.pass).collect();
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            ui.label(
+                egui::RichText::new("Checks")
+                    .font(super::theme::semi(13.0))
+                    .color(t.ink),
+            );
+            ui.label(
+                egui::RichText::new(format!("{passing} of {} pass", s.checks.len()))
+                    .small()
+                    .color(t.ink2),
+            );
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.link(if all { "Failures only" } else { "Show all" }).clicked() {
+                    toggle = true;
+                }
+            });
         });
+        egui::Grid::new("bendsim-checks")
+            .num_columns(3)
+            .striped(true)
+            .spacing([10.0, 4.0])
+            .show(ui, |ui| {
+                for h in ["Check", "Result", "Measured · limit"] {
+                    ui.label(egui::RichText::new(h).small().color(t.ink2));
+                }
+                ui.end_row();
+                for c in &shown {
+                    let (col, verdict) = if c.pass {
+                        (look::PASS, "pass")
+                    } else if c.unchecked.is_some() {
+                        (look::MUTED, "not checked")
+                    } else if c.severity == fb::Severity::Warning {
+                        (look::WARN, "warning")
+                    } else if c.undecided {
+                        (look::FAIL, "undecided")
+                    } else {
+                        (look::FAIL, "fail")
+                    };
+                    ui.label(egui::RichText::new(cards::rule_label(c.rule)).color(t.ink))
+                        .on_hover_text(c.rule.word());
+                    ui.label(egui::RichText::new(verdict).color(col));
+                    ui.label(match &c.unchecked {
+                        Some(_) => "—".to_string(),
+                        None => format!(
+                            "{} {} {}",
+                            cards::rule_value(c.rule, c.value),
+                            if c.at_most { "≤" } else { "≥" },
+                            cards::rule_value(c.rule, c.limit)
+                        ),
+                    });
+                    ui.end_row();
+                }
+            });
+        // why a check could not run, and what each failure is against, in words; a failure
+        // with a place can be located (the timeline to its instant, the eye on it)
+        for c in &shown {
+            let why = match (&c.unchecked, &c.tool) {
+                (Some(u), _) => format!("{}: not checked, {u} unknown", cards::rule_label(c.rule)),
+                (None, Some(x)) if !c.pass => {
+                    format!(
+                        "{}: against {}",
+                        cards::rule_label(c.rule),
+                        cards::body_words(cat, x)
+                    )
+                }
+                _ => continue,
+            };
+            ui.add(egui::Label::new(egui::RichText::new(why).small().color(t.ink2)).wrap());
+            if !c.pass
+                && c.unchecked.is_none()
+                && (c.at.is_some() || c.phi.is_some())
+                && ui
+                    .small_button("Locate")
+                    .on_hover_text("go to the instant and look at it")
+                    .clicked()
+            {
+                let phimax = s.angle + s.overbend;
+                let tt = match c.phase {
+                    Some(fb::Phase::Static) => 0.2,
+                    Some(fb::Phase::Approach) => 0.38,
+                    Some(fb::Phase::Return) => 0.84,
+                    _ => 0.4 + 0.35 * c.phi.map_or(1.0, |f| (f / phimax.max(1e-9)).clamp(0.0, 1.0)),
+                };
+                locate = Some((tt, c.at));
+            }
+        }
     }
+    ui.add_space(8.0);
+    ui.label(
+        egui::RichText::new(if plan.feasible {
+            "The program is feasible"
+        } else {
+            "No feasible order"
+        })
+        .color(if plan.feasible { look::PASS } else { look::FAIL }),
+    );
     for b in &plan.blocking {
-        ui.colored_label(
-            look::FAIL,
-            format!(
-                "{} blocked: {}",
-                names[b.bend],
-                b.checks
-                    .iter()
-                    .map(|c| c.rule.word())
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            ),
+        ui.add(
+            egui::Label::new(
+                egui::RichText::new(format!(
+                    "{} is blocked: {}",
+                    names[b.bend],
+                    b.checks
+                        .iter()
+                        .map(|c| cards::rule_label(c.rule).to_lowercase())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ))
+                .color(look::FAIL),
+            )
+            .wrap(),
         );
+    }
+    if toggle {
+        st.all_checks = !st.all_checks;
     }
     if let Some((t, at)) = locate {
         st.t = t;
@@ -1138,30 +1642,78 @@ pub fn results_ui(ui: &mut egui::Ui, st: &mut BendSimUi) -> Option<String> {
 }
 
 /// The timeline: every step a block, its stages marked; drag to scrub.
+/// A transport button: its icon, its name and key on hover.
+fn transport(ui: &mut egui::Ui, icon: &str, tip: &str) -> egui::Response {
+    let (r, resp) = ui.allocate_exact_size(egui::vec2(28.0, 24.0), egui::Sense::click());
+    let p = ui.painter_at(r);
+    if resp.hovered() {
+        p.rect_filled(r, 4.0, egui::Color32::from_white_alpha(28));
+    }
+    let ink = egui::Color32::from_gray(230);
+    let at = r.center() - egui::vec2(8.0, 8.0);
+    match icon {
+        "play" => {
+            p.add(egui::Shape::convex_polygon(
+                vec![
+                    at + egui::vec2(4.0, 2.0),
+                    at + egui::vec2(14.0, 8.0),
+                    at + egui::vec2(4.0, 14.0),
+                ],
+                ink,
+                egui::Stroke::NONE,
+            ));
+        }
+        "pause" => {
+            for x in [4.0, 10.0] {
+                p.rect_filled(
+                    egui::Rect::from_min_size(at + egui::vec2(x, 2.0), egui::vec2(3.0, 12.0)),
+                    0.5,
+                    ink,
+                );
+            }
+        }
+        _ => super::icons::draw(&p, at, 16.0, icon, 1.5, ink),
+    }
+    resp.on_hover_text(tip)
+}
+
 pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
     let n = st.steps();
     ui.horizontal(|ui| {
-        if ui.button("|<").clicked() {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        if transport(ui, "home", "First bend").clicked() {
             st.go(0);
         }
-        if ui.button("<").clicked() {
+        if transport(ui, "backward", "Previous bend (Left arrow)").clicked() {
             st.go(st.step.saturating_sub(1));
         }
-        if ui.button(if st.playing { "Pause" } else { "Play" }).clicked() {
+        let (icon, tip) = if st.playing {
+            ("pause", "Pause (Space)")
+        } else {
+            ("play", "Play (Space)")
+        };
+        if transport(ui, icon, tip).clicked() {
             st.play();
         }
-        if ui.button(">").clicked() && n > 0 {
+        if transport(ui, "forward", "Next bend (Right arrow)").clicked() && n > 0 {
             st.go((st.step + 1).min(n - 1));
         }
+        if transport(ui, "end", "Last bend").clicked() && n > 0 {
+            st.go(n - 1);
+        }
+        ui.add_space(10.0);
         let (stage, _) = stage_at(st.t);
         let pose = st.pose();
-        ui.label(format!(
-            "step {}/{} · {}{}",
-            st.step + 1,
-            n,
-            stage.word(),
-            pose.map_or(String::new(), |p| format!(" · phi {:.1}°", p.phi.to_degrees()))
-        ));
+        ui.label(
+            egui::RichText::new(format!(
+                "Bend {} of {} · {}{}",
+                st.step + 1,
+                n,
+                stage.word(),
+                pose.map_or(String::new(), |p| format!(" · {:.1}°", p.phi.to_degrees()))
+            ))
+            .color(egui::Color32::from_gray(230)),
+        );
     });
     let w = ui.available_width().max(100.0);
     let (rect, resp) = ui.allocate_exact_size(egui::vec2(w, 34.0), egui::Sense::click_and_drag());
@@ -1192,6 +1744,24 @@ pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
                 egui::pos2(x0 + bw * b as f32, rect.bottom() - 4.0),
             );
             p.rect_filled(r, 0.0, egui::Color32::from_gray(shade));
+            // the stage's name inside its segment, where it fits
+            let word = if s == Stage::Bend {
+                format!("Bend {} · bend", k + 1)
+            } else {
+                s.word().to_string()
+            };
+            let g = p.layout_no_wrap(
+                word,
+                egui::FontId::proportional(10.0),
+                egui::Color32::from_gray(235),
+            );
+            if g.size().x + 6.0 < r.width() {
+                p.galley(
+                    egui::pos2(r.left() + 3.0, r.center().y - 0.5 * g.size().y),
+                    g,
+                    egui::Color32::from_gray(235),
+                );
+            }
         }
         let c = if fails.get(k).copied().unwrap_or(false) {
             look::FAIL
@@ -1228,7 +1798,6 @@ pub fn timeline_ui(ui: &mut egui::Ui, st: &mut BendSimUi) {
 /// Words over the view: the machine, the step and stage, and what fails.
 pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
     let p = ui.painter_at(rect);
-    let words = st.machine_words();
     let Ok(sim) = &st.sim else {
         if let Err(e) = &st.sim {
             p.text(
@@ -1241,19 +1810,20 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
         }
         return;
     };
-    let mut lines = vec![(words, egui::Color32::from_gray(225))];
+    let cat = st.catalog.as_ref().and_then(|c| c.as_ref().ok());
+    let mut lines = vec![];
     if let Some(s) = sim.plan.steps.get(st.step) {
         let (stage, _) = stage_at(st.t);
+        // the caption: which bend, what it makes, where in its motion; the tools are the sheet's
         lines.push((
             format!(
-                "{}. {} · {} · {} on {}",
+                "Bend {} · {} · {:.0}° · {}",
                 st.step + 1,
                 sim.names[s.bend],
-                stage.word(),
-                s.punch,
-                s.die
+                s.angle.to_degrees(),
+                stage.word()
             ),
-            egui::Color32::from_gray(200),
+            egui::Color32::from_gray(230),
         ));
         if stage == Stage::Handle {
             let h = s.checks.iter().find(|c| c.rule == fb::Rule::Handling);
@@ -1268,7 +1838,9 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
                 Some(c) => (
                     format!(
                         "operator handling: not proven clear{}",
-                        c.tool.as_deref().map_or(String::new(), |t| format!(" of {t}"))
+                        c.tool
+                            .as_deref()
+                            .map_or(String::new(), |t| format!(" of {}", cards::body_words(cat, t)))
                     ),
                     look::WARN,
                 ),
@@ -1278,11 +1850,15 @@ pub fn overlay(ui: &egui::Ui, rect: egui::Rect, st: &mut BendSimUi) {
         for c in s.failures() {
             lines.push((
                 format!(
-                    "x {}{}{}",
-                    c.rule.word(),
-                    c.tool.as_deref().map_or(String::new(), |t| format!(" · {t}")),
-                    c.phi
-                        .map_or(String::new(), |f| format!(" at phi {:.1}°", f.to_degrees()))
+                    "{}{}{}",
+                    cards::rule_label(c.rule),
+                    c.tool
+                        .as_deref()
+                        .map_or(String::new(), |t| format!(" · {}", cards::body_words(cat, t))),
+                    c.phi.map_or(String::new(), |f| format!(
+                        " at {:.1}° of the turn",
+                        f.to_degrees()
+                    ))
                 ),
                 look::FAIL,
             ));

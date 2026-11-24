@@ -48,6 +48,14 @@ impl Environment for BendSim {
         content::panels(s, ctx);
     }
 
+    fn dock_width(&self, s: &Shell) -> f32 {
+        content::dock_width(s)
+    }
+
+    fn dock(&self, s: &mut Shell, ui: &mut Ui, r: Rect) {
+        content::dock(s, ui, r);
+    }
+
     fn draw(&self, s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
         content::draw(s, ui, view)
     }

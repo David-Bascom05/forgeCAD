@@ -15,6 +15,12 @@ const BACK: u16 = 101;
 const PLAY: u16 = 102;
 const NEXT: u16 = 103;
 const AGAIN: u16 = 104;
+const OVERVIEW: u16 = 105;
+const WORK: u16 = 106;
+const MACHINE: u16 = 107;
+const SUGGEST: u16 = 108;
+const WRITE: u16 = 109;
+const LAST: u16 = 110;
 
 fn tool(name: &'static str, icon: &'static str, action: Option<Action>, on: bool) -> Tool {
     Tool {
@@ -87,21 +93,44 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
     let b = s.sheet.bend_sim.as_deref();
     let ran = b.is_some_and(|b| b.sim.is_ok());
     let cmd = |c: u16| ran.then_some(Action::Env(EnvId::BendSim, c));
+    let any = b.is_some().then_some(());
     let playing = b.is_some_and(|b| b.playing);
-    let tooling = forge_brake::library::IDS
-        .iter()
-        .enumerate()
-        .map(|(k, id)| {
-            tool(
-                tooling_word(id),
-                "bendtable",
-                Some(Action::Env(EnvId::BendSim, k as u16)),
-                b.is_some_and(|b| b.tooling == *id && b.choice.press.is_none()),
-            )
-        })
-        .collect();
+    let setup = b.is_some_and(|b| b.pane == super::bendsim::Pane::Setup);
+    let written = b.is_some_and(|b| b.doc.is_some());
     vec![
-        group("Stand-in Tooling", vec![], tooling),
+        group(
+            "Machine",
+            vec![tool(
+                "Choose Press",
+                "bendtable",
+                any.map(|_| Action::Env(EnvId::BendSim, MACHINE)),
+                setup,
+            )],
+            vec![tool(
+                "Tooling",
+                "bendtable",
+                any.map(|_| Action::Env(EnvId::BendSim, MACHINE)),
+                false,
+            )],
+        ),
+        group(
+            "Program",
+            vec![tool("Suggest Order", "redo", cmd(SUGGEST), false)],
+            vec![
+                tool(
+                    "Write Program",
+                    "save",
+                    if written { None } else { cmd(WRITE) },
+                    false,
+                ),
+                tool(
+                    "Simulate Again",
+                    "redo",
+                    any.map(|_| Action::Env(EnvId::BendSim, AGAIN)),
+                    false,
+                ),
+            ],
+        ),
         group(
             "Play",
             vec![tool(
@@ -114,17 +143,13 @@ pub(super) fn groups(s: &Shell) -> Vec<Group> {
                 tool("First Bend", "home", cmd(FIRST), false),
                 tool("Previous Bend", "backward", cmd(BACK), false),
                 tool("Next Bend", "forward", cmd(NEXT), false),
+                tool("Last Bend", "end", cmd(LAST), false),
             ],
         ),
         group(
-            "Simulate",
-            vec![tool(
-                "Simulate Again",
-                "redo",
-                Some(Action::Env(EnvId::BendSim, AGAIN)),
-                false,
-            )],
-            vec![],
+            "View",
+            vec![tool("Part and Tools", "eye", cmd(WORK), false)],
+            vec![tool("Press Overview", "zoom", cmd(OVERVIEW), false)],
         ),
     ]
 }
@@ -137,7 +162,6 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
     let t = s.theme;
     let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(egui::vec2(10.0, 8.0))));
     child.set_clip_rect(r);
-    let mut flat = None;
     egui::ScrollArea::vertical()
         .id_salt("env-bendsim-browser")
         .show(&mut child, |ui| {
@@ -146,13 +170,49 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
                     .font(super::theme::semi(13.0))
                     .color(t.ink),
             );
-            super::bendsim::setup_ui(ui, &mut b);
-            ui.separator();
-            super::bendsim::sequence_ui(ui, &mut b);
-            ui.separator();
-            flat = super::bendsim::results_ui(ui, &mut b);
+            use super::bendsim::Pane;
+            // the panel's width: long lines wrap within it
+            ui.set_max_width(r.width() - 24.0);
+            ui.spacing_mut().item_spacing.x = ui.spacing().item_spacing.x.max(6.0);
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                for (pane, word) in [(Pane::Program, "Program"), (Pane::Setup, "Machine & Tools")] {
+                    if ui.selectable_label(b.pane == pane, word).clicked() {
+                        b.pane = pane;
+                    }
+                }
+            });
+            match b.pane {
+                Pane::Setup => super::bendsim::setup_ui(ui, &t, &mut b),
+                Pane::Program => super::bendsim::sequence_ui(ui, &t, &mut b),
+            }
         });
     s.places.push(("env:bendsim:browser".into(), r));
+    s.sheet.bend_sim = Some(b);
+    true
+}
+
+/// The docked properties panel's width: the selected bend's sheet.
+pub(super) fn dock_width(s: &Shell) -> f32 {
+    if s.sheet.bend_sim.is_some() { 340.0 } else { 0.0 }
+}
+
+/// The selected bend's properties, docked at the right.
+pub(super) fn dock(s: &mut Shell, ui: &mut Ui, r: Rect) {
+    let Some(mut b) = s.sheet.bend_sim.take() else {
+        return;
+    };
+    let t = s.theme;
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(egui::vec2(12.0, 10.0))));
+    child.set_clip_rect(r);
+    let mut flat = None;
+    egui::ScrollArea::vertical()
+        .id_salt("env-bendsim-dock")
+        .show(&mut child, |ui| {
+            ui.set_max_width(r.width() - 40.0);
+            flat = super::bendsim::bend_sheet(ui, &t, &mut b);
+        });
+    s.places.push(("env:bendsim:properties".into(), r));
     s.sheet.bend_sim = Some(b);
     // the flat pattern, its bend lines shown, the bend named (picking one line out is a gap)
     if let Some(bend) = flat {
@@ -160,11 +220,38 @@ pub(super) fn browser(s: &mut Shell, ui: &mut Ui, r: Rect) -> bool {
         s.out.push(Action::EnterEnv(EnvId::FlatPattern));
         s.status = format!("Flat Pattern: bend {bend}");
     }
-    true
 }
 
-/// Play's clock.
+/// Play's clock, and the keys (docs/ux/STANDARD.md §9): Space plays or pauses, the left and
+/// right arrows step back and on, F frames the part and tools; not while a field has the keys.
 pub(super) fn panels(s: &mut Shell, ctx: &egui::Context) {
+    if let Some(b) = &mut s.sheet.bend_sim
+        && b.sim.is_ok()
+        && !ctx.egui_wants_keyboard_input()
+    {
+        let n = b.steps();
+        let (space, left, right, f) = ctx.input(|i| {
+            let k = |key| i.key_pressed(key) && i.modifiers.is_none();
+            (
+                k(egui::Key::Space),
+                k(egui::Key::ArrowLeft),
+                k(egui::Key::ArrowRight),
+                k(egui::Key::F),
+            )
+        });
+        if space {
+            b.play();
+        }
+        if left {
+            b.go(b.step.saturating_sub(1));
+        }
+        if right {
+            b.go((b.step + 1).min(n.saturating_sub(1)));
+        }
+        if f {
+            b.frame = Some(super::bendsim::Framing::Work);
+        }
+    }
     if let Some(b) = &mut s.sheet.bend_sim {
         b.tick(f64::from(ctx.input(|i| i.stable_dt)).min(0.1));
         // playing, or moved from outside (the page, the agent): the view has frames to draw
@@ -225,6 +312,19 @@ pub(super) fn command(s: &mut Shell, c: u16) {
         BACK => b.go(b.step.saturating_sub(1)),
         NEXT => b.go((b.step + 1).min(n.saturating_sub(1))),
         PLAY => b.play(),
+        LAST => b.go(n.saturating_sub(1)),
+        MACHINE => b.pane = super::bendsim::Pane::Setup,
+        SUGGEST => {
+            b.pane = super::bendsim::Pane::Program;
+            b.suggest = true;
+        }
+        WRITE => {
+            if let Err(e) = b.write_doc() {
+                s.status = format!("Bend Simulation: {e}");
+            }
+        }
+        OVERVIEW => b.frame = Some(super::bendsim::Framing::Overview),
+        WORK => b.frame = Some(super::bendsim::Framing::Work),
         AGAIN => {
             if let Some(fg) = s.fg.as_ref() {
                 let tooling = b.tooling.clone();
@@ -236,14 +336,5 @@ pub(super) fn command(s: &mut Shell, c: u16) {
                 again(b, fg, id);
             }
         }
-    }
-}
-
-/// A built-in tooling set's word on the ribbon.
-fn tooling_word(id: &str) -> &'static str {
-    match id {
-        "std-eu" => "Stand-in European",
-        "std-us" => "Stand-in American",
-        _ => "Tooling",
     }
 }

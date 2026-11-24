@@ -220,7 +220,15 @@ fn bend_simulation_in_the_view_keeps_its_place() {
     click(&mut h, "tool:Next Bend");
     assert_eq!(h.gui.shell.sheet.bend_sim.as_ref().unwrap().step, 1);
     shot(&mut h, "04-bend-simulation");
-    click(&mut h, "tool:Stand-in American");
+    // a stand-in set, from the machine list (stand-ins are not on the ribbon: STANDARD.md §1)
+    h.gui
+        .shell
+        .sheet
+        .bend_sim
+        .as_mut()
+        .unwrap()
+        .redo(Default::default(), "std-us");
+    h.step();
     let b = h.gui.shell.sheet.bend_sim.as_ref().unwrap();
     assert_eq!(b.tooling, "std-us");
     assert_eq!(b.step, 1, "the step kept across a tooling change");
