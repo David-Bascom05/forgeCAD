@@ -14,6 +14,7 @@ pub mod bendsim;
 mod bendsim_cards;
 mod bendsim_env;
 pub mod cam;
+pub mod capture;
 pub mod content;
 pub mod dialog;
 pub mod docs;
@@ -27,7 +28,6 @@ mod dwgdoc_edit_ui;
 mod dwgdoc_ui;
 pub mod dwgprops;
 mod empty;
-pub mod capture;
 pub mod env;
 pub mod fg;
 pub mod fgasm;
@@ -360,6 +360,9 @@ pub struct Shell {
     pub view_tex: Option<egui::TextureId>,
     /// Laid over `view_tex` when an environment draws the view itself: its view cube.
     pub view_over_tex: Option<egui::TextureId>,
+    /// How much of `view_over_tex` shows (1: all): the Render Studio's fade from its raster
+    /// stand-in to the traced picture.
+    pub view_over_alpha: f32,
     /// The view cube's words, in the view's device pixels: real type over its picture.
     pub cube_labels: Vec<crate::viewcube::Label>,
     pub cube_place: Option<crate::viewcube::Place>,
@@ -463,6 +466,7 @@ impl Default for Shell {
             cube_region: None,
             view_tex: None,
             view_over_tex: None,
+            view_over_alpha: 1.0,
             cube_labels: Vec::new(),
             cube_place: None,
             camera: None,
@@ -588,9 +592,9 @@ impl Shell {
         // short of the view cube: a narrow view (a small window, the properties column open)
         // shows the switches that fit left of it (all of them stay in Settings)
         let ppp = ctx.pixels_per_point();
-        let limit = self
-            .cube_place
-            .map_or(self.view_rect.right(), |c| self.view_rect.min.x + c.at.0 / ppp - 8.0);
+        let limit = self.cube_place.map_or(self.view_rect.right(), |c| {
+            self.view_rect.min.x + c.at.0 / ppp - 8.0
+        });
         let r = egui::Area::new(egui::Id::unique("view-toolbar"))
             .fixed_pos(at)
             .order(egui::Order::Middle)
@@ -801,7 +805,8 @@ impl Shell {
             p.image(tex, self.view_rect, whole, Color32::WHITE);
             // what an environment lays over a picture of its own (the Render Studio's view cube)
             if let Some(over) = self.view_over_tex {
-                p.image(over, self.view_rect, whole, Color32::WHITE);
+                let a = (self.view_over_alpha.clamp(0.0, 1.0) * 255.0).round() as u8;
+                p.image(over, self.view_rect, whole, Color32::from_white_alpha(a));
             }
         }
         self.view_owned = false;

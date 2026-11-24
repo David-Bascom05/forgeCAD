@@ -79,9 +79,25 @@ fn a_click_in_the_view_paints_the_part_with_the_brush() {
     );
     assert!(st.said.ends_with(": Brass"), "{}", st.said);
     h.step();
+    // the trace starts again: until it's readable the raster view, in the same looks, stands in
+    assert!(h.gui.shell.view_over_tex.is_none(), "the noise is shown");
+    assert!(h.gui.shell.studio.samples < forge_render::shell::studio_env::READABLE);
     shot(&h, "painted");
-    // not painting: a click selects as ever and paints nothing
+    for _ in 0..80 {
+        h.step();
+        if h.gui.shell.studio.samples >= 2 * forge_render::shell::studio_env::READABLE {
+            break;
+        }
+    }
+    h.step();
+    assert!(
+        h.gui.shell.view_over_tex.is_some() && h.gui.shell.view_over_alpha == 1.0,
+        "the trace again"
+    );
+    shot(&h, "painted-settled");
+    // not painting: a click paints nothing; it chooses that part's row (lit in the view)
     h.gui.shell.studio.painting = false;
+    let other = h.gui.view.as_ref().unwrap().scene.placements[1].part as usize;
     h.gui
         .view
         .as_mut()
@@ -90,7 +106,14 @@ fn a_click_in_the_view_paints_the_part_with_the_brush() {
         .selected
         .push((1, Entity::Face(0)));
     h.step();
+    assert_eq!(h.gui.shell.studio.selected, vec![other]);
     assert_eq!(h.gui.shell.studio.looks.iter().filter(|l| l.is_some()).count(), 1);
+    // rows chosen in the list stay chosen: the view's pick is taken once
+    h.gui.shell.studio.selected = vec![0, 1, 2];
+    h.step();
+    h.step();
+    assert_eq!(h.gui.shell.studio.selected, vec![0, 1, 2]);
+    shot(&h, "selected");
 }
 
 #[test]
@@ -224,4 +247,73 @@ fn render_image_shows_its_progress_at_once_then_its_result() {
         "{}",
         h.gui.shell.status
     );
+}
+
+/// Pictures for review, only with STUDIO_MODEL_SHOTS=DIR: the rack at 1400 and 480 wide, a filter
+/// typed, applying with the pointer over a part, Overrides open.
+#[test]
+fn shots_for_review() {
+    let Ok(dir) = std::env::var("STUDIO_MODEL_SHOTS") else {
+        return;
+    };
+    for (w, h) in [(1400.0, 860.0), (480.0, 860.0)] {
+        let mut g = match Headless::new((w, h), 1.0) {
+            Ok(g) => g,
+            Err(e) => {
+                eprintln!("skipped: {e}");
+                return;
+            }
+        };
+        g.step();
+        g.gui.open(&format!(
+            "{}/../../examples/rack18u/asm/rack.fg",
+            env!("CARGO_MANIFEST_DIR")
+        ));
+        assert!(g.until(settled));
+        g.gui.env_asked = Some("render".into());
+        for _ in 0..40 {
+            g.step();
+        }
+        let snap = |g: &mut Headless, name: &str| {
+            for _ in 0..4 {
+                g.step();
+            }
+            std::fs::write(format!("{dir}/review-{}-{name}.png", w as u32), g.png().unwrap()).unwrap();
+        };
+        // a filter typed: the groups that hold matches open
+        g.gui.shell.studio.filter = "iso7380".into();
+        snap(&mut g, "filter");
+        g.gui.shell.studio.filter.clear();
+        // applying: the brush chosen, the pointer over a part in the view
+        g.gui.shell.studio.brush = Some("Paint, machine gloss".into());
+        g.gui.shell.studio.painting = true;
+        let c = g.gui.shell.view_rect.center();
+        g.move_to(c.x, c.y);
+        snap(&mut g, "applying");
+        // some looks given: Overrides open; a group open with a part chosen
+        g.gui.shell.studio.painting = false;
+        let n = g.gui.shell.studio.names.len();
+        let frame: Vec<usize> = (0..n)
+            .filter(|&k| g.gui.shell.studio.groups[k] == "frame")
+            .collect();
+        forge_render::shell::studio_model::apply(
+            &mut g.gui.shell.studio,
+            &frame,
+            Some("Paint, machine gloss"),
+        );
+        let hw: Vec<usize> = (0..n)
+            .filter(|&k| g.gui.shell.studio.groups[k] == "hw")
+            .take(3)
+            .collect();
+        forge_render::shell::studio_model::apply(&mut g.gui.shell.studio, &hw, Some("Steel, black oxide"));
+        g.gui.shell.studio.open.insert("frame".into());
+        g.gui.shell.studio.selected = frame.clone();
+        for _ in 0..60 {
+            g.step();
+            if g.gui.shell.studio.samples >= 16 {
+                break;
+            }
+        }
+        snap(&mut g, "overrides");
+    }
 }

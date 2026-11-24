@@ -9,6 +9,10 @@ use super::{Action, Shell};
 use crate::studio::appearance::Appearances;
 use egui::{Rect, RichText, Ui};
 
+/// Samples before the traced picture is readable: the raster view, in the same looks, stands in
+/// until then (gui_studio.rs); then the traced one fades in over as many again.
+pub const READABLE: u32 = 8;
+
 /// The ribbon's commands (`Action::Env(RenderStudio, c)`).
 pub const RENDER_IMAGE: u16 = 1;
 pub const TURNTABLE: u16 = 2;
@@ -100,6 +104,15 @@ pub struct StudioUi {
     pub more: bool,
     /// What the brush last did, for the view's line.
     pub said: String,
+    /// The parts of the row under the pointer (lit in the view); the part under the pointer in
+    /// the view (its row lit); a row to scroll into view.
+    pub hover_row: Vec<usize>,
+    /// Each part's file (an assembly's), for its row's hover.
+    pub files: Vec<String>,
+    /// The looks before each change (a click, a drag, an Apply), newest last: Undo takes one.
+    pub history: Vec<Vec<Option<String>>>,
+    pub hover_view: Option<usize>,
+    pub reveal: Option<usize>,
     /// A final render under way; how the last one ended (until closed).
     pub rendering: Option<Rendering>,
     pub result: Option<RenderResult>,
@@ -145,6 +158,11 @@ impl Default for StudioUi {
             open: Default::default(),
             more: false,
             said: String::new(),
+            hover_row: Vec::new(),
+            files: Vec::new(),
+            history: Vec::new(),
+            hover_view: None,
+            reveal: None,
             rendering: None,
             result: None,
             // the bundled HDRI
@@ -588,6 +606,9 @@ pub(super) fn draw(s: &mut Shell, ui: &mut Ui, view: Rect) -> bool {
     let st = &s.studio;
     let text = if st.samples == 0 {
         "Render Studio: preparing".to_string()
+    } else if st.samples < READABLE {
+        // the raster view stands in meanwhile: no promise the noise can't keep
+        "Starting again…".to_string()
     } else {
         format!(
             "{} samples{}",

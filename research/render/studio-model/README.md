@@ -40,3 +40,20 @@ zinc), check what a part is, then set the light, camera and output.
 - Tests: shell::studio_model::tests (tree, filter, multi-select, palette search, frame time);
   tests/studio_model.rs (a click in the view paints, many parts one look, the filter, the rack's
   parts keep their own materials).
+
+## UX-LEAD's P1s and markup (review-*.png: the rack at 1400 and 480 wide)
+- Painting no longer shows noise: until the restarted trace is readable (8 samples) the raster view
+  in the same looks stands in (each placement's tint from its look, `viewport_tint`'s packing, in any
+  visual style); then the trace fades in over 8 samples more. The count reads "Starting again…"
+  meanwhile (after-arm2-painting.png, then -settled).
+- The selection shows in the view: the chosen parts' faces in the selection's colour, over the trace
+  as over the raster (`cube_only` draws them through the ghost pass); a row under the pointer
+  pre-lights its occurrences fainter; the part under the pointer in the view lights its row; a click
+  in the view (not applying) chooses its row, opens its group and scrolls it in (after-arm2-selected).
+- "Apply to parts" is the brush's toggle (pressed while applying); the selection bar says "Apply X
+  to N parts", "Reset looks", "Deselect", its count on one line; "68 parts · 860 in the assembly";
+  families "Metal", "Paint & coating", …; hovers: a swatch's name and family (and "selected"), a
+  ring's "Material's own: M", a part's file and material, a group's folder, the overrides' ×
+  "Reset to the material's own"; each change of looks one Undo step (Overrides › Undo).
+- Frame time with the whole palette open and a filter typed: 250 parts 0.39 ms, 2,500 parts
+  1.04 ms; the filter compares without allocating for ASCII names.

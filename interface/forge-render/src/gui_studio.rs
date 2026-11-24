@@ -6,7 +6,7 @@
 
 use super::{Gui, now_ms};
 use crate::shell::env::EnvId;
-use crate::shell::studio_env::{Ask, RenderResult, Rendering};
+use crate::shell::studio_env::{Ask, READABLE, RenderResult, Rendering};
 use crate::studio::appearance::Appearance;
 use crate::studio::bsdf::{Bsdf, Lut};
 use crate::studio::env::{self, Env};
@@ -32,6 +32,11 @@ pub struct StudioHost {
     render_started: Option<f64>,
     written: Option<((u32, u32), Vec<u8>)>,
     thumb: Option<egui::TextureHandle>,
+    /// The placements' tints before the Studio gave them its looks (given back on leaving), for
+    /// the geometry they were taken from.
+    saved_tints: Option<(u64, Vec<[f32; 4]>)>,
+    /// The view's last pick, to take a new one once.
+    last_pick: Option<(u32, crate::render::Entity)>,
 }
 
 /// A hash of the placements' poses and what's shown: the scene changed when it does.
@@ -74,6 +79,44 @@ fn tint_bytes(t: [f32; 4]) -> [u8; 3] {
     [enc(t[0]), enc(t[1]), enc(t[2])]
 }
 
+/// The faces to light for the Model tab: every face of each placement of a chosen part, and
+/// fainter of the part whose row is under the pointer.
+pub(super) fn lit(
+    st: &crate::shell::studio_env::StudioUi,
+    scene: &crate::scene::Scene,
+    parts: &[crate::mesh::PartMesh],
+    colour: egui::Color32,
+) -> Vec<crate::render::FaceColour> {
+    let mut out = Vec::new();
+    if st.selected.is_empty() && st.hover_row.is_empty() {
+        return out;
+    }
+    for (i, p) in scene.placements.iter().enumerate() {
+        let k = p.part as usize;
+        let a = if st.selected.contains(&k) {
+            150
+        } else if st.hover_row.contains(&k) {
+            70
+        } else {
+            continue;
+        };
+        let Some(lod) = parts.get(k).and_then(|m| m.lods.first()) else {
+            continue;
+        };
+        for f in &lod.faces {
+            if out.len() >= crate::render::FACE_COLOURS {
+                return out;
+            }
+            out.push(crate::render::FaceColour {
+                placement: i as u32,
+                face: f.face,
+                rgba: [colour.r(), colour.g(), colour.b(), a],
+            });
+        }
+    }
+    out
+}
+
 impl Gui {
     /// One frame of the Studio; true while it has more to do (the window should draw again).
     pub(super) fn studio_frame(&mut self) -> bool {
@@ -83,8 +126,20 @@ impl Gui {
                 self.egui.free_texture(&h.tex);
                 self.egui.free_texture(&h.cube_tex);
                 self.shell.view_over_tex = None;
-                if let Some(v) = &self.view {
+                self.shell.view_over_alpha = 1.0;
+                if let Some(v) = &mut self.view {
                     self.shell.view_tex = Some(v.tex);
+                    // the design's colours again, where the Studio's looks were
+                    if let Some((geo, tints)) = h.saved_tints
+                        && geo == v.renderer.geometry()
+                        && tints.len() == v.scene.placements.len()
+                    {
+                        for (p, t) in v.scene.placements.iter_mut().zip(tints) {
+                            p.tint = t;
+                        }
+                        v.renderer.set_tints(&v.scene);
+                        v.dirty = true;
+                    }
                 }
             }
             return false;
@@ -115,6 +170,8 @@ impl Gui {
                 render_started: None,
                 written: None,
                 thumb: None,
+                saved_tints: None,
+                last_pick: None,
             });
         }
         let mut host = self.studio.take().expect("made above");
@@ -123,11 +180,35 @@ impl Gui {
         let mut status = None;
         let lib = st.library();
 
+        // the part under the pointer lights its row; a click (not painting) chooses its row,
+        // its group opened and the row shown
+        st.hover_view = v
+            .nav
+            .hovered()
+            .and_then(|h| v.scene.placements.get(h.placement as usize))
+            .map(|p| p.part as usize);
+        let pick = v.nav.selected.last().copied();
+        if !st.painting
+            && pick != host.last_pick
+            && let Some((pl, _)) = pick
+            && let Some(p) = v.scene.placements.get(pl as usize)
+        {
+            let k = p.part as usize;
+            st.selected = vec![k];
+            st.anchor = Some(k);
+            if let Some(g) = st.groups.get(k).filter(|g| !g.is_empty()) {
+                st.open.insert(g.clone());
+            }
+            st.reveal = Some(k);
+        }
+        host.last_pick = pick;
+
         // the brush: what's clicked in the view while painting takes its appearance
         if st.painting
             && let Some(brush) = st.brush.clone()
             && !v.nav.selected.is_empty()
         {
+            st.history.push(st.looks.clone());
             for (pl, _) in std::mem::take(&mut v.nav.selected) {
                 if let Some(p) = v.scene.placements.get(pl as usize) {
                     let k = p.part as usize;
@@ -193,6 +274,7 @@ impl Gui {
             let mut groups: Vec<String> = vec![String::new(); parts.len()];
             let mut counts: Vec<usize> = vec![0; parts.len()];
             let mut own: Vec<Option<String>> = vec![None; parts.len()];
+            let mut files: Vec<String> = vec![String::new(); parts.len()];
             if let Some((occ, _)) = &self.fg_asm {
                 for o in occ {
                     let Some(pl) = o.placement else { continue };
@@ -215,6 +297,7 @@ impl Gui {
                             .map(|d| d.to_string_lossy().into_owned())
                             .unwrap_or_default();
                         own[k] = o.material.clone();
+                        files[k] = o.file.clone();
                     }
                     counts[k] += 1;
                 }
@@ -224,6 +307,7 @@ impl Gui {
                 groups.iter_mut().for_each(String::clear);
             }
             st.groups = groups;
+            st.files = files;
             st.counts = counts;
             if own.iter().all(Option::is_none) {
                 own = vec![material_name.clone(); parts.len()];
@@ -252,6 +336,7 @@ impl Gui {
             st.looks.resize(parts.len(), None);
             let mut mats: Vec<Bsdf> = Vec::new();
             let mut inst = Vec::new();
+            let mut raster: Vec<(usize, [f32; 4])> = Vec::new();
             for i in 0..v.scene.placements.len() {
                 if v.scene.is_gone(i) {
                     continue;
@@ -282,6 +367,15 @@ impl Gui {
                     rows,
                     material: m as u32,
                 });
+                raster.push((
+                    i,
+                    [
+                        b.base.x,
+                        b.base.y,
+                        b.base.z,
+                        crate::studio::appearance::pack_tint(b.metal, b.rough, b.coat),
+                    ],
+                ));
             }
             mats.push(
                 lib.find("Studio floor")
@@ -294,6 +388,16 @@ impl Gui {
             host.scene = Some((built, mats));
             host.scene_key = Some(key);
             host.live.restart();
+            // the raster view in the same looks, to stand in while the trace starts again
+            let geo = v.renderer.geometry();
+            if host.saved_tints.as_ref().is_none_or(|(g, _)| *g != geo) {
+                host.saved_tints = Some((geo, v.scene.placements.iter().map(|p| p.tint).collect()));
+            }
+            for (i, t) in raster {
+                v.scene.placements[i].tint = t;
+            }
+            v.renderer.set_tints(&v.scene);
+            v.dirty = true;
         }
         let Some((built, mats)) = host.scene.clone() else {
             self.shell.studio = std::mem::take(st);
@@ -356,9 +460,13 @@ impl Gui {
             cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
             ..crate::render::Overlay::default()
         };
-        v.renderer.cube_only(&host.cube.view, &v.nav.camera, &overlay);
+        // what's chosen in the Model tab, lit over the trace as over the raster view
+        let lit_faces = lit(st, &v.scene, &v.renderer.cpu_parts, self.shell.theme.selection);
+        v.renderer
+            .cube_only(&host.cube.view, &v.nav.camera, &overlay, &v.scene, &lit_faces);
         let cube_tex = host.cube_tex;
         let tex = host.tex;
+        let raster_tex = v.tex;
 
         // final renders
         let mut written: Option<((u32, u32), Vec<u8>)> = None;
@@ -499,10 +607,24 @@ impl Gui {
             host.queue.log.clear();
             host.queue.log.extend(keep);
         }
+        let s = host.live.samples();
         self.studio = Some(host);
         self.shell.studio = std::mem::take(st);
-        self.shell.view_tex = Some(tex);
-        self.shell.view_over_tex = Some(cube_tex);
+        // until the trace is readable the raster view (the same looks, its own cube) stands in;
+        // then the trace fades in over it
+        if s < READABLE {
+            self.shell.view_tex = Some(raster_tex);
+            self.shell.view_over_tex = None;
+            self.shell.view_over_alpha = 1.0;
+        } else if s < 2 * READABLE {
+            self.shell.view_tex = Some(raster_tex);
+            self.shell.view_over_tex = Some(tex);
+            self.shell.view_over_alpha = (s - READABLE) as f32 / READABLE as f32;
+        } else {
+            self.shell.view_tex = Some(tex);
+            self.shell.view_over_tex = Some(cube_tex);
+            self.shell.view_over_alpha = 1.0;
+        }
         if let Some(s) = status {
             self.shell.status = s;
         }

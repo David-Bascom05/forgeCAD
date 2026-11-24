@@ -18,11 +18,24 @@ pub enum Row {
     Part(usize),
 }
 
+/// Whether `hay` holds `needle` (already lower case), any case: no allocation for ASCII names,
+/// so a filter costs nothing per row per frame.
+fn contains_ci(hay: &str, needle: &str) -> bool {
+    if needle.is_empty() {
+        return true;
+    }
+    if hay.is_ascii() && needle.is_ascii() {
+        let (h, n) = (hay.as_bytes(), needle.as_bytes());
+        return h.len() >= n.len() && h.windows(n.len()).any(|w| w.eq_ignore_ascii_case(n));
+    }
+    hay.to_lowercase().contains(needle)
+}
+
 /// Whether a part's name (or its group) answers the filter `f`, already lower case.
 fn matches(st: &StudioUi, k: usize, f: &str) -> bool {
     f.is_empty()
-        || st.names.get(k).is_some_and(|n| n.to_lowercase().contains(f))
-        || st.groups.get(k).is_some_and(|g| g.to_lowercase().contains(f))
+        || st.names.get(k).is_some_and(|n| contains_ci(n, f))
+        || st.groups.get(k).is_some_and(|g| contains_ci(g, f))
 }
 
 /// The tree's rows as they show: the groups (open while filtering), their parts if open; with no
@@ -79,13 +92,43 @@ pub fn select(st: &mut StudioUi, k: usize, ctrl: bool, shift: bool, shown: &[usi
     st.anchor = Some(k);
 }
 
-/// Gives `parts` the look (None: each its material's own).
+/// Gives `parts` the look (None: each its material's own): one step Undo takes back.
 pub fn apply(st: &mut StudioUi, parts: &[usize], look: Option<&str>) {
+    if parts
+        .iter()
+        .all(|&k| st.looks.get(k).cloned().flatten().as_deref() == look)
+    {
+        return;
+    }
+    st.history.push(st.looks.clone());
     for &k in parts {
         if st.looks.len() <= k {
             st.looks.resize(k + 1, None);
         }
         st.looks[k] = look.map(str::to_string);
+    }
+}
+
+/// Takes back the last change of looks; false when there's none.
+pub fn undo(st: &mut StudioUi) -> bool {
+    match st.history.pop() {
+        Some(was) => {
+            st.looks = was;
+            true
+        }
+        None => false,
+    }
+}
+
+/// A family's heading, as a user reads it.
+pub fn family_words(f: &str) -> String {
+    match f {
+        "paint" => "Paint & coating".into(),
+        f => {
+            let mut c = f.chars();
+            c.next()
+                .map_or_else(String::new, |h| h.to_uppercase().chain(c).collect())
+        }
     }
 }
 
@@ -188,7 +231,13 @@ fn swatch_button(ui: &mut Ui, a: &Appearance, on: bool, accent: Color32) -> bool
         })
         .response;
     let r = ui.interact(r.rect, id.with("click"), Sense::click());
-    let r = r.on_hover_text(format!("{} ({})\n{}", a.name, a.family, a.source));
+    let r = r.on_hover_text(format!(
+        "{} · {}{}\n{}",
+        a.name,
+        family_words(&a.family),
+        if on { " · selected" } else { "" },
+        a.source
+    ));
     r.clicked()
 }
 
@@ -224,7 +273,7 @@ fn palette_ui(ui: &mut Ui, s: &Shell, st: &mut StudioUi, lib: &Appearances, pick
             hidden += list.len();
             continue;
         }
-        ui.label(RichText::new(fam).small().color(s.theme.ink2));
+        ui.label(RichText::new(family_words(fam)).small().color(s.theme.ink2));
         if let Some(n) = swatches(ui, list, st.brush.as_deref(), s.theme.focus) {
             *pick = Some(n);
         }
@@ -265,9 +314,9 @@ pub(super) fn ui(ui: &mut Ui, s: &Shell, st: &mut StudioUi, lib: &Appearances) {
                 );
                 ui.label(
                     RichText::new(if st.painting {
-                        "click parts in the view to apply · Esc stops"
+                        "click parts in the view · Esc stops"
                     } else if brush.is_some() {
-                        "Paint, then click parts in the view"
+                        "Apply to parts, then click them in the view"
                     } else {
                         "choose one below"
                     })
@@ -278,7 +327,7 @@ pub(super) fn ui(ui: &mut Ui, s: &Shell, st: &mut StudioUi, lib: &Appearances) {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let r = ui.add_enabled(
                     brush.is_some(),
-                    egui::Button::new(if st.painting { "Stop" } else { "Paint" }).selected(st.painting),
+                    egui::Button::new("Apply to parts").selected(st.painting),
                 );
                 if r.clicked() {
                     st.painting = !st.painting;
@@ -303,10 +352,15 @@ pub(super) fn ui(ui: &mut Ui, s: &Shell, st: &mut StudioUi, lib: &Appearances) {
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             let occ: usize = st.counts.iter().sum();
             let n = st.names.len();
-            let words = if occ > n {
-                format!("{n} · {occ} in the assembly")
+            let parts = if n == 1 {
+                "1 part".to_string()
             } else {
-                format!("{n}")
+                format!("{n} parts")
+            };
+            let words = if occ > n {
+                format!("{parts} · {occ} in the assembly")
+            } else {
+                parts
             };
             ui.label(RichText::new(words).small().color(t.ink2));
         });
@@ -330,145 +384,182 @@ pub(super) fn ui(ui: &mut Ui, s: &Shell, st: &mut StudioUi, lib: &Appearances) {
     let mut clicks: Vec<(usize, egui::Modifiers)> = Vec::new();
     let mut toggles: Vec<String> = Vec::new();
     let height = (rows.len() as f32 * ROW_H).min(ROW_H * 12.0);
-    egui::ScrollArea::vertical()
+    let mut scroll = egui::ScrollArea::vertical()
         .id_salt("studio-parts")
         .max_height(height.max(ROW_H))
-        .auto_shrink([false, true])
-        .show_rows(ui, ROW_H, rows.len(), |ui, range| {
-            for row in &rows[range] {
-                let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
-                let p = ui.painter();
-                let (indent, name, count, looks, sel) = match row {
-                    Row::Group(g, m, _) => (
-                        0.0,
-                        g.clone(),
-                        m.len(),
-                        m.iter()
-                            .map(|&k| st.looks.get(k).cloned().flatten())
-                            .collect::<Vec<_>>(),
-                        !m.is_empty() && m.iter().all(|k| st.selected.contains(k)),
-                    ),
-                    Row::Part(k) => (
-                        if st.groups.get(*k).is_some_and(|g| !g.is_empty()) {
-                            18.0
-                        } else {
-                            0.0
-                        },
-                        st.names[*k].clone(),
-                        st.counts.get(*k).copied().unwrap_or(1),
-                        vec![st.looks.get(*k).cloned().flatten()],
-                        st.selected.contains(k),
-                    ),
-                };
-                if sel {
-                    p.rect_filled(r, 3.0, t.on);
-                } else if resp.hovered() {
-                    p.rect_filled(r, 3.0, t.hover);
-                }
-                let mut x = r.left() + 4.0 + indent;
-                if let Row::Group(g, _, open) = row {
-                    let a = Rect::from_center_size(pos2(x + 6.0, r.center().y), vec2(16.0, ROW_H));
-                    let ar = ui.interact(a, ui.scope_id().with(("open", g)), Sense::click());
-                    super::fg::disclosure(
-                        ui.painter(),
-                        a.center(),
-                        *open,
-                        if ar.hovered() { t.ink } else { t.ink2 },
-                    );
-                    if ar.clicked() {
-                        toggles.push(g.clone());
-                    }
-                    x += 16.0;
-                }
-                // the chip: the look shared, else a hollow ring with a dot (mixed)
-                let c = pos2(x + CHIP / 2.0, r.center().y);
-                let same = looks.windows(2).all(|w| w[0] == w[1]);
-                let look = if same {
-                    looks.first().cloned().flatten()
-                } else {
-                    None
-                };
-                chip(
-                    ui,
-                    c,
-                    CHIP / 2.0,
-                    look.as_deref().and_then(|n| lib.find(n)),
-                    t.ink2,
+        .auto_shrink([false, true]);
+    // a part picked in the view: its row shown
+    if let Some(k) = st.reveal.take()
+        && let Some(i) = rows.iter().position(|r| *r == Row::Part(k))
+    {
+        scroll = scroll.vertical_scroll_offset((i as f32 * ROW_H - height * 0.4).max(0.0));
+    }
+    let mut hover_row = Vec::new();
+    scroll.show_rows(ui, ROW_H, rows.len(), |ui, range| {
+        for row in &rows[range] {
+            let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
+            let p = ui.painter();
+            let (indent, name, count, looks, sel) = match row {
+                Row::Group(g, m, _) => (
+                    0.0,
+                    g.clone(),
+                    m.len(),
+                    m.iter()
+                        .map(|&k| st.looks.get(k).cloned().flatten())
+                        .collect::<Vec<_>>(),
+                    !m.is_empty() && m.iter().all(|k| st.selected.contains(k)),
+                ),
+                Row::Part(k) => (
+                    if st.groups.get(*k).is_some_and(|g| !g.is_empty()) {
+                        18.0
+                    } else {
+                        0.0
+                    },
+                    st.names[*k].clone(),
+                    st.counts.get(*k).copied().unwrap_or(1),
+                    vec![st.looks.get(*k).cloned().flatten()],
+                    st.selected.contains(k),
+                ),
+            };
+            let members: Vec<usize> = match row {
+                Row::Group(_, m, _) => m.clone(),
+                Row::Part(k) => vec![*k],
+            };
+            // lit from the view: the part under the pointer there
+            let lit = st.hover_view.is_some_and(|h| members.contains(&h));
+            if sel {
+                p.rect_filled(r, 3.0, t.on);
+            } else if resp.hovered() || lit {
+                p.rect_filled(r, 3.0, t.hover);
+            }
+            if resp.hovered() {
+                hover_row = members.clone();
+            }
+            let mut x = r.left() + 4.0 + indent;
+            if let Row::Group(g, _, open) = row {
+                let a = Rect::from_center_size(pos2(x + 6.0, r.center().y), vec2(16.0, ROW_H));
+                let ar = ui.interact(a, ui.scope_id().with(("open", g)), Sense::click());
+                super::fg::disclosure(
+                    ui.painter(),
+                    a.center(),
+                    *open,
+                    if ar.hovered() { t.ink } else { t.ink2 },
                 );
-                if !same {
-                    ui.painter().circle_filled(c, 2.5, t.ink2);
+                if ar.clicked() {
+                    toggles.push(g.clone());
                 }
-                let cr = ui.interact(
-                    Rect::from_center_size(c, vec2(CHIP + 4.0, CHIP + 4.0)),
-                    ui.scope_id().with(("chip", &name, indent as u32)),
-                    Sense::click(),
-                );
-                let own = match row {
-                    Row::Part(k) => st.own.get(*k).cloned().flatten(),
-                    _ => None,
-                };
-                let cr = cr.on_hover_text(match (&look, &own) {
-                    (Some(l), _) => format!("{l} (click to change)"),
-                    (None, Some(m)) if same => format!("{m}'s own look (click to change)"),
-                    (None, _) if same => "its material's own look (click to change)".into(),
-                    _ => "mixed looks (click to set one)".into(),
-                });
-                egui::Popup::menu(&cr).show(|ui| {
-                    ui.set_max_width(240.0);
-                    if ui.button("Material's own").clicked() {
-                        act.push((row.clone(), Some(None)));
+                x += 16.0;
+            }
+            // the chip: the look shared, else a hollow ring with a dot (mixed)
+            let c = pos2(x + CHIP / 2.0, r.center().y);
+            let same = looks.windows(2).all(|w| w[0] == w[1]);
+            let look = if same {
+                looks.first().cloned().flatten()
+            } else {
+                None
+            };
+            chip(
+                ui,
+                c,
+                CHIP / 2.0,
+                look.as_deref().and_then(|n| lib.find(n)),
+                t.ink2,
+            );
+            if !same {
+                ui.painter().circle_filled(c, 2.5, t.ink2);
+            }
+            let cr = ui.interact(
+                Rect::from_center_size(c, vec2(CHIP + 4.0, CHIP + 4.0)),
+                ui.scope_id().with(("chip", &name, indent as u32)),
+                Sense::click(),
+            );
+            let own = match row {
+                Row::Part(k) => st.own.get(*k).cloned().flatten(),
+                _ => None,
+            };
+            let cr = cr.on_hover_text(match (&look, &own) {
+                (Some(l), _) => format!("{l} (click to change)"),
+                (None, Some(m)) if same => format!("Material's own: {m} (click to change)"),
+                (None, _) if same => "its material's own look (click to change)".into(),
+                _ => "mixed looks (click to set one)".into(),
+            });
+            egui::Popup::menu(&cr).show(|ui| {
+                ui.set_max_width(240.0);
+                if ui.button("Material's own").clicked() {
+                    act.push((row.clone(), Some(None)));
+                }
+                for (fam, list) in palette(lib, "") {
+                    ui.label(RichText::new(family_words(&fam)).small().color(t.ink2));
+                    if let Some(n) = swatches(ui, &list, look.as_deref(), t.focus) {
+                        act.push((row.clone(), Some(Some(n))));
                     }
-                    for (fam, list) in palette(lib, "") {
-                        ui.label(RichText::new(fam).small().color(t.ink2));
-                        if let Some(n) = swatches(ui, &list, look.as_deref(), t.focus) {
-                            act.push((row.clone(), Some(Some(n))));
+                }
+            });
+            let g = ui
+                .painter()
+                .layout_no_wrap(name.clone(), super::theme::sans(13.0), t.ink);
+            let tx = c.x + CHIP / 2.0 + 8.0;
+            let w = (r.right() - 40.0 - tx).max(10.0);
+            ui.painter()
+                .with_clip_rect(Rect::from_min_size(pos2(tx, r.top()), vec2(w, ROW_H)))
+                .galley(pos2(tx, r.center().y - g.size().y / 2.0), g, t.ink);
+            let words = if matches!(row, Row::Group(..)) {
+                format!("{count}")
+            } else if count > 1 {
+                format!("×{count}")
+            } else {
+                String::new()
+            };
+            ui.painter().text(
+                pos2(r.right() - 6.0, r.center().y),
+                egui::Align2::RIGHT_CENTER,
+                words,
+                super::theme::sans(11.0),
+                t.ink2,
+            );
+            // what it is: a part's file and material; a group's folder
+            let resp = resp.on_hover_text(match row {
+                Row::Part(k) => {
+                    let file = st
+                        .files
+                        .get(*k)
+                        .filter(|f| !f.is_empty())
+                        .cloned()
+                        .unwrap_or_else(|| st.names[*k].clone());
+                    match st.own.get(*k).cloned().flatten() {
+                        Some(m) => format!("{file} · {m}"),
+                        None => format!("{file} · no material named"),
+                    }
+                }
+                Row::Group(_, m, _) => m
+                    .first()
+                    .and_then(|&k| st.files.get(k))
+                    .and_then(|f| std::path::Path::new(f).parent())
+                    .map_or_else(|| name.clone(), |d| d.to_string_lossy().into_owned()),
+            });
+            // a swatch dropped on the row
+            if let Some(name) = resp.dnd_release_payload::<String>() {
+                act.push((row.clone(), Some(Some((*name).clone()))));
+            }
+            if resp.clicked() {
+                match row {
+                    Row::Part(k) => clicks.push((*k, ui.input(|i| i.modifiers))),
+                    Row::Group(_, m, _) => {
+                        let ctrl = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
+                        if !ctrl {
+                            st.selected.clear();
                         }
-                    }
-                });
-                let g = ui
-                    .painter()
-                    .layout_no_wrap(name.clone(), super::theme::sans(13.0), t.ink);
-                let tx = c.x + CHIP / 2.0 + 8.0;
-                let w = (r.right() - 40.0 - tx).max(10.0);
-                ui.painter()
-                    .with_clip_rect(Rect::from_min_size(pos2(tx, r.top()), vec2(w, ROW_H)))
-                    .galley(pos2(tx, r.center().y - g.size().y / 2.0), g, t.ink);
-                let words = if matches!(row, Row::Group(..)) {
-                    format!("{count}")
-                } else if count > 1 {
-                    format!("×{count}")
-                } else {
-                    String::new()
-                };
-                ui.painter().text(
-                    pos2(r.right() - 6.0, r.center().y),
-                    egui::Align2::RIGHT_CENTER,
-                    words,
-                    super::theme::sans(11.0),
-                    t.ink2,
-                );
-                // a swatch dropped on the row
-                if let Some(name) = resp.dnd_release_payload::<String>() {
-                    act.push((row.clone(), Some(Some((*name).clone()))));
-                }
-                if resp.clicked() {
-                    match row {
-                        Row::Part(k) => clicks.push((*k, ui.input(|i| i.modifiers))),
-                        Row::Group(_, m, _) => {
-                            let ctrl = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
-                            if !ctrl {
-                                st.selected.clear();
-                            }
-                            for k in m {
-                                if !st.selected.contains(k) {
-                                    st.selected.push(*k);
-                                }
+                        for k in m {
+                            if !st.selected.contains(k) {
+                                st.selected.push(*k);
                             }
                         }
                     }
                 }
             }
-        });
+        }
+    });
+    st.hover_row = hover_row;
     for g in toggles {
         if !st.open.remove(&g) {
             st.open.insert(g);
@@ -484,29 +575,30 @@ pub(super) fn ui(ui: &mut Ui, s: &Shell, st: &mut StudioUi, lib: &Appearances) {
         }
     }
     if !st.selected.is_empty() {
+        let n = st.selected.len();
         ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(format!("{} selected", st.selected.len()))
-                    .small()
-                    .color(t.ink2),
+            ui.add(
+                egui::Label::new(RichText::new(format!("{n} selected")).small().color(t.ink2))
+                    .wrap_mode(egui::TextWrapMode::Extend),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button("Clear").clicked() {
+                if ui.button("Deselect").clicked() {
                     st.selected.clear();
                 }
                 if ui
-                    .button("Reset")
-                    .on_hover_text("their materials' own looks")
+                    .button("Reset looks")
+                    .on_hover_text("back to their materials' own")
                     .clicked()
                 {
                     let to = st.selected.clone();
                     apply(st, &to, None);
                 }
-                if let Some(b) = st.brush.clone()
-                    && ui.button(format!("Apply {b}")).clicked()
-                {
-                    let to = st.selected.clone();
-                    apply(st, &to, Some(&b));
+                if let Some(b) = st.brush.clone() {
+                    let words = format!("Apply {b} to {n} part{}", if n == 1 { "" } else { "s" });
+                    if ui.add(egui::Button::new(words).truncate()).clicked() {
+                        let to = st.selected.clone();
+                        apply(st, &to, Some(&b));
+                    }
                 }
             });
         });
@@ -536,7 +628,7 @@ pub(super) fn ui(ui: &mut Ui, s: &Shell, st: &mut StudioUi, lib: &Appearances) {
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     if ui
                                         .small_button("×")
-                                        .on_hover_text("back to its material's own")
+                                        .on_hover_text("Reset to the material's own")
                                         .clicked()
                                     {
                                         reset = Some(*k);
@@ -548,9 +640,19 @@ pub(super) fn ui(ui: &mut Ui, s: &Shell, st: &mut StudioUi, lib: &Appearances) {
                 if let Some(k) = reset {
                     apply(st, &[k], None);
                 }
-                if ui.small_button("Reset all").clicked() {
-                    apply(st, &over, None);
-                }
+                ui.horizontal(|ui| {
+                    if ui.small_button("Reset all").clicked() {
+                        apply(st, &over, None);
+                    }
+                    if !st.history.is_empty()
+                        && ui
+                            .small_button("Undo")
+                            .on_hover_text("the last change of looks")
+                            .clicked()
+                    {
+                        undo(st);
+                    }
+                });
             });
     }
 }
@@ -623,8 +725,9 @@ mod tests {
         assert_eq!(st.selected, vec![0]);
     }
 
-    /// The tab's time per frame with `n` parts in 10 groups, all open: mean over frames, ms.
-    fn frame_ms(n: usize) -> f64 {
+    /// The tab's time per frame with `n` parts in 10 groups, all open (with the whole palette
+    /// shown and a filter typed, when `busy`): mean over frames, ms.
+    fn frame_ms(n: usize, busy: bool) -> f64 {
         let ctx = egui::Context::default();
         let shell = Shell::default();
         let lib = Appearances::builtin();
@@ -636,6 +739,10 @@ mod tests {
             .map(|k| (k % 7 == 0).then(|| "Brass".to_string()))
             .collect();
         st.open = (0..10).map(|g| format!("group_{g}")).collect();
+        if busy {
+            st.more = true;
+            st.filter = "PART_1".into();
+        }
         let input = || egui::RawInput {
             screen_rect: Some(Rect::from_min_size(pos2(0.0, 0.0), vec2(330.0, 860.0))),
             ..Default::default()
@@ -660,9 +767,38 @@ mod tests {
     /// times the frame (the overrides list, every override drawn, is the only part that grows).
     #[test]
     fn many_parts_keep_the_frame_flat() {
-        let (a, b) = (frame_ms(250), frame_ms(2500));
+        let (a, b) = (frame_ms(250, false), frame_ms(2500, false));
         eprintln!("frame: 250 parts {a:.2} ms, 2500 parts {b:.2} ms");
         assert!(b < a * 4.0, "250 parts {a:.2} ms, 2500 parts {b:.2} ms");
+        // the whole palette open and a filter typed
+        let (c, d) = (frame_ms(250, true), frame_ms(2500, true));
+        eprintln!("frame, palette open and filtered: 250 parts {c:.2} ms, 2500 parts {d:.2} ms");
+        assert!(d < c * 4.0, "250 parts {c:.2} ms, 2500 parts {d:.2} ms");
+    }
+
+    #[test]
+    fn the_filter_ignores_case_without_allocating_for_plain_names() {
+        assert!(contains_ci("Post_Kit_FL", "kit_f"));
+        assert!(!contains_ci("post", "posts"));
+        assert!(contains_ci("Ünterlegscheibe", "ünter"));
+        assert!(contains_ci("anything", ""));
+    }
+
+    #[test]
+    fn each_change_of_looks_is_one_undo_step() {
+        let mut st = studio(&["a", "b", "c"], &["", "", ""]);
+        apply(&mut st, &[0, 1], Some("Brass"));
+        apply(&mut st, &[2], Some("Copper"));
+        // the same look again changes nothing, so it is no step
+        apply(&mut st, &[2], Some("Copper"));
+        assert_eq!(st.history.len(), 2);
+        assert!(undo(&mut st));
+        assert_eq!(st.looks, vec![Some("Brass".into()), Some("Brass".into()), None]);
+        assert!(undo(&mut st));
+        assert_eq!(overrides(&st), Vec::<usize>::new());
+        assert!(!undo(&mut st));
+        assert_eq!(family_words("paint"), "Paint & coating");
+        assert_eq!(family_words("metal"), "Metal");
     }
 
     #[test]
