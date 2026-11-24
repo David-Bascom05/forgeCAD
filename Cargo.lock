@@ -462,6 +462,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-probe"
+version = "0.1.0"
+dependencies = [
+ "forge-tooling",
+]
+
+[[package]]
 name = "forge-proof"
 version = "0.1.0"
 dependencies = [
