@@ -776,3 +776,24 @@ PEEL only if (ii) fails.
 - Offsets of boundary plus islands together are classic prior art, under the §9 reading of the
   moat claims (Q3 open).
 - So adaptive is for deep, open levels at full flute length, and bands stay with `clear`.
+
+**§9 note: the wall pass and the link fix** (2026-11-24, from cam/quality-adaptive-wip, test
+`path_winds_round_nothing`).
+
+Test (ii) first failed for one-way peels. Each L-peel plus its diagonal rapid back to the next
+start made a full turn about an island corner (1622° at PEEL 75°; 518° at 45°; 374° about an
+uncut point at 30°). The fix keeps PEEL 75°: a retract link returns over the pass it follows, at
+retract height, then hops to the next start. With it, all six cases pass (one- and two-way;
+sweeps 0°, 90° and 30°).
+
+The final wall pass is excluded from test (ii) on this reading. It is one plain offset of all
+walls (boundary and islands together), run after the level's sweep and cleanup: a finishing
+contour, which is classic prior art. It is neither a spiral nor a ring generated on meeting an
+island.
+
+Conditions, to be asserted in code:
+- (a) the wall pass runs only after the level is cleared to stock-to-leave;
+- (b) it is one offset at a single distance;
+- (c) cleanup rings stay partial: only the arcs that cut material.
+
+Counsel Q3 is unchanged.
