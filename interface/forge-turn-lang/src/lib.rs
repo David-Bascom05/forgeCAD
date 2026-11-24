@@ -663,7 +663,17 @@ fn run_with(src: &str, dir: &Path, exact: bool) -> TurnCam {
                     };
                     env.insert(name.clone(), v);
                 }
-                StmtKind::Expr(_) => {}
+                // a bare call would be evaluated for nothing and report nothing: every operation
+                // is named (the header, the first statement, is skipped above)
+                StmtKind::Expr(e) => {
+                    return Err(match &e.kind {
+                        ExprKind::Call(f, _) => match &f.kind {
+                            ExprKind::Name(n) => format!("an operation needs a name: `name = {n}(..)`"),
+                            _ => "an operation needs a name: `name = f(..)`".into(),
+                        },
+                        _ => "a bare expression does nothing here: name it (`name = ..`)".into(),
+                    });
+                }
                 _ => return Err("a statement a turning document does not take".into()),
             }
             Ok(())

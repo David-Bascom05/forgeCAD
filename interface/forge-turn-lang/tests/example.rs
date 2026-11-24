@@ -115,3 +115,20 @@ fn a_view_reads_the_profile_the_setup_and_the_paths() {
     assert_eq!(names, ["face", "rough", "fin", "thr", "cut"]);
     assert!(cam.paths().iter().all(|p| p.1 == 0 && !p.2.steps.is_empty()));
 }
+
+#[test]
+fn an_unnamed_operation_is_an_error() {
+    let d = dir();
+    let src = std::fs::read_to_string(d.join("shaft_turn.fg"))
+        .unwrap()
+        .replace("thr   = turn_thread(", "turn_thread(");
+    let cam = forge_turn_lang::run(&src, &d);
+    assert!(!cam.ok);
+    assert!(
+        cam.errors
+            .iter()
+            .any(|e| e.contains("an operation needs a name: `name = turn_thread(..)`")),
+        "{:?}",
+        cam.errors
+    );
+}
