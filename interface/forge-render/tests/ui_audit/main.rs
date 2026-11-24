@@ -66,9 +66,8 @@ fn hover_tip(h: &mut Headless, r: Rect) -> String {
     }
     // no tooltip: a reason may be written under the item itself, small and muted
     let s = Snap::take(h);
-    let under: Vec<String> = judge::new_texts_in(
+    let under: Vec<String> = judge::on_top_in(
         &s,
-        &before,
         &[Rect::from_min_max(
             pos2(r.left() - 4.0, r.bottom() - 2.0),
             pos2(r.right(), r.bottom() + 20.0),
