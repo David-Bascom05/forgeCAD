@@ -161,8 +161,18 @@ fn frame_preview(p: &crate::library_mesh::Preview, size: (u32, u32)) -> crate::c
     let ext = [hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]];
     let sec = ext[0].max(ext[2]);
     if p.long_axis == Some(1) && ext[1] > 4.0 * sec {
-        let near = Bounds::new(f(lo), f([hi[0], lo[1] + 4.0 * sec, hi[2]]));
-        return crate::frame::frame_from(near, view, 0.7, -62.0, 22.0);
+        // a long die or punch: all of it, seen from the side and a little above, so its length
+        // runs across the view and both ends are in it; its section is the inset beside it
+        return crate::frame::frame(
+            Bounds::new(f(lo), f(hi)),
+            view,
+            Framing {
+                dir: crate::frame::Dir::Custom(-18.0, 22.0),
+                fill: 0.75,
+            },
+            &[],
+        )
+        .camera;
     }
     let how = if p.operator {
         Framing {

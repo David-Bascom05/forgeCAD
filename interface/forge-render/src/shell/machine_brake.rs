@@ -1087,6 +1087,9 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                 continue;
             }
             lf::section(ui, t, sec);
+            // a table field (a die's segments): its row holds a summary and the chip; the table
+            // itself goes full width under the section, so the chip column never moves
+            let mut tables: Vec<Field> = Vec::new();
             egui::Grid::new(("brake:grid", *sec))
                 .num_columns(3)
                 .spacing(vec2(8.0, 4.0))
@@ -1096,6 +1099,31 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                         lf::name(ui, t, &label, &f.path, f.help, 118.0);
                         let v = get(&st.table, &f.path);
                         match v {
+                            Some(Item::Arr(rows))
+                                if matches!(f.ty, Ty::Points(_))
+                                    && !rows.is_empty()
+                                    && rows.iter().all(|r| matches!(r, Item::Table(_))) =>
+                            {
+                                let total: f64 = rows
+                                    .iter()
+                                    .filter_map(|r| match r {
+                                        Item::Table(tb) => match (tb.get("length"), tb.get("count")) {
+                                            (Some(Item::Num(l)), Some(Item::Num(c))) => Some(l * c),
+                                            (Some(Item::Num(l)), None) => Some(*l),
+                                            _ => None,
+                                        },
+                                        _ => None,
+                                    })
+                                    .sum();
+                                let line = if total > 0.0 {
+                                    format!("{} · {}", rows.len(), lf::len_text(total))
+                                } else {
+                                    rows.len().to_string()
+                                };
+                                ui.label(RichText::new(line).font(sans(12.0)).color(t.ink))
+                                    .on_hover_text("how many, and their length together: the table is below");
+                                tables.push(f.clone());
+                            }
                             Some(v) => {
                                 if let Some(nv) = cell(ui, t, f, Some(v)) {
                                     change = Some(Change::Set(f.clone(), nv));
@@ -1154,6 +1182,14 @@ pub fn editor(ui: &mut Ui, t: &Theme, st: &mut BrakeUi) {
                         ui.end_row();
                     }
                 });
+            for f in &tables {
+                ui.add_space(2.0);
+                ui.indent(("brake:table-indent", &f.path), |ui| {
+                    if let Some(nv) = cell(ui, t, f, get(&st.table, &f.path)) {
+                        change = Some(Change::Set(f.clone(), nv));
+                    }
+                });
+            }
         }
         if st.checked {
             ui.separator();
