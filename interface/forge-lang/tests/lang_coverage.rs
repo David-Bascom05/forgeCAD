@@ -142,20 +142,6 @@ fn expr_builtins(rel: &str) -> Vec<String> {
     out
 }
 
-/// The names an evaluator reads as its own before any binding: `ExprKind::Name(n) if n == "x"`
-/// arms in the function `marker` begins.
-fn name_arms(rel: &str, marker: &str) -> Vec<String> {
-    let src = read(rel);
-    let f = function(&src, marker);
-    let mut out = vec![];
-    for line in f.lines() {
-        if let Some(i) = line.find("ExprKind::Name(n) if n == \"") {
-            out.extend(quoted(&line[i..]).into_iter().take(1));
-        }
-    }
-    out
-}
-
 /// The built-in families: one line each. A new family is a new line here and its row in
 /// COVERAGE.md.
 fn families() -> Vec<(&'static str, Vec<String>, Model)> {
@@ -207,11 +193,7 @@ fn families() -> Vec<(&'static str, Vec<String>, Model)> {
             arms(ROBOT, "fn value(&self, f: &str"),
             Model::Closed,
         ),
-        (
-            "robot-constants",
-            name_arms(ROBOT, "fn eval(&self, e: &Expr"),
-            Model::Own,
-        ),
+        ("robot-constants", const_list(ROBOT, "RESERVED"), Model::Own),
     ]
 }
 
@@ -232,6 +214,7 @@ const FAMILY_CONSTS: &[&str] = &[
     "interface/forge-lang/src/harness.rs::BUILTINS",
     "interface/forge-lang/src/drawing/doc.rs::FUNCTIONS",
     "interface/forge-lang/src/syntax.rs::KEYWORDS",
+    "interface/forge-lang/src/robot.rs::RESERVED",
 ];
 
 /// The crates whose sources define what a document may say.
@@ -362,6 +345,26 @@ fn json_ops(rel: &str, marker: &str) -> Vec<String> {
         .collect()
 }
 
+/// The variants of an enum: its lines at the first variant's indentation that start with a
+/// capital.
+fn enum_variants(rel: &str, marker: &str) -> Vec<String> {
+    let src = read(rel);
+    let at = src.find(marker).unwrap_or_else(|| panic!("{rel}: no `{marker}`"));
+    let body = &src[at + marker.len()..];
+    let body = &body[..body.find("\n}").unwrap_or(body.len())];
+    body.lines()
+        .filter(|l| l.len() - l.trim_start().len() == 4)
+        .map(str::trim_start)
+        .filter(|t| t.chars().next().is_some_and(|c| c.is_ascii_uppercase()))
+        .map(|t| {
+            t.split(|c: char| !c.is_alphanumeric())
+                .next()
+                .unwrap_or("")
+                .to_string()
+        })
+        .collect()
+}
+
 fn edit_ops() -> BTreeSet<String> {
     let mut out = BTreeSet::new();
     out.extend(json_ops(
@@ -372,6 +375,12 @@ fn edit_ops() -> BTreeSet<String> {
         "interface/forge-lang/src/refactor.rs",
         "pub fn from_json(j: &Json) -> Option<Refactor>",
     ));
+    // a document kind's own edits, outside `Op`: `robot::edit`'s
+    out.extend(
+        enum_variants("interface/forge-lang/src/robot.rs", "pub enum Edit {")
+            .into_iter()
+            .map(|v| format!("robot::{v}")),
+    );
     let cli = read("interface/forge-cli/src/fg.rs");
     for line in cli.lines() {
         if line.contains("=> Some(forge_lang::undo::Step::") {

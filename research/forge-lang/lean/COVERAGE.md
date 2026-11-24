@@ -60,7 +60,7 @@ no family extension changes where a document goes.
 | builtins | `robot-assign` | `source`, `link`, `joint`, `frame` | `interface/forge-lang/src/robot.rs` `run`'s `match fname` (then `Reader::value`); closed namespace | `Families.robot_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.exec_new_refused`, `Families.families_not_keywords`; Rename `FamiliesRename.rename_run` |
 | builtins | `robot-stmt` | `root`, `cut`, `freeze`, `merge`, `drop`, `visual`, `collision`, `collisions`, `actuation`, `inertial`, `joint`, `transmission` | `robot.rs` `statement` (a bare `f(..)` statement, `St.exec`); closed namespace | `Families.robot_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.exec_new_refused`, `Families.families_not_keywords`; Rename `FamiliesRename.rename_run` |
 | builtins | `robot-value` | `pose`, `box`, `cylinder`, `capsule`, `sphere`, `mesh` | `robot.rs` `Reader::value` (nested, or an assignment's fall-through); closed namespace | `Families.robot_conservative`, `Families.run_ext_accepted`, `Families.run_ext_avoid`, `Families.stmt_new_refused`, `Families.exec_new_refused`, `Families.families_not_keywords`; Rename `FamiliesRename.rename_run` |
-| builtins | `robot-constants` | `hull`, `none` | `robot.rs` `Reader::eval`: read before any binding | GAP: read before bindings and binding them is not refused, so a binding named `hull` or `none` is accepted and never read (reported to URDF); a new such name would change documents that bind it. `Families.families_not_keywords` (they lex as identifiers) |
+| builtins | `robot-constants` | `hull`, `none` | `robot.rs` `RESERVED`: read before any binding, and binding one is refused (`ReservedName`) | `Builtins.extend_conservative`: no accepted robot document binds them, so reading them before or after bindings is the same, and the part namespace's argument applies (a new reserved word refuses only documents that bind it); `Families.families_not_keywords` |
 
 ## Document headers and keywords
 
@@ -116,6 +116,11 @@ ops); the text-level theorems (`Print`, `Suppress.suppress_text_closure`) are th
 | op | `MakeComponent` | | `refactor.rs` | `Refactor.makeComponent`; Counter/Refactor.lean |
 | op | `ExtractComponent` | | `refactor.rs` | `Refactor.extract_occ`, `Modules.link_inert`; Counter/Refactor.lean |
 | op | `InlineComponent` | | `refactor.rs` | `Refactor.extract_occ` (the same equation read the other way) |
+| op | `robot::Set` | | `robot.rs` `edit` (`field: text` on a statement, `field_was` too) | a SetArg on a robot statement: `FamiliesRename.edit_prefix`, `FamiliesRename.run_append` (every statement before the first changed one as it was). GAP: later statements (stateful built-ins); the text is re-parsed at run time, not proven |
+| op | `robot::Reset` | | `robot.rs` `edit` (a field off; a statement left with its target alone goes) | `FamiliesRename.edit_prefix`, `FamiliesRename.run_append` (every statement before the first changed one as it was). GAP: later statements (stateful built-ins); the text is re-parsed at run time, not proven |
+| op | `robot::Add` | | `robot.rs` `edit` (a statement at the end) | the old document is the prefix: every statement keeps its result and the state it leaves (`FamiliesRename.edit_prefix` with the old statements as `pre`). GAP: the added statement's own result |
+| op | `robot::Remove` | | `robot.rs` `edit` (the statement on a line) | `FamiliesRename.edit_prefix`, `FamiliesRename.run_append` (every statement before the first changed one as it was). GAP: later statements (stateful built-ins); the text is re-parsed at run time, not proven; no read check (a removed binding read later is that reader's typed error) |
+| op | `robot::Put` | | `robot.rs` `edit` (the one `call(..)` statement replaced, or added) | `FamiliesRename.edit_prefix`, `FamiliesRename.run_append` (every statement before the first changed one as it was). GAP: later statements (stateful built-ins); the text is re-parsed at run time, not proven |
 
 ## Lists of strings that are not names a document resolves
 
@@ -171,6 +176,8 @@ scope).
   `drill = drill(..)` were refused (`StillRead`) because a later `d2 = drill(..)` only calls the
   built-in, AddFeature of such a call above the binding likewise, and Suppress took `d2` out with
   it: fixed (`edit::mentions_in`; test edits::a_call_head_in_a_machining_document_is_not_a_read).
+* robot.rs read `hull` and `none` before bindings without refusing a binding of either (accepted,
+  never read): fixed by URDF (`ReservedName`, test urdf_robot::a_reserved_name_is_not_bound).
 * A machining document passes over a bare call statement silently (`facing(op1, ..)` with no
   name does nothing, reports nothing): reported to CAM-CORE / CAM-TURN.
 * A `fn`'s name and params may take a built-in's name (no `ShadowsBuiltin`): harmless, they are
